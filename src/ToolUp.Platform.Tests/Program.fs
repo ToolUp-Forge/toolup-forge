@@ -752,6 +752,11 @@ let allTests =
         SidebarVisibilityContractTests.tests
         SidebarVisibilityContractTests.orderingTests
         SidebarVisibilityContractTests.groupSetTests
+        // Phase 569 — the same decision in its reasoned form: which gate
+        // refused a deep-linked route, and the equation pinning the
+        // sidebar and the router to one predicate.
+        RouteGuardContractTests.routeGuardTests
+        RouteGuardContractTests.sharedPredicateTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
         // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
         // but constructs the SDK's built-in *client-side* UI modules

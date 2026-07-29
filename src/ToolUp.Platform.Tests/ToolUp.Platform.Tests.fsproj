@@ -1015,6 +1015,14 @@
              loaded), asserting the exact visible-module-id list, plus the
              filter-composition-order pins and the admin group sets. -->
         <Compile Include="InProcess\SidebarVisibilityContractTests.fs" />
+        <!-- Phase 569 — deep-link route-guard contract pack over the same
+             decision, in its reasoned form (`SidebarVisibility.decide`):
+             which gate refused (role / team-exposure / not-signed-in /
+             subject / no-active-team), the fail-open on an unresolved
+             team role, the Phase 245 `ShowAllModules` escape, and the
+             equation that keeps the sidebar and the router on ONE
+             predicate. -->
+        <Compile Include="InProcess\RouteGuardContractTests.fs" />
         <!-- Phase 171 — Home/Overview landing-surface verification:
              count-affordance (IObjectCounter fast-path vs ListObjects
              default), prepareModules head-injection landing selection,

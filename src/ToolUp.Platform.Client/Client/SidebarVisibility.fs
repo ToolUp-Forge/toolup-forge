@@ -192,18 +192,20 @@ let private isPlatformAdmin (inputs: SidebarVisibilityInputs) : bool =
 /// RBAC config. Phase 245's admin `ShowAllModules` escape short-circuits
 /// the whole stage for a platform admin, revealing every managed module
 /// including the ones the active team hides.
-let private rbacFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) =
+///
+/// Phase 569 restated this (and the three stages below) as a PER-MODULE
+/// predicate so the route guard can ask about one module without folding
+/// a list. The pre-569 form built two `Set`s once per sidebar render;
+/// `List.contains` over the response lists is the same answer, and both
+/// lists are the deployment's registered-module count — tens, not
+/// thousands — so the linear scan is not worth a per-call `Set` build.
+let private rbacAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
     match inputs.Accessibility with
-    | Some _ when isPlatformAdmin inputs && inputs.ShowAllModules -> modules
+    | Some _ when isPlatformAdmin inputs && inputs.ShowAllModules -> true
     | Some response ->
-        let managed = Set.ofList response.Managed
-        let accessible = Set.ofList response.Accessible
-
-        modules
-        |> List.filter (fun m ->
-            let id = (facts m).Id
-            not (managed.Contains id) || accessible.Contains id)
-    | None -> modules
+        not (List.contains f.Id response.Managed)
+        || List.contains f.Id response.Accessible
+    | None -> true
 
 /// The gate a module is actually subject to (Phase 568).
 ///
@@ -269,12 +271,10 @@ let private admits (inputs: SidebarVisibilityInputs) (role: NavRole) : bool =
 /// their own tools. Phase 568.B carries `ActiveTeamRole` on the model, so
 /// `NavRole.TeamOwnerAdmin` states that gate properly. GP 12 is unchanged
 /// throughout: the server-side Owner/Admin guards are the enforcement.
-let private navRoleFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) =
-    modules
-    |> List.filter (fun m ->
-        match effectiveNavRole (facts m) with
-        | Some role -> admits inputs role
-        | None -> true)
+let private navRoleAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
+    match effectiveNavRole f with
+    | Some role -> admits inputs role
+    | None -> true
 
 /// Stage 3 — the per-module `Visibility` gate (Phase 66 Stream B.3).
 ///
@@ -287,8 +287,8 @@ let private navRoleFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVi
 /// workaround. Default `Visibility.visibleToAll` is byte-identical to
 /// pre-B.3 (GP 11). GP 12 — UI shape only; server-side
 /// `SurfaceEnforcementMiddleware` is the authoritative gate.
-let private kindVisible (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) =
-    modules |> List.filter (fun m -> (facts m).Visibility inputs.SubjectKind)
+let private kindAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
+    f.Visibility inputs.SubjectKind
 
 /// Stage 4 — the no-active-team landing collapse.
 ///
@@ -310,26 +310,123 @@ let private kindVisible (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibi
 /// with an unpicked team still gets the affordance to select one.
 /// GP 12 — UI shape only; the server's `[<TenantScoped>]` gate is
 /// authoritative.
-let private noActiveTeamCollapsed
-    (facts: 'm -> SidebarModuleFacts)
-    (inputs: SidebarVisibilityInputs)
-    (modules: 'm list)
-    =
+let private noActiveTeamAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
     match inputs.NoActiveTeamLandingId with
     | Some landingId when inputs.HasTeamScope && inputs.ActiveTeamId.IsNone ->
-        let isAdmin = isPlatformAdmin inputs
+        f.Id = landingId || (isPlatformAdmin inputs && isAdminSidebarGroup f.Group)
+    | _ -> true
 
-        modules
-        |> List.filter (fun m ->
-            let f = facts m
-            f.Id = landingId || (isAdmin && isAdminSidebarGroup f.Group))
-    | _ -> modules
+// ─── The navigation decision (Phase 569) ──────────────────────────────
+//
+// Phase 570 lifted the sidebar's four filters here. Phase 569 makes the
+// SAME decision answer the ROUTE question — "may this caller reach this
+// module by URL" — because hiding a sidebar entry never blocked
+// navigation: a Member deep-linking an admin route rendered the module's
+// view backed only by server 403s. Nav-hide and route-reach are now the
+// same function, so they cannot drift apart.
+//
+// The shape is per-module and REASONED: `decide` names WHY a module is
+// out of reach, because a route guard has to render something (a denial
+// view whose wording depends on the reason), where the sidebar only had
+// to omit a row. `visible` is then literally `List.filter canNavigateTo`
+// — one definition site, two call sites, and the 570 contract matrix
+// still pins it unchanged.
+//
+// GP 4 / GP 12 are untouched: this is UX coherence, not the security
+// boundary. The server's per-route guards remain the enforcement, and a
+// caller who forges their way past this predicate gets a 403, not data.
+
+/// Why a caller may not reach a module. Consumed by the shell's route
+/// guard to choose the denial view's wording; the sidebar path discards
+/// it (a hidden row needs no reason).
+[<RequireQualifiedAccess>]
+type NavigationDenial =
+    /// The caller is anonymous. **Every** denial reported to an anonymous
+    /// subject collapses to this case: signing in is the only actionable
+    /// next step, and naming the specific gate ("requires Platform
+    /// Admin") to a caller with no identity narrates the role model to
+    /// the internet for no gain. A signed-in caller gets the precise
+    /// reason below.
+    | NotSignedIn
+    /// The module declares `NavRole.PlatformAdminOnly` and the caller
+    /// does not hold `PlatformRole.PlatformAdmin` — including the window
+    /// before the boot-time role fetch resolves, which is exactly the
+    /// sidebar's behaviour for the same entry.
+    | RequiresPlatformAdmin
+    /// The module declares `NavRole.TeamOwnerAdmin` and the caller's role
+    /// on the active team is `TeamRole.Member`. An UNKNOWN active-team
+    /// role admits (see `NavRole.TeamOwnerAdmin`), so this case never
+    /// fires during the load window.
+    | RequiresTeamOwnerAdmin
+    /// The server's accessible-modules response excludes the module for
+    /// this caller — RBAC, or Phase 245 per-team exposure folded into the
+    /// same response. The admin `ShowAllModules` toggle lifts it.
+    | NotExposedToTeam
+    /// The module's own `Visibility` predicate excludes the resolved
+    /// `SubjectKind` (Phase 66 Stream B.3) for a signed-in caller — e.g.
+    /// a team-only surface reached in personal scope.
+    | NotAvailableToSubject
+    /// The deployment is team-scoped, the caller has no active team, and
+    /// the no-active-team landing collapse owns the surface. Picking or
+    /// creating a team lifts it.
+    | NoActiveTeam
+
+/// The route/sidebar admission answer for one module.
+[<RequireQualifiedAccess>]
+type NavigationDecision =
+    | Permitted
+    | Denied of NavigationDenial
+
+/// **The canonical navigation decision** (Phase 569.A) — the one
+/// definition site for whether a caller may reach a module, by sidebar
+/// click or by URL. `visible` (the sidebar) and the shell's route guard
+/// both run this; see the section header above for why they must.
+///
+/// Stage order is `visible`'s order, unchanged — the first stage that
+/// refuses names the reason, so the reported denial is the
+/// narrowest-authority one rather than the last one checked.
+let decide (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (m: 'm) : NavigationDecision =
+    let f = facts m
+
+    let reason =
+        if not (rbacAdmits inputs f) then
+            Some NavigationDenial.NotExposedToTeam
+        elif not (navRoleAdmits inputs f) then
+            match effectiveNavRole f with
+            | Some NavRole.PlatformAdminOnly -> Some NavigationDenial.RequiresPlatformAdmin
+            | _ -> Some NavigationDenial.RequiresTeamOwnerAdmin
+        elif not (kindAdmits inputs f) then
+            Some NavigationDenial.NotAvailableToSubject
+        elif not (noActiveTeamAdmits inputs f) then
+            Some NavigationDenial.NoActiveTeam
+        else
+            None
+
+    match reason, inputs.SubjectKind with
+    | None, _ -> NavigationDecision.Permitted
+    // See `NotSignedIn` — an anonymous caller's only actionable next step
+    // is signing in, whichever gate refused. Collapsing here rather than
+    // per-stage keeps the stage predicates identical to the sidebar's.
+    | Some _, AnonymousKind -> NavigationDecision.Denied NavigationDenial.NotSignedIn
+    | Some r, _ -> NavigationDecision.Denied r
+
+/// `decide` as a predicate — the sidebar's question, and the cheap form
+/// for a caller that does not need the reason.
+let canNavigateTo (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (m: 'm) : bool =
+    match decide facts inputs m with
+    | NavigationDecision.Permitted -> true
+    | NavigationDecision.Denied _ -> false
 
 /// **The canonical sidebar visibility decision** (Phase 570.A) — the one
 /// definition site for which registered modules a caller may see. Pure:
 /// no model mutation, no React, no remoting; a function of the module
 /// list, the caller's subject/role, the RBAC response, the active-team
 /// state, and the three derived `ClientConfig` projections.
+///
+/// Since Phase 569 this is `List.filter canNavigateTo` — the sidebar and
+/// the router evaluate one predicate, so a module hidden from the rail is
+/// unreachable by URL by construction rather than by two filters kept in
+/// agreement by hand.
 ///
 /// **Filter order is load-bearing, and this is why (570.C).** The stages
 /// compose narrowest-authority-first, each one only ever removing:
@@ -365,11 +462,7 @@ let private noActiveTeamCollapsed
 /// Every stage is a no-op against `defaults`, so a deployment that
 /// declares nothing gets its input list back unchanged (GP 11).
 let visible (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) : 'm list =
-    modules
-    |> rbacFiltered facts inputs
-    |> navRoleFiltered facts inputs
-    |> kindVisible facts inputs
-    |> noActiveTeamCollapsed facts inputs
+    modules |> List.filter (canNavigateTo facts inputs)
 
 /// `visible` projected to the visible module ids, in sidebar order. The
 /// shape the contract pack asserts on, and the cheapest thing to log when

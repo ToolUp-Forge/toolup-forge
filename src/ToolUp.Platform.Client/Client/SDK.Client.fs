@@ -765,6 +765,54 @@ module Client =
             OnAccessibleModulesChanged = buildOnAccessibleModulesChanged config
         }
 
+    // ─── Phase 569 — the route guard's shared inputs ──────────────────
+    //
+    // The sidebar's four filters and the router's admission question are
+    // ONE decision (`SidebarVisibility.decide`); these two helpers are
+    // the shell's single projection into it, so the two call sites —
+    // `view`'s `sidebarSections` pipeline and the guard below — cannot
+    // be handed different inputs. That is the whole point of 569.A: a
+    // module hidden from the rail is unreachable by URL by construction,
+    // not by two filters someone keeps in agreement by hand.
+
+    /// `ErasedModule` → the four facts the navigation decision reads.
+    /// The projection `SidebarVisibility` is generic over (it is declared
+    /// ahead of `ErasedModule`, so it cannot name the type).
+    let private moduleFacts (m: ErasedModule) : SidebarVisibility.SidebarModuleFacts = {
+        Id = m.Definition.Id
+        Group = m.Group
+        NavRole = m.NavRole
+        Visibility = m.Visibility
+    }
+
+    /// The shell model + config projected into the decision's inputs. The
+    /// three `ClientConfig` reads live here because `ClientConfig` is
+    /// Fable-only at runtime; passing their resolved values keeps the
+    /// decision itself pure data (and .NET-testable).
+    let private navigationInputs (config: ClientConfig) (model: Model) : SidebarVisibility.SidebarVisibilityInputs = {
+        Accessibility = model.AccessibleModules
+        PlatformRole = model.PlatformRole
+        ActiveTeamRole = model.ActiveTeamRole
+        ShowAllModules = model.ShowAllModules
+        SubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
+        HasTeamScope = ClientConfig.hasTeamScope config
+        ActiveTeamId = model.ActiveTeamId
+        NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId config
+    }
+
+    /// Phase 569.B — may this caller reach this module, with the reason
+    /// when not. Consulted before any module `Init` and again at render.
+    let private navigationDecision
+        (config: ClientConfig)
+        (model: Model)
+        (m: ErasedModule)
+        : SidebarVisibility.NavigationDecision =
+        SidebarVisibility.decide moduleFacts (navigationInputs config model) m
+
+    /// The predicate form, for the init paths that only need yes/no.
+    let private canNavigateToModule (config: ClientConfig) (model: Model) (m: ErasedModule) : bool =
+        SidebarVisibility.canNavigateTo moduleFacts (navigationInputs config model) m
+
     /// The deployment's default landing surface id — the module the
     /// shell lands on when nothing else is selected:
     /// `ClientConfig.ActiveModule` when set, else the first registered
@@ -778,6 +826,16 @@ module Client =
             |> List.tryHead
             |> Option.map (fun m -> m.Definition.Id)
             |> Option.defaultValue ""
+
+    /// Phase 569 — where the denial view's "Go to home" action lands.
+    /// The deployment default, EXCEPT while the no-active-team collapse
+    /// owns the surface: sending a team-less caller to a Home they also
+    /// cannot reach turns one denial into two, so the landing module is
+    /// the route home for that window.
+    let private routeHomeModuleId (config: ClientConfig) (modules: ErasedModule list) (model: Model) : string =
+        match ClientConfig.effectiveNoActiveTeamLandingId config with
+        | Some landingId when ClientConfig.hasTeamScope config && model.ActiveTeamId.IsNone -> landingId
+        | _ -> bootDefaultModuleId config modules
 
     /// Resolve the active *content* surface accounting for the
     /// no-active-team gate (`ClientConfig.NoActiveTeamLandingModuleId`).
@@ -885,14 +943,23 @@ module Client =
                         ModuleStates = Map.empty
                 }
 
-                let ctx = buildContext config queryBus reset activeId
-                let state, cmd = moduleImpl.Init ctx
+                // Phase 569.B — the route guard, on the re-init path. A
+                // prefetch arrival can move a caller from permitted to
+                // denied (a team switch that hides the module, exposure
+                // revoked); re-initialising it here would fire the
+                // module's boot calls straight into 403s. Leave
+                // `ModuleStates` empty and let `view` render the denial.
+                if canNavigateToModule config reset moduleImpl then
+                    let ctx = buildContext config queryBus reset activeId
+                    let state, cmd = moduleImpl.Init ctx
 
-                {
-                    reset with
-                        ModuleStates = Map.ofList [ activeId, state ]
-                },
-                Cmd.map ModuleMsg cmd
+                    {
+                        reset with
+                            ModuleStates = Map.ofList [ activeId, state ]
+                    },
+                    Cmd.map ModuleMsg cmd
+                else
+                    reset, Cmd.none
             | None ->
                 {
                     model with
@@ -932,15 +999,32 @@ module Client =
                     ActivePageRoute = defaultPageRoute moduleImpl
             }
 
-            let ctx = buildContext config queryBus resolved activeId
-            let state, cmd = moduleImpl.Init ctx
+            // Phase 569.B — the route guard, on the deep-link path that
+            // matters most: a signed-in caller who pasted an admin URL
+            // reaches the shell with `InitPhase = Prefetching`, and this
+            // is the first place the module would be initialised. Denied
+            // ⇒ no `Init`, so none of the module's boot calls are made
+            // (each would 403). `InitPhase` still flips to `Ready` — the
+            // shell is loaded; it is the surface that is refused — and
+            // `view` renders the typed denial over the empty state map.
+            //
+            // A guard input that has not landed yet (the platform-role
+            // fetch racing the configs/flags pair) reads as denied here,
+            // exactly as the sidebar hides the same entry meanwhile;
+            // `ensureActiveInitialised` re-runs the decision when that
+            // fetch resolves, so a genuine admin is initialised then.
+            if canNavigateToModule config resolved moduleImpl then
+                let ctx = buildContext config queryBus resolved activeId
+                let state, cmd = moduleImpl.Init ctx
 
-            {
-                resolved with
-                    ModuleStates = Map.ofList [ activeId, state ]
-                    InitPhase = Ready
-            },
-            Cmd.map ModuleMsg cmd
+                {
+                    resolved with
+                        ModuleStates = Map.ofList [ activeId, state ]
+                        InitPhase = Ready
+                },
+                Cmd.map ModuleMsg cmd
+            else
+                { resolved with InitPhase = Ready }, Cmd.none
         | None ->
             {
                 model with
@@ -948,6 +1032,46 @@ module Client =
                     InitPhase = Ready
             },
             Cmd.none
+
+    /// Phase 569.B — re-run the route guard after one of its INPUTS
+    /// arrives (the platform role, the active-team role, or the
+    /// accessible-modules response) and initialise the active module if
+    /// it has become reachable.
+    ///
+    /// This is the other half of the deny-before-`Init` rule. The guard
+    /// necessarily refuses while the deciding fetch is in flight —
+    /// `PlatformRole = None` means "not an admin" and "not loaded yet"
+    /// alike, the same ambiguity the sidebar lives with — so without
+    /// this, a genuine platform admin who deep-links an admin route
+    /// would be permitted by the time the role lands but left with no
+    /// module state, and the shell would sit on the loading indicator
+    /// forever. Idempotent: a no-op when the module is already
+    /// initialised, still denied, or the shell is still `Prefetching`
+    /// (where `ModuleStates = Map.empty` is the invariant and
+    /// `initActiveOnFirstPrefetchReady` owns the first init).
+    let private ensureActiveInitialised
+        (config: ClientConfig)
+        (queryBus: IModuleQueryBus)
+        (modules: ErasedModule list)
+        (model: Model)
+        : Model * Cmd<Msg> =
+        if
+            model.InitPhase = Prefetching
+            || model.ModuleStates |> Map.containsKey model.ActiveModuleId
+        then
+            model, Cmd.none
+        else
+            match tryFind modules model.ActiveModuleId with
+            | Some moduleImpl when canNavigateToModule config model moduleImpl ->
+                let ctx = buildContext config queryBus model model.ActiveModuleId
+                let state, cmd = moduleImpl.Init ctx
+
+                {
+                    model with
+                        ModuleStates = model.ModuleStates |> Map.add model.ActiveModuleId state
+                },
+                Cmd.map ModuleMsg cmd
+            | _ -> model, Cmd.none
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
@@ -1118,9 +1242,32 @@ module Client =
         // entry on Ready promotion.
         let willDeferInit = needsAuth && (hasToken || hasDevIdentity)
 
+        // Phase 569.B — the route guard on the immediate-mount boot path
+        // (anonymous-only deployments and the pre-sign-in side of mixed
+        // mode). Nothing model-side has loaded at boot, so the decision's
+        // inputs ARE `SidebarVisibility.defaults` plus the three config
+        // projections — stating it that way keeps the "nothing known yet"
+        // state explicit rather than fabricating an empty model. What it
+        // catches: a deployment whose default surface declares a
+        // `Visibility` the boot subject fails (a team-only landing reached
+        // anonymously). `ensureActiveInitialised` / the prefetch paths
+        // mount it once the caller upgrades.
+        let bootPermitted =
+            SidebarVisibility.canNavigateTo
+                moduleFacts
+                {
+                    SidebarVisibility.defaults with
+                        SubjectKind = ClientConfig.resolveSubjectKind None _config
+                        HasTeamScope = ClientConfig.hasTeamScope _config
+                        NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId _config
+                }
+                moduleImpl
+
         let initPhase, moduleStates, moduleInitCmd =
             if willDeferInit then
                 Prefetching, Map.empty, Cmd.none
+            elif not bootPermitted then
+                Ready, Map.empty, Cmd.none
             else
                 let seedCtx = {
                     Config = Map.empty
@@ -1364,6 +1511,25 @@ module Client =
                                 CurrentArea = targetArea
                         },
                         Cmd.none
+                    elif not (canNavigateToModule _config model moduleImpl) then
+                        // Phase 569.B — the route guard on explicit
+                        // navigation. Reached by a deep link (the
+                        // `NavigationRequest` bus dispatches the same
+                        // `ModuleSelected`) rather than by a sidebar
+                        // click, since the rail no longer offers a
+                        // denied module — one predicate decides both.
+                        // The selection still moves so the shell reports
+                        // the route the caller actually asked for and
+                        // `view` can name the module in the denial; what
+                        // does NOT happen is `Init`, so the module's
+                        // boot calls are never made.
+                        {
+                            model with
+                                ActiveModuleId = moduleId
+                                ActivePageRoute = pageRoute
+                                CurrentArea = targetArea
+                        },
+                        Cmd.none
                     else
                         let state, cmd =
                             match model.ModuleStates |> Map.tryFind moduleId with
@@ -1384,14 +1550,16 @@ module Client =
                 | None -> model, Cmd.none
 
             | AccessibleModulesLoaded accessible ->
+                // Phase 569 — a route-guard input landed; mount the
+                // active module if that flipped it to reachable.
                 {
                     model with
                         AccessibleModules = accessible
                         // Phase 121 — the data arrived after all; clear
                         // any prior failure entry for this source.
                         Degradations = BootDegradation.remove "permissions" model.Degradations
-                },
-                Cmd.none
+                }
+                |> ensureActiveInitialised _config queryBus modules
 
             | RefreshAccessibleModules ->
                 model, bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
@@ -1539,23 +1707,28 @@ module Client =
             | PlatformRoleLoaded isAdmin ->
                 let role = if isAdmin then Some PlatformRole.PlatformAdmin else None
 
+                // Phase 569 — the input the deep-link case turns on. An
+                // admin who pasted an admin URL was refused (and left
+                // uninitialised) while this fetch was in flight; now that
+                // it has landed, mount the module they were entitled to.
                 {
                     model with
                         PlatformRole = role
                         Degradations = BootDegradation.remove "platform-role" model.Degradations
-                },
-                Cmd.none
+                }
+                |> ensureActiveInitialised _config queryBus modules
 
             | ActiveTeamRoleLoaded role ->
                 // Phase 568 — the caller's own role on the active team.
-                // Pure state: the sidebar fold reads it on the next
-                // render, so there is nothing to re-init.
+                // Pure state for the sidebar (it re-reads on the next
+                // render); Phase 569 additionally mounts the active
+                // module if the arriving role made it reachable.
                 {
                     model with
                         ActiveTeamRole = role
                         Degradations = BootDegradation.remove "team-role" model.Degradations
-                },
-                Cmd.none
+                }
+                |> ensureActiveInitialised _config queryBus modules
 
             | ActiveTeamLoaded teamId ->
                 let updated = {
@@ -2232,47 +2405,78 @@ module Client =
                 Custom(NoActiveTeamSurface model.MyTeams dispatch)
             | Ready
             | Reprefetching ->
-                match tryFind modules model.ActiveModuleId with
-                | Some moduleImpl ->
-                    let currentState = model.ModuleStates |> Map.find model.ActiveModuleId
-                    let dispatchMsg = ModuleMsg >> dispatch
+                // Phase 569.B — the route guard at page dispatch. The
+                // active module reaches here from a sidebar click, a
+                // `NavigationRequest` deep link, or a pasted URL; only
+                // the first was ever filtered, which is exactly the
+                // incoherence this closes. `navigationDecision` is the
+                // same call the sidebar's `visibleModules` fold makes
+                // (`SidebarVisibility.canNavigateTo`, one definition
+                // site), so a module absent from the rail cannot render
+                // here. The update side has already refused to run its
+                // `Init`, so nothing has been fetched on its behalf.
+                match
+                    tryFind modules model.ActiveModuleId
+                    |> Option.map (fun m -> m, navigationDecision config model m)
+                with
+                | Some(moduleImpl, SidebarVisibility.NavigationDecision.Denied reason) ->
+                    Custom(
+                        Components.NotAuthorised.render config.NotAuthorisedView {
+                            ModuleId = moduleImpl.Definition.Id
+                            ModuleName = moduleImpl.Definition.Name
+                            Denial = reason
+                            GoHome = fun () -> dispatch (ModuleSelected(routeHomeModuleId config modules model))
+                        }
+                    )
+                | Some(moduleImpl, SidebarVisibility.NavigationDecision.Permitted) ->
+                    // Permitted but not yet in `ModuleStates`: the guard
+                    // refused this module while one of its inputs was
+                    // still loading and `ensureActiveInitialised` has not
+                    // yet run the deferred `Init`. A one-render window —
+                    // both happen in the same update — but `Map.find`
+                    // here would crash the shell, so hold the loading
+                    // indicator rather than assume the entry exists.
+                    match model.ModuleStates |> Map.tryFind model.ActiveModuleId with
+                    | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
+                    | Some currentState ->
+                        let dispatchMsg = ModuleMsg >> dispatch
 
-                    let renderInner () : PageContent =
-                        match moduleImpl.PageViews, model.ActivePageRoute with
-                        | Some map, Some route when map.ContainsKey route ->
-                            let pageView = map[route]
-                            pageView currentState dispatchMsg
-                        | _ ->
-                            match moduleImpl.View with
-                            | Some v ->
-                                let left, right = v currentState dispatchMsg
-                                SplitPanel(left, right)
-                            | None ->
-                                // `register` rejects modules with neither View nor PageViews,
-                                // so this branch only fires when a multi-page module's
-                                // ActivePageRoute doesn't match any registered PageViews entry.
-                                SplitPanel(
-                                    Html.div $"No view registered for page route {model.ActivePageRoute}",
-                                    Html.div ""
-                                )
+                        let renderInner () : PageContent =
+                            match moduleImpl.PageViews, model.ActivePageRoute with
+                            | Some map, Some route when map.ContainsKey route ->
+                                let pageView = map[route]
+                                pageView currentState dispatchMsg
+                            | _ ->
+                                match moduleImpl.View with
+                                | Some v ->
+                                    let left, right = v currentState dispatchMsg
+                                    SplitPanel(left, right)
+                                | None ->
+                                    // `register` rejects modules with neither View nor PageViews,
+                                    // so this branch only fires when a multi-page module's
+                                    // ActivePageRoute doesn't match any registered PageViews entry.
+                                    SplitPanel(
+                                        Html.div $"No view registered for page route {model.ActivePageRoute}",
+                                        Html.div ""
+                                    )
 
-                    let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
+                        let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
 
-                    let counter =
-                        model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
+                        let counter =
+                            model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
 
-                    let resetKey = sprintf "%s-%d" teamPart counter
+                        let resetKey = sprintf "%s-%d" teamPart counter
 
-                    let boundaryEl =
-                        Components.ModuleBoundary.wrap
-                            model.ActiveModuleId
-                            resetKey
-                            config.OnError
-                            (fun () -> dispatch (ResetModule model.ActiveModuleId))
-                            config.InputsPaneWidth
-                            renderInner
+                        let boundaryEl =
+                            Components.ModuleBoundary.wrap
+                                model.ActiveModuleId
+                                resetKey
+                                config.OnError
+                                (fun () -> dispatch (ResetModule model.ActiveModuleId))
+                                config.InputsPaneWidth
+                                renderInner
 
-                    Custom boundaryEl
+                        Custom boundaryEl
                 | None -> SplitPanel(Html.div "Error: Module not found", Html.div "")
 
         // Composite sidebar Id for the active-border highlight so that
@@ -2310,25 +2514,16 @@ module Client =
             // team-scope predicate, and the unified landing-module id —
             // because `ClientConfig` itself is Fable-only at runtime.
             // Passing their resolved values keeps the fold pure data.
+            //
+            // Phase 569.A — the projection + inputs are no longer built
+            // inline here: `moduleFacts` / `navigationInputs` are the
+            // shell's one construction site, shared verbatim with the
+            // route guard in the content dispatch above. `visible` is
+            // itself `List.filter SidebarVisibility.canNavigateTo`, so
+            // "hidden from the rail" and "refused by the router" are the
+            // same call on the same inputs — they cannot drift.
             let visibleModules =
-                modules
-                |> SidebarVisibility.visible
-                    (fun m -> {
-                        Id = m.Definition.Id
-                        Group = m.Group
-                        NavRole = m.NavRole
-                        Visibility = m.Visibility
-                    })
-                    {
-                        Accessibility = model.AccessibleModules
-                        PlatformRole = model.PlatformRole
-                        ActiveTeamRole = model.ActiveTeamRole
-                        ShowAllModules = model.ShowAllModules
-                        SubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
-                        HasTeamScope = ClientConfig.hasTeamScope config
-                        ActiveTeamId = model.ActiveTeamId
-                        NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId config
-                    }
+                modules |> SidebarVisibility.visible moduleFacts (navigationInputs config model)
 
             // One sidebar *view* per module. A single-page (or legacy)
             // module carries no `Pages` and renders as a leaf whose

@@ -1182,6 +1182,39 @@ type LoadingIndicatorMode =
     | SpinnerLoader
     | CustomLoader of (unit -> ReactElement)
 
+/// Phase 569 — everything the "not authorised" surface is handed when
+/// the route guard refuses a deep-link. Passed to a
+/// `CustomNotAuthorised` renderer so a deployment can match on the
+/// reason and re-word (or re-route) without re-deriving the decision.
+type NotAuthorisedContext = {
+    /// The refused module's `ModuleDefinition.Id` — the stable
+    /// permission key, safe to log or key a bespoke view off.
+    ModuleId: string
+    /// The refused module's display name, for prose.
+    ModuleName: string
+    /// Why the guard refused. `NotSignedIn` is the anonymous collapse —
+    /// render a sign-in affordance rather than a role explanation.
+    Denial: SidebarVisibility.NavigationDenial
+    /// Navigate back to the deployment's default landing surface
+    /// (`ActiveModule`, else the first registered module). The route
+    /// home every denial view must offer — a refused deep-link is
+    /// otherwise a dead end with no in-app way out.
+    GoHome: unit -> unit
+}
+
+/// Phase 569 — the shell's typed "not authorised" view, rendered in the
+/// content area when a caller deep-links a module the sidebar would have
+/// hidden from them. Overridable like every other shell surface
+/// (`ToastCentreMode`, `LoadingIndicatorMode`): the SDK ships a
+/// reason-aware default and a deployment replaces it wholesale.
+type NotAuthorisedMode =
+    /// The SDK built-in — a reason-aware empty state (lock mark, a
+    /// sentence naming the actual gate, and a "Go to home" action).
+    | DefaultNotAuthorised
+    /// Deployment-supplied renderer. Receives the full
+    /// `NotAuthorisedContext`; replaces the default entirely.
+    | CustomNotAuthorised of (NotAuthorisedContext -> ReactElement)
+
 /// Phase 567 — how the sidebar presents the SDK's admin built-ins.
 type AdminSurfaceMode =
     /// The default — admin modules render as inline sidebar groups
@@ -1281,6 +1314,14 @@ type ClientConfig = {
     /// splits the sidebar into Product and Administration areas with a
     /// role-gated switcher.
     AdminSurface: AdminSurfaceMode
+    /// Phase 569 — the view rendered when the route guard refuses a
+    /// deep-linked module (the caller could not have reached it from the
+    /// sidebar either). **Default `DefaultNotAuthorised`** — the SDK's
+    /// reason-aware surface. The guard itself is not configurable: a
+    /// route the sidebar hides is not reachable by URL, which is the
+    /// coherence the phase exists to restore. Permitted callers never
+    /// see this and are byte-identical to pre-569 (GP 11).
+    NotAuthorisedView: NotAuthorisedMode
     /// Phase 217 — opt in to the built-in "Pinned / Recent" widget on the
     /// Home surface (a small per-user store of recently-visited + pinned
     /// tools, persisted through the per-user config store). **Default:
@@ -1612,6 +1653,9 @@ module ClientConfig =
         // Phase 567 — inline admin groups by default (byte-identical to
         // pre-567); SeparateArea is the opt-in two-area sidebar.
         AdminSurface = InlineGroups
+        // Phase 569 — the SDK's reason-aware denial surface; a deployment
+        // swaps in its own with `CustomNotAuthorised`.
+        NotAuthorisedView = DefaultNotAuthorised
         // Phase 217 — recents/pinning off by default (GP 13).
         HomeRecents = false
         // Opt-in; off by default so the no-team gate never changes an

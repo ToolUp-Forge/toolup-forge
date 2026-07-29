@@ -292,6 +292,12 @@
              (prepareModules calls create). -->
         <Compile Include="Client\PlatformUsersUI.fs" />
         <Compile Include="Components\ModuleBoundary.fs" />
+        <!-- Phase 569 — the shell's typed "not authorised" surface,
+             rendered when the route guard refuses a deep-linked module.
+             After SDK.ClientTypes.fs (NotAuthorisedContext / Mode) and
+             the UIToolkit StateViews it composes; before SDK.Client.fs,
+             its single call site. -->
+        <Compile Include="Components\NotAuthorised.fs" />
         <Compile Include="Client\SDK.Client.fs" />
         <!-- Phase 57 — hydration-aware bootstrap + per-route metadata
              hook for SPA prerender. Both opt-in; consumers compose
