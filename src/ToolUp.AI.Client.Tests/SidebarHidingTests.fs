@@ -91,6 +91,10 @@ let private moduleView
         HasData = false
         Group = group
         Pages = pages
+        // Phase 611 — declares no rail slot, so the fold buckets it by
+        // `Group` exactly as it did before placement was declarable. That
+        // is the shape every assertion in this pack was written against.
+        Placement = None
     }
 
 let private singlePage id name group = moduleView id name group []

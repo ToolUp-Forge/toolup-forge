@@ -20,10 +20,54 @@ type SidebarPageView = {
     Icon: ReactElement
 }
 
+/// Phase 611 — **where a rail row sits, as a declared value.** The single
+/// definition site for rail placement; `ClientModule.withPlacement` is how
+/// a module declares one, and `SidebarModuleView.Placement` carries it in.
+///
+/// Placement used to be an *implicit consequence of a field that means
+/// something else*: `Group = None` was read by `buildSections` as "bottom of
+/// the rail, inside the collapsed `_other` catch-all". Nothing declared that
+/// — it fell out of the bucketing, and the two landings escaped it only
+/// because the fold special-cased their literal ids. The Phase 567
+/// area-switcher rows never got that special case, so the only route *into*
+/// the administration area sat in a section that renders last and is
+/// collapsed on a fresh profile: the one row whose whole purpose is to be
+/// found. Every reserved row added since would have inherited the same
+/// fallback silently.
+///
+/// **`Group = None` no longer implies a position.** It means what it says —
+/// no declared group — and therefore the `_other` bucket *within* the
+/// grouped slot. Where a row sits is this value and nothing else.
+///
+/// The three slots, in render order:
+///
+/// * `LeadingSlot` — the always-visible leading section (`HomeKey`),
+///   rendered first, never collapsed, in both rail widths. The two landing
+///   modules declare it: a landing is where "you are here" starts.
+/// * `GroupedSlot` — ordinary bucketing: the row's declared `Group`, or the
+///   `OtherKey` catch-all when it declares none. Per-section collapse,
+///   pinning, hiding and drag-reorder all apply. **An undeclared row
+///   resolves here**, so a composition that declares nothing behaves exactly
+///   as it did before this type existed (GP 11).
+/// * `TrailingSlot` — the always-visible trailing section (`TrailingKey`),
+///   rendered after every grouped section, never collapsed, in both rail
+///   widths. For a row that must stay reachable but is not a destination:
+///   the two area switchers declare it, because a mode switch belongs at the
+///   foot of the rail rather than competing with the landing at its head.
+///
+/// A row in a placed slot cannot be relocated by a user preference — that
+/// is the point of declaring it — so `buildSections` never lifts one into
+/// the pinned overlay, and the render layer suppresses the pin affordance
+/// for it rather than offering a click that would do nothing.
+type SidebarPlacement =
+    | LeadingSlot
+    | GroupedSlot
+    | TrailingSlot
+
 /// Inbound description of a module the sidebar should render. The
 /// caller (shell) resolves `HasData` against its own processed-data
-/// store and `Group` from the module declaration; the sidebar never
-/// touches `ErasedModule` directly so it stays UI-focused.
+/// store and `Group` / `Placement` from the module declaration; the
+/// sidebar never touches `ErasedModule` directly so it stays UI-focused.
 ///
 /// `Pages` is empty for single-page (and legacy) modules — they render
 /// as one leaf entry. A multi-page module carries one `SidebarPageView`
@@ -36,6 +80,10 @@ type SidebarModuleView = {
     HasData: bool
     Group: string option
     Pages: SidebarPageView list
+    /// Phase 611 — the row's declared rail slot. `None` ⇒ `GroupedSlot`,
+    /// which is the bucketing every row got before this field existed, so an
+    /// existing composition is unchanged (GP 11). See `SidebarPlacement`.
+    Placement: SidebarPlacement option
 }
 
 /// A page of a multi-page module as rendered inside its parent's
@@ -72,9 +120,12 @@ type SidebarModule = {
 
 /// A section of the sidebar. `Key` is the stable identifier used
 /// for collapse lookups and reorder persistence. Reserved keys:
-/// `"_pinned"` (the pinned overlay — always first when non-empty)
-/// and `"_other"` (ungrouped modules — always last). Any other
-/// value is a module-declared group name.
+/// `"_home"` (the leading placed section), `"_pinned"` (the pinned
+/// overlay — first among the grouped sections when non-empty),
+/// `"_other"` (ungrouped modules — last of the grouped sections),
+/// `"_trailing"` (the trailing placed section) and `"_hidden"` (the
+/// reveal list, rendered after every rail section). Any other value
+/// is a module-declared group name.
 type SidebarSection = {
     Key: string
     Title: string option
@@ -91,9 +142,18 @@ let PinnedKey = "_pinned"
 [<Literal>]
 let OtherKey = "_other"
 
-/// Reserved key for the always-visible Home section.
+/// Reserved key for the always-visible Home section — the section
+/// `SidebarPlacement.LeadingSlot` resolves to.
 [<Literal>]
 let HomeKey = "_home"
+
+/// Phase 611 — reserved key for the always-visible trailing section, the
+/// one `SidebarPlacement.TrailingSlot` resolves to. Rendered after every
+/// grouped section (and before the `HiddenKey` reveal list, which stays
+/// last), never collapsed, present in both rail widths. Untitled, like
+/// `HomeKey`: a one-or-two-row placed section has nothing to head.
+[<Literal>]
+let TrailingKey = "_trailing"
 
 /// Phase 572 — reserved key for the "Hidden items" section: the reveal
 /// surface listing the entries this user has hidden, each restorable in
@@ -149,6 +209,14 @@ let private toolupForgeLogoUrl: string =
 /// these would otherwise strand the user with no route home and no
 /// visible way to restore it — the hidden-items section itself lives in
 /// the rail these ids anchor.
+///
+/// Phase 611 note: hideability and placement are deliberately separate
+/// axes, which is why this id set survived the placement model. A row
+/// declaring `LeadingSlot` / `TrailingSlot` says where it renders; this
+/// says it may not be removed from the rail at all. A consumer row may
+/// well want the second without the first (a placed row it is happy for
+/// the user to hide), so deriving one from the other would take a choice
+/// away rather than remove a special case.
 let private isHideableId (id: string) =
     id <> HomeId && id <> AdminHomeId && id <> AdminAreaId && id <> ProductAreaId
 
@@ -197,12 +265,19 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// Build the sidebar sections from the modules visible to this user
 /// and their personal overlay (pinned / collapsed / ordering).
 ///
-/// Section order:
-/// 1. Pinned (only when non-empty) — modules / pages in the user's
+/// Section order (Phase 611 — the first and fourth are the *declared*
+/// slots; the middle three are the grouped slot's internal arrangement):
+/// 1. `_home` — rows declaring `LeadingSlot`, always visible, never
+///    collapsed.
+/// 2. Pinned (only when non-empty) — modules / pages in the user's
 ///    pinned order, suppressed from their home groups to avoid
 ///    duplicates.
-/// 2. Declared groups — in first-occurrence order across `modules`.
-/// 3. `_other` — ungrouped modules, always last.
+/// 3. Declared groups — in first-occurrence order across `modules`.
+/// 4. `_other` — grouped modules declaring no group, last of the
+///    grouped sections.
+/// 5. `_trailing` — rows declaring `TrailingSlot`, always visible, never
+///    collapsed.
+/// 6. `_hidden` — the reveal list, after every rail section.
 ///
 /// A multi-page module renders as one collapsible parent entry (its
 /// pages nest under it); single-page modules render as a leaf. Pinning
@@ -249,34 +324,48 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 Pages = m.Pages |> List.filter (fun p -> not (hiddenSet.Contains p.Id))
         })
 
-    // A landing module is special — always-visible, never grouped,
-    // pinned, or collapsed. Lift it into a dedicated leading section
-    // before any bucketing so it can't fall into `_other` or hide behind
-    // a collapsed group. Everything else feeds the buckets below.
-    //
-    // Phase 573 — there are two landings now, one per navigation area,
-    // and they use the same section: under `AdminSurface = SeparateArea`
-    // the shell hands this fold one area's modules at a time, so the
-    // list below has at most one member; under `InlineGroups` the admin
-    // landing is never registered at all. Filtering (rather than
-    // `tryFind`-ing one id) keeps that an observation about the caller
-    // rather than an invariant this fold would break if it changed.
-    let isLandingId (id: string) = id = HomeId || id = AdminHomeId
+    // Phase 611 — a row's slot is DECLARED, not inferred. `None` resolves
+    // to `GroupedSlot`, which is what every row got before the field
+    // existed, so an undeclared composition buckets exactly as before
+    // (GP 11). This total function is the whole of the placement decision:
+    // the fold names no id, so a reserved row added tomorrow cannot
+    // silently inherit the `_other` fallback the way the Phase 567 area
+    // switchers did — it either declares a slot or it is grouped, and
+    // either way that is visible at its construction site.
+    let slotOf (m: SidebarModuleView) =
+        m.Placement |> Option.defaultValue GroupedSlot
 
-    let homeSection =
-        match rail |> List.filter (fun m -> isLandingId m.Id) with
+    // The two placed sections are lifted out before any bucketing, so
+    // neither can fall into `_other` or hide behind a collapsed group.
+    //
+    // Phase 573 — there are two landings, one per navigation area, and
+    // they share the leading section: under `AdminSurface = SeparateArea`
+    // the shell hands this fold one area's modules at a time, so the list
+    // is usually a single member; under `InlineGroups` the admin landing is
+    // never registered at all. Filtering (rather than `tryFind`-ing one
+    // row) keeps that an observation about the caller rather than an
+    // invariant this fold would break if it changed.
+    let placedSection (key: string) (slot: SidebarPlacement) =
+        match rail |> List.filter (fun m -> slotOf m = slot) with
         | [] -> []
-        | landings -> [
+        | placed -> [
             {
-                Key = HomeKey
+                Key = key
                 Title = None
                 IsCollapsed = false
                 IsPinnedSection = false
-                Modules = landings |> List.map (toSidebarModule pinnedSet expandedModules)
+                Modules = placed |> List.map (toSidebarModule pinnedSet expandedModules)
             }
           ]
 
-    let groupable = rail |> List.filter (fun m -> not (isLandingId m.Id))
+    let homeSection = placedSection HomeKey LeadingSlot
+    let trailingSection = placedSection TrailingKey TrailingSlot
+
+    // Everything not placed feeds the buckets below. A placed row is
+    // therefore absent from `byId` / `pageIndex`, which is what makes its
+    // position immune to a user preference: `resolvePinned` cannot resolve
+    // it, so pinning it (from a hand-edited blob, say) moves nothing.
+    let groupable = rail |> List.filter (fun m -> slotOf m = GroupedSlot)
     let byId = groupable |> List.map (fun m -> m.Id, m) |> Map.ofList
 
     // Composite-page index — maps each multi-page module's page id to
@@ -456,7 +545,12 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 }
             ]
 
-    homeSection @ pinnedSection @ declaredSections @ otherSection @ hiddenSection
+    homeSection
+    @ pinnedSection
+    @ declaredSections
+    @ otherSection
+    @ trailingSection
+    @ hiddenSection
 
 /// Flatten a section list to the ordered entry sequence — used by
 /// consumers that need to resolve the currently-selected id (e.g. the
@@ -839,6 +933,7 @@ let private renderRow
 let private renderModuleButton
     (isExpanded: bool)
     (inHiddenSection: bool)
+    (inPlacedSection: bool)
     (selectedModule: string)
     (onModuleSelected: string -> unit)
     (onPinToggled: string -> unit)
@@ -849,7 +944,15 @@ let private renderModuleButton
     // A hidden row is never pinnable — the pin/hide rule is enforced in
     // `SidebarPreferences.togglePinned`, and suppressing the control here
     // keeps the UI from offering a click that would do nothing.
-    let pinnable = m.Id <> HomeId && not inHiddenSection
+    //
+    // Phase 611 — nor is a row in a *placed* section (`_home` /
+    // `_trailing`), for the same reason and now for the whole class: a
+    // placed row's position is declared, so `buildSections` leaves it out
+    // of the pinning index and pinning it moves nothing. This used to read
+    // `m.Id <> HomeId`, which covered one of the four reserved rows by
+    // name — the admin landing and both area switchers each offered a pin
+    // control whose click was already inert.
+    let pinnable = not inPlacedSection && not inHiddenSection
     let hideable = isHideableId m.Id
 
     let controlsFor (id: string) (isPinned: bool) = {
@@ -1002,13 +1105,14 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
         ]
     ]
 
-/// Sidebar. Renders the always-visible Home entry first, then a pinned
-/// overlay (if any pinned modules exist), each declared group as a
-/// collapsible section, and the "_other" section last. Section headers
-/// appear only when the sidebar is hover-expanded; in narrow mode (w-20)
-/// the sidebar is icons-only and mirrors per-section collapse state — a
-/// collapsed group shows a single default icon (its lead module's,
-/// click-to-expand) instead of its full icon set, while Home and the
+/// Sidebar. Renders the sections in the order `buildSections` produced
+/// them: the leading placed section, a pinned overlay (if any pinned
+/// modules exist), each declared group as a collapsible section, "_other",
+/// then the trailing placed section. Section headers appear only when the
+/// sidebar is hover-expanded; in narrow mode (w-20) the sidebar is
+/// icons-only and mirrors per-section collapse state — a collapsed group
+/// shows a single default icon (its lead module's, click-to-expand)
+/// instead of its full icon set, while the two placed sections and the
 /// pinned overlay always stay fully visible.
 ///
 /// Drag-to-reorder is scoped per-section and operates on top-level
@@ -1090,11 +1194,15 @@ let Sidebar
 
     let renderSectionModules (section: SidebarSection) =
         let inHiddenSection = section.Key = HiddenKey
+        // Phase 611 — the two placed sections, derived from the reserved
+        // section keys rather than from any row id.
+        let inPlacedSection = section.Key = HomeKey || section.Key = TrailingKey
 
         let renderOne (m: SidebarModule) =
             renderModuleButton
                 isExpanded
                 inHiddenSection
+                inPlacedSection
                 selectedModule
                 onModuleSelected
                 onPinToggled
@@ -1190,10 +1298,20 @@ let Sidebar
                     then
                         ()
                     else
-                        // Home + the pinned overlay stay fully visible; every
-                        // other group collapses to its single default icon,
-                        // expanding to its module icons when the user opens it.
-                        let alwaysVisible = section.IsPinnedSection || section.Key = HomeKey
+                        // The placed sections + the pinned overlay stay fully
+                        // visible; every other group collapses to its single
+                        // default icon, expanding to its module icons when the
+                        // user opens it.
+                        //
+                        // Phase 611 — `TrailingKey` joins `HomeKey` here. Both
+                        // are built with `IsCollapsed = false`, so the
+                        // `not section.IsCollapsed` arm below would already
+                        // render them; naming them is the point — the
+                        // guarantee is "a placed row is reachable in BOTH rail
+                        // widths without expanding anything", and it should not
+                        // rest on a value computed three hundred lines away.
+                        let alwaysVisible =
+                            section.IsPinnedSection || section.Key = HomeKey || section.Key = TrailingKey
 
                         if alwaysVisible || not section.IsCollapsed then
                             React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])

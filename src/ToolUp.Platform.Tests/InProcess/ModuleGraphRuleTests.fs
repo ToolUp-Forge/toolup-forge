@@ -103,6 +103,8 @@ let private erased (id: string) : ErasedModule = {
     FeatureFlags = []
     Availability = Always
     Group = Some "Work"
+    // Phase 611 — declares no rail slot, i.e. ordinary group bucketing.
+    Placement = None
     NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []

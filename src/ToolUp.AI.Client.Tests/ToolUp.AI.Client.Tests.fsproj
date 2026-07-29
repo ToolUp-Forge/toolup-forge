@@ -84,6 +84,14 @@
              The pure preference algebra is pinned .NET-side in
              ToolUp.Platform.Tests/InProcess/SidebarHidingContractTests.fs. -->
         <Compile Include="SidebarHidingTests.fs" />
+        <!-- Phase 611 — rail placement as declared data: the buildSections
+             slot resolution (undeclared ⇒ grouped, declared ⇒ placed, no
+             reserved row in `_other`) and the Phase 608 fresh-profile
+             switcher-reachability case. Same reason as the two packs above:
+             `Toolup.Sidebar` cannot be touched from the .NET harness. The
+             code-shape pins are .NET-side in
+             ToolUp.Platform.Tests/InProcess/SidebarVisibilityContractTests.fs. -->
+        <Compile Include="SidebarPlacementTests.fs" />
         <!-- Shell program-lifetime effects: the outer-composer contract
              (programLifetimeEffects / withShellLifetimeEffects /
              EffectHandle.map) — pins that an outer Program composer

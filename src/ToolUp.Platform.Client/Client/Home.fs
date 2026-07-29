@@ -441,5 +441,11 @@ let create (recents: bool) (config: HomeModuleConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.home"
+    // Phase 611 — the landing declares its rail slot rather than being
+    // recognised by id inside `buildSections`. Ungrouped no longer implies
+    // a position, so "renders as the leading sidebar entry" is now said
+    // here, at the construction site, instead of being a consequence of
+    // the sidebar's bucketing plus a hardcoded id list.
+    |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.register

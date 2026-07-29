@@ -240,6 +240,10 @@ let create () : ErasedModule =
         Icon = ToolUp.Platform.Icons.settings
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
+    // Phase 611 — declared placement, replacing the `isLandingId` id check
+    // `buildSections` used to carry: this landing shares the leading
+    // always-visible section with the product one, and says so itself.
+    |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withArea ModuleArea.Administration
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

@@ -1015,6 +1015,27 @@ let accessibleNameTests =
                  one — fall back to a real name (the lead module's) instead."
         }
 
+        test "the narrow rail keeps both PLACED sections fully visible" {
+            // Phase 611's narrow-rail leg. The `_home` / `_trailing` sections
+            // are built with `IsCollapsed = false`, so the `not
+            // section.IsCollapsed` arm would render them anyway — naming them
+            // in `alwaysVisible` is what makes the guarantee local to the
+            // render decision instead of resting on a value computed three
+            // hundred lines away. The rail's two widths are separate render
+            // paths (608.D), and this is the one the .NET harness can only
+            // read, not run.
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "|| section.Key = TrailingKey"
+                "the narrow (w-20) rail's `alwaysVisible` must name `TrailingKey` alongside \
+                 `HomeKey`. A placed row is reachable in BOTH rail widths without expanding \
+                 anything — that is the whole point of declaring its slot, and the narrow rail \
+                 is where the Phase 608 defect was worst (an icon inside a collapsed catch-all \
+                 is not a route)."
+        }
+
         test "the app mark carries alt text" {
             let code = sidebarCode ()
 
@@ -1024,5 +1045,122 @@ let accessibleNameTests =
                 "the shell logo had no `alt`, so in the narrow rail — where the app-name span is \
                  not rendered — the shell's only branding was an unnamed image. Found by the \
                  609.C sweep of the other icon-only chrome in the rail."
+        }
+    ]
+
+// ─── Phase 611 — rail placement as declared data ──────────────────────
+//
+// A row's position used to be an implicit consequence of a field that
+// means something else: `Group = None` was read by `buildSections` as
+// "bottom of the rail, inside the collapsed `_other` catch-all". Nothing
+// declared it, and the two landings escaped it only because the fold
+// special-cased their literal ids — so the Phase 567 area-switcher rows,
+// added later with `Group = None` and no special case, bucketed into
+// `_other`: last in the rail and collapsed on a fresh profile. Observed
+// live in a `SeparateArea` deployment, where a platform admin had to
+// expand "Other" to find the only route into the administration area
+// (Phase 608, superseded by 611).
+//
+// **The behavioural pack is Fable-side, and that placement was measured.**
+// `buildSections` reads no module-level value of `Toolup.Sidebar`, so it
+// looks callable from here — but F# emits a static-init check on module
+// function entry, so the first call fires the file's initialiser, which
+// reaches `importDefault "../icons/toolup-forge-dark.png"` and throws
+// "You've hit dummy code used for Fable bindings". The pack was written
+// here first and every case errored on exactly that, which is why the
+// prose above this file's Phase 609 arm says what it says. The executing
+// assertions — undeclared ⇒ grouped, declared ⇒ placed, no reserved row in
+// `_other`, and the fresh-profile switcher-reachability case — therefore
+// live in `ToolUp.AI.Client.Tests/SidebarPlacementTests.fs`, beside the
+// other two packs over the same fold.
+//
+// What is left here is the half a .NET harness CAN hold: the code shape.
+// These are cheap and they fail in the one direction that matters —
+// someone reintroducing an id-keyed placement rule, or a new reserved row
+// arriving without a declaration.
+
+[<Tests>]
+let placementTests =
+    testList "Phase 611 — declared rail placement (shape)" [
+
+        test "the fold resolves a DECLARED slot, defaulting to grouped" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "m.Placement |> Option.defaultValue GroupedSlot"
+                "`buildSections` must resolve each row's slot from its own `Placement` declaration, \
+                 with absent ⇒ `GroupedSlot` — that default IS the GP 11 guarantee that an existing \
+                 composition buckets exactly as it did before the field existed."
+
+            for slot, key in [ "LeadingSlot", "HomeKey"; "TrailingSlot", "TrailingKey" ] do
+                Expect.stringContains
+                    code
+                    (sprintf "placedSection %s %s" key slot)
+                    (sprintf
+                        "the fold must lift `%s` rows into the `%s` section before any bucketing. \
+                         A placed section is built with `IsCollapsed = false` and no title, which is \
+                         what makes it reachable on a fresh profile in both rail widths."
+                        slot
+                        key)
+        }
+
+        test "no id literal drives placement any more" {
+            let code = sidebarCode ()
+
+            Expect.isFalse
+                (code.Contains "isLandingId")
+                "`isLandingId` was the id special-case this phase retired: `id = HomeId || id = \
+                 AdminHomeId`, a hardcoded list the Phase 567 switcher rows were never added to — \
+                 which is precisely why they fell into `_other`. Placement is declared at the row's \
+                 construction site now; a fold that recognises rows by id will grow the same gap \
+                 again the next time a reserved row is added."
+
+            // The four reserved ids still appear in this file — in
+            // `rowAccessibleName` (Phase 609) and `isHideableId` (Phase 572),
+            // both of which are deliberately id-keyed and neither of which
+            // decides position. So the assertion is specifically that no
+            // *placement* decision reads one, expressed as: the section keys a
+            // row can resolve to are chosen from the declared slot, and the
+            // grouped branch keys off `Group` alone.
+            Expect.stringContains
+                code
+                "let groupable = rail |> List.filter (fun m -> slotOf m = GroupedSlot)"
+                "the bucketed set must be exactly the rows that resolved to `GroupedSlot` — derived \
+                 from the declaration, never from an id list or a `Group = None` inference."
+        }
+
+        test "the render layer suppresses pinning for a placed row by section, not by id" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "let pinnable = not inPlacedSection && not inHiddenSection"
+                "the pin affordance must be suppressed for any row in a placed section. This read \
+                 `m.Id <> HomeId`, which covered ONE of the four reserved rows by name — the admin \
+                 landing and both switchers each offered a pin control whose click was already \
+                 inert, because `buildSections` leaves a placed row out of the pinning index."
+
+            Expect.stringContains
+                code
+                "let inPlacedSection = section.Key = HomeKey || section.Key = TrailingKey"
+                "…and it must derive that from the reserved SECTION keys, which is the placement \
+                 model's own vocabulary, rather than from any row id."
+        }
+
+        test "the section order puts the trailing slot after the rail and before the reveal list" {
+            // Line-joined so the assertion survives Fantomas moving the `@`
+            // operators around; the section names themselves are what is
+            // being pinned, in order.
+            let oneLine = sidebarCode().Split('\n') |> Array.map _.Trim() |> String.concat " "
+
+            Expect.stringContains
+                oneLine
+                "homeSection @ pinnedSection @ declaredSections @ otherSection @ trailingSection @ hiddenSection"
+                "the fold's final concatenation must read in rail order: the leading placed section, \
+                 pinned, declared groups, `_other`, the trailing placed section, then the Hidden \
+                 items reveal list. `_hidden` stays last so the Phase 572 invariant (\"rendered \
+                 after every rail section\") still holds, and `_trailing` sits after `_other` so a \
+                 placed row reads as rail chrome rather than as another destination."
         }
     ]

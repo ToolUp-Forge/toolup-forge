@@ -758,6 +758,16 @@ let allTests =
         // narrow rail); textual pins until Phase 610's shell-a11y
         // fixture set can assert the rendered names.
         SidebarVisibilityContractTests.accessibleNameTests
+        // Phase 611 — rail placement as declared data. Code-shape pins
+        // only: the fold reads each row's `Placement` (absent ⇒ grouped),
+        // `isLandingId` is gone, the render layer suppresses pinning by
+        // section rather than by id, and the section order is rail order.
+        // The behavioural half runs the real `buildSections` fold Fable-side
+        // in `ToolUp.AI.Client.Tests/SidebarPlacementTests.fs` — measured,
+        // not assumed: calling it under .NET fires the module initialiser's
+        // `importDefault`. One more separate `[<Tests>]` binding that would
+        // otherwise lie dormant.
+        SidebarVisibilityContractTests.placementTests
         // Phase 569 — the same decision in its reasoned form: which gate
         // refused a deep-linked route, and the equation pinning the
         // sidebar and the router to one predicate.

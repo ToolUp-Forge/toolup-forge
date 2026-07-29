@@ -174,6 +174,9 @@ let private referenceClient () : ErasedModule = {
     ]
     Availability = Always
     Group = Some "Analysis"
+    // Phase 611 — a declared rail slot, so the descriptor's `placement`
+    // facet has a value to report for this reference registration.
+    Placement = Some Toolup.Sidebar.TrailingSlot
     NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []

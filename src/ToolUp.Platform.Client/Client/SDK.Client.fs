@@ -2734,6 +2734,14 @@ module Client =
                                 HasData = true
                                 Group = None
                                 Pages = []
+                                // Phase 611 — declared, not inferred. Before
+                                // this the row carried `Group = None` and the
+                                // sidebar's bucketing put it in the collapsed
+                                // `_other` catch-all at the foot of the rail:
+                                // the only route back out of the
+                                // administration area, hidden behind a
+                                // section the user had to think to open.
+                                Placement = Some Toolup.Sidebar.TrailingSlot
                             }
                             : Toolup.Sidebar.SidebarModuleView)
                         ]
@@ -2758,6 +2766,15 @@ module Client =
                                         HasData = true
                                         Group = None
                                         Pages = []
+                                        // Phase 611 — the row the defect was
+                                        // observed on: the only route INTO the
+                                        // administration area, which bucketed
+                                        // into `_other` and so sat last and
+                                        // collapsed on a fresh profile. Placed
+                                        // in the trailing always-visible
+                                        // section, reachable in both rail
+                                        // widths with no persisted state.
+                                        Placement = Some Toolup.Sidebar.TrailingSlot
                                     }
                                     : Toolup.Sidebar.SidebarModuleView)
                                 ]
@@ -2801,6 +2818,13 @@ module Client =
                         HasData = hasData
                         Group = moduleImpl.Group
                         Pages = pages
+                        // Phase 611 — carried straight through from the
+                        // module's own declaration (`ClientModule.withPlacement`),
+                        // so this projection makes no placement decision and
+                        // names no id. `None` for every module that declares
+                        // nothing, which the sidebar reads as ordinary group
+                        // bucketing (GP 11).
+                        Placement = moduleImpl.Placement
                     })
 
             Toolup.Sidebar.buildSections (views @ switcherViews) model.SidebarPrefs

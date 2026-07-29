@@ -432,6 +432,7 @@ module ModuleSurface =
         "FeatureFlags", NeedsFacet
         "Availability", ProvidesFacet
         "Group", ProvidesFacet
+        "Placement", ProvidesFacet
         "NavRole", ProvidesFacet
         "Area", ProvidesFacet
         "ClientQueryHandlers", ProvidesFacet
@@ -515,6 +516,17 @@ module ModuleSurface =
                 one "Availability" (tryProp "Availability" registration |> Option.bind caseName)
                 one "Area" (tryProp "Area" registration |> Option.bind caseName)
                 one "Group" (tryProp "Group" registration |> Option.bind unwrapOption |> Option.map string)
+                // Phase 611 — the declared rail slot. Same optional shape as
+                // `Group` / `NavRole`: a module that declares none emits no
+                // entry, and the facet table above is what keeps the field
+                // classified either way. Worth surfacing because a placed row
+                // is one a user preference cannot move, which is exactly the
+                // kind of declaration a composition audit wants to see.
+                one
+                    "Placement"
+                    (tryProp "Placement" registration
+                     |> Option.bind unwrapOption
+                     |> Option.bind caseName)
                 // Phase 568 — the declared nav-role gate. Optional, so a
                 // module that declares none emits no placement entry (the
                 // `Group` line above is the same shape); the facet table

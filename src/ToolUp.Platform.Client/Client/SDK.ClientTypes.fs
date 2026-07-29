@@ -209,7 +209,24 @@ type ErasedModule = {
     /// `NavRole` below; the group label only still decides access
     /// through the deprecated fallback that covers modules predating
     /// that field (`SidebarVisibility.effectiveNavRole`).
+    ///
+    /// Phase 611 — and it no longer decides *position* either. `None` used
+    /// to mean "bottom of the rail, inside the collapsed `_other`
+    /// catch-all" as a side effect of the sidebar's bucketing; placement is
+    /// now declared by `Placement` below, and `None` here means only that
+    /// this module declares no group.
     Group: string option
+    /// Phase 611 — optional declared rail slot
+    /// (`Toolup.Sidebar.SidebarPlacement`): `LeadingSlot` for the
+    /// always-visible leading section, `TrailingSlot` for the always-visible
+    /// trailing one, `GroupedSlot` for ordinary group bucketing. Default
+    /// `None` ⇒ `GroupedSlot`, the bucketing every module got before this
+    /// field existed, so an existing composition is unchanged (GP 11).
+    /// Construct via `ClientModule.withPlacement`. The slot vocabulary is
+    /// defined once, in `Toolup.Sidebar` beside the row shape that carries
+    /// it — the sidebar owns rail arrangement; this field is a module's
+    /// declaration *about* it.
+    Placement: Toolup.Sidebar.SidebarPlacement option
     /// Phase 568 — optional typed navigation-role gate. The shell hides
     /// this module's sidebar entry from callers who do not hold the
     /// declared role (`NavRole.PlatformAdminOnly` → platform admins;
@@ -358,6 +375,10 @@ type ClientModule<'Model, 'Msg> = {
     Availability: ModuleAvailability
     /// Optional taxonomy group for sidebar grouping. See `ErasedModule.Group`.
     Group: string option
+    /// Phase 611 — declared rail slot. See `ErasedModule.Placement`; set via
+    /// `ClientModule.withPlacement`. Default `None` ⇒ ordinary group
+    /// bucketing, exactly as before the field existed (GP 11).
+    Placement: Toolup.Sidebar.SidebarPlacement option
     /// Phase 568 — typed navigation-role gate. See `ErasedModule.NavRole`;
     /// set via `ClientModule.withNavRole`. Default `None` (ungated).
     NavRole: NavRole option
@@ -1973,6 +1994,7 @@ module ClientModule =
             FeatureFlags = m.FeatureFlags
             Availability = m.Availability
             Group = m.Group
+            Placement = m.Placement
             NavRole = m.NavRole
             Area = m.Area
             ClientQueryHandlers = m.ClientQueryHandlers
@@ -2034,6 +2056,9 @@ module ClientModule =
         FeatureFlags = []
         Availability = Always
         Group = None
+        // Phase 611 — absent placement ⇒ `GroupedSlot` in the sidebar's
+        // fold, i.e. today's bucketing exactly (GP 11).
+        Placement = None
         NavRole = None
         Area = Product
         ClientQueryHandlers = []
@@ -2255,6 +2280,38 @@ module ClientModule =
         m with
             Group = Some group
     }
+
+    /// Phase 611 — declare where this module's row sits on the rail:
+    ///
+    /// * `Toolup.Sidebar.LeadingSlot` — the always-visible leading section,
+    ///   first in the rail, never collapsed, in both rail widths.
+    /// * `Toolup.Sidebar.TrailingSlot` — the always-visible trailing
+    ///   section, after every grouped section, never collapsed, in both
+    ///   rail widths.
+    /// * `Toolup.Sidebar.GroupedSlot` — ordinary bucketing by `withGroup`
+    ///   (or the `_other` catch-all when no group is declared), with
+    ///   per-section collapse, pinning, hiding and drag-reorder. This is
+    ///   the default; declaring it explicitly is a no-op that says so.
+    ///
+    /// Position used to be a side effect of `withGroup`: declaring no group
+    /// put a row in the `_other` catch-all, which renders last and is
+    /// collapsed until the user opens it. That is the right default for an
+    /// unclassified *destination* and the wrong one for a row whose purpose
+    /// is to be found — which is why the two landings and the two area
+    /// switchers declare a slot here instead. A placed row's position is
+    /// fixed by this declaration: it is not pinnable, not drag-reorderable,
+    /// and no persisted preference moves it.
+    ///
+    /// Undeclared modules are grouped exactly as before (GP 11), so this is
+    /// purely opt-in. GP 12 — rail arrangement only: it changes *where* a
+    /// row renders, never *whether* the caller may see it (that is
+    /// `withNavRole` / `withVisibility`, and the server-side guards remain
+    /// the enforcement).
+    let withPlacement
+        (placement: Toolup.Sidebar.SidebarPlacement)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        { m with Placement = Some placement }
 
     /// Phase 568 — declare the navigation role a caller must hold for
     /// this module's sidebar entry to render:

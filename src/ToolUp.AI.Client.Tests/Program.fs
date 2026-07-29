@@ -36,6 +36,11 @@ let allTests =
         // Hidden items reveal section, and the legacy-blob load path
         // (Platform.Client).
         SidebarHidingTests.tests
+        // Phase 611 — rail placement as declared data: an undeclared row
+        // buckets exactly as before, a declared row lands in its slot, and
+        // no reserved row can resolve to the collapsed `_other` catch-all
+        // (the Phase 608 fresh-profile switcher defect).
+        SidebarPlacementTests.tests
         // Phase 573 follow-up — shell program-lifetime effects: the
         // outer-composer contract (withSidePanel must re-attach the
         // shell's background subscriptions; the admin-tile click-through
