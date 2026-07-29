@@ -635,6 +635,46 @@ type private RowControls = {
     OnHideToggled: unit -> unit
 }
 
+/// Phase 609 — the accessible name of one rail row, and the single place
+/// the shell's naming rule is written down.
+///
+/// **The mechanism, stated once.** Every interactive control in this file
+/// carries `prop.ariaLabel`: that is the *accessible name* — what a screen
+/// reader announces, what voice control targets, and the only one of the
+/// two attributes that exists on a touch device. `prop.title` is added ON
+/// TOP of it wherever the control has no visible text label — the whole
+/// narrow (w-20) rail, plus the pin / hide affordances in both widths —
+/// because a hover tooltip is the sighted pointer user's equivalent
+/// affordance. `title` alone is NOT a substitute: it is the weakest source
+/// in the accessible-name computation, several assistive technologies skip
+/// it, and it never appears on touch. In the hover-expanded rail the row's
+/// own `<span>` is the visible label, so the row keeps the `aria-label`
+/// (mirroring that text, so the name survives the span being hidden) and
+/// takes no tooltip — a tooltip repeating adjacent visible text is noise.
+///
+/// A new *row* inherits all of this by going through `renderRow`. A new
+/// icon-only *control* sets both attributes; if it has visible text, it
+/// sets `aria-label` only.
+///
+/// The `rowId` fallbacks exist because a row whose display name is blank
+/// would render as an unnamed button — the same defect one level deeper.
+/// The four reserved ids are named explicitly because they are the rows
+/// whose loss strands the user: the two landings, and the
+/// [Phase 567](567-admin-area-two-surface-sidebar-navigation.md) area
+/// switchers (the switcher is the only route *into* the administration
+/// area, the landing the only guaranteed way back).
+let private rowAccessibleName (rowId: string) (displayName: string) : string =
+    if not (System.String.IsNullOrWhiteSpace displayName) then
+        displayName.Trim()
+    else
+        match rowId with
+        | HomeId -> "Home"
+        | AdminHomeId -> "Administration home"
+        | AdminAreaId -> "Administration"
+        | ProductAreaId -> "Back to app"
+        | other when not (System.String.IsNullOrWhiteSpace other) -> other.Trim()
+        | _ -> "Unnamed entry"
+
 /// One clickable sidebar row — the shared button + hover-revealed pin and
 /// hide affordances used by leaf modules, multi-page parents, and page
 /// children alike. `leading` is an optional glyph rendered before the
@@ -646,6 +686,10 @@ type private RowControls = {
 /// before the unpin re-render, so the row dropping back to its home
 /// group is the expected result, not a lost click. The hide affordance
 /// behaves the same way in reverse from the Hidden items section.
+///
+/// `rowId` is the row's sidebar id (bare module id or composite page id).
+/// It is carried purely so the row can always resolve an accessible name —
+/// see `rowAccessibleName` for the naming rule this renderer applies.
 let private renderRow
     (isExpanded: bool)
     (isSelected: bool)
@@ -654,9 +698,19 @@ let private renderRow
     (indent: bool)
     (leading: ReactElement option)
     (icon: ReactElement)
+    (rowId: string)
     (name: string)
     (onActivate: unit -> unit)
     =
+    let accessibleName = rowAccessibleName rowId name
+
+    // The trailing affordances keep their bare-verb tooltips (no visual
+    // change), but their accessible names name the row they act on: a rail
+    // of a dozen buttons all called "Pin" is unusable by voice control and
+    // useless read aloud.
+    let pinTooltip = if controls.IsPinned then "Unpin" else "Pin"
+    let hideTooltip = if controls.IsHidden then "Restore" else "Hide"
+
     Html.div [
         prop.className "relative group"
         prop.children [
@@ -681,6 +735,14 @@ let private renderRow
                     else
                         "border-2 border-transparent"
                 ]
+                // Phase 609 — the row's own name, never its section's. In
+                // the narrow rail this button has no visible text at all,
+                // so before this it exposed no accessible name and no
+                // tooltip; the two landings and the two area switchers were
+                // the worst instances of that.
+                prop.ariaLabel accessibleName
+                if not isExpanded then
+                    prop.title accessibleName
                 prop.onClick (fun _ -> onActivate ())
                 prop.children [
                     // Expand chevron (multi-page parent) — only in the
@@ -730,7 +792,8 @@ let private renderRow
                         else
                             "opacity-0 group-hover:opacity-100 transition-opacity"
                     ]
-                    prop.title (if controls.IsPinned then "Unpin" else "Pin")
+                    prop.title pinTooltip
+                    prop.ariaLabel $"{pinTooltip} {accessibleName}"
                     prop.onClick (fun e ->
                         e.stopPropagation ()
                         controls.OnPinToggled())
@@ -753,7 +816,8 @@ let private renderRow
                         else
                             "opacity-0 group-hover:opacity-100 transition-opacity"
                     ]
-                    prop.title (if controls.IsHidden then "Restore" else "Hide")
+                    prop.title hideTooltip
+                    prop.ariaLabel $"{hideTooltip} {accessibleName}"
                     prop.onClick (fun e ->
                         e.stopPropagation ()
                         controls.OnHideToggled())
@@ -816,6 +880,7 @@ let private renderModuleButton
             false
             None
             m.Icon
+            m.Id
             m.Name
             (activate m.Id)
     else
@@ -844,6 +909,7 @@ let private renderModuleButton
                     false
                     (Some(chevron (not effectiveExpanded)))
                     m.Icon
+                    m.Id
                     m.Name
                     parentActivate
 
@@ -867,6 +933,7 @@ let private renderModuleButton
                                     true
                                     None
                                     p.Icon
+                                    p.Id
                                     p.Name
                                     (activate p.Id)
                             ]
@@ -921,6 +988,11 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
             "text-white/50 hover:text-white/80 text-xs uppercase tracking-wider font-semibold"
             "transition-colors"
         ]
+        // Mirrors the visible text (Phase 609) so the header's accessible
+        // name stays stable as glyphs accumulate inside the button — it
+        // already carries a chevron and, in the pinned section, a pin.
+        // No tooltip: the label is right there.
+        prop.ariaLabel (rowAccessibleName section.Key title)
         prop.onClick (fun _ -> onGroupToggled section.Key)
         prop.children [
             chevron section.IsCollapsed
@@ -1069,13 +1141,23 @@ let Sidebar
         match section.Modules with
         | [] -> Html.none
         | lead :: _ ->
+            // Phase 609 — this used to resolve an untitled section to
+            // `Option.defaultValue ""`: an empty tooltip and no accessible
+            // name at all, which is reachable today (`_other` drops its
+            // title when it is the only section, and it is collapsed by
+            // default). Falling back to the lead module's name is honest —
+            // the icon rendered below IS that module's icon.
+            let groupLabel =
+                section.Title |> Option.defaultValue lead.Name |> rowAccessibleName section.Key
+
             Html.button [
                 prop.key (section.Key + "__groupicon")
                 prop.className [
                     "w-full flex items-center justify-center py-3 transition-colors rounded-[var(--radius)] bg-transparent"
                     "text-white/60 hover:text-white hover:bg-white/5 border-2 border-transparent"
                 ]
-                prop.title (section.Title |> Option.defaultValue "")
+                prop.ariaLabel groupLabel
+                prop.title groupLabel
                 prop.onClick (fun _ -> onGroupToggled section.Key)
                 prop.children [
                     Html.div [
@@ -1140,7 +1222,14 @@ let Sidebar
                 prop.children [
                     Html.div [
                         prop.className "w-8 h-8 flex-shrink-0"
-                        prop.children [ Html.img [ prop.src appLogo ] ]
+                        // Phase 609 sweep — the app mark carried no `alt`,
+                        // so in the narrow rail (where the app-name span
+                        // below is not rendered) the shell's only branding
+                        // was invisible to assistive tech and announced as
+                        // a bare image. The app name is the right text: it
+                        // is exactly what the adjacent span says when the
+                        // rail is expanded.
+                        prop.children [ Html.img [ prop.src appLogo; prop.alt appName ] ]
                     ]
                     if isExpanded then
                         Html.span [

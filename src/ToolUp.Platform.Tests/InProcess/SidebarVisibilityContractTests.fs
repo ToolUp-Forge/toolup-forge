@@ -868,3 +868,161 @@ let groupSetTests =
             Expect.isFalse (SidebarVisibility.isAdminSidebarGroup None) "no group is not in the union"
         }
     ]
+
+// ─── Phase 609 — accessible names for the rail's rows ─────────────────
+//
+// The narrow (w-20) rail is icon-only — nothing in a row renders visible
+// text — so a row carrying neither `aria-label` nor `title` is an unnamed
+// button: no tooltip for a sighted pointer user, a bare "button" read
+// aloud for a screen-reader user. Section HEADERS carried a `title`; the
+// ROWS carried nothing. That was worst for the two landings
+// (`_sdk.home` / `_sdk.admin-home`) and the Phase 567 area switchers
+// (`_area.admin` / `_area.product`), because the switcher is the only
+// route INTO the administration area and the landing the only guaranteed
+// way back — an unnamed icon there is a dead end, not an inconvenience.
+//
+// **Why these assertions are textual.** The renderers live in
+// `Toolup.Sidebar`, whose module initialiser reaches
+// `importDefault "../icons/toolup-forge-dark.png"` — a Fable binding that
+// throws outside a Fable compilation, so nothing in that module can be
+// CALLED from the .NET harness. That is the same constraint
+// `SidebarHidingContractTests` and `ModuleParityValidator` document, and
+// the textual form is the same one `SubjectKindClientFlowTests` uses for
+// the Fable-only client tier.
+//
+// **Migration.** Phase 610 is the structural home for shell-a11y
+// assertions. When its fixture set lands, these should be promoted to
+// rendered-DOM assertions over both rail widths (every row exposes a
+// non-empty accessible name equal to its display name) and this list
+// retired — the pins below are what holds the contract until then.
+
+let private sidebarSourcePath () =
+    let assemblyDir =
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+    // …/src/ToolUp.Platform.Tests/bin/Debug/net10.0 → the repo root
+    let repoRoot =
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+    System.IO.Path.Combine(repoRoot, "src", "ToolUp.Platform.Client", "Client", "UI", "Sidebar.fs")
+
+/// The renderer source with full-line comments stripped, and CRLF
+/// normalised to LF. Every assertion below runs against this rather than
+/// the raw text: the file's own comments quote both the attribute names
+/// and the retired `Option.defaultValue ""` spelling, so a raw search
+/// would match the prose explaining the fix instead of the code applying
+/// it — and would keep passing if the code were reverted.
+let private sidebarCode () =
+    let path = sidebarSourcePath ()
+    Expect.isTrue (System.IO.File.Exists path) (sprintf "expected Sidebar.fs at %s" path)
+
+    (System.IO.File.ReadAllText path).Replace("\r\n", "\n").Split('\n')
+    |> Array.filter (fun line -> not (line.TrimStart().StartsWith "//"))
+    |> String.concat "\n"
+
+/// One chunk per `Html.button [` occurrence, each running to the start of
+/// the next button. Coarse, but sufficient: a Feliz button's props sit
+/// between its own opening bracket and the next button's, so a chunk
+/// missing `prop.ariaLabel` is a button with no accessible name.
+let private buttonBlocks (code: string) =
+    code.Split([| "Html.button [" |], System.StringSplitOptions.None)
+    |> Array.skip 1
+
+[<Tests>]
+let accessibleNameTests =
+    testList "Phase 609 — rail row accessible names" [
+
+        test "every interactive control in the sidebar declares an accessible name" {
+            let blocks = buttonBlocks (sidebarCode ())
+
+            Expect.isTrue
+                (blocks.Length >= 5)
+                (sprintf
+                    "expected at least the five sidebar buttons (the row, its pin and hide \
+                     affordances, the section header, the collapsed-group icon) — found %d"
+                    blocks.Length)
+
+            blocks
+            |> Array.iteri (fun i block ->
+                Expect.stringContains
+                    block
+                    "prop.ariaLabel"
+                    (sprintf
+                        "Sidebar.fs button #%d carries no `prop.ariaLabel`. Phase 609 — every \
+                         interactive control in the rail names itself; in the narrow (w-20) rail \
+                         nothing renders visible text, so a button without one is announced as an \
+                         unnamed button and offers no tooltip. The rule, and when to add `title` \
+                         as well, is in the `rowAccessibleName` doc-comment."
+                        (i + 1)))
+        }
+
+        test "the row renderer names the row, not its section" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "let accessibleName = rowAccessibleName rowId name"
+                "renderRow must resolve the accessible name from the ROW's own id and display \
+                 name. The pre-609 rail named only sections (the collapsed-group icon's \
+                 `prop.title`), which is exactly the wrong granularity: every row inside a \
+                 section would have shared one name."
+
+            Expect.stringContains
+                code
+                "prop.ariaLabel accessibleName"
+                "the row button must carry the resolved name as its accessible name in BOTH rail \
+                 widths — `title` alone is the weakest source in the accessible-name computation \
+                 and never appears on touch."
+
+            Expect.stringContains
+                code
+                "prop.title accessibleName"
+                "the narrow rail must also carry the name as a tooltip — it is the sighted \
+                 pointer user's equivalent of the label span the w-20 rail does not render."
+        }
+
+        test "the reserved landing and area-switcher rows are named explicitly" {
+            let code = sidebarCode ()
+
+            let arms = [
+                "| HomeId ->", "the product landing"
+                "| AdminHomeId ->", "the administration landing"
+                "| AdminAreaId ->", "the switcher INTO the administration area"
+                "| ProductAreaId ->", "the switcher back out to the app"
+            ]
+
+            for arm, what in arms do
+                Expect.stringContains
+                    code
+                    arm
+                    (sprintf
+                        "`rowAccessibleName` must name %s (%s) even when its display name arrives \
+                         blank. These four rows are the ones whose loss strands the user, so they \
+                         do not rely on a caller supplying a name."
+                        what
+                        arm)
+        }
+
+        test "no rail control resolves its label to the empty string" {
+            let code = sidebarCode ()
+
+            Expect.isFalse
+                (code.Contains "Option.defaultValue \"\"")
+                "the collapsed-group icon resolved an untitled section to an EMPTY tooltip \
+                 (`section.Title |> Option.defaultValue \"\"`), which is reachable today: the \
+                 `_other` section drops its title when it is the only section, and it is \
+                 collapsed by default. An empty accessible name is the same defect as a missing \
+                 one — fall back to a real name (the lead module's) instead."
+        }
+
+        test "the app mark carries alt text" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "prop.alt appName"
+                "the shell logo had no `alt`, so in the narrow rail — where the app-name span is \
+                 not rendered — the shell's only branding was an unnamed image. Found by the \
+                 609.C sweep of the other icon-only chrome in the rail."
+        }
+    ]

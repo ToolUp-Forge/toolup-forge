@@ -753,6 +753,11 @@ let allTests =
         SidebarVisibilityContractTests.orderingTests
         SidebarVisibilityContractTests.groupSetTests
         SidebarVisibilityContractTests.navRoleTests
+        // Phase 609 — accessible names for every rail row (the two
+        // landings and the two area switchers were unnamed icons in the
+        // narrow rail); textual pins until Phase 610's shell-a11y
+        // fixture set can assert the rendered names.
+        SidebarVisibilityContractTests.accessibleNameTests
         // Phase 569 — the same decision in its reasoned form: which gate
         // refused a deep-linked route, and the equation pinning the
         // sidebar and the router to one predicate.
