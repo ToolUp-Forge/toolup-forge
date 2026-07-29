@@ -6,7 +6,10 @@
     <PackageId>ToolUp.Stripe.Server</PackageId>
     <Description>Giraffe / ASP.NET Core wiring for ToolUp.Stripe.Webhook: production stripeWebhook handler (signature verify + idempotent replay + status mapping). Pure BCL HttpClient for portal/checkout — no Stripe.net dependency.</Description>
     <PackageTags>fsharp;stripe;giraffe;aspnetcore;billing</PackageTags>
-    <Version>0.1.0-alpha</Version>
+    <!-- 0.2.0-alpha: rides the Webhook 0.2.0-alpha bump (SecretMissing → 500 mapping
+         landed here in the same Phase 332 commit; the nupkg's Webhook dependency
+         floor moves with the project reference). -->
+    <Version>0.2.0-alpha</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="StripeConfig.fs" />

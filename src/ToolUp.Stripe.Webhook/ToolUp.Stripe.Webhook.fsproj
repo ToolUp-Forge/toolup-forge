@@ -6,7 +6,11 @@
     <PackageId>ToolUp.Stripe.Webhook</PackageId>
     <Description>Stripe webhook signature verification + typed event envelope. Pure F# — no ASP.NET Core, no Giraffe, no Stripe.net dependency.</Description>
     <PackageTags>fsharp;stripe;webhooks;billing;hmac</PackageTags>
-    <Version>0.1.0-alpha</Version>
+    <!-- 0.2.0-alpha: WebhookError gained SecretMissing (Phase 332, d9411d8) — a DU
+         addition is binary-breaking for exhaustive matchers, so the slot advances
+         rather than repacking 0.1.0-alpha (which had already happened; consumers got
+         one contract or the other depending on cache age). -->
+    <Version>0.2.0-alpha</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="WebhookError.fs" />
