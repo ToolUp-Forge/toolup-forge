@@ -99,6 +99,15 @@
              background subscriptions, the admin-tile click-through
              regression class. -->
         <Compile Include="ShellLifetimeEffectsTests.fs" />
+        <!-- Phase 610 — the Phase 180 a11y rule set over the shell rail's
+             states. The rules are COMPILED IN from ToolUp.Platform.Testing
+             rather than reimplemented: that project ProjectReferences
+             Platform.Server, which must not be dragged through Fable, but
+             this file is BCL-only by design and already packs under
+             `fable/`. Reusing it verbatim is the point of the phase — a
+             second a11y vocabulary is the failure mode it exists to avoid. -->
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\AccessibilityAssertions.fs" />
+        <Compile Include="SidebarRailA11yTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

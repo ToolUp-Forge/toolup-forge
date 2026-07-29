@@ -7,7 +7,8 @@
         "test": "node --import ./register-loader.mjs --test output/Program.js"
     },
     "//1": "SDK-bundle deps mirror `samples/MinimalClient/package.json` — the Platform.Client tier's transpiled JS imports `react`, `@clerk/react`, `@dnd-kit/*`, `ag-*` from every consumer. Node ESM resolution at module-load needs these installed even though the test code only calls pure `init` / `update` functions (the view-side code never executes).",
-    "//2": "Test runner is Node's built-in `node:test` (stable in Node 20+) — zero transitive npm deps for the runner itself. The Fable-side facade lives in `NodeTest.fs`. See `docs/platform/testing-conventions.md` for rationale (vs Fable.Mocha + npm mocha)."
+    "//2": "Test runner is Node's built-in `node:test` (stable in Node 20+) — zero transitive npm deps for the runner itself. The Fable-side facade lives in `NodeTest.fs`. See `docs/platform/testing-conventions.md` for rationale (vs Fable.Mocha + npm mocha).",
+    "//3": "Phase 610 — `jsdom` is the DOM the shell-rail a11y pack renders into. It is a DOM, not a test runner: `node:test` is still the runner and still has no transitive deps. This is the devDep this project's `.fsproj` header reserved for the first test that concretely needs to MOUNT a Feliz view (`react-dom/client` was already installed for ESM resolution). Needed because the rail's narrow-vs-hover-expanded state is component-local `useState` driven by a pointer event, so the expanded rail is unreachable from a string renderer."
     ,
     "devDependencies": {
         "@clerk/react": "^6.6.4",
@@ -18,6 +19,7 @@
         "ag-charts-react": "13.3.0",
         "ag-grid-community": "35.3.0",
         "ag-grid-react": "35.3.0",
+        "jsdom": "^27.0.0",
         "react": "~19.2.6",
         "react-dom": "~19.2.6"
     }

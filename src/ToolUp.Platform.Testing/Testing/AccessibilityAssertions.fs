@@ -381,23 +381,99 @@ module Accessibility =
     let private hasVisibleText (children: A11yNode list) =
         children |> List.map visibleText |> String.concat " " |> _.Trim() |> (<>) ""
 
-    /// Does this element carry an accessible name — from text content,
-    /// `aria-label`, `aria-labelledby`, `title`, or (for the button-like
-    /// `input` types) its `value` / `alt`?
-    let private hasAccessibleName (tag: string) (attrs: Map<string, string>) (children: A11yNode list) =
-        let fromAttrs =
-            attrNonEmpty "aria-label" attrs
-            || attrNonEmpty "aria-labelledby" attrs
-            || attrNonEmpty "title" attrs
+    /// The HTML whitespace set. Shared by the name normaliser below and by
+    /// the fragment tokenizer at the foot of this file — one definition, so
+    /// "what counts as whitespace" cannot drift between reading a tree and
+    /// parsing one.
+    let private isWhitespaceChar (c: char) =
+        c = ' ' || c = '\t' || c = '\n' || c = '\r' || c = '\f'
 
-        let fromInput =
-            tag = "input"
-            && (match attr "type" attrs with
-                | Some("submit" | "button" | "reset") -> attrNonEmpty "value" attrs
-                | Some "image" -> attrNonEmpty "alt" attrs
-                | _ -> false)
+    /// Collapse runs of whitespace to single spaces and trim — the
+    /// normalisation an assistive technology applies before announcing a
+    /// computed name. Hand-rolled over the whitespace set rather than a
+    /// regex, per this file's BCL-only / Fable-safe posture.
+    let private normaliseName (value: string) =
+        let sb = System.Text.StringBuilder()
+        let mutable pendingSpace = false
 
-        fromAttrs || fromInput || hasVisibleText children
+        for c in value do
+            if isWhitespaceChar c then
+                if sb.Length > 0 then
+                    pendingSpace <- true
+            else
+                if pendingSpace then
+                    sb.Append ' ' |> ignore
+                    pendingSpace <- false
+
+                sb.Append c |> ignore
+
+        sb.ToString()
+
+    /// **The accessible name of one element, as a value** — the single
+    /// definition of "is this thing named", read by
+    /// `everyInteractiveHasAccessibleName` (which needs only presence) and
+    /// by `interactiveNames` (which needs the name itself). One definition,
+    /// two readers: a census that computed names its own way could report a
+    /// surface as named while the rule failed it, or the reverse, and the
+    /// disagreement would be invisible.
+    ///
+    /// `None` means unnamed — a screen reader announces the role and
+    /// nothing else. Sources are consulted in the browser's precedence
+    /// order (`aria-labelledby` → `aria-label` → the native source: text
+    /// content, or `value` / `alt` for the button-like `input` types →
+    /// `title`), so the *reported* name matches what would be announced.
+    /// The precedence affects only which name is reported: the SET of
+    /// elements with some name is exactly the set the rule accepts.
+    ///
+    /// `aria-labelledby` is reported as the raw id-reference list (this
+    /// module checks tree shape, and resolving the reference would make
+    /// the name depend on nodes elsewhere in the document); its presence
+    /// is what the rule cares about.
+    let accessibleName (e: ElementRef) : string option =
+        let nonEmpty name =
+            match attr name e.Attrs with
+            | Some v when v <> "" -> Some v
+            | _ -> None
+
+        let fromContent =
+            match e.Tag, attr "type" e.Attrs with
+            | "input", Some("submit" | "button" | "reset") -> nonEmpty "value"
+            | "input", Some "image" -> nonEmpty "alt"
+            | "input", _ -> None
+            | _ ->
+                let text = e.Children |> List.map visibleText |> String.concat " " |> normaliseName
+
+                if text = "" then None else Some text
+
+        nonEmpty "aria-labelledby"
+        |> Option.orElseWith (fun () -> nonEmpty "aria-label")
+        |> Option.orElseWith (fun () -> fromContent)
+        |> Option.orElseWith (fun () -> nonEmpty "title")
+
+    /// Does this element carry an accessible name? The presence half of
+    /// `accessibleName`, kept as its own name because that is what the
+    /// rule below asks.
+    let private hasAccessibleName (e: ElementRef) = (accessibleName e).IsSome
+
+    /// **Does this element expose an interactive control to assistive
+    /// tech?** The single definition of the element set
+    /// `everyInteractiveHasAccessibleName` judges, exposed so a caller can
+    /// enumerate exactly that set rather than guess at it.
+    ///
+    /// Form controls are deliberately EXCLUDED: they are
+    /// `everyControlHasLabel`'s subject, so one defect yields one finding
+    /// rather than two.
+    let isInteractive (e: ElementRef) : bool =
+        let role = attr "role" e.Attrs |> Option.map _.ToLowerInvariant()
+        let isFormControl = e.Tag = "input" || e.Tag = "select" || e.Tag = "textarea"
+
+        not isFormControl
+        && (e.Tag = "button"
+            || e.Tag = "summary"
+            || (e.Tag = "a" && attrNonEmpty "href" e.Attrs)
+            || (match role with
+                | Some r -> interactiveRoles.Contains r
+                | None -> false))
 
     // ─── rule: every interactive element has an accessible name ───────
 
@@ -407,32 +483,18 @@ module Accessibility =
     /// unusable without sight.
     let everyInteractiveHasAccessibleName (root: A11yNode) : A11yFinding list = [
         for e in elements root do
-            let role = attr "role" e.Attrs |> Option.map _.ToLowerInvariant()
             let hidden = attr "aria-hidden" e.Attrs = Some "true"
 
-            let isInteractive =
-                e.Tag = "button"
-                || e.Tag = "summary"
-                || (e.Tag = "a" && attrNonEmpty "href" e.Attrs)
-                || (match role with
-                    | Some r -> interactiveRoles.Contains r
-                    | None -> false)
-
-            // Form controls are the `everyControlHasLabel` rule's job —
-            // one finding per defect, not two.
-            let isFormControl = e.Tag = "input" || e.Tag = "select" || e.Tag = "textarea"
-
-            if isInteractive && not hidden && not isFormControl then
-                if not (hasAccessibleName e.Tag e.Attrs e.Children) then
-                    yield {
-                        Rule = "everyInteractiveHasAccessibleName"
-                        Path = e.Path
-                        Message =
-                            sprintf
-                                "<%s> is interactive but has no accessible name (no text content, aria-label, aria-labelledby or title)"
-                                e.Tag
-                        Severity = A11yError
-                    }
+            if isInteractive e && not hidden && not (hasAccessibleName e) then
+                yield {
+                    Rule = "everyInteractiveHasAccessibleName"
+                    Path = e.Path
+                    Message =
+                        sprintf
+                            "<%s> is interactive but has no accessible name (no text content, aria-label, aria-labelledby or title)"
+                            e.Tag
+                    Severity = A11yError
+                }
     ]
 
     // ─── rule: every image has alt text ───────────────────────────────
@@ -767,8 +829,7 @@ module Accessibility =
         | TClose of name: string
         | TText of string
 
-    let private isWhitespace (c: char) =
-        c = ' ' || c = '\t' || c = '\n' || c = '\r' || c = '\f'
+    let private isWhitespace (c: char) = isWhitespaceChar c
 
     let private tokenize (html: string) : Token list =
         let n = html.Length
@@ -931,6 +992,119 @@ module Accessibility =
     /// `assertAccessible` over a rendered HTML fragment — the entry an
     /// SSR test reaches for after `RenderView.AsString.htmlNode`.
     let assertHtml (profile: A11yProfile) (html: string) : A11yFinding list = assertAccessible profile (ofHtml html)
+
+    // ─── named surface STATES (Phase 610) ─────────────────────────────
+    //
+    // A surface is not one tree — it is a family of trees, one per state
+    // the user can put it in, and a name can be present in one and absent
+    // in another. That is not hypothetical: the shell's sidebar rail was
+    // fully named in its hover-expanded form (every row labelled by its
+    // visible `<span>`) and entirely UNNAMED in its narrow icon-only form,
+    // where no row renders text — and the rule above, which would have
+    // caught it in one line, never saw that state. The fixtures were too
+    // narrow, not the rules.
+    //
+    // ── Covered surfaces (the record this section exists to keep) ──
+    // The SHELL SIDEBAR RAIL's states are a covered surface. Every state
+    // enumerated by the shell-rail a11y pack — the hover-expanded rail, the
+    // narrow icon-only rail, the Product area, the Administration area, a
+    // collapsed group, the hidden-items reveal section, and the
+    // no-active-team collapse — is rendered from the real component and
+    // checked by the rules above. A rail row added without an accessible
+    // name therefore fails a live gate, not a prose convention; a NEW rail
+    // STATE is covered only once it is added to that pack's state list,
+    // which is why the list is written down in exactly one place.
+    //
+    // Nothing here is a new rule. These are three small pieces of
+    // plumbing — label a tree with the state it came from, carry that label
+    // into the finding, and let a caller enumerate the same element set the
+    // name rule judges — so that a report says WHICH STATE broke rather
+    // than only which path.
+
+    /// One named state of a surface: the state's own name, and the tree
+    /// the surface renders in it.
+    type SurfaceState = { State: string; Node: A11yNode }
+
+    /// Label a tree with the state it was rendered in.
+    let state (name: string) (root: A11yNode) : SurfaceState = { State = name; Node = root }
+
+    /// Label a rendered HTML fragment with the state it was captured in —
+    /// the entry a browser-tier test reaches for after capturing a mounted
+    /// node's `outerHTML`.
+    let stateOfHtml (name: string) (html: string) : SurfaceState = { State = name; Node = ofHtml html }
+
+    /// A finding plus the state it was found in.
+    type StateFinding = { State: string; Finding: A11yFinding }
+
+    /// Every interactive element in a tree — exactly the set
+    /// `everyInteractiveHasAccessibleName` judges — paired with the name it
+    /// exposes (`None` = unnamed). The census a caller uses to assert that a
+    /// SPECIFIC control is reachable by name, which a rule cannot do: a rule
+    /// reports what IS present and unnamed, never what is absent entirely.
+    let interactiveNames (root: A11yNode) : (ElementRef * string option) list = [
+        for e in elements root do
+            if isInteractive e && attr "aria-hidden" e.Attrs <> Some "true" then
+                yield e, accessibleName e
+    ]
+
+    /// The element a finding fired on, recovered from the tree by its path
+    /// — so a caller can classify a finding by the offending element's own
+    /// attributes rather than by a positional path that shifts whenever the
+    /// markup around it changes.
+    let locate (root: A11yNode) (finding: A11yFinding) : ElementRef option =
+        elements root |> List.tryFind (fun e -> e.Path = finding.Path)
+
+    /// Run a profile's rules over every state, tagging each finding with
+    /// its state. States are checked in order and every state is checked —
+    /// a first failure does not mask the rest, because "which states is
+    /// this broken in" is the question worth answering.
+    let checkStates (profile: A11yProfile) (states: SurfaceState list) : StateFinding list = [
+        for s in states do
+            for f in check profile s.Node do
+                yield { State = s.State; Finding = f }
+    ]
+
+    /// A readable one-line diagnostic naming the state first — the state is
+    /// the part a reader cannot recover from the path. For a FLAT list; the
+    /// grouped `reportStates` below prints the state once as a heading
+    /// instead, so it does not use this.
+    let describeInState (sf: StateFinding) : string =
+        sprintf "  [%s] %s" sf.State ((describe sf.Finding).TrimStart())
+
+    /// The consolidated failure report for a state-tagged finding list,
+    /// grouped by state — the state named once as a heading rather than
+    /// repeated on every line under it.
+    let reportStates (profile: A11yProfile) (findings: StateFinding list) : string =
+        let states = findings |> List.map _.State |> List.distinct
+
+        let header =
+            sprintf
+                "Accessibility check failed under the %A profile in %d of the surface's states — %d finding(s):"
+                profile
+                states.Length
+                findings.Length
+
+        let body = [
+            for st in states do
+                yield sprintf "  state \"%s\":" st
+
+                for sf in findings |> List.filter (fun f -> f.State = st) do
+                    yield "  " + describe sf.Finding
+        ]
+
+        header + "\n" + (body |> String.concat "\n")
+
+    /// Assert every state of a surface against a profile: throws with the
+    /// state-grouped finding list when any finding is fatal for that
+    /// profile, and otherwise returns the tolerated (non-fatal) findings.
+    let assertStates (profile: A11yProfile) (states: SurfaceState list) : StateFinding list =
+        let findings = checkStates profile states
+        let fatal = findings |> List.filter (fun sf -> isFatal profile sf.Finding)
+
+        if not (List.isEmpty fatal) then
+            failwith (reportStates profile fatal)
+
+        findings
 
     // ─── shipped fixtures ─────────────────────────────────────────────
 
