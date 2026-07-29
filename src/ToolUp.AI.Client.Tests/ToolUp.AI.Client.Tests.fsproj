@@ -92,6 +92,12 @@
              code-shape pins are .NET-side in
              ToolUp.Platform.Tests/InProcess/SidebarVisibilityContractTests.fs. -->
         <Compile Include="SidebarPlacementTests.fs" />
+        <!-- Phase 612 — keyboard navigation for the rail: the one traversal
+             order (`railStops`), the bindings (`railKey`), the roving
+             single tab stop (`railTabIndex`) and the never-zero-tab-stops
+             guard (`resolveActiveStop`). Same reason as the packs above:
+             `Toolup.Sidebar` cannot be touched from the .NET harness. -->
+        <Compile Include="SidebarKeyboardTests.fs" />
         <!-- Shell program-lifetime effects: the outer-composer contract
              (programLifetimeEffects / withShellLifetimeEffects /
              EffectHandle.map) — pins that an outer Program composer

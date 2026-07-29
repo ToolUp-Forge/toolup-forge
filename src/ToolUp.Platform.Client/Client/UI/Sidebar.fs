@@ -7,6 +7,12 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open SidebarPreferences
+// Phase 612 — the roving-tabindex model marks each keyboard stop with a
+// `data-toolup-rail-stop` attribute. It goes on through `dataProp.custom`
+// rather than the raw untyped form, because `DomAttrCustomAuditTests`
+// ratchets against every kebab-case attribute written the raw way; the
+// fsproj moves DataProp.fs ahead of this file so the open resolves.
+open ToolUp.Platform.DataProp
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -576,6 +582,437 @@ let flatten (sections: SidebarSection list) : SidebarModule list =
 
         m :: pageLeaves)
 
+// ─── Phase 612 — the rail's keyboard focus model ──────────────────
+//
+// [Phase 571](571-command-palette-quick-nav.md) gave the shell a
+// keyboard-first way to JUMP to a page whose name the user already knows,
+// and said so explicitly: it routes *around* the rail. This is the other
+// half — BROWSING the rail, the case the palette structurally cannot
+// serve, because a search box needs a term.
+//
+// Before this, the rail had no keyboard story at all. Every row is a
+// `<button>`, so `Tab` reached them — one tab stop per row, plus one per
+// pin, one per hide, and one per dnd-kit sortable wrapper (dnd-kit's
+// `attributes` carry `tabIndex: 0`). On a modest rail that is dozens of
+// stops between the shell chrome above it and the page content below,
+// with no way to skip past and no way to open a collapsed group, which on
+// a fresh profile is EVERY grouped section.
+//
+// The model below is the standard remedy: a **roving tabindex** (exactly
+// one control in the rail is a tab stop; arrows move within) over ONE
+// documented traversal order. Everything here is a pure function of the
+// section list the renderer is about to walk, which is the point — the
+// bindings are asserted in `SidebarKeyboardTests` without a DOM, and the
+// stop list cannot describe a control the renderer does not draw.
+
+/// Focus-key builders. A key names exactly ONE control in the rail. Keys
+/// are section-scoped (so a row lifted into the pinned overlay can never
+/// collide with anything) and stable across renders and across both rail
+/// widths for the controls that exist in both — which is what lets the
+/// roving stop survive a hover, a collapse, or a pin landing.
+[<RequireQualifiedAccess>]
+module RailFocus =
+
+    let headerKey (sectionKey: string) = "header:" + sectionKey
+
+    let groupKey (sectionKey: string) = "group:" + sectionKey
+
+    let rowKey (sectionKey: string) (rowId: string) = "row:" + sectionKey + ":" + rowId
+
+    let pinKey (sectionKey: string) (rowId: string) = "pin:" + sectionKey + ":" + rowId
+
+    let hideKey (sectionKey: string) (rowId: string) = "hide:" + sectionKey + ":" + rowId
+
+    let reorderKey (sectionKey: string) (rowId: string) = "reorder:" + sectionKey + ":" + rowId
+
+/// The DOM attribute every rail stop carries. Focus is moved by resolving
+/// a computed key through one `querySelector` on the rail root — the same
+/// idiom the command palette uses for its own keyboard cursor — rather
+/// than by threading a React ref per control through four renderers.
+[<Literal>]
+let RailStopAttr = "data-toolup-rail-stop"
+
+/// What one keyboard stop in the rail is.
+type RailStopKind =
+    /// A titled section's collapse toggle, in the hover-expanded rail.
+    | SectionHeaderStop
+    /// The single icon a collapsed group shows in the narrow rail — one
+    /// stop standing for the whole section, and the only way to open it
+    /// without a pointer.
+    | CollapsedGroupStop
+    /// A top-level module row: a leaf, or a multi-page parent.
+    | ModuleRowStop
+    /// A page child of an expanded multi-page parent.
+    | PageRowStop
+
+/// One stop in the rail's traversal order, plus the controls reachable
+/// sideways from it.
+type RailStop = {
+    /// Focus key of the stop's PRIMARY control — the element carrying
+    /// `tabIndex 0` while this stop is the roving one.
+    Key: string
+    /// The section the stop belongs to; a section-level stop discloses it.
+    SectionKey: string
+    /// The row the stop acts on — `None` for a section-level stop.
+    RowId: string option
+    Kind: RailStopKind
+    /// `ArrowRight` opens / `ArrowLeft` closes this stop when true.
+    IsDisclosure: bool
+    /// Meaningful only when `IsDisclosure`.
+    IsOpen: bool
+    /// The row's further controls, in the order `ArrowRight` walks them
+    /// after the primary control. Empty for a section-level stop.
+    Controls: string list
+}
+
+/// The two placed sections, by reserved key. Deliberately a restatement
+/// of the render layer's own `inPlacedSection` binding rather than a
+/// shared helper: that binding is pinned verbatim by the Phase 611 shape
+/// test, and the equivalence that actually matters is behavioural (a
+/// placed row offers no pin stop *and* no pin control) — asserted in
+/// `SidebarKeyboardTests` rather than by sharing a one-line predicate.
+let private isPlacedSectionKey (key: string) = key = HomeKey || key = TrailingKey
+
+/// Is this section shown in FULL in the narrow (icon-only) rail, whatever
+/// its collapse state says? Mirrors the render layer's `alwaysVisible`.
+let private alwaysVisibleInNarrowRail (section: SidebarSection) =
+    section.IsPinnedSection || isPlacedSectionKey section.Key
+
+/// **The rail's one traversal order (612.A)**, derived from exactly the
+/// section data the renderer walks — so the invariant is *a stop exists
+/// if and only if the control is rendered*.
+///
+/// Order, top to bottom:
+///
+/// 1. Sections in `buildSections` order — `_home`, pinned, declared
+///    groups, `_other`, `_trailing`, `_hidden`.
+/// 2. In the **hover-expanded** rail: the section's header (when it has a
+///    title), then — only when the section is open — its rows, each
+///    multi-page parent immediately followed by its visible pages.
+/// 3. In the **narrow** rail: the section's rows when it is placed,
+///    pinned, or open; otherwise its single collapsed-group icon.
+///    `_hidden` contributes nothing, because the narrow rail does not
+///    render it.
+///
+/// **A collapsed group is announced, not skipped.** Its header (wide) or
+/// its group icon (narrow) stays in the order; only its member rows drop
+/// out. Skipping a closed section entirely reads tidier and is wrong: the
+/// header IS the only control that opens the section, so passing over it
+/// would leave a collapsed group permanently unreachable without a
+/// pointer — and on a fresh profile every grouped section is collapsed.
+/// Announcing it costs one stop and turns the rail into something a
+/// keyboard user can actually explore, which is the whole phase.
+///
+/// `selectedModule` is read for one reason: the renderer force-expands the
+/// multi-page parent that owns the active page regardless of the persisted
+/// state, so those pages are on screen and must be traversable.
+let railStops (railExpanded: bool) (selectedModule: string) (sections: SidebarSection list) : RailStop list =
+    let controlsFor (section: SidebarSection) (isPage: bool) (rowId: string) =
+        let inHidden = section.Key = HiddenKey
+
+        // Pin + hide render only in the hover-expanded rail (`renderRow`
+        // gates both on `isExpanded`). That is precisely why the rail now
+        // expands on FOCUS as well as hover: without it 612.C would be
+        // unsatisfiable, because the controls a keyboard user is meant to
+        // reach would not be in the document to reach.
+        let trailing =
+            if not railExpanded then
+                []
+            else
+                let pinnable =
+                    if isPage then
+                        not inHidden
+                    else
+                        not (isPlacedSectionKey section.Key) && not inHidden
+
+                let hideable = isPage || isHideableId rowId
+
+                [
+                    if pinnable then
+                        RailFocus.pinKey section.Key rowId
+                    if hideable then
+                        RailFocus.hideKey section.Key rowId
+                ]
+
+        // The drag handle is the sortable WRAPPER itself, which exists for
+        // every top-level row outside the reveal list, in both widths.
+        // Keeping it on the horizontal axis is what preserves keyboard
+        // drag-reorder now that the wrapper is no longer its own tab stop.
+        let reorder =
+            if isPage || inHidden then
+                []
+            else
+                [ RailFocus.reorderKey section.Key rowId ]
+
+        trailing @ reorder
+
+    let rowStops (section: SidebarSection) (m: SidebarModule) =
+        let isParent = not (List.isEmpty m.Pages)
+        // Mirrors `renderModuleButton`'s `effectiveExpanded`.
+        let isOpen =
+            m.IsExpanded || (m.Pages |> List.exists (fun p -> p.Id = selectedModule))
+
+        let self = {
+            Key = RailFocus.rowKey section.Key m.Id
+            SectionKey = section.Key
+            RowId = Some m.Id
+            Kind = ModuleRowStop
+            // A parent discloses its subtree only in the wide rail; narrow,
+            // clicking it navigates to its first page, so there is nothing
+            // for `ArrowRight` / `ArrowLeft` to toggle.
+            IsDisclosure = isParent && railExpanded
+            IsOpen = isOpen
+            Controls = controlsFor section false m.Id
+        }
+
+        let pages =
+            if railExpanded && isParent && isOpen then
+                m.Pages
+                |> List.map (fun p -> {
+                    Key = RailFocus.rowKey section.Key p.Id
+                    SectionKey = section.Key
+                    RowId = Some p.Id
+                    Kind = PageRowStop
+                    IsDisclosure = false
+                    IsOpen = false
+                    Controls = controlsFor section true p.Id
+                })
+            else
+                []
+
+        self :: pages
+
+    sections
+    |> List.collect (fun section ->
+        if railExpanded then
+            let header =
+                match section.Title with
+                | Some _ -> [
+                    {
+                        Key = RailFocus.headerKey section.Key
+                        SectionKey = section.Key
+                        RowId = None
+                        Kind = SectionHeaderStop
+                        IsDisclosure = true
+                        IsOpen = not section.IsCollapsed
+                        Controls = []
+                    }
+                  ]
+                | None -> []
+
+            let body =
+                if section.IsCollapsed then
+                    []
+                else
+                    section.Modules |> List.collect (rowStops section)
+
+            header @ body
+        elif section.Key = HiddenKey then
+            // Omitted from the narrow rail entirely, so it offers no stop.
+            []
+        elif alwaysVisibleInNarrowRail section || not section.IsCollapsed then
+            section.Modules |> List.collect (rowStops section)
+        elif List.isEmpty section.Modules then
+            // `renderCollapsedGroupIcon` renders `Html.none` for an empty
+            // section, so there is nothing there to focus.
+            []
+        else
+            [
+                {
+                    Key = RailFocus.groupKey section.Key
+                    SectionKey = section.Key
+                    RowId = None
+                    Kind = CollapsedGroupStop
+                    IsDisclosure = true
+                    IsOpen = false
+                    Controls = []
+                }
+            ])
+
+/// The stop that owns a focus key — as its primary control, or as one of
+/// its further controls.
+let stopOwning (stops: RailStop list) (key: string) : RailStop option =
+    stops |> List.tryFind (fun s -> s.Key = key || List.contains key s.Controls)
+
+/// Move `delta` stops down (or up) the rail from whatever stop owns
+/// `key`, landing on the new stop's PRIMARY control — stepping off a
+/// row's further controls is exactly what Down / Up mean.
+///
+/// `None` at either end: arrow traversal in a navigation structure does
+/// not wrap (`Home` / `End` are the jumps), and a silent wrap is
+/// indistinguishable from "nothing happened" when you cannot see the rail.
+let moveVertical (stops: RailStop list) (key: string) (delta: int) : string option =
+    match
+        stops
+        |> List.tryFindIndex (fun s -> s.Key = key || List.contains key s.Controls)
+    with
+    | None ->
+        // The roving key names nothing in the current stop set — a section
+        // collapsed under it, or the rail changed width. Re-enter at the
+        // top rather than swallowing the keystroke.
+        stops |> List.tryHead |> Option.map _.Key
+    | Some i ->
+        let next = i + delta
+
+        if next < 0 || next >= List.length stops then
+            None
+        else
+            Some (List.item next stops).Key
+
+/// Move along the focused row's own lane: its primary control followed by
+/// its further controls, in the order they are reached.
+let moveHorizontal (stops: RailStop list) (key: string) (delta: int) : string option =
+    match stopOwning stops key with
+    | None -> None
+    | Some stop ->
+        let lane = stop.Key :: stop.Controls
+
+        match lane |> List.tryFindIndex ((=) key) with
+        | None -> None
+        | Some i ->
+            let next = i + delta
+
+            if next < 0 || next >= List.length lane then
+                None
+            else
+                Some(List.item next lane)
+
+/// What one keystroke on the rail resolves to — 612.B and 612.D as a
+/// value, so the bindings are asserted without a DOM.
+type RailKeyOutcome =
+    /// Move the roving tabindex (and the DOM focus) to this key.
+    | MoveFocus of string
+    /// Toggle what the focused stop discloses: a section's collapse state,
+    /// or a multi-page parent's page subtree.
+    | Disclose of RailStop
+    /// The rail owns the keystroke but there is nowhere to go. Consumed
+    /// anyway, so a held arrow at the end of the rail does not fall
+    /// through to scrolling the page.
+    | Consumed
+    /// Not the rail's key. Left entirely alone — no `preventDefault`, no
+    /// state change.
+    | PassThrough
+
+/// The rail's key bindings, as a pure function of the traversal order.
+///
+/// | Key | Effect |
+/// |---|---|
+/// | `ArrowDown` / `ArrowUp` | next / previous stop, landing on its primary control |
+/// | `Home` / `End` | first / last stop |
+/// | `ArrowRight` | open a closed disclosure; otherwise the next control in the row's lane |
+/// | `ArrowLeft` | the previous control in the row's lane; on the primary control of an OPEN disclosure, close it |
+/// | `Enter` / `Space` | **not handled here** — see below |
+///
+/// **`Enter` / `Space` are deliberately absent.** Every stop is a real
+/// `<button>`, so both keys already activate it natively and fire the
+/// exact `onClick` a pointer click fires. Intercepting them would
+/// duplicate the activation path for no gain and risk double-firing; the
+/// WAI-ARIA guidance for a composite built out of buttons is this — rove
+/// the tabindex, and let a button be a button. (The one thing that got in
+/// the way was dnd-kit, which claimed both keys from every descendant;
+/// see the Phase 612 note on `SortableItem` for why it no longer does.)
+///
+/// **`ArrowRight` on an already-OPEN disclosure walks the row's controls
+/// rather than moving to the first child.** The APG tree pattern spends it
+/// on the child — but the child is the very next stop by construction
+/// (`railStops` emits a section's rows, and a parent's pages, immediately
+/// after it), so `ArrowDown` already goes there. The pin / hide / reorder
+/// controls have no other keyboard route that does not reintroduce a
+/// second tab stop. Reaching them is 612.C; duplicating `ArrowDown` is not.
+///
+/// **Any modifier means `PassThrough` (612.D).** The Phase 571 palette
+/// binds `Ctrl+K` / `Cmd+K` on a *document* keydown listener, which fires
+/// wherever focus sits — including inside the rail. Bailing on every
+/// modifier rather than special-casing `k` is the stronger guard: it also
+/// leaves `Ctrl+Home`, `Shift+Tab` and any chord a browser or a consumer
+/// binds later alone, and it cannot go stale if the palette's own chord
+/// ever changes. The reverse direction needs no code at all: the rail
+/// listens on its own subtree and never on the document, and the palette
+/// overlay is not inside that subtree — so the overlay's `ArrowUp` /
+/// `ArrowDown` / `Enter` / `Escape` never reach this function.
+let railKey (stops: RailStop list) (activeKey: string) (key: string) (hasModifier: bool) : RailKeyOutcome =
+    let outcome = Option.map MoveFocus >> Option.defaultValue Consumed
+
+    if hasModifier then
+        PassThrough
+    else
+        match key with
+        | "ArrowDown" -> outcome (moveVertical stops activeKey 1)
+        | "ArrowUp" -> outcome (moveVertical stops activeKey -1)
+        | "Home" -> outcome (stops |> List.tryHead |> Option.map _.Key)
+        | "End" -> outcome (stops |> List.tryLast |> Option.map _.Key)
+        | "ArrowRight" ->
+            match stopOwning stops activeKey with
+            | Some stop when stop.Key = activeKey && stop.IsDisclosure && not stop.IsOpen -> Disclose stop
+            | _ -> outcome (moveHorizontal stops activeKey 1)
+        | "ArrowLeft" ->
+            match stopOwning stops activeKey with
+            | Some stop when stop.Key = activeKey && stop.IsDisclosure && stop.IsOpen -> Disclose stop
+            | _ -> outcome (moveHorizontal stops activeKey -1)
+        | _ -> PassThrough
+
+/// `tabIndex` for one rail control under the roving model: the active
+/// stop is the rail's SINGLE tab stop, and every other control is
+/// reachable only from inside it — by arrow key, or programmatically.
+let railTabIndex (activeKey: string) (ownKey: string) = if ownKey = activeKey then 0 else -1
+
+/// Resolve which key actually carries `tabIndex 0` this render.
+///
+/// It has to be resolved defensively rather than read straight out of
+/// state, because the stop SET moves underneath it constantly — a section
+/// collapses, the rail changes width, an entry is hidden. A stale key
+/// naming no rendered control would leave the rail with NO tab stop at
+/// all: unreachable by keyboard, a worse failure than the one this phase
+/// fixes. The fallbacks are, in order: the remembered stop if it is still
+/// live; the stop for the currently-selected row, so `Tab` enters the rail
+/// where the user already is; then the first stop.
+let resolveActiveStop (stops: RailStop list) (selectedModule: string) (remembered: string option) : string =
+    let isLive (k: string) = (stopOwning stops k).IsSome
+
+    let isRow (stop: RailStop) =
+        match stop.Kind with
+        | ModuleRowStop
+        | PageRowStop -> true
+        | SectionHeaderStop
+        | CollapsedGroupStop -> false
+
+    match remembered with
+    | Some k when isLive k -> k
+    | _ ->
+        match stops |> List.tryFind (fun s -> s.RowId = Some selectedModule) with
+        | Some s -> s.Key
+        | None ->
+            // Prefer the first ROW over the first stop, which is a
+            // meaningful distinction in two ways.
+            //
+            // The nice one: `Tab` lands on a destination rather than on a
+            // section chevron, and `ArrowUp` reaches the chevron from there.
+            //
+            // The load-bearing one: a row's focus key is the SAME in both
+            // rail widths, and a section-level stop's is not. The rail is
+            // narrow at rest, so this stop is also the element `Tab` enters
+            // through — and entering it widens the rail (`isFocusWithin`).
+            // If the entry element were a collapsed-group icon, widening
+            // would UNMOUNT the thing that had just been focused, browsers
+            // fire `blur` with a null `relatedTarget` when that happens, and
+            // the rail would collapse straight back: `Tab` into the rail
+            // would flap open and drop focus to the body. Preferring a row
+            // makes the entry element survive the width change for any rail
+            // with a placed, pinned, or open section — which is every rail
+            // that registers a landing.
+            match stops |> List.tryFind isRow with
+            | Some row -> row.Key
+            | None ->
+                // Only an EMPTY rail resolves to no key. Spelt as a match
+                // rather than `Option.defaultValue` with an empty literal
+                // because Phase 609's audit bans that spelling outright — it
+                // was how the collapsed-group icon ended up with an empty
+                // accessible name — and the ban is worth more than the
+                // one-liner.
+                match stops |> List.tryHead with
+                | Some first -> first.Key
+                | None -> ""
+
 // ─── dnd-kit bindings ─────────────────────────────────────────────
 
 // Drag-reorder is backed by @dnd-kit — its `useSortable` hook wires
@@ -626,12 +1063,36 @@ module private DndKit =
 /// Merge dnd-kit's spread-style `attributes` and `listeners` objects
 /// onto a plain props object alongside the sortable ref, the inline
 /// style, and a className. Object.assign preserves dnd-kit's own
-/// `role` / `tabIndex` / event handlers while our explicit keys win
-/// last (ref, style, className). Needed because Feliz's `Html.div`
-/// has no native "spread arbitrary props" affordance.
-[<Emit("Object.assign({}, $0, $1, { ref: $2, style: $3, className: $4 })")>]
-let private mergeSortableProps (attributes: obj) (listeners: obj) (setRef: obj) (style: obj) (className: string) : obj =
+/// `role` / event handlers while our explicit keys win last. Needed
+/// because Feliz's `Html.div` has no native "spread arbitrary props"
+/// affordance.
+///
+/// Phase 612 — `tabIndex` is now among the keys we win with, and that
+/// ordering is load-bearing: dnd-kit's `attributes` hardcodes
+/// `tabIndex: 0`, so before this every sortable wrapper was its own tab
+/// stop and the rail could not be a single one. The wrapper keeps
+/// `role="button"` and `aria-roledescription="draggable"` from dnd-kit,
+/// so it also gains an `aria-label` — a role of button with no accessible
+/// name is the Phase 609 defect one level out from the rows.
+[<Emit("Object.assign({}, $0, $1, { ref: $2, style: $3, className: $4, tabIndex: $5, 'aria-label': $6, 'data-toolup-rail-stop': $7 })")>]
+let private mergeSortableProps
+    (attributes: obj)
+    (listeners: obj)
+    (setRef: obj)
+    (style: obj)
+    (className: string)
+    (tabIndex: int)
+    (ariaLabel: string)
+    (stopKey: string)
+    : obj =
     jsNative
+
+/// Attach two dnd-kit ref callbacks to one element. The sortable wrapper
+/// is both the draggable NODE and its ACTIVATOR, and setting the second
+/// is what stops a bubbled `Enter` / `Space` from the row button inside it
+/// starting a drag — see the Phase 612 note on `SortableItem`.
+[<Emit("(el) => { $0(el); $1(el); }")>]
+let private combineRefs (first: obj) (second: obj) : obj = jsNative
 
 // ─── Rendering ────────────────────────────────────────────────────
 
@@ -729,6 +1190,34 @@ type private RowControls = {
     OnHideToggled: unit -> unit
 }
 
+/// Phase 612 — the keyboard-navigation state of one rail row: the focus
+/// keys its controls carry, which single key in the whole rail currently
+/// holds `tabIndex 0`, and whether the row discloses a page subtree.
+/// Gathered into a record for the same reason `RowControls` was — the row
+/// renderer's argument list is already long.
+type private RowFocus = {
+    /// Focus key of the row's own button.
+    RowKey: string
+    PinKey: string
+    HideKey: string
+    /// The one focus key in the rail carrying `tabIndex 0` this render.
+    ActiveKey: string
+    /// `Some isOpen` when the row discloses a page subtree — a multi-page
+    /// parent in the hover-expanded rail. `None` for a leaf, and for a
+    /// parent in the narrow rail, where clicking it navigates instead of
+    /// expanding, so there is nothing to report as expanded.
+    Disclosure: bool option
+}
+
+/// Focus-ring classes for a rail control. Load-bearing rather than
+/// cosmetic: a roving-tabindex surface whose focus is invisible is not
+/// navigable — the user's only feedback that an arrow key did anything is
+/// the ring moving. `ring-inset` because the rows sit flush against the
+/// rail edge, where an outset ring would be clipped.
+[<Literal>]
+let private RailFocusRing =
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+
 /// Phase 609 — the accessible name of one rail row, and the single place
 /// the shell's naming rule is written down.
 ///
@@ -789,6 +1278,7 @@ let private renderRow
     (isSelected: bool)
     (hasData: bool)
     (controls: RowControls)
+    (focus: RowFocus)
     (indent: bool)
     (leading: ReactElement option)
     (icon: ReactElement)
@@ -828,6 +1318,7 @@ let private renderRow
                         "border-2 border-brand"
                     else
                         "border-2 border-transparent"
+                    RailFocusRing
                 ]
                 // Phase 609 — the row's own name, never its section's. In
                 // the narrow rail this button has no visible text at all,
@@ -835,6 +1326,13 @@ let private renderRow
                 // tooltip; the two landings and the two area switchers were
                 // the worst instances of that.
                 prop.ariaLabel accessibleName
+                // Phase 612 — the row's place in the roving-tabindex model.
+                // `Enter` / `Space` are not bound anywhere: this is a real
+                // button, so both already fire the `onClick` below.
+                dataProp.custom RailStopAttr focus.RowKey
+                prop.tabIndex (railTabIndex focus.ActiveKey focus.RowKey)
+                for isOpen in Option.toList focus.Disclosure do
+                    prop.ariaExpanded isOpen
                 if not isExpanded then
                     prop.title accessibleName
                 prop.onClick (fun _ -> onActivate ())
@@ -879,15 +1377,24 @@ let private renderRow
                         // defence as the row above.
                         "absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded bg-transparent"
                         "text-white/40 hover:text-white hover:bg-white/10"
+                        RailFocusRing
                         // Always visible once pinned; hover-only otherwise
                         // so the sidebar stays visually uncluttered.
+                        //
+                        // Phase 612 — `group-focus-within` joins
+                        // `group-hover` so keyboard focus reveals the
+                        // control the same way the pointer does. Without it
+                        // 612.C would be reachable but invisible, which for
+                        // a sighted keyboard user is not reachable at all.
                         if controls.IsPinned then
                             "opacity-100"
                         else
-                            "opacity-0 group-hover:opacity-100 transition-opacity"
+                            "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
                     ]
                     prop.title pinTooltip
                     prop.ariaLabel $"{pinTooltip} {accessibleName}"
+                    dataProp.custom RailStopAttr focus.PinKey
+                    prop.tabIndex (railTabIndex focus.ActiveKey focus.PinKey)
                     prop.onClick (fun e ->
                         e.stopPropagation ()
                         controls.OnPinToggled())
@@ -905,13 +1412,16 @@ let private renderRow
                         "absolute top-1/2 -translate-y-1/2 p-1 rounded bg-transparent"
                         if controls.Pinnable then "right-9" else "right-2"
                         "text-white/40 hover:text-white hover:bg-white/10"
+                        RailFocusRing
                         if controls.IsHidden then
                             "opacity-100"
                         else
-                            "opacity-0 group-hover:opacity-100 transition-opacity"
+                            "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
                     ]
                     prop.title hideTooltip
                     prop.ariaLabel $"{hideTooltip} {accessibleName}"
+                    dataProp.custom RailStopAttr focus.HideKey
+                    prop.tabIndex (railTabIndex focus.ActiveKey focus.HideKey)
                     prop.onClick (fun e ->
                         e.stopPropagation ()
                         controls.OnHideToggled())
@@ -934,6 +1444,8 @@ let private renderModuleButton
     (isExpanded: bool)
     (inHiddenSection: bool)
     (inPlacedSection: bool)
+    (sectionKey: string)
+    (activeKey: string)
     (selectedModule: string)
     (onModuleSelected: string -> unit)
     (onPinToggled: string -> unit)
@@ -964,6 +1476,17 @@ let private renderModuleButton
         OnHideToggled = fun () -> onHideToggled id
     }
 
+    // Phase 612 — the row's keys under the roving-tabindex model. Built
+    // from the same `sectionKey` + row id `RailFocus` uses, so a control
+    // and the stop that names it cannot disagree.
+    let focusFor (id: string) (disclosure: bool option) = {
+        RowKey = RailFocus.rowKey sectionKey id
+        PinKey = RailFocus.pinKey sectionKey id
+        HideKey = RailFocus.hideKey sectionKey id
+        ActiveKey = activeKey
+        Disclosure = disclosure
+    }
+
     // In the Hidden items section the row's primary action is restore —
     // clicking a hidden entry to navigate to it would leave the user on a
     // page with no rail entry, which reads as a broken click rather than
@@ -980,6 +1503,7 @@ let private renderModuleButton
             (m.Id = selectedModule)
             m.HasData
             (controlsFor m.Id m.IsPinned)
+            (focusFor m.Id None)
             false
             None
             m.Icon
@@ -1009,6 +1533,10 @@ let private renderModuleButton
                     parentSelected
                     m.HasData
                     (controlsFor m.Id m.IsPinned)
+                    // The subtree is a disclosure only in the wide rail;
+                    // narrow, `parentActivate` navigates to the first page,
+                    // so there is nothing expanded to report.
+                    (focusFor m.Id (if isExpanded then Some effectiveExpanded else None))
                     false
                     (Some(chevron (not effectiveExpanded)))
                     m.Icon
@@ -1033,6 +1561,7 @@ let private renderModuleButton
                                         OnPinToggled = fun () -> onPinToggled p.Id
                                         OnHideToggled = fun () -> onHideToggled p.Id
                                     }
+                                    (focusFor p.Id None)
                                     true
                                     None
                                     p.Icon
@@ -1055,8 +1584,28 @@ let private renderModuleButton
 /// `activationConstraint: { distance: 5 }` — a drag doesn't start
 /// until the pointer has moved 5px, so clicks on the row (module
 /// selection) and on the nested pin button fire normally.
+///
+/// **Phase 612 — this wrapper is now the drag ACTIVATOR, and that fixes a
+/// live keyboard defect.** dnd-kit's `KeyboardSensor` claims `Space` and
+/// `Enter`, and its guard for "was this really the drag handle?" reads
+/// `active.activatorNode.current` — which is `null` unless
+/// `setActivatorNodeRef` has been attached. It never was here, so the
+/// guard was skipped and the sensor `preventDefault`ed **any** bubbled
+/// `Space` / `Enter` from inside the wrapper: pressing either on a focused
+/// row started a drag instead of activating the row, and the row's
+/// `onClick` never ran. Pointing the activator ref at the wrapper makes
+/// `event.target !== activator` true for a keystroke on a descendant, so
+/// the sensor declines it and the button activates natively — which is the
+/// whole of "Enter activates" in 612.B, with no key handler.
+///
+/// The wrapper stays the drag handle for its own keystrokes: it is a stop
+/// on the row's horizontal axis (`RailFocus.reorderKey`), so `ArrowRight`
+/// past the pin and hide controls reaches it and `Space` there starts a
+/// keyboard drag exactly as before. That is why it needs a `tabIndex` from
+/// the roving model rather than dnd-kit's hardcoded `0`, and an
+/// `aria-label` to go with the `role="button"` dnd-kit gives it.
 [<ReactComponent>]
-let private SortableItem (id: string) (child: ReactElement) =
+let private SortableItem (id: string) (dragLabel: string) (stopKey: string) (tabIndex: int) (child: ReactElement) =
     let sortable = DndKit.useSortable (createObj [ "id" ==> id ])
 
     let transform = sortable?transform
@@ -1073,7 +1622,15 @@ let private SortableItem (id: string) (child: ReactElement) =
         ]
 
     let props =
-        mergeSortableProps sortable?attributes sortable?listeners sortable?setNodeRef style "cursor-grab"
+        mergeSortableProps
+            sortable?attributes
+            sortable?listeners
+            (combineRefs sortable?setNodeRef sortable?setActivatorNodeRef)
+            style
+            ("cursor-grab " + RailFocusRing)
+            tabIndex
+            dragLabel
+            stopKey
 
     ReactLegacy.createElement ("div", props, [| child |])
 
@@ -1081,7 +1638,19 @@ let private SortableItem (id: string) (child: ReactElement) =
 /// the sidebar is expanded; the narrow (w-20) form is icons-only so
 /// headers would have nowhere meaningful to live. Pinned section
 /// shows a filled pin glyph instead of a text title.
-let private renderSectionHeader (onGroupToggled: string -> unit) (section: SidebarSection) (title: string) =
+/// Phase 612 — the header is a **disclosure**, so it declares
+/// `aria-expanded` and is the stop `ArrowRight` / `ArrowLeft` open and
+/// close. It is also why a collapsed section is announced rather than
+/// skipped in `railStops`: this button is the only control that opens the
+/// section, so a traversal that stepped over it would strand the contents.
+let private renderSectionHeader
+    (onGroupToggled: string -> unit)
+    (activeKey: string)
+    (section: SidebarSection)
+    (title: string)
+    =
+    let stopKey = RailFocus.headerKey section.Key
+
     Html.button [
         prop.key (section.Key + "__header")
         prop.className [
@@ -1090,12 +1659,16 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
             "w-full flex items-center gap-2 px-2 pt-3 pb-1 bg-transparent"
             "text-white/50 hover:text-white/80 text-xs uppercase tracking-wider font-semibold"
             "transition-colors"
+            RailFocusRing
         ]
         // Mirrors the visible text (Phase 609) so the header's accessible
         // name stays stable as glyphs accumulate inside the button — it
         // already carries a chevron and, in the pinned section, a pin.
         // No tooltip: the label is right there.
         prop.ariaLabel (rowAccessibleName section.Key title)
+        dataProp.custom RailStopAttr stopKey
+        prop.tabIndex (railTabIndex activeKey stopKey)
+        prop.ariaExpanded (not section.IsCollapsed)
         prop.onClick (fun _ -> onGroupToggled section.Key)
         prop.children [
             chevron section.IsCollapsed
@@ -1145,7 +1718,89 @@ let Sidebar
     (onHideToggled: string -> unit)
     (onReorder: string -> string list -> unit)
     =
-    let isExpanded, setIsExpanded = React.useState false
+    // The rail widens on hover — and, since Phase 612, on FOCUS. The two
+    // are separate flags rather than one `setIsExpanded` because they can
+    // be true at once and each has to be able to end without cancelling
+    // the other: a keyboard user mid-traversal must not have the rail
+    // close under them because the pointer happened to drift off it, and
+    // hover must still work while focus sits elsewhere.
+    //
+    // Focus parity is not a nicety here, it is what makes 612.C possible:
+    // the pin and hide affordances render only in the wide rail, so
+    // without this there is no state in which a keyboard user can reach
+    // them.
+    let isHovered, setIsHovered = React.useState false
+    let isFocusWithin, setIsFocusWithin = React.useState false
+    let isExpanded = isHovered || isFocusWithin
+
+    // The remembered roving stop. `None` until the user moves; resolved
+    // through `resolveActiveStop` on every render, which is what keeps the
+    // rail from ending up with zero tab stops when the stop set shifts.
+    let rememberedStop, setRememberedStop = React.useState<string option> None
+    let rootRef = React.useRef<Browser.Types.HTMLElement option> None
+
+    let stops = railStops isExpanded selectedModule sections
+    let activeKey = resolveActiveStop stops selectedModule rememberedStop
+
+    // Move the DOM focus to whatever the roving key names — but only while
+    // focus is already inside the rail. Focusing unconditionally would let
+    // any re-render (a pin landing, a section collapsing, another
+    // component's state change) yank focus out of whatever the user is
+    // actually using. Same `querySelector`-by-attribute idiom the command
+    // palette uses to keep its own keyboard cursor in view.
+    React.useEffect (
+        (fun () ->
+            if isFocusWithin && activeKey <> "" then
+                match rootRef.current with
+                | Some root ->
+                    let target = root?querySelector ($"[{RailStopAttr}='{activeKey}']")
+
+                    if not (isNullOrUndefined target) then
+                        target?focus ()
+                | None -> ()),
+        [| box activeKey; box isFocusWithin |]
+    )
+
+    let handleRailFocus (_: Browser.Types.FocusEvent) = setIsFocusWithin true
+
+    let handleRailBlur (e: Browser.Types.FocusEvent) =
+        // React's `onBlur` is `focusout`, so it fires on every move BETWEEN
+        // two rail controls as well as on the way out. Collapsing the rail
+        // on those would fight the user in the middle of a traversal — and
+        // collapsing it re-renders the narrow form, which unmounts the very
+        // control they were arrowing towards.
+        let related: obj = e?relatedTarget
+
+        let stillInside =
+            match rootRef.current with
+            | Some root when not (isNullOrUndefined related) -> root?contains (related)
+            | _ -> false
+
+        if not stillInside then
+            setIsFocusWithin false
+
+    let handleRailKeyDown (e: Browser.Types.KeyboardEvent) =
+        // Yield to anything a descendant already claimed — specifically an
+        // in-progress dnd-kit keyboard drag, whose sensor handles the arrow
+        // keys itself and `preventDefault`s them. Its listener sits on the
+        // sortable wrapper, a descendant, so it runs first on the way up.
+        if not e.defaultPrevented then
+            let hasModifier = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey
+
+            match railKey stops activeKey e.key hasModifier with
+            | PassThrough -> ()
+            | Consumed -> e.preventDefault ()
+            | MoveFocus key ->
+                e.preventDefault ()
+                setRememberedStop (Some key)
+            | Disclose stop ->
+                e.preventDefault ()
+
+                match stop.Kind with
+                | SectionHeaderStop
+                | CollapsedGroupStop -> onGroupToggled stop.SectionKey
+                | ModuleRowStop
+                | PageRowStop -> stop.RowId |> Option.iter onModuleToggled
 
     // Pointer sensor with a 5px activation threshold so short clicks
     // still fire module selection and pin-toggle handlers — dnd-kit
@@ -1203,6 +1858,8 @@ let Sidebar
                 isExpanded
                 inHiddenSection
                 inPlacedSection
+                section.Key
+                activeKey
                 selectedModule
                 onModuleSelected
                 onPinToggled
@@ -1233,7 +1890,23 @@ let Sidebar
 
             let items =
                 section.Modules
-                |> List.map (fun m -> React.KeyedFragment(m.Id, [ SortableItem m.Id (renderOne m) ]))
+                |> List.map (fun m ->
+                    // Phase 612 — the wrapper is the row's reorder stop on
+                    // the horizontal axis, so it takes its `tabIndex` from
+                    // the roving model (overriding dnd-kit's hardcoded `0`)
+                    // and names itself for the `role="button"` dnd-kit
+                    // stamps on it.
+                    let reorderKey = RailFocus.reorderKey section.Key m.Id
+
+                    let item =
+                        SortableItem
+                            m.Id
+                            ("Reorder " + rowAccessibleName m.Id m.Name)
+                            reorderKey
+                            (railTabIndex activeKey reorderKey)
+                            (renderOne m)
+
+                    React.KeyedFragment(m.Id, [ item ]))
 
             let inner = Html.div [ prop.className "space-y-1"; prop.children items ]
 
@@ -1258,14 +1931,24 @@ let Sidebar
             let groupLabel =
                 section.Title |> Option.defaultValue lead.Name |> rowAccessibleName section.Key
 
+            // Phase 612 — the narrow rail's disclosure. One stop stands for
+            // the whole collapsed section, and it is the ONLY keyboard route
+            // into that section's rows at this width, which is why
+            // `railStops` announces a collapsed group rather than skipping it.
+            let stopKey = RailFocus.groupKey section.Key
+
             Html.button [
                 prop.key (section.Key + "__groupicon")
                 prop.className [
                     "w-full flex items-center justify-center py-3 transition-colors rounded-[var(--radius)] bg-transparent"
                     "text-white/60 hover:text-white hover:bg-white/5 border-2 border-transparent"
+                    RailFocusRing
                 ]
                 prop.ariaLabel groupLabel
                 prop.title groupLabel
+                dataProp.custom RailStopAttr stopKey
+                prop.tabIndex (railTabIndex activeKey stopKey)
+                prop.ariaExpanded false
                 prop.onClick (fun _ -> onGroupToggled section.Key)
                 prop.children [
                     Html.div [
@@ -1284,7 +1967,7 @@ let Sidebar
                         // Expanded: section header (when titled) + the
                         // module rows when the section isn't collapsed.
                         match section.Title with
-                        | Some title -> renderSectionHeader onGroupToggled section title
+                        | Some title -> renderSectionHeader onGroupToggled activeKey section title
                         | None -> ()
 
                         if not section.IsCollapsed then
@@ -1324,12 +2007,24 @@ let Sidebar
         ReactLegacy.createElement (unbox<ReactElement> DndKit.DndContext, dndContextProps, [| moduleList |])
 
     Html.aside [
+        prop.ref rootRef
         prop.className [
             "h-full bg-sidebar transition-all duration-300 flex flex-col absolute left-0 top-0 z-50"
             if isExpanded then "w-64 shadow-2xl" else "w-20"
         ]
-        prop.onMouseEnter (fun _ -> setIsExpanded true)
-        prop.onMouseLeave (fun _ -> setIsExpanded false)
+        prop.onMouseEnter (fun _ -> setIsHovered true)
+        prop.onMouseLeave (fun _ -> setIsHovered false)
+        // Phase 612 — the rail's keyboard surface, bound HERE and nowhere
+        // else. Scoping it to this subtree rather than to `document` is
+        // what makes 612.D hold in the second direction with no code: the
+        // Phase 571 palette overlay renders outside this element, so its
+        // own `ArrowUp` / `ArrowDown` / `Enter` / `Escape` handling never
+        // reaches `railKey`. The first direction is `railKey`'s modifier
+        // bail-out, which leaves `Ctrl+K` / `Cmd+K` to the palette's
+        // document listener even while focus sits on a rail row.
+        prop.onKeyDown handleRailKeyDown
+        prop.onFocus handleRailFocus
+        prop.onBlur handleRailBlur
         prop.children [
             // Logo section at top
             Html.div [

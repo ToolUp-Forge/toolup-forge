@@ -1164,3 +1164,145 @@ let placementTests =
                  placed row reads as rail chrome rather than as another destination."
         }
     ]
+
+// ─── Phase 612 — keyboard navigation for the rail ──────────────────────
+//
+// The rail had no keyboard story: no arrow traversal, no roving tabindex,
+// no documented focus order, and no way to open a collapsed group or reach
+// a row's pin / hide controls without a pointer. Phase 571's palette
+// covers "I know the page's name" and deliberately routes AROUND the rail;
+// this covers browsing it, which is the case a search box cannot serve.
+//
+// **The behavioural pack is Fable-side**, for the reason the Phase 611 arm
+// above documents — `Toolup.Sidebar` cannot be CALLED from a .NET harness,
+// because the first call fires the module initialiser and it reaches
+// `importDefault`. The traversal order, the bindings, the roving-tabindex
+// invariant and the modifier bail-out are therefore asserted in
+// `ToolUp.AI.Client.Tests/SidebarKeyboardTests.fs`, where they run.
+//
+// What is left here is the half no pure function can hold: WHERE the
+// handlers are attached, and which DOM-level seams the model depends on.
+// Each of these fails in the one direction that matters — someone reaching
+// for a document listener, dropping the activator ref, or wiring the
+// rail's expansion back to hover alone.
+
+[<Tests>]
+let keyboardNavigationTests =
+    testList "Phase 612 — rail keyboard navigation (shape)" [
+
+        test "the rail's key handling is scoped to the rail, never to the document" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "prop.onKeyDown handleRailKeyDown"
+                "the rail's keydown handler must be bound on the rail element itself. That scoping \
+                 is the whole of 612.D in the second direction, at no cost: the Phase 571 palette \
+                 overlay renders OUTSIDE this subtree, so its own ArrowUp / ArrowDown / Enter / \
+                 Escape handling can never reach `railKey`."
+
+            Expect.isFalse
+                (code.Contains "document.addEventListener")
+                "the rail must not register a document-level key listener. The palette already has \
+                 one (its Ctrl+K opener, which must keep firing from inside the rail); a second one \
+                 here would make the two surfaces' key handling order-dependent, and would claim \
+                 arrow keys from every input on the page."
+        }
+
+        test "every rail control takes its tabIndex from the roving model" {
+            let code = sidebarCode ()
+
+            // One per control family: the row, its pin, its hide, the
+            // section header, the narrow rail's group icon, and the dnd-kit
+            // sortable wrapper. A control that hardcodes `tabIndex 0` — or
+            // omits it, as the pre-612 buttons did — reintroduces a second
+            // tab stop and breaks the single-tab-stop guarantee.
+            let expected = [
+                "railTabIndex focus.ActiveKey focus.RowKey", "the module / page row"
+                "railTabIndex focus.ActiveKey focus.PinKey", "the pin affordance"
+                "railTabIndex focus.ActiveKey focus.HideKey", "the hide / restore affordance"
+                "railTabIndex activeKey stopKey", "the section header + the collapsed-group icon"
+                "railTabIndex activeKey reorderKey", "the dnd-kit sortable wrapper"
+            ]
+
+            for call, what in expected do
+                Expect.stringContains
+                    code
+                    call
+                    (sprintf
+                        "%s must draw its `tabIndex` from `railTabIndex`, so exactly one control in \
+                         the rail is a tab stop. Before Phase 612 the rail was one tab stop per row \
+                         PLUS one per pin, hide and sortable wrapper — dozens of stops between the \
+                         chrome above it and the page below, with no way past."
+                        what)
+        }
+
+        test "the sortable wrapper is the drag activator, so Enter activates the row" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "setActivatorNodeRef"
+                "the sortable wrapper must be registered as dnd-kit's ACTIVATOR node. dnd-kit's \
+                 KeyboardSensor claims Space and Enter and guards on `event.target <> \
+                 active.activatorNode.current` — with no activator ref that field is null, the \
+                 guard is skipped, and the sensor preventDefaults any bubbled Space / Enter from \
+                 inside the wrapper. Pressing either on a focused row therefore started a DRAG \
+                 instead of activating the row, and the row's onClick never ran. Attaching the ref \
+                 is what makes 612.B's \"Enter activates\" true with no key binding at all."
+
+            Expect.stringContains
+                code
+                "tabIndex: $5"
+                "…and the merged props must override dnd-kit's own `tabIndex`, which its \
+                 `attributes` hardcode to 0. The Object.assign order is load-bearing: our key has \
+                 to come last."
+        }
+
+        test "the rail expands on focus, not on hover alone" {
+            let code = sidebarCode ()
+
+            Expect.stringContains
+                code
+                "let isExpanded = isHovered || isFocusWithin"
+                "the rail's width must be driven by focus as well as hover. Not a nicety: the pin \
+                 and hide affordances render only in the hover-expanded rail, so without focus \
+                 parity there is NO state in which a keyboard user can reach them and 612.C is \
+                 unsatisfiable. Two separate flags rather than one setter because either can end \
+                 without cancelling the other — a keyboard user mid-traversal must not have the \
+                 rail close because the pointer drifted off it."
+
+            Expect.stringContains
+                code
+                "group-focus-within:opacity-100"
+                "…and the hover-revealed controls must reveal on focus too. A control that is \
+                 focusable but transparent is reachable only in principle; for a sighted keyboard \
+                 user it is not reachable at all."
+        }
+
+        test "a disclosure control declares aria-expanded" {
+            let code = sidebarCode ()
+
+            // Phase 609 left `aria-expanded` as an adjacent gap for Phase
+            // 610. Phase 612 makes the disclosures load-bearing — they are
+            // what ArrowRight / ArrowLeft act on — so declaring their state
+            // belongs with the bindings rather than waiting. Three sites: the
+            // section header, the narrow rail's group icon, and a multi-page
+            // parent row.
+            let sites = [
+                "prop.ariaExpanded (not section.IsCollapsed)", "the section header"
+                "prop.ariaExpanded false", "the narrow rail's collapsed-group icon"
+                "prop.ariaExpanded isOpen", "a multi-page parent row"
+            ]
+
+            for site, what in sites do
+                Expect.stringContains
+                    code
+                    site
+                    (sprintf
+                        "%s is a disclosure that ArrowRight opens and ArrowLeft closes, so it must \
+                         report its state as `aria-expanded`. Without it a screen-reader user gets \
+                         the binding but no feedback that it did anything."
+                        what)
+        }
+    ]

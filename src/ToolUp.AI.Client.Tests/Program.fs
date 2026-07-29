@@ -41,6 +41,11 @@ let allTests =
         // no reserved row can resolve to the collapsed `_other` catch-all
         // (the Phase 608 fresh-profile switcher defect).
         SidebarPlacementTests.tests
+        // Phase 612 — rail keyboard navigation: the traversal order (a
+        // collapsed group announced, not skipped), the arrow/Home/End
+        // bindings, the roving single tab stop, and the modifier bail-out
+        // that keeps Ctrl+K the Phase 571 palette's.
+        SidebarKeyboardTests.tests
         // Phase 573 follow-up — shell program-lifetime effects: the
         // outer-composer contract (withSidePanel must re-attach the
         // shell's background subscriptions; the admin-tile click-through

@@ -60,7 +60,6 @@
         <Compile Include="Client\UI\AgGrid.fs" />
         <Compile Include="Client\UI\AgGrid.Enterprise.fs" />
         <Compile Include="Client\SidebarPreferences.fs" />
-        <Compile Include="Client\UI\Sidebar.fs" />
         <Compile Include="Client\UI\SvgProp.fs" />
         <!-- v0.5.0 — DataProp + AriaProp typed helpers. Same shape /
              rationale as SvgProp.fs: wrap `prop.custom` with a typed
@@ -70,9 +69,19 @@
              (see `DomAttrCustomAuditTests.fs`). React preserves
              `data-*` / `aria-*` / `role` verbatim today via a
              hardcoded exception; these helpers insulate against any
-             future React tightening + give a single seam to audit. -->
+             future React tightening + give a single seam to audit.
+
+             Phase 612 moved these three AHEAD of Sidebar.fs (they were
+             immediately after it). The rail's roving-tabindex model marks
+             each keyboard stop with a `data-toolup-rail-stop` attribute,
+             and the audit above is exactly the reason that must not be a
+             raw `prop.custom` call — so Sidebar.fs has to be able to
+             `open ToolUp.Platform.DataProp`. All three helper modules
+             open nothing but Feliz, so moving them earlier is
+             dependency-free. -->
         <Compile Include="Client\UI\DataProp.fs" />
         <Compile Include="Client\UI\AriaProp.fs" />
+        <Compile Include="Client\UI\Sidebar.fs" />
         <Compile Include="Client\IAuthBridge.fs" />
         <!-- Pure no-active-team landing config + gate-target precedence.
              Ahead of SDK.ClientTypes so the precedence helper carries no
