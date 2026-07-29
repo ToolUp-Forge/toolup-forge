@@ -768,6 +768,14 @@ let allTests =
         CommandPaletteContractTests.expansionTests
         CommandPaletteContractTests.fuzzyTests
         CommandPaletteContractTests.paletteStateTests
+        // Phase 572 — per-user sidebar entry hiding. The pure preference
+        // algebra plus the "still reachable" acceptance arm; four
+        // separate bindings, all of which must be listed here or they run
+        // as dormant `[<Tests>]` values nobody executes.
+        SidebarHidingContractTests.hideRestoreTests
+        SidebarHidingContractTests.pinHideRuleTests
+        SidebarHidingContractTests.legacyBlobTests
+        SidebarHidingContractTests.paletteParityTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
         // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
         // but constructs the SDK's built-in *client-side* UI modules

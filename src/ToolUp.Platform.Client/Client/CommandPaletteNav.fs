@@ -145,6 +145,14 @@ let entriesFor (f: PaletteModuleFacts) : PaletteCandidate list =
 ///
 /// Order is registration order, page order within a module — the rail's
 /// pre-preference order, which is also the order an empty query shows.
+///
+/// **Personal sidebar preferences are deliberately not read here**
+/// (Phase 572). An entry the user hid from their own rail is still a
+/// destination they are allowed to reach, and the palette is how they
+/// reach it without restoring the row — so this fold takes no
+/// `UserSidebarPreferences` parameter at all, which is a stronger
+/// guarantee than remembering not to consult one. Access is the only
+/// thing that removes a destination from this list.
 let candidates
     (facts: 'm -> PaletteModuleFacts)
     (inputs: SidebarVisibility.SidebarVisibilityInputs)

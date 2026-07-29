@@ -228,6 +228,8 @@ module Layout =
     /// `content` is the active page's rendered body, whose `PageContent` case
     /// determines the inner layout (split panel, stacked column, full-width,
     /// named-area dashboard, or a custom element).
+    /// `onHideToggled` receives the sidebar id the user hid (or restored from the
+    /// "Hidden items" section) — a per-user preference, never an access change.
     /// sidePanel: when Some, rendered as a fixed panel on the right side of the screen.
     /// headerAction: when Some, rendered in the trailing position of the page header
     /// (used by features such as the AI assistant toggle; the shell owns the markup,
@@ -242,6 +244,7 @@ module Layout =
         (onGroupToggled: string -> unit)
         (onPinToggled: string -> unit)
         (onModuleToggled: string -> unit)
+        (onHideToggled: string -> unit)
         (onReorder: string -> string list -> unit)
         (content: PageContent)
         (sidePanel: ReactElement option)
@@ -290,6 +293,7 @@ module Layout =
                                 onGroupToggled
                                 onPinToggled
                                 onModuleToggled
+                                onHideToggled
                                 onReorder
 
                             // Main content area - header + content with left padding for sidebar

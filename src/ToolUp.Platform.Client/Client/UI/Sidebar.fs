@@ -95,6 +95,15 @@ let OtherKey = "_other"
 [<Literal>]
 let HomeKey = "_home"
 
+/// Phase 572 — reserved key for the "Hidden items" section: the reveal
+/// surface listing the entries this user has hidden, each restorable in
+/// one click. Rendered last and only when non-empty, collapsed unless the
+/// user opens it (like any other section, via `ExpandedGroups`), and
+/// absent from the narrow rail — a list whose whole purpose is to be read
+/// has nothing to say as an icon.
+[<Literal>]
+let HiddenKey = "_hidden"
+
 /// The SDK Home module's reserved id (see `Home.create` →
 /// `ClientModule.withId "_sdk.home"`). The sidebar lifts it into a
 /// dedicated leading section that is always visible and never
@@ -123,6 +132,15 @@ let ProductAreaId = "_area.product"
 // single `<picture>`-style pair like `Attribution.poweredByBadge`.
 let private toolupForgeLogoUrl: string =
     importDefault "../icons/toolup-forge-dark.png"
+
+/// Ids that can never be hidden, whatever the persisted blob says: Home
+/// (the shell's guaranteed landing) and the two area-switcher rows (the
+/// only way back out of the administration area). A hand-edited
+/// localStorage blob naming one of these would otherwise strand the user
+/// with no route home and no visible way to restore it — the hidden-items
+/// section itself lives in the rail these ids anchor.
+let private isHideableId (id: string) =
+    id <> HomeId && id <> AdminAreaId && id <> ProductAreaId
 
 /// Map an inbound page view to a rendered page, resolving its pinned
 /// overlay by the page's composite id.
@@ -181,16 +199,52 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// resolves against both bare module ids and composite page ids, so an
 /// individually-pinned page (a composite `PinnedModuleIds` entry) still
 /// surfaces as its own leaf in the pinned section.
+///
+/// **Hiding (Phase 572) is applied here, and only here.** `modules` is
+/// the ALREADY access-filtered set — `SidebarVisibility.visible` ran at
+/// the shell's call site — so removing a hidden entry at this point
+/// cannot widen anything: a personal preference subtracts from what
+/// access already allowed and can never add to it. That ordering is the
+/// whole safety argument, and it is why hiding lives in this fold rather
+/// than in `SidebarVisibility`, which stays a pure access decision that
+/// the route guard and the command palette also derive from. A hidden
+/// entry keeps its route and its palette listing; it loses only its row.
 let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
     let pinnedSet = Set.ofList prefs.PinnedModuleIds
     let expandedModules = prefs.ExpandedModules
+
+    // Null-coerced (a legacy blob's missing list deserialises to `null`)
+    // and stripped of the never-hideable reserved ids.
+    let hiddenSet = hiddenIds prefs |> Set.filter isHideableId
+
+    // Index the FULL inbound set BEFORE hiding subtracts from it: the
+    // hidden-items section has to name what it is offering to restore,
+    // and a hidden entry is by definition absent from the rail set below.
+    let allById = modules |> List.map (fun m -> m.Id, m) |> Map.ofList
+
+    let allPageIndex =
+        modules
+        |> List.collect (fun m -> m.Pages |> List.map (fun p -> p.Id, (m, p)))
+        |> Map.ofList
+
+    // The rail set — the access-filtered modules minus this user's hidden
+    // entries, at both granularities: a hidden bare module id drops the
+    // whole module, a hidden composite page id drops that page from its
+    // parent's subtree and leaves its siblings.
+    let rail =
+        modules
+        |> List.filter (fun m -> not (hiddenSet.Contains m.Id))
+        |> List.map (fun m -> {
+            m with
+                Pages = m.Pages |> List.filter (fun p -> not (hiddenSet.Contains p.Id))
+        })
 
     // Home is special — always-visible, never grouped, pinned, or
     // collapsed. Lift it into a dedicated leading section before any
     // bucketing so it can't fall into `_other` or hide behind a
     // collapsed group. Everything else feeds the buckets below.
     let homeSection =
-        modules
+        rail
         |> List.tryFind (fun m -> m.Id = HomeId)
         |> Option.map (fun home -> {
             Key = HomeKey
@@ -201,7 +255,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
         })
         |> Option.toList
 
-    let groupable = modules |> List.filter (fun m -> m.Id <> HomeId)
+    let groupable = rail |> List.filter (fun m -> m.Id <> HomeId)
     let byId = groupable |> List.map (fun m -> m.Id, m) |> Map.ofList
 
     // Composite-page index — maps each multi-page module's page id to
@@ -292,6 +346,57 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 Modules = ordered
             })
 
+    // The reveal surface (572.B). Each hidden id is resolved back to a
+    // flat leaf against the pre-hiding index — a bare module id to the
+    // module, a composite id to its page — so the row can carry the
+    // entry's own name and icon rather than the raw id. An id that no
+    // longer resolves (the module was removed from the deployment, or
+    // access to it was revoked) is simply not listed: it stays in the
+    // stored preference, costing nothing, and reappears in this list if
+    // the module ever comes back. Ordered by id, which is stable across
+    // renders and independent of the order things were hidden in.
+    let hiddenSection =
+        let resolveHidden (id: string) : SidebarModule option =
+            match Map.tryFind id allById with
+            | Some m ->
+                Some {
+                    Id = m.Id
+                    Name = m.Name
+                    Icon = m.Icon
+                    HasData = m.HasData
+                    IsPinned = false
+                    Pages = []
+                    IsExpanded = false
+                }
+            | None ->
+                match Map.tryFind id allPageIndex with
+                | Some(parent, page) ->
+                    Some {
+                        Id = page.Id
+                        Name = page.Name
+                        Icon = page.Icon
+                        HasData = parent.HasData
+                        IsPinned = false
+                        Pages = []
+                        IsExpanded = false
+                    }
+                | None -> None
+
+        let entries = hiddenSet |> Set.toList |> List.choose resolveHidden
+
+        if List.isEmpty entries then
+            []
+        else
+            [
+                {
+                    Key = HiddenKey
+                    Title = Some "Hidden items"
+                    IsCollapsed = not (prefs.ExpandedGroups.Contains HiddenKey)
+                    IsPinnedSection = false
+                    Modules = entries
+                }
+            ]
+
     let otherSection =
         let others =
             nonPinned
@@ -311,7 +416,11 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
             // nothing to contrast against. The render layer uses this
             // `Title` directly.
             let title =
-                if List.isEmpty pinnedSection && List.isEmpty declaredSections then
+                if
+                    List.isEmpty pinnedSection
+                    && List.isEmpty declaredSections
+                    && List.isEmpty hiddenSection
+                then
                     None
                 else
                     Some "Other"
@@ -326,7 +435,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 }
             ]
 
-    homeSection @ pinnedSection @ declaredSections @ otherSection
+    homeSection @ pinnedSection @ declaredSections @ otherSection @ hiddenSection
 
 /// Flatten a section list to the ordered entry sequence — used by
 /// consumers that need to resolve the currently-selected id (e.g. the
@@ -452,28 +561,80 @@ let private pinIcon (isPinned: bool) =
         ]
     ]
 
-/// One clickable sidebar row — the shared button + hover-revealed pin
-/// affordance used by leaf modules, multi-page parents, and page
+/// Eye glyph for the hide / restore affordance. Struck through when the
+/// action is "hide" (the entry is on the rail and the click removes it);
+/// plain when the action is "restore" (the row is in the Hidden items
+/// section and the click puts it back). One glyph, two states — the same
+/// fill/stroke economy `pinIcon` uses.
+let private eyeIcon (isHidden: bool) =
+    Svg.svg [
+        svg.className "w-4 h-4"
+        svg.fill "none"
+        svg.stroke "currentColor"
+        svg.viewBox (0, 0, 24, 24)
+        svg.children [
+            Svg.path [
+                svg.custom ("strokeLinecap", "round")
+                svg.custom ("strokeLinejoin", "round")
+                svg.strokeWidth 2
+                svg.d
+                    "M2.04 12.32a1 1 0 0 1 0-.64C3.42 7.51 7.36 4.5 12 4.5s8.58 3.01 9.96 7.18a1 1 0 0 1 0 .64C20.58 16.49 16.64 19.5 12 19.5s-8.58-3.01-9.96-7.18Z"
+            ]
+            Svg.path [
+                svg.custom ("strokeLinecap", "round")
+                svg.custom ("strokeLinejoin", "round")
+                svg.strokeWidth 2
+                svg.d "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+            ]
+            if not isHidden then
+                Svg.path [
+                    svg.custom ("strokeLinecap", "round")
+                    svg.custom ("strokeLinejoin", "round")
+                    svg.strokeWidth 2
+                    svg.d "M3 3l18 18"
+                ]
+        ]
+    ]
+
+/// The trailing affordances of one sidebar row, gathered so the row
+/// renderer keeps a readable signature as the control set grows (it was
+/// eleven positional arguments, four of them booleans, before the hide
+/// control landed).
+///
+/// `Pinnable` / `Hideable` suppress a control entirely (Home and the area
+/// switchers are neither); `IsHidden` is true only for rows rendered
+/// inside the Hidden items section, where the pin control is suppressed
+/// by the pin/hide rule and the eye reads "Restore".
+type private RowControls = {
+    Pinnable: bool
+    IsPinned: bool
+    Hideable: bool
+    IsHidden: bool
+    OnPinToggled: unit -> unit
+    OnHideToggled: unit -> unit
+}
+
+/// One clickable sidebar row — the shared button + hover-revealed pin and
+/// hide affordances used by leaf modules, multi-page parents, and page
 /// children alike. `leading` is an optional glyph rendered before the
 /// icon (the expand chevron on a multi-page parent, shown only when the
 /// sidebar is hover-expanded); `indent` insets a page child under its
-/// parent; `pinnable = false` suppresses the pin control (Home). The pin
+/// parent; `controls` carries the trailing affordance state. The pin
 /// affordance is the sole unpin control in the pinned section: it shows
 /// the filled glyph + "Unpin" and stays visible, and clicking it fires
 /// before the unpin re-render, so the row dropping back to its home
-/// group is the expected result, not a lost click.
+/// group is the expected result, not a lost click. The hide affordance
+/// behaves the same way in reverse from the Hidden items section.
 let private renderRow
     (isExpanded: bool)
     (isSelected: bool)
     (hasData: bool)
-    (pinnable: bool)
-    (isPinned: bool)
+    (controls: RowControls)
     (indent: bool)
     (leading: ReactElement option)
     (icon: ReactElement)
     (name: string)
     (onActivate: unit -> unit)
-    (onPinToggled: unit -> unit)
     =
     Html.div [
         prop.className "relative group"
@@ -534,7 +695,7 @@ let private renderRow
             // Absolute-positioned so it overlays the button without
             // shifting layout; pointer-events-auto inside a pointer-
             // events-none parent would also work but this is simpler.
-            if isExpanded && pinnable then
+            if isExpanded && controls.Pinnable then
                 Html.button [
                     prop.className [
                         // `bg-transparent` — same consumer-global-button
@@ -543,16 +704,39 @@ let private renderRow
                         "text-white/40 hover:text-white hover:bg-white/10"
                         // Always visible once pinned; hover-only otherwise
                         // so the sidebar stays visually uncluttered.
-                        if isPinned then
+                        if controls.IsPinned then
                             "opacity-100"
                         else
                             "opacity-0 group-hover:opacity-100 transition-opacity"
                     ]
-                    prop.title (if isPinned then "Unpin" else "Pin")
+                    prop.title (if controls.IsPinned then "Unpin" else "Pin")
                     prop.onClick (fun e ->
                         e.stopPropagation ()
-                        onPinToggled ())
-                    prop.children [ pinIcon isPinned ]
+                        controls.OnPinToggled())
+                    prop.children [ pinIcon controls.IsPinned ]
+                ]
+
+            // Hide / restore toggle (Phase 572) — the same hover-revealed
+            // treatment as the pin control, sitting immediately left of it
+            // when both are present. In the Hidden items section it is the
+            // restore control and stays visible, because it is the only
+            // affordance on a row whose entire purpose is to be put back.
+            if isExpanded && controls.Hideable then
+                Html.button [
+                    prop.className [
+                        "absolute top-1/2 -translate-y-1/2 p-1 rounded bg-transparent"
+                        if controls.Pinnable then "right-9" else "right-2"
+                        "text-white/40 hover:text-white hover:bg-white/10"
+                        if controls.IsHidden then
+                            "opacity-100"
+                        else
+                            "opacity-0 group-hover:opacity-100 transition-opacity"
+                    ]
+                    prop.title (if controls.IsHidden then "Restore" else "Hide")
+                    prop.onClick (fun e ->
+                        e.stopPropagation ()
+                        controls.OnHideToggled())
+                    prop.children [ eyeIcon controls.IsHidden ]
                 ]
         ]
     ]
@@ -569,27 +753,50 @@ let private renderRow
 /// only takes the border in the narrow rail (where children are hidden).
 let private renderModuleButton
     (isExpanded: bool)
+    (inHiddenSection: bool)
     (selectedModule: string)
     (onModuleSelected: string -> unit)
     (onPinToggled: string -> unit)
     (onModuleToggled: string -> unit)
+    (onHideToggled: string -> unit)
     (m: SidebarModule)
     =
-    let pinnable = m.Id <> HomeId
+    // A hidden row is never pinnable — the pin/hide rule is enforced in
+    // `SidebarPreferences.togglePinned`, and suppressing the control here
+    // keeps the UI from offering a click that would do nothing.
+    let pinnable = m.Id <> HomeId && not inHiddenSection
+    let hideable = isHideableId m.Id
+
+    let controlsFor (id: string) (isPinned: bool) = {
+        Pinnable = pinnable
+        IsPinned = isPinned
+        Hideable = hideable
+        IsHidden = inHiddenSection
+        OnPinToggled = fun () -> onPinToggled id
+        OnHideToggled = fun () -> onHideToggled id
+    }
+
+    // In the Hidden items section the row's primary action is restore —
+    // clicking a hidden entry to navigate to it would leave the user on a
+    // page with no rail entry, which reads as a broken click rather than
+    // as the deliberate "still reachable by route" property.
+    let activate (id: string) =
+        if inHiddenSection then
+            fun () -> onHideToggled id
+        else
+            fun () -> onModuleSelected id
 
     if List.isEmpty m.Pages then
         renderRow
             isExpanded
             (m.Id = selectedModule)
             m.HasData
-            pinnable
-            m.IsPinned
+            (controlsFor m.Id m.IsPinned)
             false
             None
             m.Icon
             m.Name
-            (fun () -> onModuleSelected m.Id)
-            (fun () -> onPinToggled m.Id)
+            (activate m.Id)
     else
         let containsSelected = m.Pages |> List.exists (fun p -> p.Id = selectedModule)
         // Auto-expand the module that owns the active page so it's always
@@ -612,14 +819,12 @@ let private renderModuleButton
                     isExpanded
                     parentSelected
                     m.HasData
-                    pinnable
-                    m.IsPinned
+                    (controlsFor m.Id m.IsPinned)
                     false
                     (Some(chevron (not effectiveExpanded)))
                     m.Icon
                     m.Name
                     parentActivate
-                    (fun () -> onPinToggled m.Id)
 
                 if isExpanded && effectiveExpanded then
                     for p in m.Pages do
@@ -630,14 +835,19 @@ let private renderModuleButton
                                     isExpanded
                                     (p.Id = selectedModule)
                                     m.HasData
-                                    true
-                                    p.IsPinned
+                                    {
+                                        Pinnable = not inHiddenSection
+                                        IsPinned = p.IsPinned
+                                        Hideable = true
+                                        IsHidden = inHiddenSection
+                                        OnPinToggled = fun () -> onPinToggled p.Id
+                                        OnHideToggled = fun () -> onHideToggled p.Id
+                                    }
                                     true
                                     None
                                     p.Icon
                                     p.Name
-                                    (fun () -> onModuleSelected p.Id)
-                                    (fun () -> onPinToggled p.Id)
+                                    (activate p.Id)
                             ]
                         ]
             ]
@@ -720,6 +930,11 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
 /// Multi-page modules render as one collapsible parent entry whose pages
 /// nest beneath it (`onModuleToggled` persists the per-module expand
 /// state); single-page modules render as a leaf.
+///
+/// `onHideToggled` (Phase 572) carries the sidebar id — bare module id or
+/// composite page id — the user hid or restored. It is the same message
+/// in both directions, fired by the row's eye affordance and by a click
+/// on a row inside the "Hidden items" section.
 [<ReactComponent>]
 let Sidebar
     (appName: string)
@@ -730,6 +945,7 @@ let Sidebar
     (onGroupToggled: string -> unit)
     (onPinToggled: string -> unit)
     (onModuleToggled: string -> unit)
+    (onHideToggled: string -> unit)
     (onReorder: string -> string list -> unit)
     =
     let isExpanded, setIsExpanded = React.useState false
@@ -780,23 +996,47 @@ let Sidebar
         ]
 
     let renderSectionModules (section: SidebarSection) =
-        let sortableContextProps =
-            createObj [
-                "items" ==> (section.Modules |> List.map _.Id |> List.toArray)
-                "strategy" ==> DndKit.verticalListSortingStrategy
+        let inHiddenSection = section.Key = HiddenKey
+
+        let renderOne (m: SidebarModule) =
+            renderModuleButton
+                isExpanded
+                inHiddenSection
+                selectedModule
+                onModuleSelected
+                onPinToggled
+                onModuleToggled
+                onHideToggled
+                m
+
+        // The Hidden items section is a restore list, not part of the
+        // rail's arrangement — there is no ordering to persist for
+        // entries that are not on the rail, so it is rendered outside the
+        // sortable machinery rather than writing a `ModuleOrder` key that
+        // nothing ever reads.
+        if inHiddenSection then
+            Html.div [
+                prop.className "space-y-1"
+                prop.children (
+                    section.Modules
+                    |> List.map (fun m -> React.KeyedFragment(m.Id, [ renderOne m ]))
+                )
             ]
+        else
 
-        let items =
-            section.Modules
-            |> List.map (fun m ->
-                let button =
-                    renderModuleButton isExpanded selectedModule onModuleSelected onPinToggled onModuleToggled m
+            let sortableContextProps =
+                createObj [
+                    "items" ==> (section.Modules |> List.map _.Id |> List.toArray)
+                    "strategy" ==> DndKit.verticalListSortingStrategy
+                ]
 
-                React.KeyedFragment(m.Id, [ SortableItem m.Id button ]))
+            let items =
+                section.Modules
+                |> List.map (fun m -> React.KeyedFragment(m.Id, [ SortableItem m.Id (renderOne m) ]))
 
-        let inner = Html.div [ prop.className "space-y-1"; prop.children items ]
+            let inner = Html.div [ prop.className "space-y-1"; prop.children items ]
 
-        ReactLegacy.createElement (unbox<ReactElement> DndKit.SortableContext, sortableContextProps, [| inner |])
+            ReactLegacy.createElement (unbox<ReactElement> DndKit.SortableContext, sortableContextProps, [| inner |])
 
     // Single representative icon for a collapsed group in the narrow
     // (at-rest) rail — the group's "default icon", derived from its lead
@@ -838,11 +1078,18 @@ let Sidebar
 
                         if not section.IsCollapsed then
                             React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
+                    else if
+                        // Narrow (at-rest) rail. The Hidden items section is
+                        // omitted entirely: a list of things the user chose
+                        // not to see, rendered as an anonymous icon, is worse
+                        // than absent. It returns the moment the rail expands.
+                        section.Key = HiddenKey
+                    then
+                        ()
                     else
-                        // Narrow (at-rest) rail. Home + the pinned overlay
-                        // stay fully visible; every other group collapses to
-                        // its single default icon, expanding to its module
-                        // icons when the user opens it.
+                        // Home + the pinned overlay stay fully visible; every
+                        // other group collapses to its single default icon,
+                        // expanding to its module icons when the user opens it.
                         let alwaysVisible = section.IsPinnedSection || section.Key = HomeKey
 
                         if alwaysVisible || not section.IsCollapsed then

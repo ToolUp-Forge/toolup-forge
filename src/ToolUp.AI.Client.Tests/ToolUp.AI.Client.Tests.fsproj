@@ -78,6 +78,12 @@
              flatten nesting + SidebarPreferences module-expand + legacy
              blob (Platform.Client tier). -->
         <Compile Include="SidebarNestingTests.fs" />
+        <!-- Phase 572 — per-user sidebar entry hiding: the buildSections
+             exclusion, the "Hidden items" reveal section, and the real
+             localStorage legacy-blob load path (Platform.Client tier).
+             The pure preference algebra is pinned .NET-side in
+             ToolUp.Platform.Tests/InProcess/SidebarHidingContractTests.fs. -->
+        <Compile Include="SidebarHidingTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

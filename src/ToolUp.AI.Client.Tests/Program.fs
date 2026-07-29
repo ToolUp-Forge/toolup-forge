@@ -32,6 +32,10 @@ let allTests =
         // Nested multi-page module sidebar entries — buildSections/flatten
         // nesting + module-expand persistence + legacy blob (Platform.Client).
         SidebarNestingTests.tests
+        // Phase 572 — per-user entry hiding: buildSections exclusion, the
+        // Hidden items reveal section, and the legacy-blob load path
+        // (Platform.Client).
+        SidebarHidingTests.tests
     ]
 
 [<EntryPoint>]

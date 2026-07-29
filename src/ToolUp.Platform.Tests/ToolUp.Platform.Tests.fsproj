@@ -1030,6 +1030,16 @@
              the page-expansion rule (the two-page nesting threshold), the
              fuzzy scorer's ranking contract, and the overlay state. -->
         <Compile Include="InProcess\CommandPaletteContractTests.fs" />
+        <!-- Phase 572 — per-user sidebar entry hiding: the pure
+             `SidebarPreferences` algebra (hide / restore round-trip, the
+             pin/hide rule, the legacy-blob null coercion) plus the
+             acceptance arm that a hidden entry keeps its palette
+             destination and its place in the access fold. The
+             `buildSections` exclusion and the reveal section are pinned
+             Fable-side (`ToolUp.AI.Client.Tests/SidebarHidingTests.fs`) —
+             `Toolup.Sidebar`'s module initialiser reaches a Fable
+             `importDefault` and cannot run under .NET. -->
+        <Compile Include="InProcess\SidebarHidingContractTests.fs" />
         <!-- Phase 171 — Home/Overview landing-surface verification:
              count-affordance (IObjectCounter fast-path vs ListObjects
              default), prepareModules head-injection landing selection,

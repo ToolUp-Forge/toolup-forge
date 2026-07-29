@@ -1140,17 +1140,24 @@ ServiceStatusBoardUI+Msg+Tags.ToggleCollapsed : System.Int32 (literal)
 ServiceStatusBoardUI+Msg+ToggleCollapsed (class)
 ServiceStatusBoardUI+Msg+ToggleCollapsed.section : System.String { get }
 SidebarPreferences (class)
+SidebarPreferences.hiddenIds(SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+SidebarPreferences.hide(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
+SidebarPreferences.isHidden(System.String, SidebarPreferences+UserSidebarPreferences) : System.Boolean
 SidebarPreferences.load() : SidebarPreferences+UserSidebarPreferences
+SidebarPreferences.normalise(SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
+SidebarPreferences.restore(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.save(SidebarPreferences+UserSidebarPreferences) : System.Void
 SidebarPreferences.setOrder(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.setPinnedOrder(Microsoft.FSharp.Collections.FSharpList`1[System.String], SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.toggleExpanded(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
+SidebarPreferences.toggleHidden(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.toggleModuleExpanded(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.togglePinned(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences+UserSidebarPreferences (class)
-SidebarPreferences+UserSidebarPreferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+SidebarPreferences+UserSidebarPreferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 SidebarPreferences+UserSidebarPreferences.ExpandedGroups : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 SidebarPreferences+UserSidebarPreferences.ExpandedModules : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+SidebarPreferences+UserSidebarPreferences.HiddenEntryIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 SidebarPreferences+UserSidebarPreferences.ModuleOrder : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 SidebarPreferences+UserSidebarPreferences.PinnedModuleIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 SidebarPreferences+UserSidebarPreferencesModule (class)
@@ -3063,6 +3070,7 @@ ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRetryBootLoad : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsSidebarEntryHideToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarGroupToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleExpandToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModulePinToggled : System.Boolean { get }
@@ -3120,6 +3128,8 @@ ToolUp.Platform.Client+Msg+ResetModule (class)
 ToolUp.Platform.Client+Msg+ResetModule.moduleId : System.String { get }
 ToolUp.Platform.Client+Msg+RetryBootLoad (class)
 ToolUp.Platform.Client+Msg+RetryBootLoad.source : System.String { get }
+ToolUp.Platform.Client+Msg+SidebarEntryHideToggled (class)
+ToolUp.Platform.Client+Msg+SidebarEntryHideToggled.entryId : System.String { get }
 ToolUp.Platform.Client+Msg+SidebarGroupToggled (class)
 ToolUp.Platform.Client+Msg+SidebarGroupToggled.groupKey : System.String { get }
 ToolUp.Platform.Client+Msg+SidebarModuleExpandToggled (class)
@@ -3157,6 +3167,7 @@ ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RetryBootLoad : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.SidebarEntryHideToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarGroupToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModuleExpandToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModulePinToggled : System.Int32 (literal)
@@ -4476,12 +4487,13 @@ Toolup.NarrativeRenderer (class)
 Toolup.NarrativeRenderer.render(ToolUp.Platform.Narrative.NarrativeDocument) : Fable.React.ReactElement
 Toolup.Sidebar (class)
 Toolup.Sidebar.AdminAreaId : System.String (literal)
+Toolup.Sidebar.HiddenKey : System.String (literal)
 Toolup.Sidebar.HomeId : System.String (literal)
 Toolup.Sidebar.HomeKey : System.String (literal)
 Toolup.Sidebar.OtherKey : System.String (literal)
 Toolup.Sidebar.PinnedKey : System.String (literal)
 Toolup.Sidebar.ProductAreaId : System.String (literal)
-Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
+Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.Sidebar.buildSections(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
 Toolup.Sidebar.flatten(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModule]
 Toolup.Sidebar+SidebarModule (class)
@@ -4582,7 +4594,7 @@ Toolup.UIToolkit.Kpi+Tile.Hint : Microsoft.FSharp.Core.FSharpOption`1[System.Str
 Toolup.UIToolkit.Kpi+Tile.Label : System.String { get }
 Toolup.UIToolkit.Kpi+Tile.Value : System.String { get }
 Toolup.UIToolkit.Layout (class)
-Toolup.UIToolkit.Layout.AppShell(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]], ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
+Toolup.UIToolkit.Layout.AppShell(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]], ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicator(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicatorInline(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement

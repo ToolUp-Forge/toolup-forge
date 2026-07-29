@@ -273,6 +273,20 @@ module Client =
         /// The key is the bare module Id. Toggles
         /// `UserSidebarPreferences.ExpandedModules` and re-saves.
         | SidebarModuleExpandToggled of moduleId: string
+        /// User hid a sidebar entry, or restored one from the "Hidden
+        /// items" section (Phase 572). `entryId` is the sidebar id — a
+        /// bare module id, or a composite `{moduleId}{pageRoute}` page id
+        /// for a single page of a multi-page module. Toggles
+        /// `UserSidebarPreferences.HiddenEntryIds` and re-saves.
+        ///
+        /// **Preference only.** The entry leaves this browser's rail and
+        /// nothing else changes: no permission, no team exposure, no
+        /// route. The page stays reachable by URL and stays listed in the
+        /// command palette, and no other user is affected. The shell
+        /// deliberately does NOT navigate away when the user hides the
+        /// entry they are currently on — the page they are reading is not
+        /// what they asked to change.
+        | SidebarEntryHideToggled of entryId: string
         /// Server-driven `Notification.ModuleAction` targeting a module
         /// registered in this deployment. The shell looks up the module
         /// by Id, gates on `AccessibleModules`, calls the module's
@@ -2028,6 +2042,14 @@ module Client =
                 SidebarPreferences.save prefs
                 { model with SidebarPrefs = prefs }, Cmd.none
 
+            | SidebarEntryHideToggled entryId ->
+                // `toggleHidden` also unpins on the hide leg (the Phase
+                // 572.C rule) — the shell does not re-implement it here,
+                // so pin and hide cannot disagree about the same entry.
+                let prefs = SidebarPreferences.toggleHidden entryId model.SidebarPrefs
+                SidebarPreferences.save prefs
+                { model with SidebarPrefs = prefs }, Cmd.none
+
             | ModuleActionReceived(moduleId, actionKey, payloadJson) ->
                 // Gate 1: module registered in this deployment? If not,
                 // silently drop — the server-side tool ran and produced
@@ -2889,6 +2911,7 @@ module Client =
                 (SidebarGroupToggled >> dispatch)
                 (SidebarModulePinToggled >> dispatch)
                 (SidebarModuleExpandToggled >> dispatch)
+                (SidebarEntryHideToggled >> dispatch)
                 (fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds)))
                 content
                 chrome.SidePanel
