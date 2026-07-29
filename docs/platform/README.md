@@ -94,6 +94,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 
 ## Other reference
 
+- [`command-palette.md`](command-palette.md) — the opt-in Ctrl+K / Cmd+K quick-nav overlay: enabling it, the keybinding contract, how its entries are derived from the same visibility fold as the sidebar, and the `data-toolup-palette-*` theming hooks.
 - [`portability-rules.md`](portability-rules.md) — six rules every distributed-implementation-friendly interface satisfies.
 - [`auth.md`](auth.md) — auth providers and how to write one.
 - [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (`ClerkAuthUI` is deprecated).

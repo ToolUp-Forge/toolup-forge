@@ -72,6 +72,9 @@ let private baseModel: Client.Model = {
     ResetCounters = Map.empty
     InitPhase = Client.Prefetching
     Degradations = []
+    // Phase 571 — the command palette's overlay state. Inert for these
+    // arms (the fixture never opens it) but the field is not optional.
+    CommandPalette = CommandPaletteNav.closed
 }
 
 // `update`'s queryBus / modules parameters are untouched by the

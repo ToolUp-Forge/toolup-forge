@@ -1023,6 +1023,13 @@
              equation that keeps the sidebar and the router on ONE
              predicate. -->
         <Compile Include="InProcess\RouteGuardContractTests.fs" />
+        <!-- Phase 571 — command-palette parity pack over the SAME fold:
+             the palette's destination list per subject, cross-checked
+             against `SidebarVisibility.visibleIds` on the same inputs, so
+             a hidden admin page can never be two keystrokes away. Plus
+             the page-expansion rule (the two-page nesting threshold), the
+             fuzzy scorer's ranking contract, and the overlay state. -->
+        <Compile Include="InProcess\CommandPaletteContractTests.fs" />
         <!-- Phase 171 — Home/Overview landing-surface verification:
              count-affordance (IObjectCounter fast-path vs ListObjects
              default), prepareModules head-injection landing selection,

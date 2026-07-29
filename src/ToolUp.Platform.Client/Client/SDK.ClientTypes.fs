@@ -1215,6 +1215,32 @@ type NotAuthorisedMode =
     /// `NotAuthorisedContext`; replaces the default entirely.
     | CustomNotAuthorised of (NotAuthorisedContext -> ReactElement)
 
+/// Phase 571 — the Ctrl+K / Cmd+K command palette.
+///
+/// **Off by default (GP 13).** `NoCommandPalette` registers no keyboard
+/// listener, mounts no overlay, and adds no element to the React tree —
+/// a deployment that does not opt in renders byte-identically to
+/// pre-571. The palette is a discovery affordance for deployments with
+/// enough surface to need one (nested multi-page modules, the Phase 567
+/// administration area); a three-module app is better served by its
+/// rail.
+///
+/// There is no `Custom` arm, and that asymmetry with `ToastCentreMode` /
+/// `NotAuthorisedMode` is deliberate: the palette's whole safety
+/// property is that its entries come from the same visibility fold as
+/// the sidebar (`SidebarVisibility.canNavigateTo`). A
+/// deployment-supplied renderer taking a raw module list would be the
+/// one place that property could be lost, and losing it means a hidden
+/// admin page two keystrokes from a Member. Theming hooks (the
+/// `data-toolup-palette` attributes on every rendered part) are the
+/// supported customisation instead.
+type CommandPaletteMode =
+    /// The default — no keybinding, no overlay, no cost.
+    | NoCommandPalette
+    /// Mount the SDK's palette: Ctrl+K / Cmd+K opens an overlay over
+    /// the caller's sidebar-visible pages.
+    | DefaultCommandPalette
+
 /// Phase 567 — how the sidebar presents the SDK's admin built-ins.
 type AdminSurfaceMode =
     /// The default — admin modules render as inline sidebar groups
@@ -1322,6 +1348,13 @@ type ClientConfig = {
     /// coherence the phase exists to restore. Permitted callers never
     /// see this and are byte-identical to pre-569 (GP 11).
     NotAuthorisedView: NotAuthorisedMode
+    /// Phase 571 — the Ctrl+K / Cmd+K command palette. **Default
+    /// `NoCommandPalette`** — off, so no keybinding is registered and no
+    /// overlay enters the tree (GP 13). `DefaultCommandPalette` mounts
+    /// the SDK palette over the caller's sidebar-visible pages; its
+    /// entries are derived from the same `SidebarVisibility` fold as the
+    /// rail, so enabling it can never widen what a caller can reach.
+    CommandPalette: CommandPaletteMode
     /// Phase 217 — opt in to the built-in "Pinned / Recent" widget on the
     /// Home surface (a small per-user store of recently-visited + pinned
     /// tools, persisted through the per-user config store). **Default:
@@ -1656,6 +1689,8 @@ module ClientConfig =
         // Phase 569 — the SDK's reason-aware denial surface; a deployment
         // swaps in its own with `CustomNotAuthorised`.
         NotAuthorisedView = DefaultNotAuthorised
+        // Phase 571 — no palette, no keybinding, no overlay (GP 13).
+        CommandPalette = NoCommandPalette
         // Phase 217 — recents/pinning off by default (GP 13).
         HomeRecents = false
         // Opt-in; off by default so the no-team gate never changes an

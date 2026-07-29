@@ -757,6 +757,16 @@ let allTests =
         // sidebar and the router to one predicate.
         RouteGuardContractTests.routeGuardTests
         RouteGuardContractTests.sharedPredicateTests
+        // Phase 571 — the command palette over the SAME fold: the
+        // destination list per subject cross-checked against
+        // `SidebarVisibility.visibleIds`, the page-expansion rule, the
+        // fuzzy scorer's ranking contract, and the overlay state. Four
+        // separate `[<Tests>]` bindings that `runTestsWithCLIArgs` would
+        // otherwise leave dormant.
+        CommandPaletteContractTests.paletteVisibilityTests
+        CommandPaletteContractTests.expansionTests
+        CommandPaletteContractTests.fuzzyTests
+        CommandPaletteContractTests.paletteStateTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
         // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
         // but constructs the SDK's built-in *client-side* UI modules

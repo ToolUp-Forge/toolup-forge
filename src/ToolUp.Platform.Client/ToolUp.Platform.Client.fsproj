@@ -89,6 +89,14 @@
              `'m -> SidebarModuleFacts` projection precisely because
              ErasedModule is declared below it. -->
         <Compile Include="Client\SidebarVisibility.fs" />
+        <!-- Phase 571 — the command palette's pure half: candidate
+             derivation (SidebarVisibility.visible + a page expansion),
+             the fuzzy scorer, and the overlay state the shell model
+             carries. Immediately after SidebarVisibility.fs, whose fold
+             it calls, and ahead of SDK.ClientTypes.fs for the same
+             .NET-testability reason that file documents
+             (InProcess/CommandPaletteContractTests.fs). -->
+        <Compile Include="Client\CommandPaletteNav.fs" />
         <Compile Include="Client\SDK.ClientTypes.fs" />
         <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +
              failwithf wrapper used by Client.boot to refuse deployments
@@ -298,6 +306,12 @@
              the UIToolkit StateViews it composes; before SDK.Client.fs,
              its single call site. -->
         <Compile Include="Components\NotAuthorised.fs" />
+        <!-- Phase 571 — the Ctrl+K command palette overlay. After
+             SDK.ClientTypes.fs (CommandPaletteMode) and the dataProp /
+             ariaProp helpers it uses; before SDK.Client.fs, its single
+             call site. Mounted only under DefaultCommandPalette, so the
+             document keydown listener exists only when opted in. -->
+        <Compile Include="Components\CommandPalette.fs" />
         <Compile Include="Client\SDK.Client.fs" />
         <!-- Phase 57 — hydration-aware bootstrap + per-route metadata
              hook for SPA prerender. Both opt-in; consumers compose

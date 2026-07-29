@@ -217,6 +217,15 @@ module Client =
         /// without visiting Data Manager) until the DataManager module is
         /// mounted, at which point its live state becomes authoritative.
         PrefetchedProcessedData: ProcessedFileEntry list
+        /// Phase 571 — the Ctrl+K command palette's overlay state (open,
+        /// query, highlight counter). Carried on the shell model rather
+        /// than inside the overlay component so the palette is
+        /// Elmish-native: every transition is a message `update` can see,
+        /// and selection reduces to the same `ModuleSelected` a sidebar
+        /// click sends. `CommandPaletteNav.closed` for every deployment
+        /// that leaves `ClientConfig.CommandPalette = NoCommandPalette`
+        /// (the default) — the field is inert, the component unmounted.
+        CommandPalette: CommandPaletteNav.PaletteState
     }
 
     type Msg =
@@ -380,6 +389,30 @@ module Client =
         /// Phase 121 — user dismissed the degradation banner. Clears every
         /// entry; later failures re-surface it.
         | DismissBootDegradations
+        /// Phase 571 — Ctrl+K / Cmd+K was pressed outside a text field
+        /// (or the palette was opened by some other affordance). Opens
+        /// the overlay with an empty query and the first entry
+        /// highlighted — a shortcut whose result depends on when it was
+        /// last used is a shortcut nobody trusts.
+        | CommandPaletteOpened
+        /// Phase 571 — Escape, a backdrop click, or a completed
+        /// selection. Returns the palette to `closed`.
+        | CommandPaletteDismissed
+        /// Phase 571 — the query box changed. Resets the highlight: the
+        /// ranking has moved, so the old cursor position points at an
+        /// unrelated row.
+        | CommandPaletteQueryChanged of string
+        /// Phase 571 — arrow-key movement, as a signed delta on an
+        /// unbounded counter. The renderer wraps it into range because
+        /// it is the only side that knows how many entries the query
+        /// matched (`CommandPaletteNav.highlightIndex`).
+        | CommandPaletteHighlightMoved of int
+        /// Phase 571 — an entry was activated (Enter or click). Carries
+        /// the composite sidebar id, so the arm closes the overlay and
+        /// re-dispatches the ordinary `ModuleSelected` — the palette
+        /// navigates through the existing page path (Phase 12b
+        /// semantics, route guard included), never around it.
+        | CommandPaletteSelected of sidebarId: string
 
     // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + installRequestGuard below.
     // Proxies are constructed at module load; identity + CSRF headers are read live per request by the send-time guard.
@@ -783,6 +816,24 @@ module Client =
         Group = m.Group
         NavRole = m.NavRole
         Visibility = m.Visibility
+    }
+
+    /// Phase 571 — `ErasedModule` → the facts the command palette reads.
+    /// Carries the navigation facts above VERBATIM, so the palette's
+    /// candidate derivation runs the same fold on the same values the
+    /// rail and the route guard do; the rest is display data the pure
+    /// module cannot name (`ReactElement` icons are re-attached at
+    /// render, where they can actually be built).
+    let private paletteFacts (m: ErasedModule) : CommandPaletteNav.PaletteModuleFacts = {
+        Nav = moduleFacts m
+        Name = m.Definition.Name
+        Pages =
+            m.Definition.Pages
+            |> List.map (fun page -> {
+                CommandPaletteNav.PalettePageFacts.Route = page.Route
+                Title = page.Title
+            })
+        HasPageViews = m.PageViews.IsSome
     }
 
     /// The shell model + config projected into the decision's inputs. The
@@ -1308,6 +1359,7 @@ module Client =
             InitPhase = initPhase
             Degradations = []
             PrefetchedProcessedData = []
+            CommandPalette = CommandPaletteNav.closed
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -1848,6 +1900,54 @@ module Client =
                 Cmd.none
 
             | DismissBootDegradations -> { model with Degradations = [] }, Cmd.none
+
+            // ─── Phase 571 — command palette ──────────────────────────
+            //
+            // Four state transitions and a delegation. Nothing here
+            // decides what the palette CONTAINS: the candidate set is
+            // derived in `view` from `CommandPaletteNav.candidates`, so
+            // there is no cached list to keep in step with an RBAC
+            // response or a team switch landing mid-session.
+            | CommandPaletteOpened ->
+                {
+                    model with
+                        CommandPalette = CommandPaletteNav.opened
+                },
+                Cmd.none
+
+            | CommandPaletteDismissed ->
+                {
+                    model with
+                        CommandPalette = CommandPaletteNav.closed
+                },
+                Cmd.none
+
+            | CommandPaletteQueryChanged query ->
+                {
+                    model with
+                        CommandPalette = CommandPaletteNav.withQuery query model.CommandPalette
+                },
+                Cmd.none
+
+            | CommandPaletteHighlightMoved delta ->
+                {
+                    model with
+                        CommandPalette = CommandPaletteNav.moveHighlight delta model.CommandPalette
+                },
+                Cmd.none
+
+            | CommandPaletteSelected sidebarId ->
+                // Close, then navigate through the ORDINARY path — the
+                // same message a sidebar click sends, so same-module page
+                // switches still skip `Init`, the Phase 567 area still
+                // flips, and the Phase 569 route guard still applies. A
+                // palette that reimplemented selection would be a second
+                // navigation path to keep in agreement with the first.
+                {
+                    model with
+                        CommandPalette = CommandPaletteNav.closed
+                },
+                Cmd.ofMsg (ModuleSelected sidebarId)
 
             | ResetModule moduleId ->
                 // Phase 12c — clear the named module's state, bump its
@@ -2487,43 +2587,52 @@ module Client =
             | Some route -> $"{model.ActiveModuleId}{route}"
             | None -> model.ActiveModuleId
 
+        // Phase 570.A — the four-filter visibility fold (RBAC
+        // accessibility → the Phase 4b platform-admin role gate →
+        // the Phase 66 B.3 per-module `Visibility` predicate → the
+        // no-active-team landing collapse) was lifted out of the
+        // `sidebarSections` binding below into
+        // `SidebarVisibility.visible`, which is its
+        // single definition site. **The filter order and the reason
+        // for it are documented there, on `SidebarVisibility.visible`
+        // — read that doc-comment, not the fragments this comment
+        // replaced.** The prose that used to sit beside each inline
+        // `List.filter` here had drifted from the code it described
+        // (the role gate matched a group label no built-in declared),
+        // which is why the decision now lives somewhere a contract
+        // pack can pin it: `ToolUp.Platform.Tests`'
+        // `InProcess/SidebarVisibilityContractTests.fs` asserts the
+        // visible-id set across role × mode × exposure.
+        //
+        // The three `ClientConfig` reads stay here — `SubjectKind`
+        // resolution (B.8's canonical projection over
+        // `config.Surfaces`, shared with `UserSession` storage
+        // selection and the `AuthUIProvider` sign-in mount), the
+        // team-scope predicate, and the unified landing-module id —
+        // because `ClientConfig` itself is Fable-only at runtime.
+        // Passing their resolved values keeps the fold pure data.
+        //
+        // Phase 569.A — the projection + inputs are no longer built
+        // inline here: `moduleFacts` / `navigationInputs` are the
+        // shell's one construction site, shared verbatim with the
+        // route guard in the content dispatch above. `visible` is
+        // itself `List.filter SidebarVisibility.canNavigateTo`, so
+        // "hidden from the rail" and "refused by the router" are the
+        // same call on the same inputs — they cannot drift.
+        //
+        // Phase 571 — hoisted out of `sidebarSections` so the command
+        // palette below reads the SAME already-filtered list rather
+        // than re-deriving one. The palette re-runs the fold through
+        // `CommandPaletteNav.candidates` (one call, tens of modules)
+        // precisely so its parity with the rail is a call to the same
+        // function rather than a promise; this binding is what the
+        // per-destination icons are matched against.
+        let visibleModules =
+            modules |> SidebarVisibility.visible moduleFacts (navigationInputs config model)
+
         let sidebarSections =
             let hasDataForType dt =
                 model.ProcessedData |> List.exists (fun e -> e.DataType = dt && e.Error.IsNone)
-
-            // Phase 570.A — the four-filter visibility fold (RBAC
-            // accessibility → the Phase 4b platform-admin role gate →
-            // the Phase 66 B.3 per-module `Visibility` predicate → the
-            // no-active-team landing collapse) was lifted out of this
-            // let-binding into `SidebarVisibility.visible`, which is its
-            // single definition site. **The filter order and the reason
-            // for it are documented there, on `SidebarVisibility.visible`
-            // — read that doc-comment, not the fragments this comment
-            // replaced.** The prose that used to sit beside each inline
-            // `List.filter` here had drifted from the code it described
-            // (the role gate matched a group label no built-in declared),
-            // which is why the decision now lives somewhere a contract
-            // pack can pin it: `ToolUp.Platform.Tests`'
-            // `InProcess/SidebarVisibilityContractTests.fs` asserts the
-            // visible-id set across role × mode × exposure.
-            //
-            // The three `ClientConfig` reads stay here — `SubjectKind`
-            // resolution (B.8's canonical projection over
-            // `config.Surfaces`, shared with `UserSession` storage
-            // selection and the `AuthUIProvider` sign-in mount), the
-            // team-scope predicate, and the unified landing-module id —
-            // because `ClientConfig` itself is Fable-only at runtime.
-            // Passing their resolved values keeps the fold pure data.
-            //
-            // Phase 569.A — the projection + inputs are no longer built
-            // inline here: `moduleFacts` / `navigationInputs` are the
-            // shell's one construction site, shared verbatim with the
-            // route guard in the content dispatch above. `visible` is
-            // itself `List.filter SidebarVisibility.canNavigateTo`, so
-            // "hidden from the rail" and "refused by the router" are the
-            // same call on the same inputs — they cannot drift.
-            let visibleModules =
-                modules |> SidebarVisibility.visible moduleFacts (navigationInputs config model)
 
             // One sidebar *view* per module. A single-page (or legacy)
             // module carries no `Pages` and renders as a leaf whose
@@ -2799,6 +2908,83 @@ module Client =
             | DefaultToastCentre -> Components.ToastCentre.ToastCentre()
             | CustomToastCentre element -> element
 
+        // Phase 571 — the Ctrl+K command palette. `Html.none` under the
+        // default `NoCommandPalette`, so no element enters the tree and
+        // the component's document keydown listener is never registered
+        // (GP 13): a deployment that does not opt in is byte-identical
+        // to pre-571.
+        //
+        // The entry list is `CommandPaletteNav.candidates` — literally
+        // `SidebarVisibility.visible` plus a page expansion, run on the
+        // same `navigationInputs` the rail used two bindings up. That is
+        // the phase's safety property and it is structural, not
+        // procedural: there is no palette-side filter that could fall
+        // out of step with the sidebar's, because there is no
+        // palette-side filter.
+        let commandPalette =
+            match config.CommandPalette with
+            | NoCommandPalette -> Html.none
+            | DefaultCommandPalette ->
+                // Icons cannot live on the pure candidate (a
+                // `ReactElement` is unbuildable outside Fable, which is
+                // what keeps the derivation .NET-testable), so they are
+                // matched back on here by sidebar id. Same derivation
+                // the rail uses: a page row shows its page icon, a leaf
+                // shows `singlePageIcon`.
+                let icons =
+                    visibleModules
+                    |> List.collect (fun m ->
+                        match m.PageViews, m.Definition.Pages with
+                        | Some _, ((_ :: _ :: _) as pages) ->
+                            pages |> List.map (fun page -> $"{m.Definition.Id}{page.Route}", page.Icon)
+                        | _ -> [ m.Definition.Id, singlePageIcon m.Definition ])
+                    |> Map.ofList
+
+                // Under `SeparateArea` a module with no group still
+                // belongs to an area, and the area is often the only
+                // thing distinguishing two similarly-named pages — so
+                // fall back to the area name rather than showing
+                // nothing. Inert under `InlineGroups`, where areas are
+                // not a user-visible concept.
+                let contextLabel (candidate: CommandPaletteNav.PaletteCandidate) =
+                    match candidate.Group, config.AdminSurface with
+                    | Some group, _ -> Some group
+                    | None, InlineGroups -> None
+                    | None, SeparateArea ->
+                        modules
+                        |> List.tryFind (fun m -> m.Definition.Id = candidate.ModuleId)
+                        |> Option.map (fun m ->
+                            match ClientConfig.effectiveArea m.Area m.Group with
+                            | ModuleArea.Administration -> "Administration"
+                            | ModuleArea.Product -> "App")
+
+                let toEntry
+                    (candidate: CommandPaletteNav.PaletteCandidate)
+                    : Components.CommandPalette.CommandPaletteEntry =
+                    {
+                        SidebarId = candidate.SidebarId
+                        ModuleName = candidate.ModuleName
+                        PageTitle = candidate.PageTitle
+                        Group = contextLabel candidate
+                        Icon = icons |> Map.tryFind candidate.SidebarId |> Option.defaultValue Html.none
+                    }
+
+                let entries =
+                    CommandPaletteNav.candidates paletteFacts (navigationInputs config model) modules
+                    |> List.map toEntry
+
+                Components.CommandPalette.CommandPalette {
+                    IsOpen = model.CommandPalette.IsOpen
+                    Query = model.CommandPalette.Query
+                    Highlight = model.CommandPalette.Highlight
+                    Entries = entries
+                    OnOpen = fun () -> dispatch CommandPaletteOpened
+                    OnDismiss = fun () -> dispatch CommandPaletteDismissed
+                    OnQueryChanged = CommandPaletteQueryChanged >> dispatch
+                    OnHighlightMoved = CommandPaletteHighlightMoved >> dispatch
+                    OnSelect = CommandPaletteSelected >> dispatch
+                }
+
         // Phase 6g.D: render every companion-supplied global overlay.
         // Each thunk is invoked here on every shell render so its
         // hooks register correctly. Typical consumers are floating
@@ -2835,7 +3021,7 @@ module Client =
             FeatureFlags.provider
                 declaredKeys
                 model.ResolvedFlags
-                (React.Fragment([ shell; toastCentre; degradationBanner ] @ globalOverlays))
+                (React.Fragment([ shell; toastCentre; degradationBanner; commandPalette ] @ globalOverlays))
 
         // Wrap in `ProcessedDataContext.Context` provider — publishes
         // the platform-aggregated `ProcessedFileEntry` list to module
