@@ -467,21 +467,22 @@ type private KnownGap = {
     Matches: Map<string, string> -> bool
 }
 
-let private knownGaps: KnownGap list = [
-    {
-        Rule = "everyInteractiveHasAccessibleName"
-        Why =
-            "dnd-kit's drag wrapper. `SortableItem` splats `useSortable`'s `attributes` onto a bare \
-             <div>, and those attributes include `role=\"button\"` + `tabindex=0` — so each rail row \
-             is wrapped in a SECOND focusable button. In the hover-expanded rail it inherits a name \
-             from the row's visible <span>; in the narrow rail the row renders no text, so the \
-             wrapper is an unnamed focusable button (its `aria-label` is on the inner <button>, and a \
-             child's aria-label does not name its parent). A real defect, one level above the rows \
-             Phase 609 fixed, and fixable only in `Sidebar.fs` — which this phase does not own. \
-             Reported, not fixed."
-        Matches = fun attrs -> Map.tryFind "aria-roledescription" attrs = Some "sortable"
-    }
-]
+/// Empty, and that is the point: the one gap this pack shipped with —
+/// dnd-kit's drag wrapper, an unnamed focusable `role="button"` around every
+/// row because `SortableItem` splats `useSortable`'s `attributes` (including
+/// `tabindex=0`) onto a bare <div> — was closed by Phase 612
+/// (`toolup-forge@ac6f533`), which gave the wrapper an `aria-label` and folded
+/// it into the rail's roving tabindex.
+///
+/// Its removal was NOT bookkeeping. The `every pinned known gap still fires
+/// somewhere` case below failed the moment 612 landed, which is the guard
+/// working exactly as designed: a pin that has stopped firing is an exemption
+/// that has silently stopped checking anything, and the pack refuses to carry
+/// one. Leaving the entry here would have suppressed a real future regression
+/// of the same class.
+///
+/// The machinery stays for the next genuine not-mine-to-fix finding.
+let private knownGaps: KnownGap list = []
 
 /// Split a state's findings into the pinned gaps and the ones that must
 /// fail the pack.
