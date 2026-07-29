@@ -102,9 +102,16 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
                 | Some root when not (root.contains (e.target :?> Browser.Types.Node)) -> setIsOpen false
                 | _ -> ()
 
-            Browser.Dom.document.addEventListener ("mousedown", unbox onClick)
+            // `removeEventListener` matches by REFERENCE — bind the JS
+            // function once and hand the identical binding to both calls
+            // (an `unbox`ed lambda makes Fable emit a fresh wrapper per
+            // call site, so the remove matches nothing and the listener
+            // leaks one copy per mount). Same fix as CommandPalette.
+            let listener: Browser.Types.Event -> unit = onClick
 
-            (fun () -> Browser.Dom.document.removeEventListener ("mousedown", unbox onClick))),
+            Browser.Dom.document.addEventListener ("mousedown", listener)
+
+            (fun () -> Browser.Dom.document.removeEventListener ("mousedown", listener))),
         [||]
     )
 
