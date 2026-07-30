@@ -5403,11 +5403,32 @@ ToolUp.Platform.ModulePermissionModule (class)
 ToolUp.Platform.ModulePermissionModule.implies(ToolUp.Platform.ModulePermission, ToolUp.Platform.ModulePermission) : System.Boolean
 ToolUp.Platform.ModuleQueryBusApi (class)
 ToolUp.Platform.ModuleQueryBusApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.ModuleQueryCodec`1 (class)
+ToolUp.Platform.ModuleQueryCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])
+ToolUp.Platform.ModuleQueryCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }
+ToolUp.Platform.ModuleQueryCodec`1.Encode : Microsoft.FSharp.Core.FSharpFunc`2[T, System.String] { get }
 ToolUp.Platform.ModuleQueryContext (class)
 ToolUp.Platform.ModuleQueryContext..ctor(ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleQueryRequest)
 ToolUp.Platform.ModuleQueryContext.AccessContext : ToolUp.Platform.AccessContext { get }
 ToolUp.Platform.ModuleQueryContext.CallerModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ModuleQueryContext.Request : ToolUp.Platform.ModuleQueryRequest { get }
+ToolUp.Platform.ModuleQueryContract (class)
+ToolUp.Platform.ModuleQueryContract.codecOfThrowing`1(Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, T]) : ToolUp.Platform.ModuleQueryCodec`1[T]
+ToolUp.Platform.ModuleQueryContract.codec`1(Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]]) : ToolUp.Platform.ModuleQueryCodec`1[T]
+ToolUp.Platform.ModuleQueryContract.create`2(System.String, System.String, ToolUp.Platform.ModuleQueryCodec`1[Req], ToolUp.Platform.ModuleQueryCodec`1[Resp]) : ToolUp.Platform.ModuleQueryContract`2[Req, Resp]
+ToolUp.Platform.ModuleQueryContract.decodeFailure`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], System.String, System.String) : System.String
+ToolUp.Platform.ModuleQueryContract.decodeRequestOrRaise`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], System.String) : Req
+ToolUp.Platform.ModuleQueryContract.decodeResponse`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Resp, ToolUp.Platform.ModuleQueryError]
+ToolUp.Platform.ModuleQueryContract.describe`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp]) : System.String
+ToolUp.Platform.ModuleQueryContract.ensureTargetMatches`2(System.String, ToolUp.Platform.ModuleQueryContract`2[Req, Resp]) : System.Void
+ToolUp.Platform.ModuleQueryContract.handler`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryContext, Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Resp]]]) : ToolUp.Platform.ModuleQueryHandler
+ToolUp.Platform.ModuleQueryContract.request`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], Req) : ToolUp.Platform.ModuleQueryRequest
+ToolUp.Platform.ModuleQueryContract`2 (class)
+ToolUp.Platform.ModuleQueryContract`2..ctor(System.String, System.String, ToolUp.Platform.ModuleQueryCodec`1[Req], ToolUp.Platform.ModuleQueryCodec`1[Resp])
+ToolUp.Platform.ModuleQueryContract`2.QueryKey : System.String { get }
+ToolUp.Platform.ModuleQueryContract`2.RequestCodec : ToolUp.Platform.ModuleQueryCodec`1[Req] { get }
+ToolUp.Platform.ModuleQueryContract`2.ResponseCodec : ToolUp.Platform.ModuleQueryCodec`1[Resp] { get }
+ToolUp.Platform.ModuleQueryContract`2.TargetModule : System.String { get }
 ToolUp.Platform.ModuleQueryError (class)
 ToolUp.Platform.ModuleQueryError.IsHandlerFailed : System.Boolean { get }
 ToolUp.Platform.ModuleQueryError.IsNoHandler : System.Boolean { get }

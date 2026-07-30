@@ -1614,6 +1614,7 @@ ToolUp.Elmish.Cmd+RetryPolicyModule.defaultPolicy : ToolUp.Elmish.Cmd+RetryPolic
 ToolUp.Elmish.Cmd+RetryPolicyModule.none : ToolUp.Elmish.Cmd+RetryPolicy { get }
 ToolUp.Elmish.EffectHandle (class)
 ToolUp.Elmish.EffectHandle.manual`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
+ToolUp.Elmish.EffectHandle.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, msg], ToolUp.Elmish.EffectHandle`1[a]) : ToolUp.Elmish.EffectHandle`1[msg]
 ToolUp.Elmish.EffectHandle.moduleLifetime`1(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
 ToolUp.Elmish.EffectHandle.ofFireAndForget`1(System.String, ToolUp.Elmish.EffectLifetime, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Elmish.EffectHandle`1[msg]
 ToolUp.Elmish.EffectHandle.programLifetime`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
@@ -1713,6 +1714,7 @@ ToolUp.Elmish.Prefetch`1 (class)
 ToolUp.Elmish.Prefetch`1..ctor(ToolUp.Elmish.PrefetchStatus`1[a])
 ToolUp.Elmish.Prefetch`1.Status : ToolUp.Elmish.PrefetchStatus`1[a] { get }
 ToolUp.Elmish.ProgramModule (class)
+ToolUp.Elmish.ProgramModule.effectIds`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Elmish.ProgramModule.errorReporter`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]
 ToolUp.Elmish.ProgramModule.init`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[arg, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]
 ToolUp.Elmish.ProgramModule.mapErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
@@ -3054,11 +3056,13 @@ ToolUp.Platform.Client.moduleIdentityReport(Microsoft.FSharp.Collections.FSharpL
 ToolUp.Platform.Client.moduleIdentityTable(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleIdentityRow]
 ToolUp.Platform.Client.prepareModules(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg, Fable.React.ReactElement]
+ToolUp.Platform.Client.programLifetimeEffects(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Elmish.EffectHandle`1[ToolUp.Platform.Client+Msg]]
 ToolUp.Platform.Client.run(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
 ToolUp.Platform.Client.tryDispatchPublicEntry(ToolUp.Platform.ClientConfig) : System.Boolean
 ToolUp.Platform.Client.update(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, ToolUp.Platform.Client+Model) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.Platform.Client.view(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewWithSignIn(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.Platform.Client.withShellLifetimeEffects`4(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Platform.Client+ExtraChrome (class)
 ToolUp.Platform.Client+ExtraChrome..ctor(Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement])
 ToolUp.Platform.Client+ExtraChrome.HeaderAction : Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement] { get }
@@ -3380,6 +3384,7 @@ ToolUp.Platform.ClientModule.withNeedsData`2(Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Platform.ClientModule.withPages`2(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PageConfig, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], ToolUp.Platform.PageContent]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withPlacement`2(Toolup.Sidebar+SidebarPlacement, ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withProcessedData`2(Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
+ToolUp.Platform.ClientModule.withQueryContract`4(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryContext, Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Resp]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withQueryHandlers`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withUnitInit`2(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], ToolUp.Platform.ClientModuleContext) : System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.Platform.ClientModule.withView`2(Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
@@ -3858,6 +3863,7 @@ ToolUp.Platform.Icon (class)
 ToolUp.Platform.Icon.ofImport(System.Object) : Fable.React.ReactElement
 ToolUp.Platform.Icon.ofUrl(System.String) : Fable.React.ReactElement
 ToolUp.Platform.Icons (class)
+ToolUp.Platform.Icons.arrowLeft : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.arrowUpwards : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.dataLoading : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.health : Fable.React.ReactElement { get }
@@ -3953,8 +3959,10 @@ ToolUp.Platform.ModuleParityValidator (class)
 ToolUp.Platform.ModuleParityValidator.result(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ModuleParityValidator.validate(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
 ToolUp.Platform.ModuleQueryClient (class)
+ToolUp.Platform.ModuleQueryClient.askContract`2(ToolUp.Platform.IModuleQueryBus, ToolUp.Platform.AccessContext, ToolUp.Platform.ModuleQueryContract`2[TRequest, TResponse], TRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[TResponse, ToolUp.Platform.ModuleQueryError]]]
 ToolUp.Platform.ModuleQueryClient.ask`2(ToolUp.Platform.IModuleQueryBus, ToolUp.Platform.AccessContext, System.String, System.String, TRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[TResponse, ToolUp.Platform.ModuleQueryError]]]
 ToolUp.Platform.ModuleQueryClient.buildRegistry(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleQueryHandler]]
+ToolUp.Platform.ModuleQueryClient.contract`2(System.String, System.String) : ToolUp.Platform.ModuleQueryContract`2[TRequest, TResponse]
 ToolUp.Platform.ModuleQueryClient+ClientModuleQueryBus (class)
 ToolUp.Platform.ModuleQueryClient+ClientModuleQueryBus..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleQueryHandler]])
 ToolUp.Platform.ModuleQueryClient+ClientModuleQueryHandler (class)
@@ -4562,10 +4570,66 @@ Toolup.Sidebar.HomeKey : System.String (literal)
 Toolup.Sidebar.OtherKey : System.String (literal)
 Toolup.Sidebar.PinnedKey : System.String (literal)
 Toolup.Sidebar.ProductAreaId : System.String (literal)
+Toolup.Sidebar.RailStopAttr : System.String (literal)
 Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.Sidebar.TrailingKey : System.String (literal)
 Toolup.Sidebar.buildSections(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
 Toolup.Sidebar.flatten(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModule]
+Toolup.Sidebar.moveHorizontal(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+Toolup.Sidebar.moveVertical(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+Toolup.Sidebar.railKey(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.String, System.Boolean) : Toolup.Sidebar+RailKeyOutcome
+Toolup.Sidebar.railStops(System.Boolean, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop]
+Toolup.Sidebar.railTabIndex(System.String, System.String) : System.Int32
+Toolup.Sidebar.resolveActiveStop(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
+Toolup.Sidebar.stopOwning(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String) : Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+RailStop]
+Toolup.Sidebar+RailFocus (class)
+Toolup.Sidebar+RailFocus.groupKey(System.String) : System.String
+Toolup.Sidebar+RailFocus.headerKey(System.String) : System.String
+Toolup.Sidebar+RailFocus.hideKey(System.String, System.String) : System.String
+Toolup.Sidebar+RailFocus.pinKey(System.String, System.String) : System.String
+Toolup.Sidebar+RailFocus.reorderKey(System.String, System.String) : System.String
+Toolup.Sidebar+RailFocus.rowKey(System.String, System.String) : System.String
+Toolup.Sidebar+RailKeyOutcome (class)
+Toolup.Sidebar+RailKeyOutcome.Consumed : Toolup.Sidebar+RailKeyOutcome { get }
+Toolup.Sidebar+RailKeyOutcome.IsConsumed : System.Boolean { get }
+Toolup.Sidebar+RailKeyOutcome.IsDisclose : System.Boolean { get }
+Toolup.Sidebar+RailKeyOutcome.IsMoveFocus : System.Boolean { get }
+Toolup.Sidebar+RailKeyOutcome.IsPassThrough : System.Boolean { get }
+Toolup.Sidebar+RailKeyOutcome.PassThrough : Toolup.Sidebar+RailKeyOutcome { get }
+Toolup.Sidebar+RailKeyOutcome.Tag : System.Int32 { get }
+Toolup.Sidebar+RailKeyOutcome+Disclose (class)
+Toolup.Sidebar+RailKeyOutcome+Disclose.Item : Toolup.Sidebar+RailStop { get }
+Toolup.Sidebar+RailKeyOutcome+MoveFocus (class)
+Toolup.Sidebar+RailKeyOutcome+MoveFocus.Item : System.String { get }
+Toolup.Sidebar+RailKeyOutcome+Tags (class)
+Toolup.Sidebar+RailKeyOutcome+Tags.Consumed : System.Int32 (literal)
+Toolup.Sidebar+RailKeyOutcome+Tags.Disclose : System.Int32 (literal)
+Toolup.Sidebar+RailKeyOutcome+Tags.MoveFocus : System.Int32 (literal)
+Toolup.Sidebar+RailKeyOutcome+Tags.PassThrough : System.Int32 (literal)
+Toolup.Sidebar+RailStop (class)
+Toolup.Sidebar+RailStop..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Toolup.Sidebar+RailStopKind, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+Toolup.Sidebar+RailStop.Controls : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+Toolup.Sidebar+RailStop.IsDisclosure : System.Boolean { get }
+Toolup.Sidebar+RailStop.IsOpen : System.Boolean { get }
+Toolup.Sidebar+RailStop.Key : System.String { get }
+Toolup.Sidebar+RailStop.Kind : Toolup.Sidebar+RailStopKind { get }
+Toolup.Sidebar+RailStop.RowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+Toolup.Sidebar+RailStop.SectionKey : System.String { get }
+Toolup.Sidebar+RailStopKind (class)
+Toolup.Sidebar+RailStopKind.CollapsedGroupStop : Toolup.Sidebar+RailStopKind { get }
+Toolup.Sidebar+RailStopKind.IsCollapsedGroupStop : System.Boolean { get }
+Toolup.Sidebar+RailStopKind.IsModuleRowStop : System.Boolean { get }
+Toolup.Sidebar+RailStopKind.IsPageRowStop : System.Boolean { get }
+Toolup.Sidebar+RailStopKind.IsSectionHeaderStop : System.Boolean { get }
+Toolup.Sidebar+RailStopKind.ModuleRowStop : Toolup.Sidebar+RailStopKind { get }
+Toolup.Sidebar+RailStopKind.PageRowStop : Toolup.Sidebar+RailStopKind { get }
+Toolup.Sidebar+RailStopKind.SectionHeaderStop : Toolup.Sidebar+RailStopKind { get }
+Toolup.Sidebar+RailStopKind.Tag : System.Int32 { get }
+Toolup.Sidebar+RailStopKind+Tags (class)
+Toolup.Sidebar+RailStopKind+Tags.CollapsedGroupStop : System.Int32 (literal)
+Toolup.Sidebar+RailStopKind+Tags.ModuleRowStop : System.Int32 (literal)
+Toolup.Sidebar+RailStopKind+Tags.PageRowStop : System.Int32 (literal)
+Toolup.Sidebar+RailStopKind+Tags.SectionHeaderStop : System.Int32 (literal)
 Toolup.Sidebar+SidebarModule (class)
 Toolup.Sidebar+SidebarModule..ctor(System.String, System.String, Fable.React.ReactElement, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarPage], System.Boolean)
 Toolup.Sidebar+SidebarModule.HasData : System.Boolean { get }

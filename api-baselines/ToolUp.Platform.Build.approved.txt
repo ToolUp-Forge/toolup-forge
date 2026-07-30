@@ -35,6 +35,64 @@ ToolUp.Platform.HostPackaging.MinBundleBytes : System.Int64 (literal)
 ToolUp.Platform.HostPackaging.packAwsLambda(System.String, System.String) : System.Void
 ToolUp.Platform.HostPackaging.packAzureFunctions(System.String, System.String) : System.Void
 ToolUp.Platform.HostPackaging.packGoogleCloudFunctions(System.String, System.String) : System.Void
+ToolUp.Platform.PackagedModuleCheckOptions (class)
+ToolUp.Platform.PackagedModuleCheckOptions..ctor(System.String, System.String, ToolUp.Platform.PackagedModuleManifestSource, ToolUp.Platform.PackagedModuleContract)
+ToolUp.Platform.PackagedModuleCheckOptions.Contract : ToolUp.Platform.PackagedModuleContract { get }
+ToolUp.Platform.PackagedModuleCheckOptions.MainProject : System.String { get }
+ToolUp.Platform.PackagedModuleCheckOptions.ManifestSource : ToolUp.Platform.PackagedModuleManifestSource { get }
+ToolUp.Platform.PackagedModuleCheckOptions.ShadowProject : System.String { get }
+ToolUp.Platform.PackagedModuleCheckOptionsModule (class)
+ToolUp.Platform.PackagedModuleCheckOptionsModule.forProject(System.String) : ToolUp.Platform.PackagedModuleCheckOptions
+ToolUp.Platform.PackagedModuleConformance (class)
+ToolUp.Platform.PackagedModuleConformance.assertConformant(ToolUp.Platform.PackagedModuleCheckOptions) : System.Void
+ToolUp.Platform.PackagedModuleConformance.check(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.PackagedModuleManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance.checkAssetPaths(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.PackagedModuleManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance.checkCompileOrder(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.ShadowSourceList) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance.checkExclusion(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.PackagedModuleManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance.checkSubset(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList, ToolUp.Platform.ShadowSourceList) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance.clientFiles(ToolUp.Platform.PackagedModuleContract, ToolUp.Platform.ShadowSourceList) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.PackagedModuleConformance.isServerOnly(ToolUp.Platform.PackagedModuleContract, System.String) : System.Boolean
+ToolUp.Platform.PackagedModuleConformance.registerTarget(ToolUp.Platform.PackagedModuleCheckOptions) : System.Void
+ToolUp.Platform.PackagedModuleConformance.report(ToolUp.Platform.PackagedModuleContract, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]) : System.String
+ToolUp.Platform.PackagedModuleConformance.verify(ToolUp.Platform.PackagedModuleCheckOptions) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutViolation]
+ToolUp.Platform.PackagedModuleConformance+Load (class)
+ToolUp.Platform.PackagedModuleConformance+Load.manifest(ToolUp.Platform.PackagedModuleCheckOptions) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleConformance+Load.manifestFromDirectory(System.String) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleConformance+Load.manifestFromNupkg(System.String) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleConformance+Load.packDeclarations(System.String) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleConformance+Load.packDeclarationsFromXml(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleConformance+Load.sourceList(System.String) : ToolUp.Platform.ShadowSourceList
+ToolUp.Platform.PackagedModuleConformance+Load.sourceListFromXml(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.ShadowSourceList
+ToolUp.Platform.PackagedModuleContract (class)
+ToolUp.Platform.PackagedModuleContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String)
+ToolUp.Platform.PackagedModuleContract.FableRoot : System.String { get }
+ToolUp.Platform.PackagedModuleContract.ModuleLabel : System.String { get }
+ToolUp.Platform.PackagedModuleContract.RequiredAssets : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PackagedModuleContract.ServerOnlyDirectories : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PackagedModuleContract.ServerOnlyFiles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PackagedModuleContract.ShadowProjectFile : System.String { get }
+ToolUp.Platform.PackagedModuleContractModule (class)
+ToolUp.Platform.PackagedModuleContractModule.create(System.String, System.String) : ToolUp.Platform.PackagedModuleContract
+ToolUp.Platform.PackagedModuleManifest (class)
+ToolUp.Platform.PackagedModuleManifest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.PackagedModuleManifest.ManifestLabel : System.String { get }
+ToolUp.Platform.PackagedModuleManifest.PackagePaths : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PackagedModuleManifestModule (class)
+ToolUp.Platform.PackagedModuleManifestModule.empty(System.String) : ToolUp.Platform.PackagedModuleManifest
+ToolUp.Platform.PackagedModuleManifestSource (class)
+ToolUp.Platform.PackagedModuleManifestSource.FromPackDeclarations : ToolUp.Platform.PackagedModuleManifestSource { get }
+ToolUp.Platform.PackagedModuleManifestSource.IsFromNupkg : System.Boolean { get }
+ToolUp.Platform.PackagedModuleManifestSource.IsFromPackDeclarations : System.Boolean { get }
+ToolUp.Platform.PackagedModuleManifestSource.IsFromStagedDirectory : System.Boolean { get }
+ToolUp.Platform.PackagedModuleManifestSource.Tag : System.Int32 { get }
+ToolUp.Platform.PackagedModuleManifestSource+FromNupkg (class)
+ToolUp.Platform.PackagedModuleManifestSource+FromNupkg.nupkgPath : System.String { get }
+ToolUp.Platform.PackagedModuleManifestSource+FromStagedDirectory (class)
+ToolUp.Platform.PackagedModuleManifestSource+FromStagedDirectory.directory : System.String { get }
+ToolUp.Platform.PackagedModuleManifestSource+Tags (class)
+ToolUp.Platform.PackagedModuleManifestSource+Tags.FromNupkg : System.Int32 (literal)
+ToolUp.Platform.PackagedModuleManifestSource+Tags.FromPackDeclarations : System.Int32 (literal)
+ToolUp.Platform.PackagedModuleManifestSource+Tags.FromStagedDirectory : System.Int32 (literal)
 ToolUp.Platform.Prerender (class)
 ToolUp.Platform.Prerender.nodeScript() : System.String
 ToolUp.Platform.Prerender.registerTarget(ToolUp.Platform.Build+BuildConfig, ToolUp.Platform.Prerender+PrerenderTargetOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute]) : System.Void
@@ -58,6 +116,40 @@ ToolUp.Platform.Sbom+Component (class)
 ToolUp.Platform.Sbom+Component..ctor(System.String, System.String)
 ToolUp.Platform.Sbom+Component.Name : System.String { get }
 ToolUp.Platform.Sbom+Component.Version : System.String { get }
+ToolUp.Platform.ShadowLayoutLaw (class)
+ToolUp.Platform.ShadowLayoutLaw.IsShadowAssetPathLaw : System.Boolean { get }
+ToolUp.Platform.ShadowLayoutLaw.IsShadowCompileOrderLaw : System.Boolean { get }
+ToolUp.Platform.ShadowLayoutLaw.IsShadowExclusionLaw : System.Boolean { get }
+ToolUp.Platform.ShadowLayoutLaw.IsShadowSubsetLaw : System.Boolean { get }
+ToolUp.Platform.ShadowLayoutLaw.ShadowAssetPathLaw : ToolUp.Platform.ShadowLayoutLaw { get }
+ToolUp.Platform.ShadowLayoutLaw.ShadowCompileOrderLaw : ToolUp.Platform.ShadowLayoutLaw { get }
+ToolUp.Platform.ShadowLayoutLaw.ShadowExclusionLaw : ToolUp.Platform.ShadowLayoutLaw { get }
+ToolUp.Platform.ShadowLayoutLaw.ShadowSubsetLaw : ToolUp.Platform.ShadowLayoutLaw { get }
+ToolUp.Platform.ShadowLayoutLaw.Tag : System.Int32 { get }
+ToolUp.Platform.ShadowLayoutLaw+Tags (class)
+ToolUp.Platform.ShadowLayoutLaw+Tags.ShadowAssetPathLaw : System.Int32 (literal)
+ToolUp.Platform.ShadowLayoutLaw+Tags.ShadowCompileOrderLaw : System.Int32 (literal)
+ToolUp.Platform.ShadowLayoutLaw+Tags.ShadowExclusionLaw : System.Int32 (literal)
+ToolUp.Platform.ShadowLayoutLaw+Tags.ShadowSubsetLaw : System.Int32 (literal)
+ToolUp.Platform.ShadowLayoutLawModule (class)
+ToolUp.Platform.ShadowLayoutLawModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShadowLayoutLaw] { get }
+ToolUp.Platform.ShadowLayoutLawModule.describe(ToolUp.Platform.ShadowLayoutLaw) : System.String
+ToolUp.Platform.ShadowLayoutLawModule.name(ToolUp.Platform.ShadowLayoutLaw) : System.String
+ToolUp.Platform.ShadowLayoutViolation (class)
+ToolUp.Platform.ShadowLayoutViolation..ctor(ToolUp.Platform.ShadowLayoutLaw, System.String, System.String)
+ToolUp.Platform.ShadowLayoutViolation.Explanation : System.String { get }
+ToolUp.Platform.ShadowLayoutViolation.Subject : System.String { get }
+ToolUp.Platform.ShadowLayoutViolation.ViolatedLaw : ToolUp.Platform.ShadowLayoutLaw { get }
+ToolUp.Platform.ShadowLayoutViolationModule (class)
+ToolUp.Platform.ShadowLayoutViolationModule.render(ToolUp.Platform.ShadowLayoutViolation) : System.String
+ToolUp.Platform.ShadowSourceList (class)
+ToolUp.Platform.ShadowSourceList..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ShadowSourceList.CompiledFiles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ShadowSourceList.DeclaredOrder : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ShadowSourceList.ProjectLabel : System.String { get }
+ToolUp.Platform.ShadowSourceList.UnresolvedPatterns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ShadowSourceListModule (class)
+ToolUp.Platform.ShadowSourceListModule.empty(System.String) : ToolUp.Platform.ShadowSourceList
 ToolUp.Platform.TestPack (class)
 ToolUp.Platform.TestPack..ctor(System.String, System.String)
 ToolUp.Platform.TestPack.Name : System.String { get }
