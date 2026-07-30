@@ -292,7 +292,9 @@ let tests =
 
             let payload: SchemaMigrationJobHandler.SchemaMigrationJobPayload = {
                 SchemaId = "expense"
-                Migrations = [ AddField(field "Flag" BIFriendlyType.Boolean FieldSensitivity.Internal, "true") ]
+                Migrations = [
+                    AddField(field "Flag" BIFriendlyType.Boolean FieldSensitivity.Internal, "true")
+                ]
                 ActorUserId = "job-runner"
             }
 
