@@ -100,26 +100,37 @@ module ToolUp.AI.Client.Tests.SidebarRailShapeSnapshotTests
 // snapshot case after writing, so a run with the flag left set can never be
 // mistaken for a green one, in CI or locally.
 //
-// ── KNOWN DEFECT THESE BASELINES ENCODE ──
-// A baseline records what the shell DOES, not what it should do. One
-// currently-tracked defect is therefore baked into the committed files and
-// must not be read as the desired shape:
+// ── A DEFECT THESE BASELINES USED TO ENCODE, AND NO LONGER DO ──
+// A baseline records what the shell DOES, not what it should do, so a
+// tracked defect can legitimately be baked into the committed files. One
+// was, and this is what happened to it — kept because the shape of the
+// episode is the argument for the gate:
 //
-//   * `expanded rail — the no-active-team collapse` (state 9) captures NO
-//     `_other` section at all — no header, no row, no chevron. That is real:
-//     when `_other` is the only bucketed section `buildSections` drops its
-//     title, and the expanded rail renders a header only for a TITLED
-//     section and a body only for an OPEN one, so an untitled collapsed
-//     `_other` renders nothing and its contents are unreachable at that
-//     width. Tracked in the forge Tidy-Up bundle, not fixed here — this
-//     phase builds the gate and does not change the surface it measures.
-//     When it IS fixed that baseline changes, and the diff is the point.
+//   * `expanded rail — the no-active-team collapse` (state 9) captured NO
+//     `_other` section at all — no header, no row, no chevron. That was
+//     real: when `_other` is the only bucketed section `buildSections`
+//     drops its title, and the expanded rail rendered a header only for a
+//     TITLED section and a body only for an OPEN one, so an untitled
+//     collapsed `_other` rendered nothing and its contents were reachable
+//     only by narrowing the rail again. Phase 613 recorded it rather than
+//     fixing it — the phase builds the gate and does not change the surface
+//     it measures — and said that when it WAS fixed the baseline would
+//     change and the diff would be the point.
+//
+//     It was fixed by the Phase 610 Tidy-Up bundle:
+//     `Sidebar.showsRowsInExpandedRail` now draws an untitled section's rows
+//     whatever its collapse flag says, because an untitled section has no
+//     header and therefore no control that could ever open it. The diff was
+//     exactly the point — one state, additions only (`section _other` plus
+//     the row and its reorder / pin / hide controls), nothing dropped and no
+//     tab stop moved. So this baseline now encodes no known defect.
 //
 // The sibling Tidy-Up finding — the area switchers passing `Icon = Html.none`,
-// so the narrow-rail switcher is an empty 32×32 box — is out of this gate's
-// reach in both directions: icons are not part of the captured shape, and
-// the fixtures stub every icon anyway. This gate neither confirms nor
-// encodes it.
+// so the narrow-rail switcher was an empty 32×32 box — was fixed in the same
+// pass (`Icons.arrowLeft` / `Icons.settings` in `SDK.Client.fs`), and was
+// always out of this gate's reach in both directions: icons are not part of
+// the captured shape, and the fixtures stub every icon anyway. This gate
+// neither confirmed nor encoded it.
 //
 // Pure test-tier: `IsPackable=false`, nothing ships, zero runtime cost
 // (GP 13).

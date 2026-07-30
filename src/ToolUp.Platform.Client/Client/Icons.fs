@@ -56,6 +56,15 @@ let private arrowUpwardsSvg: obj = importDefault "./icons/arrow-upwards.svg?reac
 
 let arrowUpwards: ReactElement = Icon.ofImport arrowUpwardsSvg
 
+// The "go back" mark, carried by the Phase 567 product-area switcher
+// ("Back to app") in `sidebarSections`. Authored as `arrow-upwards.svg`
+// rotated a quarter turn — same two paths, same 1.75 stroke, same round
+// caps — so the pair reads as one family rather than two arrows drawn by
+// different hands.
+let private arrowLeftSvg: obj = importDefault "./icons/arrow-left.svg?react"
+
+let arrowLeft: ReactElement = Icon.ofImport arrowLeftSvg
+
 let private interconnectedSvg: obj =
     importDefault "./icons/interconnected.svg?react"
 

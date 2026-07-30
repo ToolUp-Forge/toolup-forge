@@ -2730,7 +2730,17 @@ module Client =
                             ({
                                 Id = Toolup.Sidebar.ProductAreaId
                                 Name = "Back to app"
-                                Icon = Html.none
+                                // Phase 610 Tidy-Up — this was `Html.none`,
+                                // and in the NARROW icon-only rail the icon
+                                // is the entire row: the switcher rendered
+                                // as an empty 32×32 box. Named and focusable
+                                // since Phase 609, so keyboard, voice and
+                                // screen-reader users could always reach it
+                                // — it was invisible only to the sighted
+                                // pointer user, which is the majority case
+                                // for the one row that leaves the
+                                // administration area.
+                                Icon = ToolUp.Platform.Icons.arrowLeft
                                 HasData = true
                                 Group = None
                                 Pages = []
@@ -2762,7 +2772,18 @@ module Client =
                                     ({
                                         Id = Toolup.Sidebar.AdminAreaId
                                         Name = "Administration"
-                                        Icon = Html.none
+                                        // Phase 610 Tidy-Up — was
+                                        // `Html.none`; see the sibling
+                                        // switcher above for why an empty
+                                        // icon is an empty ROW at the narrow
+                                        // width. The glyph is the one
+                                        // `AdminHome.create` already gives
+                                        // the Administration LANDING, so the
+                                        // gear means administration on both
+                                        // sides of the switch rather than the
+                                        // metaphor changing as the user
+                                        // crosses it.
+                                        Icon = ToolUp.Platform.Icons.settings
                                         HasData = true
                                         Group = None
                                         Pages = []

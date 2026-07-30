@@ -530,7 +530,11 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
 
             // Suppress the "Other" header when it's the only section —
             // nothing to contrast against. The render layer uses this
-            // `Title` directly.
+            // `Title` directly, and per `showsRowsInExpandedRail` an
+            // untitled section's rows are drawn whatever `IsCollapsed`
+            // says: dropping the title drops the chevron with it, so the
+            // collapse flag would otherwise hide rows behind a control
+            // that is not there.
             let title =
                 if
                     List.isEmpty pinnedSection
@@ -678,6 +682,38 @@ let private isPlacedSectionKey (key: string) = key = HomeKey || key = TrailingKe
 let private alwaysVisibleInNarrowRail (section: SidebarSection) =
     section.IsPinnedSection || isPlacedSectionKey section.Key
 
+/// Does the hover-expanded rail render this section's ROWS?
+///
+/// Open sections, obviously — and **untitled ones whatever their collapse
+/// state says**, which is the Phase 610 Tidy-Up fix. The expanded rail draws
+/// a header only for a TITLED section, and the header IS the chevron, so an
+/// untitled collapsed section has no control that could ever open it: it
+/// rendered a header (no), a chevron (no) and rows (no), and its contents
+/// were reachable only by narrowing the rail again and clicking the group
+/// icon. Not hypothetical — `buildSections` drops the "Other" title when
+/// `_other` is the only bucketed section, which is exactly the shape the
+/// no-active-team collapse produces in the shipped product.
+///
+/// **Why this and not "keep the title".** Restoring the title would also
+/// restore reachability, and it was the other candidate. It manufactures a
+/// control instead of removing the need for one: the rows would still sit
+/// behind one click on a header labelled "Other" whose only sibling is the
+/// untitled landing section — the very contrast the suppression exists to
+/// avoid — and on a fresh profile `_other` is collapsed, so the state with
+/// exactly one meaningful row would still open showing none of it. Worse, it
+/// leaves the two sides coupled by a predicate that has to keep enumerating
+/// which sections count as "something to contrast against"; that enumeration
+/// is what went stale here (it never learnt about the placed sections). This
+/// arm is structural instead — *no header ⇒ no toggle ⇒ show the rows* — and
+/// stays correct however `buildSections` later decides to title things.
+///
+/// The narrow rail is deliberately unchanged: there a collapsed section
+/// renders its group icon, which is a working disclosure. So an untitled
+/// section's collapse state still means something at that width, and the
+/// progressive disclosure (one icon narrow, full list expanded) is kept.
+let private showsRowsInExpandedRail (section: SidebarSection) =
+    section.Title.IsNone || not section.IsCollapsed
+
 /// **The rail's one traversal order (612.A)**, derived from exactly the
 /// section data the renderer walks — so the invariant is *a stop exists
 /// if and only if the control is rendered*.
@@ -687,8 +723,10 @@ let private alwaysVisibleInNarrowRail (section: SidebarSection) =
 /// 1. Sections in `buildSections` order — `_home`, pinned, declared
 ///    groups, `_other`, `_trailing`, `_hidden`.
 /// 2. In the **hover-expanded** rail: the section's header (when it has a
-///    title), then — only when the section is open — its rows, each
-///    multi-page parent immediately followed by its visible pages.
+///    title), then its rows per `showsRowsInExpandedRail` — when the section
+///    is open, or whenever it is untitled and so has no header to open it
+///    with — each multi-page parent immediately followed by its visible
+///    pages.
 /// 3. In the **narrow** rail: the section's rows when it is placed,
 ///    pinned, or open; otherwise its single collapsed-group icon.
 ///    `_hidden` contributes nothing, because the narrow rail does not
@@ -801,10 +839,10 @@ let railStops (railExpanded: bool) (selectedModule: string) (sections: SidebarSe
                 | None -> []
 
             let body =
-                if section.IsCollapsed then
-                    []
-                else
+                if showsRowsInExpandedRail section then
                     section.Modules |> List.collect (rowStops section)
+                else
+                    []
 
             header @ body
         elif section.Key = HiddenKey then
@@ -1965,12 +2003,14 @@ let Sidebar
                 for section in sections do
                     if isExpanded then
                         // Expanded: section header (when titled) + the
-                        // module rows when the section isn't collapsed.
+                        // module rows when the section is open — or, per
+                        // `showsRowsInExpandedRail`, whenever it is UNTITLED
+                        // and so has no header to toggle in the first place.
                         match section.Title with
                         | Some title -> renderSectionHeader onGroupToggled activeKey section title
                         | None -> ()
 
-                        if not section.IsCollapsed then
+                        if showsRowsInExpandedRail section then
                             React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
                     else if
                         // Narrow (at-rest) rail. The Hidden items section is

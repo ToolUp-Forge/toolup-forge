@@ -5,3 +5,8 @@ tabstop = row:_home:_sdk.home
 section _home
   reorder _sdk.home            div    name="Reorder Home" role=button
   row     _sdk.home            button name="Home"
+section _other
+  reorder AwaitingTeam         div    name="Reorder No team yet" role=button
+  row     AwaitingTeam         button name="No team yet"
+  pin     AwaitingTeam         button name="Pin No team yet" +title
+  hide    AwaitingTeam         button name="Hide No team yet" +title

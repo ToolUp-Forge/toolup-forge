@@ -388,20 +388,22 @@ let railStates: RailState list = [
     }
 
     {
-        // The expanded twin demands only the landing. An untitled collapsed
-        // section renders no header in the expanded rail, and therefore no
-        // row and no chevron either — so "No team yet" is genuinely absent
-        // here rather than unnamed, which is a reachability question for
-        // the renderer and not an a11y-name one. Noted rather than
-        // asserted: the Phase 610 pack's subject is names. The Phase 613
-        // snapshot records the absence literally — see the "known defects
-        // these baselines encode" note in `SidebarRailShapeSnapshotTests`.
+        // The expanded twin demanded only the landing until the Phase 610
+        // Tidy-Up landed. An untitled collapsed section used to render no
+        // header in the expanded rail, and therefore no chevron and no rows
+        // either — so "No team yet" was genuinely ABSENT here rather than
+        // unnamed, which is a reachability question for the renderer and not
+        // an a11y-name one, and Phase 610 noted it rather than asserting it.
+        // `Sidebar.showsRowsInExpandedRail` now draws an untitled section's
+        // rows whatever its collapse flag says (no header ⇒ no toggle ⇒ show
+        // the rows), so the row IS here, and its name is demanded like any
+        // other reachable row.
         Name = "expanded rail — the no-active-team collapse"
         Modules = awaitingModules
         Prefs = fresh
         Selected = HomeId
         Hovered = true
-        MustName = [ HomeId, "Home" ]
+        MustName = [ HomeId, "Home"; "AwaitingTeam", "No team yet" ]
     }
 ]
 
