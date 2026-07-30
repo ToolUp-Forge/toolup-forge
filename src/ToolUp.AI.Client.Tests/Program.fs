@@ -63,6 +63,12 @@ let allTests =
         // discovery. Plus the two rendered-tree invariants Phase 612's pure
         // pack could only assert one side of.
         SidebarRailShapeSnapshotTests.tests
+        // The Phase 180 a11y floor over an ordinary MODULE view — the
+        // UsageDashboard SDK module driven through its real init/update
+        // and rendered through `ModuleHarness.AssertAccessibleView`, so a
+        // module gets the floor over its OWN `view` rather than over a
+        // hand-written tree that can drift away from it.
+        ModuleViewA11yTests.tests
     ]
 
 [<EntryPoint>]

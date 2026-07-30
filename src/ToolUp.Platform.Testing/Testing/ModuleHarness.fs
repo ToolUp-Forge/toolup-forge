@@ -119,6 +119,68 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
         render model ignore |> Accessibility.assertHtml profile |> ignore
         this
 
+    // ─── The module's OWN view, through a mount seam ──────────────────
+    //
+    // The three members above all ask the caller to produce the tree.
+    // That is the ceremony: for a Fable module the only tree it HAS is a
+    // Feliz `ReactElement`, so supplying an `A11yNode` or an HTML string
+    // means hand-writing a second description of the view — which then
+    // drifts from the view, silently, in the direction of passing.
+    //
+    // These members take the module's real `view` instead, and a `mount`
+    // that turns whatever it returns into markup:
+    //
+    //     ModuleHarness.fromUnitInit MyModule.init MyModule.update
+    //         |> _.Dispatch(MyModule.Loaded sample)
+    //         |> _.AssertAccessibleView(ViewMount.mount, MyModule.view)
+    //
+    // `mount` is a plain `'View -> string` function and `'View` is
+    // unconstrained, so this file names no renderer, no DOM and no npm
+    // package — it stays BCL-only and Fable-safe (GP 1). The DOM
+    // implementation ships beside it as OPT-IN Fable source
+    // (`Testing/ViewMount.fs`, packed under `fable/` but deliberately not
+    // compiled into this assembly): a consumer that never includes it
+    // needs no `jsdom` / `react-dom` and emits nothing from it (GP 13).
+    // An SSR consumer passes its own string renderer and never touches a
+    // DOM at all.
+    //
+    // Dispatch is `ignore`, for the same reason as `AssertAccessible`:
+    // rendering must not depend on dispatching, and a view that does is
+    // itself the defect.
+
+    /// Render the module's own `view` against the harness's CURRENT model
+    /// and return the resulting markup, via a caller-supplied `mount`.
+    /// The escape hatch for a pack that wants the markup itself — to
+    /// assert a specific control is reachable by name, or to classify
+    /// findings before failing.
+    member _.RenderViewHtml(mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View) : string =
+        view model ignore |> mount
+
+    /// Run an accessibility profile's rules over the module's own
+    /// rendered `view` and RETURN the findings rather than throwing —
+    /// for a caller that pins known, tracked gaps before failing on the
+    /// rest.
+    member this.CheckAccessibleView
+        (mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, ?profile: Accessibility.A11yProfile)
+        : Accessibility.A11yFinding list =
+        let profile = defaultArg profile Accessibility.Minimal
+
+        this.RenderViewHtml(mount, view)
+        |> Accessibility.ofHtml
+        |> Accessibility.check profile
+
+    /// Assert the module's own rendered `view` against an accessibility
+    /// profile (default `Minimal`). Throws with the consolidated
+    /// `A11yFinding` list — rule + element path + message — on any
+    /// finding fatal for that profile. Returns the same harness so it
+    /// chains alongside `AssertModel` / `AssertCmd`.
+    member this.AssertAccessibleView
+        (mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, ?profile: Accessibility.A11yProfile)
+        =
+        let profile = defaultArg profile Accessibility.Minimal
+        this.RenderViewHtml(mount, view) |> Accessibility.assertHtml profile |> ignore
+        this
+
 /// Build a harness from a `unit`-shaped `init`.
 let fromUnitInit
     (init: unit -> 'Model * Cmd<'Msg>)

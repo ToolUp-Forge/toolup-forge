@@ -113,6 +113,23 @@
              `fable/`. Reusing it verbatim is the point of the phase — a
              second a11y vocabulary is the failure mode it exists to avoid. -->
         <Compile Include="..\ToolUp.Platform.Testing\Testing\AccessibilityAssertions.fs" />
+        <!-- The a11y floor for ordinary MODULE views (Phase 180 / 610
+             follow-up). Both files are compiled in from
+             ToolUp.Platform.Testing rather than reimplemented, for the
+             same reason as AccessibilityAssertions above: that project
+             ProjectReferences Platform.Server, which must not be dragged
+             through Fable, but these two are Fable-safe by construction
+             and already pack under `fable/`.
+
+             ModuleHarness carries `AssertAccessibleView`, whose `mount`
+             parameter IS the seam — the harness names no DOM and no npm
+             package. ViewMount is the jsdom implementation of that seam,
+             and is deliberately NOT in ToolUp.Platform.Testing's own
+             `<Compile>` list: this `<Compile Include>` is the opt-in a
+             consumer makes, and a consumer that skips it needs no `jsdom`
+             / `react-dom` devDependency at all (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\ModuleHarness.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\ViewMount.fs" />
         <!-- Phase 613 — the shell rail's nine STATES plus the jsdom render
              harness, extracted out of SidebarRailA11yTests so the a11y floor
              and the structural snapshot gate share ONE enumeration (613.B).
@@ -128,6 +145,11 @@
              pure-function pack could not reach — the railStops iff invariant
              and the single-tab-stop invariant — which need rendered markup. -->
         <Compile Include="SidebarRailShapeSnapshotTests.fs" />
+        <!-- The Phase 180 a11y floor over an ordinary MODULE view, driven
+             through ModuleHarness's real init/update and its own `view` —
+             the half Phase 610 left open (it covered the shell rail only,
+             and `AssertAccessible` still needed a hand-supplied render). -->
+        <Compile Include="ModuleViewA11yTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

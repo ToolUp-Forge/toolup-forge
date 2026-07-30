@@ -27,15 +27,28 @@ module ToolUp.AI.Client.Tests.SidebarKeyboardTests
 // executable half lives here, beside `SidebarPlacementTests` /
 // `SidebarNestingTests` / `SidebarHidingTests`, which pin the same fold.
 //
-// **Migration.** Phase 612.E asked for the focus-order rule to be folded
-// into Phase 610's a11y fixtures "if that has landed". It had not when this
-// pack was written (610 was in flight in a parallel session, on
-// `ToolUp.Platform.Testing/`). When its fixture set lands, the ORDER cases
-// below are the ones to promote to rendered-DOM assertions — "the rendered
-// rail has exactly one element with `tabIndex=0`", "every element carrying
-// `data-toolup-rail-stop` appears in `railStops` and vice versa" — which is
-// the invariant this pack can only assert on one side of. The binding cases
-// (`railKey`) stay here: they are pure and cheaper as they are.
+// **Migration — DONE; nothing here is waiting to move.** Phase 612.E asked
+// for the focus-order rule to be folded into Phase 610's a11y fixtures "if
+// that has landed". It had not when this pack was written (610 was in
+// flight in a parallel session), so this header used to name two
+// invariants to promote once a rendered-DOM fixture set existed. Phase 613
+// took BOTH when it built the structural snapshot gate, and they live in
+// `SidebarRailShapeSnapshotTests` over the nine rendered states of
+// `SidebarRailFixtures.railStates`:
+//
+//   * "every rendered rail stop is in `railStops`, and every stop is
+//     rendered" — the iff invariant this pure pack can only assert one
+//     side of, because `railStops` is a projection of the section data
+//     and knows nothing about what the renderer DREW.
+//   * "each rendered rail state has exactly one tab stop" — counted over
+//     elements carrying `tabindex=0` in the real markup, which is the
+//     half `railTabIndex` cannot reach: it returning 0 for exactly one
+//     KEY proves nothing about how many ELEMENTS were given that key.
+//
+// Do not restate either of them here. The cases below are the pure-model
+// ones and are the right shape for this pack: `railStops`' own ordering,
+// the `railKey` bindings, `railTabIndex`, and `resolveActiveStop` — all
+// pure functions of the section list, all cheaper without a JSDOM.
 
 open Toolup.Sidebar
 open ToolUp.AI.Client.Tests.NodeTest

@@ -20,6 +20,20 @@
              the `Accessibility` types. -->
         <Compile Include="Testing\AccessibilityAssertions.fs" />
         <Compile Include="Testing\ModuleHarness.fs" />
+        <!-- Testing\ViewMount.fs is DELIBERATELY absent from this list.
+             It is the jsdom + react-dom implementation of the
+             `ModuleHarness.AssertAccessibleView` mount seam, and it ships
+             the only way it can without dragging npm packages into a
+             compiled SDK surface: `Content`-packed under `fable/` by the
+             glob above, never compiled here. A Fable consumer opts in
+             with its own `<Compile Include="…\Testing\ViewMount.fs" />`
+             (as it already does for AccessibilityAssertions.fs) plus a
+             `jsdom` devDependency; a consumer that does not emits nothing
+             from it and needs neither (GP 13). Compiling it here would
+             also be impossible on its own terms — the file is Fable-only
+             (`[<Import>]` / `[<Emit>]`) and has no .NET meaning. See its
+             header for the full rationale. -->
+
         <Compile Include="Testing\ServerHarness.fs" />
         <Compile Include="Testing\DataTypeTestKit.fs" />
         <Compile Include="Testing\ModuleHotReload.fs" />
