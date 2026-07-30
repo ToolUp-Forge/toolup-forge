@@ -333,6 +333,12 @@ module CompositionValidator =
         | CompanionComponent -> "companion"
         | DataTypeComponent -> "datatype"
         | ToolComponent -> "tool"
+        // Phase 526 grounding kinds. The labels mirror `ComponentId`'s own
+        // slot vocabulary (`MetricSlot` / `SubjectSlot`) exactly, as every
+        // arm above does, so a duplicate-id diagnostic names a colliding
+        // unit with the same word its `ComponentId` is namespaced under.
+        | MetricComponent -> "metric"
+        | SubjectComponent -> "subject"
 
     // ── Rule evaluators (pure) ──────────────────────────────────────────
 

@@ -256,6 +256,77 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
         // events recorded under `_platform`; the payload carries the
         // UserId + a truncated credential id but no tenant ScopeId.
         None
+    | OAuth1aConnected _
+    | OAuth1aDisconnected _
+    | OAuth1aSigningFailed _
+    | TeamOwnershipTransferred _
+    | ArtifactSigned _
+    | ArtifactVerified _
+    | ArtifactRejected _
+    | SyntheticSampleGenerated _
+    | SchemaOnlyAccessAttempted _
+    | PeerCallCompleted _
+    | ArtefactSigned _
+    | SigningKeyRotated _
+    | ClassifiedFieldRead _
+    | ClassifiedFieldWritten _
+    | TenantProvisioned _
+    | TenantDeprovisioned _
+    | TenantLifecycleHookFailed _
+    | TenantDataExported _
+    | TenantOffboardConfirmationRequested _
+    | TenantOffboardConfirmationApproved _
+    | TenantOffboardConfirmationRefused _
+    | TenantDeprovisionScheduled _
+    | TenantDeprovisionCancelled _
+    | KnowledgeOriginalRetrieved _
+    | KnowledgeOriginalRetrievalDenied _
+    | RemotingMethodAudited _
+    | KnowledgeScopeErased _
+    | AuthorizationDenied _
+    | HostActionDispatched _
+    | EgressBlocked _
+    | KnowledgeIndexLoadFailed _
+    | KnowledgeIngestionDropped _
+    | KnowledgeDocumentDeduplicated _
+    | ModelFitStarted _
+    | ModelFitCompleted _
+    | ModelFitGateFailed _
+    | ModelFitBatchSubmitted _
+    | ModelArtifactRegistered _
+    | ModelArtifactTransitioned _
+    | ModelArtifactTransitionDenied _
+    | ModelScored _
+    | ModelScoreRefused _
+    | ModelEvaluated _
+    | DatasetSpillCreated _
+    | DatasetSpillDeleted _
+    | DatasetDeclassified _
+    | DatasetRevintaged _
+    | DatasetPolicyDenied _
+    | SchemaProposed _
+    | SchemaApproved _
+    | SchemaChanged _ ->
+        // No payload-level scope override: the recording scope on the
+        // envelope is the tenant axis for all of these.
+        //
+        // This is the file's own stated direction, not a default of
+        // convenience — see `buildSubjectTags` below: per-payload scope
+        // "is no longer auto-emitted to keep the tag list canonical —
+        // the recording scope is the unambiguous tenant axis" (Phase 66
+        // Stream B.7 promoted `ScopeId` to a first-class `AuditEnvelope`
+        // field). Every sibling audit sink — SplunkHec, S3Archive,
+        // GcsArchive, AzureBlobArchive, Cef — reads `envelope.ScopeId`
+        // and does no per-case introspection at all; the `Some p.X` arms
+        // above predate that decision and are kept only so existing
+        // Datadog queries keep their current behaviour.
+        //
+        // Enumerated explicitly rather than caught by a `_` wildcard on
+        // purpose: the exhaustiveness check is the only thing that makes
+        // the author of the NEXT audit event come here and classify it.
+        // A wildcard would silence FS0025 permanently and let the table
+        // drift again — which is how it fell 51 cases behind.
+        None
 
 /// Sanitise a tag value for Datadog's CSV tag list. Datadog reserves
 /// `,` (tag separator) and `:` (key/value separator); we replace both

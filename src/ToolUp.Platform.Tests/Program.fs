@@ -170,6 +170,11 @@ let allTests =
         StreamingDispatchTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
+        // Tidy-Up (grounding-wave hygiene) — regression guard proving the
+        // default renderer registry resolves a renderer for every zero-dep
+        // format. Catches the `open`-shadowing class that left Markdown
+        // unregistered while the code read as if it were registered.
+        ReportingComposeTests.tests
         NarrativeElementTests.tests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests

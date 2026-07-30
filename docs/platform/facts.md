@@ -97,10 +97,27 @@ fact is an assertion *about* data, not a copy of it).
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).
 Defaults: a fact whose metric is a registry-declared metric is
-`Surfaceable`; an undeclared intermediate is `Internal`. Enforcement at the
-egress choke points is a later phase — the *field* lands here so no fact
-ever ships un-classified, and a retrofit (reclassifying every fact ever
-asserted) is never needed.
+`Surfaceable`; an undeclared intermediate is `Internal`. Classifying at
+birth is what makes a retrofit (reclassifying every fact ever asserted)
+unnecessary.
+
+Enforcement at the egress choke points has since shipped. Five surfaces
+are gated, enumerated by the `FactEgressSurface` DU and checked through
+the single `IFactDisclosureGate` seam — no choke point re-implements the
+predicate:
+
+| Surface | What it gates | Shipped |
+|---|---|---|
+| `FactRetrieval` | fact resolution into retrieval results / prompt context — default-deny, so the model never *sees* a denied fact ("see but don't say" is not a mode) | Phase 525 |
+| `FactToolResult` | a fact-reading AI tool returning facts to the model as a tool result | Phase 525 |
+| `FactNarrativePublication` | committing / publishing a fact-referencing narrative to a surfaceable store (KB commit, public-page publication) | Phase 525 |
+| `FactExport` | a rendered export leaving the deployment as a document (the Reporting render path); denied values are redacted to the policy-naming marker before rendering, and the output notes withheld refs — id + policy, never the value | Phase 564.B |
+| `FactWebhook` | an outbound fact-event webhook payload — contract-first, so the surface and gate contract landed *before* the emitter and the emitter is born consulting the gate | Phase 564.C |
+
+The gate is registered by `FactsCompose` so the tier cannot be composed
+without its egress doors armed. Remaining doors (external write-back,
+certificates) extend the DU additively, the same way exports and webhooks
+did.
 
 ## Composition
 

@@ -1,9 +1,15 @@
 module ToolUp.Reporting.ReportingCompose
 
 open ToolUp.Reporting
-open ToolUp.Reporting.MarkdownRenderer
-open ToolUp.Reporting.HtmlRenderer
 open ToolUp.Reporting.RendererRegistry
+
+// NOTE: `MarkdownRenderer` / `HtmlRenderer` are deliberately NOT opened.
+// Both modules expose a `create ()`, so opening both put two identically-
+// named functions in scope and the later `open` silently won — an
+// unqualified `create ()` meant to build the Markdown renderer resolved to
+// `HtmlRenderer.create`. That is a defect no type error can catch (both
+// return `IReportRenderer`) and no reviewer sees. Every renderer
+// construction below is module-qualified; keep it that way.
 
 // ─── ReportingCompose ────────────────────────────────────────────────
 //
@@ -27,7 +33,7 @@ open ToolUp.Reporting.RendererRegistry
 /// formats by calling `registry.Register` after this returns.
 let buildDefaultRegistry () : RendererRegistry =
     let registry = RendererRegistry()
-    registry.Register(create ()) |> ignore // MarkdownRenderer
+    registry.Register(MarkdownRenderer.create ()) |> ignore
     registry.Register(HtmlRenderer.create ()) |> ignore
     registry
 
