@@ -23,17 +23,20 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 //      read is distinguishable from a genuinely-empty first-boot ring
 //      (which stays silent — GP 11).
 
-/// Captures `Warn` lines so the tests can assert on the read-failure
-/// diagnostic (and its absence on the healthy / first-boot paths).
+/// Captures `Warn` and `Error` lines so the tests can assert on the
+/// read-failure diagnostic (and its absence on the healthy / first-boot
+/// paths) and on the write-failure diagnostic.
 type private CapturingLogger() =
     let warns = System.Collections.Generic.List<string>()
+    let errors = System.Collections.Generic.List<string * exn option>()
     member _.Warns = List.ofSeq warns
+    member _.Errors = List.ofSeq errors
 
     interface ILogger with
         member _.Debug(_: string) = ()
         member _.Info(_: string) = ()
         member _.Warn(m: string) = warns.Add m
-        member _.Error(_: string, _: exn option) = ()
+        member _.Error(m: string, ex: exn option) = errors.Add((m, ex))
 
 /// An unreachable backend — every operation raises, the way a
 /// misconfigured container / dead endpoint surfaces through a real
@@ -208,5 +211,67 @@ let tests =
             Expect.hasLength elements 1 "the persisted key reads back"
             Expect.equal (elements[0].Attribute(XName.Get "id").Value) "k1" "byte-for-byte round-trip"
             Expect.isEmpty logger.Warns "a healthy backend is silent"
+            Expect.isEmpty logger.Errors "a healthy store emits no write-failure diagnostic (GP 11)"
+        }
+
+        // ── BlobXmlRepository Error on WRITE failure ──
+        //
+        // Phase 329 made the read path fail-loud but left `StoreElement`
+        // `|> ignore`-ing its `Upload` result, so a transient write
+        // failure at key creation / rotation silently dropped the new
+        // key and this process went on sealing with a key no other
+        // replica can read. These pin the diagnostic — and the
+        // deliberate decision NOT to raise (see the type doc comment:
+        // ASP.NET surfaces a raise from `StoreElement` as a
+        // `CryptographicException` out of `Protect`, so raising would
+        // turn a transient blob hiccup into a live request failure).
+
+        test "key-ring StoreElement write refusal → an Error naming container and blob" {
+            let logger = CapturingLogger()
+            let repo = repository (WriteDeniedBlobStorage()) logger
+
+            repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
+
+            Expect.hasLength logger.Errors 1 "exactly one Error for the refused write"
+            let message, ex = logger.Errors[0]
+            Expect.stringContains message BlobDpKeyRing.Container "the Error names the container"
+            Expect.stringContains message (BlobDpKeyRing.Prefix + "key-k1.xml") "the Error names the blob"
+
+            Expect.stringContains
+                message
+                "write denied (simulated read-only credentials)"
+                "the Error carries the underlying reason"
+
+            Expect.stringContains message "NOT persisted" "the Error states the consequence"
+            Expect.isNone ex "a refused `Result.Error` carries no exception"
+            Expect.isEmpty logger.Warns "the write failure is Error-class, not Warn-class"
+        }
+
+        test "key-ring StoreElement throw → an Error carrying the exception (not re-raised)" {
+            let logger = CapturingLogger()
+            let repo = repository (UnreachableBlobStorage()) logger
+
+            // Must not raise: ASP.NET propagates a `StoreElement` throw
+            // out of `Protect` as a `CryptographicException`, so raising
+            // here would fail live requests at the rotation moment.
+            repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
+
+            Expect.hasLength logger.Errors 1 "exactly one Error for the throwing backend"
+            let message, ex = logger.Errors[0]
+
+            Expect.stringContains
+                message
+                "connection refused (simulated backend outage)"
+                "the Error carries the underlying error"
+
+            Expect.isSome ex "the originating exception is passed to the logger for its stack trace"
+        }
+
+        test "StoreElement with no logger configured still does not raise on a write failure" {
+            let repo =
+                BlobXmlRepository(UnreachableBlobStorage())
+                :> Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository
+
+            repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
         }
     ]
