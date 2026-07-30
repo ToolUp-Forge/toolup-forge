@@ -1,0 +1,26 @@
+state   = expanded rail — Product area
+rail    = expanded
+tabstop = row:Analytics:sales
+
+section _home
+  reorder _sdk.home            div    name="Reorder Home" role=button
+  row     _sdk.home            button name="Home"
+section Analytics
+  header  -                    button name="Analytics" expanded=true
+  reorder sales                div    name="Reorder Sales" role=button
+  row     sales                button name="Sales"
+  pin     sales                button name="Pin Sales" +title
+  hide    sales                button name="Hide Sales" +title
+  reorder reports              div    name="Reorder Reports" role=button
+  row     reports              button name="Reports"
+  pin     reports              button name="Pin Reports" +title
+  hide    reports              button name="Hide Reports" +title
+section _other
+  header  -                    button name="Other" expanded=true
+  reorder scratch              div    name="Reorder Scratch" role=button
+  row     scratch              button name="Scratch"
+  pin     scratch              button name="Pin Scratch" +title
+  hide    scratch              button name="Hide Scratch" +title
+section _trailing
+  reorder _area.admin          div    name="Reorder Administration" role=button
+  row     _area.admin          button name="Administration"

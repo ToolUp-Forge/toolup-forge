@@ -1,0 +1,18 @@
+state   = narrow icon-only rail — Product area
+rail    = narrow
+tabstop = row:Analytics:sales
+
+section _home
+  reorder _sdk.home            div    name="Reorder Home" role=button
+  row     _sdk.home            button name="Home" +title
+section Analytics
+  reorder sales                div    name="Reorder Sales" role=button
+  row     sales                button name="Sales" +title
+  reorder reports              div    name="Reorder Reports" role=button
+  row     reports              button name="Reports" +title
+section _other
+  reorder scratch              div    name="Reorder Scratch" role=button
+  row     scratch              button name="Scratch" +title
+section _trailing
+  reorder _area.admin          div    name="Reorder Administration" role=button
+  row     _area.admin          button name="Administration" +title

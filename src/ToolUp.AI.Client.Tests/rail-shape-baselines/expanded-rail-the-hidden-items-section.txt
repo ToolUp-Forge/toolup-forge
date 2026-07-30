@@ -1,0 +1,23 @@
+state   = expanded rail — the hidden-items section
+rail    = expanded
+tabstop = row:Analytics:sales
+
+section _home
+  reorder _sdk.home            div    name="Reorder Home" role=button
+  row     _sdk.home            button name="Home"
+section Analytics
+  header  -                    button name="Analytics" expanded=true
+  reorder sales                div    name="Reorder Sales" role=button
+  row     sales                button name="Sales"
+  pin     sales                button name="Pin Sales" +title
+  hide    sales                button name="Hide Sales" +title
+section _other
+  header  -                    button name="Other" expanded=true
+  reorder scratch              div    name="Reorder Scratch" role=button
+  row     scratch              button name="Scratch"
+  pin     scratch              button name="Pin Scratch" +title
+  hide    scratch              button name="Hide Scratch" +title
+section _hidden
+  header  -                    button name="Hidden items" expanded=true
+  row     reports              button name="Reports"
+  hide    reports              button name="Restore Reports" +title

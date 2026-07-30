@@ -56,6 +56,13 @@ let allTests =
         // areas, a collapsed group, the hidden-items list, the
         // no-active-team collapse) and run through the shipped rules.
         SidebarRailA11yTests.tests
+        // Phase 613 — structural snapshot gate for the composed shell: the
+        // rail's shape (section keys, row order, row ids, accessible names,
+        // collapse flags) serialised per state and diffed against committed
+        // baselines, so a shape change is a reviewable diff rather than a
+        // discovery. Plus the two rendered-tree invariants Phase 612's pure
+        // pack could only assert one side of.
+        SidebarRailShapeSnapshotTests.tests
     ]
 
 [<EntryPoint>]

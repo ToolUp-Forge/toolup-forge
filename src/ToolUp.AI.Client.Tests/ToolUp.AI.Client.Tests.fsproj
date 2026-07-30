@@ -113,7 +113,21 @@
              `fable/`. Reusing it verbatim is the point of the phase — a
              second a11y vocabulary is the failure mode it exists to avoid. -->
         <Compile Include="..\ToolUp.Platform.Testing\Testing\AccessibilityAssertions.fs" />
+        <!-- Phase 613 — the shell rail's nine STATES plus the jsdom render
+             harness, extracted out of SidebarRailA11yTests so the a11y floor
+             and the structural snapshot gate share ONE enumeration (613.B).
+             Two lists would be the defect both gates exist to catch: a state
+             covered by one and invisible to the other looks exactly like a
+             state that is fine. Must precede both consuming packs. -->
+        <Compile Include="SidebarRailFixtures.fs" />
         <Compile Include="SidebarRailA11yTests.fs" />
+        <!-- Phase 613 — structural snapshot gate over the composed rail:
+             section keys, row order, row ids, accessible names and collapse
+             flags per state, diffed against committed baselines in
+             rail-shape-baselines/. Also carries the two halves Phase 612's
+             pure-function pack could not reach — the railStops iff invariant
+             and the single-tab-stop invariant — which need rendered markup. -->
+        <Compile Include="SidebarRailShapeSnapshotTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

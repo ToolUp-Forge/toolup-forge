@@ -1,0 +1,13 @@
+state   = narrow icon-only rail — Administration area
+rail    = narrow
+tabstop = row:_home:_sdk.admin-home
+
+section _home
+  reorder _sdk.admin-home      div    name="Reorder Administration" role=button
+  row     _sdk.admin-home      button name="Administration" +title
+section Administration
+  reorder admin.tenants        div    name="Reorder Tenants" role=button
+  row     admin.tenants        button name="Tenants" +title
+section _trailing
+  reorder _area.product        div    name="Reorder Back to app" role=button
+  row     _area.product        button name="Back to app" +title

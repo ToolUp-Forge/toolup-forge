@@ -1,0 +1,9 @@
+state   = expanded rail — a collapsed group
+rail    = expanded
+tabstop = row:_home:_sdk.home
+
+section _home
+  reorder _sdk.home            div    name="Reorder Home" role=button
+  row     _sdk.home            button name="Home"
+section Analytics
+  header  -                    button name="Analytics" expanded=false

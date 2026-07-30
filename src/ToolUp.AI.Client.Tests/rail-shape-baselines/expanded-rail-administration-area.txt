@@ -1,0 +1,22 @@
+state   = expanded rail — Administration area
+rail    = expanded
+tabstop = row:Administration:admin.tenants/list
+
+section _home
+  reorder _sdk.admin-home      div    name="Reorder Administration" role=button
+  row     _sdk.admin-home      button name="Administration"
+section Administration
+  header  -                    button name="Administration" expanded=true
+  reorder admin.tenants        div    name="Reorder Tenants" role=button
+  row     admin.tenants        button name="Tenants" expanded=true
+  pin     admin.tenants        button name="Pin Tenants" +title
+  hide    admin.tenants        button name="Hide Tenants" +title
+  row     admin.tenants/list   button name="All tenants"
+  pin     admin.tenants/list   button name="Pin All tenants" +title
+  hide    admin.tenants/list   button name="Hide All tenants" +title
+  row     admin.tenants/new    button name="New tenant"
+  pin     admin.tenants/new    button name="Pin New tenant" +title
+  hide    admin.tenants/new    button name="Hide New tenant" +title
+section _trailing
+  reorder _area.product        div    name="Reorder Back to app" role=button
+  row     _area.product        button name="Back to app"
