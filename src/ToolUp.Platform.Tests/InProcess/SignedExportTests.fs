@@ -15,8 +15,12 @@ open ToolUp.Platform.DataSubjectRequestApiHandler
 // `DownloadSignedExport` (default-off behaviour + the signed path + the
 // `ExportSigned` audit). The end-to-end "the JWS verifies with
 // `DefaultArtefactVerifier`" round-trip lives in `ToolUp.ArtefactSigning.Tests`
-// (Platform.Tests can't reference the signer/verifier — they sit a layer
-// above; the bundle adapter that fills `IExportEnvelopeSigner` is there).
+// alongside the bundle adapter that fills `IExportEnvelopeSigner`, which is
+// where that companion's own coverage belongs. (The header used to claim
+// Platform.Tests *cannot* reference the signer/verifier. That is no longer
+// true: `ToolUp.ArtefactSigning` arrives transitively via the
+// `ToolUp.Facts.Server` ProjectReference — `GroundingCertificateTests`
+// already `open ToolUp.ArtefactSigning`.)
 
 // ── fakes ───────────────────────────────────────────────────────────────
 
