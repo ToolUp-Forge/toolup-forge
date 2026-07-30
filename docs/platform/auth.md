@@ -73,19 +73,33 @@ Browser-side OIDC sign-in UI. Implements OAuth 2.0 Authorization Code + PKCE. Re
 
 ```fsharp
 // Client.fs
-open ToolUp.AuthProviders.Oidc.OidcClient
-open ToolUp.AuthProviders.Oidc.OidcRegister
+open ToolUp.Platform
+open ToolUp.AuthProviders.Oidc
 
-OidcRegister.register
-    { Issuer = "https://your-issuer.example.com"
-      ClientId = "your-client-id"
-      RedirectUri = "https://your-app.example.com/callback"
-      Scope = "openid profile email" }
+let oidcConfig: OidcUIConfig = {
+    Issuer = "https://your-issuer.example.com"
+    ClientId = "your-client-id"
+    RedirectUri = "https://your-app.example.com/auth/callback"
+    Scopes = [ "openid"; "profile"; "email" ]
+    PostLogoutRedirectUri = None
+    ValidateIdToken = Some true
+}
 
 Client.run
-    { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual; AuthUI = ConfiguredAuthUI OidcClient.uiProvider }
+    { ClientConfig.defaults with
+        AppName = "MyApp"
+        Surfaces = Surfaces.individual
+        AuthUI = OidcAuthUI oidcConfig
+        Handlers =
+            { ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ OidcRegister.handler ]
+                SignOutHandler = Some(OidcRegister.signOutHandler oidcConfig) } }
     modules
 ```
+
+`OidcAuthUI` is protocol-named, not vendor-named, so it stays a first-class `AuthUIMode` case rather than moving to `ProviderAuthUI` (Phase 494). The `AuthUIHandlers` entry is **not optional**: since Phase 13a the companion exports a `handler` *value* instead of registering itself at module load, and `AuthUIProvider` fails loudly at startup if `AuthUI = OidcAuthUI _` is set with no handler carrying the `"oidc"` tag. `SignOutHandler` is optional — supply it to have the shell render a "Sign out" affordance wired to the issuer's end-session flow.
+
+`OidcUIConfig.defaults issuer clientId redirectUri` fills the last three fields with `[ "openid"; "profile"; "email" ]` / `None` / `None` if you would rather not spell the record out. For a first-class preset per IdP (Entra workforce, Entra External ID, Auth0) see `OidcPresets` in the same companion.
 
 ### `ToolUp.AuthProviders.EntraExternalId{,.Client}` (Microsoft Entra External ID)
 
