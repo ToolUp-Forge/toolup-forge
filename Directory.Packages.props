@@ -236,6 +236,21 @@
          on the AssetStore fsproj — kept host-specific so non-Linux
          dev hosts don't drag in Linux natives). -->
     <PackageVersion Include="SkiaSharp" Version="3.119.2" />
+    <!-- Phase 617 — the linux-x64 native for SkiaSharp, referenced by
+         `ToolUp.Platform.Tests` only. The `IAssetStore` contract pack
+         builds real PNGs through SkiaSharp, so without a native for the
+         running RID all ten of its cases error out on a Linux runner
+         (`DllNotFoundException: libSkiaSharp`) — which is what kept the
+         `verify-all` CI job from gating. This does NOT reverse the
+         host-specific stance on `ToolUp.AssetStore.fsproj`: the shipped
+         companion still leaves the native choice to the consumer, and
+         now says so loudly at renderer construction instead of failing
+         at first render.
+         `NoDependencies` rather than the plain variant because it needs
+         no fontconfig, so the pack runs on a bare SDK container as well
+         as on a fully-provisioned runner. The asset store resizes and
+         re-encodes raster images; it renders no text. -->
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.1" />
     <PackageVersion Include="System.ClientModel" Version="1.11" />
     <PackageVersion Include="System.CodeDom" Version="10.0.6" />

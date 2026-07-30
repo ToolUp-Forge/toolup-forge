@@ -1412,5 +1412,18 @@
              set for the Public-API approval baseline. Test-tier only; never
              reaches a shipped package (GP 13). -->
         <PackageReference Include="System.Reflection.MetadataLoadContext" />
+        <!-- Phase 617 — the linux-x64 SkiaSharp native, so the
+             `IAssetStore` contract pack (which mints real PNGs through
+             SkiaSharp) runs on a Linux CI runner instead of erroring
+             out ten cases with `DllNotFoundException: libSkiaSharp`.
+             Deliberately UNCONDITIONAL rather than
+             `Condition="$([MSBuild]::IsOSPlatform('Linux'))"`: a
+             conditional reference makes restore resolve a different
+             graph per OS, so a green Windows build would stop proving
+             the Linux one even restores, and the CI NuGet cache key
+             (hashed over the fsprojs) would no longer describe what was
+             restored. The cost on a non-Linux dev box is a few MB of
+             unused natives in a test project's output. -->
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     </ItemGroup>
 </Project>

@@ -18,21 +18,22 @@
 # client-tier gates produced a red suite twice in one day, caught each
 # time only by a human remembering to run it by hand.
 #
-# 614 landed ONE of the two as a gate. `fable-tier` gates. `verify-all`
-# does NOT — the .NET suite turned out not to be green on a Linux
-# runner, for four reasons that all pre-date the phase, so that job is
-# `workflow_dispatch`-only with the evidence recorded at its header.
-# Wiring it up as a gate anyway would have meant excluding packs or
-# swallowing exits, i.e. deleting the gate and keeping the tick.
+# 614 landed `fable-tier` as a gate and found the .NET suite was not
+# green on a Linux runner, so it shipped `verify-all` dispatch-only with
+# the evidence written down rather than excluding packs or swallowing
+# exits to claim a tick. Phase 617 fixed the four blockers — two of them
+# defects in shipped SDK code, not test-environment noise — and
+# `verify-all` now gates too. Both test gates run on every push and PR;
+# the four-blocker history is kept at the `verify-all` job header
+# because two of those traps can be walked into again.
 #
 # ─── Triggers ────────────────────────────────────────────────────────
 #
-# - `push` to `main` — every job except `dco` and `verify-all`. The DCO
-#   job is conditional on `pull_request`; direct-to-main signed-off
-#   discipline relies on the operator's local commit-template /
-#   `format.signoff`.
+# - `push` to `main` — every job except `dco`. The DCO job is
+#   conditional on `pull_request`; direct-to-main signed-off discipline
+#   relies on the operator's local commit-template / `format.signoff`.
 # - `pull_request` against `main` — same, plus `dco`.
-# - `workflow_dispatch` — additionally runs `verify-all`.
+# - `workflow_dispatch` — the same set, on demand.
 #
 # Phase 614 chose `push` + `pull_request` for `fable-tier` DELIBERATELY,
 # and the reasoning is recorded here because the obvious alternative
@@ -73,8 +74,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Phase 614 — lets the `verify-all` job below be run on demand while
-  # it is not yet gating (see its header for why). Nothing in this
+  # Kept from Phase 614 (when it was `verify-all`'s only trigger) because
+  # re-running the long jobs on demand is useful in its own right — e.g.
+  # confirming a flake against an unchanged tree. Nothing in this
   # workflow deploys or publishes, so making it dispatchable is inert.
   workflow_dispatch:
 
@@ -267,13 +269,11 @@ jobs:
         working-directory: src/ToolUp.AI.Wire.Conformance/Fable
         run: node --test output/ProgramFable.js
 
-  # ─── Phase 614: the repo's two real test gates ─────────────────────
+  # ─── Phase 614 / 617: the repo's two real test gates ───────────────
   #
   # `dotnet test` is deliberately NOT used anywhere here: these packs are
   # Expecto console runners (`<OutputType>Exe</OutputType>`), against
   # which `dotnet test` exits 0 having run nothing.
-  #
-  # ── NOT A GATE YET — manual dispatch only ──────────────────────────
   #
   # Every .NET Expecto pack, via `dotnet run --project Build.fsproj --
   # VerifyAll`. The solution build ahead of it is NOT a warm-up: the
@@ -281,40 +281,60 @@ jobs:
   # `bin/Debug/net10.0` DLL and fails with a "run `dotnet build
   # ToolUp.Forge.sln` first" message when they are absent.
   #
-  # Phase 614 wired this job, ran it, and found the suite is NOT green
-  # on a Linux runner. It is therefore `workflow_dispatch`-only, and the
-  # honest reading is: this job exists so the blockers stay measurable
-  # on demand, NOT so a green tick can be claimed. Deliberately no
-  # `continue-on-error`, no pack exclusions, no narrowed assertions —
-  # weakening the gate to make it green would defeat the point of
-  # having one. Evidence, run 30575727033 on `phase-614-ci-gate-proof`:
+  # ── History: why this job spent a while not gating ─────────────────
   #
-  #   1. `ToolUp.Cli.Tests` HANGS. It printed its usage banner and then
-  #      produced nothing for 47 minutes until `timeout-minutes` killed
-  #      the job (the runner logged the orphan `ToolUp.Cli.Tests`
-  #      process at cleanup). Nothing after it in the pack list ran.
-  #   2. Ten `IAssetStore` contract cases error with
-  #      `DllNotFoundException: libSkiaSharp` — the SkiaSharp native
-  #      asset for `linux-x64` is not restored, so image handling is
-  #      unavailable on Linux. Worth noting this is not only a test
-  #      problem: a consumer deploying the asset store on Linux would
-  #      hit the same missing native.
-  #   3. Two `DockerLocalContainerScheduler` contract cases fail against
-  #      the runner's Docker daemon.
-  #   4. Two `StorageScopeResolver` active-team cache-invalidation cases
-  #      fail (timing-sensitive on a 2-core runner).
+  # Phase 614 wired it, ran it, and found the .NET suite was NOT green
+  # on a Linux runner — four independent problems, none of them 614's
+  # own. Rather than exclude packs or swallow exits, it shipped the job
+  # `workflow_dispatch`-only with the evidence recorded here and filed
+  # the blockers as Phase 617. 617 fixed them; the `if:` is gone and
+  # this is now a gate on every push and PR. Two of the four turned out
+  # to be defects in shipped SDK code, which is the return on having
+  # run the suite somewhere other than a Windows dev box:
   #
-  # All four pre-date this phase and none is in its scope. Fixing them
-  # is a follow-up; flipping this job into a real gate afterwards is a
-  # one-line change — delete the `if:` below and let the workflow-level
-  # push / pull_request triggers apply.
+  #   1. `ToolUp.Cli.Tests` HUNG — 47 minutes of silence until
+  #      `timeout-minutes` killed the job, taking every later pack with
+  #      it. A lock-order inversion inside Expecto: its redirected
+  #      `Console.Out` writer and its ProgressIndicator take the
+  #      redirected-writer monitor and the real console stream lock in
+  #      opposite orders. This one was NOT confined to the pack that
+  #      surfaced it — `ToolUp.Platform.Tests` deadlocks the same way,
+  #      and had only been getting away with it because a 2-core runner
+  #      rarely wins the race (it still hangs 2 runs in 6 at
+  #      `--parallel-workers 2`). No Expecto flag avoids it and 11.1.0
+  #      is worse than the pinned 10.2.3, so all twelve packs now
+  #      default to `CLIArguments.Sequenced`. Costs nothing measurable:
+  #      the 5,214-case Platform pack runs in 4m28s sequenced. Full
+  #      analysis: docs/platform/testing-conventions.md.
+  #   2. Ten `IAssetStore` cases errored with `DllNotFoundException:
+  #      libSkiaSharp` — no SkiaSharp native for `linux-x64`. The test
+  #      project now references the native assets, and the shipped
+  #      renderer probes at construction and names the missing package
+  #      instead of dying at first render (which is what a consumer
+  #      deploying to a Linux container was hitting too).
+  #   3. Two `DockerLocalContainerScheduler` cases failed because
+  #      `alpine:latest` is not in a fresh runner's image cache, so
+  #      `/containers/create` 404s. The contract pack skipped only on
+  #      `SchedulerUnavailable` despite its own comment covering image
+  #      pull failure. Fixed — and the image is pre-pulled below so the
+  #      leg genuinely runs here rather than skipping.
+  #   4. Two `StorageScopeResolver` cases — recorded by 614 as
+  #      "timing-sensitive on a 2-core runner", which was WRONG. They
+  #      reproduce deterministically under `--sequenced`.
+  #      `LocalFileStorage.List` was returning the OS path separator, so
+  #      `TeamStore.GetTeamMembers` read a `UserId` of
+  #      `memberships\alice` on Windows, `IsLastOwner` never matched,
+  #      and the last Owner of a team was removable there. Linux was
+  #      behaving correctly and the tests encoded the Windows bug as
+  #      their premise. Blob names are now normalised to `/` and the
+  #      shape is pinned by the `IBlobStorage` contract pack.
   #
-  # Measured cost when it does run (2-core ubuntu-latest, warm NuGet
-  # cache): solution build 6m10s, then the packs — Platform alone is
-  # 5m36s for 5,214 cases. Budget ~15 minutes for a completing run.
+  # Measured cost (2-core ubuntu-latest, warm NuGet cache): solution
+  # build 6m10s, then the packs — Platform alone is 5m36s for 5,214
+  # cases. Budget ~15 minutes for a completing run. `timeout-minutes`
+  # stays generous but finite: a hang must fail loudly rather than burn
+  # the 6-hour default, which is exactly how (1) was caught.
   verify-all:
-    name: verify-all (manual, not yet gating)
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -341,6 +361,17 @@ jobs:
       # dir lets NuGet enumerate it (0 packages) and proceed.
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
+
+      # The `IContainerScheduler` contract pack's real-backend leg binds
+      # against the runner's Docker daemon and launches a container. The
+      # daemon is present on `ubuntu-latest`; `alpine:latest` is not in
+      # its image cache, and the scheduler drives the Docker HTTP API
+      # directly, where `/containers/create` does NOT pull on demand the
+      # way `docker run` does. Without this the leg skips itself — which
+      # is honest but gates nothing, and this workflow exists to gate.
+      # Cheap (a ~4 MB image) and off the critical path.
+      - name: Pre-pull the container-scheduler test image
+        run: docker pull alpine:latest
 
       - name: Build the solution
         run: dotnet build ToolUp.Forge.sln --nologo

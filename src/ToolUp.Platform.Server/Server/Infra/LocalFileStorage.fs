@@ -217,7 +217,26 @@ type LocalFileStorage(baseDir: string) =
                     try
                         return
                             Directory.GetFiles(dir, $"{prefix}*", SearchOption.AllDirectories)
-                            |> Array.map (fun p -> Path.GetRelativePath(dir, p))
+                            // `GetRelativePath` returns the OS separator, so
+                            // this yielded `memberships\alice.json` on Windows
+                            // and `memberships/alice.json` on Linux. Blob names
+                            // on `IBlobStorage` are `/`-delimited — that is how
+                            // every caller builds them and what the cloud
+                            // backends return — so the local backend must
+                            // normalise rather than leak the filesystem's shape.
+                            //
+                            // The leak was silent, which is why it survived:
+                            // `Download` accepts either separator on Windows, so
+                            // round-tripping worked. What broke was callers that
+                            // strip a known prefix to recover an id
+                            // (`name.Replace("memberships/", "")`) — the replace
+                            // simply no-opped and handed back a mangled id. That
+                            // is how `TeamStore.GetTeamMembers` reported
+                            // `UserId = "memberships\alice"`, making
+                            // `IsLastOwner` always false and letting the last
+                            // Owner of a team be removed on Windows (Phase 617).
+                            // Pinned by the `IBlobStorage` contract pack.
+                            |> Array.map (fun p -> Path.GetRelativePath(dir, p).Replace('\\', '/'))
                             |> Array.toList
                     with :? DirectoryNotFoundException ->
                         return []

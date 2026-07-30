@@ -110,6 +110,41 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             Expect.isEmpty entries "empty container yields empty list"
         }
 
+        // Blob names are `/`-delimited on this interface — every caller
+        // builds them that way (`$"memberships/{userId}.json"`), so what
+        // `List` hands back must be the same shape it was given.
+        // Callers rely on that twice: they feed the name straight back
+        // into `Download`, and several strip a known prefix off it to
+        // recover the id (`name.Replace("memberships/", "")`). A backend
+        // that returns the OS separator breaks the second use SILENTLY —
+        // the replace no-ops, the caller gets a mangled id, and nothing
+        // throws. That is exactly how a `LocalFileStorage` returning
+        // `memberships\alice.json` on Windows let `TeamStore.IsLastOwner`
+        // compare `"memberships\alice" = "alice"`, always miss, and allow
+        // the last Owner of a team to be removed (Phase 617).
+        testCaseAsync "List returns `/`-delimited names for nested blobs, never the OS separator"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            let! _ = store.Upload(container, "nested/deep/c.txt", [| 3uy |])
+
+            let! entries = store.List(container, "nested/")
+            Expect.contains entries "nested/deep/c.txt" "nested name keeps its `/` separators"
+
+            Expect.all
+                entries
+                (fun n -> not (n.Contains '\\'))
+                "no entry carries a backslash — blob names are not filesystem paths"
+
+            // The round-trip half: whatever `List` returned must be a
+            // name `Download` accepts, on every platform.
+            for entry in entries do
+                match! store.Download(container, entry) with
+                | Ok _ -> ()
+                | Error e -> failtestf "List returned '%s' but Download rejected it: %s" entry e
+        }
+
         testCaseAsync "GetMetadata returns size and recent LastModified for existing blob"
         <| async {
             let store = factory ()

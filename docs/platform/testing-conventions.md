@@ -102,6 +102,41 @@ Set-Location C:\repos\ToolUp\toolup-forge
 
 Filter to server-tier paths under `src/ToolUp.Platform.Server/`, `src/AuthProviders/Oidc/`, `src/AuthProviders/EntraExternalId/` — client-tier paths fall under the Fable-tier (a)-class by construction.
 
+## Every Expecto pack runs sequenced by default
+
+Each pack's `Program.fs` passes `CLIArguments.Sequenced` as the default:
+
+```fsharp
+[<EntryPoint>]
+let main argv = runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
+```
+
+It is a *default*, not a hard `testSequenced` wrapper, so `--parallel` on the command line still overrides it. Prefer the default; reach for `--parallel` only to reproduce a concurrency-specific problem, and expect it to hang (see below).
+
+### Why: Expecto deadlocks when parallel tests write to the console
+
+Expecto replaces `Console.Out` / `Console.Error` with a synchronized `FuncTextWriter` so it can attribute a test's output to that test. A test thread writing through it takes that writer's monitor and descends into `ANSIOutputWriter.prettyPrintInner` → `flushInner`, which fires the `ProgressIndicator`, which writes to the **real** console stream and blocks in `ConsolePal.WriteFromConsoleStream` — while sibling threads sit on the writer's monitor it still holds. Two locks, acquired in two orders, with no timeout on either. The process hangs forever.
+
+Almost every pack here drives a subject that logs (`ConsoleLogger`, compose-time warnings, the `toolup` CLI's own output), so this is not an exotic case.
+
+Measured on a Linux host, `ToolUp.Cli.Tests` (36 cases, every one of which runs a real `toolup` command, and every command prints):
+
+| configuration | completed |
+|---|---|
+| parallel (default before this change) | 3/6 |
+| parallel, `--no-spinner` | 4/6 |
+| parallel, `--colours 0` | 0/6 |
+| parallel, `--parallel-workers 2` | 4/6 |
+| **sequenced** | **6/6, and 10/10 on a repeat run** |
+
+Two things that look like fixes and are not: **no CLI flag helps** — `--no-spinner` still hangs, `--colours 0` makes it worse — and **upgrading Expecto does not help** either; 11.1.0 completed 1/6 against 10.2.3's 3/6 on the same pack.
+
+`--parallel-workers 2` still hanging is the important row: a 2-core CI runner is exposed too, not just a big dev box. `ToolUp.Platform.Tests` hangs reliably on a 16-core host and had merely been getting away with it on a 2-core runner.
+
+**Sequencing is not the performance cost it looks like.** `ToolUp.Platform.Tests` (5,214 cases) runs in 4m28s sequenced — these packs are dominated by I/O and compose-time work, not by parallelisable CPU. It also makes the CI log readable, since output stops interleaving mid-line between tests.
+
+**If you add a pack**, copy the entry point above. **If you are tempted to make a pack parallel again**, the bar is that its subject writes nothing to the console — not that it currently happens to pass.
+
 ## Testing client-tier MVU update functions
 
 Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:

@@ -164,10 +164,42 @@ let private makeTeamResolver () =
     let cache = new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
     teamStore, new TeamScopeResolver(teamStore, cache, notifications)
 
+/// Same shape, but the store and the resolver sit on SEPARATE
+/// notification channels, so a membership write never reaches the
+/// resolver's cache-eviction handler. That is the only way to reach
+/// the stale-cache path from a test: `InMemoryNotificationChannel`
+/// invokes subscribers inline on `Publish`, so with one shared
+/// channel `RemoveMember` evicts the entry before it returns and the
+/// stale window a caller would actually hit — a direct-to-store
+/// removal by a script, or a second instance in a multi-node
+/// deployment whose channel is in-process — cannot be reproduced.
+let private makeDetachedTeamResolver () =
+    let storage = freshStorage ()
+    let storeChannel = InMemoryNotificationChannel(None) :> INotificationChannel
+    let resolverChannel = InMemoryNotificationChannel(None) :> INotificationChannel
+    let teamStore = TeamStore(storage, storeChannel)
+    let cache = new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
+    teamStore, new TeamScopeResolver(teamStore, cache, resolverChannel)
+
 let private seedTeam (teamStore: TeamStore) (userId: string) (teamId: string) = async {
     let! _ = teamStore.CreateTeam(teamId, teamId + "-name")
     let! _ = teamStore.AddMember(teamId, userId, Owner)
     let! _ = teamStore.SetActiveTeam(userId, teamId)
+    return ()
+}
+
+/// Give `teamId` a second Owner so the first one is removable.
+///
+/// `RemoveMember` refuses to remove a team's LAST Owner — a revocation
+/// test that seeds a sole Owner is therefore asserting against a
+/// no-op. Both revocation tests below used to do exactly that and
+/// passed only because `TeamStore.GetTeamMembers` was mangling every
+/// `UserId` on Windows (`LocalFileStorage.List` leaked the OS path
+/// separator), so `IsLastOwner` never fired. With that fixed, the
+/// refusal is real on every platform and the co-owner is what makes
+/// these tests exercise revocation rather than the guard. (Phase 617.)
+let private addCoOwner (teamStore: TeamStore) (teamId: string) = async {
+    let! _ = teamStore.AddMember(teamId, "co-owner", Owner)
     return ()
 }
 
@@ -225,6 +257,7 @@ let private teamTests =
         <| async {
             let teamStore, resolver = makeTeamResolver ()
             do! seedTeam teamStore "alice" "acme"
+            do! addCoOwner teamStore "acme"
 
             let request = { emptyRequest with User = Some alice }
 
@@ -234,7 +267,10 @@ let private teamTests =
             // RemoveMember clears the active-team pointer when the
             // removed team is active; the API handler also invalidates
             // the resolver cache (simulated manually here).
-            let! _ = teamStore.RemoveMember("acme", "alice")
+            match! teamStore.RemoveMember("acme", "alice") with
+            | Ok() -> ()
+            | Error e -> failtestf "RemoveMember must succeed for this test to mean anything: %s" e
+
             resolver.InvalidateUser "alice"
 
             match! (resolver :> IStorageScopeResolver).Resolve request with
@@ -245,8 +281,12 @@ let private teamTests =
 
         testCaseAsync "Stale active-team cache on a revoked member → NotTeamMember (defense in depth)"
         <| async {
-            let teamStore, resolver = makeTeamResolver ()
+            // Detached channels: the store's `Removed` event never
+            // reaches the resolver, so its cached active-team entry
+            // stays stale — the window this test exists to cover.
+            let teamStore, resolver = makeDetachedTeamResolver ()
             do! seedTeam teamStore "alice" "acme"
+            do! addCoOwner teamStore "acme"
 
             let request = { emptyRequest with User = Some alice }
 
@@ -259,13 +299,14 @@ let private teamTests =
             // chance to invalidate, or a direct-to-store removal via
             // a script. The resolver's per-request membership check
             // is the braces that make this safe.
-            let! _ = teamStore.RemoveMember("acme", "alice")
+            match! teamStore.RemoveMember("acme", "alice") with
+            | Ok() -> ()
+            | Error e -> failtestf "RemoveMember must succeed for this test to mean anything: %s" e
 
             match! (resolver :> IStorageScopeResolver).Resolve request with
             | Ok _ -> failtest "Expected Error; stale cache should not grant access"
             | Error(NotTeamMember teamId) -> Expect.equal teamId "acme" "names the team that denied"
-            | Error NoActiveTeam -> () // Also acceptable if RemoveMember cleared and cache happened to miss.
-            | Error other -> failtestf "Expected NotTeamMember or NoActiveTeam; got %A" other
+            | Error other -> failtestf "Expected NotTeamMember; got %A" other
         }
 
         testCaseAsync "InvalidateUser forces a re-fetch after SetActiveTeam changes"

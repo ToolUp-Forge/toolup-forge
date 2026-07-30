@@ -188,12 +188,24 @@ let tests (name: string) (binding: ContainerSchedulerBinding) =
                 let! launch = scheduler.LaunchContainer(sampleTenant, spec)
 
                 match launch with
-                | Error(SchedulerUnavailable _) ->
+                | Error(SchedulerUnavailable _)
+                | Error(ImagePullFailed _) ->
                     // Backend reachable from the factory but launch
-                    // failed (image pull denied, etc.). Skip the
-                    // post-launch assertions rather than fail — the
-                    // operator's pre-flight image-pull validation is
+                    // failed (image absent locally, pull denied, etc.).
+                    // Skip the post-launch assertions rather than fail —
+                    // the operator's pre-flight image-pull validation is
                     // separate.
+                    //
+                    // `ImagePullFailed` was always meant to be here —
+                    // the comment above has said "image pull denied,
+                    // etc." since this pack was written — but only
+                    // `SchedulerUnavailable` was matched, so a runner
+                    // with a working Docker daemon and no `alpine:latest`
+                    // in its local image cache failed the case instead of
+                    // skipping it. That is a missing image, not a broken
+                    // contract. (Phase 617; CI pre-pulls the image so
+                    // this arm is the fallback, not the normal path —
+                    // a leg that skips everywhere gates nothing.)
                     ()
                 | Error other -> failtestf "unexpected launch failure %A" other
                 | Ok containerId ->
@@ -231,7 +243,9 @@ let tests (name: string) (binding: ContainerSchedulerBinding) =
                 let! launch = scheduler.LaunchContainer(isolatedTenant, spec)
 
                 match launch with
-                | Error(SchedulerUnavailable _) -> ()
+                // Same environment-vs-contract split as the case above.
+                | Error(SchedulerUnavailable _)
+                | Error(ImagePullFailed _) -> ()
                 | Error other -> failtestf "unexpected launch failure %A" other
                 | Ok containerId ->
                     try
