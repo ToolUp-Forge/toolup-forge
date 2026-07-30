@@ -310,7 +310,11 @@ dotnet run --project src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fspro
 # E.4 follow-on). Different shape: transpiles via Fable + runs under
 # Node's built-in test runner (`node:test`, zero npm test-runner
 # deps); see docs/platform/testing-conventions.md for rationale and
-# the full procedure. Run from the project directory:
+# the full procedure. The canonical invocation is the FAKE target
+# below, which owns all four steps (tool restore, `npm ci`, the Fable
+# compile, the node:test run) so CI and a developer cannot drift:
+dotnet run --project Build.fsproj -- VerifyFable
+# The four steps it wraps, for when you need to iterate inside one:
 #   cd src/ToolUp.AI.Client.Tests
 #   dotnet tool restore && npm install --no-fund --no-audit
 #   dotnet fable -o output --noCache
@@ -323,6 +327,30 @@ dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 **Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the twelve `dotnet run --project` Expecto suites `VerifyAll` runs with 0 failures (`Platform` / `Forms` / `Scheduling` / `Stripe` / `Build` / `RemotingAnalyzers` / `Cli` / `Voice` / `AICookbooks` / `Algorithms` / `AlgorithmProviders` always-on; `AIProviders` env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above).
 
 **Shortcut for all twelve Expecto packs**: `dotnet run --project Build.fsproj -- VerifyAll` runs all 12 sequentially (`Platform` / `Forms` / `Scheduling` / `AIProviders` / `Stripe` / `Build` / `RemotingAnalyzers` / `Cli` / `Voice` / `AICookbooks` / `Algorithms` / `AlgorithmProviders`) with a per-pack summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
+
+**Shortcut for the Fable tier**: `dotnet run --project Build.fsproj -- VerifyFable` (Phase 614) runs the client-tier harness end to end — `dotnet tool restore`, `npm ci`, `dotnet fable -o output --noCache`, then `node --test` over the transpiled output. It asserts the TAP **pass / fail counts**, not just the exit status, because `node --test` exits 0 when it matched no test file at all; a harness that stopped emitting cases is otherwise indistinguishable from a green run. The floor is a lower bound (currently 100 against 131 shipped cases), so adding a case never needs an edit here.
+
+### What CI actually gates (Phase 614)
+
+Written down here so the next reader does not have to re-derive it from `.github/workflows/checks.yml` — three phases in one batch had to. **Read the "gates?" column, not the job list**: a job existing is not the same as a job gating.
+
+| Job | Checks | Gates? |
+|---|---|---|
+| `spdx-headers` | Apache-2.0 SPDX header on every Fable-packed source file | yes |
+| `fantomas` | `dotnet fantomas --check .` over the repo | yes |
+| `dco` | `Signed-off-by:` on every commit in a PR | PR only |
+| `fable-wire-smoke` | `ToolUp.AI.Wire` compiles + round-trips on both the .NET and Fable hosts | yes |
+| `ai-wire-conformance` | the connector mappers produce identical output across both hosts, over one corpus | yes |
+| **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
+| **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **all twelve Expecto packs** via `VerifyAll` | **no — `workflow_dispatch` only** |
+
+Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template.
+
+Both test gates were local-only until Phase 614, and 614 landed **one of the two**. `fable-tier` gates; it was demonstrated red on a scratch branch against a deliberately broken `node:test` case before landing, because an unproven CI gate is precisely the failure mode it exists to prevent.
+
+**`verify-all` does not gate yet, and the reason is a finding rather than an omission: the .NET suite is not green on a Linux runner.** Four independent problems, all pre-dating the phase, all still open — `ToolUp.Cli.Tests` hangs indefinitely; ten `IAssetStore` cases error on a missing `libSkiaSharp` native for `linux-x64` (which would equally affect a consumer deploying the asset store on Linux); two `DockerLocalContainerScheduler` cases fail against the runner's daemon; two `StorageScopeResolver` cache-invalidation cases fail on a 2-core runner. The job is wired, cached and assertion-complete, and runs on demand so the blockers stay measurable; the full evidence is at its header in `checks.yml`. Turning it into a real gate once those are fixed is deleting one `if:` line. It was deliberately **not** made green by excluding packs or swallowing exit codes — that trades a gate for a tick.
+
+Both jobs are written so they **cannot pass vacuously**. `verify-all` parses the `VerifyAll summary:` block and fails unless at least twelve packs report `PASS` — the target legitimately exits 0 with an empty `BuildConfig.TestPacks`, which would otherwise read as green. `VerifyFable` fails unless the TAP summary exists and clears its case floor, because `node --test` exits 0 when it matched no test file at all.
 
 `dotnet run --project Build.fsproj -- Pack` walks every public-surface SDK fsproj (filtered against `IsPackable=false`) and packs each individually into a local feed (default `../local-nuget-feed/`). ~9 minutes for a clean cold pack of ~43 packages; subsequent packs are incremental. Point a consumer's `nuget.config` at the same folder to test unreleased changes end-to-end.
 

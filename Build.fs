@@ -60,6 +60,114 @@ let main args =
     init args
     registerTargets config
 
+    // Phase 614 — the Fable-tier test gate as ONE invocation.
+    //
+    // `VerifyAll` (in ToolUp.Platform.Build) covers the twelve .NET
+    // Expecto packs. The client tier's harness is a different shape —
+    // Fable-transpiled F# run under Node's built-in `node:test` — and
+    // was until now a four-step recipe every caller reproduced by hand
+    // from `CLAUDE.md`. Two transcriptions of one recipe drift; a single
+    // target cannot, so CI and a developer necessarily run the same
+    // thing.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyFable`
+    //
+    // The last step deliberately reads the TAP COUNTS, not just the exit
+    // code. `node --test` exits 0 when it matched no test file at all,
+    // so a harness that silently stopped emitting cases — a moved output
+    // path, a Fable compile that wrote elsewhere, an entry point that
+    // registered nothing — is indistinguishable from a green run by exit
+    // status alone. That is the exact shape of the local `--filter`
+    // incident that silently matched 0 Expecto tests. `fableCaseFloor` is
+    // a LOWER BOUND, not the exact count: adding a case never needs a
+    // companion edit here, and it fires only when the harness has
+    // collapsed rather than shrunk.
+    let fableCaseFloor = 100
+
+    Target.create "VerifyFable" (fun _ ->
+        let testDir = Path.getFullName "src/ToolUp.AI.Client.Tests"
+
+        let onPath name =
+            match ProcessUtils.tryFindFileOnPath name with
+            | Some path -> path
+            | None ->
+                failwithf
+                    "VerifyFable: `%s` was not found on PATH. The Fable-tier harness needs the .NET SDK and Node.js (>= 20)."
+                    name
+
+        let proc exe args =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory testDir
+
+        let runChecked exe args =
+            proc exe args |> CreateProcess.ensureExitCode |> Proc.run |> ignore
+
+        let npm = onPath "npm"
+        let node = onPath "node"
+
+        Trace.tracefn "▶ VerifyFable (1/4): dotnet tool restore"
+        runChecked "dotnet" [ "tool"; "restore" ]
+
+        // `ci`, not `install` — the lockfile is committed, so this is the
+        // reproducible form and it is the same one CI runs.
+        Trace.tracefn "▶ VerifyFable (2/4): npm ci"
+        runChecked npm [ "ci"; "--no-fund"; "--no-audit" ]
+
+        Trace.tracefn "▶ VerifyFable (3/4): dotnet fable -o output --noCache"
+        runChecked "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
+
+        Trace.tracefn "▶ VerifyFable (4/4): node --test output/Program.js"
+
+        // `--test-reporter=tap` is pinned rather than inherited: node
+        // picks `spec` on a TTY and `tap` otherwise, and the summary
+        // counts parsed below only exist in the TAP form.
+        let result =
+            proc node [
+                "--import"
+                "./register-loader.mjs"
+                "--test"
+                "--test-reporter=tap"
+                "output/Program.js"
+            ]
+            |> CreateProcess.redirectOutput
+            |> Proc.run
+
+        let output = result.Result.Output + result.Result.Error
+        printfn "%s" output
+
+        let tapCount (label: string) =
+            let prefix = sprintf "# %s " label
+
+            output.Split('\n')
+            |> Array.map _.Trim()
+            |> Array.tryPick (fun line ->
+                if line.StartsWith prefix then
+                    match System.Int32.TryParse(line.Substring prefix.Length) with
+                    | true, n -> Some n
+                    | _ -> None
+                else
+                    None)
+
+        match tapCount "pass", tapCount "fail" with
+        | Some passed, Some failed ->
+            Trace.tracefn ""
+            Trace.tracefn "VerifyFable summary: %d passed, %d failed (floor %d)." passed failed fableCaseFloor
+
+            if failed > 0 then
+                failwithf "VerifyFable: %d node:test case(s) failed." failed
+
+            if passed < fableCaseFloor then
+                failwithf
+                    "VerifyFable: only %d case(s) ran, below the floor of %d. A run this small means the harness matched almost nothing — check the Fable output path and the entry point before lowering the floor."
+                    passed
+                    fableCaseFloor
+        | _ ->
+            failwith
+                "VerifyFable: node:test printed no TAP `# pass` / `# fail` summary — the harness did not run. `node --test` exits 0 in that case, which is why the counts are checked and not just the exit status."
+
+        if result.ExitCode <> 0 then
+            failwithf "VerifyFable: node exited %d." result.ExitCode)
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =

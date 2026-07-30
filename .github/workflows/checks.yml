@@ -9,13 +9,52 @@
 #      CONTRIBUTING.md §"Quick start" Step 4. Strict-match against the
 #      commit author per the DCO spec (no anonymous / pseudonymous).
 #
+# Later phases added the portability gates (`fable-wire-smoke`,
+# `ai-wire-conformance`, both scoped to ToolUp.AI.Wire). Phase 614 came
+# for the repo's TWO REAL TEST GATES — `verify-all` (the twelve .NET
+# Expecto packs) and `fable-tier` (the client-tier node:test harness) —
+# which until then were local-only: nothing stopped a regression in
+# either from reaching `main`, and the batch that built five new
+# client-tier gates produced a red suite twice in one day, caught each
+# time only by a human remembering to run it by hand.
+#
+# 614 landed ONE of the two as a gate. `fable-tier` gates. `verify-all`
+# does NOT — the .NET suite turned out not to be green on a Linux
+# runner, for four reasons that all pre-date the phase, so that job is
+# `workflow_dispatch`-only with the evidence recorded at its header.
+# Wiring it up as a gate anyway would have meant excluding packs or
+# swallowing exits, i.e. deleting the gate and keeping the tick.
+#
 # ─── Triggers ────────────────────────────────────────────────────────
 #
-# - `push` to `main` — runs the two repo-state gates (SPDX, Fantomas).
-#   The DCO job is conditional on `pull_request` and is skipped here;
-#   direct-to-main signed-off discipline relies on the operator's local
-#   commit-template / `format.signoff` config.
-# - `pull_request` against `main` — runs all three gates.
+# - `push` to `main` — every job except `dco` and `verify-all`. The DCO
+#   job is conditional on `pull_request`; direct-to-main signed-off
+#   discipline relies on the operator's local commit-template /
+#   `format.signoff`.
+# - `pull_request` against `main` — same, plus `dco`.
+# - `workflow_dispatch` — additionally runs `verify-all`.
+#
+# Phase 614 chose `push` + `pull_request` for `fable-tier` DELIBERATELY,
+# and the reasoning is recorded here because the obvious alternative
+# looks cheaper and is wrong for this repo:
+#
+#   * `fable-tier` is one of the expensive jobs (a full Fable compile of
+#     the Client tier plus 131 node:test cases). The tempting gate is
+#     `pull_request` only.
+#   * But this repo's normal integration path is a DIRECT PUSH to
+#     `main`, not a PR — which is exactly why the `dco` job above had to
+#     be marked PR-only in the first place. A PR-only test gate would
+#     therefore almost never run. A gate that does not run is worse than
+#     no gate: it reports green.
+#   * Cost is not the constraint that would justify it. This repository
+#     is public, so GitHub-hosted standard runners are free and
+#     unmetered; the concurrency group below already cancels superseded
+#     runs, so rapid iteration costs one run, not N. Measured: the whole
+#     `fable-tier` job is ~1m35s, of which the Fable compile is 49s.
+#
+# Every long job carries an explicit `timeout-minutes` so a hang fails
+# loudly instead of burning the 6-hour default — which is exactly how
+# the `ToolUp.Cli.Tests` hang above was caught rather than missed.
 #
 # The concurrency group cancels superseded runs (PR force-push, branch
 # updates) so CI minutes don't pile up on rapid iteration. Pattern
@@ -34,6 +73,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Phase 614 — lets the `verify-all` job below be run on demand while
+  # it is not yet gating (see its header for why). Nothing in this
+  # workflow deploys or publishes, so making it dispatchable is inert.
+  workflow_dispatch:
 
 concurrency:
   group: checks-${{ github.ref }}
@@ -223,3 +266,162 @@ jobs:
       - name: Run the same corpus on the Fable host under node:test
         working-directory: src/ToolUp.AI.Wire.Conformance/Fable
         run: node --test output/ProgramFable.js
+
+  # ─── Phase 614: the repo's two real test gates ─────────────────────
+  #
+  # `dotnet test` is deliberately NOT used anywhere here: these packs are
+  # Expecto console runners (`<OutputType>Exe</OutputType>`), against
+  # which `dotnet test` exits 0 having run nothing.
+  #
+  # ── NOT A GATE YET — manual dispatch only ──────────────────────────
+  #
+  # Every .NET Expecto pack, via `dotnet run --project Build.fsproj --
+  # VerifyAll`. The solution build ahead of it is NOT a warm-up: the
+  # Public-API approval pack (Phase 175) reads every project's
+  # `bin/Debug/net10.0` DLL and fails with a "run `dotnet build
+  # ToolUp.Forge.sln` first" message when they are absent.
+  #
+  # Phase 614 wired this job, ran it, and found the suite is NOT green
+  # on a Linux runner. It is therefore `workflow_dispatch`-only, and the
+  # honest reading is: this job exists so the blockers stay measurable
+  # on demand, NOT so a green tick can be claimed. Deliberately no
+  # `continue-on-error`, no pack exclusions, no narrowed assertions —
+  # weakening the gate to make it green would defeat the point of
+  # having one. Evidence, run 30575727033 on `phase-614-ci-gate-proof`:
+  #
+  #   1. `ToolUp.Cli.Tests` HANGS. It printed its usage banner and then
+  #      produced nothing for 47 minutes until `timeout-minutes` killed
+  #      the job (the runner logged the orphan `ToolUp.Cli.Tests`
+  #      process at cleanup). Nothing after it in the pack list ran.
+  #   2. Ten `IAssetStore` contract cases error with
+  #      `DllNotFoundException: libSkiaSharp` — the SkiaSharp native
+  #      asset for `linux-x64` is not restored, so image handling is
+  #      unavailable on Linux. Worth noting this is not only a test
+  #      problem: a consumer deploying the asset store on Linux would
+  #      hit the same missing native.
+  #   3. Two `DockerLocalContainerScheduler` contract cases fail against
+  #      the runner's Docker daemon.
+  #   4. Two `StorageScopeResolver` active-team cache-invalidation cases
+  #      fail (timing-sensitive on a 2-core runner).
+  #
+  # All four pre-date this phase and none is in its scope. Fixing them
+  # is a follow-up; flipping this job into a real gate afterwards is a
+  # one-line change — delete the `if:` below and let the workflow-level
+  # push / pull_request triggers apply.
+  #
+  # Measured cost when it does run (2-core ubuntu-latest, warm NuGet
+  # cache): solution build 6m10s, then the packs — Platform alone is
+  # 5m36s for 5,214 cases. Budget ~15 minutes for a completing run.
+  verify-all:
+    name: verify-all (manual, not yet gating)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Restore dominates a cold run of this job; the key covers every
+      # input that can change the resolved graph (CPM manifest, SDK pin,
+      # and the project files themselves).
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Build the solution
+        run: dotnet build ToolUp.Forge.sln --nologo
+
+      # The count assertion is the point of this step, not decoration.
+      # `VerifyAll` is a no-op that EXITS 0 when `BuildConfig.TestPacks`
+      # is empty — a documented path, since the target ships in the SDK
+      # for consumers who have not opted in. A job that only checked the
+      # exit status would report green for a forge `Build.fs` that had
+      # lost its pack list, which is indistinguishable from a real pass
+      # unless the summary block is read. So: the summary must exist, it
+      # must list at least every pack we expect, and none may be FAIL.
+      - name: Run every Expecto pack (VerifyAll)
+        env:
+          EXPECTED_PACKS: 12
+        run: |
+          set -euo pipefail
+          dotnet run --project Build.fsproj -- VerifyAll 2>&1 | tee verifyall.log
+
+          summary=$(awk '/VerifyAll summary:/{seen=1} seen' verifyall.log)
+          if [ -z "${summary}" ]; then
+            echo "::error::VerifyAll printed no summary block — the target did not run any pack."
+            exit 1
+          fi
+
+          passed=$(printf '%s\n' "${summary}" | grep -c 'PASS' || true)
+          failed=$(printf '%s\n' "${summary}" | grep -c 'FAIL' || true)
+          echo "VerifyAll summary: ${passed} pack(s) PASS, ${failed} pack(s) FAIL."
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::${failed} Expecto pack(s) failed."
+            exit 1
+          fi
+          if [ "${passed}" -lt "${EXPECTED_PACKS}" ]; then
+            echo "::error::Only ${passed} pack(s) ran; expected at least ${EXPECTED_PACKS}. A short run means the pack list shrank or VerifyAll no-opped, not that the suite got faster. Check BuildConfig.TestPacks in Build.fs before lowering EXPECTED_PACKS."
+            exit 1
+          fi
+
+  # Gate 2 of 2 — the client-tier harness. Fable-transpiled F# run under
+  # Node's built-in `node:test`; it is the only place the Platform.Client
+  # MVU surfaces (every Sidebar pack, the rail a11y floor, the structural
+  # snapshot gate) can execute at all, because their module-level
+  # Remoting proxy constructors are reflection-shaped for Fable and throw
+  # under .NET reflection.
+  #
+  # One command, shared with developers verbatim:
+  # `dotnet run --project Build.fsproj -- VerifyFable`. That target owns
+  # the tool restore, `npm ci`, the Fable compile and the run, AND
+  # asserts the TAP pass/fail counts — `node --test` exits 0 when it
+  # matched no tests, so the counts, not the exit status, are the gate.
+  fable-tier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/ToolUp.AI.Client.Tests/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Run the Fable-tier node:test harness (VerifyFable)
+        run: dotnet run --project Build.fsproj -- VerifyFable
