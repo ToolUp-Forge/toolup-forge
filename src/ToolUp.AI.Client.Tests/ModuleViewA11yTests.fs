@@ -173,15 +173,23 @@ type private KnownGap = {
 ///
 /// The guard below refuses to carry a pin that has stopped firing, so
 /// when that edit lands this entry FAILS the pack until it is deleted.
-let private knownGaps: KnownGap list = [
-    {
-        Rule = "everyControlHasLabel"
-        Why =
-            "UsageDashboard's grouping <select> is labelled only by a sibling <label> with no `for` \
-             — fix in ToolUp.Platform.Client/Client/UsageDashboard.fs (renderControls)"
-        Matches = fun e -> e.Tag = "select"
-    }
-]
+/// Empty, and that is the point. This pack shipped with one pin —
+/// `UsageDashboard`'s grouping `<select>`, labelled only by a sibling
+/// `<label>` with no `for`, so an unnamed combo box in all six of the
+/// module's states. It was the FIRST defect the module-view floor found on
+/// the first ordinary module view it was pointed at, which is the argument
+/// for the floor existing.
+///
+/// Fixed in `UsageDashboard.renderControls` (the select now carries its own
+/// `aria-label`, bound to the same string as the visible label so the two
+/// cannot drift). The pin was deleted in that same commit — required, not
+/// tidy-up: the `every pinned known gap still fires somewhere` case below
+/// goes RED the moment a pinned finding stops firing, because an exemption
+/// that no longer fires is one that has silently stopped checking a class
+/// that is now clean.
+///
+/// The machinery stays for the next genuine not-mine-to-fix finding.
+let private knownGaps: KnownGap list = []
 
 let private classify (node: Accessibility.A11yNode) (findings: Accessibility.A11yFinding list) =
     findings

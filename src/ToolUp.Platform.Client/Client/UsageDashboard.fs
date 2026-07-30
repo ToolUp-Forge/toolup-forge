@@ -185,14 +185,23 @@ let private renderTable (rows: UsageAggregateRow list) =
         ]
 
 let private renderControls (model: Model) (dispatch: Msg -> unit) =
+    // The visible <label> sits BESIDE the select rather than wrapping it, and
+    // this tier has no `for`/`id` pairing convention to associate them — so the
+    // select carries its own accessible name. Without it the control is an
+    // unnamed combo box: it looks labelled to anyone who can see the text, but
+    // a screen reader announces no name and voice control has nothing to say.
+    // Both read from one binding so the visible and announced names cannot drift.
+    let groupByLabel = "Group by"
+
     Html.div [
         prop.className "flex flex-wrap items-end gap-4 mb-4"
         prop.children [
             Html.div [
                 prop.className "flex flex-col"
                 prop.children [
-                    Html.label [ prop.className "text-xs text-gray-600 mb-1"; prop.text "Group by" ]
+                    Html.label [ prop.className "text-xs text-gray-600 mb-1"; prop.text groupByLabel ]
                     Html.select [
+                        prop.ariaLabel groupByLabel
                         prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
                         prop.value (groupingLabel model.Grouping)
                         prop.onChange (fun (v: string) ->
