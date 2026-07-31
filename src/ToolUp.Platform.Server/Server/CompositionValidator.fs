@@ -181,6 +181,20 @@ type ModuleGraphKey = {
 /// registered data type for the handler to ever fire. A second
 /// name-declaring registration field joins by appending here — no rule
 /// change.
+///
+/// **Phase 621 made the client-side need declarative and this rule still
+/// cannot read it — deliberately.** `ErasedModule.NeedsDataKeys` now
+/// carries the ids as data beside the predicate, which is exactly the
+/// "second name-declaring registration field" above. It does not join
+/// here because it is declared on the CLIENT tier and this validator runs
+/// server-side: the Server tier does not (and must not) reference the
+/// Client tier, so the accumulator that feeds this list cannot see it.
+/// Reaching it needs one of two things neither of which is a rule change:
+/// a server-side declaration (`ServerModule`) that feeds this list
+/// directly, or the composition root unioning the client declarations
+/// into `ServerConfig`, the way `FeatureFlags` and `DataTypes` already
+/// cross that boundary. Until one exists this rule's input is unchanged
+/// by 621 — see the severity note on `evalUnsatisfiedNeedsData`.
 type ModuleDataNeed = {
     /// The declaring module's registration `Name`, or `""` when the
     /// registration carries no owner attribution. The accumulator behind
@@ -615,6 +629,34 @@ module CompositionValidator =
     /// behind the consuming one, and because the need is only *partly*
     /// enumerable (see `ModuleDataNeed`): a rule that cannot see every
     /// need must not be able to block a boot on the subset it can.
+    ///
+    /// **Phase 621 revisited the severity and left it a warning.** The
+    /// premise for promoting it was that making the need declarative would
+    /// let the rule prove the unmet case. It does not, for two reasons
+    /// that are worth stating so the question is not reopened from the
+    /// same wrong start:
+    ///
+    /// 1. **The new declaration does not reach this rule.**
+    ///    `ErasedModule.NeedsDataKeys` is a CLIENT-tier field and this
+    ///    validator runs server-side, so `DataNeeds` still carries exactly
+    ///    what it carried before 621 — the `VectorisationHandlers` ids,
+    ///    which were already name-declared. Promoting on the strength of a
+    ///    declaration the rule cannot see would be raising the severity of
+    ///    a population 621 did not change.
+    /// 2. **The declaration is a subset claim even where it is visible.**
+    ///    The predicate stays authoritative and may accept ids the list
+    ///    omits, so a declaration still does not enumerate every need. The
+    ///    original argument — a rule that cannot see every need must not
+    ///    block a boot — survives 621 intact.
+    ///
+    /// The GP 11 consequence of promoting anyway is concrete rather than
+    /// theoretical: every deployment that boots today with a vectorisation
+    /// handler naming a not-yet-registered data type — the staged-producer
+    /// shape this rule's own text calls legitimate — would stop starting
+    /// on upgrade. Error severity is earned by a need the rule can see in
+    /// full, and that is a later phase (a server-side declaration, or the
+    /// composition root unioning the client's into `ServerConfig`), not a
+    /// severity edit.
     ///
     /// The provided set is every registered data-type name — the
     /// manifest's `DataType` labels unioned with the pre-collapse

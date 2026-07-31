@@ -448,9 +448,41 @@ are no keys to enumerate, and those are reported in `Opaque` — named, counted,
 | Field | Why it is opaque |
 |---|---|
 | `ServerModule.Handlers` | a Giraffe `HttpHandler` is a closure; its routes are unreachable. The declared route surface is `RoutePrefixes` / `RouteSurfaceRequirements` — a module that wants its routes on its label declares them. |
-| `ErasedModule.NeedsData` | a predicate `(DataTypeId -> bool) -> bool`, not a declared key set — the ids it accepts are not enumerable. |
-| `ErasedModule.ActionDecoder` | a `(actionKey, payloadJson) -> Msg option` function — the action keys it accepts are not enumerable. |
-| outbound queries | no registration field declares the `(TargetModule, QueryKey)` pairs a module *asks* for; those are ordinary `IModuleQueryBus.Ask` calls. The needs side reports the substrate it can derive and says so. |
+| `ErasedModule.NeedsData` | a predicate `(DataTypeId -> bool) -> bool`, not a declared key set — the ids it accepts are not enumerable. Declare the ids beside it with `withNeedsDataKeys` / `withRequiredDataTypes` (below). |
+| `ErasedModule.ActionDecoder` | a `(actionKey, payloadJson) -> Msg option` function — the action keys it accepts are not enumerable. Declare them beside it with `withActionKeys` (below). |
+| outbound queries | no `ServerModule` field declares the `(TargetModule, QueryKey)` pairs a server-side module *asks* for; those are ordinary `IModuleQueryBus.Ask` calls. The client registration can declare its own with `withQueryTargets` (below). |
+
+### Declaring the enumerable half
+
+A registration may declare, **beside** each of those functions, the key set it works over. The
+function stays authoritative — the shell's activation gate still reads `NeedsData`, the action
+router still calls `ActionDecoder`, and nothing gates an `Ask` — so declaring changes no runtime
+behaviour at all. What it changes is what a composition can *read*.
+
+| Builder | Declares | Reported as |
+|---|---|---|
+| `ClientModule.withNeedsDataKeys [ "SalesData" ]` | `NeedsDataKeys` — the ids the gate needs | a `datatype-need` **need**, keyed against the same `ComponentId` slot space as the `datatype` provide that satisfies it |
+| `ClientModule.withRequiredDataTypes [ "SalesData" ]` | both halves from one list: the `NeedsData` conjunction *and* `NeedsDataKeys` | as above — and the two cannot drift, which is why this is the preferred form when the gate is "every one of these" |
+| `ClientModule.withActionKeys [ "apply-budget" ]` | `ActionKeys` — the keys the decoder handles | an `action-key` **provide** (the module offers to *receive* those actions) |
+| `ClientModule.withQueryTargets [ ModuleQueryTarget.ofContract myContract ]` | `QueryTargets` — the outbound queries the module asks for | a `query-target` **need**, keyed `<TargetModule>.<QueryKey>` |
+
+Three properties are load-bearing, and reading the fields any other way will mislead you:
+
+- **Absent means unchanged.** All three default to `None`, and a module that declares nothing
+  produces byte-for-byte the descriptor it produced before these fields existed (GP 11) — no
+  entries, and the `Opaque` note without so much as a "declares nothing" clause.
+- **`Some []` is a claim, not an absence.** It says *this set is empty*, and reads differently
+  from having made no declaration. Do not collapse the two with `Option.defaultValue []`.
+- **A declaration is "at least these", never a closed set.** The predicate may accept an id the
+  list omits and the decoder a key it omits, so the `Opaque` note **survives** the declaration —
+  it says how many keys were declared beside the function rather than disappearing and implying
+  the surface is now fully enumerated. `QueryTargets` is the same for a sharper reason: nothing
+  observes an `Ask`. No compose-time pass can enumerate a module's call sites, and
+  `IModuleQueryBus.Ask` carries no caller identity to attribute one to, so an undeclared ask is
+  neither rejected nor reportable — which is precisely why the field must not be read as
+  exhaustive. Same posture as `ActionDeclaration` on the emitting side: an inspection surface,
+  not an enforcement contract. The direction that *is* provable — a declared target or data type
+  no composed module answers or registers — is the one worth checking.
 
 `ModuleSurface.toJson` (and the `describeJson` shorthand) projects the descriptor through the
 SDK's canonical JSON converter set, deterministically — the same registration always yields
@@ -584,8 +616,9 @@ descriptor, not ad-hoc reflection. The last three cannot fully: as the `Opaque` 
 Those laws therefore **probe** what is observable — the predicate is *evaluated* against the
 advertised ids, and the decoder is *called* with each declared action key. That is an honest
 approximation rather than the full law, and the limits are explicit: behaviour outside the probed
-inputs is not covered, and the reverse direction (a decoder key no tool emits) is not observable at
-all.
+inputs is not covered, and the reverse direction (a decoder key no tool emits) was not observable at
+all until a module could declare `ActionKeys` — the laws still probe, but a module that declares its
+key set now puts that direction within reach of a future law.
 
 Three chainers widen the witness where a module legitimately needs it — each one a visible
 declaration, not a silent loosening:

@@ -366,8 +366,15 @@ let private referenceClient () : ErasedModule =
         Icon = Unchecked.defaultof<ReactElement>
     }
     |> ClientModule.withView (fun _ _ -> Unchecked.defaultof<ReactElement>, Unchecked.defaultof<ReactElement>)
-    |> ClientModule.withNeedsData (fun has -> has "ConformanceSales")
+    // Phase 621 — the SDK's own canonical module declares both halves.
+    // `withRequiredDataTypes` is the same gate `withNeedsData (fun has ->
+    // has "ConformanceSales")` expressed once, so the predicate law 3
+    // evaluates and the key set the surface descriptor reports cannot
+    // drift apart; `withActionKeys` makes law 4's un-observable direction
+    // (a decoded key no tool emits) enumerable for the first time.
+    |> ClientModule.withRequiredDataTypes [ "ConformanceSales" ]
     |> ClientModule.withActionDecoder (fun (key, _) -> if key = "apply-budget" then Some ApplyBudget else None)
+    |> ClientModule.withActionKeys [ "apply-budget" ]
     |> ClientModule.register
 
 let private conformingWitness () =

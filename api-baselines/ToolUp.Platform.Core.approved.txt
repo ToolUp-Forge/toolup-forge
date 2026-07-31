@@ -5468,6 +5468,14 @@ ToolUp.Platform.ModuleQueryRequest.TargetModule : System.String { get }
 ToolUp.Platform.ModuleQueryResponse (class)
 ToolUp.Platform.ModuleQueryResponse..ctor(System.String)
 ToolUp.Platform.ModuleQueryResponse.Payload : System.String { get }
+ToolUp.Platform.ModuleQueryTarget (class)
+ToolUp.Platform.ModuleQueryTarget..ctor(System.String, System.String)
+ToolUp.Platform.ModuleQueryTarget.QueryKey : System.String { get }
+ToolUp.Platform.ModuleQueryTarget.TargetModule : System.String { get }
+ToolUp.Platform.ModuleQueryTargetModule (class)
+ToolUp.Platform.ModuleQueryTargetModule.create(System.String, System.String) : ToolUp.Platform.ModuleQueryTarget
+ToolUp.Platform.ModuleQueryTargetModule.describe(ToolUp.Platform.ModuleQueryTarget) : System.String
+ToolUp.Platform.ModuleQueryTargetModule.ofContract`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp]) : ToolUp.Platform.ModuleQueryTarget
 ToolUp.Platform.ModuleSbom (class)
 ToolUp.Platform.ModuleSbom..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSbomComponent])
 ToolUp.Platform.ModuleSbom.Components : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSbomComponent] { get }

@@ -96,6 +96,7 @@ let private erased (id: string) : ErasedModule = {
     View = None
     PageViews = None
     NeedsData = None
+    NeedsDataKeys = None
     DataTypes = []
     ProvidesProcessedData = None
     ProvidesNarrative = None
@@ -108,7 +109,9 @@ let private erased (id: string) : ErasedModule = {
     NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []
+    QueryTargets = None
     ActionDecoder = None
+    ActionKeys = None
     Visibility = Visibility.visibleToAll
     EventSubscriptions = Map.empty
 }

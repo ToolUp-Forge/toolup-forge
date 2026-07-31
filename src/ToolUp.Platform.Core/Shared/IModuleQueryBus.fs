@@ -200,6 +200,62 @@ type ModuleQueryContract<'Req, 'Resp> = {
     ResponseCodec: ModuleQueryCodec<'Resp>
 }
 
+/// Phase 621 — one outbound query a module declares it ASKS for: the
+/// `(TargetModule, QueryKey)` pair a `ModuleQueryRequest` routes on,
+/// carried as data so a composition can read a module's outbound edges
+/// without reading its source.
+///
+/// **Declared here, beside the envelope it mirrors**, so the pair has one
+/// definition site: `ModuleQueryRequest` (the wire), `ModuleQueryContract`
+/// (the typed declaration) and this (the caller-side declaration) all name
+/// the same two strings, and `ModuleQueryTarget.ofContract` derives one
+/// from the other so a declaration cannot drift from the contract it
+/// describes.
+///
+/// **What the declaration claims, exactly.** "This module asks *at least*
+/// these" — an asserted subset, never a closed set. Nothing observes an
+/// `Ask`: `IModuleQueryBus.Ask` is an ordinary call from arbitrary module
+/// code, so no compose-time pass can enumerate the asks a module will
+/// make, and the bus's own signature (`AccessContext * ModuleQueryRequest`)
+/// carries no caller identity to attribute one to. Reading the field as a
+/// closed set would therefore assert something nothing in the system can
+/// check, and an undeclared-but-working `Ask` would silently turn the
+/// declaration into a lie. As a subset it stays true under every
+/// undeclared ask, and the direction that IS checkable — a declared target
+/// no composed module answers — is a real defect a composition rule can
+/// prove. Same posture, and for the same reason, as `ActionDeclaration`:
+/// an inspection surface, not an enforcement contract.
+type ModuleQueryTarget = {
+    /// The answering module's registration `Name` — the routing key
+    /// `ModuleQueryRequest.TargetModule` carries.
+    TargetModule: string
+    /// The module-declared discriminator the target answers under.
+    QueryKey: string
+}
+
+[<RequireQualifiedAccess>]
+module ModuleQueryTarget =
+    /// Declare a target from a module name and a query key. The stringly
+    /// form — prefer `ofContract` where the caller can reference the
+    /// contract value, which cannot typo either string.
+    let create (targetModule: string) (queryKey: string) : ModuleQueryTarget = {
+        TargetModule = targetModule
+        QueryKey = queryKey
+    }
+
+    /// Derive the declaration from the contract the caller already asks
+    /// through, so the two cannot drift.
+    let ofContract (contract: ModuleQueryContract<'Req, 'Resp>) : ModuleQueryTarget = {
+        TargetModule = contract.TargetModule
+        QueryKey = contract.QueryKey
+    }
+
+    /// `"<TargetModule>.<QueryKey>"` — the same identity string
+    /// `ModuleQueryContract.describe` renders, and the key the module
+    /// surface descriptor reports a declared target under.
+    let describe (target: ModuleQueryTarget) : string =
+        sprintf "%s.%s" target.TargetModule target.QueryKey
+
 /// Construction + the shared failure vocabulary for `ModuleQueryContract`.
 /// Tier-neutral (no JSON dependency), so both buses layer their own
 /// serialiser on top: see `ModuleQueryBus.contract` (server, STJ +

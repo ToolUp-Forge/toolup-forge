@@ -46,10 +46,27 @@ open ToolUp.Remoting.Json.SystemTextJson
 // data-type ids rather than a list of them, and `ActionDecoder` is a
 // `(key, payload) -> Msg option` function rather than a declared key
 // set. Those surface in `Opaque` — named, counted, with the reason —
-// rather than being guessed at or quietly omitted. Outbound module
-// queries are the same story from the other end: no registration field
-// declares which `(TargetModule, QueryKey)` pairs a module ASKS for, so
-// the needs side reports the substrate it can derive and says so.
+// rather than being guessed at or quietly omitted.
+//
+// **Phase 621 gave three of those an enumerable half.** A client
+// registration may now declare `NeedsDataKeys` beside the predicate,
+// `ActionKeys` beside the decoder, and `QueryTargets` where no
+// registration field existed at all — and the descriptor reports each
+// as ordinary entries (`datatype-need` / `action-key` / `query-target`)
+// instead of having only an opaque note to offer. Three things stay
+// true and are what keeps the report honest:
+//   * A module that declares nothing is reported exactly as before —
+//     the opaque note, no entries (GP 11). `None` is "no claim"; `Some
+//     []` is the claim that the set is empty, and the two read
+//     differently here rather than being conflated.
+//   * The opaque note SURVIVES the declaration where a function is
+//     still registered, because the function is still opaque. The
+//     declaration is an "at least these" subset claim — the predicate
+//     may accept an id the list omits, the decoder a key it omits — so
+//     a reader that treated the list as the whole truth would be
+//     wrong. The note now says how many keys were declared beside it.
+//   * Outbound queries keep an opaque line on the SERVER side, because
+//     `ServerModule` still declares none — see `serverOpaque`.
 //
 // **Generic substrate (GP 9); zero cost when unused (GP 13).** The SDK
 // names no module here — the shape carries only `ComponentId`s,
@@ -351,9 +368,12 @@ module ModuleSurface =
             Kind = "query-target"
             Count = 0
             Reason =
-                "no registration field declares the (TargetModule, QueryKey) pairs a module ASKS for — "
-                + "outbound queries are ordinary calls through IModuleQueryBus, so the needs side "
-                + "reports only the substrate the registrations imply"
+                "no ServerModule field declares the (TargetModule, QueryKey) pairs a server-side module "
+                + "ASKS for — outbound queries are ordinary calls through IModuleQueryBus, so the "
+                + "server needs side reports only the substrate the registrations imply. Phase 621 "
+                + "added the client-side declaration (client:QueryTargets), which is reported as "
+                + "query-target entries when the client registration declares one; it is a subset "
+                + "claim, since nothing observes an undeclared Ask"
         }
     ]
 
@@ -414,6 +434,50 @@ module ModuleSurface =
             else
                 None
 
+    /// Phase 621 — read one of the declared key lists (`'T list option`)
+    /// off the erased registration. The three-valued result is the whole
+    /// point and must not be flattened: `None` — the module declares
+    /// nothing, so the descriptor reports the pre-621 opaque note and no
+    /// entries (GP 11); `Some []` — the module declares that the set is
+    /// empty, a real claim; `Some xs` — the declared members.
+    ///
+    /// `tryProp` already returns `None` for an F# `None` (which reflects
+    /// as null), so the two absent cases collapse here — which is correct:
+    /// a registration shape that carries no such field at all and one that
+    /// carries `None` both mean "no declaration", and the `Unclassified`
+    /// diff is what catches a field that has genuinely gone missing.
+    let private declaredElements (name: string) (registration: obj) : obj list option =
+        tryProp name registration
+        |> Option.bind unwrapOption
+        |> Option.map (fun value -> elements (Some value))
+
+    let private declaredStrings (name: string) (registration: obj) : string list option =
+        declaredElements name registration
+        |> Option.map (
+            List.choose (fun (o: obj) ->
+                match o with
+                | :? string as s -> Some s
+                | _ -> None)
+        )
+
+    /// How a declared key list reads in an `Opaque` reason, so the note
+    /// beside a still-opaque function says what was declared beside it.
+    ///
+    /// **Empty for `None`, deliberately.** An undeclared module's whole
+    /// descriptor — not merely its behaviour — must be byte-identical to
+    /// the pre-621 one (GP 11), and a `Reason` string is part of it; a
+    /// "declares nothing" note would be a diff on every module that never
+    /// opted in. The absence of the suffix IS the pre-621 report.
+    let private declaredSuffix (field: string) (declared: string list option) : string =
+        match declared with
+        | None -> ""
+        | Some [] -> sprintf "; the registration declares an EMPTY %s list — a claim, not an absence" field
+        | Some keys ->
+            sprintf
+                "; the registration additionally declares %d key(s) as %s, reported as entries — an 'at least these' subset claim, since the function above stays authoritative"
+                (List.length keys)
+                field
+
     /// The `ErasedModule` registration fields, with the facet each
     /// contributes. Literals, because the Server tier cannot name the
     /// Client tier's type — the `Stale` / `Unclassified` diff is what
@@ -425,6 +489,9 @@ module ModuleSurface =
         "View", OpaqueFacet
         "PageViews", ProvidesFacet
         "NeedsData", OpaqueFacet
+        // Phase 621 — the enumerable half of the data gate. A NEED: the
+        // ids name data the module expects some OTHER module to provide.
+        "NeedsDataKeys", NeedsFacet
         "DataTypes", ProvidesFacet
         "ProvidesProcessedData", OpaqueFacet
         "ProvidesNarrative", OpaqueFacet
@@ -436,7 +503,15 @@ module ModuleSurface =
         "NavRole", ProvidesFacet
         "Area", ProvidesFacet
         "ClientQueryHandlers", ProvidesFacet
+        // Phase 621 — declared outbound queries. A NEED: each names a
+        // handler the module expects some other module to answer.
+        "QueryTargets", NeedsFacet
         "ActionDecoder", OpaqueFacet
+        // Phase 621 — the decoder's key set, as data. A PROVIDE, unlike
+        // the two above: the module offers the composition its ability to
+        // RECEIVE these actions, so the pairing runs emitter (a tool's
+        // `EmitsActions`, server-side) → decoder (here).
+        "ActionKeys", ProvidesFacet
         "Visibility", OpaqueFacet
         "EventSubscriptions", NeedsFacet
     ]
@@ -538,7 +613,16 @@ module ModuleSurface =
                      |> Option.bind caseName)
             ]
 
-        List.concat [ pages; pageViews; dataTypes; configFields; queries; placement ]
+        // Phase 621 — the action keys the module's decoder handles, now
+        // that they can be declared rather than probed for. A provide: it
+        // is the receiving half of the emitter↔decoder pairing, whose
+        // emitting half is a server-side tool's `EmitsActions`.
+        let actionKeys =
+            declaredStrings "ActionKeys" registration
+            |> Option.defaultValue []
+            |> List.map (fun key -> entry (clientField "ActionKeys") "action-key" key "" None)
+
+        List.concat [ pages; pageViews; dataTypes; configFields; queries; placement; actionKeys ]
 
     let private clientNeeds (registration: obj) : ModuleSurfaceEntry list =
         let flags =
@@ -558,7 +642,44 @@ module ModuleSurface =
             |> List.choose (fun kv -> tryString "Key" kv)
             |> List.map (fun topic -> entry (clientField "EventSubscriptions") "event-topic" topic "" None)
 
-        flags @ topics
+        // Phase 621 — the enumerable half of the data gate. Keyed against
+        // the same `ComponentId.forDataType` slot space the `datatype`
+        // provide uses, so a need and the provide that satisfies it join
+        // on an id rather than on a string comparison at the reader.
+        let dataNeeds =
+            declaredStrings "NeedsDataKeys" registration
+            |> Option.defaultValue []
+            |> List.map (fun id ->
+                entry
+                    (clientField "NeedsDataKeys")
+                    "datatype-need"
+                    id
+                    "declared beside the NeedsData predicate"
+                    (Some(ComponentId.forDataType id)))
+
+        // Phase 621 — declared outbound module queries. Keyed
+        // `"<TargetModule>.<QueryKey>"`, the identity string
+        // `ModuleQueryTarget.describe` renders and the same shape the
+        // `query` provide's key composes with the answering module's
+        // name — so a declared target and the handler that answers it are
+        // joinable without the reader re-deriving the convention.
+        let queryTargets =
+            declaredElements "QueryTargets" registration
+            |> Option.defaultValue []
+            |> List.choose (fun target ->
+                match tryString "TargetModule" target, tryString "QueryKey" target with
+                | Some targetModule, Some queryKey ->
+                    Some(
+                        entry
+                            (clientField "QueryTargets")
+                            "query-target"
+                            (targetModule + "." + queryKey)
+                            ""
+                            (Some(ComponentId.ofModule targetModule))
+                    )
+                | _ -> None)
+
+        flags @ topics @ dataNeeds @ queryTargets
 
     let private clientOpaque (registration: obj) : ModuleOpaqueSurface list =
         let declared name =
@@ -572,9 +693,15 @@ module ModuleSurface =
                 Field = clientField "NeedsData"
                 Kind = "needs-data"
                 Count = declared "NeedsData"
+                // Phase 621 — the predicate is STILL opaque, so the note
+                // stays; what changed is that it can now say what the
+                // module declared beside it. Dropping the note once a
+                // declaration exists would read as "the surface is fully
+                // enumerated", which the subset claim does not support.
                 Reason =
                     "NeedsData is a predicate over data-type ids ((DataTypeId -> bool) -> bool), "
                     + "not a declared key set — the ids it accepts are not enumerable"
+                    + declaredSuffix "NeedsDataKeys" (declaredStrings "NeedsDataKeys" registration)
             }
             {
                 Field = clientField "ActionDecoder"
@@ -583,6 +710,7 @@ module ModuleSurface =
                 Reason =
                     "ActionDecoder is a (actionKey, payloadJson) -> Msg option function — "
                     + "the action keys it accepts are not enumerable"
+                    + declaredSuffix "ActionKeys" (declaredStrings "ActionKeys" registration)
             }
             {
                 Field = clientField "ProvidesProcessedData"

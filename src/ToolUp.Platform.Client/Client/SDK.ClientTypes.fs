@@ -167,6 +167,31 @@ type ErasedModule = {
     /// the same `Model`.
     PageViews: Map<string, obj -> (obj -> unit) -> PageContent> option
     NeedsData: ((DataManagementTypes.DataTypeId -> bool) -> bool) option
+    /// Phase 621 — the data-type ids this module's gate needs, declared as
+    /// DATA beside the predicate above rather than instead of it.
+    ///
+    /// `NeedsData` is `(DataTypeId -> bool) -> bool`: a function, so the
+    /// ids it accepts cannot be listed without guessing candidates to
+    /// evaluate it against, which is why `ModuleSurface` reports it as
+    /// opaque. This field is the enumerable half, for the readers that
+    /// need one — the surface descriptor, a composition audit, a graph
+    /// rule.
+    ///
+    /// **The predicate stays authoritative for behaviour.** The shell's
+    /// activation gate reads `NeedsData` and nothing else, so declaring
+    /// keys changes no runtime behaviour whatsoever. `None` — the default
+    /// — means the module makes no claim, and its descriptor and
+    /// behaviour are byte-for-byte what they were before this field
+    /// existed (GP 11); `Some []` is a real declaration ("this module
+    /// needs no data type"), distinct from making none.
+    ///
+    /// **The claim is "at least these".** The predicate can accept ids the
+    /// list does not name, so a reader may not treat the list as a closed
+    /// set — but a declared id that no composed module provides is a
+    /// defect either way, which is the direction worth checking.
+    /// Construct via `ClientModule.withNeedsDataKeys`, or declare both
+    /// halves from one list with `ClientModule.withRequiredDataTypes`.
+    NeedsDataKeys: DataManagementTypes.DataTypeId list option
     /// Data types this module can display summaries for in the file manager.
     DataTypes: DataTypeDisplay list
     /// Extract processed data from module state (aggregated by the shell into
@@ -250,6 +275,23 @@ type ErasedModule = {
     /// modules that only make queries (or that only answer from the
     /// server) declare nothing.
     ClientQueryHandlers: ModuleQueryHandler list
+    /// Phase 621 — the outbound module queries this module declares it
+    /// ASKS for. The first of the three declarations that is a NEW
+    /// surface rather than a widening: no registration field named a
+    /// module's outbound `(TargetModule, QueryKey)` pairs at all, so the
+    /// module graph's outbound edges could only ever be inferred from
+    /// code, never read.
+    ///
+    /// `None` — the default — is "no claim", and is byte-for-byte the
+    /// pre-621 surface (GP 11); `Some []` is a real declaration ("this
+    /// module asks nothing"). A declaration is a SUBSET claim, never a
+    /// closed set, and it gates nothing at runtime — see
+    /// `ModuleQueryTarget` for why enforcement is not available here and
+    /// what remains checkable. Construct via
+    /// `ClientModule.withQueryTargets`, deriving each entry from the
+    /// contract the caller asks through
+    /// (`ModuleQueryTarget.ofContract`).
+    QueryTargets: ModuleQueryTarget list option
     /// Decoder for server-published `Notification.ModuleAction` events
     /// targeting this module. Receives `(actionKey, payloadJson)` and
     /// returns the module's `Msg` to dispatch, or `None` to reject the
@@ -259,6 +301,23 @@ type ErasedModule = {
     /// module's decoder. Modules without a decoder silently ignore
     /// targeted actions.
     ActionDecoder: (string * string -> obj option) option
+    /// Phase 621 — the action keys the decoder above handles, declared as
+    /// DATA beside it. `ActionDecoder` is `(actionKey, payloadJson) ->
+    /// Msg option`: the keys it accepts are recoverable only by probing
+    /// it with candidates, which is why `ModuleSurface` reports it as
+    /// opaque and why the Phase 582 action-coverage law can only drive it
+    /// with keys some tool already declares — the reverse direction (a
+    /// decoded key no tool emits) was not observable at all.
+    ///
+    /// **The decoder stays authoritative for dispatch.** The shell routes
+    /// a `ModuleAction` by calling the decoder; this list is read by the
+    /// surface descriptor and by graph rules, never by the router, so
+    /// declaring keys changes no runtime behaviour. `None` — the default
+    /// — is "no claim" and leaves the surface exactly as it was (GP 11);
+    /// `Some []` declares that the module decodes nothing. The claim is
+    /// "at least these": the decoder may accept keys the list omits.
+    /// Construct via `ClientModule.withActionKeys`.
+    ActionKeys: string list option
     /// Phase 66 Stream B.3 — per-module sidebar visibility predicate
     /// over the resolved `SubjectKind`. The shell's sidebar filter
     /// invokes this for every registered module before rendering;
@@ -344,6 +403,13 @@ type ClientModule<'Model, 'Msg> = {
     /// Construct via the `withPages` helper after `create`.
     PageViews: Map<string, 'Model -> ('Msg -> unit) -> PageContent> option
     NeedsData: ((DataManagementTypes.DataTypeId -> bool) -> bool) option
+    /// Phase 621 — the enumerable half of the data gate. See
+    /// `ErasedModule.NeedsDataKeys`; set via
+    /// `ClientModule.withNeedsDataKeys`, or declare both halves at once
+    /// with `ClientModule.withRequiredDataTypes`. Default `None` — no
+    /// claim, and the predicate alone decides behaviour exactly as before
+    /// the field existed (GP 11).
+    NeedsDataKeys: DataManagementTypes.DataTypeId list option
     DataTypes: DataTypeDisplay list
     /// Extract processed data from module state (aggregated by the shell into
     /// `Model.ProcessedData` and published through `ProcessedDataContext`).
@@ -388,11 +454,20 @@ type ClientModule<'Model, 'Msg> = {
     /// Client-side query handlers. See `ErasedModule.ClientQueryHandlers`.
     /// Construct via `withQueryHandlers`.
     ClientQueryHandlers: ModuleQueryHandler list
+    /// Phase 621 — declared outbound module queries. See
+    /// `ErasedModule.QueryTargets`; set via
+    /// `ClientModule.withQueryTargets`. Default `None` (no claim).
+    QueryTargets: ModuleQueryTarget list option
     /// Decoder for server-published `Notification.ModuleAction` events.
     /// See `ErasedModule.ActionDecoder`. Construct via `withActionDecoder`.
     /// The typed form is `(actionKey, payloadJson) -> 'Msg option`; the
     /// erasure wraps it into `obj option` when `register` is called.
     ActionDecoder: (string * string -> 'Msg option) option
+    /// Phase 621 — the action keys the decoder handles, as data. See
+    /// `ErasedModule.ActionKeys`; set via `ClientModule.withActionKeys`.
+    /// Default `None` (no claim). Unlike the decoder this needs no
+    /// erasure — it is already tier-neutral data.
+    ActionKeys: string list option
     /// Phase 66 Stream B.3 — per-module sidebar visibility predicate.
     /// See `ErasedModule.Visibility`. Construct via `withVisibility`,
     /// drawing from the named smart constructors in the `Visibility`
@@ -2007,6 +2082,10 @@ module ClientModule =
                             let typedDispatch msg = dispatch (box msg)
                             view typedModel typedDispatch))
             NeedsData = m.NeedsData
+            // Phase 621 — the three declared key sets are already
+            // tier-neutral data, so erasure passes them straight through;
+            // there is nothing generic in them to box.
+            NeedsDataKeys = m.NeedsDataKeys
             DataTypes = m.DataTypes
             ProvidesProcessedData =
                 m.ProvidesProcessedData
@@ -2022,9 +2101,11 @@ module ClientModule =
             NavRole = m.NavRole
             Area = m.Area
             ClientQueryHandlers = m.ClientQueryHandlers
+            QueryTargets = m.QueryTargets
             ActionDecoder =
                 m.ActionDecoder
                 |> Option.map (fun f -> fun (key, payload) -> f (key, payload) |> Option.map box)
+            ActionKeys = m.ActionKeys
             Visibility = m.Visibility
             EventSubscriptions =
                 m.EventSubscriptions
@@ -2073,6 +2154,11 @@ module ClientModule =
         View = None
         PageViews = None
         NeedsData = None
+        // Phase 621 — `None` is "declares nothing", not "declares an
+        // empty set": the descriptor keeps reporting the predicate /
+        // decoder as opaque and emits no entries, which is the pre-621
+        // surface byte-for-byte (GP 11).
+        NeedsDataKeys = None
         DataTypes = []
         ProvidesProcessedData = None
         ProvidesNarrative = None
@@ -2086,7 +2172,9 @@ module ClientModule =
         NavRole = None
         Area = Product
         ClientQueryHandlers = []
+        QueryTargets = None
         ActionDecoder = None
+        ActionKeys = None
         Visibility = Visibility.visibleToAll
         EventSubscriptions = Map.empty
     }
@@ -2248,6 +2336,41 @@ module ClientModule =
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with ActionDecoder = Some decoder }
+
+    /// Phase 621 — declare the action keys the decoder handles, as data
+    /// beside it. The decoder stays authoritative for dispatch; this list
+    /// is what the module-surface descriptor reports and what makes the
+    /// decoder's side of the emitter↔decoder pairing enumerable at all.
+    ///
+    /// Declare it alongside `withActionDecoder` on the same module: the
+    /// keys the decoder matches on ARE the declaration, so writing them
+    /// out is the cheapest way to let a composition see that a tool's
+    /// `EmitsActions` has a decoder waiting for it — without the audit
+    /// having to guess candidate keys and probe.
+    let withActionKeys (keys: string list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            ActionKeys = Some keys
+    }
+
+    /// Phase 621 — declare the outbound module queries this module asks
+    /// for. Build each entry with `ModuleQueryTarget.ofContract` where
+    /// the caller asks through a `ModuleQueryContract` (the contract
+    /// value then carries both strings, so the declaration cannot typo
+    /// either), or `ModuleQueryTarget.create` for a stringly ask.
+    ///
+    /// **Nothing is enforced against it.** No compose-time pass can see a
+    /// call site and the bus carries no caller identity, so an ask the
+    /// module did not declare still works and is still invisible; the
+    /// declaration is therefore an "at least these" subset claim, exactly
+    /// as `ActionDeclaration` is on the emitting side. What it buys is
+    /// the checkable direction: a declared target no composed module
+    /// answers is a defect a composition can prove without running the
+    /// module.
+    let withQueryTargets
+        (targets: ModuleQueryTarget list)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        { m with QueryTargets = Some targets }
 
     /// Subscribe this module to a cross-module client event topic. When
     /// any module publishes `topic` via `ModuleEvents.publish`, the shell
@@ -2411,6 +2534,46 @@ module ClientModule =
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with NeedsData = Some check }
+
+    /// Phase 621 — declare the data-type ids the gate needs, as data
+    /// beside the predicate. Mirrors `withGroup` / `withPlacement` /
+    /// `withNavRole`: it sets one optional field and nothing else.
+    ///
+    /// **It does not touch `NeedsData`**, so the module's activation
+    /// behaviour is byte-for-byte unchanged — this is a declaration for
+    /// the readers that need an enumerable set (the module-surface
+    /// descriptor, a composition audit), not a second gate. Where the
+    /// predicate is exactly "every one of these ids is available", prefer
+    /// `withRequiredDataTypes`, which derives both halves from one list
+    /// so they cannot drift apart.
+    let withNeedsDataKeys
+        (keys: DataManagementTypes.DataTypeId list)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        { m with NeedsDataKeys = Some keys }
+
+    /// Phase 621 — declare a required data-type set ONCE and get both
+    /// halves of the gate from it: the `NeedsData` predicate the shell
+    /// evaluates (`every declared id is available`) and the
+    /// `NeedsDataKeys` list every reader enumerates.
+    ///
+    /// The common case, and the shape that cannot drift — a module using
+    /// `withNeedsData` plus `withNeedsDataKeys` separately can change one
+    /// and forget the other, which would make the declaration describe a
+    /// gate the module no longer has. Modules whose gate is genuinely not
+    /// a conjunction (any-of, or a predicate over a computed property)
+    /// keep `withNeedsData` and declare the ids they know about with
+    /// `withNeedsDataKeys` — the declaration is a subset claim, so a
+    /// partial list is honest.
+    let withRequiredDataTypes
+        (keys: DataManagementTypes.DataTypeId list)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        {
+            m with
+                NeedsData = Some(fun has -> keys |> List.forall has)
+                NeedsDataKeys = Some keys
+        }
 
     /// Declare a team-editable configuration schema. The SDK admin UI
     /// surfaces a form under this module's key and the shell hands the

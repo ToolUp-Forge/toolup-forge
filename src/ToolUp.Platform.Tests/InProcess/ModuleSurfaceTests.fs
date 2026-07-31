@@ -160,6 +160,10 @@ let private referenceClient () : ErasedModule = {
     View = None
     PageViews = None
     NeedsData = Some(fun has -> has "SalesData")
+    // Phase 621 — the enumerable half of the gate, declared beside the
+    // predicate so the descriptor has a declaration to report rather than
+    // only the opaque note.
+    NeedsDataKeys = Some [ "SalesData" ]
     DataTypes = []
     ProvidesProcessedData = None
     ProvidesNarrative = None
@@ -180,9 +184,24 @@ let private referenceClient () : ErasedModule = {
     NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []
+    // Phase 621 — a declared outbound edge. The only one of the three
+    // that had NO registration field before, so this is the first time a
+    // module's outbound query is readable from its registration at all.
+    QueryTargets = Some [ ModuleQueryTarget.create "Catalogue" "sku-lookup" ]
     ActionDecoder = Some(fun _ -> None)
+    ActionKeys = Some [ "apply-budget" ]
     Visibility = Visibility.visibleToAll
     EventSubscriptions = Map.ofList [ "sales.refreshed", (fun (_: string) -> box ()) ]
+}
+
+/// Phase 621 — the same registration with all three declarations absent.
+/// The GP 11 control: everything a pre-621 module could produce, and
+/// nothing a 621 declaration adds.
+let private undeclaredClient () : ErasedModule = {
+    referenceClient () with
+        NeedsDataKeys = None
+        ActionKeys = None
+        QueryTargets = None
 }
 
 /// A stand-in registration carrying one field the descriptor has never
@@ -439,6 +458,216 @@ let tests =
                 (keysOf "event-topic" surface.Needs)
                 (Set.ofList [ "sales.refreshed" ])
                 "the subscribed event topic is a need"
+
+        // ── Phase 621: declarative module needs ───────────────────────
+        //
+        // Three registration shapes that carried only a function gained an
+        // enumerable half. The load-bearing pair is the two GP 11 cases:
+        // a module that declares nothing must produce the pre-621
+        // descriptor exactly, and a module that declares an EMPTY set must
+        // NOT be read as one that declared nothing.
+
+        testCase "declared needs, action keys and query targets are reported as entries"
+        <| fun _ ->
+            let surface =
+                ModuleSurface.describeWith (referenceModule (), Some(box (referenceClient ())))
+
+            Expect.equal
+                (keysOf "datatype-need" surface.Needs)
+                (Set.ofList [ "SalesData" ])
+                "the declared data-type key is a NEED — the module expects some other module to provide it"
+
+            Expect.equal
+                (keysOf "action-key" surface.Provides)
+                (Set.ofList [ "apply-budget" ])
+                "the declared action key is a PROVIDE — the module offers to receive that action"
+
+            Expect.equal
+                (keysOf "query-target" surface.Needs)
+                (Set.ofList [ "Catalogue.sku-lookup" ])
+                "the declared outbound query is a NEED, keyed <TargetModule>.<QueryKey>"
+
+        testCase "a declared data need keys against the same slot space as the provide that satisfies it"
+        <| fun _ ->
+            let surface =
+                ModuleSurface.describeWith (referenceModule (), Some(box (referenceClient ())))
+
+            let need =
+                surface.Needs
+                |> List.find (fun e -> e.Kind = "datatype-need" && e.Key = "SalesData")
+
+            let provide =
+                surface.Provides
+                |> List.find (fun e -> e.Kind = "datatype" && e.Key = "SalesData")
+
+            Expect.equal
+                need.Slot
+                provide.Slot
+                "need and provide join on a ComponentId, not on a string comparison at the reader"
+
+            Expect.equal need.Slot (Some(ComponentId.forDataType "SalesData")) "the data-type slot id space"
+
+        testCase "a module that declares none of the three is byte-identical to the pre-621 descriptor"
+        <| fun _ ->
+            let surface =
+                ModuleSurface.describeWith (referenceModule (), Some(box (undeclaredClient ())))
+
+            Expect.isEmpty
+                (surface.Needs
+                 |> List.filter (fun e -> e.Kind = "datatype-need" || e.Kind = "query-target"))
+                "no need entry appears for a declaration that was never made"
+
+            Expect.isEmpty
+                (surface.Provides |> List.filter (fun e -> e.Kind = "action-key"))
+                "no provide entry appears either"
+
+            // The opaque note is part of the descriptor, so its text is
+            // pinned verbatim: an undeclared module must not even gain a
+            // "declares nothing" clause.
+            let needsData = surface.Opaque |> List.find (fun o -> o.Kind = "needs-data")
+
+            Expect.equal
+                needsData.Reason
+                "NeedsData is a predicate over data-type ids ((DataTypeId -> bool) -> bool), not a declared key set — the ids it accepts are not enumerable"
+                "the pre-621 reason, verbatim — the absence of a suffix IS the unchanged report"
+
+            let actionDecoder =
+                surface.Opaque |> List.find (fun o -> o.Field = "client:ActionDecoder")
+
+            Expect.equal
+                actionDecoder.Reason
+                "ActionDecoder is a (actionKey, payloadJson) -> Msg option function — the action keys it accepts are not enumerable"
+                "likewise for the decoder"
+
+            Expect.equal needsData.Count 1 "the predicate is still registered and still counted"
+
+        testCase "an empty declaration is a claim, and reads differently from no declaration"
+        <| fun _ ->
+            // The distinction `Option.defaultValue []` would erase:
+            // `None` = "I make no claim" (the pre-621 state), `Some []` =
+            // "I claim the set is empty". A descriptor that conflated them
+            // would report a module as having declared something it did
+            // not, which is the failure mode the whole phase exists to
+            // avoid.
+            let declaredEmpty = {
+                referenceClient () with
+                    NeedsDataKeys = Some []
+            }
+
+            let empty = ModuleSurface.describeWith (referenceModule (), Some(box declaredEmpty))
+
+            let absent =
+                ModuleSurface.describeWith (referenceModule (), Some(box (undeclaredClient ())))
+
+            let reasonOf (s: ModuleSurface) =
+                (s.Opaque |> List.find (fun o -> o.Kind = "needs-data")).Reason
+
+            Expect.stringContains (reasonOf empty) "EMPTY NeedsDataKeys" "the empty declaration is reported as a claim"
+
+            Expect.notEqual
+                (reasonOf empty)
+                (reasonOf absent)
+                "and is distinguishable from having declared nothing at all"
+
+            Expect.isEmpty
+                (empty.Needs |> List.filter (fun e -> e.Kind = "datatype-need"))
+                "an empty declared set yields no entries, same as no declaration"
+
+        testCase "a still-opaque function keeps its note once a declaration sits beside it"
+        <| fun _ ->
+            // The declaration is an "at least these" subset claim — the
+            // predicate can accept an id the list omits — so dropping the
+            // opaque note on declaration would over-claim.
+            let surface =
+                ModuleSurface.describeWith (referenceModule (), Some(box (referenceClient ())))
+
+            let needsData = surface.Opaque |> List.find (fun o -> o.Kind = "needs-data")
+
+            Expect.stringContains needsData.Reason "not enumerable" "the predicate is still opaque and still says so"
+
+            Expect.stringContains
+                needsData.Reason
+                "subset claim"
+                "and the note names what was declared beside it, without claiming completeness"
+
+        testCase "the descriptor learned the three new client fields"
+        <| fun _ ->
+            let surface =
+                ModuleSurface.describeWith (referenceModule (), Some(box (referenceClient ())))
+
+            let facetOf field =
+                surface.Coverage |> List.find (fun c -> c.Field = field) |> _.Facet
+
+            Expect.equal (facetOf "client:NeedsDataKeys") NeedsFacet "a declared data need is a need"
+            Expect.equal (facetOf "client:QueryTargets") NeedsFacet "a declared outbound query is a need"
+
+            Expect.equal
+                (facetOf "client:ActionKeys")
+                ProvidesFacet
+                "a decodable action key is offered TO the composition, so it is a provide"
+
+            Expect.isEmpty surface.Unclassified "the three fields are classified, not drifting"
+
+        // ── the builders ─────────────────────────────────────────────
+        testCase "withNeedsDataKeys declares without touching the predicate"
+        <| fun _ ->
+            let m =
+                ClientModule.create {
+                    Init = fun () -> (), Cmd.none
+                    Update = fun () () -> (), Cmd.none
+                    Name = "Builder"
+                    Icon = Unchecked.defaultof<ReactElement>
+                }
+                |> ClientModule.withNeedsDataKeys [ "SalesData" ]
+
+            Expect.equal m.NeedsDataKeys (Some [ "SalesData" ]) "the declaration landed"
+
+            Expect.isNone
+                m.NeedsData
+                "and the predicate is untouched — declaring keys is not a second gate, so activation behaviour cannot change"
+
+        testCase "withRequiredDataTypes derives both halves from one list so they cannot drift"
+        <| fun _ ->
+            let m =
+                ClientModule.create {
+                    Init = fun () -> (), Cmd.none
+                    Update = fun () () -> (), Cmd.none
+                    Name = "Builder"
+                    Icon = Unchecked.defaultof<ReactElement>
+                }
+                |> ClientModule.withRequiredDataTypes [ "SalesData"; "Inventory" ]
+
+            Expect.equal m.NeedsDataKeys (Some [ "SalesData"; "Inventory" ]) "the enumerable half"
+
+            let predicate = Option.get m.NeedsData
+            let available = Set.ofList [ "SalesData"; "Inventory"; "Other" ]
+
+            Expect.isTrue (predicate available.Contains) "the derived gate opens when every declared id is available"
+
+            Expect.isFalse
+                (predicate (Set.ofList [ "SalesData" ]).Contains)
+                "and closes when one is missing — a conjunction, matching what the list says"
+
+        testCase "a declared query target can be derived from the contract the caller asks through"
+        <| fun _ ->
+            let contract =
+                ModuleQueryContract.create
+                    "Catalogue"
+                    "sku-lookup"
+                    (ModuleQueryContract.codec id Ok)
+                    (ModuleQueryContract.codec id Ok)
+
+            let target = ModuleQueryTarget.ofContract contract
+
+            Expect.equal
+                target
+                (ModuleQueryTarget.create "Catalogue" "sku-lookup")
+                "the declaration and the contract carry the same two strings by construction, not by hand"
+
+            Expect.equal
+                (ModuleQueryTarget.describe target)
+                (ModuleQueryContract.describe contract)
+                "and render the same identity string the descriptor keys the entry under"
 
         // ── determinism + JSON projection ────────────────────────────
         testCase "describe is deterministic"
