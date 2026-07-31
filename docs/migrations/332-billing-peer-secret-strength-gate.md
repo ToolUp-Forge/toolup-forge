@@ -72,10 +72,15 @@ follows the existing local precedent — `constantTimeEquals` is already duplica
 
 ## API baselines
 
-`WebhookError.SecretMissing` and `StripeConfigValidator` are **additive** public surface. The Phase 175
-`PublicApiApproval` gate tolerates additive growth (it fails only on *removed* tokens), so the build
-stays green without a baseline edit; `api-baselines/ToolUp.Stripe.Webhook.approved.txt` and
-`…Stripe.Server.approved.txt` fold the new tokens in on the next `TOOLUP_APPROVE_API=1` regeneration.
+`WebhookError.SecretMissing` and `StripeConfigValidator` are **additive** public surface. At the time
+this phase shipped, the Phase 175 `PublicApiApproval` gate tolerated additive growth silently (it
+failed only on *removed* tokens), so the build stayed green without a baseline edit and
+`api-baselines/ToolUp.Stripe.Webhook.approved.txt` / `…Stripe.Server.approved.txt` folded the new
+tokens in on a later `TOOLUP_APPROVE_API=1` regeneration.
+
+> **No longer true — see [Phase 618](175-public-api-approval.md#additive-vs-breaking-policy).** The
+> deferred fold described above is precisely the drift Phase 618 closed: an addition now fails the
+> gate too, so the baseline must be regenerated and committed in the same PR as the surface change.
 
 ## Verification
 

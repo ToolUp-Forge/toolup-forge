@@ -9,7 +9,7 @@ The repo split (Phase 11.B) and the GitHub-Packages publish pipeline (Phase 11.F
 ## What changed (forge-internal only)
 
 - **`src/ToolUp.Platform.Tests/Contracts/PublicApiApproval.fs`** — surface renderer + comparer. Discovers the packable set (mirrors the `Pack` glob: `IsPackable != false`, non-`.Tests`, non-analyzer), renders each assembly's public surface metadata-only via `System.Reflection.MetadataLoadContext`, and diffs against the committed baseline. Type names are rendered assembly-qualifier-free (no `Version=…` suffix) so a routine version bump produces **zero** diff.
-- **`src/ToolUp.Platform.Tests/InProcess/PublicApiApprovalTests.fs`** — one Expecto case per packable assembly + four synthetic comparer fixtures (fails-closed on a removal, no false-positive on an addition, retype reads as a removal, comment/blank noise ignored). Wired into `Program.fs` (runs under the Platform pack / `VerifyAll`).
+- **`src/ToolUp.Platform.Tests/InProcess/PublicApiApprovalTests.fs`** — one Expecto case per packable assembly + synthetic comparer fixtures (fails-closed on a removal, an addition scores as an addition and not a removal, retype reads as a removal, comment/blank noise ignored) + (Phase 618) fixtures pinning that the two failure messages stay distinguishable, and that the Phase 258 `[<Obsolete>]` marker convention scores additive. Wired into `Program.fs` (runs under the Platform pack / `VerifyAll`).
 - **`api-baselines/<assembly>.approved.txt`** — committed surface baselines (one per packable assembly).
 - **CPM / fsproj** — `System.Reflection.MetadataLoadContext` added to `Directory.Packages.props` and referenced from `ToolUp.Platform.Tests` only.
 
@@ -17,10 +17,12 @@ The repo split (Phase 11.B) and the GitHub-Packages publish pipeline (Phase 11.F
 
 The comparer is direction-aware:
 
-- A token in the **rendered surface but not the baseline** (a new public type/member) is **allowed** — additive growth is non-breaking under `0.x` minor/patch.
 - A token in the **baseline but not the rendered surface** (removed / renamed / retyped) is a **breaking diff** — the test fails and names every lost token.
+- A token in the **rendered surface but not the baseline** (a new public type/member) is an **unfolded addition**. Additive growth stays non-breaking under `0.x` minor/patch, but **since Phase 618 it fails the test too**, with a distinct message saying nothing is broken and the baseline simply needs regenerating in the same PR.
 
-Accepting a deliberate break is a reviewed edit of the `.approved.txt` file in the same PR, regenerated in one step:
+> **Amended by Phase 618 (2026-07-31).** As shipped, Phase 175 passed an addition *silently*, on the reasoning that additive growth is auto-acceptable. It is — but "auto-acceptable" was implemented as "invisible", so a surface-growing change got a green gate and no signal that a baseline had moved. The 2026-07-30 sweep folded 457 added lines across five baselines from ten originating sources, and the fortnight after it produced 20 more. Phase 618 changes **when** an addition is folded, not **whether** it is allowed.
+
+Accepting either — a deliberate break, or the routine fold-forward of an addition — is a reviewed edit of the `.approved.txt` file in the same PR, regenerated in one step:
 
 ```powershell
 $env:TOOLUP_APPROVE_API = "1"
