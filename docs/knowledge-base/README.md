@@ -71,7 +71,7 @@ RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 
 Wire the client composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
 open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 

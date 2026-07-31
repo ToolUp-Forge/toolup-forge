@@ -67,7 +67,7 @@ That's it. The scheduling API + persistence is now in place.
 
 Client-side:
 
-```fsharp
+```fsharp skip=fragment
 let! slots =
     SchedulingClient.proxy.ListSlots {
         ResourceId = ResourceId "stylist-1"
@@ -97,7 +97,7 @@ The server derives slots from the resource's `AvailabilityWindows` + buffer + ex
 
 ## 5. Book a slot
 
-```fsharp
+```fsharp skip=fragment
 let! result =
     SchedulingClient.proxy.Book {
         ResourceId = ResourceId "stylist-1"
@@ -124,7 +124,7 @@ The server's per-resource `SemaphoreSlim` ensures two concurrent callers booking
 
 ## 6. Cancel a booking
 
-```fsharp
+```fsharp skip=fragment
 let! result = SchedulingClient.proxy.Cancel bookingId
 // result : Result<unit, BookingError>
 ```
@@ -163,7 +163,7 @@ For complex calendar shapes (week view, month view, drag-to-extend slot), use a 
 
 For recurring appointments ("weekly therapy session for 12 weeks"):
 
-```fsharp
+```fsharp skip=fragment
 let weeklyRule = {
     Frequency = Weekly
     Interval = 1
@@ -192,7 +192,7 @@ If any individual booking fails (slot occupied, outside availability), the loop 
 
 For atomic series booking (all-or-nothing), use `BookSeries`:
 
-```fsharp
+```fsharp skip=fragment
 let! result = SchedulingClient.proxy.BookSeries {
     ResourceId = stylistId
     DurationMinutes = 60
@@ -211,7 +211,7 @@ let! result = SchedulingClient.proxy.BookSeries {
 
 ## 9. Export to iCalendar
 
-```fsharp
+```fsharp skip=fragment
 let! ics = SchedulingClient.proxy.ExportICalendar resourceId
 // ics : string (.ics content)
 ```

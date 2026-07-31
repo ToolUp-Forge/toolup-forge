@@ -25,7 +25,7 @@ TOOLUP_REDIS_CONNECTION=localhost:6379
 
 The reference deployment reads these env vars at startup and registers the Redis channel:
 
-```fsharp
+```fsharp skip=fragment
 let notificationChannel =
     RedisNotificationChannel.create
         { ConnectionString = "localhost:6379" }
@@ -71,7 +71,7 @@ TOOLUP_SMTP_FROM_NAME="My App"
 
 Password stored in `ISecretStore` under `_platform`, key `SMTP_PASSWORD`.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.NotificationChannels.Email.Smtp
 
 let sink = SmtpNotificationSink.create smtpSettings secretStore :> INotificationSink
@@ -100,7 +100,7 @@ TOOLUP_SENDGRID_FROM_NAME="My App"
 
 API key in `ISecretStore`, key `SENDGRID_API_KEY`.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.NotificationChannels.Email.SendGrid
 
 let sink = SendGridNotificationSink.create sendGridSettings secretStore :> INotificationSink
@@ -133,7 +133,7 @@ TOOLUP_TWILIO_FROM_NUMBER=+14155551234
 
 Auth token in `ISecretStore`, key `TWILIO_AUTH_TOKEN`.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.NotificationChannels.Sms.Twilio
 
 let sink = TwilioNotificationSink.create twilioSettings secretStore :> INotificationSink
@@ -158,7 +158,7 @@ TOOLUP_VAPID_PUBLIC_KEY=...   # generated once; safe to expose
 
 Private key in `ISecretStore`, key `VAPID_PRIVATE_KEY`.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.NotificationChannels.Push.WebPush
 
 let sink = WebPushNotificationSink.create webPushSettings secretStore :> INotificationSink
@@ -261,7 +261,7 @@ Deployments without any sinks skip the dispatcher hosted-service entirely — ze
 
 For a vendor not covered (Postmark, Mailgun, AWS SNS, Firebase Cloud Messaging, etc.):
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.NotificationSink
 
 open ToolUp.Platform
@@ -284,7 +284,7 @@ type MyVendorEmailSink(settings: MyVendorSettings, secretStore: ISecretStore, ht
 
 Wire:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ...
 |> ServerApp.withTransactionalSink (MyVendorEmailSink(settings, secretStore, httpClient) :> INotificationSink)

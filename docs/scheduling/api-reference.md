@@ -155,7 +155,7 @@ and ListBookingsRequest = {
 
 ### `RecurrenceExpander`
 
-```fsharp
+```fsharp skip=signature
 module RecurrenceExpander =
     val expand: rule: RecurrenceRule -> startDate: DateTime -> DateTime list
     val validate: rule: RecurrenceRule -> Result<unit, RecurrenceError>
@@ -168,7 +168,7 @@ and RecurrenceError =
 
 ### `iCalendar`
 
-```fsharp
+```fsharp skip=signature
 module iCalendar =
     val toICalString: events: ICalEvent list -> string
     val fromBooking: booking: Booking -> resource: Resource -> ICalEvent
@@ -211,7 +211,7 @@ Default impl: `BookingScheduler` over `IEntityStore`. Per-`ResourceId` `Semaphor
 
 ### `BookingConflictDetector`
 
-```fsharp
+```fsharp skip=signature
 module BookingConflictDetector =
     val findConflicts:
         existing: Booking list ->
@@ -223,7 +223,7 @@ Pure function for conflict detection. Used internally by `Book`; exposed for cli
 
 ### `SchedulingServerApp`
 
-```fsharp
+```fsharp skip=signature
 type SchedulingServerApp = {
     Server: ServerApp
     Resources: Resource list
@@ -243,7 +243,7 @@ The client surface is small — no built-in calendar UI. The shipped pieces:
 
 ### `SchedulingClient.proxy`
 
-```fsharp
+```fsharp skip=signature
 val proxy: ISchedulingApi
 ```
 
@@ -255,7 +255,7 @@ Cmd.OfAsync.either (fun () -> SchedulingClient.proxy.Book request) () onSuccess 
 
 ### `RecurrenceFormFields` (Feliz components)
 
-```fsharp
+```fsharp skip=fragment
 RecurrenceFormFields.render
     {| Rule: RecurrenceRule
        OnChange: RecurrenceRule -> unit |}

@@ -153,14 +153,14 @@ Both seams call into the same SDK-side prerender entry-point — the `<head>` co
 
 ## Compose-time wiring
 
-```fsharp
+```fsharp skip=fragment
 // src/Server/Server.fs — server-side middleware
 
 app.UseMiddleware<PrerenderedRoutesMiddleware>(config) |> ignore
 app.UseStaticFiles(...)  // standard SDK pipeline — keep as is
 ```
 
-```fsharp
+```fsharp skip=fragment
 // src/Client/Program.fs — client-side bootstrap
 
 // Replaces `Client.run config modules`:

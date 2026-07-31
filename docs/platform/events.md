@@ -95,7 +95,7 @@ type IAuditSink =
 
 Wiring:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withAuditSink (S3Archive.create "compliance-archive" s3Settings blobStorage)
 |> ServerApp.withAuditSink (SplunkHec.create "splunk-prod" splunkSettings secretStore "splunk-hec-token" httpClient)
@@ -162,7 +162,7 @@ This prevents the most common SSRF-via-webhook pattern.
 
 Admin-UI access:
 
-```fsharp
+```fsharp skip=fragment
 // In a Platform Admin module
 let! trail = auditLog.GetAuditTrail(scopeId, from, until)
 ```
@@ -187,7 +187,7 @@ Audit-sink env vars:
 
 The audit subsystem is opt-in at multiple layers:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with

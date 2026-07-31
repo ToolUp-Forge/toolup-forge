@@ -35,7 +35,7 @@ A source is a function `Slug -> AccessContext -> Async<ContentBody option>`. Ret
 
 ### `ContentSource.create` — claim by your own logic
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.PublicRendering
 
 let statusPage =
@@ -52,7 +52,7 @@ let statusPage =
 
 A route pattern is a `/`-delimited template where `{name}` captures one segment. `"services/{client}"` matches `"services/acme"` capturing `client = "acme"`. Literal segments must match exactly; segment counts must be equal (captures do not span segments).
 
-```fsharp
+```fsharp skip=fragment
 let clientPages =
     ContentSource.ofRoute "services/{client}" (fun captures ctx -> async {
         let client = captures.TryFind "client" |> Option.defaultValue ""
@@ -123,7 +123,7 @@ let clientReport =
 
 `NarrativeFromData.chart` / `sparkline` project a labelled series into a `Component("chart", …)` block (the sanctioned Phase 87 type-erasure seam — no `NarrativeElement` DU fork). The HTML render is a **deterministic inline SVG** (no JavaScript → prerender-safe, byte-identical across runs) supplied by `NarrativeCharts`; a deployment opts in by including `NarrativeCharts.registry` in its component registry:
 
-```fsharp
+```fsharp skip=fragment
 let body =
     [ NarrativeFromData.chart NarrativeFromData.Line (Some "Revenue trend")
         [ "Jan", 12_500.0; "Feb", 13_900.0; "Mar", 15_200.0 ]
@@ -171,7 +171,7 @@ A data-bound page with a `Table` in its Narrative body exposes a clean download 
 
 A projector's pure-data output can be prefaced by an AI-generated summary when a deployment composes one. The SDK ships no implementation and takes no dependency on the AI substrate — the hook is a plain function; absent one the pure-data path is used unchanged (GP 13):
 
-```fsharp
+```fsharp skip=fragment
 let body =
     NarrativeFromData.fromProcessed processed opts
     |> NarrativeFromData.withSynthesis NarrativeFromData.withoutSynthesis   // or your hook
@@ -181,7 +181,7 @@ let body =
 
 Request-time source pages (and the `/tag/{x}` taxonomy pages) are computed per request, so the context-free `ListPages` never enumerates them — which means by default they're invisible to `sitemap.xml`, the static-export build, and prerender. A source opts into discovery by also implementing `IEnumerableContentSource`:
 
-```fsharp
+```fsharp skip=fragment
 let dynamic =
     ContentSource.ofRouteEnumerable "report/{client}"
         (fun captures ctx -> async { (* … resolve … *) })
@@ -233,7 +233,7 @@ The synthesised page leaves `Layout` unset, so `PublicPageHandler` falls back to
 
 The `Narrative` path above derives head metadata from the document. A source serving a **server-rendered HTML fragment** (`ContentBody.Html` — produced by any external renderer) has no document to derive from, so pre-111 it was SEO-incomplete: no canonical, no `og:image`, no JSON-LD. The `ofResolved` constructor family closes the gap — the resolver returns a `ResolvedContent` carrying the body **plus** typed per-request head metadata:
 
-```fsharp
+```fsharp skip=fragment
 let reports =
     ContentSource.ofRouteResolvedEnumerable "reports/{q}"
         (fun captures ctx -> async {
@@ -305,7 +305,7 @@ This is the same caching machinery `PublicPageHandler` uses, exposed for reuse �
 
 Every source receives the resolved `AccessContext`. The page handler resolves it from `ctx.RequestServices` (falling back to an unrestricted anonymous context when no auth is wired — the normal case for a public content site). Use it to scope a query structurally:
 
-```fsharp
+```fsharp skip=fragment
 let dashboard =
     ContentSource.ofRoute "dashboard/{quarter}" (fun captures ctx -> async {
         // A TeamMember sees their team's figures; an AnonymousSession the public view.

@@ -329,7 +329,7 @@ Premium grant / revoke writes use the Phase 62 endpoints (`POST` / `DELETE /api/
 
 ### Worked example — public-utility deployment
 
-```fsharp
+```fsharp skip=fragment
 // Client-side composition (Client.fs):
 let clientConfig = {
     ClientConfig.defaults with

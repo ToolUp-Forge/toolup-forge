@@ -140,7 +140,7 @@ type IErasureHandler =
 
 Each store ships a thin adapter with a compose-time helper, e.g.:
 
-```fsharp
+```fsharp skip=fragment
 let exporters = [ EventStoreErasureHandler.exporter eventStore
                   DataObjectStoreErasureHandler.exporter dataObjectStore ]
 

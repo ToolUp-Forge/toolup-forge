@@ -63,7 +63,7 @@ Remove the `.props` import from the consuming app's client `.fsproj` and the `Ag
 
 `AgChart.axes` in `AgChart.fs` produces a JS object keyed by direction (`"x"` for time/category, `"y"` for number), not an array and not a position-keyed object. This matches AG Charts v13+'s `getPrimaryAxisKeys` fallback logic, which looks for direction keys `"x"` and `"y"` when resolving which axis to bind to which series dimension.
 
-```fsharp
+```fsharp skip=fragment
 static member inline axes(v: obj seq) =
     "axes"
     ==> (v
@@ -119,7 +119,7 @@ On each render it JSON-serializes the incoming options and compares against the 
 
 `AgChart.chart` delegates to this wrapper:
 
-```fsharp
+```fsharp skip=fragment
 static member inline chart props =
     ensureChartsModulesRegistered ()
     MemoizedChart (createObj !!props)

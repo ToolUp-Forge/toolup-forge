@@ -11,7 +11,7 @@
 
 ### Three-valued return shape
 
-```fsharp
+```fsharp skip=fragment
 abstract Ask:
     context: AccessContext * request: ModuleQueryRequest ->
         Async<Result<ModuleQueryResponse, ModuleQueryError> option>
@@ -46,7 +46,7 @@ let serverModule =
 
 Callers use the mirror-image `ModuleQueryBus.ask` / `ModuleQueryClient.ask` helper:
 
-```fsharp
+```fsharp skip=fragment
 let! result =
     ModuleQueryBus.ask<LatestAnalysisReq, LatestAnalysisResp>
         bus accessContext "SkuAnalysis" "latest" { DatasetId = id }

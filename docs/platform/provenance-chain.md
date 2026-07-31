@@ -45,7 +45,7 @@ therefore arrive through the generic **`IFactEvidenceSource`** seam — a
 fact-store adapter fills it (interface in Platform, implementation in the
 companion). Compose it two ways:
 
-```fsharp
+```fsharp skip=fragment
 // Lineage only — data-object / result chains walk; fact + message nodes absent.
 let graph = ProvenanceGraph.create lineageStore
 
@@ -59,7 +59,7 @@ Given a pipeline where `res-1` was derived from data object `obj-1`, fact
 `fact-2` was computed from `res-1` (superseding `fact-1`), and message
 `msg-1` cited `fact-2`:
 
-```fsharp
+```fsharp skip=fragment
 // "Show the working" for an answer — from the message to the CSV row:
 let! chain = graph.GetChainForMessage(scopeId, "msg-1", citedFactIds = [ "fact-2" ], depth = 5)
 ```
@@ -75,7 +75,7 @@ msg-1 ──CitesFact──▶ fact-2 ──EvidenceFor──▶ res-1 ──Der
 
 Walk the other direction — "what was built on this data?":
 
-```fsharp
+```fsharp skip=fragment
 let! downstream = graph.GetChain(scopeId, DataObjectRef "obj-1", Downstream, depth = 5)
 // obj-1 ◀──DerivedFrom── res-1 ◀──EvidenceFor── fact-2
 ```

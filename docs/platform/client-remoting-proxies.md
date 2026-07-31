@@ -74,7 +74,7 @@ The per-call construction pattern (`let private fooApi () = …`) was the workar
 
 `ToolUp.Platform.Client/Client/ModuleQueryClient.fs`'s proxy lives inside a `type ClientModuleQueryBus(registry) = …` class body rather than at module scope. Same shape applies (drop the `()`, add the type annotation) — F# evaluates the `let` once per class instance, and the bus itself is constructed once per app at the composition root. End result: the proxy is built once per app, same as a module-level value.
 
-```fsharp
+```fsharp skip=fragment
 type ClientModuleQueryBus(registry: Map<string, Map<string, ModuleQueryHandler>>) =
     // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + SDK.Client.fs installRequestGuard.
     // Constructed once per ClientModuleQueryBus instance (the bus itself is a singleton in the composition root).

@@ -70,7 +70,7 @@ A gated media item is never served from a world-readable blob URL.
 `IMediaLibrary.SignedUrl id scope ttl` mints a URL whose token HMAC-signs
 `(MediaId, ScopeId, Container, ExpiresAt)`:
 
-```fsharp
+```fsharp skip=fragment
 let! url = mediaLibrary.SignedUrl(mediaId, viewerScope, TimeSpan.FromMinutes 15.0)
 //  /media/signed/{mediaId}?token=… — valid for 15 minutes, this scope only
 ```

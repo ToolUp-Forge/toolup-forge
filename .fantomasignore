@@ -1,0 +1,7 @@
+# Phase 620 — `VerifyDocSnippets` extracts every in-scope ```fsharp block
+# from the docs into `docs-snippets/generated/`. Those files are build
+# output reproducing a doc's text verbatim, so formatting them is both
+# meaningless and actively wrong: `dotnet fantomas --check .` would fail
+# on any repo where the target had been run, over source nobody wrote.
+docs-snippets/generated/
+**/docs-snippets/generated/

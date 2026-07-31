@@ -64,7 +64,7 @@ the request `AccessContext`, so it returns only documents the caller may
 read (GP 4). The source also implements `IEnumerableContentSource`, so its
 pages appear in `sitemap.xml` and the static export.
 
-```fsharp
+```fsharp skip=fragment
 let docsProvider =
     { new IKnowledgeDocsProvider with
         member _.ListDocuments ctx = async { (* map your KB's GetDocuments *) ... }
@@ -90,7 +90,7 @@ link builder.
 - **Decline-on-no-RAG** — even when composed, the route falls through to a
   404 when no `IRetrievalPipeline` is registered.
 
-```fsharp
+```fsharp skip=fragment
 |> PublicRenderingServerApp.withSemanticSearch (
     SemanticSearchConfig.create [ VectorScope.Team teamId ]
     |> SemanticSearchConfig.withResultLink (SemanticSearch.docsLinkByChunkId "docs"))
@@ -130,7 +130,7 @@ Defaults reproduce the prior immediate-publish behaviour (GP 11);
 `NarrativePublishGuardrails.aiHardened` is the recommended opt-in for
 multi-tenant / untrusted-AI deployments.
 
-```fsharp
+```fsharp skip=fragment
 |> PublicRenderingServerApp.withAIPublishEnabled true
 |> PublicRenderingServerApp.withAIPublishGuardrails (
     NarrativePublishGuardrails.aiHardened

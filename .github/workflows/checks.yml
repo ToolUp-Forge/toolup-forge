@@ -456,3 +456,97 @@ jobs:
 
       - name: Run the Fable-tier node:test harness (VerifyFable)
         run: dotnet run --project Build.fsproj -- VerifyFable
+
+  # ─── Phase 620: the docs gate ──────────────────────────────────────
+  #
+  # Extracts every in-scope ```fsharp block from `docs/**` and
+  # `src/ToolUp.Platform/technical-guide/**` and COMPILES it against the
+  # real SDK. The class it closes: a snippet naming an API the SDK no
+  # longer has. Readers copy these blocks verbatim, so a renamed field
+  # is a defect that ships to every reader and is visible to no test.
+  # Both live instances that motivated the phase — the stale OIDC block
+  # in `docs/platform/auth.md` and the `Mode = Individual` block in the
+  # technical guide — were found by a human noticing.
+  #
+  # `VerifyDocSnippets` owns extraction, generation, compilation and the
+  # verdict, so this job and a developer necessarily run the same thing
+  # — the `VerifyFable` precedent. The scope convention, the closed set
+  # of skip reasons, and the baseline's ratchet are documented at
+  # `docs-snippets/README.md`; the design rationale is in the target's
+  # own header in `Build.fs`.
+  #
+  # ── This job cannot pass vacuously ─────────────────────────────────
+  #
+  # Three independent ways, because "the docs gate went green" has more
+  # ways of being meaningless than most:
+  #   1. An extraction floor. The target legitimately exits 0 over an
+  #      empty corpus — a moved docs folder, a fence parser that stopped
+  #      matching — which is indistinguishable from a pass. It fails
+  #      below 300 extracted blocks (currently 385). Same shape as
+  #      `VerifyFable`'s TAP case floor and `verify-all`'s pack count.
+  #   2. Unattributable compiler errors are a HARNESS fault, never
+  #      absorbed as doc drift. If the preamble or the project
+  #      references break, the target fails loudly rather than quietly
+  #      reporting every block as drifted.
+  #   3. The baseline is shrink-only. `known-drift.txt` records the 230
+  #      blocks that were ALREADY broken when the gate landed, keyed by
+  #      a hash of each block's own text. A failing block absent from it
+  #      fails the job; a listed block that now compiles ALSO fails the
+  #      job until its line is deleted. Because the key is the content
+  #      hash, editing a listed block retires its entry — a broken
+  #      snippet cannot be rewritten into a differently-broken one.
+  #
+  # The baseline is the honest posture, not a mute button: 230 already-
+  # drifted snippets is a docs project, and the alternative — marking
+  # them `skip=` — would be a lie, since `skip` claims a block is not
+  # CHECKABLE, not that it is checkable and wrong. Same call Phase 614
+  # made when `verify-all` was not green on Linux, and the same shape as
+  # the Phase 175 public-API approval baseline.
+  #
+  # ── Trigger ────────────────────────────────────────────────────────
+  #
+  # `push` + `pull_request`, matching every other gate here and for the
+  # reason recorded at the top of this file: this repo's normal
+  # integration path is a DIRECT PUSH to `main`, so a PR-only gate would
+  # almost never run, and a gate that does not run is worse than no gate
+  # because it reports green. Cost is not a constraint that would argue
+  # otherwise — the repository is public, so runners are free and
+  # unmetered, and the concurrency group cancels superseded runs.
+  #
+  # Measured cost: 1m29s end to end on a fresh worktree with a warm
+  # NuGet cache (dev machine, cold build of the ~47 referenced SDK
+  # projects, which dominates); 31s warm, of which extraction and the
+  # snippet compile are ~20s. Budget ~10 minutes on a 2-core runner.
+  # `timeout-minutes` stays generous but finite so a hang fails loudly
+  # instead of burning the 6-hour default.
+  #
+  # That is roughly a fifth of `verify-all`, and it is a fraction of the
+  # solution: the referenced set is the SDK surface the docs actually
+  # teach, not everything.
+  doc-snippets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Compile every in-scope documentation snippet (VerifyDocSnippets)
+        run: dotnet run --project Build.fsproj -- VerifyDocSnippets

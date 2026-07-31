@@ -6,7 +6,7 @@ How to write a custom `IBookingScheduler` impl, build multi-resource patterns, a
 
 The default `BookingScheduler` is single-instance (uses in-process `SemaphoreSlim`). For multi-instance deployments, a distributed-lock-backed alternative slots in:
 
-```fsharp
+```fsharp skip=fragment
 type RedisLockedBookingScheduler(entityStore: IEntityStore, redis: IConnectionMultiplexer) =
     interface IBookingScheduler with
         member _.Book(scopeId, request, bookedBy) = async {
@@ -46,7 +46,7 @@ type RedisLockedBookingScheduler(entityStore: IEntityStore, redis: IConnectionMu
 
 Wire:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ...
 |> ServerApp.withBookingScheduler (RedisLockedBookingScheduler(entityStore, redis) :> IBookingScheduler)
@@ -64,7 +64,7 @@ The shipped scheduler is per-`ResourceId`. For multi-resource booking (assign N 
 
 Each practitioner is their own `Resource`. A booking targets one specific practitioner. The customer-facing UI lets them pick (or auto-assigns).
 
-```fsharp
+```fsharp skip=fragment
 let practitioner1 = { ResourceId = ResourceId "p-1"; Name = "Alice"; ... }
 let practitioner2 = { ResourceId = ResourceId "p-2"; Name = "Bob"; ... }
 let practitioner3 = { ResourceId = ResourceId "p-3"; Name = "Carol"; ... }
@@ -134,7 +134,7 @@ The SDK ships no built-in calendar component. Plug in a Feliz-compatible library
 
 ### Pattern — wrap FullCalendar
 
-```fsharp
+```fsharp skip=fragment
 module FullCalendarBindings
 
 open Feliz
@@ -202,7 +202,7 @@ A `GoogleCalendarSyncProvider` companion would query Google Calendar's API for t
 
 Currently this is a deferred extension. Build it as a custom module-side layer for now:
 
-```fsharp
+```fsharp skip=fragment
 let listSlotsWithExternalSync resourceId start end_ = async {
     let! slots = schedulingApi.ListSlots { ResourceId = resourceId; Start = start; End = end_ }
     let! externalEvents = googleCalendarApi.fetchEvents resourceId start end_
@@ -214,7 +214,7 @@ let listSlotsWithExternalSync resourceId start end_ = async {
 
 The shipped `RecurrenceExpander` covers Daily / Weekly / Monthly / Yearly with `Count` / `Until` termination + `ByDayOfWeek` / `ByDayOfMonth`. For richer recurrence (multi-modifier `BYDAY`, business days, exception dates), write a custom expander:
 
-```fsharp
+```fsharp skip=fragment
 module CustomRecurrence
 
 let expandWithExceptions
@@ -240,7 +240,7 @@ type FullICalRecurrenceExpander(icalLib: ICalRecurrenceLibrary) =
 
 When a booking cancels, auto-promote from a wait list. Build at the module layer:
 
-```fsharp
+```fsharp skip=fragment
 // Subscribe to BookingCancelled events
 let waitListPromoter scopeId =
     eventStore.Subscribe "_platform.audit" "BookingCancelled" (fun event -> async {
@@ -266,7 +266,7 @@ The wait-list itself is a custom entity store; the cancel-event subscription dri
 
 Express N customers in one slot as N parallel resources of the same kind:
 
-```fsharp
+```fsharp skip=fragment
 let class1Spot1 = { ResourceId = ResourceId "class-1-spot-1"; Name = "Yoga Class A — Spot 1"; ... }
 let class1Spot2 = { ResourceId = ResourceId "class-1-spot-2"; Name = "Yoga Class A — Spot 2"; ... }
 // ...
@@ -276,7 +276,7 @@ Customers book a specific spot. For "any spot available" UX, the `PractitionerPo
 
 Alternatively, lift "group capacity" into a custom scheduler that tracks N concurrent bookings per resource (the shipped scheduler caps at 1 — the slot's `SemaphoreSlim` is `new SemaphoreSlim(1, 1)`).
 
-```fsharp
+```fsharp skip=fragment
 type CapacityScheduler(capacity: int, entityStore: IEntityStore) =
     interface IBookingScheduler with
         member _.Book(scopeId, request, bookedBy) = async {

@@ -54,7 +54,7 @@ let nav = NavTree.parseYaml (System.IO.File.ReadAllText "content/nav.yaml")
 
 `NavTree.filter ctx nav` drops every node the requesting principal can't see — together with its whole subtree — *before* render, so a gated item never appears in the markup for an unauthorised viewer. The audience model is evaluated against the shipped `AccessContext`, so site structure is self-contained; it doesn't depend on page-level audience targeting.
 
-```fsharp
+```fsharp skip=fragment
 let visible = NavTree.filter ctx nav   // ctx from the request
 ```
 
@@ -79,7 +79,7 @@ let pageLayout (page: PublicPage) (ctx: AccessContext) : XmlNode =
 
 `NavTree.ofCollection pages` turns a collection's pages into a flat leaf menu (the docs-site "chapter list from the `docs` collection" shape):
 
-```fsharp
+```fsharp skip=fragment
 let! chapters = api.GetCollection "docs"            // Phase 38
 let docsMenu = NavTree.ofCollection chapters         // one NavSlug leaf per chapter, labelled by Title
 ```
@@ -97,7 +97,7 @@ tags: news, product, launch
 
 and the helpers read them:
 
-```fsharp
+```fsharp skip=fragment
 PublicPage.tags page          // [ "news"; "product"; "launch" ]
 PublicPage.hasTag "Product" page   // true (case-insensitive)
 ```
@@ -118,7 +118,7 @@ The provider thunk (`fun () -> api.ListPages ""`) enumerates the candidate set f
 
 ### Related content & faceted browse
 
-```fsharp
+```fsharp skip=fragment
 let related = TaxonomyHandler.relatedByTag allPages page   // same-tag pages, ranked by shared-tag count, self excluded
 let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("product", 8); … ] count-desc, tag-asc
 ```
@@ -129,7 +129,7 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `withTaxonomy` enables the `/tag/{slug}` surface with no hand-wired `listPages` thunk — compose registers `TaxonomyHandler.tagIndexSource` against the default content API automatically. `withNav` loads a `nav.yaml` file at startup and registers the parsed tree as a `NavCatalog` DI singleton (also stored on `app.Nav` for a layout to capture); `withNavTree` registers a code-built tree directly.
 
-```fsharp
+```fsharp skip=fragment
 |> PublicRenderingServerApp.withTaxonomy
 |> PublicRenderingServerApp.withNav "content/nav.yaml"
 ```
@@ -138,7 +138,7 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `TaxonomyHandler.facetedBrowseSource` serves `/browse/{tags}` where `{tags}` is a `+`-separated tag list (AND semantics) — the "filter by topic + type" interaction. It renders the matching pages plus a **facet sidebar** (each remaining tag + the count it would yield, narrowing as tags are added), excluding gated and non-published pages (GP 4). The pure `TaxonomyHandler.facetedBrowse matchAll tags pages` (AND when `matchAll`, OR otherwise) returns `(results, facets)` for custom wiring, and composes with the Phase 98 pager.
 
-```fsharp
+```fsharp skip=fragment
 |> PublicRenderingServerApp.withContentSource (TaxonomyHandler.facetedBrowseSource (fun () -> api.ListPages ""))
 // GET /browse/news+product  → pages tagged both, + facet counts
 ```
@@ -147,7 +147,7 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `Pagination.paginate pageSize page items` is a pure helper returning the page's slice plus a stable `{ Page; PageCount; HasPrev; HasNext }` contract (`pageSize <= 0` = the whole list, unchanged). `NavTree.ofCollectionPaged` paginates a collection menu; `NavLayout.pager pageHref slice` renders a `Previous` / numbered / `Next` control with `tu-pager__*` class hooks — `pageHref n` lets the layout choose the URL scheme (path `/tag/news/2` or query `?page=2`):
 
-```fsharp
+```fsharp skip=fragment
 let slice = NavTree.ofCollectionPaged 20 page chapters
 NavLayout.menu None slice.Items
 NavLayout.pager (sprintf "/docs?page=%d") slice
@@ -157,7 +157,7 @@ NavLayout.pager (sprintf "/docs?page=%d") slice
 
 A reader can subscribe to a topic: `withTagFeed` registers a feed filtered to one tag (the taxonomy-axis extension of the Phase 80b `withFeed`), reusing the same Atom renderer:
 
-```fsharp
+```fsharp skip=fragment
 |> PublicRenderingServerApp.withTagFeed "news"
      { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }
 // or fan out one feed per tag:
@@ -170,7 +170,7 @@ A tag feed surfaces the Narrative-bodied pages carrying that tag, newest-first, 
 
 `NavLayout.headStructuredData baseUrl ctx currentSlug nav` derives schema.org `BreadcrumbList` (from the page's nested slug) and `SiteNavigationElement` (from the **audience-filtered** nav tree) JSON-LD, absolutised against the base URL, as `<script type="application/ld+json">` blocks a layout splices into `<head>`:
 
-```fsharp
+```fsharp skip=fragment
 head [] [
     // …
     yield! NavLayout.headStructuredData config.PublicBaseUrl ctx (Some page.Slug) nav

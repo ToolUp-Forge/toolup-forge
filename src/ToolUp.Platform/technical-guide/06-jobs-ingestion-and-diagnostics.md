@@ -107,7 +107,7 @@ applies the same `RegisterHandler` + per-scope `Schedule` shape the SDK
 already uses for its own internal handlers
 (`DataIngestionJobHandler`, `OAuthRefreshJobHandler`).
 
-```fsharp
+```fsharp skip=fragment
 // In a module's Server.fs
 type SalesAnalysisRollupHandler() =
     interface IJobHandler with
@@ -167,7 +167,7 @@ admin UIs that schedule jobs at runtime against caller-supplied scopes,
 modules that need to query a live runtime state before deciding whether
 to schedule, and tests that exercise the dispatch loop manually.
 
-```fsharp
+```fsharp skip=fragment
 let scheduler = sp.GetService<IJobScheduler>() :?> IJobScheduler
 scheduler.RegisterHandler("salesanalysis.ad-hoc", SalesAnalysisAdHocHandler())
 

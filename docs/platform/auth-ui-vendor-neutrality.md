@@ -18,7 +18,7 @@ dispatch its tag perfectly well.
 
 Add one vendor-neutral case that mirrors the registry's own keying:
 
-```fsharp
+```fsharp skip=fragment
 | ProviderAuthUI of tag: string * config: obj
 ```
 

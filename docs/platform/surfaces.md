@@ -339,7 +339,7 @@ ServerApp.empty
 
 Single module, minimal composition, fully public.
 
-```fsharp
+```fsharp skip=fragment
 let config = { ServerConfig.defaults with Surfaces = Surfaces.anonymous }
 
 ServerApp.empty
@@ -356,7 +356,7 @@ Operators enabling AI on a pure-Anonymous deployment own the cost-control surfac
 
 The shape that motivates this whole redesign: a public calculator / lookup tool with a small private admin surface in the same process.
 
-```fsharp
+```fsharp skip=fragment
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.anonymousAndIndividual

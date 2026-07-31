@@ -223,7 +223,7 @@ For production observability, the same data flows through `IMetricsSink` (Promet
 
 For a vendor not covered (Mistral, DeepSeek, Cohere, custom in-house LLM):
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.AIProvider
 
 let descriptor = {

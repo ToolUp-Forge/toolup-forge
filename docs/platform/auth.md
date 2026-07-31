@@ -71,7 +71,7 @@ Configuration via environment variables:
 
 Browser-side OIDC sign-in UI. Implements OAuth 2.0 Authorization Code + PKCE. Registers via the `AuthUIProvider` delegate registry; deployments select it through `ClientConfig.AuthUI`.
 
-```fsharp
+```fsharp skip=fragment
 // Client.fs
 open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc
@@ -131,7 +131,7 @@ Clerk is a commercial product with its own licence and pricing — this companio
 
 ## Wiring an auth provider
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with Surfaces = Surfaces.individual }
 |> ServerApp.withAuth oidcAuthProvider
@@ -145,7 +145,7 @@ Omit the `withAuth` call entirely for `HeaderAuthProvider` (the default). A depl
 
 A new provider lives in `src/AuthProviders/<Name>/` with its own `.fsproj`. Implement `IAuthProvider`, expose a `create` function, and (for the client side) register via `AuthUIProvider`.
 
-```fsharp
+```fsharp skip=fragment
 module MyAuthProvider
 
 open ToolUp.Platform

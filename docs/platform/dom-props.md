@@ -149,7 +149,7 @@ All helpers live under the `dataProp` module and return
 
 ### Example
 
-```fsharp
+```fsharp skip=fragment
 open Feliz
 open ToolUp.Platform
 
@@ -207,7 +207,7 @@ same protection `data-*` enjoys.
 
 ### Example
 
-```fsharp
+```fsharp skip=fragment
 open Feliz
 open ToolUp.Platform
 

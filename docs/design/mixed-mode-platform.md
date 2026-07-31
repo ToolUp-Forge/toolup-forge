@@ -953,7 +953,7 @@ The shell's sidebar filter calls `module.Visibility (Subject.kind ctx.Subject)` 
 
 The `withMode` builder retires; `Surfaces` lives on `ServerConfig`. The whole composition pipeline gets one new optional step (`withSubjectMigrator`):
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with Surfaces = Surfaces.individual }
 |> ServerApp.withAuth authProvider
@@ -976,7 +976,7 @@ ServerApp.empty
 
 Multi-shape with claim-bearer:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with
                             Surfaces = [
@@ -1131,7 +1131,7 @@ and MigrationError =
 
 **Composability.** Multiple migrators can compose via a small combinator:
 
-```fsharp
+```fsharp skip=fragment
 module AnonymousSessionMigrator =
     /// Combine N migrators; runs each sequentially, accumulating
     /// summaries. Bails on the first InfrastructureFailed.
@@ -1201,7 +1201,7 @@ Per OQ1 resolution (operator-overridden from "defer" to "implement now"), `RateL
 
 **Design.** A `RateLimitPolicy` describes the rate; the partition key is *implied by the subject kind* rather than carried on the policy. This avoids the foot-gun of "did I pick the right partition key for this subject?" — for each subject kind there is one natural partition (IP for anonymous, userId for user, teamId for team-member, tokenId for claim-bearer).
 
-```fsharp
+```fsharp skip=fragment
 /// A rate envelope: how many requests per window, with queueing.
 /// Partition key is implied by the subject kind that applies the
 /// policy — see RateLimitPolicy.partitionFor.
@@ -1304,7 +1304,7 @@ Contract-test addition: `IShareTokenStoreContract` gains a `ListByIssuer` round-
 
 **The decorator itself.** New companion under `src/ShareTokenStoreDecorators/RevokeOnIssuerRemoved/` (following the existing flat-companion convention — see `src/Storage/`, `src/AuditSinks/`, etc.):
 
-```fsharp
+```fsharp skip=fragment
 namespace ToolUp.ShareTokens.RevokeOnIssuerRemoved
 
 /// Decorates an inner IShareTokenStore. Subscribes to MembershipChanged
@@ -1329,7 +1329,7 @@ type RevokeOnIssuerRemovedStore(
 
 **Wiring.** Composition-root API:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withShareTokenStoreDecorator RevokeOnIssuerRemoved.wrap   // OPTIONAL — opt-in
@@ -1384,13 +1384,13 @@ What can go wrong:
 - *Claim with `ScopeId` pointing to another team.* The signed claim's `ScopeId` is fixed at issue time and signed; tampering invalidates the HMAC. A team admin can only issue claims into their own team's scope (server-side check at `Issue`). Existing defence.
 - *Race: user added to a new team, immediately switches, sees stale data.* `TeamScopeResolver` invalidates the membership cache on `MembershipChanged`. Stale data is bounded to ≤5 minutes (the cache TTL) under network partition; under normal conditions ≤100ms (notification propagation).
 - *Handler with a `_` wildcard that admits the wrong subject kind.* A team-CRUD handler with the pattern:
-  ```fsharp
+  ```fsharp skip=fragment
   match ctx.Subject with
   | TeamMember (uid, tid) -> doTeamThing uid tid
   | _ -> Error "Not in team scope"
   ```
   is safe. A handler with:
-  ```fsharp
+  ```fsharp skip=fragment
   match ctx.Subject with
   | TeamMember (uid, tid) -> doTeamThing uid tid
   | _ -> doTeamThing "anonymous" "default"   // ← dangerous fallback
@@ -1760,7 +1760,7 @@ The repo-by-repo migration plan, drawing on Phase 1 §1.10's consumer survey.
 
 **New composition root:**
 
-```fsharp
+```fsharp skip=fragment
 let config = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 // referenceApp defaults now declare Surfaces = Surfaces.individual
 
@@ -1781,7 +1781,7 @@ ServerApp.empty
 
 **New composition root (both apps, parallel structure):**
 
-```fsharp
+```fsharp skip=fragment
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
@@ -1813,7 +1813,7 @@ ServerApp.empty
 
 **New composition root:**
 
-```fsharp
+```fsharp skip=fragment
 let config = { ServerConfig.defaults with Surfaces = Surfaces.anonymous; PublicPath = "public" }
 
 ServerApp.empty

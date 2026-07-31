@@ -88,7 +88,7 @@ per-call rebuild is wasteful — construction parses connection strings and
 builds HTTP pipelines. Cache the client and rebuild **only when the
 resolved secret changes**:
 
-```fsharp
+```fsharp skip=fragment
 let gate = obj ()
 let mutable cachedSecret = ""
 let mutable cachedClient = Unchecked.defaultof<_>

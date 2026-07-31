@@ -10,7 +10,7 @@ A new provider goes in its own NuGet package. The convention is `ToolUp.AIProvid
 
 Implement `IAIProvider`:
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.AIProvider
 
 open ToolUp.Platform
@@ -47,7 +47,7 @@ The agent loop is provider-agnostic — every provider gets the same `AIProvider
 
 ### Expose a builder + descriptor
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.AIProvider
 
 let descriptor: AIProviderDescriptor = {
@@ -97,7 +97,7 @@ For providers that stream SSE responses, the implementation reads the response s
 
 Pattern (skeleton — vendor-specific stream parsing varies):
 
-```fsharp
+```fsharp skip=fragment
 member _.SendMessageStreaming(req, emit) = async {
     // Open the SSE response
     use! response =
@@ -143,7 +143,7 @@ member _.SendMessageStreaming(req, emit) = async {
 
 Populate `AIProviderResponse.Usage` with the provider's reported token counts:
 
-```fsharp
+```fsharp skip=fragment
 {
     Messages = [...]
     StopReason = EndTurn
@@ -212,7 +212,7 @@ If the vendor supports server-side structured-output natively, implement against
 
 For vendors without a native mode (or for an MVP provider you'll harden later), delegate one line to the helper:
 
-```fsharp
+```fsharp skip=fragment
 interface IAIProvider with
     member _.Capabilities = ...
     member _.SendMessage(...) = ...
@@ -228,7 +228,7 @@ The fallback prepends the schema as a system-prompt instruction, calls `SendMess
 
 Once an `IAIProvider` is resolved (via `DefaultAIProviderFactory.Resolve` or any factory path), call `SendStructuredMessage` directly:
 
-```fsharp
+```fsharp skip=fragment
 let schema = """{
     "type": "object",
     "properties": {
@@ -300,7 +300,7 @@ let myAnalysisTool : AIToolDefinition = {
 
 Register via `ServerModule.withAITools`:
 
-```fsharp
+```fsharp skip=fragment
 let myModule =
     ServerModule.create "MyModule"
     |> ServerModule.withGuardedApi myApi
@@ -313,7 +313,7 @@ The agent loop sees the tool in `GetAvailableTools`; the LLM can call it. When c
 
 The substrate (`ClientToolRuntime` + `ClientToolDispatch` + `AICancellationRegistry`) is generic — any companion can register `ClientResident` tools. A typical use is to let the LLM drive the UI (set form fields, click buttons, select rows, navigate). Server-side, a `ClientResident` tool dispatches to the client over SSE; the browser runs the tool and returns the result.
 
-```fsharp
+```fsharp skip=fragment
 let setFieldTool : AIToolDefinition = {
     Name = "_platform.ui.set_field"
     Description = "Set the value of a field in the current page."
@@ -409,7 +409,7 @@ For the full companion-authoring walkthrough — wiring the authorizer + handler
 
 For complex prompts that pull from runtime state:
 
-```fsharp
+```fsharp skip=fragment
 let dataSummaryPromptBuilder : SystemPromptBuilder = fun ctx -> async {
     match ctx.ActiveModule with
     | Some "SalesAnalysis" ->
@@ -428,7 +428,7 @@ Always cite the dataset name when answering questions about specific data."""
 
 Compose it into the default builder:
 
-```fsharp
+```fsharp skip=fragment
 let composedBuilder =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic "You are an analytics assistant. ..."
@@ -530,7 +530,7 @@ For unit tests of the wire-format translation layer, no provider key is needed �
 
 For SDK-level integration tests (agent loop + provider), the SDK ships an `InMemoryProvider` test double consumers can use:
 
-```fsharp
+```fsharp skip=fragment
 let provider =
     InMemoryProvider.create {
         OnSendMessage = fun req -> async {

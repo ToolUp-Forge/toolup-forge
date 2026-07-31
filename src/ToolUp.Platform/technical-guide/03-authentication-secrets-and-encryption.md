@@ -84,18 +84,30 @@ The registry also resolves the "companion imports AuthUIMode but AuthUIMode ship
 Enable by importing `OidcClient.Client.props` in the consumer client `.fsproj` and setting `ClientConfig.AuthUI`:
 
 ```fsharp
+open ToolUp.AuthProviders.Oidc
+
+let oidcConfig: OidcUIConfig = {
+    Issuer = "https://auth.example.com"
+    ClientId = "<client id>"
+    RedirectUri = "https://app.example.com/auth/callback"
+    Scopes = [ "openid"; "profile"; "email" ]
+    PostLogoutRedirectUri = Some "https://app.example.com"
+    ValidateIdToken = Some true
+}
+
 let config = {
     ClientConfig.defaults with
-        Mode = Individual
-        AuthUI = OidcAuthUI {
-            Issuer = "https://auth.example.com"
-            ClientId = "<client id>"
-            RedirectUri = "https://app.example.com/auth/callback"
-            Scopes = [ "openid"; "profile"; "email" ]
-            PostLogoutRedirectUri = Some "https://app.example.com"
+        Surfaces = Surfaces.individual
+        AuthUI = OidcAuthUI oidcConfig
+        Handlers = {
+            ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ OidcRegister.handler ]
+                SignOutHandler = Some(OidcRegister.signOutHandler oidcConfig)
         }
 }
 ```
+
+The `Handlers.AuthUIHandlers` entry is **not optional**. Since Phase 13a the companion exports a `handler` *value* rather than registering itself at module load, so `AuthUIProvider` fails loudly at startup when `AuthUI = OidcAuthUI _` is set with no handler carrying the `"oidc"` tag. `SignOutHandler` is optional — supply it to have the shell render a "Sign out" affordance wired to the issuer's end-session flow. `OidcUIConfig.defaults issuer clientId redirectUri` fills the last three fields if you would rather not spell the record out.
 
 **Flow:**
 
@@ -317,7 +329,7 @@ One platform-wide AES-256 key shared across all scopes. Persisted at `_platform/
 
 One key per `StorageScope.ScopeId`, persisted at `_platform/encryption/scopes/{scopeId}.key`. Auto-created per scope on first resolution; in-memory cache with 5-minute sliding TTL.
 
-```fsharp
+```fsharp skip=fragment
 let cache = MemoryCache(MemoryCacheOptions()) :> IMemoryCache
 let auditLog = ... // resolved from DI in compose; None for tests
 let resolver = PerScopeKeyResolver.create secrets cache auditLog

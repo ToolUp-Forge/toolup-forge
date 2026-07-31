@@ -19,7 +19,7 @@ The `_platform` container is reserved for SDK-owned state (team memberships, rol
 
 ## Wiring a storage backend
 
-```fsharp
+```fsharp skip=fragment
 // Default — disk-backed (dev)
 ServerApp.empty
 |> ServerApp.withStorage (LocalFileStorage("./data") :> IBlobStorage)
@@ -69,7 +69,7 @@ Two shipped resolvers:
 
 **`SingleKeyResolver`** — one platform-wide key. Simplest setup. Suitable when crypto-shred isn't a tenant-level requirement.
 
-```fsharp
+```fsharp skip=fragment
 let resolver = SingleKeyResolver(secretStore) :> IBlobEncryptionKeyResolver
 ServerApp.empty
 |> ServerApp.withEncryptedBlobStorage resolver
@@ -78,7 +78,7 @@ ServerApp.empty
 
 **`PerScopeKeyResolver`** — per-tenant. `IMemoryCache` with 5-min sliding TTL so reads are fast after warmup. `DestroyKey scopeId actorUserId` crypto-shreds the tenant's data (subsequent reads fail because the envelope's KeyId can't be resolved). Crypto-shred is instant — far faster than walking and deleting every encrypted object.
 
-```fsharp
+```fsharp skip=fragment
 let resolver = PerScopeKeyResolver(secretStore, blobStorage) :> IBlobEncryptionKeyResolver
 ServerApp.empty
 |> ServerApp.withEncryptedBlobStorage resolver
@@ -96,7 +96,7 @@ Three audit events fire under `_platform.audit`:
 
 Custom resolvers (per-`(scopeId, userId)`, BYOK, KMS-backed) plug in against the same interface:
 
-```fsharp
+```fsharp skip=fragment
 type AwsKmsKeyResolver(kmsClient: IAmazonKMS) =
     interface IBlobEncryptionKeyResolver with
         member _.ResolveKey(keyId) = async {

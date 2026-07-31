@@ -163,7 +163,7 @@ let aiContext : ModuleAIContext = {
 
 In the server composition root:
 
-```fsharp
+```fsharp skip=fragment
 let moduleAIContexts = [
     MyModule.Server.aiContext
     // ... other modules with AI contexts

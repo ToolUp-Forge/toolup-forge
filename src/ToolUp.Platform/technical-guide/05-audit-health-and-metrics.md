@@ -474,7 +474,7 @@ Channels MUST NOT trust the caller-supplied `TraceContext` value for routing, au
 
 Module-side code that wants to record a nested span — a long-running computation, a third-party SDK call worth a separate node — resolves `IActivitySink` from DI exactly like `IMetricsSink`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Tracing
 
 let runWorkflow (ctx: HttpContext) =

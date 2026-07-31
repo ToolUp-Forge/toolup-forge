@@ -31,7 +31,7 @@ Don't use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 // Default — no withAuth call needed; HeaderAuthProvider is the implicit default
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -50,7 +50,7 @@ Use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 let authProvider =
     StaticJwtAuthProvider(
         signingKey = "your-symmetric-signing-key",
@@ -84,7 +84,7 @@ Use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders.Oidc
 
 let authProvider =
@@ -112,7 +112,7 @@ Pair with `ToolUp.AuthProviders.Oidc.Client` for the browser-side sign-in flow.
 
 When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` (or `provider=entra-external-id`) alongside the SDK's other observability metrics:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders
 
@@ -204,7 +204,7 @@ Token refresh: the client checks `exp` on the access token; when within 5 minute
 
 By default, the callback handler binds the returned `id_token` to *this* sign-in attempt via nonce validation (mandatory; on by default since Cluster B1), then trusts the id_token's signature / `iss` / `aud` / `exp` until the server validates them on the next protected request. Opt in to immediate client-side validation by setting `OidcUIConfig.ValidateIdToken = Some true`:
 
-```fsharp
+```fsharp skip=fragment
 let oidcConfig = {
     OidcUIConfig.defaults issuer clientId redirectUri with
         ValidateIdToken = Some true
@@ -235,7 +235,7 @@ Use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders
 
 // Inline:
@@ -319,7 +319,7 @@ Wraps Clerk's React components and surfaces them through the `AuthUIProvider` re
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders
 
 Client.run
@@ -348,7 +348,7 @@ Configuration via environment / Vite env:
 
 For an auth mechanism not covered by the shipped companions (LDAP / SAML / proprietary / etc.):
 
-```fsharp
+```fsharp skip=fragment
 module MyAuthProvider
 
 open Microsoft.AspNetCore.Http

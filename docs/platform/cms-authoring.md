@@ -52,7 +52,7 @@ it through the Forms engine and, on success, projects it to a
 `PublicPage`. A `ContentTypeMapping` says which field is the title /
 slug / description and which fields become the body:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.ContentAuthoring.ContentTypeBridge
 
 let mapping =
@@ -129,7 +129,7 @@ as a new current version, so history (including the restore) is preserved.
 HMAC-signed tokens behind publishable Forms surveys) to share an
 unpublished page without full auth:
 
-```fsharp
+```fsharp skip=fragment
 let! url = ContentPreview.issuePreviewToken shareTokenStore scopeId "case-studies/acme" "editor-1" (TimeSpan.FromDays 3.0)
 //  /preview?token=… — renders the Draft for 3 days, gated by the signature
 ```

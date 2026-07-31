@@ -6,7 +6,7 @@ Public surface of `ToolUp.RAG`. Types are listed by package.
 
 ### `IngestionTypes`
 
-```fsharp
+```fsharp skip=fragment
 type IngestionJob = {
     DocumentId: Guid
     Scope: VectorScope
@@ -86,7 +86,7 @@ type RetrievalRequest = {
 
 ### `VectorisationHandler`
 
-```fsharp
+```fsharp skip=fragment
 type VectorisationHandler = {
     DataTypeId: string
     Vectorise: fileName: string -> dataObject: obj -> Async<TextChunk list>
@@ -115,7 +115,7 @@ type RAGServerApp = {
 
 Constructors:
 
-```fsharp
+```fsharp skip=signature
 module RAGServerApp =
     val create: AIProviderFactory * IUserAIConfigStore * IEmbeddingProvider -> RAGServerApp
     val empty: RAGServerApp                  // requires all three withFactory/withConfigStore/withEmbedder before run
@@ -279,7 +279,7 @@ type IRagTelemetry =
 
 ## Chunking
 
-```fsharp
+```fsharp skip=signature
 type ChunkingConfig = {
     MaxTokens: int           // default 500
     OverlapTokens: int       // default 50
@@ -305,7 +305,7 @@ and SheetData = {
 
 ## `RAGPromptBuilder`
 
-```fsharp
+```fsharp skip=signature
 module RAGPromptBuilder =
     val withRetrieval: pipeline: IRetrievalPipeline -> config: RAGPromptConfig -> SystemPromptBuilder
 
@@ -332,7 +332,7 @@ and ScopeStrategy =
 
 ## `composeWithRAG`
 
-```fsharp
+```fsharp skip=signature
 module RAGCompose =
     val composeWithRAG:
         ai: AIServerApp ->

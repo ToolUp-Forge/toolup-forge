@@ -112,7 +112,7 @@ The SDK solves this with a two-stage approach:
 
 **Stage 1: Typed construction.** Each module builds a `ClientModule<'Model, 'Msg>` record with its strongly-typed init, update, and view:
 
-```fsharp
+```fsharp skip=fragment
 // In a module's ClientView.fs
 let register () : ToolUp.Platform.ErasedModule =
     ToolUp.Platform.ClientModule.register {
@@ -220,7 +220,7 @@ Apps compose their server through a layered record-based fluent API. Each layer 
 - `AIServerApp` — wraps a `ServerApp.Base`; adds AI provider factory, AI config store, AI tools, module AI contexts
 - `RAGServerApp` — wraps an `AIServerApp.AI`; adds an embedding provider
 
-```fsharp
+```fsharp skip=fragment
 // No AI:
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -246,7 +246,7 @@ RAGServerApp.empty
 
 A `ServerModule` record collects everything one module contributes to the server:
 
-```fsharp
+```fsharp skip=fragment
 ServerModule.create "SkuAnalysis"           // Name = RBAC key for makePermissionGuardedApi
 |> ServerModule.withGuardedApi apiFactory   // HttpContext -> 'T, wrapped in makePermissionGuardedApi
 |> ServerModule.withDataTypes [ salesDataType ]
@@ -256,7 +256,7 @@ ServerModule.create "SkuAnalysis"           // Name = RBAC key for makePermissio
 
 `ServerApp.addModules` flattens the `ServerModule` list into the handler list, data-type list, vectorisation-handler list, and config-schema list that the underlying `SDK.Server.compose` consumes. Under the record pipeline, `compose` still has the same signature — but callers don't interact with it directly. Its responsibilities (auto-inject the five platform APIs — `PlatformInfoApi`, `TeamApi`, `PermissionApi`, `AccessibilityApi`, `DataCatalogApi` — plus FileManagementApi, ConfigApi, `/api/notifications`; register DI services; apply middleware) are unchanged.
 
-```fsharp
+```fsharp skip=fragment
 let compose
     (handlers: HttpHandler list)
     (dataTypes: DataType list)
@@ -291,7 +291,7 @@ Compose does the following:
 
 The DI registration and middleware setup are spelled out directly against the raw ASP.NET Core APIs — no Saturn DSL. The composition reads top-to-bottom so it can be skimmed without learning a wrapper:
 
-```fsharp
+```fsharp skip=fragment
 let builder = WebApplication.CreateBuilder()
 builder.WebHost.UseUrls($"http://0.0.0.0:{serverPort}") |> ignore
 
@@ -347,7 +347,7 @@ app.Services.GetRequiredService<ILogger>() |> ignore  // Startup validation
 
 The middleware pipeline runs in this order (each step is conditional only where noted):
 
-```fsharp
+```fsharp skip=fragment
 // Optional — production behind a TLS-terminating load balancer
 if config.TrustForwardedHeaders then app.UseForwardedHeaders(opts) |> ignore
 if config.RequireHttps then app.UseHttpsRedirection() |> ignore
@@ -471,7 +471,7 @@ ServerApp.empty
 
 **`ICspContributor`.** Every subsystem/companion that needs a non-`'self'` origin declares it; `SecurityHardening.aggregate` walks the `IServiceCollection` at compose time (same instance-descriptor contract as `IHealthCheck` / `IConfigValidator`) and folds them into one header. First-party defaults auto-registered when hardening is on: the OIDC issuer (from `TOOLUP_OIDC_ISSUER`, inert if unset) and the AI provider hosts (`api.anthropic.com`, `api.openai.com`) → `connect-src`. A CDN-delivered grid host is opt-in via `ServerApp.withCspContributor (AgGridCdnCspContributor())`. Companions register their own with `services.AddSingleton<ICspContributor>(...)` through the `ComposeExtensions.ServiceConfig` hook.
 
-```fsharp
+```fsharp skip=fragment
 type StripeCspContributor() =
     interface ICspContributor with
         member _.RequiredSources =

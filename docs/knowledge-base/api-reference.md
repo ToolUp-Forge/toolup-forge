@@ -134,7 +134,7 @@ let kbModule =
 
 `DataType` declaration for the KB module:
 
-```fsharp
+```fsharp skip=fragment
 let kbDataType : DataType = {
     Info = { Id = "Knowledge"; DisplayName = "Knowledge base entries"; Schema = None }
     Id = "Knowledge"
@@ -160,7 +160,7 @@ Register via `RAGServerApp.withVectorisationHandler`.
 
 Factory for the `IIngestionStatusObserver` registered with `composeWithRAG`:
 
-```fsharp
+```fsharp skip=signature
 val makeIngestionStatusObserver: unit -> IIngestionStatusObserver
 ```
 
@@ -170,7 +170,7 @@ Register via `RAGServerApp.withIngestionStatusObserver`.
 
 Opt-in AI prompt builder that reads the team's standing context per outer turn:
 
-```fsharp
+```fsharp skip=signature
 val standingContextBuilder:
     IBlobStorage -> ILogger option -> SystemPromptBuilder
 ```
@@ -190,7 +190,7 @@ let combinedPrompt =
 
 ### `KnowledgeBaseView.narrativeCommitHandler`
 
-```fsharp
+```fsharp skip=signature
 val narrativeCommitHandler: NarrativeCommitHandler
 ```
 
@@ -198,7 +198,7 @@ The companion's "Save to Knowledge Base" broker. Set it on `ClientConfig.Handler
 
 ### `KnowledgeBaseView.register` / `KnowledgeBaseView.create`
 
-```fsharp
+```fsharp skip=signature
 val register: unit -> ErasedModule
 val create: KnowledgeBaseConfig option -> ErasedModule
 ```
@@ -207,7 +207,7 @@ Returns the KB `ErasedModule` for SDK registration. Multi-page module with `/doc
 
 ### `KnowledgeBaseMode` / `KnowledgeBaseClientConfig.withKnowledgeBase`
 
-```fsharp
+```fsharp skip=signature
 // namespace ToolUp.KnowledgeBase
 type KnowledgeBaseConfig = { Name: string; Icon: ReactElement; Group: string option }
 
@@ -227,7 +227,7 @@ The four-case override mode parallel to `DataManagerMode`. Applies client-side o
 
 ### `Toolup.NarrativeCommit` (global submitter)
 
-```fsharp
+```fsharp skip=signature
 module Toolup.NarrativeCommit =
     val install: handler: (NarrativeCommitRequest -> Async<unit>) -> unit
     val submit: NarrativeCommitRequest -> unit       // fire-and-forget; logs on failure
@@ -243,7 +243,7 @@ Other modules call `Toolup.NarrativeCommit.submit` to push content into KB. No c
 
 ### `KnowledgeBaseIcons`
 
-```fsharp
+```fsharp skip=signature
 module KnowledgeBaseIcons =
     val documentIcon: ReactElement
     val noteIcon: ReactElement

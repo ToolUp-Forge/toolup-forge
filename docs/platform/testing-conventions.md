@@ -32,7 +32,7 @@ Tests that touch a module-level cache MUST pick one of the following:
 
 The module exposes an `internal` reset function. Tests call [`CacheReset.invalidateAll`](../../src/ToolUp.Platform.Tests/Support/CacheReset.fs) at the top of any `testCaseAsync` that mutates the shared cache. The registry knows the small finite set of cache-bearing modules; adding a new (b)-class module means appending one line to `CacheReset.fs`.
 
-```fsharp
+```fsharp skip=fragment
 testCaseAsync "exercises sweepExpired against a real blob"
 <| async {
     do! CacheReset.invalidateAll ()
@@ -57,7 +57,7 @@ let internal __internal_resetForTests () = cache <- None
 
 When a whole `testList` exercises the same shared cache and per-test isolation is cheaper to express by serialising, wrap the list:
 
-```fsharp
+```fsharp skip=fragment
 testSequencedGroup "uses shared PendingInviteStore cache" (
     testList "TeamInvitation cache-sensitive tests" [
         // tests in here run sequentially with respect to each other
@@ -106,7 +106,7 @@ Filter to server-tier paths under `src/ToolUp.Platform.Server/`, `src/AuthProvid
 
 Each pack's `Program.fs` passes `CLIArguments.Sequenced` as the default:
 
-```fsharp
+```fsharp skip=fragment
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
 ```
@@ -163,7 +163,7 @@ The harness uses Node's built-in test runner (`node:test`, stable in Node 20+) p
 
 1. **Add a `.fs` file under [`src/ToolUp.AI.Client.Tests/`](../../src/ToolUp.AI.Client.Tests/)** alongside `PlatformAIKeysAdminUITests.fs`. The pack's top shape:
 
-   ```fsharp
+   ```fsharp skip=fragment
    module ToolUp.AI.Client.Tests.MyNewTests
 
    open ToolUp.AI.Client.Tests.NodeTest
@@ -221,3 +221,38 @@ Adding view-level tests is a follow-on once a concrete view-level case lands. Th
 5. Write the test using Strategy A (`do! CacheReset.invalidateAll ()`) or Strategy B (`testSequencedGroup`).
 
 The convention's enforcement is by audit and by code review — there is no compile-time gate (the F# language doesn't carry "this mutable is process-lifetime safe" as a type). The audit grep is cheap enough to run on every refactor that touches an SDK substrate file.
+
+## Documentation snippets are compiled (Phase 620)
+
+Every `fsharp` block under `docs/**` and `src/ToolUp.Platform/technical-guide/**` is extracted and
+compiled against the real SDK by the `doc-snippets` CI job. Run it exactly as CI does:
+
+```
+dotnet run --project Build.fsproj -- VerifyDocSnippets
+```
+
+This closes a class no test could see: a reader copies a fenced block verbatim, so a snippet naming
+a renamed or removed API is a defect that ships to every reader while every suite stays green. It
+is the mirror of the XML-doc coverage gate — that one asserts *docs exist on code*, this one asserts
+*code in docs still resolves*; neither subsumes the other.
+
+**Writing a block needs no ceremony.** Ambient `open`s are supplied by the harness, never by the
+markdown, so what a reader copies stays exactly what an author meant to show. If a block genuinely
+cannot compile, mark its fence with a reason from the closed set — `fragment`, `signature`, or
+`anti-pattern`:
+
+````markdown
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withStorage (LocalFileStorage("./data") :> IBlobStorage)
+|> ...
+```
+````
+
+The marker is invisible when rendered (every renderer takes the first info-string word as the
+language). "It does not compile" is **not** a reason — `skip` claims a block is not *checkable*, and
+a block that is checkable and wrong belongs in the shrink-only `docs-snippets/known-drift.txt`
+baseline, or gets fixed.
+
+Full convention, the baseline's ratchet, and how context is supplied:
+[`docs-snippets/README.md`](../../docs-snippets/README.md).

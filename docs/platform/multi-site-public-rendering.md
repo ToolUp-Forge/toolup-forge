@@ -61,7 +61,7 @@ domain points at the same listener.
 
 ## Per-site SEO + export surfaces
 
-```fsharp
+```fsharp skip=fragment
 // Feeds per site:
 |> PublicRenderingServerApp.withSite
     { PublicSite.create "blog" [ "blog.example.net" ]
@@ -106,7 +106,7 @@ If a satellite needs the CMS tier, give it its own deployment.
 
 The compose registers the `SiteRegistry` as a DI singleton when sites exist:
 
-```fsharp
+```fsharp skip=fragment
 let myHandler: HttpHandler =
     fun next ctx ->
         match ctx.RequestServices.GetService(typeof<SiteRegistry>) with

@@ -29,7 +29,7 @@ The client-side default implementation, `ConsoleLogger`, routes severity-tagged 
 
 The `Logger` module (in `ToolUp.Platform.Client/Client/Logger.fs`) wraps `ConsoleLogger` with two ergonomics:
 
-```fsharp
+```fsharp skip=fragment
 /// Uncategorised — no `[category]` prefix on emitted messages.
 Logger.defaultLogger : ILogger
 
@@ -43,7 +43,7 @@ Logger.forCategory (category: string) : ILogger
 
 Declare one categorised logger per file, at module level, immediately after the `open` declarations:
 
-```fsharp
+```fsharp skip=fragment
 module YourCompanion.Client.Foo
 
 open Fable.Core
@@ -71,7 +71,7 @@ Rules:
 
 The SDK provides no global swap-point. Downstream client-tier modules that need a non-default logger receive `ILogger` through their init parameters — the same dependency-injection shape the server tier already uses. The shell does not own a "Logger" field on `ClientConfig`; consumer code threads `ILogger` explicitly:
 
-```fsharp
+```fsharp skip=fragment
 // Companion that wants a non-default sink:
 type YourCompanionInit = {
     Logger: ILogger

@@ -44,3 +44,10 @@ samples/*/data/
 # run time. Never tracked — publishing it would leak exactly what the
 # guard exists to keep out of this repo.
 /neutrality-tokens.local.txt
+
+# Phase 620 — extracted documentation snippets. `VerifyDocSnippets`
+# regenerates `docs-snippets/generated/` from the fenced `fsharp` blocks
+# in `docs/**` on every run, so the sources are build output, not
+# content. The project itself, its README and `known-drift.txt` ARE
+# tracked; only the extraction is not.
+docs-snippets/generated/

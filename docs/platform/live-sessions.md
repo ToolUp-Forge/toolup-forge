@@ -22,7 +22,7 @@ Not composed → no endpoint, no DI registration, no allocation (GP 11 / GP 13).
 
 ## Driving a session (server-side protocol code)
 
-```fsharp
+```fsharp skip=fragment
 let host = ctx.RequestServices.GetService(typeof<ILiveSessionHost>) :?> ILiveSessionHost
 
 // open under the caller's resolved scope (the structural partition key)

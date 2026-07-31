@@ -128,7 +128,7 @@ The pipeline reads top-down: substrate setup on the outer `ServerApp`, then each
 
 **DI access in workflow guards / actions.** `WorkflowGuard` / `WorkflowAction` receive a `WorkflowContext` record carrying the resolved `IServiceProvider` (an earlier signature took `Submission * AccessContext` and predated combinable composition roots). Actions registered via `FormsServerApp.withAction` resolve `IEntityStore` / `INotificationChannel` / any DI-registered service directly:
 
-```fsharp
+```fsharp skip=fragment
 let stampSubmission: WorkflowAction =
     fun ctx -> async {
         let entityStore =

@@ -23,7 +23,7 @@ A consuming app has two thin composition roots (server + client) that list modul
 
 The server composition root assembles every module as a `ServerModule` record, composes them into an `ServerApp` / `AIServerApp` / `RAGServerApp` pipeline, and calls `.run`.
 
-```fsharp
+```fsharp skip=fragment
 let mySalesModule =
     ServerModule.create "SalesAnalysis"
     |> ServerModule.withGuardedApi salesAnalysisApi
@@ -164,7 +164,7 @@ Currently the SDK does not enforce per-module permissions beyond the user's choi
 
 The SDK ships a single notification channel abstraction:
 
-```fsharp
+```fsharp skip=fragment
 type INotificationChannel =
     abstract Publish: scopeId: string -> Notification -> Async<unit>
     abstract Subscribe: scopeId: string -> filter: (NotificationKind -> bool) -> handler: ... -> Async<Guid>

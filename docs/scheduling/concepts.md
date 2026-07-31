@@ -108,7 +108,7 @@ Result: deterministic slot grid against the resource definition; no race conditi
 
 `Book` uses a `SemaphoreSlim` per `ResourceId`:
 
-```fsharp
+```fsharp skip=fragment
 let private locks = ConcurrentDictionary<ResourceId, SemaphoreSlim>()
 
 let private getLock (resourceId: ResourceId) =
@@ -161,7 +161,7 @@ and Frequency = Daily | Weekly | Monthly | Yearly
 
 `RecurrenceExpander.expand` is pure:
 
-```fsharp
+```fsharp skip=fragment
 let expand (rule: RecurrenceRule) (startDate: DateTime) : DateTime list =
     // ...
 ```
@@ -184,7 +184,7 @@ For richer recurrence, an `IRecurrenceProvider` extension point (deferred) would
 
 ## iCalendar export
 
-```fsharp
+```fsharp skip=fragment
 let! ics = schedulingApi.ExportICalendar resourceId
 // ics : string (RFC 5545-compliant .ics content)
 ```

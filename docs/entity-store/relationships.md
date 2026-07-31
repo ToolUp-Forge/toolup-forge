@@ -94,7 +94,7 @@ own registration instead.
 predicate over the foreign-key field; `relatedToAny` produces an `In` over
 several ids. Both execute through the existing query executor unchanged:
 
-```fsharp
+```fsharp skip=fragment
 // "all Orders for Customer c-1"
 let q =
     EntityQuery.forType<Order> "Order"
@@ -138,7 +138,7 @@ let enrolledInCourses = {
 
 Resolving "the courses `s-1` is enrolled in":
 
-```fsharp
+```fsharp skip=fragment
 // Leg 1 — query the join entity by the source key.
 let joinQuery =
     EntityQuery.forType<Enrollment> "Enrollment"
@@ -159,7 +159,7 @@ let! courses =
 `EntityRegistration.relationships` returns the declared list as a pure read of
 registration metadata:
 
-```fsharp
+```fsharp skip=fragment
 let edges = EntityRegistration.relationships orderRegistration
 ```
 

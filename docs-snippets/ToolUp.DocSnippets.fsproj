@@ -1,0 +1,103 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Phase 620 — the compile target for documentation snippets.
+
+    NOT a library anyone consumes and NOT part of ToolUp.Forge.sln. Its
+    `generated/` sources are produced by the `VerifyDocSnippets` FAKE
+    target from the fenced `fsharp` blocks in `docs/**` and
+    `src/ToolUp.Platform/technical-guide/**`, and are gitignored — a
+    fresh clone has no `generated/` folder at all, which is why this
+    project is kept OUT of the solution: `dotnet build ToolUp.Forge.sln`
+    would otherwise fail on a checkout that has not run the extractor.
+
+    IsPackable=false: it produces no public surface, so it must never
+    reach the `Pack` target's `src/**/*.fsproj` walk (it lives outside
+    `src/` too, but the property is the load-bearing guard).
+
+    Warnings are off across the board. A doc snippet is prose that must
+    RESOLVE, not production code that must be lint-clean — an unused
+    binding or a shadowed name in an illustrative block is not a defect
+    worth failing a docs gate on. Errors are emphatically still errors.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>0</WarningLevel>
+    <NoWarn>$(NoWarn);FS0025;FS0040;FS0049;FS0064;FS0020;FS0193;FS1182;FS3370;FS3535</NoWarn>
+    <!--
+      The default max-error cap (100) truncates the census long before the
+      corpus is exhausted, which would silently understate the report and
+      (worse) let a NEW failure hide behind 100 baselined ones.
+    -->
+    <OtherFlags>$(OtherFlags) --maxerrors:5000</OtherFlags>
+  </PropertyGroup>
+
+  <!--
+    Each generated file is self-contained (its own ambient preamble and
+    the page's accumulated `open`s are inlined), so compile ORDER is
+    irrelevant and a plain glob is correct.
+  -->
+  <ItemGroup>
+    <Compile Include="generated/*.fs" />
+  </ItemGroup>
+
+  <!--
+    The SDK surface the docs teach. A doc that names a package absent
+    from this list reports its symbols as undefined, which is a harness
+    gap rather than doc drift — add the ProjectReference here.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../src/AIProviders/Claude/ClaudeAIProvider.fsproj" />
+    <ProjectReference Include="../src/AIProviders/Gemini/Gemini.fsproj" />
+    <ProjectReference Include="../src/AIProviders/OpenAI/OpenAIProvider.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/ClerkUI/ClerkUI.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/Oidc/OidcAuthProvider.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/OidcClient/OidcClient.fsproj" />
+    <ProjectReference Include="../src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj" />
+    <ProjectReference Include="../src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.fsproj" />
+    <ProjectReference Include="../src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj" />
+    <ProjectReference Include="../src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj" />
+    <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />
+    <ProjectReference Include="../src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj" />
+    <ProjectReference Include="../src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj" />
+    <ProjectReference Include="../src/Secrets/AzureKeyVault/AzureKeyVault.fsproj" />
+    <ProjectReference Include="../src/Storage/AwsS3Storage/AwsS3Storage.fsproj" />
+    <ProjectReference Include="../src/Storage/AzureBlobStorage/AzureBlobStorage.fsproj" />
+    <ProjectReference Include="../src/Storage/GoogleCloudStorage/GoogleCloudStorage.fsproj" />
+    <ProjectReference Include="../src/ToolUp.AI.Client/ToolUp.AI.Client.fsproj" />
+    <ProjectReference Include="../src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Algorithms.Core/ToolUp.Algorithms.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Algorithms.Server/ToolUp.Algorithms.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj" />
+    <ProjectReference Include="../src/ToolUp.AssetStore/ToolUp.AssetStore.fsproj" />
+    <ProjectReference Include="../src/ToolUp.BrandKit/ToolUp.BrandKit.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Experiments.Core/ToolUp.Experiments.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Forms.Client/ToolUp.Forms.Client.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Forms.Core/ToolUp.Forms.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Forms.Server/ToolUp.Forms.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.KnowledgeBase.Client/ToolUp.KnowledgeBase.Client.fsproj" />
+    <ProjectReference Include="../src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj" />
+    <ProjectReference Include="../src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Scheduling.Core/ToolUp.Scheduling.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Scheduling.Server/ToolUp.Scheduling.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Stripe.Server/ToolUp.Stripe.Server.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Stripe.TierToken/ToolUp.Stripe.TierToken.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Stripe.Webhook/ToolUp.Stripe.Webhook.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Tabular/ToolUp.Tabular.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Workflow.Core/ToolUp.Workflow.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Workflow.Server/ToolUp.Workflow.Server.fsproj" />
+  </ItemGroup>
+
+</Project>

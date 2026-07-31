@@ -53,7 +53,7 @@ Two consequences the model gives for free:
 
 ## Assert / query
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Facts
 
 let store = BlobFactStore.create blobStorage eventStore   // IFactStore

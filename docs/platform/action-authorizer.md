@@ -16,7 +16,7 @@ type IActionAuthorizer =
 
 ## Policy as data
 
-```fsharp
+```fsharp skip=fragment
 let policy = {
     Rules = [
         // first matching rule wins; "*" wildcard; trailing "*" prefix-matches

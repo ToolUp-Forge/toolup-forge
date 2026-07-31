@@ -280,7 +280,7 @@ type AIServerApp = {
 
 Constructors:
 
-```fsharp
+```fsharp skip=signature
 module AIServerApp =
     val create: AIProviderFactory * IUserAIConfigStore -> AIServerApp
     val empty: AIServerApp        // requires withAIFactory + withAIConfigStore before run
@@ -317,7 +317,7 @@ Passed via `withAIConfig`. When `SystemPrompt = None`, the default prompt builde
 
 ### `SystemPromptBuilder`
 
-```fsharp
+```fsharp skip=signature
 type PromptContext = {
     Access: AccessContext
     ActiveModule: string option
@@ -336,7 +336,7 @@ module SystemPromptBuilder =
 
 ### `AIToolRegistry`
 
-```fsharp
+```fsharp skip=signature
 type RegisteredTool = {
     Definition: AIToolDefinition
     Source: ToolSource           // PlatformBuiltin | ModuleDeclared of moduleName | CompanionContributed of companionName
@@ -357,7 +357,7 @@ The agent loop pulls `toProviderDef` to translate `AIToolDefinition`s into the p
 
 ### `DefaultAIProviderFactory`
 
-```fsharp
+```fsharp skip=signature
 module DefaultAIProviderFactory =
     val create:
         builders: AIProviderBuilder list ->
@@ -375,7 +375,7 @@ The factory returned closes over the builder list + stores. Per call, it resolve
 
 ### `AIProviderBuilder` + `AIProviderDescriptor`
 
-```fsharp
+```fsharp skip=fragment
 type AIProviderDescriptor = {
     Id: string                  // unique provider id, e.g. "claude", "openai"
     DisplayName: string         // user-visible
@@ -393,7 +393,7 @@ Each provider companion exposes one or more builders; `DefaultAIProviderFactory.
 
 ### `AIAgentEngine`
 
-```fsharp
+```fsharp skip=signature
 module AIAgentEngine =
     val runAgentLoop:
         provider: IAIProvider ->
@@ -416,7 +416,7 @@ The function is the agent's heart. Most apps don't call it directly — `AIServe
 
 ### `AICompose`
 
-```fsharp
+```fsharp skip=signature
 module AICompose =
     val composeWithAI:
         baseApp: ServerApp ->
@@ -434,7 +434,7 @@ Called internally by `AIServerApp.run`. Returns the same `int` exit code as `Ser
 
 ### `AIClientConfig`
 
-```fsharp
+```fsharp skip=signature
 module AIClientConfig =
     val withAIAssistant:
         mode: AIAssistantMode ->
@@ -453,7 +453,7 @@ Internal types exposed for apps that want to compose additional Elmish wrappers 
 
 ### `ConversationPanel` (Feliz component)
 
-```fsharp
+```fsharp skip=fragment
 ConversationPanel.render
     {| ConversationId = ConversationId
        Messages = ConversationMessage list
@@ -465,7 +465,7 @@ Reusable chat panel. Used internally by the AI assistant module + the side panel
 
 ### `SSEClient`
 
-```fsharp
+```fsharp skip=signature
 module SSEClient =
     val openConnection:
         baseUrl: string ->
@@ -480,7 +480,7 @@ EventSource wrapper. Handles reconnect (browser default) + mode-aware query para
 
 Each provider companion exposes:
 
-```fsharp
+```fsharp skip=signature
 module ClaudeAIProvider =
     val builder: AIProviderBuilder
     val createWithApiKeyAndModel: apiKey: string -> model: string -> IAIProvider

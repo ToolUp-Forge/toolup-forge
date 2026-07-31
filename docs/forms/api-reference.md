@@ -6,7 +6,7 @@ Public surface of `ToolUp.Forms`. Type signatures are reproduced verbatim from `
 
 ### `FormSchema` (`module ToolUp.Forms.FormSchema`)
 
-```fsharp
+```fsharp skip=signature
 type FormSchemaId = string
 
 type FormVisibility =
@@ -71,7 +71,7 @@ module FormSchema =
 
 ### `Submission` (`module ToolUp.Forms.FormSubmission`)
 
-```fsharp
+```fsharp skip=signature
 open System
 
 type SubmissionId = string
@@ -164,7 +164,7 @@ type FormError =
 
 ### `Workflow` (`module ToolUp.Forms.Workflow`)
 
-```fsharp
+```fsharp skip=signature
 type WorkflowState = string
 type WorkflowId = string
 type TransitionEvent = string
@@ -206,7 +206,7 @@ module WorkflowDefinition =
 
 ### `IActionLedger` (`module ToolUp.Forms.IActionLedger`)
 
-```fsharp
+```fsharp skip=signature
 type ActionLedgerStatus =
     | Pending
     | Succeeded
@@ -256,7 +256,7 @@ module ActionLedger =
 
 The authenticated ToolUp.Remoting wire contract. Mounted by `FormsServerApp.run` at `/api/IFormApi/<MethodName>`.
 
-```fsharp
+```fsharp skip=signature
 open System
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Forms.AggregationTypes
@@ -410,7 +410,7 @@ val routeBuilder : typeName: string -> methodName: string -> string
 
 Anonymous, token-gated public surface for publishable surveys. Mounted at `/api/public/forms/<MethodName>`.
 
-```fsharp
+```fsharp skip=signature
 [<Literal>]
 val ResourceKind : string = "forms.publishable"
 
@@ -535,7 +535,7 @@ type IWorkflowEngine =
 
 Default impl: `WorkflowEngine`. Constructor parameters (immutable for process lifetime):
 
-```fsharp
+```fsharp skip=fragment
 new WorkflowEngine(
     formStore: IFormStore,
     auditLog: IAuditLog,
@@ -551,7 +551,7 @@ new WorkflowEngine(
 
 ### `FormValidator` (`module ToolUp.Forms.FormValidator`)
 
-```fsharp
+```fsharp skip=signature
 /// Server-side custom validator. Receives the raw string form of a
 /// field value; returns `Ok ()` to pass or `Error message` to fail.
 type CustomValidator = string -> Result<unit, string>
@@ -579,7 +579,7 @@ module FormValidator =
 
 `FormsServerApp` wraps a base `ServerApp` and adds the form-specific compose helpers.
 
-```fsharp
+```fsharp skip=signature
 type FormsServerApp = {
     Base: ServerApp
     Schemas: Map<FormSchemaId, FormSchema>
@@ -672,7 +672,7 @@ No default impl ships. Consumers register custom analysers in the DI container; 
 
 ### `FormRenderer`
 
-```fsharp
+```fsharp skip=fragment
 FormRenderer.render
     {| Schema : FormSchema
        InitialValues : Map<string, FieldValue>
@@ -683,7 +683,7 @@ Feliz component. Uses `React.useState` for in-flight values. Dispatches `OnSubmi
 
 ### `WorkflowBadge`
 
-```fsharp
+```fsharp skip=fragment
 WorkflowBadge.render
     {| State : SubmissionState
        Workflow : WorkflowDefinition |}
@@ -693,7 +693,7 @@ Renders a state pill with hover for the available-transitions list.
 
 ### `FormSubmissionsList`
 
-```fsharp
+```fsharp skip=fragment
 FormSubmissionsList.render
     {| Submissions : Submission list
        Schema : FormSchema
@@ -705,7 +705,7 @@ Table of submissions with optional per-row transition buttons (filtered by avail
 
 ### `PublicEmbed`
 
-```fsharp
+```fsharp skip=fragment
 PublicEmbed.render
     {| Token : string         // from URL parameter
        BaseUrl : string |}
@@ -715,7 +715,7 @@ Standalone Feliz component. Renders the form with no app shell — meant to be e
 
 ### `SurveyDashboardView` + `SurveyListView`
 
-```fsharp
+```fsharp skip=fragment
 SurveyDashboardView.render
     {| SchemaId : FormSchemaId
        Aggregations : AggregationSummary |}
@@ -729,7 +729,7 @@ Apps wire these into their own admin module.
 
 ### ToolUp.Remoting proxies
 
-```fsharp
+```fsharp skip=signature
 val FormsClient.proxy : IFormApi
 val PublicFormsClient.proxy : IPublicFormApi
 ```

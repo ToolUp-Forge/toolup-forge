@@ -26,7 +26,7 @@ a leaf package with no content-system dependency) — they take neutral
 **slots** (`XmlNode` / `XmlNode list` / strings), and the consumer's
 layout function is the glue:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.BrandKit
 open ToolUp.BrandKit.Layouts
 open ToolUp.PublicRendering
@@ -161,7 +161,7 @@ the layout code. Two contrasting sets that both style the same render:
 
 ## Feliz-DSL layouts (`withFelizLayout`)
 
-```fsharp
+```fsharp skip=fragment
 // layout authored in the Feliz DSL — PublicPage -> ReactElement
 |> PublicRenderingServerApp.withFelizLayout (LayoutName "feliz") FelizPageLayout.render
 ```

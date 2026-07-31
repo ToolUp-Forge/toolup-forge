@@ -71,7 +71,7 @@ Wire the client (no built-in calendar UI — the SDK ships the data primitives; 
 
 Book a slot:
 
-```fsharp
+```fsharp skip=fragment
 let! result = schedulingApi.Book {
     ResourceId = ResourceId "chair-1"
     Start = DateTime(2026, 5, 12, 14, 0, 0)
@@ -130,7 +130,7 @@ The expander is pure — no I/O, no scheduling impl. Use it client-side to rende
 
 ## iCalendar export
 
-```fsharp
+```fsharp skip=fragment
 let! ics = schedulingApi.ExportICalendar resourceId
 
 // ics : string  (RFC 5545-compliant .ics file content)

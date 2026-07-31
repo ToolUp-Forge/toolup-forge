@@ -168,6 +168,582 @@ let main args =
         if result.ExitCode <> 0 then
             failwithf "VerifyFable: node exited %d." result.ExitCode)
 
+    // Phase 620 — compile-checked documentation snippets.
+    //
+    // Nothing detected a doc snippet naming an API the SDK no longer
+    // has. The docs teach `fsharp` fenced blocks a reader copies
+    // verbatim; when a phase renames or removes the thing a snippet
+    // calls, the snippet silently becomes a lie that compiles nowhere
+    // and fails at the reader's first build. Two live instances were
+    // found minutes apart by a human noticing, which is not a process.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyDocSnippets`
+    //        `… -- VerifyDocSnippets --update-baseline`  (see below)
+    //
+    // ── What is in scope (620.A) ────────────────────────────────────
+    //
+    // IN SCOPE BY DEFAULT: every ```fsharp block under `docs/**` and
+    // `src/ToolUp.Platform/technical-guide/**`. The escape is a marker
+    // in the fence INFO STRING — ```fsharp skip=<reason> — drawn from a
+    // CLOSED set (`docSnippetSkipReasons`). An unknown reason, a bare
+    // `skip`, or any other unrecognised attribute FAILS the target, so
+    // the escape cannot be widened by typo or by invention; widening it
+    // is a visible diff to this file.
+    //
+    // The info string is metadata, not content: every Markdown renderer
+    // takes the FIRST word as the language, so `fsharp skip=fragment`
+    // still highlights as F# and the marker is invisible to a reader.
+    // That is what makes an in-band marker acceptable here — it adds no
+    // ceremony to the code a reader copies.
+    //
+    // ONE tree-level exclusion, `docs/migrations/**`: a migration doc's
+    // job is to show the RETIRED shape beside its replacement, usually
+    // in the same block. Compiling it is category-incorrect — the old
+    // shape must not compile, that is the point of the page. This is a
+    // tree exclusion rather than 436 per-block markers precisely
+    // because a marker on every migration block would be the easy
+    // opt-out that gets reached for.
+    //
+    // ── How a fragment declares its context (620.B) ─────────────────
+    //
+    // Snippets are excerpts, not programs, and the docs must not grow
+    // `open`-ceremony a reader then copies. So context is supplied
+    // OUT-OF-BAND, in three layers, none of which touch the markdown:
+    //
+    //   1. `docSnippetPreamble` — the ambient opens any ToolUp source
+    //      file has.
+    //   2. `docSnippetTreePreamble` — per doc tree; a page under
+    //      `docs/rag/` is read in the context of the RAG package.
+    //   3. Page accumulation — `open` lines declared in an EARLIER
+    //      block of the same page apply to later ones, which is how a
+    //      reader reads a page top to bottom.
+    //
+    // Each block then compiles as its own module in its own generated
+    // file. One file per BLOCK, not per page, is load-bearing: F#
+    // abandons a file at its first parse error, so a single malformed
+    // block in a shared file would mask every later block on the page.
+    //
+    // What this therefore gates is "every SDK name a snippet uses still
+    // exists, with the shape shown" — not "this block is a runnable
+    // program". That is the drift class, and it is the one that bites
+    // readers.
+    //
+    // ── Where the failure points (620.E) ────────────────────────────
+    //
+    // Each generated file carries an F# `# <line> "<abs path to the
+    // .md>"` directive, so the COMPILER ITSELF reports at the markdown
+    // file and line — `docs/platform/auth.md(88,13): error FS1129: …`.
+    // No error-message rewriting, and the location survives every
+    // downstream tool that understands compiler output. The summary
+    // below additionally groups by file and block ordinal.
+    //
+    // ── The baseline, and why it is not a way of going green ────────
+    //
+    // The corpus was measured before the gate was designed: of 655
+    // in-scope blocks, 231 already named at least one API the SDK does
+    // not have. Fixing all of them is a docs project, not this phase,
+    // and marking them `skip=` would be a lie — `skip` means "not
+    // checkable", not "checkable and currently wrong". They are instead
+    // recorded in `docs-snippets/known-drift.txt`, keyed by a hash of
+    // the block's own text.
+    //
+    // The baseline is a RATCHET, not a mute button, and it fails in
+    // BOTH directions:
+    //   * any failing block absent from the baseline fails the target
+    //     (new drift cannot land);
+    //   * any baseline entry that now compiles ALSO fails the target,
+    //     demanding its removal (the baseline can only shrink).
+    // Because the key is the block's content hash, editing a baselined
+    // block invalidates its entry — so a broken snippet cannot be
+    // quietly rewritten into a differently-broken one.
+    //
+    // Same posture as the Phase 175 public-API approval baseline, and
+    // the same posture Phase 614 took when `verify-all` was not green
+    // on Linux: record the evidence, gate what is true today, and let
+    // the number only fall.
+    //
+    // `--update-baseline` REWRITES the file from the current run. It is
+    // for the first seeding and for wholesale re-measurement after a
+    // deliberate corpus change; it is never part of making CI pass.
+    let docSnippetRoots = [ "docs"; "src/ToolUp.Platform/technical-guide" ]
+    let docSnippetExcludedTrees = [ "docs/migrations" ]
+
+    // The closed escape set. Each reason is a claim about the block's
+    // SHAPE that a reviewer can check by reading it:
+    //   signature   — an `.fsi`-shaped API listing (`module M = val f: …`).
+    //                 Not implementation F#; cannot be compiled as such.
+    //   fragment    — an excerpt: an elided body (`|> ...`), or it reads
+    //                 locals belonging to a surrounding program the page
+    //                 does not show.
+    //   anti-pattern— deliberately wrong, shown as a "don't".
+    // "It failed to compile" is NOT a reason — that is what the
+    // baseline is for.
+    let docSnippetSkipReasons = set [ "signature"; "fragment"; "anti-pattern" ]
+
+    // Floor guard: this target legitimately exits 0 with an empty
+    // corpus (a bad glob, a moved docs folder, an extractor that
+    // matched no fences), which is indistinguishable from a pass unless
+    // the count is asserted. A LOWER bound, like `fableCaseFloor` — it
+    // fires when the harness has collapsed, not when the corpus shrank
+    // a little.
+    let docSnippetFloor = 300
+
+    Target.create "VerifyDocSnippets" (fun _ ->
+        // Read from the process argv rather than `p.Context.Arguments`:
+        // FAKE's own CLI parser consumes trailing options before the
+        // target sees them, so the flag never arrives there.
+        let updateBaseline = args |> Array.contains "--update-baseline"
+        let repoRoot = __SOURCE_DIRECTORY__
+        let projDir = Path.Combine(repoRoot, "docs-snippets")
+        let outDir = Path.Combine(projDir, "generated")
+        let baselinePath = Path.Combine(projDir, "known-drift.txt")
+
+        let toSlash (s: string) = s.Replace('\\', '/')
+
+        let docFiles =
+            docSnippetRoots
+            |> List.collect (fun root ->
+                let full = Path.Combine(repoRoot, root)
+
+                if Directory.Exists full then
+                    Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories)
+                    |> List.ofSeq
+                else
+                    [])
+            |> List.map (fun f -> f, toSlash (Path.GetRelativePath(repoRoot, f)))
+            |> List.filter (fun (_, rel) ->
+                docSnippetExcludedTrees |> List.forall (fun t -> not (rel.StartsWith(t + "/"))))
+            |> List.sortBy snd
+
+        // A fence opens with >= 3 backticks plus an info string, and
+        // closes on the first >= as many backticks with no info string.
+        let fenceOf (line: string) =
+            let t = line.TrimStart(' ')
+            let n = t.Length - t.TrimStart('`').Length
+            if n >= 3 then Some(n, t.Substring(n).Trim()) else None
+
+        let blocksIn (abs: string, rel: string) =
+            let lines = File.ReadAllLines abs
+            let acc = ResizeArray<string * int * int * int * string * string list>()
+            let mutable i = 0
+            let mutable ordinal = 0
+
+            while i < lines.Length do
+                match fenceOf lines[i] with
+                | Some(n, info) when info <> "" ->
+                    let mutable j = i + 1
+
+                    let closes k =
+                        match fenceOf lines[k] with
+                        | Some(m, "") when m >= n -> true
+                        | _ -> false
+
+                    while j < lines.Length && not (closes j) do
+                        j <- j + 1
+
+                    ordinal <- ordinal + 1
+                    let body = [ for k in i + 1 .. j - 1 -> lines[k] ]
+                    // rel, ordinal, first content line, closing-fence line, info, body
+                    acc.Add(rel, ordinal, i + 2, j, info, body)
+                    i <- j + 1
+                | _ -> i <- i + 1
+
+            List.ofSeq acc
+
+        let allBlocks = docFiles |> List.collect blocksIn
+
+        let fsharpBlocks =
+            allBlocks
+            |> List.filter (fun (_, _, _, _, info, _) -> info.Split(' ')[0] = "fsharp")
+
+        // Validate every attribute BEFORE deciding anything, so a typo'd
+        // marker fails loudly rather than silently leaving a block in or
+        // out of scope.
+        let markerErrors =
+            fsharpBlocks
+            |> List.collect (fun (rel, ord, start, _, info, _) ->
+                info.Split(' ')
+                |> Array.toList
+                |> List.tail
+                |> List.filter (fun a -> a <> "")
+                |> List.choose (fun attr ->
+                    if attr.StartsWith "skip=" then
+                        let reason = attr.Substring 5
+
+                        if docSnippetSkipReasons.Contains reason then
+                            None
+                        else
+                            Some(
+                                sprintf
+                                    "%s:%d (block %d): unknown skip reason '%s'. Allowed: %s"
+                                    rel
+                                    (start - 1)
+                                    ord
+                                    reason
+                                    (System.String.Join(", ", docSnippetSkipReasons))
+                            )
+                    else
+                        Some(
+                            sprintf
+                                "%s:%d (block %d): unrecognised fence attribute '%s'. The only attribute is skip=<reason>."
+                                rel
+                                (start - 1)
+                                ord
+                                attr
+                        )))
+
+        if not markerErrors.IsEmpty then
+            for e in markerErrors do
+                Trace.traceError e
+
+            failwithf "VerifyDocSnippets: %d invalid fence marker(s) — see above." markerErrors.Length
+
+        let isSkipped (info: string) = info.Contains "skip="
+
+        let inScope =
+            fsharpBlocks |> List.filter (fun (_, _, _, _, info, _) -> not (isSkipped info))
+
+        let skippedByReason =
+            fsharpBlocks
+            |> List.choose (fun (_, _, _, _, info, _) ->
+                info.Split(' ')
+                |> Array.tryPick (fun a -> if a.StartsWith "skip=" then Some(a.Substring 5) else None))
+            |> List.countBy id
+            |> List.sortBy fst
+
+        // ---- ambient context, declared here and never in the docs ----
+        let docSnippetPreamble = [
+            "open System"
+            "open System.Threading.Tasks"
+            "open ToolUp.Platform"
+            "open ToolUp.Platform.Auth"
+            "open ToolUp.Platform.VectorKnowledgeTypes"
+            "open DataManagementTypes"
+        ]
+
+        let docSnippetTreePreamble = [
+            "docs/ai/",
+            [
+                "open ToolUp.AI"
+                "open ToolUp.AI.AICompose"
+                "open ToolUp.Platform.AI"
+                "open ToolUp.AI.Wire"
+            ]
+            "docs/rag/", [ "open ToolUp.RAG"; "open ToolUp.RAG.RAGCompose" ]
+            "docs/knowledge-base/", [ "open ToolUp.KnowledgeBase"; "open SharedTypes" ]
+            "docs/forms/",
+            [
+                "open ToolUp.Forms"
+                "open ToolUp.Forms.FormSchema"
+                "open ToolUp.Forms.FormSubmission"
+            ]
+            "docs/scheduling/",
+            [
+                "open ToolUp.Scheduling"
+                "open ToolUp.Scheduling.SchedulingTypes"
+                "open ToolUp.Scheduling.SchedulingCompose"
+            ]
+        ]
+
+        let preambleFor (rel: string) =
+            let tree =
+                docSnippetTreePreamble
+                |> List.tryPick (fun (prefix, opens) -> if rel.StartsWith prefix then Some opens else None)
+                |> Option.defaultValue []
+
+            docSnippetPreamble @ tree
+
+        let moduleNameOf (rel: string) =
+            let stripped = rel.Replace(".md", "")
+
+            let cleaned =
+                System.String([| for c in stripped -> if System.Char.IsLetterOrDigit c then c else '_' |])
+
+            if System.Char.IsDigit cleaned[0] then
+                "d" + cleaned
+            else
+                cleaned
+
+        let hashOf (body: string list) =
+            use sha = System.Security.Cryptography.SHA256.Create()
+
+            let bytes =
+                System.Text.Encoding.UTF8.GetBytes(System.String.Join("\n", body |> List.map _.TrimEnd()))
+
+            (sha.ComputeHash bytes)[..3] |> Array.map (sprintf "%02x") |> String.concat ""
+
+        if Directory.Exists outDir then
+            Directory.Delete(outDir, true)
+
+        Directory.CreateDirectory outDir |> ignore
+
+        // The blocks a compiler error may be attributed to. SKIPPED blocks
+        // are present too, with inScope=false: a page's `open` lines are
+        // carried forward to later blocks (see below), so an unresolvable
+        // `open` declared in a skipped block would otherwise surface as an
+        // unattributable error — and be reported as a harness fault — in
+        // every later block on the page. Attributed to its declaring block
+        // it is correctly ignored, because that block was already declared
+        // uncheckable.
+        // rel, ordinal, startLine, endLine, hash, inScope
+        let blockTable = ResizeArray<string * int * int * int * string * bool>()
+
+        for (rel, ord, start, endLine, info, body) in fsharpBlocks do
+            if isSkipped info then
+                blockTable.Add(rel, ord, start, endLine, hashOf body, false)
+
+        for rel, blocks in fsharpBlocks |> List.groupBy (fun (rel, _, _, _, _, _) -> rel) do
+            let m = moduleNameOf rel
+            let absPath = docFiles |> List.find (fun (_, r) -> r = rel) |> fst
+
+            let lineDirective line =
+                sprintf "# %d \"%s\"" line (absPath.Replace("\\", "\\\\"))
+
+            // (open text, the doc line it was declared on)
+            let carried = ResizeArray<string * int>()
+
+            for (_, ord, start, endLine, info, body) in blocks |> List.sortBy (fun (_, o, _, _, _, _) -> o) do
+                if not (isSkipped info) then
+                    let sb = System.Text.StringBuilder()
+
+                    sb.AppendLine(sprintf "module ToolUp.DocSnippets.Generated.%s_B%02d" m ord)
+                    |> ignore
+
+                    for o in preambleFor rel do
+                        sb.AppendLine o |> ignore
+
+                    // Each carried `open` is stamped with the line it was
+                    // written on, so an unresolvable one is reported against
+                    // the block that DECLARED it rather than every block that
+                    // inherits it.
+                    for o, srcLine in Seq.distinctBy fst carried do
+                        if not (body |> List.exists (fun l -> l.Trim() = o)) then
+                            sb.AppendLine(lineDirective srcLine) |> ignore
+                            sb.AppendLine o |> ignore
+
+                    // Everything after this directive is attributed to the
+                    // markdown file — this is what makes the compiler name
+                    // the doc rather than a generated artefact.
+                    sb.AppendLine(lineDirective start) |> ignore
+
+                    for l in body do
+                        sb.AppendLine l |> ignore
+
+                    File.WriteAllText(Path.Combine(outDir, sprintf "%s_B%02d.fs" m ord), sb.ToString())
+                    blockTable.Add(rel, ord, start, endLine, hashOf body, true)
+
+                body
+                |> List.iteri (fun i l ->
+                    let t = l.Trim()
+
+                    if t.StartsWith "open " && not (t.Contains "//") then
+                        carried.Add(t, start + i))
+
+        let checkedCount =
+            blockTable |> Seq.filter (fun (_, _, _, _, _, ok) -> ok) |> Seq.length
+
+        Trace.tracefn
+            "▶ VerifyDocSnippets (1/2): extracted %d compiled block(s) (+%d skipped) from %d file(s)"
+            checkedCount
+            (blockTable.Count - checkedCount)
+            docFiles.Length
+
+        if checkedCount < docSnippetFloor then
+            failwithf
+                "VerifyDocSnippets: only %d block(s) extracted, below the floor of %d. A corpus this small means the extractor matched almost nothing — check the scope roots and the fence parser before lowering the floor."
+                checkedCount
+                docSnippetFloor
+
+        Trace.tracefn "▶ VerifyDocSnippets (2/2): compiling against the real SDK"
+
+        let result =
+            CreateProcess.fromRawCommand "dotnet" [
+                "build"
+                "docs-snippets/ToolUp.DocSnippets.fsproj"
+                "--nologo"
+                "-v"
+                "quiet"
+            ]
+            |> CreateProcess.withWorkingDirectory repoRoot
+            |> CreateProcess.redirectOutput
+            |> Proc.run
+
+        let output = result.Result.Output + result.Result.Error
+
+        // Attribute each reported error to the block whose line range
+        // covers it. `+ 1` because an unterminated construct is reported
+        // at the line PAST the block's last one.
+        let errorLines =
+            output.Split('\n')
+            |> Array.map _.Trim()
+            |> Array.filter (fun l -> l.Contains ": error ")
+            |> Array.distinct
+
+        let attribute (line: string) =
+            let i = line.LastIndexOf ".md("
+
+            if i < 0 then
+                None
+            else
+                let rest = line.Substring(i + 4)
+
+                match System.Int32.TryParse(rest.Substring(0, max 0 (rest.IndexOf ','))) with
+                | false, _ -> None
+                | true, lineNo ->
+                    let rel = toSlash (line.Substring(0, i + 3))
+
+                    blockTable
+                    |> Seq.tryFind (fun (r, _, s, e, _, _) -> rel.EndsWith r && lineNo >= s && lineNo <= e + 1)
+                    |> Option.map (fun (r, ord, s, _, h, ok) -> ((r, ord, s, h), line, ok))
+
+        // Errors landing in a SKIPPED block are dropped: that block was
+        // declared uncheckable, and the only way one of its lines reaches
+        // the compiler is as an `open` carried onto a later block.
+        let attributed =
+            errorLines
+            |> Array.choose attribute
+            |> Array.filter (fun (_, _, ok) -> ok)
+            |> Array.map (fun (k, l, _) -> k, l)
+
+        let unattributed = errorLines |> Array.filter (attribute >> Option.isNone)
+
+        // An error the harness cannot pin to a block is a harness fault
+        // (a broken preamble, a missing reference) and must never be
+        // absorbed as doc drift.
+        if unattributed.Length > 0 then
+            for l in unattributed |> Array.truncate 20 do
+                Trace.traceError l
+
+            failwithf
+                "VerifyDocSnippets: %d compiler error(s) could not be attributed to a documentation block. That is a fault in the harness (preamble, project references, or the generated project), not drift in the docs."
+                unattributed.Length
+
+        let failing =
+            attributed
+            |> Array.groupBy fst
+            |> Array.map (fun (k, es) -> k, es |> Array.map snd)
+            |> Array.sortBy (fun ((r, o, _, _), _) -> r, o)
+
+        let failingKeys =
+            failing |> Array.map (fun ((r, _, _, h), _) -> r + " " + h) |> Set.ofArray
+
+        let writeBaseline () =
+            let lines = [
+                "# Phase 620 — documentation snippets that name an API the SDK does not have."
+                "# GENERATED by `dotnet run --project Build.fsproj -- VerifyDocSnippets --update-baseline`."
+                "#"
+                "# Each line: <content-hash> <doc path>#<block> — <first compiler error>"
+                "# The hash is of the block's own text, so editing a block RETIRES its"
+                "# entry and the block must then compile. This list may only shrink."
+                ""
+                for (rel, ord, start, h), errs in failing do
+                    let first = if errs.Length > 0 then errs[0] else ""
+
+                    // Keep the message, drop MSBuild's trailing
+                    // ` [<absolute path>.fsproj]` — a machine-local path in
+                    // a tracked file is churn on every other clone — and
+                    // flatten control characters to spaces. FSC embeds raw
+                    // 0x1D separators in its "Maybe you want one of the
+                    // following" hints; a tracked file carrying those reads
+                    // as BINARY to git's diff heuristics and to `file`,
+                    // which would quietly opt this file out of the repo's
+                    // LF normalisation.
+                    let msg =
+                        let i = first.IndexOf ": error "
+                        let m = if i >= 0 then first.Substring(i + 2) else first
+                        let j = m.LastIndexOf " ["
+                        let trimmed = if j >= 0 && m.EndsWith "]" then m.Substring(0, j) else m
+
+                        let flattened =
+                            System.String([| for c in trimmed -> if System.Char.IsControl c then ' ' else c |])
+
+                        System.Text.RegularExpressions.Regex.Replace(flattened, @"\s+", " ").Trim()
+
+                    sprintf "%s %s#%d (line %d) — %s" h rel ord start msg
+            ]
+
+            // LF explicitly, not `WriteAllLines`: this file is tracked and
+            // `.gitattributes` pins the repo to LF, so writing the platform
+            // newline would make every regeneration on Windows a whole-file
+            // diff on every other clone.
+            File.WriteAllText(baselinePath, System.String.Join("\n", lines) + "\n")
+            Trace.tracefn "VerifyDocSnippets: wrote %d baseline entries to %s" failing.Length baselinePath
+
+        let runChecks () =
+            let baseline =
+                if File.Exists baselinePath then
+                    File.ReadAllLines baselinePath
+                    |> Array.filter (fun l -> l.Trim() <> "" && not (l.StartsWith "#"))
+                    |> Array.choose (fun l ->
+                        let parts = l.Split(' ')
+
+                        if parts.Length >= 2 then
+                            Some(parts[1].Split('#')[0] + " " + parts[0], l)
+                        else
+                            None)
+                    |> Map.ofArray
+                else
+                    Map.empty
+
+            let baselineKeys = baseline |> Map.keys |> Set.ofSeq
+
+            let newFailures =
+                failing
+                |> Array.filter (fun ((r, _, _, h), _) -> not (baselineKeys.Contains(r + " " + h)))
+
+            let fixedButListed = baselineKeys - failingKeys
+            let passing = checkedCount - failing.Length
+
+            Trace.tracefn ""
+            Trace.tracefn "VerifyDocSnippets summary:"
+            Trace.tracefn "  blocks compiled : %d" checkedCount
+            Trace.tracefn "  passing         : %d" passing
+            Trace.tracefn "  known drift     : %d (docs-snippets/known-drift.txt)" baselineKeys.Count
+            Trace.tracefn "  new failures    : %d" newFailures.Length
+            Trace.tracefn "  fixed-but-listed: %d" fixedButListed.Count
+
+            for reason, n in skippedByReason do
+                Trace.tracefn "  skip=%-12s %d" reason n
+
+            if newFailures.Length > 0 then
+                Trace.tracefn ""
+
+                for (rel, ord, start, _), errs in newFailures do
+                    Trace.traceError (sprintf "%s — block %d (opens at line %d):" rel ord (start - 1))
+
+                    for e in errs |> Array.truncate 8 do
+                        Trace.traceError ("    " + e)
+
+                failwithf
+                    "VerifyDocSnippets: %d documentation block(s) name an API the SDK does not have. Fix the snippet against the current surface; do NOT add it to known-drift.txt — that list may only shrink. If the block genuinely cannot be compiled (an .fsi-shaped listing, an elided excerpt, a deliberate anti-pattern), mark its fence with a skip reason instead."
+                    newFailures.Length
+
+            if fixedButListed.Count > 0 then
+                Trace.tracefn ""
+
+                for k in fixedButListed do
+                    Trace.traceError (sprintf "    %s" (baseline |> Map.find k))
+
+                failwithf
+                    "VerifyDocSnippets: %d baseline entr(ies) in docs-snippets/known-drift.txt now compile. Delete those lines — the ratchet only holds if a fixed snippet is removed from the list."
+                    fixedButListed.Count
+
+            if result.ExitCode <> 0 && failing.Length = 0 then
+                printfn "%s" output
+
+                failwithf
+                    "VerifyDocSnippets: the snippet project failed to build for a reason not attributable to any block (exit %d)."
+                    result.ExitCode
+
+            Trace.tracefn ""
+
+            Trace.tracefn
+                "VerifyDocSnippets: OK — %d block(s) compile, %d known-drift held at the ratchet."
+                passing
+                baselineKeys.Count
+
+        if updateBaseline then writeBaseline () else runChecks ())
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =

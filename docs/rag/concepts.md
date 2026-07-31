@@ -161,7 +161,7 @@ Result: Team A's vector store entries are never readable by Team B's caller, eve
 
 `Chunking.fs` handles the text → chunk transformation:
 
-```fsharp
+```fsharp skip=signature
 type ChunkingConfig = {
     MaxTokens: int           // default 500
     OverlapTokens: int       // default 50
@@ -263,7 +263,7 @@ Trigger on operator action (model swap, scope reset, periodic refresh). The defa
 - The `VacuumScheduleValidator` warns at startup in both misconfigured cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel), so the gap is loud rather than silent.
 - `ListScopes()` on the in-memory default returns only scopes loaded so far this process lifetime — a cold scope is vacuumed on the first tick after it loads, not before. This is a latency, not a correctness, caveat: nothing is ever purged before its retention window elapses.
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create factory providerProfile embedder
 |> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
 |> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
@@ -275,7 +275,7 @@ RAGServerApp.create factory providerProfile embedder
 
 `RAGPromptBuilder.withRetrieval` is a `SystemPromptBuilder` that injects retrieved chunks:
 
-```fsharp
+```fsharp skip=fragment
 let ragBuilder = RAGPromptBuilder.withRetrieval pipeline {
     TopK = 5
     MinScore = 0.3

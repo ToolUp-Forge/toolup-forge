@@ -56,7 +56,7 @@ The vectorisation handler runs on every KB document save and turns the extracted
 
 ## 3. Wire the client wrapper + narrative-commit
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
 open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 
@@ -79,7 +79,7 @@ AIClientConfig.program aiMode clientConfig modules
 
 The KB module supports a "Standing AI Context" page where the team can write persistent instructions for the assistant (e.g. "The team focuses on Q3 marketing analysis. Brand names are case-sensitive."). Wire the builder into the AI compose:
 
-```fsharp
+```fsharp skip=fragment
 let standingContextBuilder =
     KnowledgeBase.Server.standingContextBuilder blobStorage (Some logger)
 

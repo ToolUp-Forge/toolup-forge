@@ -107,7 +107,7 @@ The three worked examples below share a common composition root and differ only 
 
 ### Common composition root
 
-```fsharp
+```fsharp skip=fragment
 // Server/Composition.fs
 module MyApp.Composition
 
@@ -414,7 +414,7 @@ The fourth worked example pairs any of the three serverless front-doors above wi
 
 **Front-door composition root.** Same shape as the Anonymous worked example above, with substrate fields pointing at cloud companions and (typically) `Mode = Team` or `Mode = Individual` rather than `Anonymous`.
 
-```fsharp
+```fsharp skip=fragment
 // Server/FrontDoorComposition.fs
 module MyApp.FrontDoorComposition
 
@@ -443,7 +443,7 @@ let serverHost: IServerHost =
 
 **Worker silo composition root.** Same domain modules; opposite background-subsystem posture.
 
-```fsharp
+```fsharp skip=fragment
 // Server/WorkerComposition.fs
 module MyApp.WorkerComposition
 
@@ -520,7 +520,7 @@ A pure-Anonymous-mode deployment that doesn't use ToolUp.Remoting on its API sur
 
 What is NOT pre-resolved: module-level singletons registered through their own `services.AddSingleton<…>` that the composition root never touches. If a module's first request triggers an expensive type-load (opening an LLM tokeniser, parsing a large RAG knowledge-base index, deserialising a registered prompt corpus), pre-resolve it explicitly:
 
-```fsharp
+```fsharp skip=fragment
 // In the consumer's Composition.fs, after the SDK compose
 let host = ServerApp.empty |> ... |> ServerApp.composeOnly
 host.Host.StartAsync(CancellationToken.None).Wait()

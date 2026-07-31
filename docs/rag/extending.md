@@ -6,7 +6,7 @@ How to write a new embedding provider, vector store, retrieval tracer, OCR provi
 
 A new provider goes in `ToolUp.EmbeddingProviders.<VendorName>`. Implement the interface, expose a `create` function.
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.EmbeddingProvider
 
 open ToolUp.Platform
@@ -43,7 +43,7 @@ module MyVendorEmbeddingProvider =
 
 ### Wire into a consumer
 
-```fsharp
+```fsharp skip=fragment
 open MyVendor.EmbeddingProvider
 
 let embedder = MyVendorEmbeddingProvider.create secretStore "myvendor-large"
@@ -88,7 +88,7 @@ Some impls (in-memory, HNSW) persist their state to `IBlobStorage` for warm rest
 
 Bind your impl into the `IVectorStoreContract` test pack:
 
-```fsharp
+```fsharp skip=fragment
 testList "MyVectorStore conformance" [
     yield! IVectorStoreContract.tests
         (fun () -> MyVectorStore.create()  :> IVectorStore)
@@ -101,7 +101,7 @@ Run in CI. Failing tests indicate semantic violations; passing means drop-in com
 
 Trivial interface; wire to whatever observability sink you want:
 
-```fsharp
+```fsharp skip=fragment
 type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
     interface IRetrievalTracer with
         member _.Trace(trace, accessCtx) = async {
@@ -117,7 +117,7 @@ type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
 
 Register via `withRetrievalTracer`:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create (...)
 |> ...
 |> RAGServerApp.withRetrievalTracer (DatadogRetrievalTracer(httpClient, apiKey))
@@ -154,7 +154,7 @@ OCR is expensive — typical pricing is ~$1.50 per 1000 pages. Use sparingly; pa
 
 ## Writing a new `ITableExtractor`
 
-```fsharp
+```fsharp skip=fragment
 type CamelotTableExtractor(...) =
     interface ITableExtractor with
         member _.ExtractTables(documentBytes) = async {

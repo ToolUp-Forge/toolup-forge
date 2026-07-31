@@ -49,7 +49,7 @@ Add the packages:
 
 Wire the server composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Server
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.Workflow

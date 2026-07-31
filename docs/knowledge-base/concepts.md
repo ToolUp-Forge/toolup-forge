@@ -58,7 +58,7 @@ If extraction fails (corrupted PDF, password-protected DOCX, etc.), the handler 
 
 By default the upload boundary imposes no size cap and no type allowlist, and stores a type it has no extractor for as `UnsupportedFormat` ("stored, not searchable") rather than the misleading `Complete 0`. Compose `KnowledgeBase.Server.withUploadPolicy` to tighten this:
 
-```fsharp
+```fsharp skip=fragment
 app
 |> KnowledgeBase.Server.withUploadPolicy {
     KnowledgeUploadPolicy.permissive with
@@ -176,7 +176,7 @@ Use case: capturing one-off observations the assistant should know ("we measure 
 
 The AI Context page is a different shape — entries are NOT indexed for retrieval. They're injected directly into the system prompt every turn:
 
-```fsharp
+```fsharp skip=fragment
 let standingContextBuilder = KnowledgeBase.Server.standingContextBuilder blobStorage (Some logger)
 ```
 

@@ -76,7 +76,7 @@ the deployment selects `ServerConfig.GraphStore = CustomGraphStore`.
 
 ## Composition
 
-```fsharp
+```fsharp skip=fragment
 // Default composition already registers the in-memory IGraphStore
 // lazily — a consumer that never resolves IGraphStore pays nothing.
 // ServerConfig.GraphStore defaults to InMemoryGraphStore.
@@ -88,7 +88,7 @@ the deployment selects `ServerConfig.GraphStore = CustomGraphStore`.
 
 `IGraphStore` is resolved from DI like any other substrate interface:
 
-```fsharp
+```fsharp skip=fragment
 // Model an org chart, then ask a reachability question in one query.
 do! store.UpsertNode(scopeId, { Id = NodeId "alice"; Labels = set [ "Person" ]; Properties = Map.empty })
 // ... more nodes + REPORTS_TO edges ...

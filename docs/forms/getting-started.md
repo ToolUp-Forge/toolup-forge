@@ -29,7 +29,7 @@ In your client project's `.fsproj`:
 
 In a module's `SharedTypes.fs`:
 
-```fsharp
+```fsharp skip=fragment
 module MyModule.SharedTypes
 
 open ToolUp.Forms.FormSchema
@@ -77,7 +77,7 @@ let leadCaptureSchema : FormSchema =
 
 `FieldKind` shipped variants:
 
-```fsharp
+```fsharp skip=fragment
 | TextField of maxLength: int option
 | NumberField of min: float option * max: float option
 | DateField
@@ -92,7 +92,7 @@ let leadCaptureSchema : FormSchema =
 
 `ValidationRule` shipped variants:
 
-```fsharp
+```fsharp skip=fragment
 | Regex of pattern: string * description: string option
 | NumberRange of min: float option * max: float option
 | LengthRange of min: int option * max: int option
@@ -205,7 +205,7 @@ let exitCode = FormsServerApp.run serverApp
 
 In a module's `ClientView.fs`:
 
-```fsharp
+```fsharp skip=fragment
 module MyModule.ClientView
 
 open Feliz
@@ -237,7 +237,7 @@ Client-side validation mirrors the server's; the server's is authoritative.
 
 The `OnSubmit` callback typically dispatches an Elmish `Msg`. The handler calls the API:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.FormApi
 open ToolUp.Forms.FormSubmission
 
@@ -283,7 +283,7 @@ The list view shows one row per submission, formatted per schema. Workflow-aware
 
 Transition handler:
 
-```fsharp
+```fsharp skip=fragment
 | TransitionWorkflow (submissionId, eventName) ->
     let request : ApplyTransitionRequest = {
         SubmissionId = submissionId
@@ -351,7 +351,7 @@ let exitCode = FormsServerApp.run serverApp
 
 Issue tokens:
 
-```fsharp
+```fsharp skip=fragment
 open System
 open ToolUp.Forms.FormApi
 

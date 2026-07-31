@@ -23,21 +23,21 @@ This is the canonical convention. The cross-tier (Core / Server / Client) split 
 
 ## Minimum module — Hello World
 
-```fsharp
+```fsharp skip=fragment
 // SharedTypes.fs
 module HelloWorld.SharedTypes
 
 type HelloApi = { DoThing: string -> Async<string> }
 ```
 
-```fsharp
+```fsharp skip=fragment
 // Server.fs
 module HelloWorld.Server
 
 let routine (input: string) : string = sprintf "did: %s" input
 ```
 
-```fsharp
+```fsharp skip=fragment
 // ClientModel.fs
 module HelloWorld.ClientModel
 open ToolUp.Elmish
@@ -50,7 +50,7 @@ let init () : Model * Cmd<Msg> = { Text = "" }, Cmd.none
 let update _ m = m, Cmd.none
 ```
 
-```fsharp
+```fsharp skip=fragment
 // ClientView.fs
 module HelloWorld.ClientView
 open Feliz
@@ -80,7 +80,7 @@ The runnable version of this minimum module lives at `samples/HelloWorld/`.
 
 The minimum module above doesn't ship an HTTP API — it's pure routine. When a module needs an HTTP API, the API record is **assembled in the composition root**, not in the module's own `Server.fs`.
 
-```fsharp
+```fsharp skip=fragment
 // Server.fs (in the module)
 module HelloWorld.Server
 
@@ -202,7 +202,7 @@ Modules that handle file data declare `DataType` records in `Server.fs`. Each `D
 - **`Detect: string -> bool`** — given file contents, returns true if this `DataType` applies.
 - **`Process: string * string -> obj * ProcessedFileEntry`** — given `(fileName, contents)`, returns a boxed result + a `ProcessedFileEntry` for the file manager.
 
-```fsharp
+```fsharp skip=fragment
 module MyModule.DataType
 
 open ToolUp.Platform
@@ -238,7 +238,7 @@ Client-side, modules render summaries of their processed data via `DataTypeDispl
 
 Modules consume processed data from upstream modules via the `ProcessedDataContext`:
 
-```fsharp
+```fsharp skip=fragment
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
     let processed = React.useContext ProcessedDataContext
     let salesData = processed |> ProcessedData.tryGet<SalesEntry> "SalesData"
@@ -329,7 +329,7 @@ both at request time and both on whichever deployment happens to exercise that p
 the *providing* module's shared tier — the file both the server and the Fable client compile —
 and reference that value from both ends:
 
-```fsharp
+```fsharp skip=fragment
 // Reports/SharedTypes.fs — the providing module's shared tier
 module Reports.SharedTypes
 
@@ -350,7 +350,7 @@ let serverModule =
     })
 ```
 
-```fsharp
+```fsharp skip=fragment
 // any other module — the caller asks it
 let! result =
     ModuleQueryBus.askContract bus access Reports.SharedTypes.latest { DatasetId = id; Top = 5 }
@@ -511,21 +511,21 @@ JSON, so an external authoring tool consumes it as a pinned snapshot **without l
 assembly**. Every list is emitted in a stable sort order and record fields serialise in
 declaration order, so the same composition always yields byte-identical output.
 
-```fsharp
+```fsharp skip=fragment
 // In the deployment (an admin endpoint, a CLI target, a test):
 System.IO.File.WriteAllText("envelope.staging.json", HostEnvelope.describeJson (app, modules))
 ```
 
 Pin the stamp beside whatever you generated from it:
 
-```fsharp
+```fsharp skip=fragment
 let stamp = HostEnvelope.stampOf envelope
 // { StampSchemaVersion = 1; StampPlatformVersion = "0.9.4.0"; StampContentHash = "8f3c…" }
 ```
 
 Later, against a live app, ask whether the snapshot is still true:
 
-```fsharp
+```fsharp skip=fragment
 match HostEnvelope.staleness pinnedStamp (HostEnvelope.describe (app, modules)) with
 | [] -> () // still exactly true of this deployment
 | reasons -> printfn "envelope stale: %s" (String.concat ", " reasons)
@@ -702,7 +702,7 @@ The same check binds in the module's own test project. `assertConformant` raises
 report on any violation and is silent when conformant, so it needs no test-framework dependency
 (the Build package carries none):
 
-```fsharp
+```fsharp skip=fragment
 test "the packaged layout is conformant" {
     PackagedModuleConformance.assertConformant layout
 }

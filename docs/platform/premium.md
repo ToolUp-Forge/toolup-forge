@@ -78,7 +78,7 @@ let handler : HttpHandler =
 
 ## Gating a client-side surface
 
-```fsharp
+```fsharp skip=fragment
 open Feliz
 open ToolUp.Platform
 
@@ -110,7 +110,7 @@ Premium gating composes with the SDK's feature-flag substrate (see [`events.md`]
 
 The three are composable: a `PremiumOnly` flag can still be turned off for a specific premium user via a User-scope override of `Bool false` (the floor only blocks the `true` direction).
 
-```fsharp
+```fsharp skip=fragment
 // Compose-root wire:
 let premiumGatedKeys = [ "analytics.advanced-export"; "viewer.history-mode" ]
 

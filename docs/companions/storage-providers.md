@@ -30,7 +30,7 @@ Don't use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 // Default — no withStorage call needed
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -56,7 +56,7 @@ Use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Storage.AwsS3
 
 let storage =
@@ -142,7 +142,7 @@ All providers expose `Save` / `Load` / `Delete` / `List` / `Exists` over the uni
 
 The `EncryptedBlobStorage` decorator wraps any `IBlobStorage` and applies AES-GCM envelope encryption transparently. Layer it on top of the cloud companion for application-tier crypto:
 
-```fsharp
+```fsharp skip=fragment
 let resolver = PerScopeKeyResolver(secretStore, blobStorage) :> IBlobEncryptionKeyResolver
 
 ServerApp.empty
@@ -193,7 +193,7 @@ type MinioStorage(client: AmazonS3Client, bucket: string) =
 
 Wire:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ...
 |> ServerApp.withStorage (MinioStorage(client, bucket) :> IBlobStorage)

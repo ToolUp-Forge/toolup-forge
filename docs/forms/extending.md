@@ -22,7 +22,7 @@ let blockListValidator : CustomValidator =
 
 Register on `FormsServerApp`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.FormsCompose
 
 let app =
@@ -100,7 +100,7 @@ let creditCheckPassed (creditApi: ICreditCheckApi) : WorkflowGuard =
 
 Register on `FormsServerApp`:
 
-```fsharp
+```fsharp skip=fragment
 let app =
     FormsServerApp.create ()
     // ...
@@ -175,7 +175,7 @@ let kickoffOnboardingJob (jobs: IJobScheduler) : WorkflowAction =
 
 Register:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
 
@@ -376,7 +376,7 @@ Passing the pack is the conformance bar — the engine relies on these lifecycle
 
 `FormRenderer` is generic; sometimes you need custom UX (multi-step wizards, mobile-specific layouts, branded look-and-feel). Write your own renderer against the same `FormSchema`:
 
-```fsharp
+```fsharp skip=fragment
 module MyCustomFormRenderer
 
 open Feliz
@@ -529,7 +529,7 @@ The interface is six-rule-portable by construction — identity by value, async 
 
 ### Wiring a custom limiter
 
-```fsharp
+```fsharp skip=fragment
 let myRedisLimiter : IShareTokenRateLimiter =
     MyCompany.RedisShareTokenRateLimiter(redisConnString) :> _
 

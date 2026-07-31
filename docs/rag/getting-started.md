@@ -81,7 +81,7 @@ Upload a document via the Knowledge Base sidebar entry. Watch the ingestion-stat
 
 For programmatic ingestion (no UI), enqueue an `IngestionJob` directly:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG
 
 let queue = serviceProvider.GetRequiredService<IngestionQueue>()
@@ -108,7 +108,7 @@ The retrieval pipeline embeds the query, fetches the top-K chunks from the team 
 
 Inspect the retrieval trail via `/dev/inspect` (when `EnableDevEndpoints` is on) or query the audit log:
 
-```fsharp
+```fsharp skip=fragment
 let! events = eventStore.ReadByType("_platform.retrieval", "KnowledgeRetrieved")
 ```
 
@@ -141,7 +141,7 @@ let myDataVectorisationHandler : VectorisationHandler = {
 
 Register via `composeWithRAG`:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 |> ...
 |> RAGServerApp.withVectorisationHandler myDataVectorisationHandler

@@ -99,7 +99,7 @@ The `JobNotifyEventStore` decorator stacks above `HookedEventStore` so `OnEvent`
 
 For a job to react to "module X published event Y", register:
 
-```fsharp
+```fsharp skip=fragment
 let myJob = {
     JobId = "react-to-y"
     HandlerName = "my-handler"
@@ -118,7 +118,7 @@ scheduler.Schedule(myJob)
 
 `Manual`-triggered jobs sit in the registry without an automatic fire path. Trigger explicitly:
 
-```fsharp
+```fsharp skip=fragment
 scheduler.TriggerOnce(myJobId)
 ```
 
@@ -184,7 +184,7 @@ type MyJobHandler() =
 
 Register handlers in the composition root:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with JobScheduler = InProcessJobScheduler }
 |> ServerApp.withJobHandler (MyJobHandler() :> IJobHandler)
@@ -197,7 +197,7 @@ The handler registry is a `Map<HandlerName, IJobHandler>`. Handler lookup at tri
 
 ### Daily summary email
 
-```fsharp
+```fsharp skip=fragment
 let summaryJob = {
     JobId = "daily-summary"
     HandlerName = "summary-email"
@@ -215,7 +215,7 @@ The handler resolves recipients via `ITeamStore`, builds a summary via the relev
 
 ### On-event index refresh
 
-```fsharp
+```fsharp skip=fragment
 let reindexJob = {
     JobId = "reindex-on-document-upload"
     HandlerName = "reindex-handler"
@@ -233,7 +233,7 @@ The handler reads recent `DocumentUploaded` events from `IEventStore` and chunks
 
 ### Stale-record cleanup
 
-```fsharp
+```fsharp skip=fragment
 let cleanupJob = {
     JobId = "cleanup-stale"
     HandlerName = "stale-cleanup"
@@ -253,7 +253,7 @@ The handler walks `IEntityStore` for records older than N days and soft-deletes 
 
 The data-ingestion subsystem registers `DataIngestionJobHandler` with `HandlerName = "_platform.dataingestion.run"`. Triggered + scheduled `IDataIngestor.Run` calls flow through this handler — refresh on schedule, refresh on demand, refresh on event, all through the same machinery.
 
-```fsharp
+```fsharp skip=fragment
 // Triggered refresh:
 let! _ = dataIngestionApi.TriggerRefresh datasourceId
 // Internally schedules a Manual job + calls TriggerOnce.
@@ -279,7 +279,7 @@ Five-field, `*` / values / commas / `*/N`. Not POSIX cron, not Quartz cron. For 
 
 ## Configuration
 
-```fsharp
+```fsharp skip=fragment
 ServerConfig.JobScheduler = NoJobScheduler | InProcessJobScheduler
 ```
 

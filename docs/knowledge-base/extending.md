@@ -14,7 +14,7 @@ The minimum contract for a KB replacement:
 
 A replacement is just another module under `src/Modules/MyKnowledgeBase/`:
 
-```fsharp
+```fsharp skip=fragment
 // SharedTypes.fs
 module MyKnowledgeBase.SharedTypes
 
@@ -54,7 +54,7 @@ let myIngestionStatusObserver : IIngestionStatusObserver =
 
 In the composition root:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 |> ...
 |> RAGServerApp.addModules [ myKnowledgeBaseModule ]    // your module
@@ -113,7 +113,7 @@ The shipped extractor list is internal to `ToolUp.KnowledgeBase.Server`. Adding 
 
 Example: ePub module:
 
-```fsharp
+```fsharp skip=fragment
 // Server.fs (in your new module)
 let epubDataType : DataType = {
     Info = { Id = "Epub"; DisplayName = "EPUB books"; Schema = None }
@@ -146,7 +146,7 @@ let epubVectorisationHandler : VectorisationHandler = {
 
 Wire alongside KB:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create (...)
 |> RAGServerApp.addModules [ kbModule; epubModule ]
 |> RAGServerApp.withVectorisationHandler kbVectorisationHandler
@@ -178,7 +178,7 @@ If you want the AI side panel to surface your module's ingestion too, match the 
 
 The KB extractor for PDFs uses `UglyToad.PdfPig` for native text extraction. Scanned PDFs (image-only pages) get empty text. To OCR them, register an `IOcrProvider`:
 
-```fsharp
+```fsharp skip=fragment
 let ocrProvider = AzureDocIntelligenceOcrProvider.create azureClient :> IOcrProvider
 
 RAGServerApp.create (...)
@@ -195,7 +195,7 @@ OCR is expensive (~$1.50 per 1000 pages with Azure Document Intelligence). Use s
 
 For documents where embedded tables are important (financial reports, scientific papers), an `ITableExtractor` companion can surface tables explicitly:
 
-```fsharp
+```fsharp skip=fragment
 let tableExtractor = CamelotTableExtractor.create pythonSidecar :> ITableExtractor
 
 RAGServerApp.create (...)
@@ -223,7 +223,7 @@ type SlackOnFailureObserver(slackWebhookUrl: string) =
 
 Wire alongside (or replace) the built-in observer:
 
-```fsharp
+```fsharp skip=fragment
 let composedObserver = ChainedObserver([
     KnowledgeBase.Server.makeIngestionStatusObserver()
     SlackOnFailureObserver(slackWebhookUrl)
@@ -241,7 +241,7 @@ RAGServerApp.create (...)
 
 The AI Context page is a UI for the standing-context entries persisted to `_platform/kb-ai-context/{teamId}/entries.json`. A custom AI-context UI replaces just the page, keeping the persistence and the standing-context builder:
 
-```fsharp
+```fsharp skip=fragment
 // Custom AI-context page
 let aiContextView model dispatch : PageContent = ...
 

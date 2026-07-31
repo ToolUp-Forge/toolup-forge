@@ -39,7 +39,7 @@ Don't use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.EmbeddingProviders.Local
 
 let embedder = LocalEmbeddingProvider.create() :> IEmbeddingProvider
@@ -62,7 +62,7 @@ Use when:
 
 Setup:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.EmbeddingProviders.OpenAI
 
 let embedder = OpenAIEmbeddingProvider.create secretStore :> IEmbeddingProvider
@@ -97,7 +97,7 @@ Cache hits matter most when:
 
 Replace the in-memory cache with a Redis-backed companion:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create (...)
 |> ...
 |> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create redis :> IEmbeddingCache)
@@ -145,7 +145,7 @@ Distributed-ready providers MUST be stateless between calls (portability rule 4)
 
 For a vendor not covered (Cohere, Voyage, BGE, in-house):
 
-```fsharp
+```fsharp skip=fragment
 module MyVendor.EmbeddingProvider
 
 let create (secretStore: ISecretStore) (model: string) : IEmbeddingProvider =
@@ -171,7 +171,7 @@ type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
 
 Wire:
 
-```fsharp
+```fsharp skip=fragment
 let embedder = MyVendor.EmbeddingProvider.create secretStore "myvendor-large"
 RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 |> ...

@@ -10,7 +10,7 @@ The six rules below define that portability discipline. Any interface that *migh
 
 Returns and parameters use `string`, `Guid`, or domain records — never live framework handles (`IActorRef`, `IGrainReference`, `Task<T>` you can't resume from a different process, etc.).
 
-```fsharp
+```fsharp skip=fragment
 // Good
 abstract GetJob: jobId: string -> Async<JobDefinition option>
 
@@ -26,7 +26,7 @@ abstract GetJob: jobId: string -> Async<IActorRef>
 
 Every interface method returns `Async<T>` or `Task<T>`. Synchronous methods (`unit -> T`) and fire-and-forget `Tell`-style signatures (`unit -> unit`) are violations.
 
-```fsharp
+```fsharp skip=fragment
 // Good
 abstract Publish: scopeId: string -> Notification -> Async<unit>
 
@@ -48,7 +48,7 @@ Methods invoked exclusively at compose time MAY return `unit` synchronously rath
 
 Retry, backoff, and dead-letter behaviour are expressed as records (e.g. `RetryPolicy`). Callback parameters like `OnFailure: exn -> unit` or supervision-strategy objects leak framework semantics.
 
-```fsharp
+```fsharp skip=fragment
 // Good
 type JobRetryPolicy = {
     MaxAttempts: int
