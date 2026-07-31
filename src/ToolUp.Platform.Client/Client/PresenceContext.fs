@@ -13,12 +13,23 @@ open ToolUp.Platform
 // module views read "who else is here" and "is this entity locked, and
 // by whom" from a React context provided at the root of the view tree —
 // the same idiomatic path as `ProcessedDataContext` /
-// `LoadingIndicatorContext`. The DEPLOYMENT mounts `provider` (the SDK
-// shell does not auto-mount it) and keeps the value fresh by subscribing
-// to the reserved `_platform.presence` / `_platform.lock` notification
-// keys (Phase 6a SSE bridge) and re-providing on each roster / lock
-// change; module views never poll and never thread the state through
-// props.
+// `LoadingIndicatorContext`. Module views never poll and never thread the
+// state through props.
+//
+// **Two ways `provider` gets mounted, and both are supported:**
+//   * **Phase 622 (batteries-included).** `ClientConfig.Presence =
+//     EnabledPresence` makes the SDK shell mount it — `PresenceMount`
+//     owns the heartbeat, the roster refresh and the `_platform.*` fold.
+//     No deployment wiring at all.
+//   * **Phase 442 (hand-mounted).** The deployment mounts `provider`
+//     itself and keeps the value fresh by subscribing to the reserved
+//     `_platform.presence` / `_platform.lock` notification keys (Phase 6a
+//     SSE bridge) and re-providing on each roster / lock change. This was
+//     the only path before 622 and it still works unchanged — including
+//     underneath the shell's own provider, since React context resolves
+//     to the nearest one.
+//
+// The hooks stay transport-parameterised for exactly that reason.
 //
 // The `useEntityLock` helper hook wraps the acquire-on-edit /
 // release-on-blur lifecycle with auto-renew — the ergonomic path for a

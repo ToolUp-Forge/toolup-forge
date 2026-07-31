@@ -254,6 +254,9 @@
         <Compile Include="InProcess\WebhookSecretMigrationTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
+        <!-- Phase 622 — presence + lock platform API: scope isolation
+             first, then lock contention and the heartbeat fold. -->
+        <Compile Include="InProcess\PresenceApiTests.fs" />
         <!-- Phase 242 — A/B experiment substrate. -->
         <Compile Include="InProcess\ExperimentSubstrateTests.fs" />
         <!-- Phase 243 — BPMN-shaped workflow engine. -->

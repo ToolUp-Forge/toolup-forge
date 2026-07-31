@@ -44,18 +44,32 @@ let update (msg: Msg) (model: Model) : Model =
     match msg with
     | RosterUpdated roster -> { model with Roster = roster }
 
-/// Start the heartbeat + roster-poll loop. Fires immediately, then every
-/// `intervalMs`. Returns a dispose thunk (clears the timer + sends a
-/// best-effort `Leave`) — call it from the owning component's teardown.
+/// The bare heartbeat-and-poll mechanism, with no opinion about what a
+/// beat returns. Fires `poll` immediately, then every `intervalMs`,
+/// handing each result to `onPolled`. Returns a dispose thunk that clears
+/// the timer and sends a best-effort `leave`.
+///
+/// Extracted from `start` (below, which is now a thin wrapper over it) so
+/// the Phase 622 shell auto-mount runs on THIS pump rather than growing a
+/// second copy of the same timer. The two callers poll different shapes —
+/// `start` yields Phase 241's `PresenceEntry list`, the auto-mount yields
+/// Phase 442's `PresencePeer list` — which is the whole reason this is
+/// generic in `'T` instead of the two sharing a roster type they do not
+/// share. Additive: `start`'s signature and behaviour are unchanged.
+///
 /// Matching the codebase's raw `setInterval`/`clearInterval` subscription
 /// shape (e.g. `UserSession`).
-let start (transport: PresenceTransport) (intervalMs: int) (dispatch: Msg -> unit) : unit -> unit =
+let startPump
+    (poll: unit -> Async<'T>)
+    (leave: unit -> Async<unit>)
+    (intervalMs: int)
+    (onPolled: 'T -> unit)
+    : unit -> unit =
     let tick () =
         Async.StartImmediate(
             async {
-                do! transport.Heartbeat()
-                let! roster = transport.FetchRoster()
-                dispatch (RosterUpdated roster)
+                let! polled = poll ()
+                onPolled polled
             }
         )
 
@@ -64,7 +78,20 @@ let start (transport: PresenceTransport) (intervalMs: int) (dispatch: Msg -> uni
 
     fun () ->
         clearInterval handle
-        Async.StartImmediate(transport.Leave())
+        Async.StartImmediate(leave ())
+
+/// Start the heartbeat + roster-poll loop. Fires immediately, then every
+/// `intervalMs`. Returns a dispose thunk (clears the timer + sends a
+/// best-effort `Leave`) — call it from the owning component's teardown.
+let start (transport: PresenceTransport) (intervalMs: int) (dispatch: Msg -> unit) : unit -> unit =
+    startPump
+        (fun () -> async {
+            do! transport.Heartbeat()
+            return! transport.FetchRoster()
+        })
+        transport.Leave
+        intervalMs
+        (RosterUpdated >> dispatch)
 
 /// Online members of the roster, sorted for stable rendering — the
 /// "who's here right now" list a view binds to.

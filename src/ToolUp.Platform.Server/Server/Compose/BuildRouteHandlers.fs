@@ -146,6 +146,19 @@ let buildRouteHandlers
         | NoUserSchemaAuthoring -> []
         | EnabledUserSchemaAuthoring -> [ makeApi UserSchemaApiHandler.userSchemaApi ]
 
+    // Phase 622 — presence + soft-lock API over the Phase 442 substrate.
+    // Mounted only when `ServerConfig.Presence = EnabledPresence`, which
+    // is the SAME flag that registers `IPresenceTracker` /
+    // `IEntityLockStore` into DI — so the route can never resolve a null
+    // substrate, and the default `NoPresence` mounts nothing at all (the
+    // surface 404s; GP 13). Purely additive: a deployment that already
+    // hand-mounts its own module-owned presence API over the resolved
+    // services keeps working and simply never calls this one.
+    let presenceHandler: HttpHandler list =
+        match config.Presence with
+        | NoPresence -> []
+        | EnabledPresence -> [ makeApi PresenceApiHandler.presenceApi ]
+
     // Cross-module query bus API. Auto-injected so client-side modules
     // can reach the bus without extra wiring. The server resolves
     // `AccessContext` from DI per request and forwards to the
@@ -641,6 +654,7 @@ let buildRouteHandlers
             @ featureFlagHandler
             @ webhookHandler
             @ userSchemaHandler
+            @ presenceHandler
             @ moduleQueryBusHandler
             @ fileManagementHandler
             @ columnMappingHandler

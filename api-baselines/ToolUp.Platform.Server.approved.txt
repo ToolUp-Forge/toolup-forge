@@ -4335,6 +4335,9 @@ ToolUp.Platform.PrerenderedRoutesMiddleware..ctor(Microsoft.AspNetCore.Http.Requ
 ToolUp.Platform.PrerenderedRoutesMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PrerenderedRoutesPath (class)
 ToolUp.Platform.PrerenderedRoutesPath.tryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.PresenceApiHandler (class)
+ToolUp.Platform.PresenceApiHandler.forScope(ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.IPresenceApi
+ToolUp.Platform.PresenceApiHandler.presenceApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IPresenceApi
 ToolUp.Platform.PrincipalRegistry (class)
 ToolUp.Platform.PrincipalRegistry.defaultAuditLookBack : System.TimeSpan { get }
 ToolUp.Platform.PrincipalRegistry.listPrincipals(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]]

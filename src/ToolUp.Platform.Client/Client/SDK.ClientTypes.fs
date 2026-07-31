@@ -1727,6 +1727,27 @@ type ClientConfig = {
     /// failure naming both directions, in the same shape as the server
     /// side's `client-server-module-parity` preflight defect.
     ExpectedModules: string list option
+
+    /// Phase 622 — shell auto-mount of the presence + soft-lock context.
+    /// `EnabledPresence` makes the shell wrap the view tree in a live
+    /// `PresenceContext` provider: a heartbeat announcing the active
+    /// module as this peer's location, a roster refreshed off the
+    /// reserved `_platform.presence` fan-out, and a lease map folded from
+    /// `_platform.lock` — so module views get `Presence.usePeers` /
+    /// `Presence.useLock` / `useEntityLock` with no deployment wiring.
+    ///
+    /// Pair it with `ServerConfig.Presence = EnabledPresence`, which
+    /// registers the substrate and mounts the `IPresenceApi` this reads.
+    ///
+    /// `NoPresence` (the default) mounts nothing and starts no timer, so
+    /// an existing deployment renders byte-for-byte as before (GP 11 +
+    /// GP 13). The flag is deliberately separate from the server's: a
+    /// deployment already on the Phase 442 hand-mounted path must not
+    /// acquire a second heartbeat in every browser tab merely by
+    /// upgrading the SDK. That path stays supported — a self-mounted
+    /// `PresenceContext.provider` nested inside the shell's takes
+    /// precedence for the views below it.
+    Presence: PresenceMode
 }
 
 module ClientConfig =
@@ -1806,6 +1827,9 @@ module ClientConfig =
         // Phase 583 — parity check dormant until the consumer declares
         // an expected-module list on BOTH roots (GP 13).
         ExpectedModules = None
+        // Phase 622 — no shell presence mount, no heartbeat, no SSE
+        // subscription until the deployment opts in (GP 11 + GP 13).
+        Presence = NoPresence
     }
 
     /// Back-compat: `ClientConfig` with every field at the SDK default

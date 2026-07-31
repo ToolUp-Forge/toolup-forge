@@ -121,6 +121,9 @@ let allTests =
         WebhookSecretMigrationTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
+        // Phase 622 — presence + lock platform API (scope isolation,
+        // lock contention, heartbeat fold, hand-mounted path).
+        PresenceApiTests.tests
         // Phase 442 — presence tracker + advisory soft-lock conformance.
         IPresenceTrackerContract.tests
         IEntityLockStoreContract.tests

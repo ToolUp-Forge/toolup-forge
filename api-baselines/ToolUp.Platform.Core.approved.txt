@@ -4265,6 +4265,15 @@ ToolUp.Platform.IPlatformTenantApi.PreviewDeprovision : Microsoft.FSharp.Core.FS
 ToolUp.Platform.IPlatformTenantApi.ProvisionTenant : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ProvisioningRequest], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.RequestDeprovisionToken : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.ScheduleDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int32, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduledDeprovision, System.String]]] { get }
+ToolUp.Platform.IPresenceApi (class)
+ToolUp.Platform.IPresenceApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PresenceLocation, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockLease]]])
+ToolUp.Platform.IPresenceApi.AcquireLock : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]] { get }
+ToolUp.Platform.IPresenceApi.Heartbeat : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PresenceLocation, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]] { get }
+ToolUp.Platform.IPresenceApi.Leave : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.IPresenceApi.LockHolder : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockLease]]] { get }
+ToolUp.Platform.IPresenceApi.ReleaseLock : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.IPresenceApi.RenewLock : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]] { get }
+ToolUp.Platform.IPresenceApi.Roster : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]] { get }
 ToolUp.Platform.IPresenceChannel (interface)
 ToolUp.Platform.IPresenceChannel.Heartbeat(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceChannel.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -6440,6 +6449,11 @@ ToolUp.Platform.PrerenderRoute..ctor(System.String, Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.PrerenderRoute.InitStateKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.PrerenderRoute.Meta : ToolUp.Platform.PrerenderMeta { get }
 ToolUp.Platform.PrerenderRoute.Path : System.String { get }
+ToolUp.Platform.PresenceApi (class)
+ToolUp.Platform.PresenceApi.heartbeatIntervalMs : System.Int32 (literal)
+ToolUp.Platform.PresenceApi.lockRenewIntervalMs : System.Int32 (literal)
+ToolUp.Platform.PresenceApi.lockTtl : System.TimeSpan { get }
+ToolUp.Platform.PresenceApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.PresenceChange (class)
 ToolUp.Platform.PresenceChange.IsJoined : System.Boolean { get }
 ToolUp.Platform.PresenceChange.IsLeft : System.Boolean { get }

@@ -7,6 +7,17 @@ open System
 
 // ─── IPresenceChannel — Phase 241 ────────────────────────────────────
 //
+// ⚠ **This is the NARROWER of the SDK's two presence families, and it is
+// not the one the platform builds on.** Phase 622.A settled that: the
+// composed substrate is Phase 442's `IPresenceTracker` +
+// `IEntityLockStore`, and `IPresenceApi` binds those. This interface has
+// no compose site and no DI registration — `InMemoryPresenceChannel`
+// below is constructed only by its own test. Before adding server
+// surface here, read the decision record in `Shared/PresenceTypes.fs`
+// ("THE TWO-SUBSTRATE DECISION"); it exists because this duplication has
+// been rediscovered from scratch more than once. `PresenceEntry` is
+// recoverable from a `PresencePeer`; the reverse is not.
+//
 // The thin first slice of real-time collaboration: "who is in this
 // scope right now, and when were they last seen". Co-editing / cursors
 // (OT/CRDT) are deliberately out of scope — a much larger problem left

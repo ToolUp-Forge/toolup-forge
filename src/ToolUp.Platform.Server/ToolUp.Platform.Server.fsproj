@@ -607,6 +607,10 @@
              TeamManagement (the role gate); before BuildRouteHandlers mounts
              it. -->
         <Compile Include="Server\UserSchemaApiHandler.fs" />
+        <!-- Phase 622 — IPresenceApi Remoting handler over the Phase 442
+             substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
+             services it resolves); before BuildRouteHandlers mounts it. -->
+        <Compile Include="Server\PresenceApiHandler.fs" />
         <Compile Include="Server\IFeatureFlagStore.fs" />
         <!-- Phase 239 — read-only external flag-resolution seam. -->
         <Compile Include="Server\IFlagSource.fs" />

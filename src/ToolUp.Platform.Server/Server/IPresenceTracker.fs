@@ -31,10 +31,20 @@ open ToolUp.Remoting.Json.SystemTextJson
 //
 // Composition: `ServerConfig.Presence = EnabledPresence` registers the
 // in-memory default into DI (see `ComposeNotifications`); `NoPresence`
-// (the default) registers nothing. The SDK mounts no presence HTTP
-// surface — a deployment exposes its own module-owned API over the
-// resolved tracker (the client hooks in `PresenceClient` /
-// `PresenceContext` are transport-parameterised to match).
+// (the default) registers nothing.
+//
+// **This is the substrate the platform builds on** — Phase 622.A decided
+// that against Phase 241's `IPresenceChannel`, and the reasoning lives at
+// the shared seam (`Shared/PresenceTypes.fs`, "THE TWO-SUBSTRATE
+// DECISION"). Read it before adding a third presence family.
+//
+// Phase 622 also mounts a batteries-included `IPresenceApi` over this
+// tracker at `/api/IPresenceApi/*` under the same flag, and the shell
+// auto-mounts the client half under `ClientConfig.Presence`. That is
+// purely additive: the pre-622 contract — SDK registers the substrate, a
+// deployment exposes its own module-owned API over the resolved tracker
+// and mounts `PresenceContext.provider` itself — remains supported, which
+// is why the client hooks stay transport-parameterised.
 
 /// Scope-isolated presence tracker with per-peer location. `Join`
 /// announces arrival at a location; `Heartbeat` keeps a peer live

@@ -34,10 +34,19 @@ open ToolUp.Remoting.Json.SystemTextJson
 //
 // Composition: `ServerConfig.Presence = EnabledPresence` registers the
 // in-memory default into DI (see `ComposeNotifications`); `NoPresence`
-// (the default) registers nothing. The SDK mounts no lock HTTP surface —
-// a deployment exposes its own module-owned API over the resolved store
-// (the `useEntityLock` hook's `LockTransport` is consumer-supplied to
-// match).
+// (the default) registers nothing.
+//
+// Phase 622 mounts the lock half of `IPresenceApi` over this store under
+// the same flag (acquire / renew / release / holder), with the lease TTL
+// server-owned (`PresenceApi.lockTtl`) rather than client-supplied so a
+// buggy caller cannot strand an entity behind an unbounded lease. Purely
+// additive: a deployment exposing its own module-owned API over the
+// resolved store keeps working, which is why the `useEntityLock` hook's
+// `LockTransport` stays consumer-supplied.
+//
+// Note there is deliberately no "list every lease in this scope"
+// operation. The shell's lease map is therefore built from the
+// `_platform.lock` fan-out rather than a poll — see `PresenceMount`.
 
 /// Scope-isolated advisory soft-lock store. `Acquire` grants a lease or
 /// returns the current holder (never blocks); `Renew` extends the

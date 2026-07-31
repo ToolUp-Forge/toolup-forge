@@ -3162,6 +3162,21 @@ module Client =
         let withGrid =
             ToolUp.Platform.AgGrid.provider config.GridModules [ withLoadingIndicator ]
 
+        // Phase 622 — wrap in the presence + soft-lock provider so module
+        // views can read "who else is here" / "is this entity locked" via
+        // the Phase 442 hooks with no deployment wiring. The active module
+        // id is passed through as the peer's location descriptor, so the
+        // roster shows *where* each collaborator is.
+        //
+        // Gated on `ClientConfig.Presence`, default `NoPresence`: an
+        // unconfigured deployment evaluates one `match` and renders
+        // `withGrid` unchanged — no provider, no heartbeat timer, no SSE
+        // subscription (GP 11 + GP 13).
+        let withPresence =
+            match config.Presence with
+            | NoPresence -> withGrid
+            | EnabledPresence -> PresenceMount.mount model.ActiveModuleId withGrid
+
         // Phase 5e — wrap the whole tree in the branding provider so any
         // view (shell chrome and module views alike) can read the active
         // team's `Branding` via `BrandingProvider.useBranding`. The
@@ -3169,7 +3184,7 @@ module Client =
         // the favicon + `--brand-primary` document side effects.
         BrandingProvider.provider
             resolvedBranding
-            (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withGrid ])
+            (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withPresence ])
 
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
