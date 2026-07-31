@@ -95,14 +95,87 @@ module AuditMetrics =
 // union via `FSharpType.GetUnionCases` and fails the build if any case
 // lacks a registry entry — adding a new `AuditEvent` case without a row
 // here is a test failure, not a runtime loss (GP 6 + GP 9).
+//
+// ─── Phase 625 — the `Artifact` / `Artefact` decision record ──────
+//
+// `AuditEvent` carried a one-letter homograph pair: the Phase 30a
+// module-distribution family (`ArtifactSigned` / `ArtifactVerified` /
+// `ArtifactRejected`, `_platform.artefacts`) and the Phase 40
+// detached-JWS family (`ArtefactSigned`, `_platform.signing`). Two
+// different security events, one vowel apart, both public API. Neither
+// the compiler nor a reviewer reliably tells them apart, so a match
+// arm, a dashboard query, or an alert rule can silently address the
+// wrong one.
+//
+// WHAT WE MEASURED FIRST (the question that decided the shape). Is the
+// `EventType` string matched anywhere downstream? Yes — in four places,
+// three of them outside forge's reach:
+//
+//   1. `CefFormatter.highEvents` contains the literal "ArtifactRejected"
+//      and grades it `CefHigh`. That set is membership-based, not a
+//      match over the DU, so a renamed case looks exactly like a NEW
+//      case to it and silently falls through to the `CefLow` default —
+//      a security-severity downgrade with no compile error.
+//   2. Every audit sink projects `AuditEvent.eventTypeName` verbatim as
+//      the external discriminator: `EventType` in the S3 / GCS / Azure
+//      Blob archive records, `eventTypeName` in the Splunk HEC and
+//      Datadog Logs payloads, `cat` in the CEF record. These land in
+//      customer-owned SIEMs whose saved searches, correlation rules and
+//      retention policies key on the string. Forge can neither migrate
+//      nor enumerate them.
+//   3. The `toolup.audit.write_failures_total` metric is tagged
+//      `event_type` from the same function, so operator dashboards and
+//      alert thresholds key on it too.
+//   4. This platform's own append-only store round-trips it: a changed
+//      string makes every archived row of the family decode to
+//      `Error "unknown event type ..."` and routes it to
+//      `AuditEventDecodeFailed` — the audit trail for that family goes
+//      dark rather than failing loudly.
+//
+// THE DECISION. Rename at the F# surface; pin the wire. The three 30a
+// cases and their payload types became `ModuleArtefact*` — house
+// `artefact` spelling, and a word apart from `ArtefactSigned` rather
+// than a vowel — while `eventTypeName` continues to emit the historical
+// `"Artifact*"` discriminators. Record FIELD names are untouched (those
+// ARE serialised); only F#-facing identifiers moved.
+//
+// WHAT THAT COSTS, stated plainly rather than asserted away:
+//   * It is a BREAKING source change. Consumers pattern-matching these
+//     cases or constructing these payloads get a compile error. That is
+//     the intended failure mode — loud, located, and mechanical to fix
+//     (see docs/migrations/625-module-artefact-audit-cases.md).
+//   * It leaves the homograph AT THE QUERY SURFACE unfixed: an operator
+//     reading a Splunk archive still sees "ArtifactSigned" next to
+//     "ArtefactSigned". This is accepted deliberately. The only way to
+//     fix it is to change the emitted string, and that breaks
+//     already-correct operator alert rules SILENTLY, with no upgrade
+//     signal — strictly worse than a confusing-but-stable name in a
+//     security-telemetry surface, and a direct GP 11 violation ("an
+//     existing deployment that upgrades stays byte-for-byte identical
+//     until it opts in").
+//   * It makes case identifier != wire string for exactly three rows,
+//     which is a new (smaller) hazard: a future author may "tidy" the
+//     strings to match. That is why the pin is asserted by a test in
+//     `AuditEventRegistryTests` rather than merely commented here.
+//
+// REJECTED: "rename fully and migrate the archives" — impossible, not
+// merely expensive. Audit archives are append-only by design and are
+// already replicated to third-party sinks; you cannot migrate what has
+// left the building. REJECTED: "leave it and document" — that was the
+// status quo (the Phase 40 case already carried a disambiguating doc
+// comment) and it did not prevent the confusion that raised this phase.
 
 /// One row of the audit-event codec registry: the wire `EventType`
 /// discriminator plus the encode/decode pair for that case's payload.
 /// `internal` so the replicator (same assembly) and the test pack
 /// (InternalsVisibleTo) share the one table.
 type internal AuditEventCodec = {
-    /// Wire-format `EventType` discriminator. Matches the DU case name
-    /// returned by `AuditEvent.eventTypeName`.
+    /// Wire-format `EventType` discriminator. Always equal to
+    /// `AuditEvent.eventTypeName` for this entry's case — that identity
+    /// is what the decode lookup and the exhaustiveness gate rest on.
+    /// It is NOT necessarily the F# case identifier: the three Phase 625
+    /// `ModuleArtefact*` rows deliberately emit their historical
+    /// `"Artifact*"` strings (see the decision record above).
     EventType: string
     /// Serialise THIS case's payload to JSON. Returns `Some json` when
     /// `audit` is this entry's case, `None` otherwise — the table is
@@ -836,29 +909,33 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> j)
     }
+    // Phase 625 — the three rows below are the ONLY rows in this table
+    // whose `EventType` differs from its `AuditEvent` case identifier.
+    // That divergence is deliberate and pinned; see the decision record
+    // in this file's registry header.
     {
         EventType = "ArtifactSigned"
         TryEncode =
             (function
-            | ArtifactSigned p -> Some(toAuditJson p)
+            | ModuleArtefactSigned p -> Some(toAuditJson p)
             | _ -> None)
-        Decode = fun j -> ArtifactSigned(fromAuditJson<ArtifactSignedPayload> j)
+        Decode = fun j -> ModuleArtefactSigned(fromAuditJson<ModuleArtefactSignedPayload> j)
     }
     {
         EventType = "ArtifactVerified"
         TryEncode =
             (function
-            | ArtifactVerified p -> Some(toAuditJson p)
+            | ModuleArtefactVerified p -> Some(toAuditJson p)
             | _ -> None)
-        Decode = fun j -> ArtifactVerified(fromAuditJson<ArtifactVerifiedPayload> j)
+        Decode = fun j -> ModuleArtefactVerified(fromAuditJson<ModuleArtefactVerifiedPayload> j)
     }
     {
         EventType = "ArtifactRejected"
         TryEncode =
             (function
-            | ArtifactRejected p -> Some(toAuditJson p)
+            | ModuleArtefactRejected p -> Some(toAuditJson p)
             | _ -> None)
-        Decode = fun j -> ArtifactRejected(fromAuditJson<ArtifactRejectedPayload> j)
+        Decode = fun j -> ModuleArtefactRejected(fromAuditJson<ModuleArtefactRejectedPayload> j)
     }
     {
         EventType = "SyntheticSampleGenerated"

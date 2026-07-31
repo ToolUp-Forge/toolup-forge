@@ -80,14 +80,41 @@ let rec private defaultValue (t: Type) : obj =
     else
         failwithf "AuditEventRegistryTests: no default-value rule for type %s" t.FullName
 
-/// One synthesised representative of every `AuditEvent` union case.
+/// One synthesised representative of every `AuditEvent` union case,
+/// keyed by its WIRE discriminator (`AuditEvent.eventTypeName`) rather
+/// than by its F# case identifier.
+///
+/// Phase 625 made the distinction load-bearing. Before it, the two were
+/// identical for every case and this pack asserted that identity
+/// directly. Three cases now diverge on purpose — `ModuleArtefactSigned`
+/// emits `"ArtifactSigned"`, and so on — because the wire string is
+/// replicated into operator-owned SIEMs and append-only archives that
+/// forge cannot migrate.
+///
+/// Keying on `eventTypeName` is not a weakening of the Phase 114 gate:
+/// the coupling that actually matters is `eventTypeName` <-> registry
+/// `EventType` (that is what the decode lookup keys on), and this asserts
+/// exactly that. The F#-identifier identity was only ever a proxy for it.
+/// The identifiers that DO diverge are pinned by their own test below.
 let private allCaseSamples: (string * AuditEvent) list =
     FSharpType.GetUnionCases typeof<AuditEvent>
     |> Array.map (fun case ->
         let fieldVals = case.GetFields() |> Array.map (fun f -> defaultValue f.PropertyType)
         let evt = FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent
-        case.Name, evt)
+        AuditEvent.eventTypeName evt, evt)
     |> List.ofArray
+
+/// Phase 625 — the wire discriminators that deliberately differ from
+/// their F# case identifier, pinned so a future "tidy the strings to
+/// match the case names" edit fails here instead of silently breaking
+/// every operator alert rule and orphaning every archived row of the
+/// family. Left side is the F# case identifier, right side is the
+/// historical string that must keep going out on the wire.
+let private pinnedLegacyWireNames = [
+    "ModuleArtefactSigned", "ArtifactSigned"
+    "ModuleArtefactVerified", "ArtifactVerified"
+    "ModuleArtefactRejected", "ArtifactRejected"
+]
 
 [<Tests>]
 let tests =
@@ -110,21 +137,68 @@ let tests =
         }
 
         test "every registry entry maps to a real AuditEvent union case" {
-            let caseNames = allCaseSamples |> List.map fst |> Set.ofList
+            let wireNames = allCaseSamples |> List.map fst |> Set.ofList
 
             let orphans =
                 AuditLog.auditEventCodecs
                 |> List.map _.EventType
-                |> List.filter (fun et -> not (Set.contains et caseNames))
+                |> List.filter (fun et -> not (Set.contains et wireNames))
 
             Expect.isEmpty
                 orphans
                 (sprintf "registry entries with no matching union case: %s" (String.concat ", " orphans))
         }
 
-        test "registry EventType matches AuditEvent.eventTypeName for every case" {
-            for name, evt in allCaseSamples do
-                Expect.equal (AuditEvent.eventTypeName evt) name "registry EventType == DU case name"
+        test "registry EventType round-trips to itself for every case" {
+            // The coupling the decode lookup actually rests on: the
+            // string a case EMITS must be the string the registry is
+            // KEYED by. `allCaseSamples` is keyed by `eventTypeName`, so
+            // this asserts each emitted discriminator resolves to a
+            // decoder that reconstructs the same case.
+            for wireName, evt in allCaseSamples do
+                Expect.equal (AuditEvent.eventTypeName evt) wireName "eventTypeName is stable"
+
+                Expect.isTrue
+                    (AuditLog.auditDecoderByType |> Map.containsKey wireName)
+                    (sprintf "registry is keyed by the emitted discriminator '%s'" wireName)
+        }
+
+        test "Phase 625 — legacy wire discriminators stay pinned" {
+            // These three cases were renamed `Artifact*` ->
+            // `ModuleArtefact*` at the F# surface while their emitted
+            // discriminator deliberately did NOT move. Changing a string
+            // here would break `CefFormatter`'s severity set, every
+            // operator-owned SIEM rule keyed on it, the
+            // `toolup.audit.write_failures_total` `event_type` tag, and
+            // would orphan every archived row of the family (they would
+            // decode to `Error "unknown event type ..."`). None of that
+            // produces a compile error, so it is asserted here.
+            let byCaseName =
+                FSharpType.GetUnionCases typeof<AuditEvent>
+                |> Array.map (fun case ->
+                    let fieldVals = case.GetFields() |> Array.map (fun f -> defaultValue f.PropertyType)
+                    case.Name, (FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent))
+                |> Map.ofArray
+
+            for caseName, expectedWireName in pinnedLegacyWireNames do
+                match Map.tryFind caseName byCaseName with
+                | None ->
+                    failtestf
+                        "AuditEvent case '%s' no longer exists. If it was renamed again, the wire discriminator '%s' must STILL be emitted — update this pin, never the emitted string."
+                        caseName
+                        expectedWireName
+                | Some evt ->
+                    Expect.equal
+                        (AuditEvent.eventTypeName evt)
+                        expectedWireName
+                        (sprintf
+                            "case '%s' must keep emitting the historical discriminator '%s' (Phase 625 — archived events and operator SIEM rules key on it)"
+                            caseName
+                            expectedWireName)
+
+                    Expect.isTrue
+                        (AuditLog.auditDecoderByType |> Map.containsKey expectedWireName)
+                        (sprintf "archived '%s' rows must still decode" expectedWireName)
         }
 
         test "every union case serialises through the registry without throwing" {

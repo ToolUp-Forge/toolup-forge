@@ -101,7 +101,7 @@ let private substrateSpecificTests =
             do! store.RemoveTrustedKey(PublisherKeyId "never-added")
         }
 
-        testCaseAsync "Verifier emits ArtifactVerified audit on Ok (publisher key id recorded; no key bytes)"
+        testCaseAsync "Verifier emits ModuleArtefactVerified audit on Ok (publisher key id recorded; no key bytes)"
         <| async {
             let publisherId, publicKey, privateKey = mkPublisherKeyPair ()
             let blobs = InMemoryBlobStorage() :> IBlobStorage
@@ -126,10 +126,10 @@ let private substrateSpecificTests =
                 audit.Recorded
                 |> List.choose (fun (_, evt) ->
                     match evt with
-                    | ArtifactVerified p -> Some p
+                    | ModuleArtefactVerified p -> Some p
                     | _ -> None)
 
-            Expect.equal verifiedEvents.Length 1 "Exactly one ArtifactVerified event must be recorded"
+            Expect.equal verifiedEvents.Length 1 "Exactly one ModuleArtefactVerified event must be recorded"
             let recorded = verifiedEvents[0]
 
             Expect.equal
@@ -142,7 +142,7 @@ let private substrateSpecificTests =
             Expect.equal recorded.ArtifactVersion manifest.Version "Audit payload must carry the artefact version"
         }
 
-        testCaseAsync "Verifier emits ArtifactRejected audit on untrusted publisher (reason verbatim)"
+        testCaseAsync "Verifier emits ModuleArtefactRejected audit on untrusted publisher (reason verbatim)"
         <| async {
             let publisherId, _publicKey, privateKey = mkPublisherKeyPair ()
             let blobs = InMemoryBlobStorage() :> IBlobStorage
@@ -167,10 +167,10 @@ let private substrateSpecificTests =
                 audit.Recorded
                 |> List.choose (fun (_, evt) ->
                     match evt with
-                    | ArtifactRejected p -> Some p
+                    | ModuleArtefactRejected p -> Some p
                     | _ -> None)
 
-            Expect.equal rejectedEvents.Length 1 "Exactly one ArtifactRejected event must be recorded"
+            Expect.equal rejectedEvents.Length 1 "Exactly one ModuleArtefactRejected event must be recorded"
 
             Expect.equal
                 rejectedEvents[0].Reason

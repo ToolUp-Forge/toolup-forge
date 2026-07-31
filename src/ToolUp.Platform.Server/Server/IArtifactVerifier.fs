@@ -37,7 +37,7 @@ open System
 ///    clock precision boundary.
 ///
 /// **Audit contract.** Implementations call `IAuditLog.Record` with
-/// `AuditEvent.ArtifactVerified` on `Ok` and `AuditEvent.ArtifactRejected`
+/// `AuditEvent.ModuleArtefactVerified` on `Ok` and `AuditEvent.ModuleArtefactRejected`
 /// on `Error`. The rejection payload includes the operator-readable
 /// reason verbatim.
 type IArtifactVerifier =

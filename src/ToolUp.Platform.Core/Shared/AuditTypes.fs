@@ -1807,11 +1807,29 @@ type HostActionDispatchedPayload = {
 // `Shared/Types/ArtifactTypes.fs`). PII-free — payloads carry the
 // publisher key id (NEVER the private key bytes), the module id +
 // artefact version (manifest-supplied), and a reason on `Rejected`.
+//
+// Phase 625 — these three payloads and their `AuditEvent` cases were
+// renamed `Artifact*` -> `ModuleArtefact*`. They were a one-letter
+// homograph of the Phase 40 `_platform.signing` family
+// (`ArtefactSignedPayload` / `AuditEvent.ArtefactSigned`), which is a
+// DIFFERENT event about a DIFFERENT subject, and neither the compiler
+// nor a reviewer distinguishes `Artifact`/`Artefact` reliably. The
+// `Module` qualifier makes the two families a word apart rather than a
+// vowel apart, and adopts the estate's `artefact` house spelling.
+//
+// The WIRE IS UNCHANGED: `AuditEvent.eventTypeName` still returns the
+// historical `"ArtifactSigned"` / `"ArtifactVerified"` /
+// `"ArtifactRejected"` discriminators. See the decision record at
+// `auditEventCodecs` in `Server/AuditLog.fs`. Record FIELD names are
+// likewise untouched (they ARE serialised); only the F#-facing type and
+// case identifiers moved.
 
 /// `IArtifactSigner.Sign` succeeded. Records who signed (the actor that
 /// invoked the signer), which publisher key was used (id only — never
 /// the private key), and the manifest's module / version identity.
-type ArtifactSignedPayload = {
+///
+/// Wire `EventType` is the historical `"ArtifactSigned"` (Phase 625).
+type ModuleArtefactSignedPayload = {
     /// Actor who invoked the signer (typically `"_hub"` for an
     /// automated publish pipeline; the authenticated user's id for
     /// operator-initiated signs).
@@ -1828,7 +1846,9 @@ type ArtifactSignedPayload = {
 
 /// `IArtifactVerifier.Verify` returned `ArtifactValidation.Ok` (signature
 /// valid + publisher key trusted at the edge).
-type ArtifactVerifiedPayload = {
+///
+/// Wire `EventType` is the historical `"ArtifactVerified"` (Phase 625).
+type ModuleArtefactVerifiedPayload = {
     /// `PublisherKeyId.value` of the publisher whose signature was
     /// validated.
     PublisherKeyId: string
@@ -1839,10 +1859,14 @@ type ArtifactVerifiedPayload = {
 }
 
 /// `IArtifactVerifier.Verify` returned `ArtifactValidation.Error reason`.
-/// Recorded as a separate case from `ArtifactVerified` so operator
+/// Recorded as a separate case from `ModuleArtefactVerified` so operator
 /// dashboards can target refusal rates without scanning every verify
 /// row.
-type ArtifactRejectedPayload = {
+///
+/// Wire `EventType` is the historical `"ArtifactRejected"` (Phase 625) —
+/// deliberately pinned, because `CefFormatter`'s `highEvents` severity
+/// set and operator-owned SIEM rules key on that exact string.
+type ModuleArtefactRejectedPayload = {
     /// `PublisherKeyId.value` from the manifest. `None` when the
     /// rejection happened before the key id could be parsed (corrupt
     /// manifest, decode failure).
@@ -1954,12 +1978,17 @@ type PeerCallCompletedPayload = {
 // Emitted by the `ToolUp.ArtefactSigning` companion's
 // `DefaultArtefactSigner` for the general-purpose detached-JWS signing
 // path. Reserved `SourceModule = "_platform.signing"`. Distinct from the
-// Phase 30a `_platform.artefacts` family (`ArtifactSigned` /
-// `ArtifactVerified` / `ArtifactRejected`, with the "Artifact" spelling),
-// which signs module-distribution artefacts against an `ArtifactManifest`
-// — this family signs arbitrary byte payloads for compliance non-
-// repudiation. Payloads carry the key id + a SHA-256 of the artefact,
-// NEVER the artefact bytes or the private-key material.
+// Phase 30a `_platform.artefacts` family (`ModuleArtefactSigned` /
+// `ModuleArtefactVerified` / `ModuleArtefactRejected`), which signs
+// module-distribution artefacts against an `ArtifactManifest` — this
+// family signs arbitrary byte payloads for compliance non-repudiation.
+// Payloads carry the key id + a SHA-256 of the artefact, NEVER the
+// artefact bytes or the private-key material.
+//
+// Phase 625 renamed the 30a family to carry the `Module` qualifier; it
+// and this family were previously one letter apart
+// (`ArtifactSigned` / `ArtefactSigned`). This family is UNCHANGED — it
+// already used the house `artefact` spelling.
 
 module SigningSourceModule =
     /// Reserved `SourceModule` for `ToolUp.ArtefactSigning` audit events.
@@ -3015,17 +3044,28 @@ type AuditEvent =
     /// Phase 30a — `IArtifactSigner.Sign` succeeded. Reserved
     /// `SourceModule = "_platform.artefacts"`. Payload carries the
     /// publisher key id (never the private key bytes).
-    | ArtifactSigned of ArtifactSignedPayload
+    ///
+    /// Phase 625: renamed from `ArtifactSigned`. Wire `EventType`
+    /// remains `"ArtifactSigned"` — do not "tidy" it to match the case
+    /// name; see the decision record at `AuditLog.auditEventCodecs`.
+    | ModuleArtefactSigned of ModuleArtefactSignedPayload
     /// Phase 30a — `IArtifactVerifier.Verify` returned
     /// `ArtifactValidation.Ok` (signature valid + publisher key trusted
     /// at the edge). Reserved `SourceModule = "_platform.artefacts"`.
-    | ArtifactVerified of ArtifactVerifiedPayload
+    ///
+    /// Phase 625: renamed from `ArtifactVerified`. Wire `EventType`
+    /// remains `"ArtifactVerified"`.
+    | ModuleArtefactVerified of ModuleArtefactVerifiedPayload
     /// Phase 30a — `IArtifactVerifier.Verify` returned
     /// `ArtifactValidation.Error reason`. Reserved
     /// `SourceModule = "_platform.artefacts"`. Operator dashboards
     /// query on this case to surface refusal rates without scanning
     /// every verify row.
-    | ArtifactRejected of ArtifactRejectedPayload
+    ///
+    /// Phase 625: renamed from `ArtifactRejected`. Wire `EventType`
+    /// remains `"ArtifactRejected"` — `CefFormatter` grades that exact
+    /// string `CefHigh`, and operator SIEM rules key on it.
+    | ModuleArtefactRejected of ModuleArtefactRejectedPayload
     /// Phase 30d — `IDataCatalog.GetSyntheticSample` returned
     /// synthetic rows for a `ModulePermission.SchemaOnly` partner-
     /// sandbox caller. Payload is metadata-only (count + seed) — no
@@ -3044,8 +3084,10 @@ type AuditEvent =
     /// Phase 40 — `IArtefactSigner.Sign` produced a detached-JWS
     /// signature over an arbitrary artefact. Reserved `SourceModule =
     /// "_platform.signing"`. Payload carries the key id + artefact
-    /// SHA-256, never the bytes. Spelled "Artefact" to disambiguate from
-    /// the Phase 30a module-distribution `ArtifactSigned` ("Artifact").
+    /// SHA-256, never the bytes. Distinct from the Phase 30a
+    /// module-distribution family, which Phase 625 renamed to
+    /// `ModuleArtefactSigned` precisely because a one-vowel difference
+    /// was not a safe way to tell two security events apart.
     | ArtefactSigned of ArtefactSignedPayload
     /// Phase 40 — a new artefact-signing key became active, rotating out
     /// a predecessor whose public key remains discoverable for archival
@@ -3293,9 +3335,17 @@ module AuditEvent =
         | AnonymousSessionMigrated _ -> "AnonymousSessionMigrated"
         | AuthScopeResolutionFailed _ -> "AuthScopeResolutionFailed"
         | SurfaceDenied _ -> "SurfaceDenied"
-        | ArtifactSigned _ -> "ArtifactSigned"
-        | ArtifactVerified _ -> "ArtifactVerified"
-        | ArtifactRejected _ -> "ArtifactRejected"
+        // Phase 625 — PINNED legacy wire names. These three cases were
+        // renamed `Artifact*` -> `ModuleArtefact*` at the F# surface;
+        // the emitted discriminator deliberately did NOT move, because
+        // it is already replicated into operator-owned SIEMs and
+        // append-only archives that forge cannot migrate. Changing a
+        // string here silently breaks existing alert rules and makes
+        // every archived row of this family undecodable. The pin is
+        // asserted by `AuditEventRegistryTests`.
+        | ModuleArtefactSigned _ -> "ArtifactSigned"
+        | ModuleArtefactVerified _ -> "ArtifactVerified"
+        | ModuleArtefactRejected _ -> "ArtifactRejected"
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | PeerCallCompleted _ -> "PeerCallCompleted"

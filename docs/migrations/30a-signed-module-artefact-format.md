@@ -43,12 +43,21 @@ Default implementations:
 
 Three new `AuditEvent` cases (`AuditTypes.fs`), with matching payloads:
 
-- `ArtifactSigned of ArtifactSignedPayload { Actor; PublisherKeyId;
-  ModuleId; ArtifactVersion }`.
-- `ArtifactVerified of ArtifactVerifiedPayload { PublisherKeyId;
-  ModuleId; ArtifactVersion }`.
-- `ArtifactRejected of ArtifactRejectedPayload { PublisherKeyId: string
-  option; ModuleId; ArtifactVersion; Reason }`.
+- `ModuleArtefactSigned of ModuleArtefactSignedPayload { Actor;
+  PublisherKeyId; ModuleId; ArtifactVersion }`.
+- `ModuleArtefactVerified of ModuleArtefactVerifiedPayload {
+  PublisherKeyId; ModuleId; ArtifactVersion }`.
+- `ModuleArtefactRejected of ModuleArtefactRejectedPayload {
+  PublisherKeyId: string option; ModuleId; ArtifactVersion; Reason }`.
+
+> **Renamed by Phase 625.** These cases and payload types originally
+> shipped as `ArtifactSigned` / `ArtifactVerified` / `ArtifactRejected`
+> (with `Artifact*Payload`), one letter away from the unrelated Phase 40
+> `ArtefactSigned`. **The wire is unchanged** — the emitted `EventType`
+> discriminators are still `"ArtifactSigned"`, `"ArtifactVerified"` and
+> `"ArtifactRejected"`, so archived events, sink records and SIEM rules
+> are unaffected. Only the F#-facing identifiers moved. See
+> [`625-module-artefact-audit-cases.md`](625-module-artefact-audit-cases.md).
 
 Two contract test packs in `ToolUp.Platform.Tests`:
 

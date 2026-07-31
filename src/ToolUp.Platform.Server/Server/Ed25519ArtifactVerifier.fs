@@ -23,8 +23,8 @@ open Org.BouncyCastle.Crypto.Signers
 //     isn't 32 bytes.
 //   * `"signature mismatch"` — Ed25519 verification returned false.
 //
-// **Audit emission.** The verifier records `AuditEvent.ArtifactVerified`
-// on `Ok` and `AuditEvent.ArtifactRejected` on `Error` via the injected
+// **Audit emission.** The verifier records `AuditEvent.ModuleArtefactVerified`
+// on `Ok` and `AuditEvent.ModuleArtefactRejected` on `Error` via the injected
 // `IAuditLog`. Audit emission failures are swallowed (the contract of
 // `IAuditLog.Record` is best-effort, never blocking).
 
@@ -62,7 +62,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 
                 do!
                     recordAudit (
-                        AuditEvent.ArtifactRejected {
+                        AuditEvent.ModuleArtefactRejected {
                             PublisherKeyId = Some(PublisherKeyId.value publisherKeyId)
                             ModuleId = manifest.ModuleId
                             ArtifactVersion = manifest.Version
@@ -80,7 +80,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 
                     do!
                         recordAudit (
-                            AuditEvent.ArtifactRejected {
+                            AuditEvent.ModuleArtefactRejected {
                                 PublisherKeyId = Some(PublisherKeyId.value publisherKeyId)
                                 ModuleId = manifest.ModuleId
                                 ArtifactVersion = manifest.Version
@@ -94,7 +94,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 
                     do!
                         recordAudit (
-                            AuditEvent.ArtifactRejected {
+                            AuditEvent.ModuleArtefactRejected {
                                 PublisherKeyId = Some(PublisherKeyId.value publisherKeyId)
                                 ModuleId = manifest.ModuleId
                                 ArtifactVersion = manifest.Version
@@ -115,7 +115,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
                     if valid then
                         do!
                             recordAudit (
-                                AuditEvent.ArtifactVerified {
+                                AuditEvent.ModuleArtefactVerified {
                                     PublisherKeyId = PublisherKeyId.value publisherKeyId
                                     ModuleId = manifest.ModuleId
                                     ArtifactVersion = manifest.Version
@@ -128,7 +128,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 
                         do!
                             recordAudit (
-                                AuditEvent.ArtifactRejected {
+                                AuditEvent.ModuleArtefactRejected {
                                     PublisherKeyId = Some(PublisherKeyId.value publisherKeyId)
                                     ModuleId = manifest.ModuleId
                                     ArtifactVersion = manifest.Version
@@ -142,7 +142,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 module Ed25519ArtifactVerifier =
     /// Construct an `IArtifactVerifier` against the given key store +
     /// audit log. `edgeScopeId` is the scope under which
-    /// `ArtifactVerified` / `ArtifactRejected` events are recorded —
+    /// `ModuleArtefactVerified` / `ModuleArtefactRejected` events are recorded —
     /// typically `"_platform"` (artefact installation is a
     /// deployment-wide concern, not tenant-scoped).
     let create (keyStore: IPublisherKeyStore) (audit: IAuditLog) (edgeScopeId: string) : IArtifactVerifier =

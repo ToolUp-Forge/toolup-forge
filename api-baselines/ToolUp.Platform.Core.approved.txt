@@ -626,18 +626,6 @@ ToolUp.Platform.ArtifactManifest.PublisherKeyId : ToolUp.Platform.PublisherKeyId
 ToolUp.Platform.ArtifactManifest.SchemaHash : ToolUp.Platform.ContentHash { get }
 ToolUp.Platform.ArtifactManifest.SdkVersionRange : ToolUp.Platform.SdkVersionRange { get }
 ToolUp.Platform.ArtifactManifest.Version : System.String { get }
-ToolUp.Platform.ArtifactRejectedPayload (class)
-ToolUp.Platform.ArtifactRejectedPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String)
-ToolUp.Platform.ArtifactRejectedPayload.ArtifactVersion : System.String { get }
-ToolUp.Platform.ArtifactRejectedPayload.ModuleId : System.String { get }
-ToolUp.Platform.ArtifactRejectedPayload.PublisherKeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.ArtifactRejectedPayload.Reason : System.String { get }
-ToolUp.Platform.ArtifactSignedPayload (class)
-ToolUp.Platform.ArtifactSignedPayload..ctor(System.String, System.String, System.String, System.String)
-ToolUp.Platform.ArtifactSignedPayload.Actor : System.String { get }
-ToolUp.Platform.ArtifactSignedPayload.ArtifactVersion : System.String { get }
-ToolUp.Platform.ArtifactSignedPayload.ModuleId : System.String { get }
-ToolUp.Platform.ArtifactSignedPayload.PublisherKeyId : System.String { get }
 ToolUp.Platform.ArtifactValidation (class)
 ToolUp.Platform.ArtifactValidation.IsError : System.Boolean { get }
 ToolUp.Platform.ArtifactValidation.IsOk : System.Boolean { get }
@@ -648,11 +636,6 @@ ToolUp.Platform.ArtifactValidation+Error.reason : System.String { get }
 ToolUp.Platform.ArtifactValidation+Tags (class)
 ToolUp.Platform.ArtifactValidation+Tags.Error : System.Int32 (literal)
 ToolUp.Platform.ArtifactValidation+Tags.Ok : System.Int32 (literal)
-ToolUp.Platform.ArtifactVerifiedPayload (class)
-ToolUp.Platform.ArtifactVerifiedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.ArtifactVerifiedPayload.ArtifactVersion : System.String { get }
-ToolUp.Platform.ArtifactVerifiedPayload.ModuleId : System.String { get }
-ToolUp.Platform.ArtifactVerifiedPayload.PublisherKeyId : System.String { get }
 ToolUp.Platform.ArtifactsSourceModule (class)
 ToolUp.Platform.ArtifactsSourceModule.value : System.String (literal)
 ToolUp.Platform.AssetDeletedPayload (class)
@@ -703,9 +686,6 @@ ToolUp.Platform.AuditEvent.IsAdSlotConfigUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAnalysisRun : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAnonymousSessionMigrated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsArtefactSigned : System.Boolean { get }
-ToolUp.Platform.AuditEvent.IsArtifactRejected : System.Boolean { get }
-ToolUp.Platform.AuditEvent.IsArtifactSigned : System.Boolean { get }
-ToolUp.Platform.AuditEvent.IsArtifactVerified : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAssetDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAssetUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAuditEventDecodeFailed : System.Boolean { get }
@@ -766,6 +746,9 @@ ToolUp.Platform.AuditEvent.IsModelFitGateFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitStarted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScoreRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScored : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModuleArtefactRejected : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModuleArtefactSigned : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModuleArtefactVerified : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationDeliveryFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSent : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSilentlySkipped : System.Boolean { get }
@@ -850,12 +833,6 @@ ToolUp.Platform.AuditEvent+AnonymousSessionMigrated (class)
 ToolUp.Platform.AuditEvent+AnonymousSessionMigrated.Item : ToolUp.Platform.AnonymousSessionMigratedPayload { get }
 ToolUp.Platform.AuditEvent+ArtefactSigned (class)
 ToolUp.Platform.AuditEvent+ArtefactSigned.Item : ToolUp.Platform.ArtefactSignedPayload { get }
-ToolUp.Platform.AuditEvent+ArtifactRejected (class)
-ToolUp.Platform.AuditEvent+ArtifactRejected.Item : ToolUp.Platform.ArtifactRejectedPayload { get }
-ToolUp.Platform.AuditEvent+ArtifactSigned (class)
-ToolUp.Platform.AuditEvent+ArtifactSigned.Item : ToolUp.Platform.ArtifactSignedPayload { get }
-ToolUp.Platform.AuditEvent+ArtifactVerified (class)
-ToolUp.Platform.AuditEvent+ArtifactVerified.Item : ToolUp.Platform.ArtifactVerifiedPayload { get }
 ToolUp.Platform.AuditEvent+AssetDeleted (class)
 ToolUp.Platform.AuditEvent+AssetDeleted.Item : ToolUp.Platform.AssetDeletedPayload { get }
 ToolUp.Platform.AuditEvent+AssetUploaded (class)
@@ -976,6 +953,12 @@ ToolUp.Platform.AuditEvent+ModelScoreRefused (class)
 ToolUp.Platform.AuditEvent+ModelScoreRefused.Item : ToolUp.Platform.ModelScoreRefusedPayload { get }
 ToolUp.Platform.AuditEvent+ModelScored (class)
 ToolUp.Platform.AuditEvent+ModelScored.Item : ToolUp.Platform.ModelScoredPayload { get }
+ToolUp.Platform.AuditEvent+ModuleArtefactRejected (class)
+ToolUp.Platform.AuditEvent+ModuleArtefactRejected.Item : ToolUp.Platform.ModuleArtefactRejectedPayload { get }
+ToolUp.Platform.AuditEvent+ModuleArtefactSigned (class)
+ToolUp.Platform.AuditEvent+ModuleArtefactSigned.Item : ToolUp.Platform.ModuleArtefactSignedPayload { get }
+ToolUp.Platform.AuditEvent+ModuleArtefactVerified (class)
+ToolUp.Platform.AuditEvent+ModuleArtefactVerified.Item : ToolUp.Platform.ModuleArtefactVerifiedPayload { get }
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed (class)
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed.Item : ToolUp.Platform.NotificationDeliveryFailedPayload { get }
 ToolUp.Platform.AuditEvent+NotificationSent (class)
@@ -1063,9 +1046,6 @@ ToolUp.Platform.AuditEvent+Tags.AdSlotConfigUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AnalysisRun : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AnonymousSessionMigrated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ArtefactSigned : System.Int32 (literal)
-ToolUp.Platform.AuditEvent+Tags.ArtifactRejected : System.Int32 (literal)
-ToolUp.Platform.AuditEvent+Tags.ArtifactSigned : System.Int32 (literal)
-ToolUp.Platform.AuditEvent+Tags.ArtifactVerified : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AssetDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AssetUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AuditEventDecodeFailed : System.Int32 (literal)
@@ -1126,6 +1106,9 @@ ToolUp.Platform.AuditEvent+Tags.ModelFitGateFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitStarted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScoreRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScored : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModuleArtefactRejected : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModuleArtefactSigned : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModuleArtefactVerified : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationDeliveryFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSent : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSilentlySkipped : System.Int32 (literal)
@@ -5294,6 +5277,23 @@ ToolUp.Platform.ModelScoredPayload.ProviderId : System.String { get }
 ToolUp.Platform.ModelScoredPayload.ProviderVersion : System.String { get }
 ToolUp.Platform.ModelScoredPayload.RowCount : System.Int64 { get }
 ToolUp.Platform.ModelScoredPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModuleArtefactRejectedPayload (class)
+ToolUp.Platform.ModuleArtefactRejectedPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String)
+ToolUp.Platform.ModuleArtefactRejectedPayload.ArtifactVersion : System.String { get }
+ToolUp.Platform.ModuleArtefactRejectedPayload.ModuleId : System.String { get }
+ToolUp.Platform.ModuleArtefactRejectedPayload.PublisherKeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModuleArtefactRejectedPayload.Reason : System.String { get }
+ToolUp.Platform.ModuleArtefactSignedPayload (class)
+ToolUp.Platform.ModuleArtefactSignedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.ModuleArtefactSignedPayload.Actor : System.String { get }
+ToolUp.Platform.ModuleArtefactSignedPayload.ArtifactVersion : System.String { get }
+ToolUp.Platform.ModuleArtefactSignedPayload.ModuleId : System.String { get }
+ToolUp.Platform.ModuleArtefactSignedPayload.PublisherKeyId : System.String { get }
+ToolUp.Platform.ModuleArtefactVerifiedPayload (class)
+ToolUp.Platform.ModuleArtefactVerifiedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModuleArtefactVerifiedPayload.ArtifactVersion : System.String { get }
+ToolUp.Platform.ModuleArtefactVerifiedPayload.ModuleId : System.String { get }
+ToolUp.Platform.ModuleArtefactVerifiedPayload.PublisherKeyId : System.String { get }
 ToolUp.Platform.ModuleBindingAnchorRef (class)
 ToolUp.Platform.ModuleBindingAnchorRef.IsAsymmetricAnchorRef : System.Boolean { get }
 ToolUp.Platform.ModuleBindingAnchorRef.IsSymmetricAnchorRef : System.Boolean { get }

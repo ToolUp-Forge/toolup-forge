@@ -35,7 +35,7 @@ open System
 ///    timing / clock precision boundary.
 ///
 /// **Audit contract.** Implementations call `IAuditLog.Record` with
-/// `AuditEvent.ArtifactSigned` after a successful sign. The payload
+/// `AuditEvent.ModuleArtefactSigned` after a successful sign. The payload
 /// carries the publisher key id (NEVER the private key bytes).
 type IArtifactSigner =
     /// Sign `payload` against `manifest`. Returns a `SignedArtifact`
@@ -45,5 +45,5 @@ type IArtifactSigner =
     abstract Sign: manifest: ArtifactManifest * payload: byte[] -> Async<SignedArtifact>
 
     /// The publisher key id this signer is configured to sign as.
-    /// Recorded on every `ArtifactSigned` audit emission.
+    /// Recorded on every `ModuleArtefactSigned` audit emission.
     abstract PublisherKeyId: PublisherKeyId

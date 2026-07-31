@@ -25,7 +25,7 @@ open Org.BouncyCastle.Crypto.Signers
 //
 // **Audit emission.** The signer does not emit audit events directly —
 // the caller (typically the publish pipeline) is responsible for
-// recording `AuditEvent.ArtifactSigned` after a successful `Sign`. This
+// recording `AuditEvent.ModuleArtefactSigned` after a successful `Sign`. This
 // keeps the signer pure (input → output, no `IAuditLog` dependency) so
 // the same instance can be unit-tested without a full SDK composition.
 
