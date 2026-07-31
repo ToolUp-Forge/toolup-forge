@@ -845,4 +845,42 @@ let main args =
         |> Proc.run
         |> ignore)
 
+    // Phase 626 — unreferenced-definition report.
+    //
+    // Nothing in this repo detected a definition with no call sites, and
+    // the compiler does not fill the gap: `--warnon:1182` fires only for
+    // unused LOCAL bindings, so a module-level `let private` with zero
+    // callers is silent. That is how `DatadogLogsAuditSink`'s
+    // `extractEventScopeId` drifted 51 of 132 match arms behind without
+    // anyone noticing — nothing called it, so nothing failed.
+    //
+    // A REPORT, not a gate, and that is a deliberate choice rather than
+    // a staging post: the tool cannot distinguish "dead" from "not yet
+    // used", and in this SDK both are legitimate — a seam shipped ahead
+    // of its first implementor is exactly the shape it would flag. A
+    // gate makes keeping such a thing cost a suppression mechanism, and
+    // the pressure then runs toward deleting seams to get green. Pass
+    // `--fail-on-dead` to gate anyway; see tools/ToolUp.DeadCode/README.md
+    // for the promotion criteria and the analysis's documented limits.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- DeadCodeReport`
+    Target.create "DeadCodeReport" (fun _ ->
+        // Read from the process argv rather than the target context, for
+        // the same reason VerifyDocSnippets does: FAKE's own CLI parser
+        // consumes trailing options before the target sees them.
+        let passthrough =
+            [ "--fail-on-dead"; "--verbose"; "--json" ]
+            |> List.filter (fun flag -> args |> Array.contains flag)
+
+        let toolArgs =
+            [ "run"; "--project"; "tools/ToolUp.DeadCode"; "--" ]
+            @ [ "--repo-root"; __SOURCE_DIRECTORY__ ]
+            @ passthrough
+
+        CreateProcess.fromRawCommand "dotnet" toolArgs
+        |> CreateProcess.withWorkingDirectory __SOURCE_DIRECTORY__
+        |> CreateProcess.ensureExitCode
+        |> Proc.run
+        |> ignore)
+
     execute args
