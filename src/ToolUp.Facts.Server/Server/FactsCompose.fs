@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -27,6 +28,22 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // regardless of the order `ServerApp` registers its substrate.
 
 module FactsCompose =
+
+    // ─── Phase 623 — shared optional-substrate lookups ────────────────
+
+    let private tryService<'T> (sp: IServiceProvider) : 'T option =
+        match sp.GetService(typeof<'T>) with
+        | :? 'T as service -> Some service
+        | _ -> None
+
+    /// The composed lineage store, or an `IEventStore`-backed view over
+    /// the same events when a deployment did not enable
+    /// `ServerConfig.Lineage` — the invalidation walk is always buildable
+    /// (the same fallback `IGroundingCertificateIssuer` uses below).
+    let private resolveLineage (sp: IServiceProvider) : ILineageStore =
+        match tryService<ILineageStore> sp with
+        | Some lineage -> lineage
+        | None -> LineageStore.EventStoreLineageStore(sp.GetRequiredService<IEventStore>()) :> ILineageStore
 
     // Register the fact-store DI singletons (lazy factories over the
     // composed substrate).
@@ -63,14 +80,22 @@ module FactsCompose =
             // 519) is optional: a deployment with no grounding declarations
             // derives freshness under the `UntilSuperseded` default and
             // renders values verbatim.
+            // Phase 623.B — the resolver is composed in its *reactive*
+            // form: `IDataObjectStore` supplies the derived
+            // `inputsChanged` signal that makes `UntilUpstreamChange`
+            // real at the read path, and `IFactRecomputer` arms the
+            // `OnQuery` recompute-at-read arm. Both are read back out of
+            // DI as options, so a deployment missing either resolves
+            // byte-for-byte the pre-623 projection (GP 11), and the
+            // probe itself only runs for metrics that declare one of the
+            // two policies (GP 13).
             .AddSingleton<IFactResolver>(
                 Func<IServiceProvider, IFactResolver>(fun sp ->
-                    let registry =
-                        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
-                        | :? Grounding.IMetricRegistry as r -> Some r
-                        | _ -> None
-
-                    FactStoreFactResolver.create (sp.GetRequiredService<IFactStore>()) registry)
+                    FactStoreFactResolver.createReactive
+                        (sp.GetRequiredService<IFactStore>())
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        (tryService<IDataObjectStore> sp)
+                        (tryService<IFactRecomputer> sp))
             )
             // Phase 560 — the grounded answer planner rides the same
             // knob: question → (subject, metric, period) triples →
@@ -139,12 +164,109 @@ module FactsCompose =
                         signer)
             )
 
+    // ─── Phase 623 — activate reactive recomputation ──────────────────
+    //
+    // Phase 561 shipped the substrate and wired none of it: the recompute
+    // handler was never registered with a scheduler, so a job it enqueued
+    // had no handler to dispatch to, and nothing ever told the fact tier a
+    // data-object version had landed. The three registrations below are
+    // what take it live, and they ride the SAME `EnabledFactStore` knob as
+    // the store itself — one compose knob, never four.
+    //
+    //   1. `IFactRecomputer` — the deployment seam that actually
+    //      recomputes a value. Registered with `TryAdd` semantics, so a
+    //      deployment's own engine always wins and the default
+    //      (`NoFactRecomputer`, recomputes nothing) is only the floor.
+    //   2. The recompute job handler, registered with the scheduler
+    //      through the Phase 623.A DI-deferred declaration — the handler
+    //      needs `IFactStore` + `IFactRecomputer`, neither of which
+    //      exists until the container is built.
+    //   3. The `IDataObjectStore` decorator that reacts to a landed
+    //      version (Phase 623.C). It self-gates on a declared non-`Manual`
+    //      `RecomputePolicy`, so a fact deployment that declares none pays
+    //      one boolean test per save.
+    //
+    // A `NoFactStore` deployment reaches none of this — `withFactStore`
+    // returns before `registerFactStore` is ever composed into
+    // `ServiceConfig` (GP 13).
+
+    let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
+        // (1) The default recompute engine — TryAdd so a deployment-
+        //     supplied `IFactRecomputer` registered anywhere in the
+        //     compose chain takes precedence.
+        services.TryAddSingleton<IFactRecomputer>(NoFactRecomputer())
+
+        // (3) Decorate the composed data-object store. The inner store is
+        //     taken from the descriptor already in the collection — never
+        //     from the built provider, which by then resolves to the
+        //     decorator itself. `ServiceConfig` runs after the SDK's core
+        //     singletons are registered, so the descriptor is present for
+        //     any deployment that has a data-object store at all; one that
+        //     somehow does not is left untouched rather than failing.
+        let innerDescriptor =
+            services
+            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<IDataObjectStore>)
+            |> Seq.tryLast
+
+        match innerDescriptor with
+        | Some descriptor when (descriptor.ImplementationInstance :? IDataObjectStore) ->
+            let inner = descriptor.ImplementationInstance :?> IDataObjectStore
+
+            services.AddSingleton<IDataObjectStore>(
+                Func<IServiceProvider, IDataObjectStore>(fun sp ->
+                    let scheduler () = tryService<IJobScheduler> sp
+
+                    let registry () =
+                        tryService<Grounding.IMetricRegistry> sp
+
+                    let react =
+                        ReactiveDataChange.reaction
+                            (fun () -> sp.GetRequiredService<IFactStore>())
+                            (fun () -> resolveLineage sp)
+                            scheduler
+                            registry
+
+                    ReactiveDataChange.decorate
+                        inner
+                        (ReactiveDataChange.gate registry scheduler)
+                        react
+                        (sp.GetRequiredService<ILogger>()))
+            )
+            |> ignore
+        | _ -> ()
+
+        // (2) Register + schedule the recompute handler at startup, once
+        //     the container that owns `IFactStore` / `IFactRecomputer`
+        //     exists. `Trigger.Manual`: recompute jobs are fired on demand
+        //     by `reactToDataChange`, never on a cadence.
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                DeferredScheduledJobDeclaration.hostedService
+                    "Reactive fact recomputation"
+                    [
+                        DeferredScheduledJobDeclaration.create (fun provider ->
+                            RecomputeJobHandler.declaration
+                                (provider.GetRequiredService<IFactStore>())
+                                (provider.GetRequiredService<IFactRecomputer>())
+                                (provider.GetRequiredService<ILogger>()))
+                    ]
+                    sp)
+        )
+        |> ignore
+
+        services
+
     /// Compose the grounding fact store per `ServerConfig.FactStore`.
     /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +
     /// `IFactEvidenceSource` + `IFactDisclosureGate` + `IFactResolver`
-    /// into DI; `NoFactStore` returns the app unchanged. Insert once in
-    /// the compose pipeline before `ServerApp.run` (and before a RAG
-    /// compose, so the retrieval pipeline's DI pickup sees the fact tier):
+    /// into DI, and (Phase 623) activates reactive recomputation over it:
+    /// the default `IFactRecomputer`, the recompute job handler on the
+    /// composed scheduler, and the data-arrival hook that drives fact
+    /// invalidation when a data-object version lands. `NoFactStore`
+    /// returns the app unchanged — no registration, no hosted service, no
+    /// decorator, no allocation (GP 13). Insert once in the compose
+    /// pipeline before `ServerApp.run` (and before a RAG compose, so the
+    /// retrieval pipeline's DI pickup sees the fact tier):
     ///
     /// ```fsharp
     /// ServerApp.empty
@@ -152,14 +274,27 @@ module FactsCompose =
     /// |> FactsCompose.withFactStore
     /// |> ServerApp.run
     /// ```
+    ///
+    /// Reactive recomputation stays dormant until a module's grounding
+    /// declarations ask for it: a metric declaring
+    /// `RecomputePolicy.Eager` recomputes off a scheduled job when its
+    /// inputs change, `OnQuery` recomputes at the next read, and the
+    /// default `Manual` surfaces the changed state only. Wire a real
+    /// `IFactRecomputer` into DI to give any of them a value to compute.
     let withFactStore (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
         | EnabledFactStore ->
+            // Phase 623 — the fact tier and its reactive activation are
+            // one registration pass: the store first, then the recompute
+            // engine + handler + data-arrival hook over it.
+            let register (s: IServiceCollection) =
+                registerReactiveRecomputation (registerFactStore s)
+
             let serviceConfig =
                 match app.Extensions.ServiceConfig with
-                | None -> Some registerFactStore
-                | Some existing -> Some(fun s -> registerFactStore (existing s))
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
 
             {
                 app with

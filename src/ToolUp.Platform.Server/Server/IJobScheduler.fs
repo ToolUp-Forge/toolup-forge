@@ -265,3 +265,148 @@ module ScheduledJobDeclaration =
         d with
             Tags = tags
     }
+
+    /// Register + schedule ONE declaration against a live scheduler —
+    /// the per-declaration body `ComposeJobs.registerScheduledJobDeclarations`
+    /// runs at compose time, lifted here (Phase 623) so the DI-deferred
+    /// form below reaches the identical registration path instead of
+    /// re-implementing it. Behaviour is unchanged: `RegisterHandler`
+    /// (idempotent at the scheduler), `Scopes = []` defaulted to
+    /// `["_platform"]`, a stable `module-{handlerName}-{scopeId}`
+    /// idempotency key (one-year TTL) so a restart returns the existing
+    /// `JobId`, and a `Warn` — never a throw — on a failed `Schedule`.
+    let registerWith (scheduler: IJobScheduler) (logger: ILogger) (declaration: ScheduledJobDeclaration) : unit =
+        scheduler.RegisterHandler(declaration.HandlerName, declaration.Handler)
+
+        let scopes =
+            if List.isEmpty declaration.Scopes then
+                [ "_platform" ]
+            else
+                declaration.Scopes
+
+        for scopeId in scopes do
+            let idempotency =
+                match declaration.Idempotency with
+                | Some key -> Some key
+                | None ->
+                    Some {
+                        Key = sprintf "module-%s-%s" declaration.HandlerName scopeId
+                        TtlSeconds = 60 * 60 * 24 * 365
+                    }
+
+            let registration: JobRegistration = {
+                ScopeId = scopeId
+                Handler = declaration.HandlerName
+                Payload = declaration.Payload
+                Trigger = declaration.Trigger
+                Idempotency = idempotency
+                RetryPolicy = declaration.RetryPolicy
+                ShardKey = declaration.ShardKey
+                Precision = declaration.Precision
+                CreatedBy = "_platform"
+                Tags = declaration.Tags |> Map.add "source" "compose-time"
+            }
+
+            let result = scheduler.Schedule registration |> Async.RunSynchronously
+
+            match result with
+            | Ok _ -> ()
+            | Error err ->
+                logger.Warn(
+                    sprintf "[Phase 9b.B] Failed to schedule %s in scope %s: %A" declaration.HandlerName scopeId err
+                )
+
+// ─── Phase 623 — DI-deferred scheduled-job declarations ──────────────
+//
+// `ScheduledJobDeclaration.Handler` is a **constructed** `IJobHandler`,
+// which a compose root can only supply when the handler's dependencies
+// are already in hand. Companion composition is **lazy-DI**: the store,
+// the scheduler, a metric registry and the like are only resolvable from
+// the *built* `IServiceProvider`, long after the declaration list is
+// assembled. Three in-tree companions (Phase 449 model-fit, Phase 9h.A
+// DSR, Phase 563 fact-base coherence) each hand-rolled the same startup
+// `IHostedService` to bridge that gap; Phase 623 makes the bridge
+// substrate so the fourth (reactive fact recomputation) and every later
+// one declare instead of hand-roll.
+//
+// **Additive by construction (GP 11).** `ScheduledJobDeclaration` is
+// untouched — no field added, none retyped, no helper resigned — so every
+// existing declaration, every direct record construction, and every
+// `ComposeJobs.registerScheduledJobDeclarations` call compiles and
+// behaves exactly as before. The deferred form is a *second, separate*
+// declaration type that RESOLVES to the first; both converge on
+// `ScheduledJobDeclaration.registerWith`, so a deferred job is registered
+// and scheduled by the identical code path as an eager one.
+//
+// **Why not eager construction at end-of-compose?** It would work only
+// for handlers whose dependencies are registered instances; anything
+// resolved through a DI factory (the fact tier's `IFactStore` is built
+// from `IBlobStorage` + `IEventStore` at first use) is not constructible
+// at that point without forcing an early `BuildServiceProvider`, which
+// duplicates singletons and is the documented ASP.NET Core anti-pattern.
+// Deferring to `IHostedService.StartAsync` resolves from the *one* real
+// container, after every companion has registered.
+
+/// A `ScheduledJobDeclaration` whose handler (and any other
+/// DI-dependent field) is produced from the built `IServiceProvider`
+/// rather than supplied at compose time. Register with
+/// `DeferredScheduledJobDeclaration.hostedService`.
+type DeferredScheduledJobDeclaration = {
+    /// Produce the concrete declaration from the built provider. Called
+    /// once, at `IHostedService.StartAsync`, on the container every
+    /// request-time consumer also resolves from.
+    Resolve: IServiceProvider -> ScheduledJobDeclaration
+}
+
+module DeferredScheduledJobDeclaration =
+
+    /// The general form — resolve the whole declaration from the provider.
+    let create (resolve: IServiceProvider -> ScheduledJobDeclaration) : DeferredScheduledJobDeclaration = {
+        Resolve = resolve
+    }
+
+    /// The common form — a fixed `handlerName` + `trigger` with only the
+    /// handler resolved from DI. Refine the resolved declaration with the
+    /// ordinary `ScheduledJobDeclaration.with*` helpers by composing them
+    /// into `create` instead.
+    let ofHandler
+        (handlerName: string)
+        (trigger: Trigger)
+        (handler: IServiceProvider -> IJobHandler)
+        : DeferredScheduledJobDeclaration =
+        create (fun sp -> ScheduledJobDeclaration.create handlerName (handler sp) trigger)
+
+    /// An `IHostedService` that, at startup, resolves each deferred
+    /// declaration against the built provider and registers + schedules
+    /// it through `ScheduledJobDeclaration.registerWith`. `label` names
+    /// the composing feature in the diagnostic emitted when the
+    /// deployment has no scheduler (`JobScheduler = NoJobScheduler`) —
+    /// declarations are dead code there, which is a config mismatch, not
+    /// a crash. An empty list registers nothing and logs nothing.
+    let hostedService
+        (label: string)
+        (declarations: DeferredScheduledJobDeclaration list)
+        (sp: IServiceProvider)
+        : Microsoft.Extensions.Hosting.IHostedService =
+        { new Microsoft.Extensions.Hosting.IHostedService with
+            member _.StartAsync(_ct) =
+                if not (List.isEmpty declarations) then
+                    let logger = sp.GetService(typeof<ILogger>) :?> ILogger
+
+                    match sp.GetService(typeof<IJobScheduler>) with
+                    | :? IJobScheduler as scheduler ->
+                        for deferred in declarations do
+                            ScheduledJobDeclaration.registerWith scheduler logger (deferred.Resolve sp)
+                    | _ ->
+                        logger.Warn(
+                            sprintf
+                                "[Phase 623] %s declared %d deferred scheduled job(s) but JobScheduler = NoJobScheduler — none were registered. Pair with JobScheduler = InProcessJobScheduler (or a distributed scheduler companion)."
+                                label
+                                declarations.Length
+                        )
+
+                System.Threading.Tasks.Task.CompletedTask
+
+            member _.StopAsync(_ct) =
+                System.Threading.Tasks.Task.CompletedTask
+        }

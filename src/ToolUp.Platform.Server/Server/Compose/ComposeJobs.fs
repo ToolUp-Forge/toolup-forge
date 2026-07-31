@@ -574,50 +574,12 @@ let registerScheduledJobDeclarations
                     handlerNames
             )
         | Some scheduler ->
+            // Phase 623 — the per-declaration body was lifted verbatim to
+            // `ScheduledJobDeclaration.registerWith` so the DI-deferred
+            // declaration variant reaches the identical registration path
+            // rather than re-implementing it. Behaviour is unchanged.
             for declaration in declarations do
-                scheduler.RegisterHandler(declaration.HandlerName, declaration.Handler)
-
-                let scopes =
-                    if List.isEmpty declaration.Scopes then
-                        [ "_platform" ]
-                    else
-                        declaration.Scopes
-
-                for scopeId in scopes do
-                    let idempotency =
-                        match declaration.Idempotency with
-                        | Some key -> Some key
-                        | None ->
-                            Some {
-                                Key = sprintf "module-%s-%s" declaration.HandlerName scopeId
-                                TtlSeconds = 60 * 60 * 24 * 365
-                            }
-
-                    let registration: JobRegistration = {
-                        ScopeId = scopeId
-                        Handler = declaration.HandlerName
-                        Payload = declaration.Payload
-                        Trigger = declaration.Trigger
-                        Idempotency = idempotency
-                        RetryPolicy = declaration.RetryPolicy
-                        ShardKey = declaration.ShardKey
-                        Precision = declaration.Precision
-                        CreatedBy = "_platform"
-                        Tags = declaration.Tags |> Map.add "source" "compose-time"
-                    }
-
-                    let result = scheduler.Schedule registration |> Async.RunSynchronously
-
-                    match result with
-                    | Ok _ -> ()
-                    | Error err ->
-                        resolvedLogger.Warn(
-                            sprintf
-                                "[Phase 9b.B] Failed to schedule %s in scope %s: %A"
-                                declaration.HandlerName
-                                scopeId
-                                err
-                        )
+                ScheduledJobDeclaration.registerWith scheduler resolvedLogger declaration
 
 /// Phase 9h.A — register the background DSR export/erasure substrate.
 /// Gated on `DataSubjectRequests = Enabled { Async = true }`:

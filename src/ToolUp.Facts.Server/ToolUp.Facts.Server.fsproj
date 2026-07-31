@@ -27,12 +27,19 @@
         <Compile Include="Server\FactStoreEvidenceSource.fs" />
         <Compile Include="Server\DisclosureTaint.fs" />
         <Compile Include="Server\FactDisclosureGate.fs" />
+        <!-- Phase 623.B — the pure invalidation derivation moved AHEAD of
+             the resolver: the read path now derives freshness through
+             `FactInvalidation.deriveFreshness` (upstream-aware) and its
+             `OnQuery` arm recomputes inline via `IFactRecomputer`, both
+             declared here. Nothing in `FactInvalidation.fs` depends on the
+             files it moved past, so the reorder is compile-order only. -->
+        <Compile Include="Server\FactInvalidation.fs" />
         <Compile Include="Server\FactStoreFactResolver.fs" />
         <Compile Include="Server\FactQueryTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
-        <Compile Include="Server\FactInvalidation.fs" />
         <Compile Include="Server\RecomputeJobHandler.fs" />
+        <Compile Include="Server\ReactiveDataChange.fs" />
         <Compile Include="Server\CoherenceCheck.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>

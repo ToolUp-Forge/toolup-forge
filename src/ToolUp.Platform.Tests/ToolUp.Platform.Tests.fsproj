@@ -1221,6 +1221,12 @@
              reverted-control proof that the suite catches regressions, not just
              passes. Test-only; reached through the shipped public surface. -->
         <Compile Include="InProcess\ThreatLensRegressionSuite.fs" />
+        <!-- Phase 623 — reactive fact recomputation ACTIVATED in composed
+             deployments: the DI-deferred scheduled-job declaration, the
+             upstream-aware read path, the data-arrival hook, and the
+             facts-free zero-cost twin. Every case drives the fact tier
+             through FactsCompose, never by direct construction. -->
+        <Compile Include="InProcess\ReactiveRecomputeComposeTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

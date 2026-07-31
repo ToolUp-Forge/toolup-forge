@@ -1037,6 +1037,13 @@ let allTests =
         // reverted-control proof that the suite catches regressions, not just
         // passes. A reverted security control fails the matching lens here.
         ThreatLensRegressionSuite.tests
+        // Phase 623 — reactive fact recomputation activated in composed
+        // deployments: the Phase 623.A DI-deferred scheduled-job
+        // declaration reaching the scheduler, upstream-aware freshness +
+        // OnQuery recompute at the read path, the data-arrival hook
+        // driving invalidation end to end, and the facts-free twin that
+        // proves a deployment without facts is byte-for-byte unchanged.
+        ReactiveRecomputeComposeTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
