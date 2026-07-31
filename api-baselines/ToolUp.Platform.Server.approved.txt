@@ -1648,6 +1648,13 @@ ToolUp.Platform.DefaultProvenanceGraph..ctor(ToolUp.Platform.ILineageStore, Micr
 ToolUp.Platform.DefaultSubjectResolver (class)
 ToolUp.Platform.DefaultSubjectResolver+DefaultSubjectResolver (class)
 ToolUp.Platform.DefaultSubjectResolver+DefaultSubjectResolver..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+ITeamStore], Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.DeferredScheduledJobDeclaration (class)
+ToolUp.Platform.DeferredScheduledJobDeclaration..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Platform.ScheduledJobDeclaration])
+ToolUp.Platform.DeferredScheduledJobDeclaration.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Platform.ScheduledJobDeclaration] { get }
+ToolUp.Platform.DeferredScheduledJobDeclarationModule (class)
+ToolUp.Platform.DeferredScheduledJobDeclarationModule.create(Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Platform.ScheduledJobDeclaration]) : ToolUp.Platform.DeferredScheduledJobDeclaration
+ToolUp.Platform.DeferredScheduledJobDeclarationModule.hostedService(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeferredScheduledJobDeclaration], System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.Platform.DeferredScheduledJobDeclarationModule.ofHandler(System.String, ToolUp.Platform.Trigger, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Platform.IJobHandler]) : ToolUp.Platform.DeferredScheduledJobDeclaration
 ToolUp.Platform.DegradedCapabilities (class)
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilitiesDiagnosticsContributor (class)
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilitiesDiagnosticsContributor..ctor(ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry)
@@ -4711,6 +4718,7 @@ ToolUp.Platform.ScheduledJobDeclaration.Tags : Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.ScheduledJobDeclaration.Trigger : ToolUp.Platform.Trigger { get }
 ToolUp.Platform.ScheduledJobDeclarationModule (class)
 ToolUp.Platform.ScheduledJobDeclarationModule.create(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger) : ToolUp.Platform.ScheduledJobDeclaration
+ToolUp.Platform.ScheduledJobDeclarationModule.registerWith(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ILogger, ToolUp.Platform.ScheduledJobDeclaration) : System.Void
 ToolUp.Platform.ScheduledJobDeclarationModule.withIdempotency(ToolUp.Platform.IdempotencyKey, ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration
 ToolUp.Platform.ScheduledJobDeclarationModule.withPayload(System.String, ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration
 ToolUp.Platform.ScheduledJobDeclarationModule.withPrecision(ToolUp.Platform.JobPrecision, ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration

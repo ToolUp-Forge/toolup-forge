@@ -195,8 +195,11 @@ ToolUp.Facts.FactStoreEvidenceSourceModule (class)
 ToolUp.Facts.FactStoreEvidenceSourceModule.create(ToolUp.Facts.IFactStore) : ToolUp.Platform.IFactEvidenceSource
 ToolUp.Facts.FactStoreFactResolver (class)
 ToolUp.Facts.FactStoreFactResolver..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.FactStoreFactResolver..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactRecomputer])
 ToolUp.Facts.FactStoreFactResolverModule (class)
 ToolUp.Facts.FactStoreFactResolverModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
+ToolUp.Facts.FactStoreFactResolverModule.createReactive(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactRecomputer]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
+ToolUp.Facts.FactStoreFactResolverModule.createReactiveWithClock(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactRecomputer], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
 ToolUp.Facts.FactStoreFactResolverModule.createWithClock(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
 ToolUp.Facts.FactSupersededEvent (class)
 ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
@@ -271,6 +274,13 @@ ToolUp.Facts.NoFactRecomputer (class)
 ToolUp.Facts.NoFactRecomputer..ctor()
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
+ToolUp.Facts.ReactiveDataChange (class)
+ToolUp.Facts.ReactiveDataChange.declaresReactivePolicy(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : System.Boolean
+ToolUp.Facts.ReactiveDataChange.decorate(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.ILogger) : ToolUp.Platform.IDataObjectStore
+ToolUp.Facts.ReactiveDataChange.gate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]
+ToolUp.Facts.ReactiveDataChange.reaction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Facts.IFactStore], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]]) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]
+ToolUp.Facts.ReactiveDataObjectStore (class)
+ToolUp.Facts.ReactiveDataObjectStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.ILogger)
 ToolUp.Facts.RecomputeJobHandler (class)
 ToolUp.Facts.RecomputeJobHandler..ctor(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ILogger)
 ToolUp.Facts.RecomputeJobHandlerModule (class)
