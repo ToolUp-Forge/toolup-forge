@@ -280,3 +280,82 @@ let createWithDisclosureGate
     (scopeId: string)
     : IReportApi =
     createCore (Some(gate, principal)) templateStore registry storeBlob auditOnRender config scopeId
+
+// ─── In-handler management gate (Phase 619) ──────────────────────────
+//
+// `IReportApi`'s per-method attributes (`[<RequiresClaim "scope">]` on
+// all four) are the primary gate: the dispatcher's Phase 69d classifier
+// refuses an anonymous caller before this handler runs. That closes the
+// defect Phase 619 was filed for — every method used to be
+// `[<AllowAnonymous>]` while its doc comments claimed "Owner / Admin
+// gated", the same tell Phase 229 found on the DSR export/erasure
+// endpoints.
+//
+// 229's lesson was that ONE gate whose enforcement lives entirely in
+// deployment wiring is a gate nobody can point at. So, as there, the
+// mutating half gets a second, in-handler check that does not depend on
+// the deployment's auth middleware being wired the way the contract
+// hopes. It is a decorator rather than a constructor parameter because
+// the deployment's answer to "may this caller manage templates?" is the
+// deployment's own role model — forge cannot express it (the first-party
+// providers leave `AuthenticatedUser.Roles` empty, so an
+// `[<RequiresRole "Owner">]` would be a Phase 132 dead gate denying
+// everyone) — and because a decorator composes with BOTH `create` and
+// `createWithDisclosureGate` without a combinatorial set of factories.
+//
+// Not composing it is a supported posture (GP 13): the attribute gate
+// still refuses anonymous callers, which is the breaking default this
+// phase ships. Composing it is how a deployment restores the Owner /
+// Admin restriction its templates need.
+
+/// Predicate answering "may the current caller manage templates at this
+/// scope?". Resolved per call — not snapshotted at construction — so a
+/// deployment that revokes a caller's management rights mid-session
+/// takes effect on the caller's next write rather than at the next
+/// restart. (The build-once / read-per-call seam mismatch is a live
+/// defect class in this codebase; this seam is read-per-call by
+/// construction.)
+type CanManageTemplates = unit -> Async<bool>
+
+/// The refusal a management-gated write returns. A single constant so
+/// the two call sites cannot drift, and so a consumer can match on it.
+/// Names the requirement, never the caller or the policy internals.
+[<Literal>]
+let TemplateManagementDenied =
+    "report-template management requires an Owner / Admin caller at this scope"
+
+/// Phase 619 — wrap an `IReportApi` so `SaveTemplate` / `DeleteTemplate`
+/// additionally consult the deployment's management predicate. Reads and
+/// renders are untouched: listing and rendering are the ordinary
+/// user-facing operations, and `Render`'s own fact-level `FactExport`
+/// gate (Phase 564.B) is what decides which values a principal may
+/// egress.
+///
+/// Composes over either factory:
+///
+/// ```fsharp
+/// ReportApiHandler.createWithDisclosureGate gate principal store registry storeBlob audit config scopeId
+/// |> ReportApiHandler.withManagementGate canManage
+/// ```
+let withManagementGate (canManage: CanManageTemplates) (api: IReportApi) : IReportApi = {
+    api with
+        SaveTemplate =
+            fun template -> async {
+                let! permitted = canManage ()
+
+                if permitted then
+                    return! api.SaveTemplate template
+                else
+                    return Result.Error TemplateManagementDenied
+            }
+
+        DeleteTemplate =
+            fun id -> async {
+                let! permitted = canManage ()
+
+                if permitted then
+                    return! api.DeleteTemplate id
+                else
+                    return Result.Error TemplateManagementDenied
+            }
+}

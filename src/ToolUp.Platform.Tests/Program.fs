@@ -175,6 +175,10 @@ let allTests =
         // format. Catches the `open`-shadowing class that left Markdown
         // unregistered while the code read as if it were registered.
         ReportingComposeTests.tests
+        // Phase 619 — IReportApi secure-by-default authorization: every
+        // method gated, the anonymous path proved refused (with a
+        // falsifier fixture), and the in-handler management gate.
+        ReportingAuthorizationTests.tests
         NarrativeElementTests.tests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests

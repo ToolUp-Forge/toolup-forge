@@ -280,6 +280,7 @@
         <Compile Include="InProcess\MarkdownRendererTests.fs" />
         <Compile Include="InProcess\HtmlRendererTests.fs" />
         <Compile Include="InProcess\ReportingComposeTests.fs" />
+        <Compile Include="InProcess\ReportingAuthorizationTests.fs" />
         <Compile Include="InProcess\NarrativeElementTests.fs" />
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
         <Compile Include="InProcess\SignedExportTests.fs" />
