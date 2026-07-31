@@ -238,6 +238,108 @@ let private failClosedTests =
         }
     ]
 
+// ─── Phase 624 — FS0025 stays a build error ───────────────────────────
+//
+// `Directory.Build.props` promotes FS0025 to an error tree-wide. These
+// tests keep that promotion meaningful by pinning at zero the two
+// suppressions that would silence it for a whole FILE or a whole
+// PROJECT, and by asserting the policy itself is still declared — a gate
+// that can be deleted to make a build go green is not a gate.
+//
+// The `| _ ->` wildcard is deliberately out of scope; see the rationale
+// block in Contracts/ArchitectureFitness.fs for why no census over
+// compiler output can see one, and what to use instead.
+
+let private fs0025Tests =
+    testList "Phase 624 — incomplete-match gate" [
+
+        test "the tree-wide FS0025-as-error policy is still declared" {
+            Expect.isTrue
+                (policyDeclaresFs0025AsError ())
+                "Directory.Build.props must keep FS0025 in <WarningsAsErrors>. If this failed, the incomplete-match gate was removed — restore it rather than deleting this test."
+        }
+
+        test "no source file silences FS0025 for its whole file" {
+            let findings =
+                fs0025ScannableFiles ()
+                |> List.filter (fun p -> p.EndsWith ".fs" || p.EndsWith ".fsx")
+                |> List.collect (fun path -> scanNowarnSuppressions (relative path) (File.ReadAllText path))
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "`#nowarn \"25\"` disables the incomplete-match gate for an entire file. Offending file(s):\n%s"
+                    (findings |> List.map formatSourceFinding |> String.concat "\n"))
+        }
+
+        test "no project exempts itself from FS0025" {
+            let findings =
+                fs0025ScannableFiles ()
+                |> List.filter (fun p -> p.EndsWith ".fsproj" || p.EndsWith ".props")
+                |> List.collect (fun path -> scanProjectSuppressions (relative path) (File.ReadAllText path))
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "A project named FS0025 in <NoWarn> / <WarningsNotAsErrors>, exempting itself from the incomplete-match gate. Offending project(s):\n%s"
+                    (findings |> List.map formatSourceFinding |> String.concat "\n"))
+        }
+
+        test "every exemption is declared where authors read the policy" {
+            let propsText = File.ReadAllText(Path.Combine(repoRoot (), "Directory.Build.props"))
+
+            for exemption in fs0025ExemptPrefixes do
+                Expect.stringContains
+                    propsText
+                    exemption.Prefix
+                    (sprintf
+                        "`%s` is exempt from the FS0025 gate but is not named in Directory.Build.props. An exemption the policy comment does not mention makes the policy read as stronger than it is — document it there (reason on file: %s)."
+                        exemption.Prefix
+                        exemption.Reason)
+
+                Expect.isNotEmpty exemption.Reason (sprintf "exemption `%s` must carry a reason" exemption.Prefix)
+        }
+
+        // ── fail-closed: the detectors fire on planted violations ──────
+
+        test "a planted #nowarn \"25\" is detected" {
+            let source =
+                "module Planted\n\n#nowarn \"25\"\n\nlet f x = match x with | Some v -> v\n"
+
+            let findings = scanNowarnSuppressions "planted.fs" source
+
+            Expect.hasLength findings 1 "the file-scoped suppression must be detected"
+            Expect.equal findings[0].Line 3 "the finding names the directive's line"
+        }
+
+        test "a planted FS0025 NoWarn is detected in both property spellings" {
+            let noWarn =
+                scanProjectSuppressions "planted.fsproj" "<NoWarn>$(NoWarn);FS0025</NoWarn>"
+
+            let notAsErrors =
+                scanProjectSuppressions "planted.fsproj" "<WarningsNotAsErrors>FS0025</WarningsNotAsErrors>"
+
+            Expect.hasLength noWarn 1 "a NoWarn naming FS0025 must be detected"
+            Expect.hasLength notAsErrors 1 "a WarningsNotAsErrors naming FS0025 must be detected"
+        }
+
+        test "the bare `25` spelling is detected but `NU1525` is not" {
+            Expect.hasLength (scanProjectSuppressions "p.fsproj" "<NoWarn>25</NoWarn>") 1 "bare `25` is warning 25"
+
+            Expect.isEmpty
+                (scanProjectSuppressions "p.fsproj" "<NoWarn>NU1525;FS0250</NoWarn>")
+                "ids that merely CONTAIN 25 must not match — a detector that fires on everything proves nothing"
+        }
+
+        test "an unrelated #nowarn is not flagged" {
+            let source = "module Planted\n\n#nowarn \"44\"\n#nowarn \"51\"\n"
+
+            Expect.isEmpty
+                (scanNowarnSuppressions "planted.fs" source)
+                "only warning 25 is in scope; the deprecation/pointer suppressions the tree legitimately uses must pass"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 174 — architecture-fitness gate" [ directionTests; liveSourceTests; failClosedTests ]
+    testList "Phase 174 — architecture-fitness gate" [ directionTests; liveSourceTests; failClosedTests; fs0025Tests ]

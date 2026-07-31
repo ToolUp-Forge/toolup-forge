@@ -174,6 +174,8 @@ let tests =
                 | MethodOutcome.Failed ex ->
                     Expect.stringContains ex.Message "fuse-blown" "Exception carries the original reason"
                 | MethodOutcome.Succeeded -> failtest "Expected Failed outcome, got Succeeded"
+                | MethodOutcome.RateLimited retryAfter ->
+                    failtestf "Expected Failed outcome, got RateLimited (retryAfter %A)" retryAfter
 
         // ---- Phase 69b.D coverage: correlation-id ambient propagation ----
 

@@ -70,6 +70,7 @@ module HelloWorldRoutes =
                     match t.Outcome with
                     | MethodOutcome.Succeeded -> "ok"
                     | MethodOutcome.Failed ex -> sprintf "error: %s" ex.Message
+                    | MethodOutcome.RateLimited retryAfter -> sprintf "rate-limited: retry after %A" retryAfter
 
                 let correlationText =
                     match t.CorrelationId with

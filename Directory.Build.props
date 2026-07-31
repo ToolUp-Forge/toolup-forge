@@ -26,6 +26,63 @@
     non-breaking. Per-package <Version> overrides where a package needs
     to advance independently.
   -->
+  <!--
+    Phase 624 (2026-07-31) — FS0025 (incomplete pattern match) is an
+    ERROR, not a hint.
+
+    WHY. FS0025 is non-fatal and names only ONE example of the unmatched
+    case. Measured directly against the F# 10 compiler: a match over a
+    six-case DU missing THREE cases reports exactly one of them. So a
+    warning that reports one instance of an N-instance problem produces
+    an N-instance backlog, and the backlog is invisible because the build
+    is green. That is not theoretical here — one hygiene bundle found a
+    label function missing two arms where the warning had recorded one,
+    and an audit-event table that had fallen 51 of 132 cases behind.
+
+    Promoting it to an error does not make the message list every missing
+    case — it still names one — but it forces the fix loop to CONTINUE
+    until the match is exhaustive, instead of letting it stop after the
+    single arm the warning happened to name.
+
+    SCOPE. Tree-wide: every project that inherits this file. That is all
+    161 projects in ToolUp.Forge.sln, plus Build.fsproj, tools/*,
+    probes/*, dev/*, samples/*, and the templates/ projects that have no
+    Directory.Build.props of their own.
+
+    NOT COVERED, deliberately, and named here so the policy is not read
+    as stronger than it is:
+      • docs-snippets/ — documentation snippets are prose that must
+        RESOLVE, not production code that must be lint-clean. It sits
+        outside the solution, its sources are generated + gitignored, and
+        it already turns all warnings off (Phase 620).
+      • templates/safer/ and templates/platformsdk-solution/ — template
+        CONTENT shipped to consumers via `dotnet new`. Each carries its
+        own Directory.Build.props that does not import a parent, so
+        MSBuild's walk stops there and this file never applies.
+    Both exemptions are mirrored in `ArchitectureFitness.fs0025ExemptPrefixes`.
+
+    THE WILDCARD HAZARD. Making this an error creates pressure to write
+    `| _ ->` to get green. Do not. Measured: a wildcard emits no
+    diagnostic at all, so it silences the check permanently and lets the
+    table drift again invisibly — which is exactly how the 51-case gap
+    opened. Enumerate the missing arms instead; if a case is genuinely
+    unreachable, match it explicitly and fail loudly in its body.
+
+    The two BROADER escape hatches — `#nowarn "25"` (whole file) and
+    FS0025 in a project's NoWarn / WarningsNotAsErrors (whole project) —
+    are pinned at zero by the Phase 624 tests in
+    src/ToolUp.Platform.Tests/InProcess/ArchitectureFitnessTests.fs,
+    which also assert this property is still here.
+
+    Where a table over a closed DU must PROVABLY stay in step, the
+    wildcard-immune mechanism is a reflection census over
+    FSharpType.GetUnionCases — see AuditEventRegistryTests (Phase 114).
+    It never reads the match expression, so no wildcard can fool it.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);FS0025</WarningsAsErrors>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Authors>Andrew J. Willshire</Authors>
     <Company>ToolUp Analytics Ltd (UK)</Company>

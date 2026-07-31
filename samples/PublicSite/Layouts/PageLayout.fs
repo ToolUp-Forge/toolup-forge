@@ -12,6 +12,10 @@ let render (page: PublicPage) : XmlNode =
         match page.Body with
         | Html fragment -> rawText fragment
         | Markdown source -> rawText source
+        // Phase 80 bodies reach this layout when a narrative page picks
+        // the marketing template; render it the same way NarrativeLayout
+        // does rather than dropping the body silently.
+        | Narrative doc -> rawText (ToolUp.Platform.Narrative.NarrativeHtml.render doc)
 
     let structuredData = StructuredDataHelpers.organization page
 

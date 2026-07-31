@@ -291,6 +291,152 @@ let sampleModuleUnits () : ModuleUnit list =
             })
         |> List.ofSeq
 
+// ─── Rule: FS0025 stays a build error (Phase 624) ─────────────────────
+//
+// `Directory.Build.props` promotes FS0025 (incomplete pattern match)
+// from a warning to an error tree-wide. That gate has three ways to be
+// defeated, and only one of them is the wildcard everyone worries about:
+//
+//   1. `#nowarn "25"` at the top of a source file — silences the check
+//      for the WHOLE file, permanently and invisibly.
+//   2. `FS0025` in a project's `NoWarn` / `WarningsNotAsErrors` —
+//      silences it for the whole PROJECT.
+//   3. a `| _ ->` wildcard arm — silences it for one match expression.
+//
+// (1) and (2) are strictly worse than (3): they are broad, they are far
+// from the code they affect, and nothing in a later diff hints that a
+// table stopped being checked. They are also exactly detectable by text,
+// so this rule pins them at zero. What remains is (3), which is at least
+// local and lands on the diff line the compiler just pointed at.
+//
+// The wildcard itself is deliberately NOT counted here. It emits no
+// diagnostic at all, so no census over compiler output can see it, and a
+// blanket count is meaningless in a tree with ~2,400 legitimate
+// wildcards over options, strings and ints. Deciding whether a given
+// wildcard hides missing DU cases needs the scrutinee's TYPE, which
+// needs a typed whole-repo check this repo does not have. Where a table
+// over a closed DU must provably stay in step, the wildcard-immune
+// mechanism is a reflection census over `FSharpType.GetUnionCases` —
+// see `AuditEventRegistryTests` (Phase 114), which never reads the match
+// expression and therefore cannot be fooled by a wildcard at all.
+
+/// Spellings of warning 25 that MSBuild / the F# compiler both accept.
+let fs0025Spellings = Set.ofList [ "25"; "FS25"; "FS0025" ]
+
+/// Split an MSBuild warning-list property value (`FS0025;NU5128`) into
+/// comparable tokens, dropping property references like `$(NoWarn)`.
+let warningListTokens (value: string) : string list =
+    value.Split([| ';'; ','; ' '; '\t'; '\n'; '\r' |])
+    |> Array.map (fun t -> t.Trim().ToUpperInvariant())
+    |> Array.filter (fun t -> t <> "" && not (t.StartsWith "$("))
+    |> List.ofArray
+
+/// True when a warning-list property value names FS0025.
+let listSuppressesFs0025 (value: string) : bool =
+    warningListTokens value |> List.exists fs0025Spellings.Contains
+
+/// A `#nowarn` directive and the warning ids it names (quoted or bare).
+let nowarnPattern =
+    Regex(@"^[ \t]*#nowarn[ \t]+(.+)$", RegexOptions.Multiline ||| RegexOptions.Compiled)
+
+/// MSBuild properties that would exempt a whole project from the gate.
+let projectSuppressionPattern =
+    Regex(@"<(NoWarn|WarningsNotAsErrors)[^>]*>([^<]*)</\1>", RegexOptions.Compiled ||| RegexOptions.IgnoreCase)
+
+/// Findings for file-scoped `#nowarn` suppressions of FS0025.
+let scanNowarnSuppressions (filename: string) (source: string) : SourceFinding list = [
+    for m in nowarnPattern.Matches source do
+        let ids = m.Groups[1].Value.Replace("\"", " ")
+
+        if listSuppressesFs0025 ids then
+            yield {
+                File = filename
+                Line = lineOf source m.Index
+                Detail =
+                    "`#nowarn \"25\"` silences the incomplete-match gate for this ENTIRE file (Phase 624). Enumerate the missing cases instead; if a table over a closed DU must stay in step, gate it by reflection over its union cases (see AuditEventRegistryTests) rather than switching the compiler off."
+            }
+]
+
+/// Findings for project-scoped `NoWarn` / `WarningsNotAsErrors` exemptions.
+let scanProjectSuppressions (filename: string) (source: string) : SourceFinding list = [
+    for m in projectSuppressionPattern.Matches source do
+        if listSuppressesFs0025 m.Groups[2].Value then
+            yield {
+                File = filename
+                Line = lineOf source m.Index
+                Detail =
+                    sprintf
+                        "`<%s>` names FS0025, exempting this ENTIRE project from the incomplete-match gate (Phase 624). Fix the matches instead; a deliberate exemption belongs in the documented list in Directory.Build.props, not added quietly here."
+                        m.Groups[1].Value
+            }
+]
+
+/// A subtree the gate deliberately does not cover.
+type Fs0025Exemption = {
+    /// Repo-relative path prefix, forward-slashed.
+    Prefix: string
+    /// Why this subtree is out of scope. Full reasoning lives beside the
+    /// policy in Directory.Build.props.
+    Reason: string
+}
+
+/// Repo-relative path prefixes deliberately exempt from the gate, each
+/// with its reason. Kept here (rather than left implicit) so the
+/// exemption set is reviewable — a policy that silently exempts part of
+/// the tree reads as stronger than it is. Mirrors the documented list in
+/// `Directory.Build.props`; a test asserts the two agree, so an
+/// exemption cannot be widened here without saying so where authors read
+/// the policy.
+let fs0025ExemptPrefixes: Fs0025Exemption list = [
+    {
+        Prefix = "docs-snippets/"
+        Reason = "generated doc snippets — prose that must resolve, not lint-clean code; outside the sln (Phase 620)"
+    }
+    {
+        Prefix = "templates/safer/"
+        Reason = "template content — its own Directory.Build.props has no parent import, so the policy never reaches it"
+    }
+    {
+        Prefix = "templates/platformsdk-solution/"
+        Reason = "template content — same structural reason as templates/safer/"
+    }
+]
+
+/// Extensions the gate applies to: F# sources (`#nowarn`) and the
+/// MSBuild files that could carry a project-wide exemption.
+let private fs0025ScannedExtensions =
+    Set.ofList [ ".fs"; ".fsx"; ".fsproj"; ".props" ]
+
+/// Every source / project file the gate applies to. One walk, extensions
+/// filtered in memory; `node_modules` is pruned because npm packages do
+/// ship MSBuild `.props` files and a vendored one is not ours to gate.
+let fs0025ScannableFiles () : string list =
+    let root = repoRoot ()
+    let exemptPrefixes = fs0025ExemptPrefixes |> List.map _.Prefix
+
+    Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+    |> Seq.filter (fun p -> fs0025ScannedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
+    |> Seq.filter (isGeneratedPath >> not)
+    |> Seq.filter (fun p -> not ((p.Replace('\\', '/')).Contains "/node_modules/"))
+    |> Seq.filter (fun p ->
+        let rel = relative p
+        not (exemptPrefixes |> List.exists rel.StartsWith))
+    |> List.ofSeq
+
+/// The tree-wide policy declaration, read from `Directory.Build.props`.
+/// A gate that can be deleted to make a build go green is not a gate, so
+/// its presence is asserted like any other rule.
+let policyDeclaresFs0025AsError () : bool =
+    let path = Path.Combine(repoRoot (), "Directory.Build.props")
+
+    if not (File.Exists path) then
+        false
+    else
+        let text = File.ReadAllText path
+
+        Regex.Matches(text, @"<WarningsAsErrors[^>]*>([^<]*)</WarningsAsErrors>", RegexOptions.IgnoreCase)
+        |> Seq.exists (fun m -> listSuppressesFs0025 m.Groups[1].Value)
+
 // ─── Formatting ───────────────────────────────────────────────────────
 
 let formatEdge (e: ReferenceEdge) : string = sprintf "  %s → %s" e.From e.To

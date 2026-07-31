@@ -171,6 +171,7 @@ let tests =
 
                 let message = CompositionDescriptor.renderError (UnknownComponents ids)
                 Expect.stringContains message "module:not-registered" "the readable message names the offending id"
+            | Error(UnfilledHoles holes) -> failtestf "expected UnknownComponents; got UnfilledHoles %A" holes
 
         // ── every unresolved id is reported, not just the first ───────
         testCase "ofManifest reports every unresolved id together"
@@ -191,6 +192,7 @@ let tests =
                     [ "module:ghost-a"; "module:ghost-b" ]
                     "both unresolved ids are reported; the resolvable one is not"
             | Ok _ -> failtest "expected an UnknownComponents error"
+            | Error(UnfilledHoles holes) -> failtestf "expected UnknownComponents; got UnfilledHoles %A" holes
 
         // ── the raising ServerApp.ofManifest surfaces the message ─────
         testCase "ServerApp.ofManifest raises the readable message on an unknown id"
