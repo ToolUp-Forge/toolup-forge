@@ -87,6 +87,17 @@ type PeerServerApp = {
     /// `withStrictAudienceBinding`. Purely a compose-time gate — it
     /// changes no registration and reaches no request path.
     StrictAudienceBinding: bool
+    /// Phase 343 — when `true`, a non-2xx answer to the outbound
+    /// capability-*profile* fetch degrades to the bare capability list
+    /// (every contract advertised, no method lifecycle) instead of
+    /// failing the handshake. **Off by default, which is a deliberate
+    /// change of behaviour**: the degrade drops exactly the `Deprecated`
+    /// / `Removed` declarations negotiation exists to read, and it fires
+    /// on a status code the answering side chooses. Opt in with
+    /// `withLegacyProfileFallback` when federating with a peer that
+    /// genuinely predates `GET /peer/v1/capabilities/profile`. See
+    /// `PeerRemoteProfile`.
+    LegacyProfileFallback: bool
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -124,6 +135,7 @@ module PeerServerApp =
         ContractProfiles = []
         ConsumedContracts = []
         StrictAudienceBinding = false
+        LegacyProfileFallback = false
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -316,6 +328,30 @@ module PeerServerApp =
             StrictAudienceBinding = true
     }
 
+    /// Phase 343 — restore the pre-343 degrade on the outbound
+    /// capability-*profile* fetch: a non-2xx answer falls back to the
+    /// bare `GET /peer/v1/capabilities` list instead of failing the
+    /// handshake.
+    ///
+    /// **This accepts a real downgrade, and naming it is the point.** The
+    /// bare list carries no per-method lifecycle, so a `Deprecated` or
+    /// `Removed` method the receiver actually declared negotiates as
+    /// `MethodNotAdvertised` — which the negotiation contract documents
+    /// as "fall back to contract-version negotiation", i.e. call it
+    /// anyway. Because the fallback keys off a status code the answering
+    /// side (or anything on the path) chooses, leaving it on by default
+    /// made lifecycle masking a one-response trick that logged nothing.
+    ///
+    /// Compose it when — and only when — this deployment federates with a
+    /// peer that genuinely predates the profile route. Purely a
+    /// compose-time flag read by the handshake's fetch; it registers
+    /// nothing, and a composition that never calls it never issues the
+    /// second request (GP 13). Full rationale in `PeerRemoteProfile`.
+    let withLegacyProfileFallback (app: PeerServerApp) : PeerServerApp = {
+        app with
+            LegacyProfileFallback = true
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -446,39 +482,24 @@ module PeerServerApp =
 
             // Phase 18d — the handshake's outbound *profile* fetch. Reads
             // `GET /peer/v1/capabilities/profile` (a bare `PeerProfile`).
-            // A peer that predates 18d 404s that route, so a non-2xx
-            // degrades to the bare `/peer/v1/capabilities` mapped through
-            // `fromCapabilityList` (every method `Active`) — a 18d-aware
-            // caller still negotiates against a foundation-only peer. A
-            // transport failure is `HandshakeUnreachable`.
-            let fetchRemoteProfile
-                (auth: IPeerAuthProvider)
-                (target: TargetPeer)
-                : Async<Result<PeerProfile, PeerHandshakeError>> =
-                async {
-                    let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
+            //
+            // Phase 343 — the non-2xx branch is no longer a silent degrade
+            // to the bare capability list. That fallback drops every
+            // per-method lifecycle declaration and fires on a status code
+            // the answering side chooses, so it was a one-response way to
+            // mask a `Deprecated` / `Removed` method. It now fails closed
+            // unless `withLegacyProfileFallback` is composed. The whole
+            // fetch lives in `PeerRemoteProfile` so the status handling is
+            // testable against a stub `HttpMessageHandler` rather than only
+            // reachable through a live compose.
+            let profileFallback =
+                if app.LegacyProfileFallback then
+                    PeerRemoteProfile.LegacyCapabilityFallback
+                else
+                    PeerRemoteProfile.FailClosedProfile
 
-                    match tokenResult with
-                    | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
-                    | Ok token ->
-                        try
-                            use request =
-                                new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities/profile")
-
-                            request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
-                            let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
-                            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-                            if response.IsSuccessStatusCode then
-                                return Ok(JsonRpc.deserialize<PeerProfile> body)
-                            else
-                                // Pre-18d peer (no profile endpoint): fall
-                                // back to the bare capability list.
-                                let! caps = fetchRemote auth target
-                                return caps |> Result.map PeerCapabilityNegotiation.fromCapabilityList
-                        with ex ->
-                            return Error(HandshakeUnreachable ex.Message)
-                }
+            let fetchRemoteProfile (auth: IPeerAuthProvider) (target: TargetPeer) =
+                PeerRemoteProfile.fetch sharedHttpClient profileFallback (fetchRemote auth) auth localIdentity target
 
             let peerServiceConfig (services: IServiceCollection) =
                 services

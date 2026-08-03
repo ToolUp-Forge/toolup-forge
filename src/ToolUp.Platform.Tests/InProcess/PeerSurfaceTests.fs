@@ -178,6 +178,14 @@ let tests =
                 // advisory or a compose-time refusal, and the posture it
                 // guards is already reported as `TrustPosture.AudienceBound`.
                 "StrictAudienceBinding"
+                // Phase 343 — deliberately NOT projected either, and for
+                // the mirror-image reason. It registers nothing and
+                // describes nothing this deployment SERVES: it governs
+                // how this deployment reads a counterparty's capability
+                // profile on the OUTBOUND handshake. A `PeerSurface` is
+                // the face a counterparty sees, and a counterparty cannot
+                // observe how strictly we read its answers.
+                "LegacyProfileFallback"
             ]
 
             let actual =

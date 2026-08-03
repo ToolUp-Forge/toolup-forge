@@ -31,6 +31,16 @@
          pre-338 behaviour (GP 11 / GP 13). -->
     <Compile Include="Server\PeerTokenPolicy.fs" />
     <Compile Include="Server\JwtPeerAuthProvider.fs" />
+    <!-- Phase 343 — the asymmetric (ES256 / RS256) peer-auth companion.
+         Compiles AFTER JwtPeerAuthProvider.fs because it reuses that
+         file's internal `PeerJwt` claim set, signing-input builder and
+         post-signature validation tail verbatim — the two providers
+         differ only in which secret they read, which `alg` they accept,
+         and how the signature is checked, and sharing the rest is what
+         stops them drifting. Nothing composes it: `PeerCompose` still
+         registers the HS256 default (GP 11), and a deployment that never
+         constructs this type pays nothing (GP 13). -->
+    <Compile Include="Server\AsymmetricPeerAuthProvider.fs" />
     <Compile Include="Server\DefaultPlatformPeer.fs" />
     <Compile Include="Server\BlobPeerRegistry.fs" />
     <Compile Include="Server\InMemoryPeerHandshake.fs" />
@@ -73,6 +83,13 @@
     <Compile Include="Server\CommutativeCipher.fs" />
     <Compile Include="Server\EcCommutativeCipher.fs" />
     <Compile Include="Server\PrivateSetIntersection.fs" />
+    <!-- Phase 343 — the handshake's outbound capability-PROFILE fetch,
+         lifted out of PeerCompose.fs so its non-2xx handling is testable
+         against a stub HttpMessageHandler instead of only reachable
+         through a live compose. Depends on PeerCapabilityNegotiation.fs
+         (the legacy degrade), IPeerAuthProvider.fs and IPeerHandshake.fs;
+         compiles immediately before its only caller. -->
+    <Compile Include="Server\PeerRemoteProfile.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
          derived from the composed PeerServerApp (compiles after it). -->

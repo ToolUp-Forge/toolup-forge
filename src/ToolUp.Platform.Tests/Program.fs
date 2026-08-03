@@ -970,6 +970,21 @@ let allTests =
         // delegation check is neutered — the pre-330 posture.
         PeerDelegationVerificationTests.hostVerificationTests
         PeerDelegationVerificationTests.userContextClaimTests
+        // Phase 343 — peer robustness roundup. A malformed base64url
+        // signature is a 401 with a body byte-identical to a merely-wrong
+        // one (so the status code stops being an error oracle), asserted
+        // at the provider and over a TestServer, plus a host backstop for
+        // any provider that throws. A non-2xx capability-PROFILE fetch
+        // fails the handshake instead of degrading to the lifecycle-free
+        // capability list — the opt-in legacy fallback is kept as the
+        // NEGATIVE CONTROL that shows the receiver's `Deprecated`
+        // declaration being erased. And the asymmetric ES256 / RS256
+        // provider validates with a public key alone, with the paired
+        // assertion that the same store CANNOT mint as the caller.
+        PeerRobustnessTests.base64UrlSignatureTests
+        PeerRobustnessTests.profileNoDowngradeTests
+        PeerRobustnessTests.asymmetricProviderTests
+        PeerRobustnessTests.defaultCompositionUnchangedTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`
         // signing-key lookup and the blob-backed peer directory, with

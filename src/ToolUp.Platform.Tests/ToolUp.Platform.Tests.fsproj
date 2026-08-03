@@ -1195,6 +1195,17 @@
              malformed `uctx`. The forged-assertion exposure is pinned by a
              NEGATIVE CONTROL that ADMITS it when the check is neutered. -->
         <Compile Include="InProcess\PeerDelegationVerificationTests.fs" />
+        <!-- Phase 343 — peer robustness roundup: a malformed base64url
+             signature answered 401 rather than 500 (asserted at the
+             provider AND over a TestServer, with both refusals carrying
+             an identical body so the status code is not an oracle); the
+             capability-PROFILE fetch failing closed on a non-2xx instead
+             of degrading to the lifecycle-free capability list, with the
+             opt-in fallback kept as the NEGATIVE CONTROL that shows the
+             deprecation being erased; and the asymmetric ES256 / RS256
+             provider verifying with a public key alone while proving the
+             same store cannot mint. -->
+        <Compile Include="InProcess\PeerRobustnessTests.fs" />
         <!-- Phase 334 — federated-identity sanitisation PARITY: one table
              of hostile identifiers driven through all three federated
              boundaries (the Entra oid/sub/tid claim mapping, the peer

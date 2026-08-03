@@ -55,6 +55,15 @@ open ToolUp.Platform.Secrets
 // and refusing to mint would break a deployment whose local id is odd
 // but whose peers never see it (GP 11). See `PeerJwt.isWellFormedPeerId`.
 //
+// **Symmetric, and that is a topology decision (Phase 343).** One shared
+// secret per peer means a single receiver compromise leaks every trusted
+// peer's key, and any key-holder can mint tokens AS that peer — fine for
+// the strict 1:1 pairing this provider was written for, a poor trade for
+// a hub with many spokes. `AsymmetricPeerAuthProvider` (the sibling file)
+// is the GP 1 companion for that shape: the receiver holds only public
+// keys, so compromising it forges nothing. This provider stays the
+// default and is unchanged by that phase (GP 11).
+//
 // **Claim order is load-bearing.** The replay claim is the LAST check.
 // Claiming before the signature verifies would let an unauthenticated
 // attacker burn seen-set entries with forged tokens — turning the
@@ -83,7 +92,18 @@ open ToolUp.Platform.Secrets
 /// `ToolUp.Platform.JwtCrypto`; only the peer-specific glue (split,
 /// payload decode, claim reads, exp/nbf, audience binding, the
 /// issue-side encode path and the delegation string compare) stays here.
-module private PeerJwt =
+///
+/// **`internal`, not `private`, since Phase 343.** The asymmetric
+/// provider (`AsymmetricPeerAuthProvider`) differs from this one in
+/// exactly three places — which secret it reads, which `alg` it accepts,
+/// and how it checks the signature — and in nothing else. Everything
+/// after the signature (`exp` / `nbf` / `aud` / `cid` / `uctx` / the
+/// replay claim, in that order) is the same decision made about the same
+/// claim set, so it is shared rather than copied: a check added here is
+/// automatically run by both providers, and the two cannot drift into
+/// disagreeing about what a valid peer token is. Assembly-internal only
+/// — none of this reaches the public surface.
+module internal PeerJwt =
 
     /// Reserved SDK-level secret scope (see `ISecretStore`).
     let platformScope = "_platform"
@@ -160,15 +180,53 @@ module private PeerJwt =
         | _ -> Error "Invalid JWT format"
 
     /// Verify the HS256 signature in constant time.
+    ///
+    /// **Phase 343 — the signature segment is decoded with `tryDecode`.**
+    /// It is attacker-controlled and arrives before anything has
+    /// authenticated it, and `Base64Url.decode` throws `FormatException`
+    /// on a segment that is not valid base64url. Nothing between here and
+    /// the Giraffe handler caught that: `JwtCrypto.result` is a `Result`
+    /// computation expression, not an exception boundary, so the throw
+    /// escaped `ValidatePeerToken` and the host answered **500** where
+    /// every other bad credential answers 401. Fail-closed either way —
+    /// but a status-code difference an unauthenticated caller can trigger
+    /// at will is a free oracle separating "malformed encoding" from
+    /// "wrong key", and it is removed by returning the SAME
+    /// `"Invalid signature"` a well-formed-but-wrong signature returns.
+    ///
+    /// The HMAC is still computed first, before the decode is inspected,
+    /// so the work done is unchanged by whether the segment parses.
     let verifySignature (secret: byte[]) (header: string) (payload: string) (signature: string) =
         let message = Encoding.UTF8.GetBytes($"{header}.{payload}")
         let expected = JwtCrypto.computeHmac secret message
-        let actual = Base64Url.decode signature
 
-        if JwtCrypto.fixedTimeEquals expected actual then
-            Ok()
-        else
-            Error "Invalid signature"
+        match Base64Url.tryDecode signature with
+        | Some actual when JwtCrypto.fixedTimeEquals expected actual -> Ok()
+        | _ -> Error "Invalid signature"
+
+    /// Phase 343 — the algorithm gate for a provider whose `alg` is not
+    /// HS256. `JwtCrypto.checkHs256Alg` is deliberately hard-wired to the
+    /// symmetric algorithm (it *is* the alg-confusion defence for the
+    /// symmetric validators); an asymmetric provider needs the same shape
+    /// against its own single accepted algorithm. Same posture: exactly
+    /// one algorithm is accepted, named by the caller, a header that will
+    /// not parse is an `Error` rather than an exception, and the
+    /// offending value is not echoed back (it is attacker-controlled and
+    /// flows into logs).
+    let checkAlg (expected: string) (header: string) : Result<unit, string> =
+        try
+            use doc = JsonDocument.Parse(Encoding.UTF8.GetString(Base64Url.decode header))
+
+            match doc.RootElement.TryGetProperty "alg" with
+            | true, algElem when algElem.ValueKind = JsonValueKind.String ->
+                if algElem.GetString() = expected then
+                    Ok()
+                else
+                    Error $"Unsupported JWT algorithm (this receiver accepts only {expected})"
+            | true, _ -> Error "JWT header 'alg' field is not a string"
+            | false, _ -> Error "JWT header missing 'alg' field"
+        with ex ->
+            Error $"Failed to parse JWT header: {ex.Message}"
 
     /// Decode the payload into a JsonDocument.
     let decodePayload (payload: string) =
@@ -339,10 +397,101 @@ module private PeerJwt =
             with _ ->
                 Error malformedUserContextMessage
 
-    /// Mint a signed HS256 token. `uctx` carries the serialised
-    /// `UserContext` as a string claim (round-tripped through the
-    /// universal converter set so the DU survives the wire). Lifetime is
-    /// five minutes — a peer token is minted per call, not cached.
+    /// Phase 338 — claim the token's `jti` against the replay guard.
+    /// Runs only once every other check has passed (see the claim-order
+    /// note in this file's header). Without a guard composed this is
+    /// `Ok` without touching the token at all, so the `jti` claim is
+    /// inert for a deployment that has not opted in.
+    ///
+    /// Phase 343 — lifted out of `JwtPeerAuthProvider` so the asymmetric
+    /// provider makes the identical claim, in the identical order.
+    let claimNonce (policy: PeerTokenPolicy) (doc: JsonDocument) : Async<Result<unit, string>> = async {
+        match policy.ReplayGuard with
+        | None -> return Ok()
+        | Some guard ->
+            match getClaim "jti" doc with
+            | None -> return Error missingNonceMessage
+            | Some jti when String.IsNullOrWhiteSpace jti -> return Error missingNonceMessage
+            | Some jti ->
+                match freshnessDeadline doc with
+                | None -> return Error "Token carries no usable 'exp' claim to bound its replay-guard entry"
+                | Some deadline ->
+                    let! verdict = guard.ClaimTokenId(jti, deadline)
+
+                    match verdict with
+                    | ReplayFirstUse -> return Ok()
+                    | ReplayDetected ->
+                        return
+                            Error "Peer token replayed — its 'jti' has already been spent inside the freshness window"
+                    | ReplayGuardUnavailable reason ->
+                        // Fail CLOSED. A guard that cannot see its state has
+                        // no basis for calling a token fresh, and answering
+                        // "not seen" here would silently restore the pre-338
+                        // posture exactly when it is under attack.
+                        return
+                            Error
+                                $"Replay guard unavailable ({reason}) — refusing the call rather than accepting an unchecked token"
+    }
+
+    /// Phase 343 — everything a validated peer token is checked for
+    /// *after* its signature: the time and binding claims, the asserted
+    /// end-user context, the replay claim, and the principal that comes
+    /// out the far side. Shared verbatim by the HS256 and asymmetric
+    /// providers, which differ only in how they establish the signature.
+    ///
+    /// **The order is the contract, not an implementation detail.** The
+    /// `uctx` read precedes the nonce claim so a token about to be
+    /// rejected on its payload shape does not spend a seen-set entry on
+    /// the way out, and the nonce claim is last so only an otherwise-
+    /// valid token consumes one. Sharing the function is what keeps that
+    /// ordering true of every provider rather than of whichever one was
+    /// edited most recently.
+    let finishValidation
+        (expectedAudience: string)
+        (policy: PeerTokenPolicy)
+        (expectedContract: string option)
+        (iss: string)
+        (doc: JsonDocument)
+        : Async<Result<PeerPrincipal, PeerError>> =
+        async {
+            let claims = JwtCrypto.result {
+                do! checkExpiry doc
+                do! checkNotBefore doc
+                do! checkAudience expectedAudience doc
+                do! checkContractScope policy.CallScope expectedContract doc
+                return ()
+            }
+
+            match claims with
+            | Error e -> return Error(PeerUnauthorized e)
+            | Ok() ->
+                match readUserContext doc with
+                | Error e -> return Error(PeerUnauthorized e)
+                | Ok user ->
+                    let! claimed = claimNonce policy doc
+
+                    match claimed with
+                    | Error e -> return Error(PeerUnauthorized e)
+                    | Ok() ->
+                        let name = getClaim "name" doc |> Option.defaultValue iss
+
+                        return
+                            Ok {
+                                Caller = { PeerId = iss; DisplayName = name }
+                                User = user
+                            }
+        }
+
+    /// Phase 343 — the claim set and its `header.payload` signing input,
+    /// single-sourced across every signing algorithm. `encode` (HS256)
+    /// and the asymmetric provider differ only in the `alg` they name and
+    /// in what they do with these bytes; the claims themselves are one
+    /// definition, so a claim added for one provider is minted by both.
+    ///
+    /// `uctx` carries the serialised `UserContext` as a string claim
+    /// (round-tripped through the universal converter set so the DU
+    /// survives the wire). Lifetime is five minutes — a peer token is
+    /// minted per call, not cached.
     ///
     /// Phase 338 — a `jti` nonce is minted UNCONDITIONALLY, whether or
     /// not this deployment enforces replay defence. A receiver ignores
@@ -351,8 +500,8 @@ module private PeerJwt =
     /// first and switch enforcement on second, rather than needing both
     /// halves of every peer pair to move in one step. `contractId` is
     /// `Some` only on the call-scoped issue path.
-    let encode
-        (secret: byte[])
+    let signingInput
+        (alg: string)
         (caller: PeerIdentity)
         (audience: PeerIdentity)
         (user: UserContext)
@@ -361,7 +510,7 @@ module private PeerJwt =
         let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
 
         let header = JsonObject()
-        header["alg"] <- JsonValue.Create("HS256")
+        header["alg"] <- JsonValue.Create(alg)
         header["typ"] <- JsonValue.Create("JWT")
 
         let payload = JsonObject()
@@ -383,12 +532,23 @@ module private PeerJwt =
         let encodedPayload =
             Base64Url.encode (Encoding.UTF8.GetBytes(payload.ToJsonString()))
 
-        let signingInput = $"{encodedHeader}.{encodedPayload}"
+        $"{encodedHeader}.{encodedPayload}"
 
-        let signature =
-            Base64Url.encode (JwtCrypto.computeHmac secret (Encoding.UTF8.GetBytes signingInput))
+    /// Phase 343 — assemble the compact serialisation from a signing
+    /// input and its raw signature bytes. Trivial, and shared for the
+    /// same reason `signingInput` is: the wire shape is one definition.
+    let assemble (input: string) (signature: byte[]) = $"{input}.{Base64Url.encode signature}"
 
-        $"{signingInput}.{signature}"
+    /// Mint a signed HS256 token over the shared claim set.
+    let encode
+        (secret: byte[])
+        (caller: PeerIdentity)
+        (audience: PeerIdentity)
+        (user: UserContext)
+        (contractId: string option)
+        =
+        let input = signingInput "HS256" caller audience user contractId
+        assemble input (JwtCrypto.computeHmac secret (Encoding.UTF8.GetBytes input))
 
     /// Canonical byte string a delegating peer signs over: the subject
     /// joined to the ordered delegation chain. Deterministic so both
@@ -462,43 +622,10 @@ type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy
                 return Ok token
         }
 
-    /// Phase 338 — claim the token's `jti` against the replay guard.
-    /// Runs only once every other check has passed (see the claim-order
-    /// note in this file's header). Without a guard composed this is
-    /// `Ok` without touching the token at all, so the `jti` claim is
-    /// inert for a deployment that has not opted in.
-    member private _.ClaimNonce(doc: JsonDocument) : Async<Result<unit, string>> = async {
-        match policy.ReplayGuard with
-        | None -> return Ok()
-        | Some guard ->
-            match PeerJwt.getClaim "jti" doc with
-            | None -> return Error PeerJwt.missingNonceMessage
-            | Some jti when String.IsNullOrWhiteSpace jti -> return Error PeerJwt.missingNonceMessage
-            | Some jti ->
-                match PeerJwt.freshnessDeadline doc with
-                | None -> return Error "Token carries no usable 'exp' claim to bound its replay-guard entry"
-                | Some deadline ->
-                    let! verdict = guard.ClaimTokenId(jti, deadline)
-
-                    match verdict with
-                    | ReplayFirstUse -> return Ok()
-                    | ReplayDetected ->
-                        return
-                            Error "Peer token replayed — its 'jti' has already been spent inside the freshness window"
-                    | ReplayGuardUnavailable reason ->
-                        // Fail CLOSED. A guard that cannot see its state has
-                        // no basis for calling a token fresh, and answering
-                        // "not seen" here would silently restore the pre-338
-                        // posture exactly when it is under attack.
-                        return
-                            Error
-                                $"Replay guard unavailable ({reason}) — refusing the call rather than accepting an unchecked token"
-    }
-
     /// The whole validation path. `expectedContract` is `Some` on the
     /// call-scoped entry point and `None` on the plain one; every other
     /// check is identical, so the two cannot drift.
-    member private this.Validate
+    member private _.Validate
         (token: string, expectedContract: string option)
         : Async<Result<PeerPrincipal, PeerError>> =
         async {
@@ -536,41 +663,21 @@ type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy
                         | Some secret ->
                             let secretBytes = Encoding.UTF8.GetBytes secret
 
-                            let validated = JwtCrypto.result {
+                            let verified = JwtCrypto.result {
                                 do! JwtCrypto.checkHs256Alg header
                                 do! PeerJwt.verifySignature secretBytes header payload signature
-                                do! PeerJwt.checkExpiry doc
-                                do! PeerJwt.checkNotBefore doc
-                                do! PeerJwt.checkAudience expectedAudience doc
-                                do! PeerJwt.checkContractScope policy.CallScope expectedContract doc
                                 return ()
                             }
 
-                            match validated with
+                            match verified with
                             | Error e -> return Error(PeerUnauthorized e)
-                            | Ok() ->
-                                // Phase 330 — the asserted end-user context is
-                                // read (and refused if unreadable) BEFORE the
-                                // nonce claim: a token that is going to be
-                                // rejected on its payload shape should not
-                                // spend a seen-set entry on the way out.
-                                match PeerJwt.readUserContext doc with
-                                | Error e -> return Error(PeerUnauthorized e)
-                                | Ok user ->
-                                    // LAST: only an otherwise-valid token gets to
-                                    // consume a seen-set entry.
-                                    let! claimed = this.ClaimNonce doc
-
-                                    match claimed with
-                                    | Error e -> return Error(PeerUnauthorized e)
-                                    | Ok() ->
-                                        let name = PeerJwt.getClaim "name" doc |> Option.defaultValue iss
-
-                                        return
-                                            Ok {
-                                                Caller = { PeerId = iss; DisplayName = name }
-                                                User = user
-                                            }
+                            // Phase 343 — everything after the signature (the
+                            // time / binding claims, then the asserted end-user
+                            // context, then the replay claim, in that order) is
+                            // the shared tail every provider runs. See
+                            // `PeerJwt.finishValidation` for why the ordering is
+                            // part of the contract.
+                            | Ok() -> return! PeerJwt.finishValidation expectedAudience policy expectedContract iss doc
         }
 
     interface IPeerAuthProvider with

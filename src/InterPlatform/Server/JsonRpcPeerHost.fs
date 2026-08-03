@@ -308,6 +308,41 @@ module JsonRpcPeerHost =
                 do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
         }
 
+    /// Phase 343 — authenticate an inbound token, fail-closed even when
+    /// the provider *throws*.
+    ///
+    /// `IPeerAuthProvider` is contractually total: every defect is
+    /// `Error (PeerUnauthorized …)`. The default provider was not, on one
+    /// path — a signature segment that is not valid base64url reached
+    /// `Base64Url.decode`, which throws, and `JwtCrypto.result` is a
+    /// `Result` computation expression rather than an exception boundary,
+    /// so it escaped to here and the handler answered **500**. That is
+    /// fixed at source in `PeerJwt.verifySignature`; this is the backstop
+    /// that stops the class recurring, because the *host* is where the
+    /// consequence lives and it must not depend on every present and
+    /// future provider being exception-free.
+    ///
+    /// It matters beyond tidiness: a status code an unauthenticated
+    /// caller can flip at will is an error oracle, distinguishing
+    /// "malformed encoding" from "wrong key" before any credential has
+    /// been accepted. Every credential defect now answers 401 with the
+    /// same shape.
+    ///
+    /// Cancellation is deliberately NOT swallowed — the `when` guard lets
+    /// it propagate. A disconnected client is not a rejected credential,
+    /// and turning one into a 401 would both lie in the logs and write to
+    /// a response nobody is reading.
+    let private authenticate (auth: IPeerAuthProvider) (token: string) : Async<Result<PeerPrincipal, PeerError>> = async {
+        try
+            return! auth.ValidatePeerToken token
+        with ex when not (ex :? OperationCanceledException) ->
+            return
+                Error(
+                    PeerUnauthorized
+                        $"Peer token could not be validated ({ex.GetType().Name}) — refusing the call rather than reporting a server fault for a credential defect"
+                )
+    }
+
     /// Phase 330 — verify the *originator* a validated principal asserts,
     /// before anything acts on it.
     ///
@@ -346,7 +381,7 @@ module JsonRpcPeerHost =
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
-                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+                let! validation = authenticate auth token |> Async.StartAsTask
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
@@ -415,7 +450,7 @@ module JsonRpcPeerHost =
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
-                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+                let! validation = authenticate auth token |> Async.StartAsTask
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
@@ -439,7 +474,7 @@ module JsonRpcPeerHost =
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
-                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+                let! validation = authenticate auth token |> Async.StartAsTask
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
@@ -477,7 +512,7 @@ module JsonRpcPeerHost =
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
-                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+                let! validation = authenticate auth token |> Async.StartAsTask
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
