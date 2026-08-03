@@ -69,6 +69,14 @@
     <!-- Phase 590 — the deployment's cross-instance face as data,
          derived from the composed PeerServerApp (compiles after it). -->
     <Compile Include="Server\PeerSurface.fs" />
+    <!-- Phase 595 — aggregate peer surface + gateway composition: one
+         collective PeerSurface over a set of member surfaces plus an
+         explicit exposure selection, and the gateway shape that serves it
+         by delegating to the owning member. Compiles after PeerSurface.fs
+         (it derives a PeerSurface) and after PeerCompose.fs (the gateway
+         registers onto a PeerServerApp). Nothing composes it — the opt-in
+         hook is PeerGateway.withAggregate (GP 13). -->
+    <Compile Include="Server\AggregatePeerSurface.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

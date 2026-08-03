@@ -936,6 +936,12 @@ let allTests =
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.
         PeerSurfaceTests.tests
+        // Phase 595 — aggregate peer surface + gateway composition: one
+        // collective PeerSurface over a set of member surfaces plus an
+        // explicit exposure allow-list (posture floored to the weakest
+        // exposing member, vocabulary pins on unanimity only), and the
+        // gateway that fronts it by delegating to the owning member.
+        AggregatePeerSurfaceTests.tests
         // Phase 316 — peer job-result retention: a parked federated
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.

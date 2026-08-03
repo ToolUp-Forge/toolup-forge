@@ -1,0 +1,473 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+namespace ToolUp.InterPlatform
+
+open ToolUp.Platform
+open ToolUp.InterPlatform.PeerCompose
+
+// ─── Phase 595 — aggregate peer surface + gateway composition ────────
+//
+// A group of deployments often needs to face the outside world **as one
+// peer**: a multi-site organisation joining an external exchange, a
+// consortium exposing a single front. Two additive pieces over the Phase
+// 590 `PeerSurface`:
+//
+// (a) **`AggregatePeerSurface.derive`** — compose one collective
+//     `PeerSurface` from a set of member surfaces plus an explicit
+//     **exposure selection**. The selection is an allow-list of served
+//     contract ids: what is not listed stays internal (default-deny), so
+//     a group never leaks a member's contract by accident. Trust-posture
+//     facets take the **floor** — the collective posture is never
+//     stronger than the weakest exposing member's, because a call routed
+//     through the group lands on that member. Pinned data-vocabulary
+//     packs (Phase 594) are carried only where every exposing member
+//     agrees exactly; a divergent pack is **omitted, never averaged** —
+//     a group cannot honestly assert a shared meaning its members do not
+//     share.
+//
+// (b) **`PeerGateway`** — a deployment shape that serves the aggregate's
+//     exposed contracts by delegating to the owning member over the
+//     existing typed peer client, and contributes the aggregate as its
+//     own `PeerSurface`. An external counterparty pins the *group's*
+//     face exactly like any single instance's; the Phase 591 preflight
+//     applies unchanged.
+//
+// **The export is the same shape as a single instance's.** `derive`
+// returns a real `PeerSurface`, so `PeerSurface.export` / `exportJson`
+// stamp it through the very same code path — an external consumer cannot
+// (and need not) distinguish a gateway-fronted group from one
+// deployment.
+//
+// **Generic SDK vocabulary — no group governance.** "Aggregate surface",
+// "member", "gateway". Who may speak for a group, how membership is
+// admitted, and what a member owes the group are consumer concerns,
+// expressed by what they sign; the substrate only composes labels and
+// routes calls (GP 1).
+//
+// **Zero cost when unused (GP 11 / GP 13).** Everything here is pure and
+// on demand: nothing is registered, allocated, or hosted unless a
+// deployment calls `PeerGateway.withAggregate`. A non-grouped deployment
+// is byte-for-byte unchanged.
+//
+// **Scope note — long-running methods are not fronted.** The gateway
+// forwards the *invoke* leg of a contract call. A member's long-running
+// method parks its result in the member's own job-result store, which
+// the group's `/peer/v1/{contractId}/jobs/{jobId}` route cannot read, so
+// the aggregate advertises **no routines** and `LongRunningEnabled =
+// false` — the honest report of what the group actually dispatches.
+// Fronting the poll leg needs a forwarding hook in the host's job-status
+// route and is deliberately left to a later phase.
+
+/// One member of an aggregate group: how the gateway reaches it, plus
+/// its own cross-instance face. The surface is whatever the group has of
+/// that member — `PeerSurface.describe` of a co-owned composition, or a
+/// pinned export received from a counterparty. Derivation reads the
+/// surface only, so a group can be composed from labels alone.
+type AggregateMember = {
+    /// Identity + base URL the gateway delegates to.
+    Target: TargetPeer
+    /// The member's own `PeerSurface`.
+    Surface: PeerSurface
+}
+
+/// One contract the group fronts externally, and the member it is
+/// fronted from. Anything not named here stays internal — the exposure
+/// selection is an allow-list, never a deny-list.
+type ExposedContract = {
+    /// The served contract id, as it appears on the member's surface (and
+    /// as external callers will address it on the gateway).
+    ContractId: string
+    /// The peer id of the member the gateway routes this contract to.
+    /// `None` resolves to the sole member serving it; ambiguous when
+    /// more than one does — the group must then say which one owns the
+    /// external face.
+    Owner: string option
+}
+
+/// The group's external face declaration: the identity it presents as
+/// one peer, plus the contracts it fronts.
+type AggregateExposure = {
+    /// The group's own peer identity — what an external counterparty
+    /// addresses, authenticates, and pins. Distinct from every member's
+    /// identity: the group *is* a peer.
+    Group: PeerIdentity
+    /// The exposure allow-list. Empty ⇒ the group serves nothing
+    /// externally (a legitimate, if inert, shape).
+    Contracts: ExposedContract list
+}
+
+/// Why an exposure selection cannot be resolved against the member set.
+/// Expressed as data (GP 12 rule 3): every case names the contract (and
+/// where relevant the member) so a composition failure is diagnosable
+/// without reading the derivation.
+type AggregateDerivationError =
+    /// The exposure names a contract no member serves — the group would
+    /// advertise a face nothing stands behind.
+    | ExposureUnserved of contractId: string
+    /// More than one member serves the contract and the exposure does not
+    /// say which owns the external face.
+    | ExposureOwnerAmbiguous of contractId: string * candidates: string list
+    /// The declared owner is not a member of the group.
+    | ExposureOwnerUnknown of contractId: string * ownerPeerId: string
+    /// The declared owner is a member but does not serve the contract.
+    | ExposureOwnerDoesNotServe of contractId: string * ownerPeerId: string
+    /// The same contract id appears twice in the exposure selection.
+    | ExposureDuplicated of contractId: string
+    /// The same peer id appears twice in the member set.
+    | MemberDuplicated of peerId: string
+
+/// One resolved routing entry: the contract the group fronts, the wire
+/// versions it fronts it at (the owner's own advertised set, so an
+/// external caller's handshake resolves to a version the member accepts),
+/// and the member the gateway delegates to. Routing declared as data —
+/// the gateway holds no lookup logic of its own.
+type AggregateRoute = {
+    ContractId: string
+    Versions: ContractVersion list
+    Owner: TargetPeer
+}
+
+/// Derives one collective `PeerSurface` from a set of member surfaces
+/// plus an exposure selection. Pure; nothing here touches the wire.
+[<RequireQualifiedAccess>]
+module AggregatePeerSurface =
+
+    /// Prefix marking a trust-posture facet the exposing members disagree
+    /// on. A counterparty reading `mixed:a|b` learns it may rely on
+    /// neither stance — strictly weaker than any single member's claim,
+    /// which is the whole point of a floor.
+    [<Literal>]
+    let mixedPrefix = "mixed:"
+
+    /// The floor of one string-valued posture facet: the unanimous value
+    /// where the exposing members agree, else an explicit `mixed:` marker
+    /// enumerating the divergence (sorted, so the aggregate's hash is
+    /// independent of member order).
+    let private floorFacet (values: string list) : string =
+        match values |> List.distinct |> List.sort with
+        | [] -> ""
+        | [ single ] -> single
+        | many -> mixedPrefix + String.concat "|" many
+
+    /// The gateway's own structural surface: what `PeerSurface.describe`
+    /// reports for a bare enabled composition carrying the group identity
+    /// and nothing else. **Derived, never re-asserted** — the posture
+    /// constants and the cascade-guard description live in one place
+    /// (`PeerSurface.describe`), so a change there flows here with no
+    /// edit. Runs no contract builder: the composition has none.
+    let private edgeSurface (group: PeerIdentity) : PeerSurface =
+        PeerServerApp.create ()
+        |> PeerServerApp.withConfig {
+            ServerConfig.defaults with
+                PeerSubstrate = EnabledPeerSubstrate
+        }
+        |> PeerServerApp.withLocalPeer group
+        |> PeerSurface.describe
+
+    /// The posture floor over the gateway edge and every exposing member:
+    /// boolean facets are conjunctions (a group binds audiences only if
+    /// every member does), string facets fall back to `mixed:` on
+    /// divergence. The edge participates because the group's face is the
+    /// weaker of what the gateway enforces and what the members behind it
+    /// do.
+    let private floorPosture (postures: PeerTrustPosture list) : PeerTrustPosture = {
+        AuthProfile = floorFacet (postures |> List.map _.AuthProfile)
+        AudienceBound = postures |> List.forall _.AudienceBound
+        DelegationVerification = floorFacet (postures |> List.map _.DelegationVerification)
+        ReplayStance = floorFacet (postures |> List.map _.ReplayStance)
+        TransportSecurity = floorFacet (postures |> List.map _.TransportSecurity)
+    }
+
+    /// The vocabulary pins the group can honestly carry: a pack surfaces
+    /// only when **every** exposing member pins it at the identical
+    /// version AND hash. Any divergence — a differing version, an
+    /// in-place mutation of the same version, or a member that pins it at
+    /// all where another does not — omits the pack entirely. Never
+    /// averaged, never majority-voted: a federated data type either means
+    /// the same thing across every exposing member or the group makes no
+    /// claim about it.
+    let private unanimousPins (exposing: PeerSurface list) : VocabularyPackPin list =
+        match exposing with
+        | [] -> []
+        | _ ->
+            let pinsOf (surface: PeerSurface) =
+                surface.PinnedVocabulary |> List.map (fun p -> p.PackId, p) |> Map.ofList
+
+            let perMember = exposing |> List.map pinsOf
+
+            exposing
+            |> List.collect (fun s -> s.PinnedVocabulary |> List.map _.PackId)
+            |> List.distinct
+            |> List.choose (fun packId ->
+                match perMember |> List.map (Map.tryFind packId) |> List.distinct with
+                | [ Some pin ] -> Some pin
+                | _ -> None)
+            |> List.sortBy (fun p -> p.PackId, p.Version.Major, p.Version.Minor)
+
+    /// What the group consumes from *outside* itself: the exposing
+    /// members' consumed declarations, minus every contract some member
+    /// of the group serves. A consumption satisfied inside the group is
+    /// internal traffic and no part of the group's external face — the
+    /// same default-deny reading that governs the serving half.
+    let private externalConsumes
+        (members: AggregateMember list)
+        (exposing: AggregateMember list)
+        : ConsumedContract list =
+        let servedInGroup =
+            members
+            |> List.collect (fun m -> m.Surface.Serves.Contracts |> List.map _.ContractId)
+            |> Set.ofList
+
+        exposing
+        |> List.collect (fun m -> m.Surface.Consumes)
+        |> List.filter (fun c -> not (Set.contains c.ContractId servedInGroup))
+        |> List.distinct
+        |> List.sortBy _.ContractId
+
+    /// Resolve the exposure selection against the member set into the
+    /// gateway's routing table. Every problem is reported, not just the
+    /// first: a group author fixing one exposure typo should not have to
+    /// re-run to find the next.
+    let routes
+        (members: AggregateMember list, exposure: AggregateExposure)
+        : Result<AggregateRoute list, AggregateDerivationError list> =
+
+        let duplicateMembers =
+            members
+            |> List.countBy (fun m -> m.Target.Peer.PeerId)
+            |> List.filter (snd >> (<) 1)
+            |> List.map (fst >> MemberDuplicated)
+
+        let duplicateExposures =
+            exposure.Contracts
+            |> List.countBy _.ContractId
+            |> List.filter (snd >> (<) 1)
+            |> List.map (fst >> ExposureDuplicated)
+
+        /// The members whose surface serves `contractId`, and the served
+        /// entry itself (the versions the group will front it at).
+        let servingMembers (contractId: string) =
+            members
+            |> List.choose (fun m ->
+                m.Surface.Serves.Contracts
+                |> List.tryFind (fun c -> c.ContractId = contractId)
+                |> Option.map (fun c -> m, c))
+
+        let resolved =
+            exposure.Contracts
+            |> List.distinctBy _.ContractId
+            |> List.map (fun exposed ->
+                match servingMembers exposed.ContractId, exposed.Owner with
+                | [], _ -> Error [ ExposureUnserved exposed.ContractId ]
+                | [ (owner, served) ], None ->
+                    Ok {
+                        ContractId = exposed.ContractId
+                        Versions = served.Versions |> List.sort
+                        Owner = owner.Target
+                    }
+                | candidates, None ->
+                    Error [
+                        ExposureOwnerAmbiguous(
+                            exposed.ContractId,
+                            candidates |> List.map (fun (m, _) -> m.Target.Peer.PeerId) |> List.sort
+                        )
+                    ]
+                | candidates, Some ownerId ->
+                    match candidates |> List.tryFind (fun (m, _) -> m.Target.Peer.PeerId = ownerId) with
+                    | Some(owner, served) ->
+                        Ok {
+                            ContractId = exposed.ContractId
+                            Versions = served.Versions |> List.sort
+                            Owner = owner.Target
+                        }
+                    | None when members |> List.exists (fun m -> m.Target.Peer.PeerId = ownerId) ->
+                        Error [ ExposureOwnerDoesNotServe(exposed.ContractId, ownerId) ]
+                    | None -> Error [ ExposureOwnerUnknown(exposed.ContractId, ownerId) ])
+
+        let resolutionErrors =
+            resolved
+            |> List.collect (function
+                | Error errs -> errs
+                | Ok _ -> [])
+
+        match duplicateMembers @ duplicateExposures @ resolutionErrors with
+        | [] ->
+            resolved
+            |> List.choose (function
+                | Ok route -> Some route
+                | Error _ -> None)
+            |> List.sortBy _.ContractId
+            |> Ok
+        | errors -> Error errors
+
+    /// Compose one collective `PeerSurface` from the member surfaces and
+    /// the exposure selection. The result is an ordinary `PeerSurface` —
+    /// `PeerSurface.export` / `exportJson` stamp it through the identical
+    /// code path a single instance uses, which is what makes a
+    /// gateway-fronted group indistinguishable from one deployment on the
+    /// wire.
+    let derive
+        (members: AggregateMember list, exposure: AggregateExposure)
+        : Result<PeerSurface, AggregateDerivationError list> =
+        routes (members, exposure)
+        |> Result.map (fun resolvedRoutes ->
+            let edge = edgeSurface exposure.Group
+
+            // Exposing members = the owners actually reachable through the
+            // group's face. A member serving only unlisted contracts is
+            // internal and contributes no posture, no pin, and no
+            // consumption — it is not part of what the group asserts.
+            let exposing =
+                resolvedRoutes
+                |> List.map (fun r -> r.Owner.Peer.PeerId)
+                |> List.distinct
+                |> List.sort
+                |> List.choose (fun peerId -> members |> List.tryFind (fun m -> m.Target.Peer.PeerId = peerId))
+
+            let posturesInPlay =
+                (edge.TrustPosture |> Option.toList)
+                @ (exposing |> List.choose (fun m -> m.Surface.TrustPosture))
+
+            {
+                Enabled = true
+                LocalPeerId = Some exposure.Group.PeerId
+                Serves = {
+                    Contracts =
+                        resolvedRoutes
+                        |> List.map (fun route -> {
+                            ContractId = route.ContractId
+                            Versions = route.Versions |> List.sort
+                            // The gateway fuses no routine onto its own job
+                            // substrate — see the scope note at the head of
+                            // this file.
+                            Routines = []
+                        })
+                    Endpoints = PeerSurface.endpoints
+                }
+                Consumes = externalConsumes members exposing
+                TrustPosture = Some(floorPosture posturesInPlay)
+                Budgets =
+                    Some {
+                        CascadeGuard =
+                            floorFacet (
+                                (edge.Budgets |> Option.toList |> List.map _.CascadeGuard)
+                                @ (exposing |> List.choose (fun m -> m.Surface.Budgets) |> List.map _.CascadeGuard)
+                            )
+                        // False by construction, not by floor: the group
+                        // advertises no routines, so it dispatches no
+                        // long-running work of its own.
+                        LongRunningEnabled = false
+                    }
+                PinnedVocabulary = unanimousPins (exposing |> List.map _.Surface)
+            })
+
+/// Composes a deployment that presents an aggregate group as one peer:
+/// it serves the exposed contracts by delegating each to its owning
+/// member over the typed peer client, and reports the aggregate as its
+/// own cross-instance face.
+[<RequireQualifiedAccess>]
+module PeerGateway =
+
+    /// The forwarding contract host for one resolved route. Dispatch is
+    /// method-agnostic — whatever method name arrives is forwarded — so a
+    /// member adding a method needs no gateway edit; what the gateway
+    /// pins is the *contract* and its versions.
+    ///
+    /// The outbound context is derived through `PeerCascade.deriveNext`,
+    /// the same single-sourced bookkeeping every other forwarding site
+    /// uses (Phase 314): the group is appended to `Route`, the hop budget
+    /// decremented, `RootRequestId` preserved, and a doomed hop (loop or
+    /// exhausted budget) refused **before** the wire call — so a gateway
+    /// hop is a first-class cascade hop, not an invisible one.
+    let forwardingContract (client: IPeerClient) (group: PeerIdentity) (route: AggregateRoute) : PeerContractHost =
+        let dispatch: PeerDispatch =
+            fun context methodName argsJson -> async {
+                match PeerCascade.deriveNext context group route.Owner with
+                | Error e -> return Error e
+                | Ok outbound ->
+                    let payload: PeerWirePayload = {
+                        Context = outbound
+                        Arguments = argsJson
+                    }
+
+                    return! client.Invoke(route.Owner, route.ContractId, methodName, payload)
+            }
+
+        {
+            Registration = {
+                ContractId = route.ContractId
+                Versions = route.Versions
+                Dispatch = dispatch
+            }
+            // No routine is fused onto the gateway's job substrate — the
+            // member owns the long-running leg (scope note above).
+            JobHandlers = []
+        }
+
+    /// Register the group's exposed contracts on a peer composition as
+    /// forwarding hosts, adopt the group identity as the deployment's
+    /// local peer, and declare the group's external consumption. The
+    /// composition's own `withConfig` still decides everything else —
+    /// this helper contributes registrations, never configuration.
+    ///
+    /// `client` is the transport the gateway delegates over. A deployment
+    /// that wants the composed `IPeerClient` singleton (built inside
+    /// `PeerServerApp.run` from the resolved `ISecretStore`) passes a thin
+    /// forwarder that resolves it per call; a deployment that owns its own
+    /// `HttpPeerClient` passes it directly.
+    ///
+    /// Fails with the full error list when the exposure cannot be
+    /// resolved — a gateway that cannot say what it fronts must not
+    /// compose.
+    let withAggregate
+        (client: IPeerClient)
+        (members: AggregateMember list)
+        (exposure: AggregateExposure)
+        (app: PeerServerApp)
+        : Result<PeerServerApp, AggregateDerivationError list> =
+        match AggregatePeerSurface.routes (members, exposure), AggregatePeerSurface.derive (members, exposure) with
+        | Ok resolvedRoutes, Ok aggregate ->
+            let withContracts =
+                resolvedRoutes
+                |> List.fold
+                    (fun acc route ->
+                        acc
+                        |> PeerServerApp.withContract (fun _ -> forwardingContract client exposure.Group route))
+                    app
+
+            aggregate.Consumes
+            |> List.fold (fun acc consumed -> PeerServerApp.withConsumedContract consumed acc) withContracts
+            |> PeerServerApp.withLocalPeer exposure.Group
+            |> Ok
+        | Error errors, _
+        | _, Error errors -> Error errors
+
+    /// The gateway's live cross-instance face. The serving and consuming
+    /// halves come from `PeerSurface.describe` of the *composed* app — so
+    /// they are derived from the registrations the gateway actually
+    /// mounts, never re-asserted from the exposure list — and the group's
+    /// posture / budget / vocabulary floors are folded over the top,
+    /// because those describe the members behind the edge and no amount of
+    /// local introspection can see them.
+    ///
+    /// For a composition built by `withAggregate` (over an enabled peer
+    /// substrate, with no registrations of its own) this equals
+    /// `AggregatePeerSurface.derive` exactly — asserted by test. A gateway
+    /// that registers extra contracts diverges, which is precisely what
+    /// that assertion exists to catch.
+    let surface
+        (members: AggregateMember list)
+        (exposure: AggregateExposure)
+        (app: PeerServerApp)
+        : Result<PeerSurface, AggregateDerivationError list> =
+        AggregatePeerSurface.derive (members, exposure)
+        |> Result.map (fun aggregate ->
+            let live = PeerSurface.describe app
+
+            {
+                live with
+                    TrustPosture = aggregate.TrustPosture
+                    Budgets = aggregate.Budgets
+                    PinnedVocabulary = aggregate.PinnedVocabulary
+            })

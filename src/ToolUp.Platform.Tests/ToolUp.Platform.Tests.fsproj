@@ -1165,6 +1165,13 @@
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->
         <Compile Include="InProcess\PeerSurfaceTests.fs" />
+        <!-- Phase 595 — aggregate peer surface + gateway composition:
+             exposure as an allow-list, posture / vocabulary floors over
+             the exposing members, the named derivation errors, and the
+             gateway leg (routing to the owning member, cascade guards,
+             live-surface == derived-aggregate). Pure derive + an
+             in-process peer client; no TestServer. -->
+        <Compile Include="InProcess\AggregatePeerSurfaceTests.fs" />
         <!-- Phase 316 — peer job-result retention: TTL expiry, delete-on-read
              with a poll-grace window, and blob reclamation, over the real
              BlobPeerJobResultStore with an injected clock. -->

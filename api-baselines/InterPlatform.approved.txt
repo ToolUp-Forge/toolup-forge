@@ -3,6 +3,53 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.InterPlatform.AggregateDerivationError (class)
+ToolUp.InterPlatform.AggregateDerivationError.IsExposureDuplicated : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.IsExposureOwnerAmbiguous : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.IsExposureOwnerDoesNotServe : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.IsExposureOwnerUnknown : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.IsExposureUnserved : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.IsMemberDuplicated : System.Boolean { get }
+ToolUp.InterPlatform.AggregateDerivationError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureDuplicated (class)
+ToolUp.InterPlatform.AggregateDerivationError+ExposureDuplicated.contractId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerAmbiguous (class)
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerAmbiguous.candidates : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerAmbiguous.contractId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerDoesNotServe (class)
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerDoesNotServe.contractId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerDoesNotServe.ownerPeerId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerUnknown (class)
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerUnknown.contractId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureOwnerUnknown.ownerPeerId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+ExposureUnserved (class)
+ToolUp.InterPlatform.AggregateDerivationError+ExposureUnserved.contractId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+MemberDuplicated (class)
+ToolUp.InterPlatform.AggregateDerivationError+MemberDuplicated.peerId : System.String { get }
+ToolUp.InterPlatform.AggregateDerivationError+Tags (class)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.ExposureDuplicated : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.ExposureOwnerAmbiguous : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.ExposureOwnerDoesNotServe : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.ExposureOwnerUnknown : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.ExposureUnserved : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateDerivationError+Tags.MemberDuplicated : System.Int32 (literal)
+ToolUp.InterPlatform.AggregateExposure (class)
+ToolUp.InterPlatform.AggregateExposure..ctor(ToolUp.InterPlatform.PeerIdentity, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ExposedContract])
+ToolUp.InterPlatform.AggregateExposure.Contracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ExposedContract] { get }
+ToolUp.InterPlatform.AggregateExposure.Group : ToolUp.InterPlatform.PeerIdentity { get }
+ToolUp.InterPlatform.AggregateMember (class)
+ToolUp.InterPlatform.AggregateMember..ctor(ToolUp.InterPlatform.TargetPeer, ToolUp.InterPlatform.PeerSurface)
+ToolUp.InterPlatform.AggregateMember.Surface : ToolUp.InterPlatform.PeerSurface { get }
+ToolUp.InterPlatform.AggregateMember.Target : ToolUp.InterPlatform.TargetPeer { get }
+ToolUp.InterPlatform.AggregatePeerSurface (class)
+ToolUp.InterPlatform.AggregatePeerSurface.derive(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerSurface, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
+ToolUp.InterPlatform.AggregatePeerSurface.mixedPrefix : System.String (literal)
+ToolUp.InterPlatform.AggregatePeerSurface.routes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateRoute], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
+ToolUp.InterPlatform.AggregateRoute (class)
+ToolUp.InterPlatform.AggregateRoute..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], ToolUp.InterPlatform.TargetPeer)
+ToolUp.InterPlatform.AggregateRoute.ContractId : System.String { get }
+ToolUp.InterPlatform.AggregateRoute.Owner : ToolUp.InterPlatform.TargetPeer { get }
+ToolUp.InterPlatform.AggregateRoute.Versions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion] { get }
 ToolUp.InterPlatform.BlobPeerJobResultStore (class)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy)
@@ -112,6 +159,10 @@ ToolUp.InterPlatform.EcCommutativeCipher.GroupOrder : System.Byte[] { get }
 ToolUp.InterPlatform.EcCommutativeCipherModule (class)
 ToolUp.InterPlatform.EcCommutativeCipherModule.create() : ToolUp.InterPlatform.ICommutativeCipher
 ToolUp.InterPlatform.EcCommutativeCipherModule.onCurve(System.String) : ToolUp.InterPlatform.ICommutativeCipher
+ToolUp.InterPlatform.ExposedContract (class)
+ToolUp.InterPlatform.ExposedContract..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.InterPlatform.ExposedContract.ContractId : System.String { get }
+ToolUp.InterPlatform.ExposedContract.Owner : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.InterPlatform.FanoutPolicy (class)
 ToolUp.InterPlatform.FanoutPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.InterPlatform.FanoutPolicy.CancelOnFirstSuccess : System.Boolean { get }
@@ -460,6 +511,10 @@ ToolUp.InterPlatform.PeerError+Tags.PeerUnauthorized : System.Int32 (literal)
 ToolUp.InterPlatform.PeerError+Tags.PeerVersionMismatch : System.Int32 (literal)
 ToolUp.InterPlatform.PeerFanout (class)
 ToolUp.InterPlatform.PeerFanout.create() : ToolUp.InterPlatform.IPeerFanout
+ToolUp.InterPlatform.PeerGateway (class)
+ToolUp.InterPlatform.PeerGateway.forwardingContract(ToolUp.InterPlatform.IPeerClient, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.AggregateRoute) : ToolUp.InterPlatform.PeerContractHost
+ToolUp.InterPlatform.PeerGateway.surface(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerSurface, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
+ToolUp.InterPlatform.PeerGateway.withAggregate(ToolUp.InterPlatform.IPeerClient, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerCompose+PeerServerApp, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
 ToolUp.InterPlatform.PeerHandshakeError (class)
 ToolUp.InterPlatform.PeerHandshakeError.IsHandshakeRejected : System.Boolean { get }
 ToolUp.InterPlatform.PeerHandshakeError.IsHandshakeUnreachable : System.Boolean { get }
