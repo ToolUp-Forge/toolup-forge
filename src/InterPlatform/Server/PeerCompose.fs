@@ -170,6 +170,22 @@ type PeerServerApp = {
     /// dormant and registers no validator, so a composition that pins
     /// nothing is byte-for-byte a pre-591 composition (GP 11 / GP 13).
     FederationPins: FederationPinStore
+    /// Phase 190 — the cumulative ε accounting every clean-room gate
+    /// this deployment installs runs its answers through: a ledger, the
+    /// declared ceiling / charge schedule, and the clock the epoch is
+    /// derived from.
+    ///
+    /// The gate applies a floor to ONE answer; a budget is what stops a
+    /// series of individually-compliant answers exhausting the
+    /// protection unobserved. Composed here rather than per template
+    /// because a ledger is substrate a deployment wires once, exactly as
+    /// `TemplateApprovals` is — the per-template axis is already in the
+    /// scope key.
+    ///
+    /// `None` unless a composition calls `withPrivacyBudget`, and `None`
+    /// is byte-for-byte the pre-190 gate (GP 11 / GP 13) — no ledger
+    /// read, no reservation, no allocation.
+    PrivacyBudget: PrivacyBudgetMeter option
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -240,6 +256,7 @@ module PeerServerApp =
         TransportPolicy = PeerTransportPolicy.defaults
         TemplateApprovals = None
         FederationPins = FederationPinStore.empty
+        PrivacyBudget = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -661,6 +678,55 @@ module PeerServerApp =
             TemplateApprovals = Some policy
     }
 
+    /// Phase 190 — account a cumulative ε budget across every answer a
+    /// gated contract gives, so a series of individually-compliant
+    /// queries cannot exhaust the privacy protection unobserved.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
+    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerServerApp.withPrivacyBudget (
+    ///            PrivacyBudgetMeter.create
+    ///                (BlobPrivacyBudgetLedger blobs)
+    ///                (PrivacyBudgetPolicy.create 50m 1m))
+    ///
+    /// **What this adds to Phase 311.** The gate already refuses an
+    /// answer below the floor. What no per-query check can see is that
+    /// two in-floor cohorts differing in one record recover that record
+    /// — cohort floors do not compose. The ledger bounds the SERIES:
+    /// once the declared ceiling is reached every further answer under
+    /// that template is withheld, through the same dispatch closure the
+    /// handler has no say in, and the remaining budget is readable for
+    /// the audit trail.
+    ///
+    /// **Read `PrivacyBudgetLedger.fs`'s header before telling anyone
+    /// this is differential privacy.** It is an accounting control: the
+    /// composed `ICleanRoomBroker` suppresses and refuses, it does not
+    /// randomise, and ε summed over deterministic answers bounds nothing
+    /// formally. It bounds how many questions a counterparty may ask
+    /// under a declared schedule, enforced and auditable — which is the
+    /// control a regulated clean-room buyer asks for, described
+    /// honestly.
+    ///
+    /// The ledger arrives built (like `withTemplateApprovals`' registry)
+    /// rather than resolved from DI, because which storage backs it is
+    /// the deployment's call and `BlobPrivacyBudgetLedger` refuses a
+    /// backend without conditional writes at construction — a failure an
+    /// operator should see when they wire it, not at the first peer call.
+    ///
+    /// Applies to every contract gated by `withCleanRoomTemplate`;
+    /// budgets are keyed per (template, counterparty, epoch), so one
+    /// meter serves any number of templates. Calling this twice applies
+    /// the LAST meter, matching `withCleanRoomTemplate`'s own last-wins
+    /// rule.
+    ///
+    /// A composition that never calls this reads no ledger and is
+    /// byte-for-byte a pre-190 composition (GP 11 / GP 13).
+    let withPrivacyBudget (meter: PrivacyBudgetMeter) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            PrivacyBudget = Some meter
+    }
+
     /// Phase 591 — pin a counterparty's published `PeerSurface` label, so
     /// this deployment's federation edges are validated against what the
     /// counterparty *claimed to serve* before any traffic flows.
@@ -1002,6 +1068,7 @@ module PeerServerApp =
             let contracts = app.Contracts
             let cleanRoomTemplates = cleanRoomTemplateMap app
             let templateApprovals = app.TemplateApprovals
+            let privacyBudget = app.PrivacyBudget
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
@@ -1225,7 +1292,17 @@ module PeerServerApp =
                                             fun payload ->
                                                 auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
 
-                                    (CleanRoomGate.wrapApproved broker template approvalCheck sink registration)
+                                    // Phase 190 — the composed ε meter,
+                                    // or `None` for a composition that
+                                    // declared no budget (the pre-190
+                                    // gate exactly).
+                                    (CleanRoomGate.wrapMetered
+                                        broker
+                                        template
+                                        approvalCheck
+                                        privacyBudget
+                                        sink
+                                        registration)
                                         .Registration
 
                             for builder in contracts do

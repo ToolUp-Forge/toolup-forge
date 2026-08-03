@@ -4,6 +4,7 @@
 namespace ToolUp.InterPlatform
 
 open System
+open System.Runtime.ExceptionServices
 open ToolUp.Platform
 
 // ─── Phase 311 — the structurally-enforced clean-room gate ───────────
@@ -197,10 +198,36 @@ module CleanRoomGate =
     /// — the broker holds no state and neither does the wrapper (GP 12
     /// rule 4), which is what keeps a gated contract as portable as an
     /// ungated one.
-    let wrapApproved
+    ///
+    /// Phase 190 — `budget` is the cumulative ε accounting the per-query
+    /// floor cannot do. `None` is every pre-190 composition exactly: no
+    /// ledger call, no reservation, no branch beyond one `option` match
+    /// (GP 11 / GP 13).
+    ///
+    /// **Where the debit sits is the design, and it is deliberately
+    /// two-phase.** The reservation is taken as **invariant 0.5** —
+    /// after approval, before the handler runs — so no answer can reach
+    /// the wire on credit: a release that was never debited is a free
+    /// query, and a crash between "released" and "debited" would mint
+    /// one. It is then SETTLED once the outcome is known, so the
+    /// mirror-image failure is closed too: a dispatch that errored, or
+    /// answered in an uncheckable shape, returns its ε rather than
+    /// quietly eroding a budget nobody spent. Whether a *withheld*
+    /// answer is charged is the composition's declared
+    /// `WithholdCharge` — a withhold does disclose one bit, and
+    /// charging it (the default) is what stops a counterparty
+    /// binary-searching a cohort size for free.
+    ///
+    /// A dispatch that throws leaves the reservation open on purpose:
+    /// the ε is returned by the ledger's TTL reclaim rather than by a
+    /// settlement written from a broken call path, which is the
+    /// direction that never hands budget back for an answer that
+    /// shipped.
+    let wrapMetered
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
         (approval: CleanRoomApprovalCheck option)
+        (budget: PrivacyBudgetMeter option)
         (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
@@ -299,12 +326,88 @@ module CleanRoomGate =
                                         return withheld template
                 }
 
+                // Invariant 0.5 — the cumulative ε budget (Phase 190).
+                // `None` is a composition that declared no meter: the
+                // call goes straight to Phase 311's invariants, having
+                // read no ledger and allocated nothing (GP 11 / GP 13).
+                //
+                // Sits AFTER approval and BEFORE the handler for the
+                // same reason invariant 0 does: a template neither party
+                // agreed to is not a question this deployment answers at
+                // all, and a budget that cannot afford the answer is not
+                // a reason to compute it. Sits before the SURFACE check
+                // too, deliberately — an off-surface probe is still a
+                // question asked, and under `WithholdCharged` it is
+                // charged like any other refusal.
+                let metered () = async {
+                    match budget with
+                    | None -> return! enforce ()
+                    | Some meter ->
+                        let held =
+                            PrivacyBudgetMeter.spendFor template.TemplateId context.Peer.PeerId methodName meter
+
+                        let! reserved = meter.Ledger.ReserveBudget(held, meter.Policy.EpsilonCeiling)
+
+                        match reserved with
+                        | BudgetRefused refusal ->
+                            // The quantitative reason is recorded
+                            // receiver-side only, exactly as every other
+                            // withhold's is — a caller that could read
+                            // back its own remaining budget while
+                            // varying its query has a second oracle
+                            // beside the one the k-floor already refuses.
+                            let reason =
+                                match PrivacyBudgetMeter.refusalDecision template.TemplateId refusal with
+                                | Withheld r -> r
+                                | Released _ -> ""
+
+                            do! record sink (decision false [] reason)
+                            return withheld template
+                        | BudgetReserved(spend, _) ->
+                            let! attempt = Async.Catch(enforce ())
+
+                            match attempt with
+                            | Choice2Of2 ex ->
+                                // Leave the reservation open — the TTL
+                                // reclaims it. Settling from a failed
+                                // path would be the one direction that
+                                // can hand budget back for an answer
+                                // that shipped.
+                                ExceptionDispatchInfo.Capture(ex).Throw()
+                                return withheld template // unreachable; the throw above does not return
+                            | Choice1Of2 outcome ->
+                                let settlement =
+                                    match outcome with
+                                    // Released: the ε stands.
+                                    | Ok _ -> SpendCommitted
+                                    // Withheld by the gate. The refusal
+                                    // itself discloses one bit, so
+                                    // whether it is charged is declared
+                                    // policy, not an SDK opinion.
+                                    | Error(PeerCleanRoomWithheld _) ->
+                                        match meter.Policy.WithholdCharge with
+                                        | WithholdCharged -> SpendCommitted
+                                        | WithholdFree ->
+                                            SpendReturned
+                                                "the answer was withheld and this policy charges only released answers"
+                                    // Anything else is a handler or
+                                    // transport failure: nothing about
+                                    // the protected data was produced,
+                                    // so nothing is owed.
+                                    | Error _ ->
+                                        SpendReturned
+                                            "the gated dispatch produced no answer, so nothing about the protected data was disclosed"
+
+                                do! meter.Ledger.RecordSpend(spend, settlement)
+                                return outcome
+                }
+
                 // Invariant 0 — bilateral approval (Phase 480). `None` is
                 // a composition that declared no approval registry: the
                 // call goes straight to Phase 311's invariants, having
                 // read no store and allocated nothing (GP 11 / GP 13).
                 match approval with
-                | None -> return! enforce ()
+                | None -> return! metered ()
                 | Some check ->
                     let! approved = check context template
 
@@ -317,13 +420,32 @@ module CleanRoomGate =
                         // withhold does.
                         do! record sink (decision false [] reason)
                         return withheld template
-                    | Ok() -> return! enforce ()
+                    | Ok() -> return! metered ()
             }
 
         Gated {
             registration with
                 Dispatch = gatedDispatch
         }
+
+    /// Phase 480 — install `template`'s gate on `registration`'s
+    /// dispatch, optionally behind a bilateral-approval pre-check and
+    /// with no cumulative ε accounting. The pre-190 shape, preserved
+    /// exactly.
+    ///
+    /// Defined in terms of `wrapMetered` rather than beside it for the
+    /// reason `wrap` is defined in terms of this: the whole argument for
+    /// a structural gate is that there is ONE path, and a second
+    /// implementation of "the gate" is how a path that enforces slightly
+    /// less appears.
+    let wrapApproved
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        wrapMetered broker template approval None sink registration
 
     /// Phase 311 — install `template`'s gate on `registration`'s
     /// dispatch. The pre-480 shape, preserved exactly: no bilateral

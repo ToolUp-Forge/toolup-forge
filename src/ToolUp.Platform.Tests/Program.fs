@@ -958,6 +958,15 @@ let allTests =
         TemplateApprovalTests.compositionTests
         TemplateApprovalTests.handshakeTests
         TemplateApprovalTests.queueTests
+        // Phase 190 — the cumulative half: an epsilon budget accounted
+        // per (template, counterparty, epoch), debited atomically before
+        // the answer is computed and settled after, so a series of
+        // individually-in-floor queries cannot exhaust the protection
+        // unobserved.
+        PrivacyBudgetLedgerTests.policyTests
+        PrivacyBudgetLedgerTests.ledgerContractTests
+        PrivacyBudgetLedgerTests.atomicityTests
+        PrivacyBudgetLedgerTests.gateTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

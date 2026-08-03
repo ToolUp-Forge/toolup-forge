@@ -73,6 +73,19 @@
          (`PeerCascade.fs` moved above the typed proxy by Phase 314.) -->
     <Compile Include="Server\PeerFanout.fs" />
     <Compile Include="Server\CleanRoomBroker.fs" />
+    <!-- Phase 190 — the cumulative half of the clean-room story: the
+         epsilon-budget ledger seam, its three in-tree implementations
+         (no-op / in-memory / conditional-blob) and the composed meter.
+         Compiles AFTER CleanRoomBroker.fs (it expresses a refusal as
+         that file's `GateDecision`) and BEFORE CleanRoomGate.fs, which
+         is the only in-tree caller — the gate is where a reservation is
+         taken and settled, because that is the one seam every gated
+         answer crosses. Deliberately NOT folded into CleanRoomBroker.fs:
+         that file's contract is a pure, stateless, synchronous decision,
+         and a durable async ledger inside it would contradict its own
+         header and drag IBlobStorage into it. Nothing composes a meter
+         by default (GP 13). -->
+    <Compile Include="Server\PrivacyBudgetLedger.fs" />
     <!-- Phase 311 — the structural half of the clean-room gate: the
          dispatch wrapper that runs the broker on every answer of a gated
          contract, plus the witness type proving a registration went

@@ -1183,6 +1183,17 @@
              pre-480 control that releases. Pure orchestration + an
              in-memory blob/secret store; no TestServer. -->
         <Compile Include="InProcess\TemplateApprovalTests.fs" />
+        <!-- Phase 190 — the clean-room privacy-budget ledger: cumulative
+             epsilon exhaustion through the Phase 311 gate (paired with
+             an unmetered control that releases the identical series),
+             atomicity measured against a real conditional-blob backend
+             AND against the same ledger over a backend whose conditional
+             write ignores its precondition (which over-admits, so the
+             green result is a measurement), reserve-before-release
+             ordering observed from inside the handler, the withhold-
+             charge policy, refund on a failed dispatch, and the TTL
+             reclaim of an abandoned reservation. -->
+        <Compile Include="InProcess\PrivacyBudgetLedgerTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

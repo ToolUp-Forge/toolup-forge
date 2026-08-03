@@ -227,6 +227,27 @@ A withhold reaches the caller as `PeerCleanRoomWithheld templateId` — the temp
 
 Composing a template for a contract id this deployment does not host **refuses to start**: a privacy gate that looks composed and never runs is worse than no gate at all. `PeerServerApp.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight. A composition that gates nothing wraps nothing and costs nothing.
 
+### Privacy-budget ledger (Phase 190)
+
+The floor decides about **one** answer. Cohort floors do not compose — differencing two in-floor cohorts that overlap in all but one record recovers that record, and no per-query check can see it because *each query passed*. `PeerServerApp.withPrivacyBudget` bounds the series:
+
+```fsharp
+app
+|> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
+|> PeerServerApp.withPrivacyBudget (
+       PrivacyBudgetMeter.create
+           (BlobPrivacyBudgetLedger blobs)
+           (PrivacyBudgetPolicy.create 50m 1m))          // 50 ε ceiling, 1 ε per answer
+```
+
+Budgets are keyed per `(template, counterparty, epoch)`. Once the declared ceiling is reached every further answer under that template is **withheld** — through the same dispatch closure the handler has no say in — and `IPrivacyBudgetLedger.RemainingBudget` is the auditable reading. Charges add: **basic (sequential) composition**, the standard bound.
+
+The debit is two-phase and that is the design. `ReserveBudget` runs *before* the handler, so no answer reaches the wire on credit; `RecordSpend` settles once the outcome is known, so a dispatch that errored returns its ε rather than eroding a budget nobody spent. A *withheld* answer is charged by default, because a free refusal is a counting oracle over the cohort size; `PrivacyBudgetPolicy.withWithholdCharge WithholdFree` opts out of that. `BlobPrivacyBudgetLedger` takes every reservation through a conditional (compare-and-swap) write and **refuses a backend without conditional writes at construction** — a ledger that over-admits under load reads as defended and is not.
+
+**It is an accounting control, not a differential-privacy guarantee.** ε-DP is a property of a randomised mechanism; the shipped broker suppresses and refuses but adds no noise, so summing ε over deterministic answers bounds nothing formally. What it bounds is how many questions a counterparty may ask under a declared schedule, enforced and auditable. A deployment needing the formal guarantee substitutes an `ICleanRoomBroker` that randomises, at which point these values become that mechanism's real privacy loss. Collusion between counterparties is out of scope, the charge falls on the validated immediate caller rather than a cascade origin, and a refilling epoch (`DailyBudget` / `MonthlyBudget`) is a deliberate weakening of `PerpetualBudget`. Full rationale: `Server/PrivacyBudgetLedger.fs`.
+
+A composition that never calls `withPrivacyBudget` reads no ledger and costs nothing.
+
 ## Audit transparency (Phase 18a)
 
 The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").

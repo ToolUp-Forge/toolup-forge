@@ -284,6 +284,35 @@ let tests =
                 // un-inspected; the counterparty SET is composition, not
                 // face.
                 "FederationPins"
+                // Phase 190 — NOT projected, and the argument is
+                // `CleanRoomTemplates`' one sharpened by a degree.
+                //
+                // A composed ε budget is observable in the strongest
+                // sense: a counterparty that has spent its ceiling gets
+                // `PeerCleanRoomWithheld` on every subsequent call, and
+                // the ceiling is plainly a term of the commercial deal
+                // rather than receiver capacity policy. So the case for
+                // publishing it is better than for the floor.
+                //
+                // It stays out for exactly the reason the floor does,
+                // and one more. A `PeerSurface` is hash-stamped and
+                // pinned; putting the ceiling in it means an operator
+                // TIGHTENING a budget — which can only make the
+                // protection stronger, and which they should be free to
+                // do at any restart — invalidates every pinned copy.
+                // And the field it would have to carry is a *policy*,
+                // not a *state*: the remaining budget changes on every
+                // query, so anything counterparties could actually act
+                // on is the half that cannot live in a stamped
+                // descriptor at all. Advertising a budget properly means
+                // a `formatVersion` bump plus a live read path, which is
+                // the surface's own phase to make, not this one's.
+                //
+                // Note also that the ledger itself registers nothing a
+                // counterparty calls: unlike Phase 480's approval
+                // handshake there is no reserved contract here, so there
+                // is nothing owed to `Serves` either.
+                "PrivacyBudget"
             ]
 
             let actual =
