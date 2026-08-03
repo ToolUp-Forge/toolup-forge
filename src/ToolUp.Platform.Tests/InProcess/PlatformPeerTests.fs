@@ -321,6 +321,21 @@ let private pollTarget: TargetPeer = {
     BaseUrl = "http://localhost"
 }
 
+/// The parked result the no-leak assertions below look for. It carries
+/// letters outside the hex alphabet on purpose.
+///
+/// The refusal echoes the polled `jobId` as the response's correlation
+/// id (Phase 315), and a jobId is a random v4 GUID — so a numeric marker
+/// like `42` appears somewhere inside its 32 hex digits about 15% of the
+/// time, and the "no trace of the parked result" assertion then fails for
+/// a reason that has nothing to do with a leak. Across the two cases
+/// below that is a ~28% false-red rate. A sentinel that cannot be spelled
+/// in hex measures what the assertion claims to measure.
+///
+/// Same reasoning, same sentinel as `PeerWireHardeningTests`, which hit
+/// this when it introduced the echo.
+let private parkedSentinel = "parked-result-QZX"
+
 /// Fusion pair over a fresh in-memory store. The scheduler stub throws
 /// on any use — the poll route must never schedule.
 let private pollFixtureFusion () =
@@ -367,7 +382,13 @@ let jobPollOwnershipTests =
             // write the job handler performs when the job finishes.
             let jobId = Guid.NewGuid()
 
-            do! store.SaveResult("_platform", jobId, buyerId.PeerId, PeerJobStatus.Completed(JsonRpc.serialize 42))
+            do!
+                store.SaveResult(
+                    "_platform",
+                    jobId,
+                    buyerId.PeerId,
+                    PeerJobStatus.Completed(JsonRpc.serialize parkedSentinel)
+                )
 
             let seller = DefaultPlatformPeer() :> IPlatformPeer
             let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
@@ -380,7 +401,7 @@ let jobPollOwnershipTests =
 
             match owned with
             | Ok(PeerJobStatus.Completed json) ->
-                Expect.equal (JsonRpc.deserialize<int> json) 42 "the owner reads the parked typed result"
+                Expect.equal (JsonRpc.deserialize<string> json) parkedSentinel "the owner reads the parked typed result"
             | other -> failtestf "Expected Completed for the owner, got %A" other
 
             // … and an unknown jobId stays Pending for the owner — not a
@@ -418,7 +439,13 @@ let jobPollOwnershipTests =
             let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             Expect.equal (int response.StatusCode) 401 "a non-owner poll is refused at the HTTP layer"
-            Expect.isFalse (body.Contains "42") "the refused response carries no trace of the parked result"
+
+            // CONTROL — the refusal really is the correlated JSON-RPC
+            // body, so the absence assertion below is measuring a real
+            // payload rather than passing vacuously on an empty response.
+            Expect.stringContains body (string jobId) "the refusal correlates with the polled jobId (Phase 315)"
+
+            Expect.isFalse (body.Contains parkedSentinel) "the refused response carries no trace of the parked result"
         }
 
         // ─── (c): unauthenticated poll stays 401 (unchanged) ──────────
@@ -432,7 +459,13 @@ let jobPollOwnershipTests =
             let store, fusion = pollFixtureFusion ()
             let jobId = Guid.NewGuid()
 
-            do! store.SaveResult("_platform", jobId, buyerId.PeerId, PeerJobStatus.Completed(JsonRpc.serialize 42))
+            do!
+                store.SaveResult(
+                    "_platform",
+                    jobId,
+                    buyerId.PeerId,
+                    PeerJobStatus.Completed(JsonRpc.serialize parkedSentinel)
+                )
 
             let seller = DefaultPlatformPeer() :> IPlatformPeer
             let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
@@ -446,7 +479,11 @@ let jobPollOwnershipTests =
             let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             Expect.equal (int response.StatusCode) 401 "an unauthenticated poll stays 401"
-            Expect.isFalse (body.Contains "42") "the refused response carries no trace of the parked result"
+
+            // CONTROL — see the matching note in the case above.
+            Expect.stringContains body (string jobId) "the refusal correlates with the polled jobId (Phase 315)"
+
+            Expect.isFalse (body.Contains parkedSentinel) "the refused response carries no trace of the parked result"
         }
     ]
 

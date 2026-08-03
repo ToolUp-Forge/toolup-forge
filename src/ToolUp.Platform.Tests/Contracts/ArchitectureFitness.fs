@@ -119,6 +119,34 @@ let isGeneratedPath (path: string) : bool =
     let n = path.Replace('\\', '/')
     n.Contains "/bin/" || n.Contains "/obj/" || n.Contains "/output/"
 
+/// Path segments that are not this repo's source and must be pruned from
+/// any sweep rooted at the repo root.
+///
+/// `.claude/` is the load-bearing one. It holds `worktrees/<name>/` — a
+/// concurrent agent session's isolated git worktree, i.e. a COMPLETE
+/// second checkout of this tree sitting inside it. A sweep that walks it
+/// does not merely double-count: the repo-relative exemption prefixes
+/// (`fs0025ExemptPrefixes`) are anchored at the root, and a worktree copy
+/// is not, so `.claude/worktrees/x/docs-snippets/…` fails to match the
+/// `docs-snippets/` exemption and an out-of-scope subtree re-enters the
+/// gate under a different name. The gate then fails on files that are
+/// neither ours nor in scope, and only while some other session happens
+/// to have a worktree open — a false red that appears and disappears
+/// with no change to this repo at all.
+///
+/// `node_modules/` is vendored npm packages (they do ship MSBuild
+/// `.props` files, and a vendored one is not ours to gate); `artifacts/`
+/// is `Publish` output; `.git/` is repository metadata.
+let prunedPathSegments = [ "/.claude/"; "/.git/"; "/node_modules/"; "/artifacts/" ]
+
+/// True for a path under any pruned segment. Complements
+/// `isGeneratedPath` — that one covers build output *of* our source, this
+/// one covers trees that are not our source at all.
+let isPrunedPath (path: string) : bool =
+    let n = path.Replace('\\', '/')
+
+    prunedPathSegments |> List.exists n.Contains
+
 /// Enumerate `.fs` files under `root` (recursive), skipping generated
 /// paths. Returns absolute paths; missing root yields an empty list.
 let fsFilesUnder (root: string) : string list =
@@ -408,8 +436,9 @@ let private fs0025ScannedExtensions =
     Set.ofList [ ".fs"; ".fsx"; ".fsproj"; ".props" ]
 
 /// Every source / project file the gate applies to. One walk, extensions
-/// filtered in memory; `node_modules` is pruned because npm packages do
-/// ship MSBuild `.props` files and a vendored one is not ours to gate.
+/// filtered in memory; build output and the non-source trees named in
+/// `prunedPathSegments` (vendored npm packages, a concurrent session's
+/// `.claude/worktrees/` checkout, …) are pruned first.
 let fs0025ScannableFiles () : string list =
     let root = repoRoot ()
     let exemptPrefixes = fs0025ExemptPrefixes |> List.map _.Prefix
@@ -417,7 +446,7 @@ let fs0025ScannableFiles () : string list =
     Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
     |> Seq.filter (fun p -> fs0025ScannedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
     |> Seq.filter (isGeneratedPath >> not)
-    |> Seq.filter (fun p -> not ((p.Replace('\\', '/')).Contains "/node_modules/"))
+    |> Seq.filter (isPrunedPath >> not)
     |> Seq.filter (fun p ->
         let rel = relative p
         not (exemptPrefixes |> List.exists rel.StartsWith))

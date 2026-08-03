@@ -285,6 +285,42 @@ let private fs0025Tests =
                     (findings |> List.map formatSourceFinding |> String.concat "\n"))
         }
 
+        test "the sweep still walks a non-trivial slice of the tree, and no foreign worktree" {
+            let files = fs0025ScannableFiles ()
+
+            let sources = files |> List.filter (fun p -> p.EndsWith ".fs" || p.EndsWith ".fsx")
+
+            let projects =
+                files |> List.filter (fun p -> p.EndsWith ".fsproj" || p.EndsWith ".props")
+
+            // Floors, deliberately far below the ~2,000 / ~220 the tree
+            // carries today, so adding or moving files never edits this
+            // test. Both assertions the gate actually makes are
+            // `Expect.isEmpty` — which a sweep that matches NOTHING passes
+            // perfectly. An over-broad prune or a broken root walk would
+            // therefore turn the gate off and report green; these floors
+            // make that failure loud instead.
+            Expect.isGreaterThan
+                (List.length sources)
+                1000
+                "the FS0025 sweep found almost no F# sources — the gate is only as good as its root set, and an empty one passes vacuously. Check the prune list in ArchitectureFitness.fs rather than lowering this floor."
+
+            Expect.isGreaterThan
+                (List.length projects)
+                100
+                "the FS0025 sweep found almost no project/props files — same reasoning as the source floor above."
+
+            // A concurrent agent session's isolated git worktree is a full
+            // second checkout of this tree living inside it. It is not our
+            // source, its copies of the exempt subtrees do not match the
+            // root-anchored exemption prefixes, and it appears and vanishes
+            // with no change to this repo — so its files must never reach
+            // the gate.
+            Expect.isEmpty
+                (files |> List.filter (fun p -> (p.Replace('\\', '/')).Contains "/.claude/"))
+                "the sweep walked into .claude/ — a foreign worktree there fails the gate on files that are neither ours nor in scope"
+        }
+
         test "every exemption is declared where authors read the policy" {
             let propsText = File.ReadAllText(Path.Combine(repoRoot (), "Directory.Build.props"))
 
