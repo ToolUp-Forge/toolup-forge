@@ -376,6 +376,14 @@ ToolUp.InterPlatform.IPrivacyBudgetLedger.ReserveBudget(ToolUp.InterPlatform.Bud
 ToolUp.InterPlatform.IPrivateSetIntersection (interface)
 ToolUp.InterPlatform.IPrivateSetIntersection.Intersect(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PeerError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiOutcome, ToolUp.InterPlatform.PsiError]]
 ToolUp.InterPlatform.IPrivateSetIntersection.Respond(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], ToolUp.InterPlatform.PsiRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PsiError]
+ToolUp.InterPlatform.IPrivateSetIntersectionModes (interface)
+ToolUp.InterPlatform.IPrivateSetIntersectionModes.IntersectAs(ToolUp.InterPlatform.PsiRunOptions, System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiModeRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PeerError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeOutcome, ToolUp.InterPlatform.PsiError]]
+ToolUp.InterPlatform.IPrivateSetIntersectionModes.RespondAs(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], ToolUp.InterPlatform.PsiResponderPolicy, ToolUp.InterPlatform.PsiModeRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PsiError]
+ToolUp.InterPlatform.IPrivateSetIntersectionModes.RespondWithPayloads(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PsiPayloadElement], ToolUp.InterPlatform.PsiResponderPolicy, ToolUp.InterPlatform.PsiModeRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PsiError]
+ToolUp.InterPlatform.IPsiAggregator (interface)
+ToolUp.InterPlatform.IPsiAggregator.Combine(System.Byte[], System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.InterPlatform.PsiAggregateError]
+ToolUp.InterPlatform.IPsiAggregator.IsConcealing : System.Boolean { get }
+ToolUp.InterPlatform.IPsiAggregator.Zero : System.Byte[] { get }
 ToolUp.InterPlatform.IRoundObserver (interface)
 ToolUp.InterPlatform.IRoundObserver.Observe(System.String, ToolUp.InterPlatform.RoundEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundOrchestrator (interface)
@@ -411,6 +419,10 @@ ToolUp.InterPlatform.InMemoryPrivacyBudgetLedger (class)
 ToolUp.InterPlatform.InMemoryPrivacyBudgetLedger..ctor()
 ToolUp.InterPlatform.InMemoryPrivacyBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.InMemoryPrivacyBudgetLedger.Scopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.BudgetScope] { get }
+ToolUp.InterPlatform.InMemoryPsiAggregator (class)
+ToolUp.InterPlatform.InMemoryPsiAggregator..ctor()
+ToolUp.InterPlatform.InMemoryPsiAggregator..ctor(System.Int32)
+ToolUp.InterPlatform.InMemoryPsiAggregator.Width : System.Int32 { get }
 ToolUp.InterPlatform.InMemoryRoundStateStore (class)
 ToolUp.InterPlatform.InMemoryRoundStateStore..ctor()
 ToolUp.InterPlatform.JsonRpc (class)
@@ -1145,39 +1157,138 @@ ToolUp.InterPlatform.PrivacyGateModule.isStricterOrEqual(ToolUp.InterPlatform.Pr
 ToolUp.InterPlatform.PrivacyGateModule.observed(ToolUp.InterPlatform.CohortResult) : ToolUp.InterPlatform.PrivacyGate
 ToolUp.InterPlatform.PrivateSetIntersection (class)
 ToolUp.InterPlatform.PrivateSetIntersection.create(ToolUp.InterPlatform.ICommutativeCipher) : ToolUp.InterPlatform.IPrivateSetIntersection
+ToolUp.InterPlatform.PrivateSetIntersection.createModes(ToolUp.InterPlatform.ICommutativeCipher) : ToolUp.InterPlatform.IPrivateSetIntersectionModes
+ToolUp.InterPlatform.PrivateSetIntersection.createModesWith(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.InterPlatform.IPrivateSetIntersectionModes
 ToolUp.InterPlatform.PrivateSetIntersection.createWith(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.InterPlatform.IPrivateSetIntersection
 ToolUp.InterPlatform.PrivateSetIntersection.overContract(ToolUp.InterPlatform.PsiApi, ToolUp.InterPlatform.PsiRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.PrivateSetIntersection.overModeContract(ToolUp.InterPlatform.PsiModeApi, ToolUp.InterPlatform.PsiModeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.PsiAggregateError (class)
+ToolUp.InterPlatform.PsiAggregateError.AggregateMalformed : ToolUp.InterPlatform.PsiAggregateError { get }
+ToolUp.InterPlatform.PsiAggregateError.AggregateWidthMismatch : ToolUp.InterPlatform.PsiAggregateError { get }
+ToolUp.InterPlatform.PsiAggregateError.IsAggregateMalformed : System.Boolean { get }
+ToolUp.InterPlatform.PsiAggregateError.IsAggregateWidthMismatch : System.Boolean { get }
+ToolUp.InterPlatform.PsiAggregateError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PsiAggregateError+Tags (class)
+ToolUp.InterPlatform.PsiAggregateError+Tags.AggregateMalformed : System.Int32 (literal)
+ToolUp.InterPlatform.PsiAggregateError+Tags.AggregateWidthMismatch : System.Int32 (literal)
 ToolUp.InterPlatform.PsiApi (class)
 ToolUp.InterPlatform.PsiApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiResponse]])
 ToolUp.InterPlatform.PsiApi.Exchange : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiResponse]] { get }
 ToolUp.InterPlatform.PsiError (class)
+ToolUp.InterPlatform.PsiError.IsPsiAggregation : System.Boolean { get }
 ToolUp.InterPlatform.PsiError.IsPsiCipher : System.Boolean { get }
+ToolUp.InterPlatform.PsiError.IsPsiConfiguration : System.Boolean { get }
 ToolUp.InterPlatform.PsiError.IsPsiProtocol : System.Boolean { get }
 ToolUp.InterPlatform.PsiError.IsPsiTransport : System.Boolean { get }
 ToolUp.InterPlatform.PsiError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PsiError+PsiAggregation (class)
+ToolUp.InterPlatform.PsiError+PsiAggregation.error : ToolUp.InterPlatform.PsiAggregateError { get }
 ToolUp.InterPlatform.PsiError+PsiCipher (class)
 ToolUp.InterPlatform.PsiError+PsiCipher.error : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.PsiError+PsiConfiguration (class)
+ToolUp.InterPlatform.PsiError+PsiConfiguration.message : System.String { get }
 ToolUp.InterPlatform.PsiError+PsiProtocol (class)
 ToolUp.InterPlatform.PsiError+PsiProtocol.message : System.String { get }
 ToolUp.InterPlatform.PsiError+PsiTransport (class)
 ToolUp.InterPlatform.PsiError+PsiTransport.error : ToolUp.InterPlatform.PeerError { get }
 ToolUp.InterPlatform.PsiError+Tags (class)
+ToolUp.InterPlatform.PsiError+Tags.PsiAggregation : System.Int32 (literal)
 ToolUp.InterPlatform.PsiError+Tags.PsiCipher : System.Int32 (literal)
+ToolUp.InterPlatform.PsiError+Tags.PsiConfiguration : System.Int32 (literal)
 ToolUp.InterPlatform.PsiError+Tags.PsiProtocol : System.Int32 (literal)
 ToolUp.InterPlatform.PsiError+Tags.PsiTransport : System.Int32 (literal)
+ToolUp.InterPlatform.PsiMode (class)
+ToolUp.InterPlatform.PsiMode.AggregatePayload : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiMode.CardinalityOnly : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiMode.IsAggregatePayload : System.Boolean { get }
+ToolUp.InterPlatform.PsiMode.IsCardinalityOnly : System.Boolean { get }
+ToolUp.InterPlatform.PsiMode.IsMembers : System.Boolean { get }
+ToolUp.InterPlatform.PsiMode.Members : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiMode.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PsiMode+Tags (class)
+ToolUp.InterPlatform.PsiMode+Tags.AggregatePayload : System.Int32 (literal)
+ToolUp.InterPlatform.PsiMode+Tags.CardinalityOnly : System.Int32 (literal)
+ToolUp.InterPlatform.PsiMode+Tags.Members : System.Int32 (literal)
+ToolUp.InterPlatform.PsiModeApi (class)
+ToolUp.InterPlatform.PsiModeApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiModeRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiModeResponse]])
+ToolUp.InterPlatform.PsiModeApi.ExchangeMode : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiModeRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiModeResponse]] { get }
+ToolUp.InterPlatform.PsiModeOutcome (class)
+ToolUp.InterPlatform.PsiModeOutcome.IsAggregateReleased : System.Boolean { get }
+ToolUp.InterPlatform.PsiModeOutcome.IsCardinalityReleased : System.Boolean { get }
+ToolUp.InterPlatform.PsiModeOutcome.IsMembersReleased : System.Boolean { get }
+ToolUp.InterPlatform.PsiModeOutcome.IsReleaseWithheld : System.Boolean { get }
+ToolUp.InterPlatform.PsiModeOutcome.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PsiModeOutcome+AggregateReleased (class)
+ToolUp.InterPlatform.PsiModeOutcome+AggregateReleased.aggregate : System.Byte[] { get }
+ToolUp.InterPlatform.PsiModeOutcome+AggregateReleased.matched : System.Int32 { get }
+ToolUp.InterPlatform.PsiModeOutcome+CardinalityReleased (class)
+ToolUp.InterPlatform.PsiModeOutcome+CardinalityReleased.matched : System.Int32 { get }
+ToolUp.InterPlatform.PsiModeOutcome+MembersReleased (class)
+ToolUp.InterPlatform.PsiModeOutcome+MembersReleased.outcome : ToolUp.InterPlatform.PsiOutcome { get }
+ToolUp.InterPlatform.PsiModeOutcome+ReleaseWithheld (class)
+ToolUp.InterPlatform.PsiModeOutcome+ReleaseWithheld.reason : System.String { get }
+ToolUp.InterPlatform.PsiModeOutcome+Tags (class)
+ToolUp.InterPlatform.PsiModeOutcome+Tags.AggregateReleased : System.Int32 (literal)
+ToolUp.InterPlatform.PsiModeOutcome+Tags.CardinalityReleased : System.Int32 (literal)
+ToolUp.InterPlatform.PsiModeOutcome+Tags.MembersReleased : System.Int32 (literal)
+ToolUp.InterPlatform.PsiModeOutcome+Tags.ReleaseWithheld : System.Int32 (literal)
+ToolUp.InterPlatform.PsiModeRequest (class)
+ToolUp.InterPlatform.PsiModeRequest..ctor(System.String, ToolUp.InterPlatform.PsiMode, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.PsiModeRequest.Blinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiModeRequest.Mode : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiModeRequest.SessionId : System.String { get }
+ToolUp.InterPlatform.PsiModeResponse (class)
+ToolUp.InterPlatform.PsiModeResponse..ctor(System.String, ToolUp.InterPlatform.PsiMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.PsiModeResponse.Doubled : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiModeResponse.Mode : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiModeResponse.PartnerBlinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiModeResponse.Payloads : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiModeResponse.SessionId : System.String { get }
 ToolUp.InterPlatform.PsiOutcome (class)
 ToolUp.InterPlatform.PsiOutcome..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]])
 ToolUp.InterPlatform.PsiOutcome.MatchedElements : Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]] { get }
 ToolUp.InterPlatform.PsiOutcome.MatchedTokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiPayloadElement (class)
+ToolUp.InterPlatform.PsiPayloadElement..ctor(System.Byte[], System.Byte[])
+ToolUp.InterPlatform.PsiPayloadElement.Element : System.Byte[] { get }
+ToolUp.InterPlatform.PsiPayloadElement.Payload : System.Byte[] { get }
+ToolUp.InterPlatform.PsiPayloadElementModule (class)
+ToolUp.InterPlatform.PsiPayloadElementModule.create(System.Byte[], System.Byte[]) : ToolUp.InterPlatform.PsiPayloadElement
+ToolUp.InterPlatform.PsiPayloadElementModule.ofElement(System.Byte[]) : ToolUp.InterPlatform.PsiPayloadElement
+ToolUp.InterPlatform.PsiReleaseGate (class)
+ToolUp.InterPlatform.PsiReleaseGate..ctor(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyGate])
+ToolUp.InterPlatform.PsiReleaseGate.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
+ToolUp.InterPlatform.PsiReleaseGate.MethodName : System.String { get }
+ToolUp.InterPlatform.PsiReleaseGate.Requested : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyGate] { get }
+ToolUp.InterPlatform.PsiReleaseGate.Template : ToolUp.InterPlatform.CleanRoomTemplate { get }
 ToolUp.InterPlatform.PsiRequest (class)
 ToolUp.InterPlatform.PsiRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.InterPlatform.PsiRequest.Blinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PsiRequest.SessionId : System.String { get }
+ToolUp.InterPlatform.PsiResponderPolicy (class)
+ToolUp.InterPlatform.PsiResponderPolicy..ctor(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.InterPlatform.PsiMode], System.Int32)
+ToolUp.InterPlatform.PsiResponderPolicy.AcceptedModes : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.InterPlatform.PsiMode] { get }
+ToolUp.InterPlatform.PsiResponderPolicy.MinInputCohort : System.Int32 { get }
+ToolUp.InterPlatform.PsiResponderPolicyModule (class)
+ToolUp.InterPlatform.PsiResponderPolicyModule.create(System.Collections.Generic.IEnumerable`1[ToolUp.InterPlatform.PsiMode], System.Int32) : ToolUp.InterPlatform.PsiResponderPolicy
+ToolUp.InterPlatform.PsiResponderPolicyModule.membersOnly : ToolUp.InterPlatform.PsiResponderPolicy { get }
+ToolUp.InterPlatform.PsiResponderPolicyModule.withMinInputCohort(System.Int32, ToolUp.InterPlatform.PsiResponderPolicy) : ToolUp.InterPlatform.PsiResponderPolicy
 ToolUp.InterPlatform.PsiResponse (class)
 ToolUp.InterPlatform.PsiResponse..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.InterPlatform.PsiResponse.Doubled : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PsiResponse.PartnerBlinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PsiResponse.SessionId : System.String { get }
+ToolUp.InterPlatform.PsiRunOptions (class)
+ToolUp.InterPlatform.PsiRunOptions..ctor(ToolUp.InterPlatform.PsiMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPsiAggregator], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PsiReleaseGate])
+ToolUp.InterPlatform.PsiRunOptions.Aggregator : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPsiAggregator] { get }
+ToolUp.InterPlatform.PsiRunOptions.AllowRevealingAggregator : System.Boolean { get }
+ToolUp.InterPlatform.PsiRunOptions.Mode : ToolUp.InterPlatform.PsiMode { get }
+ToolUp.InterPlatform.PsiRunOptions.Release : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PsiReleaseGate] { get }
+ToolUp.InterPlatform.PsiRunOptionsModule (class)
+ToolUp.InterPlatform.PsiRunOptionsModule.allowingRevealingAggregator(ToolUp.InterPlatform.PsiRunOptions) : ToolUp.InterPlatform.PsiRunOptions
+ToolUp.InterPlatform.PsiRunOptionsModule.create(ToolUp.InterPlatform.PsiMode) : ToolUp.InterPlatform.PsiRunOptions
+ToolUp.InterPlatform.PsiRunOptionsModule.withAggregator(ToolUp.InterPlatform.IPsiAggregator, ToolUp.InterPlatform.PsiRunOptions) : ToolUp.InterPlatform.PsiRunOptions
+ToolUp.InterPlatform.PsiRunOptionsModule.withRelease(ToolUp.InterPlatform.PsiReleaseGate, ToolUp.InterPlatform.PsiRunOptions) : ToolUp.InterPlatform.PsiRunOptions
 ToolUp.InterPlatform.PythonClientGen (class)
 ToolUp.InterPlatform.PythonClientGen.emit(ToolUp.InterPlatform.PeerContractSchema) : System.String
 ToolUp.InterPlatform.PythonClientGen.pyType(ToolUp.InterPlatform.PeerTypeRef) : System.String
