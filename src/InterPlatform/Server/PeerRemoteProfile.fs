@@ -92,8 +92,15 @@ let nonSuccessOutcome (fallback: RemoteProfileFallback) (statusCode: int) : Peer
 /// handling, is exercisable against a stub `HttpMessageHandler` — the
 /// alternative is asserting on the pure decision and *hoping* the
 /// transport wires it up the same way.
+///
+/// Phase 339 — `policy` gates the URL before a token is minted. The
+/// profile fetch carries the same deployment-vouching bearer the
+/// contract transport does, so it is held to the same
+/// https-or-loopback rule; a refusal is a `HandshakeRejected` carrying
+/// `PeerTransportSecurity.refusalMessage`, and no request is issued.
 let fetch
     (http: HttpClient)
+    (policy: PeerTransportPolicy)
     (fallback: RemoteProfileFallback)
     (fetchCapabilities: TargetPeer -> Async<Result<CapabilityList, PeerHandshakeError>>)
     (auth: IPeerAuthProvider)
@@ -101,27 +108,30 @@ let fetch
     (target: TargetPeer)
     : Async<Result<PeerProfile, PeerHandshakeError>> =
     async {
-        let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
+        match PeerTransportSecurity.check policy target.BaseUrl with
+        | Error _ -> return Error(HandshakeRejected(PeerTransportSecurity.refusalMessage target.BaseUrl))
+        | Ok() ->
+            let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
 
-        match tokenResult with
-        | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
-        | Ok token ->
-            try
-                use request =
-                    new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities/profile")
+            match tokenResult with
+            | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
+            | Ok token ->
+                try
+                    use request =
+                        new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities/profile")
 
-                request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
-                let! response = http.SendAsync request |> Async.AwaitTask
-                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                    request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                    let! response = http.SendAsync request |> Async.AwaitTask
+                    let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
-                if response.IsSuccessStatusCode then
-                    return Ok(JsonRpc.deserialize<PeerProfile> body)
-                else
-                    match nonSuccessOutcome fallback (int response.StatusCode) with
-                    | Some refusal -> return Error refusal
-                    | None ->
-                        let! caps = fetchCapabilities target
-                        return caps |> Result.map PeerCapabilityNegotiation.fromCapabilityList
-            with ex ->
-                return Error(HandshakeUnreachable ex.Message)
+                    if response.IsSuccessStatusCode then
+                        return Ok(JsonRpc.deserialize<PeerProfile> body)
+                    else
+                        match nonSuccessOutcome fallback (int response.StatusCode) with
+                        | Some refusal -> return Error refusal
+                        | None ->
+                            let! caps = fetchCapabilities target
+                            return caps |> Result.map PeerCapabilityNegotiation.fromCapabilityList
+                with ex ->
+                    return Error(HandshakeUnreachable ex.Message)
     }

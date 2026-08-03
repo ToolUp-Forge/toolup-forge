@@ -1329,6 +1329,17 @@
              aborted the request, and a `FanoutPolicy.all` control pins
              that nothing is cancelled without an early return. -->
         <Compile Include="InProcess\PeerTransportTimeoutTests.fs" />
+        <!-- Phase 339 — peer transport TLS enforcement. The outbound
+             legs built their URL from `target.BaseUrl` verbatim, so an
+             `http://` peer carried a deployment-vouching bearer token in
+             the clear. Every refusal case here is measured on TWO
+             counters (requests that reached the wire, tokens that were
+             minted) rather than inferred from the `Error` case, and each
+             is paired with both a legitimate-path control (https,
+             loopback http) and a PRE-339-POSTURE control that admits the
+             very same cleartext call — so "refused" cannot mean
+             "refuses everything". -->
+        <Compile Include="InProcess\PeerTransportTlsTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -60,6 +60,7 @@ ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IB
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.BlobPeerRegistry (class)
 ToolUp.InterPlatform.BlobPeerRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.InterPlatform.BlobPeerRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerTransportPolicy)
 ToolUp.InterPlatform.BlobPeerReplayGuard (class)
 ToolUp.InterPlatform.BlobPeerReplayGuard..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.BlobPeerReplayGuard..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
@@ -525,6 +526,8 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateRefusal(Mi
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.create() : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTransportSecurity(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.insecureTransportAdvisory : System.String { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCascadePolicy(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
@@ -538,6 +541,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withContractProfile(ToolUp.
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withInsecurePeerTransport(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLegacyProfileFallback(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLocalPeer(ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
@@ -738,7 +742,7 @@ ToolUp.InterPlatform.PeerRecordSchema..ctor(System.String, Microsoft.FSharp.Coll
 ToolUp.InterPlatform.PeerRecordSchema.Fields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.PeerTypeRef]] { get }
 ToolUp.InterPlatform.PeerRecordSchema.Name : System.String { get }
 ToolUp.InterPlatform.PeerRemoteProfile (class)
-ToolUp.InterPlatform.PeerRemoteProfile.fetch(System.Net.Http.HttpClient, ToolUp.InterPlatform.PeerRemoteProfile+RemoteProfileFallback, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], ToolUp.InterPlatform.PeerHandshakeError]]], ToolUp.InterPlatform.IPeerAuthProvider, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.TargetPeer) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], ToolUp.InterPlatform.PeerHandshakeError]]
+ToolUp.InterPlatform.PeerRemoteProfile.fetch(System.Net.Http.HttpClient, ToolUp.InterPlatform.PeerTransportPolicy, ToolUp.InterPlatform.PeerRemoteProfile+RemoteProfileFallback, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], ToolUp.InterPlatform.PeerHandshakeError]]], ToolUp.InterPlatform.IPeerAuthProvider, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.TargetPeer) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], ToolUp.InterPlatform.PeerHandshakeError]]
 ToolUp.InterPlatform.PeerRemoteProfile.nonSuccessOutcome(ToolUp.InterPlatform.PeerRemoteProfile+RemoteProfileFallback, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerHandshakeError]
 ToolUp.InterPlatform.PeerRemoteProfile.refusalMessage(System.Int32) : System.String
 ToolUp.InterPlatform.PeerRemoteProfile+RemoteProfileFallback (class)
@@ -818,12 +822,21 @@ ToolUp.InterPlatform.PeerTransportOutcome.TimeoutPrefix : System.String (literal
 ToolUp.InterPlatform.PeerTransportOutcome.isTimeout(ToolUp.InterPlatform.PeerError) : System.Boolean
 ToolUp.InterPlatform.PeerTransportOutcome.timedOut(System.TimeSpan) : ToolUp.InterPlatform.PeerError
 ToolUp.InterPlatform.PeerTransportPolicy (class)
-ToolUp.InterPlatform.PeerTransportPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.InterPlatform.PeerTransportPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Boolean)
+ToolUp.InterPlatform.PeerTransportPolicy.AllowInsecureTransport : System.Boolean { get }
 ToolUp.InterPlatform.PeerTransportPolicy.CallTimeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.InterPlatform.PeerTransportPolicyModule (class)
+ToolUp.InterPlatform.PeerTransportPolicyModule.allowInsecureTransport(ToolUp.InterPlatform.PeerTransportPolicy) : ToolUp.InterPlatform.PeerTransportPolicy
 ToolUp.InterPlatform.PeerTransportPolicyModule.defaults : ToolUp.InterPlatform.PeerTransportPolicy { get }
 ToolUp.InterPlatform.PeerTransportPolicyModule.unbounded : ToolUp.InterPlatform.PeerTransportPolicy { get }
 ToolUp.InterPlatform.PeerTransportPolicyModule.withCallTimeout(System.TimeSpan, ToolUp.InterPlatform.PeerTransportPolicy) : ToolUp.InterPlatform.PeerTransportPolicy
+ToolUp.InterPlatform.PeerTransportSecurity (class)
+ToolUp.InterPlatform.PeerTransportSecurity.RefusalPrefix : System.String (literal)
+ToolUp.InterPlatform.PeerTransportSecurity.check(ToolUp.InterPlatform.PeerTransportPolicy, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.InterPlatform.PeerError]
+ToolUp.InterPlatform.PeerTransportSecurity.isAcceptablePeerUrl(ToolUp.InterPlatform.PeerTransportPolicy, System.String) : System.Boolean
+ToolUp.InterPlatform.PeerTransportSecurity.isRefusal(ToolUp.InterPlatform.PeerError) : System.Boolean
+ToolUp.InterPlatform.PeerTransportSecurity.refusalMessage(System.String) : System.String
+ToolUp.InterPlatform.PeerTransportSecurity.refused(System.String) : ToolUp.InterPlatform.PeerError
 ToolUp.InterPlatform.PeerTrustPosture (class)
 ToolUp.InterPlatform.PeerTrustPosture..ctor(System.String, System.Boolean, System.String, System.String, System.String)
 ToolUp.InterPlatform.PeerTrustPosture.AudienceBound : System.Boolean { get }

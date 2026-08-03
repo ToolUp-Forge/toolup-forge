@@ -36,6 +36,18 @@ open System.Threading
 // took no token, so a fan-out that stopped awaiting a peer left its
 // socket held for the client's default 100 s — the latency was hidden,
 // the resources were not reclaimed.
+//
+// Phase 339 — and no request leaves here over cleartext. The URL was
+// built from `target.BaseUrl` verbatim with no scheme check, so an
+// `http://` peer — configured by hand or resolved from the registry —
+// put a freshly-minted deployment-vouching bearer token on the path in
+// the clear. The gate sits at TWO layers, mirroring the three
+// `isAcceptableKeyFetchUrl` uses on the OIDC side: at the top of each
+// `IPeerClient` method, where refusing happens BEFORE
+// `IssuePeerToken` so no token exists to leak; and inside `send`, the
+// single choke point every request passes through, so a future method
+// on this transport cannot be added ungated. See
+// `PeerTransportSecurity`.
 
 /// `IPeerClient` over `HttpClient`. `localPeer` is the identity the poll
 /// leg vouches for (the invoke leg takes its caller from the propagated
@@ -77,7 +89,7 @@ type HttpPeerClient
         with ex ->
             Error(PeerDeserialization ex.Message)
 
-    let send
+    let sendOverWire
         (httpMethod: HttpMethod)
         (url: string)
         (token: string)
@@ -151,6 +163,30 @@ type HttpPeerClient
                 return Error(PeerTransport ex.Message)
         }
 
+    /// Phase 339 — the transport's single choke point. Every request
+    /// this client issues goes through here, so "no peer request leaves
+    /// this transport in the clear" is a property of the transport
+    /// rather than of each method remembering to call the gate — a
+    /// method added later cannot be added ungated.
+    ///
+    /// The check runs against the FULL request URL, not just
+    /// `target.BaseUrl`, so a base that passes on its own but composes
+    /// into something that does not is caught too. A refused call
+    /// allocates nothing further — no linked token source, no request
+    /// message (GP 13).
+    let send
+        (httpMethod: HttpMethod)
+        (url: string)
+        (token: string)
+        (jsonBody: string option)
+        (callerToken: CancellationToken)
+        =
+        async {
+            match PeerTransportSecurity.check policy url with
+            | Error refusal -> return Error refusal
+            | Ok() -> return! sendOverWire httpMethod url token jsonBody callerToken
+        }
+
     /// The pre-312 shape, on `PeerTransportPolicy.defaults` — a
     /// secondary constructor rather than an optional argument, because
     /// F# folds an optional argument into one widened constructor and
@@ -172,14 +208,23 @@ type HttpPeerClient
             ) =
             async {
                 let callerToken = defaultArg cancellationToken CancellationToken.None
-                let! tokenResult = auth.IssuePeerToken(payload.Context.Peer, target.Peer, payload.Context.User)
 
-                match tokenResult with
-                | Error e -> return Error e
-                | Ok token ->
-                    let url = $"{target.BaseUrl}/peer/v1/{contractId}"
-                    let envelope = JsonRpc.request payload.Context.RootRequestId methodName payload
-                    return! send HttpMethod.Post url token (Some(JsonRpc.serialize envelope)) callerToken
+                // Phase 339 — refused BEFORE the token is minted, which
+                // is the whole difference between this gate and the one
+                // inside `send`. A token that is never issued cannot
+                // leak, cannot be replayed, and does not consume the
+                // signing key's rotation window.
+                match PeerTransportSecurity.check policy target.BaseUrl with
+                | Error refusal -> return Error refusal
+                | Ok() ->
+                    let! tokenResult = auth.IssuePeerToken(payload.Context.Peer, target.Peer, payload.Context.User)
+
+                    match tokenResult with
+                    | Error e -> return Error e
+                    | Ok token ->
+                        let url = $"{target.BaseUrl}/peer/v1/{contractId}"
+                        let envelope = JsonRpc.request payload.Context.RootRequestId methodName payload
+                        return! send HttpMethod.Post url token (Some(JsonRpc.serialize envelope)) callerToken
             }
 
         member _.PollJob
@@ -187,20 +232,29 @@ type HttpPeerClient
             =
             async {
                 let callerToken = defaultArg cancellationToken CancellationToken.None
-                let! tokenResult = auth.IssuePeerToken(localPeer, target.Peer, Anonymous)
 
-                match tokenResult with
-                | Error e -> return Error e
-                | Ok token ->
-                    let url = $"{target.BaseUrl}/peer/v1/{contractId}/jobs/{jobId}"
-                    let! parsed = send HttpMethod.Get url token None callerToken
+                // Phase 339 — the poll leg mints its own token on every
+                // call (GP 12 rule 4 — stateless between calls), so it
+                // is gated on exactly the same terms as `Invoke`. A poll
+                // loop against a cleartext peer would otherwise mint a
+                // fresh token per iteration.
+                match PeerTransportSecurity.check policy target.BaseUrl with
+                | Error refusal -> return Error refusal
+                | Ok() ->
+                    let! tokenResult = auth.IssuePeerToken(localPeer, target.Peer, Anonymous)
 
-                    return
-                        match parsed with
-                        | Error e -> Error e
-                        | Ok statusJson ->
-                            try
-                                Ok(JsonRpc.deserialize<PeerJobStatus<string>> statusJson)
-                            with ex ->
-                                Error(PeerDeserialization ex.Message)
+                    match tokenResult with
+                    | Error e -> return Error e
+                    | Ok token ->
+                        let url = $"{target.BaseUrl}/peer/v1/{contractId}/jobs/{jobId}"
+                        let! parsed = send HttpMethod.Get url token None callerToken
+
+                        return
+                            match parsed with
+                            | Error e -> Error e
+                            | Ok statusJson ->
+                                try
+                                    Ok(JsonRpc.deserialize<PeerJobStatus<string>> statusJson)
+                                with ex ->
+                                    Error(PeerDeserialization ex.Message)
             }

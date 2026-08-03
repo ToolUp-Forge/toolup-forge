@@ -111,9 +111,15 @@ type private StubAuth() =
 
 let private peer (id: string) : PeerIdentity = { PeerId = id; DisplayName = id }
 
+/// Phase 339 — `https`, because the transport now refuses to send a peer
+/// bearer token to a non-loopback cleartext host before it mints one.
+/// The stub handler below never performs a TLS handshake, so the scheme
+/// changes nothing these cases measure; it is only what lets them reach
+/// the wire at all. (`PeerTransportTlsTests` is where the refusal itself
+/// is measured.)
 let private targetAt (id: string) (host: string) : TargetPeer = {
     Peer = peer id
-    BaseUrl = $"http://{host}"
+    BaseUrl = $"https://{host}"
 }
 
 let private fastPeer = targetAt "fast-peer" "fast.test"

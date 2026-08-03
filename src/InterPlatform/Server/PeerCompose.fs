@@ -128,6 +128,14 @@ type PeerServerApp = {
     /// `PeerTransportPolicy.defaults` (100 s — the bound the shared
     /// client already inherited from the BCL) unless a composition says
     /// otherwise. Set it with `withTransportPolicy`.
+    ///
+    /// Phase 339 — the same record now also carries the outbound TLS
+    /// posture (`AllowInsecureTransport`, default `false`: https
+    /// anywhere, http to loopback only). It lives here rather than as a
+    /// field of its own because a `TargetPeer` can arrive from the
+    /// registry at runtime, so the posture has to travel with the
+    /// transport that dials it, not with the composition record. Opt out
+    /// with `withInsecurePeerTransport`.
     TransportPolicy: PeerTransportPolicy
 }
 
@@ -507,6 +515,41 @@ module PeerServerApp =
             TransportPolicy = policy
     }
 
+    /// Phase 339 — restore the pre-339 transport posture: send peer
+    /// bearer tokens to whatever scheme a peer's `BaseUrl` names,
+    /// cleartext included.
+    ///
+    /// **This accepts a real downgrade, and naming it is the point.**
+    /// Every outbound peer leg carries a freshly-minted HS256 bearer
+    /// that vouches for the whole deployment, so one observation on the
+    /// path is peer impersonation until the signing key rotates. From
+    /// 339 the substrate refuses to send one over `http://` unless the
+    /// host is loopback — which covers the dev inner loop, the in-repo
+    /// suites and a two-container compose file without anyone opting
+    /// out of anything.
+    ///
+    /// Compose this when — and only when — a peer is genuinely reachable
+    /// only over cleartext AND the path between the two deployments is
+    /// already trusted by other means (a private link, a service mesh
+    /// terminating TLS at a sidecar). It is not a substitute for a
+    /// certificate the platform will not accept: nothing here disables,
+    /// relaxes, or offers a knob to relax chain validation or hostname
+    /// verification, and a private trust anchor belongs in the host's
+    /// certificate store where it is auditable.
+    ///
+    /// A composition that never calls this is unaffected; a deployment
+    /// that does gets one `Warn` line per start naming the posture.
+    ///
+    /// **Ordering matters** — this sets a field on `TransportPolicy`, so
+    /// a later `withTransportPolicy` replaces the whole record and
+    /// discards it. Call `withTransportPolicy` first, or build the
+    /// policy with `PeerTransportPolicy.allowInsecureTransport` and pass
+    /// it whole.
+    let withInsecurePeerTransport (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TransportPolicy = PeerTransportPolicy.allowInsecureTransport app.TransportPolicy
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -567,6 +610,28 @@ module PeerServerApp =
             else
                 app.Base.Logger
                 |> Option.iter (fun logger -> logger.Warn audienceBindingAdvisory)
+
+    /// Phase 339 — the advisory emitted at `run` when a composition has
+    /// opted out of peer-transport TLS enforcement. Emitted every start,
+    /// deliberately: a deployment that sends deployment-vouching bearer
+    /// tokens over cleartext should say so in its own logs rather than
+    /// have it be readable only from its source.
+    let insecureTransportAdvisory =
+        "peer-transport-tls: PeerTransportPolicy.AllowInsecureTransport is set, so this deployment will send peer bearer tokens to a cleartext http:// peer on any host, not just loopback. A peer token vouches for the whole deployment, so one observation on the path is peer impersonation until the signing key rotates. Drop PeerServerApp.withInsecurePeerTransport once every peer is reachable over https (loopback peers need no opt-out — http://localhost is accepted by default)."
+
+    /// Phase 339 — apply the posture. Advisory only: unlike Phase 309's
+    /// audience gate there is nothing to refuse here, because the
+    /// insecure posture is a deliberate composition act rather than an
+    /// oversight, and the enforcement that matters happens per call in
+    /// `PeerTransportSecurity`. Exposed so a deployment can run the same
+    /// check from its own preflight.
+    let enforceTransportSecurity (app: PeerServerApp) : unit =
+        match app.Base.Config.PeerSubstrate with
+        | NoPeerSubstrate -> ()
+        | EnabledPeerSubstrate ->
+            if app.TransportPolicy.AllowInsecureTransport then
+                app.Base.Logger
+                |> Option.iter (fun logger -> logger.Warn insecureTransportAdvisory)
 
     /// Phase 311 — the effective template per contract id, last-wins.
     /// Exposed so a deployment can assert its own gating posture without
@@ -666,6 +731,13 @@ module PeerServerApp =
             // composition that gates nothing does not run it (GP 13).
             enforceCleanRoomTemplates app
 
+            // Phase 339 — one line per start when the composition has
+            // opted out of peer-transport TLS enforcement. Silent in
+            // every other state, and inside this branch so the
+            // `NoPeerSubstrate` short-circuit stays byte-for-byte a bare
+            // `ServerApp.run` (GP 13).
+            enforceTransportSecurity app
+
             let contracts = app.Contracts
             let cleanRoomTemplates = cleanRoomTemplateMap app
             let auditTransparency = app.AuditTransparency
@@ -708,30 +780,40 @@ module PeerServerApp =
             // directly. Mints a per-call token vouching for the local
             // identity; a transport failure is `HandshakeUnreachable`, an
             // auth / non-2xx refusal is `HandshakeRejected`.
+            //
+            // Phase 339 — gated on the same https-or-loopback rule as
+            // the contract transport, and refused BEFORE the token is
+            // minted. This leg carries the same deployment-vouching
+            // bearer, and it is usually the FIRST call made to a newly
+            // configured peer, so it is where a cleartext `BaseUrl` is
+            // most likely to be noticed.
             let fetchRemote
                 (auth: IPeerAuthProvider)
                 (target: TargetPeer)
                 : Async<Result<CapabilityList, PeerHandshakeError>> =
                 async {
-                    let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
+                    match PeerTransportSecurity.check transportPolicy target.BaseUrl with
+                    | Error _ -> return Error(HandshakeRejected(PeerTransportSecurity.refusalMessage target.BaseUrl))
+                    | Ok() ->
+                        let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
 
-                    match tokenResult with
-                    | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
-                    | Ok token ->
-                        try
-                            use request =
-                                new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities")
+                        match tokenResult with
+                        | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
+                        | Ok token ->
+                            try
+                                use request =
+                                    new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities")
 
-                            request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
-                            let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
-                            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                                request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                                let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
+                                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
-                            if response.IsSuccessStatusCode then
-                                return Ok(JsonRpc.deserialize<CapabilityList> body)
-                            else
-                                return Error(HandshakeRejected body)
-                        with ex ->
-                            return Error(HandshakeUnreachable ex.Message)
+                                if response.IsSuccessStatusCode then
+                                    return Ok(JsonRpc.deserialize<CapabilityList> body)
+                                else
+                                    return Error(HandshakeRejected body)
+                            with ex ->
+                                return Error(HandshakeUnreachable ex.Message)
                 }
 
             // Phase 18d — the handshake's outbound *profile* fetch. Reads
@@ -753,7 +835,14 @@ module PeerServerApp =
                     PeerRemoteProfile.FailClosedProfile
 
             let fetchRemoteProfile (auth: IPeerAuthProvider) (target: TargetPeer) =
-                PeerRemoteProfile.fetch sharedHttpClient profileFallback (fetchRemote auth) auth localIdentity target
+                PeerRemoteProfile.fetch
+                    sharedHttpClient
+                    transportPolicy
+                    profileFallback
+                    (fetchRemote auth)
+                    auth
+                    localIdentity
+                    target
 
             let peerServiceConfig (services: IServiceCollection) =
                 services
@@ -799,7 +888,12 @@ module PeerServerApp =
                     .AddSingleton<IPeerRegistry>(
                         System.Func<System.IServiceProvider, IPeerRegistry>(fun sp ->
                             let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-                            BlobPeerRegistry(blobs) :> IPeerRegistry)
+                            // Phase 339 — the directory refuses to
+                            // RECORD a cleartext peer under the same
+                            // policy the transport refuses to CALL one.
+                            // Reads stay ungated, so a pre-339 directory
+                            // still resolves (see `BlobPeerRegistry`).
+                            BlobPeerRegistry(blobs, transportPolicy) :> IPeerRegistry)
                     )
                     .AddSingleton<IPlatformPeer>(
                         // Built once on first resolution (the first inbound

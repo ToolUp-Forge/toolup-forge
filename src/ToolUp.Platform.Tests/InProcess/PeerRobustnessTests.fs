@@ -389,9 +389,14 @@ let private capabilityList: CapabilityList = [
     }
 ]
 
+/// Phase 339 — `https`, because the profile fetch now refuses to send a
+/// peer bearer token to a non-loopback cleartext host before it issues
+/// any request at all. The stub `HttpMessageHandler` below never
+/// performs a TLS handshake, so the scheme changes nothing these cases
+/// measure; it is only what makes them reach the transport.
 let private target: TargetPeer = {
     Peer = receiverId
-    BaseUrl = "http://receiver.test"
+    BaseUrl = "https://receiver.test"
 }
 
 /// Run the fetch against a canned response, reporting whether the legacy
@@ -409,7 +414,14 @@ let private fetchProfile (fallback: PeerRemoteProfile.RemoteProfileFallback) (st
     use http = new HttpClient(new StubHandler(status, body))
 
     let! result =
-        PeerRemoteProfile.fetch http fallback fetchCapabilities (StubAuth() :> IPeerAuthProvider) callerId target
+        PeerRemoteProfile.fetch
+            http
+            PeerTransportPolicy.defaults
+            fallback
+            fetchCapabilities
+            (StubAuth() :> IPeerAuthProvider)
+            callerId
+            target
 
     return result, capabilityFetches.Value
 }

@@ -1038,6 +1038,23 @@ let allTests =
         PeerTransportTimeoutTests.deadlineTests
         PeerTransportTimeoutTests.cancellationTests
         PeerTransportTimeoutTests.fanoutReachTests
+        // Phase 339 — peer transport TLS enforcement. Every outbound
+        // peer leg mints a bearer that vouches for the whole deployment
+        // and built its URL from `target.BaseUrl` with no scheme check,
+        // so an `http://` peer put that token on the path in the clear —
+        // one observation is peer impersonation until the signing key
+        // rotates. The accept rule is the OIDC side's
+        // `isAcceptableKeyFetchUrl`: https anywhere, http to loopback
+        // only. Refusal is measured on two counters (requests that
+        // reached the wire, tokens that were minted), never inferred
+        // from the `Error` case, and every refusal is paired with a
+        // pre-339-posture control that ADMITS the same cleartext call —
+        // so "refused" cannot quietly mean "refuses everything".
+        PeerTransportTlsTests.acceptRuleTests
+        PeerTransportTlsTests.transportTests
+        PeerTransportTlsTests.handshakeFetchTests
+        PeerTransportTlsTests.registryTests
+        PeerTransportTlsTests.composeTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`
         // signing-key lookup and the blob-backed peer directory, with
