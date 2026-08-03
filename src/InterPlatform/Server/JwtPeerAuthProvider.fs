@@ -8,6 +8,7 @@ open System.Text
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Platform
+open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
 
 // ─── Layer 4 — default peer auth provider ────────────────────────────
@@ -41,6 +42,18 @@ open ToolUp.Platform.Secrets
 // spent against (`IPeerCallScopedAuth`). Both are off by default: the
 // default `PeerTokenPolicy.unscoped` validates exactly as before
 // (GP 11) and consults no store at all (GP 13).
+//
+// **Identity sanitisation (Phase 334).** The peer id that selects the
+// signing key is a path segment of the `ISecretStore` key, and on both
+// validation paths it is wholly unverified at that moment — the token's
+// self-asserted `iss`, and the last hop of a wire-supplied delegation
+// chain. Both now go through the platform `IdentitySanitiser` charset
+// policy BEFORE the key is built, the same one `PeerBearerAuthMiddleware`
+// applies to `X-Peer-Name` and the Entra decorator applies to
+// `oid` / `sub` / `tid`. The ISSUE path is deliberately unguarded: its
+// caller id comes from the deployment's own composition, not the wire,
+// and refusing to mint would break a deployment whose local id is odd
+// but whose peers never see it (GP 11). See `PeerJwt.isWellFormedPeerId`.
 //
 // **Claim order is load-bearing.** The replay claim is the LAST check.
 // Claiming before the signature verifies would let an unauthenticated
@@ -77,6 +90,42 @@ module private PeerJwt =
 
     /// Secret-store key holding a peer's symmetric HS256 signing key.
     let signingKeyFor (peerId: string) = $"peers/{peerId}/signing-key"
+
+    /// Phase 334 — a peer id is a PATH SEGMENT of the `ISecretStore` key
+    /// `signingKeyFor` builds, and on the *validation* paths it arrives
+    /// wholly unverified: the token's own self-asserted `iss`, and the
+    /// last hop of a wire-supplied delegation chain. It is unverified by
+    /// construction, because the key that would verify it is precisely
+    /// what the id is being used to look up.
+    ///
+    /// So the shape is checked before the interpolation, using the same
+    /// platform `IdentitySanitiser` charset policy
+    /// `PeerBearerAuthMiddleware` applies to `X-Peer-Name` (Phase 137)
+    /// and the Entra decorator applies to `oid` / `sub` / `tid`
+    /// (Phase 334) — one sanitiser, one rule set, so the three federated
+    /// identity boundaries cannot drift apart. A traversal-shaped, NUL-
+    /// bearing, control-character or Windows-reserved id can no longer
+    /// address a key outside the peer key space of an `ISecretStore`
+    /// companion that maps keys onto a filesystem or URL path.
+    ///
+    /// The sanitiser returns valid input unchanged, so a well-formed
+    /// peer id resolves byte-for-byte the same key it always did
+    /// (GP 11), and a deployment that never receives a malformed id
+    /// cannot tell this guard is here (GP 13).
+    let isWellFormedPeerId (peerId: string) : bool =
+        IdentitySanitiser.sanitiseScopeId peerId |> Result.isOk
+
+    /// Phase 334 — the single wording for a rejected issuer. Deliberately
+    /// does NOT echo the offending value: it flows into logs and audit,
+    /// and an attacker-controlled string does not belong there (the same
+    /// reason `IdentitySanitiser` categorises rather than quotes).
+    let malformedIssuerMessage =
+        "Rejected 'iss' claim — a peer id must be alphanumerics, '-', '_' or '.' (no leading period, no path separator, no control character) before it is used to address a signing key"
+
+    /// Phase 334 — the delegation-chain counterpart of
+    /// `malformedIssuerMessage`. Same policy, same non-echoing posture.
+    let malformedDelegatingPeerMessage =
+        "Rejected delegating peer — a peer id must be alphanumerics, '-', '_' or '.' (no leading period, no path separator, no control character) before it is used to address a signing key"
 
     /// Minimum per-peer signing-key length, in bytes of its UTF-8 encoding.
     /// An HMAC-SHA256 key below the 32-byte SHA-256 block offers less than
@@ -463,6 +512,13 @@ type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy
 
                     match PeerJwt.getClaim "iss" doc with
                     | None -> return Error(PeerUnauthorized "Missing 'iss' claim")
+                    // Phase 334 — FIRST, before the id is interpolated into
+                    // the secret-store key path. Ordering matters: a
+                    // traversal-shaped `iss` must never reach `GetSecret`,
+                    // even to miss, because a path-mapping companion
+                    // resolves the traversal on the way to deciding that.
+                    | Some iss when not (PeerJwt.isWellFormedPeerId iss) ->
+                        return Error(PeerUnauthorized PeerJwt.malformedIssuerMessage)
                     | Some iss ->
                         let! secretOpt = secrets.GetSecret(PeerJwt.platformScope, PeerJwt.signingKeyFor iss)
 
@@ -526,6 +582,11 @@ type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy
         member _.VerifyDelegation(assertion: DelegatedAssertion) = async {
             match List.tryLast assertion.DelegationChain with
             | None -> return Error(PeerUnauthorized "Delegation chain is empty")
+            // Phase 334 — the delegation chain is wire-supplied and, like
+            // `iss`, is unverified at the moment it is used to address the
+            // key that would verify it. Same guard, same rule set.
+            | Some delegatingPeer when not (PeerJwt.isWellFormedPeerId delegatingPeer) ->
+                return Error(PeerUnauthorized PeerJwt.malformedDelegatingPeerMessage)
             | Some delegatingPeer ->
                 let! secretOpt = secrets.GetSecret(PeerJwt.platformScope, PeerJwt.signingKeyFor delegatingPeer)
 

@@ -970,6 +970,16 @@ let allTests =
         // delegation check is neutered — the pre-330 posture.
         PeerDelegationVerificationTests.hostVerificationTests
         PeerDelegationVerificationTests.userContextClaimTests
+        // Phase 334 — federated-identity sanitisation parity: one hostile
+        // corpus driven through the Entra claim mapping, the peer `iss`
+        // signing-key lookup and the blob-backed peer directory, with
+        // every verdict compared to the canonical IdentitySanitiser one
+        // so a future divergence on any single boundary fails. The
+        // negative controls pin that the refusal is the sanitiser and not
+        // a missing key, a weak key, or a fixture that refuses everything.
+        FederatedIdentitySanitisationTests.parityTests
+        FederatedIdentitySanitisationTests.negativeControlTests
+        FederatedIdentitySanitisationTests.boundaryDetailTests
         // Phase 483 — multi-round protocol orchestrator: a three-round
         // two-party protocol expressed as a step function alone, each
         // DropoutPolicy variant against a missed round deadline,

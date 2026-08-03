@@ -1195,6 +1195,16 @@
              malformed `uctx`. The forged-assertion exposure is pinned by a
              NEGATIVE CONTROL that ADMITS it when the check is neutered. -->
         <Compile Include="InProcess\PeerDelegationVerificationTests.fs" />
+        <!-- Phase 334 — federated-identity sanitisation PARITY: one table
+             of hostile identifiers driven through all three federated
+             boundaries (the Entra oid/sub/tid claim mapping, the peer
+             `iss` signing-key lookup, the blob-backed peer directory),
+             every verdict asserted equal to the canonical
+             IdentitySanitiser verdict so a divergence on ANY side fails
+             here. Negative controls prove the refusal is the sanitiser:
+             the traversal key path resolves a real strong key, and the
+             benign twin of every hostile row still passes. -->
+        <Compile Include="InProcess\FederatedIdentitySanitisationTests.fs" />
         <!-- Phase 483 — multi-round protocol orchestrator: the round
              barrier + accumulated-state thread, each DropoutPolicy
              variant, restart-resume from persisted state, and

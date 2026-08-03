@@ -155,20 +155,52 @@ let private extractRawToken (location: TokenLocation) (ctx: HttpContext) : strin
 
 // ─── Entra-flavoured user projection ─────────────────────────────────
 
+/// Phase 334 — a federated claim only becomes the effective *scope*
+/// identity if it survives the platform `IdentitySanitiser`.
+///
+/// `oid` / `sub` / `tid` land on `AuthenticatedUser.UserId` /
+/// `TenantId`, which the storage-scope resolver turns into a
+/// `StorageScope.Container` — a path segment in `LocalFileStorage`, a
+/// blob/container name in the cloud backends, and part of
+/// `secrets-{scopeId}.json` in `FileSecretStore`. Before this phase the
+/// decorator OVERWROTE the inner OIDC provider's already-sanitised
+/// values with the raw claims, so 6l.H's guard was undone one line
+/// after it ran and a hostile or misconfigured IdP could hand back
+/// `../../etc`, a NUL byte, or a Windows reserved device name and
+/// select a scope outside its root.
+///
+/// A rejected claim is treated as **absent**, so the mapping falls
+/// through the same candidate chain it always had and lands on the
+/// inner provider's sanitised value — never on the raw claim. The
+/// sanitiser returns valid input unchanged, so a well-formed identity
+/// is byte-for-byte what it was (GP 11). The identical policy guards
+/// the peer `iss` boundary in `ToolUp.InterPlatform` — one sanitiser,
+/// one rule set, no per-boundary dialect.
+let private sanitisedClaim (raw: string option) : string option =
+    raw
+    |> Option.bind (fun value ->
+        match IdentitySanitiser.sanitiseScopeId value with
+        | Result.Ok clean -> Some clean
+        | Result.Error _ -> None)
+
 let private applyEntraMapping (claims: EntraClaims) (user: AuthenticatedUser) : AuthenticatedUser =
     // `oid` is preferred. Fall back to `sub` (the inner provider's
     // default) only when `oid` is absent — rare but possible for some
     // federated IdP flows. Display name and email fall back to the
     // inner provider's values when the Entra-specific claims are
-    // absent.
+    // absent. `DisplayName` / `Email` are NOT sanitised: they are
+    // presentation / correspondence fields and never become a scope or
+    // key-path segment, so constraining them would reject legitimate
+    // human names for no security gain.
     let userId =
-        claims.Oid
-        |> Option.defaultWith (fun () -> claims.Sub |> Option.defaultValue user.UserId)
+        sanitisedClaim claims.Oid
+        |> Option.orElse (sanitisedClaim claims.Sub)
+        |> Option.defaultValue user.UserId
 
     {
         user with
             UserId = userId
-            TenantId = claims.Tid |> Option.orElse user.TenantId
+            TenantId = sanitisedClaim claims.Tid |> Option.orElse user.TenantId
             DisplayName = claims.Name |> Option.defaultValue user.DisplayName
             Email = claims.Email |> Option.orElse user.Email
     }
@@ -186,6 +218,24 @@ let readIdpClaim (location: TokenLocation) (ctx: HttpContext) : string option =
 
     extractRawToken location ctx
     |> Option.bind (fun raw -> (tryReadClaims silent raw).Idp)
+
+/// Phase 334 — apply the Entra claim mapping to an already-validated
+/// `AuthenticatedUser`, given the raw token the inner provider accepted.
+/// This is exactly what the decorator does after `ValidateRequest` /
+/// `GetUser`, exposed as an additive entry point so the
+/// sanitisation-parity pack can drive the real mapping rather than a
+/// re-implementation of it (a re-implementation is what would let the
+/// two drift, which is the class this phase closes).
+///
+/// **Performs no validation of its own.** The caller MUST have verified
+/// the token's signature, issuer, audience and expiry first — the
+/// decorator has, by the time it calls this. Claim-parse failures
+/// degrade to "no Entra claims" and the inner user is returned
+/// unchanged; the parse-failure counter is only emitted from the
+/// metered auth path, matching `readIdpClaim`.
+let applyValidatedClaims (rawToken: string) (user: AuthenticatedUser) : AuthenticatedUser =
+    let silent = NoOpMetricsSink() :> IMetricsSink
+    applyEntraMapping (tryReadClaims silent rawToken) user
 
 // ─── HttpClient sharing ──────────────────────────────────────────────
 
