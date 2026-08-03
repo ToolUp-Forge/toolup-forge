@@ -144,6 +144,43 @@ A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationExcept
 
 `HopBudget` is the maximum forward depth a call may reach in a multi-hop cascade (`8` above is a generous default, not a per-topology recommendation). Size it to your federation graph — see [`docs/migrations/18c-federation-hop-budget.md`](../../docs/migrations/18c-federation-hop-budget.md). An under-sized budget rejects a legitimate forward with `PeerHopLimitExceeded`.
 
+### `create` roots a cascade; `forward` continues one (Phase 314)
+
+**A bare `create` starts a NEW cascade root.** Every call through that proxy mints a fresh `RootRequestId`, resets `Route` to `[ caller ]`, and sets `HopsRemaining = HopBudget`. That is exactly right for a call this deployment *originates* — and exactly wrong for one it is *forwarding*.
+
+So a handler that continues an inbound cascade by building another `create` proxy silently discards the inbound route, hop budget, and correlation id: loop detection and hop limits stop spanning the cascade, and the cross-hop audit correlation is lost. **Continuing an inbound cascade uses `forward` instead:**
+
+```fsharp
+// Inside a handler for an inbound peer call, `inbound` is the
+// PeerCallContext this deployment is currently serving.
+let onward = JsonRpcPeerClient.forward<DirectoryContract> inbound {
+    Client = httpPeerClient
+    Target = { Peer = nextPeerId; BaseUrl = "https://next.example" }
+    Caller = thisPeerId        // the forwarding deployment
+    User = Anonymous
+    Version = v1
+    ContractId = "directory"
+    HopBudget = 8              // ignored on a forwarding proxy — see below
+}
+
+let! caps = onward.GetCapabilities()
+```
+
+Each call through a `forward` proxy derives its context from `inbound` via the same `PeerCascade.deriveNext` bookkeeping `IPeerCascade.Forward` uses, so the two forwarding paths compose instead of diverging:
+
+| Field | `create` | `forward inbound` |
+|---|---|---|
+| `RootRequestId` | fresh per call | **preserved** from `inbound` (GP 7 — correlation rides the chain, across hops) |
+| `Route` | `[ config.Caller.PeerId ]` | `inbound.Route @ [ config.Caller.PeerId ]` |
+| `HopsRemaining` | `config.HopBudget` | `inbound.HopsRemaining - 1` — **`HopBudget` is ignored**; the budget belongs to the cascade, not to this leg |
+| `ParentRequestId` | `None` | `Some inbound.RootRequestId` |
+| `Peer` | `config.Caller` | `config.Caller` (re-keyed to the forwarder) |
+| `User` / `ContractVersion` | `config.User` / `config.Version` | `config.User` / `config.Version` — **the config still wins** |
+
+That last row is deliberate: a forwarding deployment vouches for the outbound leg itself, on the contract version it negotiated for *that* leg. To propagate the inbound end-user identity onward, say so — `{ config with User = inbound.User }` — rather than have it happen by accident.
+
+**A doomed hop never leaves the forwarding peer.** If the derivation is rejected — the target is already on the route (`PeerLoopDetected`), or the budget is exhausted (`PeerHopLimitExceeded`) — the call short-circuits to a raised `PeerInvocationException` carrying that `PeerError`, **before** the wire round-trip. This is the same caller-side defence in depth `IPeerCascade` already provided, now reachable from the typed proxy.
+
 ## Audit transparency (Phase 18a)
 
 The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").

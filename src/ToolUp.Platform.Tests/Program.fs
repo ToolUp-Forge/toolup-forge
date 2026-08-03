@@ -925,6 +925,10 @@ let allTests =
         // caller-side loop / budget guards).
         PeerFederationTests.fanoutTests
         PeerFederationTests.cascadeTests
+        // Phase 314 — cascade-aware typed proxy forwarding: `forward`
+        // continues an inbound cascade (root id / route / budget threaded,
+        // doomed hops rejected before the wire); `create` still roots.
+        PeerFederationTests.proxyForwardingTests
         // Phase 18b — clean-room privacy-gate broker: surface enforcement,
         // gate composition (tighten-only), per-cell suppression, k-floor.
         CleanRoomBrokerTests.tests

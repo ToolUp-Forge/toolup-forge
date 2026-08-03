@@ -327,3 +327,223 @@ let cascadeTests =
             Expect.isFalse invoked.Value "a doomed hop never reaches the wire"
         }
     ]
+
+// ─── Phase 314 — cascade-aware typed proxy forwarding ─────────────────
+//
+// The typed proxy has two entry points and the difference is the whole
+// phase: `create` starts a NEW cascade root, `forward` CONTINUES an
+// inbound one. Coverage is pure in-process over a capturing
+// `IPeerClient` — what matters is the `PeerCallContext` the proxy hands
+// the transport, and whether it reaches the transport at all.
+
+/// A minimal record-of-functions contract. Must not be `private`:
+/// `FSharpType.IsRecord` reads a private-representation record as a
+/// non-record and the proxy build fails.
+type EchoContract = { Echo: string -> Async<string> }
+
+/// `IPeerClient` that records the context of every call it is handed and
+/// answers with a canned serialised result. Standing in for the wire lets
+/// the test assert both what crossed it and that nothing did.
+type private CapturingPeerClient() =
+    let calls = ResizeArray<PeerCallContext>()
+
+    member _.Calls = calls |> List.ofSeq
+    member _.Last = calls |> Seq.tryLast
+
+    interface IPeerClient with
+        member _.Invoke(_target, _contractId, _methodName, payload) = async {
+            lock calls (fun () -> calls.Add payload.Context)
+            return Ok(JsonRpc.serialize "echoed")
+        }
+
+        member _.PollJob(_target, _contractId, _jobId) = async {
+            return Error(PeerTransport "the echo contract has no long-running method")
+        }
+
+let proxyForwardingTests =
+
+    /// A proxy config for `localPeer` calling `next`, over `client`.
+    let configFor (client: IPeerClient) (localPeer: string) (next: string) : PeerProxyConfig = {
+        Client = client
+        Target = target next
+        Caller = peer localPeer
+        User = Anonymous
+        Version = { Major = 1; Minor = 0 }
+        ContractId = "echo"
+        HopBudget = 8
+    }
+
+    /// Run `call` and return the `PeerError` it short-circuited with, or
+    /// fail the test if it did not raise one.
+    let expectPeerError (call: Async<string>) = async {
+        let! outcome = Async.Catch call
+
+        return
+            match outcome with
+            | Choice1Of2 value -> failtestf "expected a PeerInvocationException, got Ok %A" value
+            | Choice2Of2(PeerInvocationException e) -> e
+            | Choice2Of2 ex -> failtestf "expected a PeerInvocationException, got %A" ex
+    }
+
+    testList "Phase 314 cascade-aware typed proxy forwarding" [
+
+        // ─── `create` is unchanged: a fresh cascade root ──────────────
+
+        testCaseAsync "a bare create still mints a fresh cascade root per call"
+        <| async {
+            let client = CapturingPeerClient()
+            let proxy = JsonRpcPeerClient.create<EchoContract> (configFor client "a" "b")
+
+            let! first = proxy.Echo "one"
+            let! second = proxy.Echo "two"
+            Expect.equal first "echoed" "the canned result deserialises"
+            Expect.equal second "echoed" "the canned result deserialises"
+
+            match client.Calls with
+            | [ c1; c2 ] ->
+                Expect.equal c1.Route [ "a" ] "route reset to the caller alone"
+                Expect.equal c1.HopsRemaining 8 "hop budget seeded from HopBudget"
+                Expect.equal c1.ParentRequestId None "a root call has no parent"
+                Expect.notEqual c1.RootRequestId c2.RootRequestId "each create call is its own cascade root"
+            | other -> failtestf "expected two recorded calls, got %i" (List.length other)
+        }
+
+        // ─── `forward` continues the inbound cascade ──────────────────
+
+        testCaseAsync "forward preserves the root id, extends the route, and decrements the budget"
+        <| async {
+            let client = CapturingPeerClient()
+            // b is handling a's call and forwards to c.
+            let inbound = ctx [ "a" ] 5
+
+            let proxy =
+                JsonRpcPeerClient.forward<EchoContract> inbound (configFor client "b" "c")
+
+            let! result = proxy.Echo "onward"
+            Expect.equal result "echoed" "the forwarded call resolves normally"
+
+            match client.Last with
+            | Some outbound ->
+                Expect.equal outbound.RootRequestId "root-123" "root id preserved across the hop (GP 7)"
+                Expect.equal outbound.Route [ "a"; "b" ] "forwarding peer appended to the route"
+                Expect.equal outbound.HopsRemaining 4 "hop budget decremented, not reset to HopBudget"
+                Expect.equal outbound.ParentRequestId (Some "root-123") "parent set to the cascade root"
+                Expect.equal outbound.Peer (peer "b") "calling peer re-keyed to the forwarder"
+            | None -> failtest "the forwarded call must reach the transport"
+        }
+
+        testCaseAsync "a two-hop cascade forwarded through the proxy keeps one root id end to end"
+        <| async {
+            let client = CapturingPeerClient()
+
+            // Hop 1: b forwards a's inbound call to c.
+            let atB = ctx [ "a" ] 5
+            let bProxy = JsonRpcPeerClient.forward<EchoContract> atB (configFor client "b" "c")
+            let! _ = bProxy.Echo "hop-1"
+
+            // Hop 2: c receives exactly what b put on the wire, and
+            // forwards it onward to d.
+            let atC =
+                match client.Last with
+                | Some ctx -> ctx
+                | None -> failtest "hop 1 must reach the transport"
+
+            let cProxy = JsonRpcPeerClient.forward<EchoContract> atC (configFor client "c" "d")
+            let! _ = cProxy.Echo "hop-2"
+
+            match client.Calls with
+            | [ hop1; hop2 ] ->
+                Expect.equal hop1.RootRequestId "root-123" "hop 1 carries the cascade root"
+                Expect.equal hop2.RootRequestId "root-123" "hop 2 carries the SAME cascade root"
+                Expect.equal hop1.Route [ "a"; "b" ] "hop 1 route"
+                Expect.equal hop2.Route [ "a"; "b"; "c" ] "hop 2 route threaded, not reset"
+                Expect.equal hop1.HopsRemaining 4 "hop 1 budget"
+                Expect.equal hop2.HopsRemaining 3 "hop 2 budget keeps counting down"
+            | other -> failtestf "expected two recorded hops, got %i" (List.length other)
+        }
+
+        testCaseAsync "forward carries the proxy config's user + version, not the inbound leg's"
+        <| async {
+            let client = CapturingPeerClient()
+
+            let inbound = {
+                ctx [ "a" ] 5 with
+                    User =
+                        Direct {
+                            Subject = "u-1"
+                            Issuer = "a"
+                            DisplayName = None
+                        }
+                    ContractVersion = { Major = 1; Minor = 0 }
+            }
+
+            let config = {
+                configFor client "b" "c" with
+                    Version = { Major = 2; Minor = 0 }
+            }
+
+            let proxy = JsonRpcPeerClient.forward<EchoContract> inbound config
+            let! _ = proxy.Echo "onward"
+
+            match client.Last with
+            | Some outbound ->
+                Expect.equal outbound.User Anonymous "the forwarding leg vouches for its own configured identity"
+                Expect.equal outbound.ContractVersion { Major = 2; Minor = 0 } "the version negotiated for THIS leg"
+                Expect.equal outbound.RootRequestId "root-123" "cascade fields still come from the inbound context"
+            | None -> failtest "the forwarded call must reach the transport"
+        }
+
+        // ─── Doomed hops never leave the forwarding peer ──────────────
+
+        testCaseAsync "a loop short-circuits to PeerLoopDetected before the wire round-trip"
+        <| async {
+            let client = CapturingPeerClient()
+            // c is handling a call that already traversed a → b, and
+            // tries to forward back to a.
+            let inbound = ctx [ "a"; "b" ] 5
+
+            let proxy =
+                JsonRpcPeerClient.forward<EchoContract> inbound (configFor client "c" "a")
+
+            let! error = expectPeerError (proxy.Echo "doomed")
+
+            match error with
+            | PeerLoopDetected route -> Expect.contains route "a" "the loop names the repeated peer"
+            | other -> failtestf "expected PeerLoopDetected, got %A" other
+
+            Expect.isEmpty client.Calls "a doomed hop never leaves the forwarding peer"
+        }
+
+        testCaseAsync "an exhausted budget short-circuits to PeerHopLimitExceeded before the wire round-trip"
+        <| async {
+            let client = CapturingPeerClient()
+            let inbound = ctx [ "a" ] 0
+
+            let proxy =
+                JsonRpcPeerClient.forward<EchoContract> inbound (configFor client "b" "c")
+
+            let! error = expectPeerError (proxy.Echo "doomed")
+            Expect.equal error PeerHopLimitExceeded "budget exhaustion is structured, not a transport failure"
+            Expect.isEmpty client.Calls "a doomed hop never leaves the forwarding peer"
+        }
+
+        testCaseAsync "the HopBudget on a forwarding config is ignored — the cascade owns the budget"
+        <| async {
+            let client = CapturingPeerClient()
+            let inbound = ctx [ "a" ] 1
+
+            let config = {
+                configFor client "b" "c" with
+                    HopBudget = 99
+            }
+
+            let proxy = JsonRpcPeerClient.forward<EchoContract> inbound config
+
+            let! _ = proxy.Echo "onward"
+
+            match client.Last with
+            | Some outbound ->
+                Expect.equal outbound.HopsRemaining 0 "budget came from the inbound context, not HopBudget"
+            | None -> failtest "the forwarded call must reach the transport"
+        }
+    ]

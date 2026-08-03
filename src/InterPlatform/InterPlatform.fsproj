@@ -33,14 +33,20 @@
     <Compile Include="Server\TypeScriptClientGen.fs" />
     <Compile Include="Server\PythonClientGen.fs" />
     <Compile Include="Server\HttpPeerClient.fs" />
+    <!-- Phase 314 — PeerCascade compiles BEFORE the typed proxy: the
+         proxy's cascade-continuation entry point (`JsonRpcPeerClient.forward`)
+         seeds each call from `PeerCascade.deriveNext`, so the bookkeeping
+         stays single-sourced rather than re-derived proxy-side. Cascade
+         depends only on `Shared/PeerTypes.fs`. -->
+    <Compile Include="Server\PeerCascade.fs" />
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />
     <Compile Include="Server\PeerAuditContractHost.fs" />
     <!-- Phase 18c — federation orchestration (fan-out + cascade) over the
          peer foundation. Phase 18b — clean-room privacy-gate broker.
-         Neutral substrate; aggregation + domain privacy policy stay out. -->
+         Neutral substrate; aggregation + domain privacy policy stay out.
+         (`PeerCascade.fs` moved above the typed proxy by Phase 314.) -->
     <Compile Include="Server\PeerFanout.fs" />
-    <Compile Include="Server\PeerCascade.fs" />
     <Compile Include="Server\CleanRoomBroker.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
