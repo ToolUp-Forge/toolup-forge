@@ -73,6 +73,14 @@
          (`PeerCascade.fs` moved above the typed proxy by Phase 314.) -->
     <Compile Include="Server\PeerFanout.fs" />
     <Compile Include="Server\CleanRoomBroker.fs" />
+    <!-- Phase 311 — the structural half of the clean-room gate: the
+         dispatch wrapper that runs the broker on every answer of a gated
+         contract, plus the witness type proving a registration went
+         through it. Compiles AFTER CleanRoomBroker.fs (it applies that
+         file's `Enforce` + `PrivacyGate.observed`) and before
+         PeerCompose.fs, its only in-tree caller. Nothing is wrapped
+         unless a composition calls `withCleanRoomTemplate` (GP 13). -->
+    <Compile Include="Server\CleanRoomGate.fs" />
     <!-- Phase 483 — multi-round protocol orchestrator. Compiles AFTER
          PeerFanout.fs (a round's scatter IS an IPeerFanout call) and
          before PeerCompose.fs; it is not composed by PeerServerApp.run,

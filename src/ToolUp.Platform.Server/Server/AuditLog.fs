@@ -971,6 +971,17 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PeerJobCompleted(fromAuditJson<PeerJobCompletedPayload> j)
     }
+    // Phase 311 — the composed clean-room gate's decision over one gated
+    // contract answer. The only place the withhold reason is recorded; the
+    // wire refusal deliberately carries none.
+    {
+        EventType = "PeerCleanRoomDecision"
+        TryEncode =
+            (function
+            | PeerCleanRoomDecision p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PeerCleanRoomDecision(fromAuditJson<PeerCleanRoomDecisionPayload> j)
+    }
     {
         EventType = "FederationRoundCompleted"
         TryEncode =

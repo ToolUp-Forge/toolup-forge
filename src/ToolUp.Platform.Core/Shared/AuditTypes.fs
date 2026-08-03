@@ -2032,6 +2032,64 @@ type PeerJobCompletedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 311 — the receiver's composed clean-room gate reached a decision
+/// over one contract answer. Emitted once per gated dispatch by
+/// `CleanRoomGate`, whichever way the decision went. Reserved
+/// `SourceModule = "_platform.peer"`, the same family as
+/// `PeerCallCompleted`, because a suppression is a federation event and an
+/// operator reconstructs a call from one trail.
+///
+/// **Why a distinct case rather than fields on `PeerCallCompletedPayload`.**
+/// Same argument Phase 310 made for `PeerJobCompleted`: the call-completed
+/// row answers "the receiver dispatched this call and it ended like this",
+/// and a gate decision answers "and this is what the privacy floor did to
+/// the answer". Widening the existing payload would change the wire shape
+/// of every immediate peer call's row for the sake of the minority that are
+/// gated; a new case leaves it byte-for-byte identical (GP 11) and lets an
+/// operator query suppressions without scanning every call.
+///
+/// **This is the ONLY place the withhold reason is recorded.** The wire
+/// refusal (`PeerCleanRoomWithheld`) carries the template id and nothing
+/// else on purpose: the broker's reasons are quantitative ("released cohort
+/// 7 is below the k-anonymity floor 10") and a caller able to read them back
+/// while varying its query has a counting oracle over the protected data.
+/// Receiver-side audit is where that detail belongs, and the Phase 18a
+/// audit-transparency contract is the deliberate, caller-scoped opt-in for
+/// exposing any of it.
+///
+/// PII-free on the same terms as the rest of the family: peer ids, a
+/// correlation id, an outcome flag, and `SuppressedCells` — which are the
+/// *author-chosen bucket labels* of a histogram ("age-25-34", "region-north"),
+/// never a cell's value and never an end-user identifier. A deployment whose
+/// bucket labels would themselves be identifying has authored a clean-room
+/// template that leaks with or without this row.
+type PeerCleanRoomDecisionPayload = {
+    /// The hosted `contractId` the gated call targeted.
+    ContractId: string
+    /// The contract method name whose answer was gated.
+    MethodName: string
+    /// `TemplateId` of the `CleanRoomTemplate` composed for this contract.
+    TemplateId: string
+    /// `PeerId` of the validated *calling* peer, taken from the derived
+    /// `PeerCallContext` — never the self-asserted wire body.
+    CallerPeerId: string
+    /// The cascade-wide correlation id, so this row joins the
+    /// `PeerCallCompleted` row the same call produces.
+    RootRequestId: string
+    /// `true` when the answer was released (possibly with cells
+    /// suppressed); `false` when the whole answer was withheld.
+    Released: bool
+    /// Labels of the cells dropped by per-cell suppression. Empty on a
+    /// withhold (nothing was released) and on an untouched release.
+    SuppressedCells: string list
+    /// The gate's own explanation — the broker's `Withheld` reason, or the
+    /// substrate's reason for overriding a release. Empty on a clean
+    /// release. Recorded here and never sent on the wire.
+    Reason: string
+    /// Wall-clock time the gate decided.
+    OccurredAt: DateTimeOffset
+}
+
 // ─── Phase 483 — multi-round federation-run audit payloads ─────────────
 //
 // Emitted by `ToolUp.InterPlatform`'s `IRoundOrchestrator` as an
@@ -3221,6 +3279,11 @@ type AuditEvent =
     /// that the call was *accepted and scheduled*. Reserved
     /// `SourceModule = "_platform.peer"`.
     | PeerJobCompleted of PeerJobCompletedPayload
+    /// Phase 311 — the receiver's composed clean-room gate decided over one
+    /// contract answer (released, possibly with cells suppressed, or
+    /// withheld whole). Emitted by `CleanRoomGate` once per gated dispatch.
+    /// Reserved `SourceModule = "_platform.peer"`.
+    | PeerCleanRoomDecision of PeerCleanRoomDecisionPayload
     /// Phase 483 — one round of a multi-round federated run reached its
     /// barrier and its responses were folded. Emitted by
     /// `IRoundOrchestrator` once per completed round. Reserved
@@ -3502,6 +3565,7 @@ module AuditEvent =
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | PeerCallCompleted _ -> "PeerCallCompleted"
         | PeerJobCompleted _ -> "PeerJobCompleted"
+        | PeerCleanRoomDecision _ -> "PeerCleanRoomDecision"
         | FederationRoundCompleted _ -> "FederationRoundCompleted"
         | FederationParticipantDropped _ -> "FederationParticipantDropped"
         | FederationRunAborted _ -> "FederationRunAborted"

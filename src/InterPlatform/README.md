@@ -197,6 +197,35 @@ The receiver therefore derives its trusted `PeerCallContext` rather than copying
 
 Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route entries, 128-character identifiers), so an existing federation is unaffected; tune them with `PeerServerApp.withCascadePolicy`. What this does **not** claim to stop is two colluding peers bouncing a call between themselves, each hop presenting a fresh in-ceiling budget — no receiver-side rule can see that from a single message. What it closes is the unilateral escape: one peer, one call, claiming a budget or a history the receiver never agreed to.
 
+## Clean-room gate (Phase 18b + 311)
+
+A **clean-room contract** answers an approved query against sensitive data with privacy-preserving outputs only — cohort counts at or above a k-anonymity floor, small cells suppressed, output shape constrained — never row-level data. `ICleanRoomBroker` ships that mechanism; `PeerServerApp.withCleanRoomTemplate` is what makes it *run*:
+
+```fsharp
+let reachTemplate: CleanRoomTemplate = {
+    TemplateId = "reach"
+    AllowedMethods = Set.ofList [ "EstimateReach"; "Histogram" ]
+    Floor = {
+        MinCohortSize = 50
+        SuppressionThreshold = 50
+        PermittedShapes = Set.ofList [ Count; Histogram ]
+    }
+}
+
+PeerServerApp.create ()
+|> PeerServerApp.withConfig config
+|> PeerServerApp.withLocalPeer thisPeerId
+|> PeerServerApp.withContract reachHost                            // contract id "example.reach"
+|> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
+|> PeerServerApp.run
+```
+
+**The floor is applied by the substrate, not by the handler.** The composed template wraps the contract's dispatch closure — the only route the receiver has to the wire — so every method's answer passes the gate whether or not the handler ever calls the broker. Gated methods answer with a `CohortResult`; an answer in any other shape is **withheld**, because a floor that cannot be evaluated must not be assumed cleared. Three invariants are the wrapper's own, so they hold even when a deployment substitutes its own `ICleanRoomBroker`: a method off `AllowedMethods` is refused before the handler runs, an uncheckable answer is withheld, and a release is re-checked against the composed floor.
+
+A withhold reaches the caller as `PeerCleanRoomWithheld templateId` — the template id and nothing more. The broker's reasons name cohort sizes, and a caller that can vary its query and read them back has a counting oracle over exactly the data the floor protects; the full reason is recorded receiver-side as a `PeerCleanRoomDecision` audit row (suppressed-cell labels included), and audit transparency below is the deliberate, caller-scoped route to any of it.
+
+Composing a template for a contract id this deployment does not host **refuses to start**: a privacy gate that looks composed and never runs is worse than no gate at all. `PeerServerApp.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight. A composition that gates nothing wraps nothing and costs nothing.
+
 ## Audit transparency (Phase 18a)
 
 The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").

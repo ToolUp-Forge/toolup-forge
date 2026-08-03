@@ -1161,6 +1161,15 @@
              privacy-gate broker. Pure orchestration; no TestServer. -->
         <Compile Include="InProcess\PeerFederationTests.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />
+        <!-- Phase 311 — the structurally-enforced clean-room gate: a
+             reflection sweep proving `CleanRoomGate.wrap` is the only
+             route to the gated-registration witness, withhold cases run
+             against handlers that never call the broker (each paired
+             with an ungated negative control), the release
+             post-condition overriding a deliberately leaky substituted
+             broker, and the compose-time refusal of a template that
+             binds to no hosted contract. -->
+        <Compile Include="InProcess\CleanRoomGateTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

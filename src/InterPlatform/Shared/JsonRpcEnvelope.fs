@@ -92,6 +92,16 @@ module JsonRpc =
     /// "too big" from "malformed". The HTTP status is 413 alongside it.
     let requestTooLarge = -32007
 
+    /// Phase 311 — the receiver's composed clean-room gate withheld the
+    /// answer. A distinct code rather than a reuse of `handlerError`:
+    /// the handler did not fail, and a caller (or an operator dashboard)
+    /// has to be able to tell "your counterpart's privacy floor refused
+    /// this answer" from "your counterpart's code threw" — the two have
+    /// different remedies and only one of them is the caller's problem.
+    /// The HTTP status stays 200 alongside it, like every other
+    /// structured dispatch outcome.
+    let cleanRoomWithheld = -32008
+
     /// The universal F# converter set, constructed once. Mirrors the
     /// SDK convention for SSE / non-Remoting JSON (`CLAUDE.md`).
     let options: JsonSerializerOptions = FableConverters.create ()
@@ -117,6 +127,7 @@ module JsonRpc =
         | PeerHandler _ -> handlerError
         | PeerDeserialization _ -> parseError
         | PeerRequestTooLarge _ -> requestTooLarge
+        | PeerCleanRoomWithheld _ -> cleanRoomWithheld
 
     /// One-line human-readable message for a `PeerError` (the JSON-RPC
     /// `message` field). The structured error rides in `Data`.
@@ -135,6 +146,11 @@ module JsonRpc =
         | PeerDeserialization message -> $"Peer (de)serialization error: {message}"
         | PeerRequestTooLarge limitBytes ->
             $"Peer request too large: the receiver accepts at most {limitBytes} bytes of request body"
+        // Deliberately says only THAT the gate withheld, never why — the
+        // quantitative reason is a counting oracle over the protected
+        // cohort (see `PeerCleanRoomWithheld`).
+        | PeerCleanRoomWithheld templateId ->
+            $"Peer clean-room gate '{templateId}' withheld this answer: it did not clear the receiver's privacy floor"
 
     /// The `PeerError` DU case name, with no payload detail — the safe
     /// outcome label for audit (`PeerCallCompletedPayload.Outcome`) and
@@ -151,6 +167,7 @@ module JsonRpc =
         | PeerHandler _ -> "PeerHandler"
         | PeerDeserialization _ -> "PeerDeserialization"
         | PeerRequestTooLarge _ -> "PeerRequestTooLarge"
+        | PeerCleanRoomWithheld _ -> "PeerCleanRoomWithheld"
 
     /// Build a JSON-RPC success response carrying a serialised result.
     let success (id: string) (result: 'T) : JsonRpcResponse = {

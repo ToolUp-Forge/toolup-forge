@@ -214,6 +214,26 @@ let tests =
                 // policy — `LocalPeerId` — is already projected, from
                 // `LocalPeer`, which is where it comes from.
                 "CascadePolicy"
+                // Phase 311 — NOT projected, on the same argument, with
+                // one extra wrinkle worth naming because it cuts the
+                // other way. A composed clean-room floor is very
+                // observable: a counterparty's answers come back
+                // suppressed, or `PeerCleanRoomWithheld`, and unlike a
+                // body ceiling the floor is arguably a term of the deal
+                // rather than capacity policy — a clean-room's whole
+                // point is that the floor is DECLARED.
+                //
+                // It stays out for now anyway, because putting it in
+                // means putting `MinCohortSize` / `SuppressionThreshold`
+                // / `PermittedShapes` into a hash-stamped descriptor
+                // counterparties pin, and an operator tightening a floor
+                // (which they should be free to do at any restart, and
+                // which can only ever make the answer safer) would
+                // invalidate every pinned copy. Advertising the floor
+                // properly means a `formatVersion` bump and a decision
+                // about whether a tightening is a breaking change — that
+                // is the surface's own phase to make, not this one's.
+                "CleanRoomTemplates"
             ]
 
             let actual =

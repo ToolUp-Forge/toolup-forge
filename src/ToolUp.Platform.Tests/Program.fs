@@ -932,6 +932,14 @@ let allTests =
         // Phase 18b — clean-room privacy-gate broker: surface enforcement,
         // gate composition (tighten-only), per-cell suppression, k-floor.
         CleanRoomBrokerTests.tests
+        // Phase 311 — the structural half of the same gate: the dispatch
+        // wrapper that runs the broker on every answer of a composed
+        // contract, so a handler that never calls it cannot leak.
+        CleanRoomGateTests.structuralTests
+        CleanRoomGateTests.enforcementTests
+        CleanRoomGateTests.substitutionTests
+        CleanRoomGateTests.compositionTests
+        CleanRoomGateTests.wireTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

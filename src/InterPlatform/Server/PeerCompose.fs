@@ -115,6 +115,14 @@ type PeerServerApp = {
     /// does not take from the caller. Set the ceilings with
     /// `withCascadePolicy`.
     CascadePolicy: PeerCascadePolicy
+    /// Phase 311 — the clean-room templates this deployment enforces,
+    /// keyed by the hosted contract id they gate. A contract named here
+    /// has its registration wrapped by `CleanRoomGate.wrap` before it is
+    /// registered, so the privacy floor is applied by the substrate on
+    /// every answer whether or not the handler calls the broker itself.
+    /// Empty unless a composition calls `withCleanRoomTemplate`, and an
+    /// empty list wraps nothing (GP 13).
+    CleanRoomTemplates: (string * CleanRoomTemplate) list
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -155,6 +163,7 @@ module PeerServerApp =
         LegacyProfileFallback = false
         WireLimits = PeerWireLimits.defaults
         CascadePolicy = PeerCascadePolicy.defaults
+        CleanRoomTemplates = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -412,6 +421,57 @@ module PeerServerApp =
             CascadePolicy = policy
     }
 
+    /// Phase 311 — enforce a clean-room privacy floor on every answer the
+    /// named contract gives, by wrapping its registration rather than by
+    /// asking its handlers to behave.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ] >> id)
+    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
+    ///
+    /// **This is the documented default for a clean-room contract, and
+    /// the manual `ICleanRoomBroker.Enforce` call is not.** Phase 18b's
+    /// broker was a mechanism a handler had to remember to invoke, and a
+    /// handler that forgot returned row-level data with a passing build.
+    /// A contract composed here has the floor applied by the substrate on
+    /// the way out: the handler's answer travels down `CleanRoomGate`'s
+    /// dispatch wrapper, which is the only route `IPlatformPeer` has to
+    /// the wire, so there is nothing for a handler to forget. The raw
+    /// `ICleanRoomBroker` API stays for bespoke callers — a
+    /// caller-requested gate, a non-peer surface — and is unchanged.
+    ///
+    /// Every method the contract exposes is gated; the template's
+    /// `AllowedMethods` decides which are answerable at all, so adding a
+    /// method to a gated contract cannot quietly add an ungated one. An
+    /// answer that is not a `CohortResult` is withheld rather than
+    /// released unchecked, and a withhold reaches the caller as
+    /// `PeerCleanRoomWithheld` carrying the template id and no
+    /// quantitative detail (the full reason is recorded receiver-side as
+    /// a `PeerCleanRoomDecision` audit row — see `PeerCleanRoomWithheld`
+    /// for why the wire stays quiet).
+    ///
+    /// The gate runs over the resolved `ICleanRoomBroker`, so a
+    /// deployment that registered its own mechanism keeps it. The
+    /// composed floor still binds either way: the wrapper re-checks a
+    /// released answer against `template.Floor` and overrides a broker
+    /// that released below it.
+    ///
+    /// Naming a contract id this deployment does not host is a
+    /// composition defect and `run` REFUSES TO START on it — an inert
+    /// privacy gate that looks composed is the exact failure this phase
+    /// exists to remove, so it is not something to discover from a
+    /// missing audit row later. Calling this twice for one contract id
+    /// applies the LAST template (composition is a list, and a
+    /// last-wins overwrite matches `withContract`'s own re-registration
+    /// rule).
+    ///
+    /// A composition that never calls this wraps nothing and is
+    /// byte-for-byte a pre-311 composition (GP 11 / GP 13).
+    let withCleanRoomTemplate (contractId: string) (template: CleanRoomTemplate) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            CleanRoomTemplates = app.CleanRoomTemplates @ [ contractId, template ]
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -473,6 +533,77 @@ module PeerServerApp =
                 app.Base.Logger
                 |> Option.iter (fun logger -> logger.Warn audienceBindingAdvisory)
 
+    /// Phase 311 — the effective template per contract id, last-wins.
+    /// Exposed so a deployment can assert its own gating posture without
+    /// booting a server, and so the compose path and any preflight read
+    /// the same resolution rule.
+    let cleanRoomTemplateMap (app: PeerServerApp) : Map<string, CleanRoomTemplate> =
+        app.CleanRoomTemplates
+        |> List.fold (fun acc (contractId, template) -> Map.add contractId template acc) Map.empty
+
+    /// Phase 311 — the contract ids this composition would register.
+    /// Materialises each `withContract` builder exactly the way
+    /// `PeerSurface.describe` does; `None` fusion is sufficient because a
+    /// contract's id does not depend on the job substrate.
+    let private hostedContractIds (app: PeerServerApp) : Set<string> =
+        let authored =
+            app.Contracts
+            |> List.map (fun builder -> (builder None).Registration.ContractId)
+
+        let transparency =
+            if app.AuditTransparency then
+                [ PeerAudit.contractId ]
+            else
+                []
+
+        Set.ofList (authored @ transparency)
+
+    /// Phase 311 — the contract ids named by `withCleanRoomTemplate` that
+    /// no hosted contract answers to. Empty on a healthy composition.
+    ///
+    /// An unbound template is a gate that will never run while looking
+    /// entirely composed — the shape Phase 330's unreferenced
+    /// `VerifyDelegation` took, and the reason this phase exists at all.
+    /// Detection is data, not a log line, so a deployment can assert it
+    /// in its own preflight (the same posture `auditAudienceBinding`
+    /// takes for Phase 309).
+    ///
+    /// Materialising the contract builders is not free, so it happens
+    /// only when at least one template is composed: a deployment that
+    /// gates nothing runs no probe (GP 13). A `NoPeerSubstrate`
+    /// composition reports nothing — it registers no contracts at all,
+    /// and the strip-imports path must stay byte-for-byte a bare
+    /// `ServerApp.run`.
+    let auditCleanRoomTemplates (app: PeerServerApp) : string list =
+        match app.Base.Config.PeerSubstrate, app.CleanRoomTemplates with
+        | NoPeerSubstrate, _
+        | _, [] -> []
+        | EnabledPeerSubstrate, templates ->
+            let hosted = hostedContractIds app
+
+            templates
+            |> List.map fst
+            |> List.distinct
+            |> List.filter (fun contractId -> not (Set.contains contractId hosted))
+
+    /// The refusal raised at `run` when a composed clean-room template
+    /// binds to no hosted contract.
+    let cleanRoomTemplateRefusal (unbound: string list) =
+        let named = String.concat ", " unbound
+
+        $"peer-clean-room-gate: PeerServerApp.withCleanRoomTemplate names contract(s) [{named}] that this deployment does not host, so the privacy floor declared for them would never run — a gate that looks composed and enforces nothing. Refusing to start: register the contract with PeerServerApp.withContract under the same id, or drop the template."
+
+    /// Phase 311 — apply the posture. Unlike the Phase 309 audience gate
+    /// there is no advisory mode: an unbound template cannot be an
+    /// existing deployment's deliberate posture, because the helper that
+    /// creates one did not exist before this phase. Every reachable case
+    /// is a defect in code written after the gate shipped, so failing is
+    /// both safe (GP 11 — nothing pre-311 can trip it) and correct.
+    let enforceCleanRoomTemplates (app: PeerServerApp) : unit =
+        match auditCleanRoomTemplates app with
+        | [] -> ()
+        | unbound -> failwith (cleanRoomTemplateRefusal unbound)
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -494,7 +625,14 @@ module PeerServerApp =
             // above stays byte-for-byte a bare `ServerApp.run` (GP 13).
             enforceAudienceBinding app
 
+            // Phase 311 — refuse a clean-room template that binds to no
+            // hosted contract, before anything registers. Costs one
+            // builder pass and only when a template is composed; a
+            // composition that gates nothing does not run it (GP 13).
+            enforceCleanRoomTemplates app
+
             let contracts = app.Contracts
+            let cleanRoomTemplates = cleanRoomTemplateMap app
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
@@ -641,9 +779,41 @@ module PeerServerApp =
                                 |> Option.ofObj
                                 |> Option.map (fun x -> x :?> IJobScheduler)
 
+                            // Phase 311 — the clean-room gate is installed
+                            // HERE, at the single seam every contract
+                            // registration passes through, so a gated
+                            // contract cannot be registered ungated: the
+                            // wrapper owns the dispatch closure
+                            // `IPlatformPeer` will call, and the handler
+                            // is never consulted about whether the floor
+                            // applies. An id with no composed template is
+                            // registered exactly as it was before this
+                            // phase — same value, no branch on the call
+                            // path (GP 13).
+                            let gate (registration: PeerContractRegistration) =
+                                match Map.tryFind registration.ContractId cleanRoomTemplates with
+                                | None -> registration
+                                | Some template ->
+                                    let broker = sp.GetService(typeof<ICleanRoomBroker>) :?> ICleanRoomBroker
+
+                                    // Best-effort, like every other peer
+                                    // audit path: a partial host with no
+                                    // `IAuditLog` still gates, it just
+                                    // records nothing.
+                                    let sink =
+                                        match sp.GetService(typeof<IAuditLog>) with
+                                        | null -> CleanRoomGate.noAudit
+                                        | svc ->
+                                            let auditLog = svc :?> IAuditLog
+
+                                            fun payload ->
+                                                auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
+
+                                    (CleanRoomGate.wrap broker template sink registration).Registration
+
                             for builder in contracts do
                                 let host = builder fusion
-                                peer.RegisterContract host.Registration
+                                peer.RegisterContract(gate host.Registration)
 
                                 match scheduler with
                                 | Some s ->
@@ -659,7 +829,14 @@ module PeerServerApp =
                             if auditTransparency then
                                 match sp.GetService(typeof<IAuditLog>) with
                                 | null -> ()
-                                | svc -> peer.RegisterContract(PeerAuditContractHost.registration (svc :?> IAuditLog))
+                                // Gated on the same terms as an author
+                                // contract: a template naming the
+                                // reserved audit id is unusual, but the
+                                // seam must not have an exception in it.
+                                | svc ->
+                                    peer.RegisterContract(
+                                        gate (PeerAuditContractHost.registration (svc :?> IAuditLog))
+                                    )
 
                             peer)
                     )

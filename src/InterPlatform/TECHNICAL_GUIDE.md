@@ -39,6 +39,7 @@ All F# DU / Option / record bodies are (de)serialised with the universal `FableC
 | `PeerHandler` | `-32005` | `handlerError` |
 | `PeerTransport` | `-32006` | `transportError` |
 | `PeerRequestTooLarge` | `-32007` | `requestTooLarge` |
+| `PeerCleanRoomWithheld` | `-32008` | `cleanRoomWithheld` |
 | `PeerMethodNotFound` | `-32601` | `methodNotFound` (standard) |
 | `PeerDeserialization` | `-32700` | `parseError` (standard) |
 
@@ -129,6 +130,24 @@ A long-running contract method has shape `… -> Async<PeerJobHandle<'T>>`. It c
 
 **Zero cost when unused** (GP 13): the `PeerJobFusion` singleton is registered only when `JobScheduler <> NoJobScheduler`. Absent it, a long-running method's dispatch is a closure that immediately returns `PeerHandler "Long-running contract method '…' requires the peer job-fusion substrate, which is not enabled"`, and the method contributes no job handler.
 
+### Clean-room gate
+
+A contract composed with `PeerServerApp.withCleanRoomTemplate contractId template` has its `PeerContractRegistration.Dispatch` wrapped by `CleanRoomGate.wrap`, so the composed privacy floor is applied to **every** answer of **every** method on that contract — by the substrate, not by the handler. A handler that never calls `ICleanRoomBroker.Enforce` (the shape Phase 18b's broker relied on and nothing checked) cannot release row-level data: its answer travels down the wrapper, which is the only route `IPlatformPeer` has to the wire.
+
+Three invariants are checked by the wrapper regardless of which `ICleanRoomBroker` is resolved — the seam is substitutable, the composed floor is not:
+
+1. **Surface** — a method outside `template.AllowedMethods` is refused *before the handler runs*.
+2. **Checkability** — an answer that does not deserialise as a `CohortResult` is withheld. A gated method answering in some other shape has produced something the floor cannot be evaluated against, and a privacy gate's failure mode is silence.
+3. **Release post-condition** — a `Released` decision is re-checked with `PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released)`; a broker that released below the floor is overridden.
+
+The broker's own `Enforce` runs between (1) and (3) and is where the suppression / gate-composition mechanism lives.
+
+A withhold reaches the caller as `PeerCleanRoomWithheld templateId` (code `-32008`, HTTP `200` like every other structured dispatch outcome) carrying **no quantitative detail**: the broker's reasons name cohort sizes, and a caller able to vary its query and read them back has a counting oracle over the protected data. The full reason is recorded receiver-side as a `PeerCleanRoomDecision` audit row; the Phase 18a audit-transparency contract is the deliberate, caller-scoped route to any of it.
+
+`withCleanRoomTemplate` naming a contract id the deployment does not host is a composition defect and `run` refuses to start — an inert privacy gate that looks composed is the failure this seam exists to remove. `PeerServerApp.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight.
+
+A composition that never calls `withCleanRoomTemplate` wraps nothing, probes nothing, and registers the same `PeerContractRegistration` values it did before (GP 11 / GP 13). The raw `ICleanRoomBroker` API is unchanged for bespoke callers — notably any caller that has a caller-requested gate to compose, which the peer wire format does not carry.
+
 ## Audit emission
 
 The foundation ships **one** audit event — `PeerCallCompleted` — emitted best-effort per inbound call by the contract handler after dispatch reaches a terminal outcome (`auditPeerCall`). It resolves `IAuditLog` per-request; a partial test host without one registered simply records nothing.
@@ -145,6 +164,8 @@ The foundation ships **one** audit event — `PeerCallCompleted` — emitted bes
 | `OccurredAt` | wall-clock resolution time |
 
 Reserved `SourceModule = "_platform.peer"`. PII-free: identities are peer ids plus a correlation id — never end-user payload. The event records under scope `PeerJob.Scope = "_platform"`.
+
+`PeerCleanRoomDecision` joins it on a gated contract: one row per gated dispatch, carrying `TemplateId`, `Released`, the `SuppressedCells` labels, and the gate's own `Reason`. Same family, same scope, same PII-free terms — the labels are author-chosen histogram buckets, never a cell value. It is the only place the withhold reason exists; see [Clean-room gate](#clean-room-gate) for why the wire refusal stays quiet.
 
 > The phase originally sketched five events (`PeerCallStarted` / `…Completed` / `…Failed` / `PeerHandshakeCompleted` / `…Failed`). The foundation collapses the call lifecycle to the single terminal `PeerCallCompleted` (which carries success/failure in `Succeeded` + `Outcome`, removing the need for separate started/failed events) and defers handshake audit to the follow-on transparency phase (18a). Documenting only the shipped event keeps this guide honest.
 

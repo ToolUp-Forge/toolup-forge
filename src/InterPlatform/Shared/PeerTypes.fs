@@ -156,6 +156,26 @@ type PeerError =
     /// coarser. Language-neutral callers read the JSON-RPC `code`
     /// (`JsonRpc.requestTooLarge`), which is stable regardless.
     | PeerRequestTooLarge of limitBytes: int64
+    /// Phase 311 — the receiver's composed clean-room gate withheld the
+    /// answer. Carries the template id and NOTHING else, deliberately.
+    ///
+    /// **Why no reason string.** The broker's own `Withheld` reasons are
+    /// diagnostic and quantitative — "released cohort 7 is below the
+    /// k-anonymity floor 10" — and handing that to the caller would
+    /// disclose the very sub-k cohort size the floor exists to hide, one
+    /// refusal at a time. A caller that can vary its query and read the
+    /// refusal text back has a counting oracle over the protected data,
+    /// which is a worse leak than the answer it was denied. The full
+    /// reason is recorded receiver-side (`PeerCleanRoomDecision` audit)
+    /// and is readable by the calling peer only through the Phase 18a
+    /// audit-transparency contract, which is scoped to that peer's own
+    /// calls and is the deployment's deliberate opt-in.
+    ///
+    /// A peer on a pre-311 SDK cannot deserialise this case and degrades
+    /// to `PeerTransport` carrying the same message, exactly as Phase
+    /// 315's case does; language-neutral callers read the JSON-RPC code
+    /// (`JsonRpc.cleanRoomWithheld`), which is stable regardless.
+    | PeerCleanRoomWithheld of templateId: string
 
 /// Failure modes of the capability handshake. Surfaced at handshake
 /// time rather than mid-call so a version incompatibility is a

@@ -10,9 +10,27 @@ namespace ToolUp.InterPlatform
 // counterparty can run an approved query against sensitive data and
 // receive only privacy-preserving outputs — cohort counts at or above a
 // k-anonymity floor, small cells suppressed, output shape constrained —
-// never row-level data. The enforcement is mechanical: "I asked for a
-// cohort count and got an aggregate ≥ k" is guaranteed by construction,
-// not by trust.
+// never row-level data.
+//
+// **Where the "by construction" guarantee actually lives (Phase 311).**
+// This file is the neutral MECHANISM and nothing more: `Enforce` is a
+// pure function a caller has to invoke. Until Phase 311 the header
+// claimed "I asked for a cohort count and got an aggregate ≥ k" was
+// guaranteed by construction, and that was untrue of the library on its
+// own — nothing in the dispatch path called the broker, so the guarantee
+// held only while every contract author remembered to. A handler that
+// forgot returned row-level data with no error, no warning and a passing
+// build, which is precisely the shape of enforcement this SDK does not
+// ship (GP 4: structural, not "remember to filter").
+//
+// The guarantee is real on the COMPOSED path:
+// `PeerServerApp.withCleanRoomTemplate contractId template` wraps the
+// named contract's registration so `ICleanRoomBroker.Enforce` runs on
+// every answer of every method, the handler having no say in the matter
+// — see `CleanRoomGate.fs`. Calling `Enforce` by hand from a handler
+// remains supported for bespoke callers (a caller-requested gate, a
+// non-peer surface), but it is no longer the documented default, and a
+// gated contract does not depend on it.
 //
 // Scope discipline (GP 1): the broker ships the neutral *mechanism* —
 // k-anonymity, cell suppression, output-shape constraint, and the
@@ -120,6 +138,34 @@ module PrivacyGate =
         candidate.MinCohortSize >= floor.MinCohortSize
         && candidate.SuppressionThreshold >= floor.SuppressionThreshold
         && Set.isSubset candidate.PermittedShapes floor.PermittedShapes
+
+    /// Phase 311 — the strictest gate a materialised result demonstrably
+    /// satisfies: the cohort it actually releases, the smallest cell it
+    /// actually carries, and the single shape it actually has.
+    ///
+    /// It exists so a release can be checked against a floor with
+    /// `isStricterOrEqual floor (observed released)` — one comparison
+    /// answering "does this answer clear the composed floor on every
+    /// axis?" rather than three hand-written ones that can drift from
+    /// `PrivacyGate`'s own definition of strictness. That check is the
+    /// composed gate's release post-condition (`CleanRoomGate`), and it
+    /// is what makes the floor bind on a SUBSTITUTED `ICleanRoomBroker`
+    /// too: the seam exists so a deployment can ship a different privacy
+    /// mechanism, and a different mechanism must not be able to release
+    /// below the floor the composition declared.
+    ///
+    /// An empty result observes `SuppressionThreshold = Int32.MaxValue`
+    /// (no cell violates a threshold when there is no cell) and
+    /// `MinCohortSize = 0`, so it clears a zero floor and nothing else —
+    /// which is the honest reading of "everything was suppressed".
+    let observed (result: CohortResult) : PrivacyGate = {
+        MinCohortSize = result.Cells |> List.sumBy _.Count
+        SuppressionThreshold =
+            match result.Cells with
+            | [] -> System.Int32.MaxValue
+            | cells -> cells |> List.map _.Count |> List.min
+        PermittedShapes = Set.singleton result.Shape
+    }
 
 /// The enforcement seam wrapping a clean-room query. The default
 /// implementation is `DefaultCleanRoomBroker`; a deployment substitutes
