@@ -946,6 +946,19 @@ let allTests =
         // restart-resume from persisted state, and cancellation reaching
         // the participant calls already on the wire.
         RoundOrchestratorTests.tests
+        // Phase 18f — commutative cipher (OPRF) + two-party private set
+        // intersection: the algebraic law set bound to both shipped
+        // backends and to two further prime-order curves, published P-256
+        // parameters, recorded wire vectors, malformed / cross-backend
+        // rejection, and the end-to-end intersection plus its
+        // transcript-opacity assertion.
+        CommutativeCipherTests.tests
+        // The negative controls for the pack above: two deliberately
+        // broken ciphers, each asserted to FAIL the laws that exist to
+        // catch it and PASS the ones it genuinely satisfies — so a law
+        // that stopped having teeth fails here rather than passing
+        // everywhere.
+        CommutativeCipherTests.selfTests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /

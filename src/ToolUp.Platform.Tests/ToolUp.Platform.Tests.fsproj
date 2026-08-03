@@ -1174,6 +1174,13 @@
              variant, restart-resume from persisted state, and
              cancellation reaching the in-flight participant calls. -->
         <Compile Include="InProcess\RoundOrchestratorTests.fs" />
+        <!-- Phase 18f — commutative-cipher (OPRF) contract pack + two-party
+             PSI: the algebraic laws as reusable predicates bound to both
+             shipped backends and to two deliberately-broken control
+             ciphers, published P-256 parameters + recorded wire vectors,
+             malformed / cross-backend rejection, and the end-to-end
+             intersection with a transcript-opacity assertion. -->
+        <Compile Include="InProcess\CommutativeCipherTests.fs" />
         <!-- Giraffe stock-helper DI defaults — RequestErrors.* / negotiate /
              json resolve INegotiationConfig + Json.ISerializer from DI;
              ComposeBootstrap.registerGiraffeDefaults registers them

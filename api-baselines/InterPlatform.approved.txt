@@ -22,6 +22,23 @@ ToolUp.InterPlatform.CohortResult (class)
 ToolUp.InterPlatform.CohortResult..ctor(ToolUp.InterPlatform.OutputShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PrivacyCell])
 ToolUp.InterPlatform.CohortResult.Cells : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PrivacyCell] { get }
 ToolUp.InterPlatform.CohortResult.Shape : ToolUp.InterPlatform.OutputShape { get }
+ToolUp.InterPlatform.CommutativeCipher (class)
+ToolUp.InterPlatform.CommutativeCipher.bytesEqual(System.Byte[], System.Byte[]) : System.Boolean
+ToolUp.InterPlatform.CommutativeCipherError (class)
+ToolUp.InterPlatform.CommutativeCipherError.InvalidKey : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.CommutativeCipherError.InvalidPoint : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.CommutativeCipherError.IsInvalidKey : System.Boolean { get }
+ToolUp.InterPlatform.CommutativeCipherError.IsInvalidPoint : System.Boolean { get }
+ToolUp.InterPlatform.CommutativeCipherError.IsLengthMismatch : System.Boolean { get }
+ToolUp.InterPlatform.CommutativeCipherError.IsNotOnCurve : System.Boolean { get }
+ToolUp.InterPlatform.CommutativeCipherError.LengthMismatch : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.CommutativeCipherError.NotOnCurve : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.CommutativeCipherError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.CommutativeCipherError+Tags (class)
+ToolUp.InterPlatform.CommutativeCipherError+Tags.InvalidKey : System.Int32 (literal)
+ToolUp.InterPlatform.CommutativeCipherError+Tags.InvalidPoint : System.Int32 (literal)
+ToolUp.InterPlatform.CommutativeCipherError+Tags.LengthMismatch : System.Int32 (literal)
+ToolUp.InterPlatform.CommutativeCipherError+Tags.NotOnCurve : System.Int32 (literal)
 ToolUp.InterPlatform.ConsumedContract (class)
 ToolUp.InterPlatform.ConsumedContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], System.String)
 ToolUp.InterPlatform.ConsumedContract.ContractId : System.String { get }
@@ -54,6 +71,10 @@ ToolUp.InterPlatform.DefaultPeerProfileProvider (class)
 ToolUp.InterPlatform.DefaultPeerProfileProvider..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile])
 ToolUp.InterPlatform.DefaultPlatformPeer (class)
 ToolUp.InterPlatform.DefaultPlatformPeer..ctor()
+ToolUp.InterPlatform.DefaultPrivateSetIntersection (class)
+ToolUp.InterPlatform.DefaultPrivateSetIntersection..ctor(ToolUp.InterPlatform.ICommutativeCipher)
+ToolUp.InterPlatform.DefaultPrivateSetIntersection..ctor(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.InterPlatform.DefaultPrivateSetIntersection.SecureShuffle : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.InterPlatform.DefaultRoundOrchestrator (class)
 ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout)
 ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout, ToolUp.InterPlatform.IRoundStateStore)
@@ -83,6 +104,14 @@ ToolUp.InterPlatform.DropoutPolicy+Tags.ContinueWithout : System.Int32 (literal)
 ToolUp.InterPlatform.DropoutPolicy+Tags.WaitUntil : System.Int32 (literal)
 ToolUp.InterPlatform.DropoutPolicy+WaitUntil (class)
 ToolUp.InterPlatform.DropoutPolicy+WaitUntil.grace : System.TimeSpan { get }
+ToolUp.InterPlatform.EcCommutativeCipher (class)
+ToolUp.InterPlatform.EcCommutativeCipher..ctor()
+ToolUp.InterPlatform.EcCommutativeCipher..ctor(System.String)
+ToolUp.InterPlatform.EcCommutativeCipher.CurveName : System.String { get }
+ToolUp.InterPlatform.EcCommutativeCipher.GroupOrder : System.Byte[] { get }
+ToolUp.InterPlatform.EcCommutativeCipherModule (class)
+ToolUp.InterPlatform.EcCommutativeCipherModule.create() : ToolUp.InterPlatform.ICommutativeCipher
+ToolUp.InterPlatform.EcCommutativeCipherModule.onCurve(System.String) : ToolUp.InterPlatform.ICommutativeCipher
 ToolUp.InterPlatform.FanoutPolicy (class)
 ToolUp.InterPlatform.FanoutPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.InterPlatform.FanoutPolicy.CancelOnFirstSuccess : System.Boolean { get }
@@ -111,6 +140,11 @@ ToolUp.InterPlatform.HttpPeerClient (class)
 ToolUp.InterPlatform.HttpPeerClient..ctor(System.Net.Http.HttpClient, ToolUp.InterPlatform.IPeerAuthProvider, ToolUp.InterPlatform.PeerIdentity)
 ToolUp.InterPlatform.ICleanRoomBroker (interface)
 ToolUp.InterPlatform.ICleanRoomBroker.Enforce(ToolUp.InterPlatform.CleanRoomTemplate, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyGate], ToolUp.InterPlatform.CohortResult) : ToolUp.InterPlatform.GateDecision
+ToolUp.InterPlatform.ICommutativeCipher (interface)
+ToolUp.InterPlatform.ICommutativeCipher.Apply(System.Byte[], System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.InterPlatform.CommutativeCipherError]
+ToolUp.InterPlatform.ICommutativeCipher.GenerateKey() : System.Byte[]
+ToolUp.InterPlatform.ICommutativeCipher.HashToPoint(System.Byte[]) : System.Byte[]
+ToolUp.InterPlatform.ICommutativeCipher.Remove(System.Byte[], System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.InterPlatform.CommutativeCipherError]
 ToolUp.InterPlatform.IPeerAuditApi (class)
 ToolUp.InterPlatform.IPeerAuditApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerAuditEntry]]])
 ToolUp.InterPlatform.IPeerAuditApi.QueryCalls : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerAuditEntry]]] { get }
@@ -146,6 +180,9 @@ ToolUp.InterPlatform.IPlatformPeer (interface)
 ToolUp.InterPlatform.IPlatformPeer.Capabilities() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability]]
 ToolUp.InterPlatform.IPlatformPeer.Handle(System.String, ToolUp.InterPlatform.PeerCallContext, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]]
 ToolUp.InterPlatform.IPlatformPeer.RegisterContract(ToolUp.InterPlatform.PeerContractRegistration) : System.Void
+ToolUp.InterPlatform.IPrivateSetIntersection (interface)
+ToolUp.InterPlatform.IPrivateSetIntersection.Intersect(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PeerError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiOutcome, ToolUp.InterPlatform.PsiError]]
+ToolUp.InterPlatform.IPrivateSetIntersection.Respond(System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]], ToolUp.InterPlatform.PsiRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PsiError]
 ToolUp.InterPlatform.IRoundObserver (interface)
 ToolUp.InterPlatform.IRoundObserver.Observe(System.String, ToolUp.InterPlatform.RoundEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundOrchestrator (interface)
@@ -154,6 +191,10 @@ ToolUp.InterPlatform.IRoundStateStore (interface)
 ToolUp.InterPlatform.IRoundStateStore.Clear(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.Save(System.String, ToolUp.InterPlatform.RoundState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.TryLoad(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.RoundState]]
+ToolUp.InterPlatform.InMemoryCommutativeCipher (class)
+ToolUp.InterPlatform.InMemoryCommutativeCipher..ctor()
+ToolUp.InterPlatform.InMemoryCommutativeCipherModule (class)
+ToolUp.InterPlatform.InMemoryCommutativeCipherModule.create() : ToolUp.InterPlatform.ICommutativeCipher
 ToolUp.InterPlatform.InMemoryPeerHandshake (class)
 ToolUp.InterPlatform.InMemoryPeerHandshake..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], ToolUp.InterPlatform.PeerHandshakeError]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], ToolUp.InterPlatform.PeerHandshakeError]]])
 ToolUp.InterPlatform.InMemoryRoundStateStore (class)
@@ -346,6 +387,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.addModules(Microsoft.FSharp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.create() : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCommutativeCipher(ToolUp.InterPlatform.ICommutativeCipher, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConsumedContract(ToolUp.InterPlatform.ConsumedContract, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
@@ -635,6 +677,41 @@ ToolUp.InterPlatform.PrivacyGate.SuppressionThreshold : System.Int32 { get }
 ToolUp.InterPlatform.PrivacyGateModule (class)
 ToolUp.InterPlatform.PrivacyGateModule.compose(ToolUp.InterPlatform.PrivacyGate, ToolUp.InterPlatform.PrivacyGate) : ToolUp.InterPlatform.PrivacyGate
 ToolUp.InterPlatform.PrivacyGateModule.isStricterOrEqual(ToolUp.InterPlatform.PrivacyGate, ToolUp.InterPlatform.PrivacyGate) : System.Boolean
+ToolUp.InterPlatform.PrivateSetIntersection (class)
+ToolUp.InterPlatform.PrivateSetIntersection.create(ToolUp.InterPlatform.ICommutativeCipher) : ToolUp.InterPlatform.IPrivateSetIntersection
+ToolUp.InterPlatform.PrivateSetIntersection.createWith(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.InterPlatform.IPrivateSetIntersection
+ToolUp.InterPlatform.PrivateSetIntersection.overContract(ToolUp.InterPlatform.PsiApi, ToolUp.InterPlatform.PsiRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.PsiApi (class)
+ToolUp.InterPlatform.PsiApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiResponse]])
+ToolUp.InterPlatform.PsiApi.Exchange : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PsiResponse]] { get }
+ToolUp.InterPlatform.PsiError (class)
+ToolUp.InterPlatform.PsiError.IsPsiCipher : System.Boolean { get }
+ToolUp.InterPlatform.PsiError.IsPsiProtocol : System.Boolean { get }
+ToolUp.InterPlatform.PsiError.IsPsiTransport : System.Boolean { get }
+ToolUp.InterPlatform.PsiError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PsiError+PsiCipher (class)
+ToolUp.InterPlatform.PsiError+PsiCipher.error : ToolUp.InterPlatform.CommutativeCipherError { get }
+ToolUp.InterPlatform.PsiError+PsiProtocol (class)
+ToolUp.InterPlatform.PsiError+PsiProtocol.message : System.String { get }
+ToolUp.InterPlatform.PsiError+PsiTransport (class)
+ToolUp.InterPlatform.PsiError+PsiTransport.error : ToolUp.InterPlatform.PeerError { get }
+ToolUp.InterPlatform.PsiError+Tags (class)
+ToolUp.InterPlatform.PsiError+Tags.PsiCipher : System.Int32 (literal)
+ToolUp.InterPlatform.PsiError+Tags.PsiProtocol : System.Int32 (literal)
+ToolUp.InterPlatform.PsiError+Tags.PsiTransport : System.Int32 (literal)
+ToolUp.InterPlatform.PsiOutcome (class)
+ToolUp.InterPlatform.PsiOutcome..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]])
+ToolUp.InterPlatform.PsiOutcome.MatchedElements : Microsoft.FSharp.Collections.FSharpList`1[System.Byte[]] { get }
+ToolUp.InterPlatform.PsiOutcome.MatchedTokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiRequest (class)
+ToolUp.InterPlatform.PsiRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.PsiRequest.Blinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiRequest.SessionId : System.String { get }
+ToolUp.InterPlatform.PsiResponse (class)
+ToolUp.InterPlatform.PsiResponse..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.PsiResponse.Doubled : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiResponse.PartnerBlinded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PsiResponse.SessionId : System.String { get }
 ToolUp.InterPlatform.PythonClientGen (class)
 ToolUp.InterPlatform.PythonClientGen.emit(ToolUp.InterPlatform.PeerContractSchema) : System.String
 ToolUp.InterPlatform.PythonClientGen.pyType(ToolUp.InterPlatform.PeerTypeRef) : System.String

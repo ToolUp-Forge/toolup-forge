@@ -53,6 +53,18 @@
          before PeerCompose.fs; it is not composed by PeerServerApp.run,
          so nothing downstream depends on it (GP 13). -->
     <Compile Include="Server\RoundOrchestrator.fs" />
+    <!-- Phase 18f — commutative cipher (OPRF) + two-party private set
+         intersection. `CommutativeCipher.fs` carries the seam, the shared
+         codec/scalar helpers, and the reference backend; the curve backend
+         and the protocol both build on it, so it compiles first.
+         `PrivateSetIntersection.fs` depends on the seam and on
+         `Shared/PeerTypes.fs` (`PeerError`) only — not on either backend,
+         which is what keeps the protocol backend-agnostic. Nothing here is
+         composed by `PeerServerApp.run`; the opt-in hook is
+         `PeerServerApp.withCommutativeCipher` (GP 13). -->
+    <Compile Include="Server\CommutativeCipher.fs" />
+    <Compile Include="Server\EcCommutativeCipher.fs" />
+    <Compile Include="Server\PrivateSetIntersection.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
          derived from the composed PeerServerApp (compiles after it). -->
@@ -61,6 +73,20 @@
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 18f — group arithmetic for the commutative cipher: scalar
+         multiplication of an arbitrary curve point, and modular inverse on
+         a big integer. The BCL exposes neither (ECDiffieHellman offers no
+         raw point multiplication; System.Numerics.BigInteger has no
+         ModInverse), and hand-rolling curve arithmetic is not a trade this
+         SDK makes. Declared directly here per the companion-authoring rule
+         that a companion owns its vendor PackageReferences — it already
+         arrived transitively from ToolUp.Platform.Server (Ed25519 artefact
+         signing), which is why this adds no new dependency to the graph.
+         MIT-licensed (GP 2). Nothing vendor-typed reaches the public
+         surface: keys and group elements are byte[]. -->
+    <PackageReference Include="BouncyCastle.Cryptography" />
   </ItemGroup>
   <!-- ToolUp.Remoting.Json.SystemTextJson (FableConverters) + Giraffe +
        ASP.NET Core flow transitively from ToolUp.Platform.Server.

@@ -223,6 +223,47 @@ module PeerServerApp =
             ConsumedContracts = app.ConsumedContracts @ [ consumed ]
     }
 
+    /// Phase 18f — register a commutative-cipher backend and the two-party
+    /// private-set-intersection protocol over it, so contract handlers and
+    /// modules can resolve `ICommutativeCipher` / `IPrivateSetIntersection`
+    /// from DI.
+    ///
+    /// **Absent by default, and this is why it is a `with*` call rather
+    /// than a default singleton beside `ICleanRoomBroker`.** There is no
+    /// defensible SDK default here: `InMemoryCommutativeCipher` is a
+    /// reference backend nobody should reach by accident, and silently
+    /// picking the curve backend for every peer-enabled deployment would
+    /// hand a cryptographic choice to whoever forgot to make one. A
+    /// deployment that never calls this registers nothing and pays nothing
+    /// — no singleton, no allocation, byte-for-byte unchanged (GP 11 /
+    /// GP 13).
+    ///
+    /// Registered through the base `ServerApp`'s `ServiceConfig` seam, not
+    /// the peer branch, so PSI is available to a deployment that uses the
+    /// primitive without hosting peer contracts. `TryAdd`, so a deployment
+    /// that registered its own implementation earlier keeps it.
+    let withCommutativeCipher (cipher: ICommutativeCipher) (app: PeerServerApp) : PeerServerApp =
+        let register (services: IServiceCollection) =
+            services.TryAddSingleton<ICommutativeCipher>(cipher)
+            services.TryAddSingleton<IPrivateSetIntersection>(PrivateSetIntersection.create cipher)
+            services
+
+        let extensions = app.Base.Extensions
+
+        {
+            app with
+                Base = {
+                    app.Base with
+                        Extensions = {
+                            extensions with
+                                ServiceConfig =
+                                    match extensions.ServiceConfig with
+                                    | None -> Some register
+                                    | Some existing -> Some(existing >> register)
+                        }
+                }
+        }
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
