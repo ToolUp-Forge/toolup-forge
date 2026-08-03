@@ -142,6 +142,20 @@ type PeerError =
     | PeerHandler of message: string
     /// Request or response body could not be (de)serialised.
     | PeerDeserialization of message: string
+    /// Phase 315 — the inbound request body exceeded the receiver's
+    /// configured ceiling (`PeerWireLimits.MaxRequestBytes`) and was
+    /// refused before it was fully buffered. Carries the limit, not the
+    /// observed size: the receiver stops reading the moment the ceiling
+    /// is passed, so it does not *know* the observed size, and reporting
+    /// the ceiling is the only number a caller can act on anyway.
+    ///
+    /// A peer on a pre-315 SDK cannot deserialise this case, so its
+    /// `HttpPeerClient` degrades to `PeerTransport` carrying the same
+    /// human-readable message (the `Data` fallback in `parseResponse`) —
+    /// the refusal is still structured and still legible, one DU case
+    /// coarser. Language-neutral callers read the JSON-RPC `code`
+    /// (`JsonRpc.requestTooLarge`), which is stable regardless.
+    | PeerRequestTooLarge of limitBytes: int64
 
 /// Failure modes of the capability handshake. Surfaced at handshake
 /// time rather than mid-call so a version incompatibility is a

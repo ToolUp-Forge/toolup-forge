@@ -985,6 +985,20 @@ let allTests =
         PeerRobustnessTests.profileNoDowngradeTests
         PeerRobustnessTests.asymmetricProviderTests
         PeerRobustnessTests.defaultCompositionUnchangedTests
+        // Phase 315 — peer host wire hardening. The contract route now
+        // reads the inbound body under a configurable ceiling instead of
+        // buffering whatever arrives: the over-cap cases drive the real
+        // routes against a request stream that COUNTS the bytes pulled
+        // off it, so "refused before it is fully buffered" is measured
+        // rather than argued, and the negative control shows the same
+        // payload read end to end under a generous ceiling. The ordering
+        // is pinned too — an unauthenticated over-cap request still
+        // answers 401, so the size check did not reopen the status-code
+        // oracle Phase 343 closed. And the job-poll response echoes the
+        // polled jobId as its JSON-RPC `Id` where every answer used to
+        // carry "", with the in-tree client asserted unchanged.
+        PeerWireHardeningTests.requestBodyCapTests
+        PeerWireHardeningTests.pollCorrelationTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`
         // signing-key lookup and the blob-backed peer directory, with

@@ -186,6 +186,25 @@ let tests =
                 // the face a counterparty sees, and a counterparty cannot
                 // observe how strictly we read its answers.
                 "LegacyProfileFallback"
+                // Phase 315 — NOT projected, and this one needs a
+                // different argument from the two above, because unlike
+                // them it IS observable: a caller that exceeds the
+                // ceiling is refused `PeerRequestTooLarge`.
+                //
+                // It is still not part of the *face*. A `PeerSurface` is
+                // hash-stamped and pinned by counterparties, so anything
+                // in it is a thing they may rely on staying put — and a
+                // body ceiling is receiver capacity policy that an
+                // operator may retune at any restart without touching a
+                // contract or its version. Projecting it would make
+                // every such tweak invalidate every pinned copy, for a
+                // value the caller learns from the structured refusal at
+                // the exact moment it matters. If the surface ever wants
+                // to advertise capacity, the natural home is
+                // `PeerBudgetShape` alongside `LongRunningEnabled` — and
+                // that is a `formatVersion` bump, which belongs to the
+                // surface's own phase, not to this one.
+                "WireLimits"
             ]
 
             let actual =

@@ -4,7 +4,9 @@
 namespace ToolUp.InterPlatform
 
 open System
+open System.IO
 open System.Reflection
+open System.Text
 open Microsoft.AspNetCore.Http
 open Microsoft.FSharp.Reflection
 open Giraffe
@@ -41,6 +43,61 @@ open PeerReflection
 // failure — otherwise any peer with a valid signing key could name any
 // subject as the originator, which is what the delegation-chain
 // signature exists to prevent.
+//
+// **Wire hardening (Phase 315).** Two wire-level fixes, both narrow:
+// the contract route reads the inbound body under a configurable
+// ceiling instead of buffering whatever arrives, and the job-poll route
+// echoes the polled `jobId` as its JSON-RPC `Id` instead of `""`, so a
+// poll response correlates to its request the way a dispatch response
+// already does.
+
+/// Phase 315 — the receiver-side wire limits the `/peer/v1/*` handlers
+/// enforce. Resolved per-request from DI (`PeerCompose` registers the
+/// composed value as a singleton); a host with none registered — a
+/// partial test host, or any composition predating this phase — falls
+/// back to `PeerWireLimits.defaults`, so this is a tunable and never a
+/// required registration (GP 11 / GP 13).
+type PeerWireLimits = {
+    /// The largest inbound request body, in bytes, the contract route
+    /// will accept. Enforced in two places because one is not enough: a
+    /// declared `Content-Length` over the ceiling is refused without
+    /// reading a byte, and a request that declares nothing (chunked
+    /// transfer-encoding, which a hostile peer chooses freely) is
+    /// refused the moment the bounded read passes the ceiling. Either
+    /// way the receiver never holds more than `MaxRequestBytes` of a
+    /// payload it has not agreed to.
+    MaxRequestBytes: int64
+}
+
+[<RequireQualifiedAccess>]
+module PeerWireLimits =
+
+    /// 8 MiB.
+    ///
+    /// Deliberately generous rather than tight: a peer contract's
+    /// arguments are a JSON array, and an 8 MiB argument array is far
+    /// past anything the substrate is shaped for, so no existing
+    /// deployment should meet this ceiling (GP 11). It is still a
+    /// genuine narrowing — Kestrel's own `MaxRequestBodySize` default is
+    /// 30 MB, and the point of this phase is that "auth-gated" bounds
+    /// *who* can push a large body at the receiver, not *how large*.
+    ///
+    /// A deployment that genuinely exchanges larger payloads raises it
+    /// with `PeerServerApp.withWireLimits`; one that wants a tighter
+    /// federation boundary lowers it. Both are one line, and neither is
+    /// a wire-format change — the ceiling is per-receiver policy.
+    let defaultMaxRequestBytes = 8L * 1024L * 1024L
+
+    /// The limits a composition that never says otherwise runs under.
+    let defaults: PeerWireLimits = {
+        MaxRequestBytes = defaultMaxRequestBytes
+    }
+
+    /// Narrow (or widen) the inbound contract-body ceiling.
+    let withMaxRequestBytes (bytes: int64) (limits: PeerWireLimits) : PeerWireLimits = {
+        limits with
+            MaxRequestBytes = bytes
+    }
 
 /// Reflection shim: awaits a boxed `Async<'R>` and serialises its result
 /// to the wire. Invoked via `MakeGenericMethod(retType)` from the
@@ -260,6 +317,75 @@ module JsonRpcPeerHost =
             Some(header.Substring(7).Trim())
         | _ -> None
 
+    /// Phase 315 — read the request body under a ceiling, replacing the
+    /// unbounded `ctx.ReadBodyFromRequestAsync()`.
+    ///
+    /// The old read buffered whatever arrived. Auth-gating narrows *who*
+    /// can do that to peers holding a valid signing key, which is a real
+    /// bound on the attacker set and no bound at all on the memory: one
+    /// validated-but-hostile (or simply buggy) peer could hand the
+    /// receiver an arbitrarily large string, and a federation deployment
+    /// trusts its peers to be authentic, not to be well-behaved.
+    ///
+    /// Two checks, because either alone is bypassable:
+    ///
+    ///   * A declared `Content-Length` over the ceiling is refused
+    ///     without reading a byte. Cheap, and the common honest case.
+    ///   * The read itself stops at `cap + 1` bytes. `Content-Length` is
+    ///     absent under chunked transfer-encoding — which the *caller*
+    ///     chooses — and is in any case a claim, not a measurement, so a
+    ///     header check alone would be a suggestion. This is what makes
+    ///     the acceptance criterion true: the refusal happens before the
+    ///     body is fully buffered, not after measuring it.
+    ///
+    /// Deliberately a single forward-only pass over `Request.Body` with
+    /// no `EnableBuffering`, and it runs BEFORE the response starts. The
+    /// estate has a standing hazard here: a stage that reads the request
+    /// body after an earlier stage disposed it (or after the response has
+    /// begun) throws where the framework's exception handler can no
+    /// longer run, and the caller sees a 502 for a call that succeeded.
+    /// Nothing downstream re-reads the body — `auditPeerCall` works from
+    /// values already materialised here — so that shape is not created.
+    let private readCappedBody
+        (ctx: HttpContext)
+        (limits: PeerWireLimits)
+        : System.Threading.Tasks.Task<Result<string, PeerError>> =
+        task {
+            let cap = limits.MaxRequestBytes
+            let declared = ctx.Request.ContentLength
+
+            if declared.HasValue && declared.Value > cap then
+                return Error(PeerRequestTooLarge cap)
+            else
+                let buffer = Array.zeroCreate<byte> 16384
+                use collected = new MemoryStream()
+                let mutable total = 0L
+                let mutable overflowed = false
+                let mutable finished = false
+
+                while not finished do
+                    let! read = ctx.Request.Body.ReadAsync(buffer, 0, buffer.Length, ctx.RequestAborted)
+
+                    if read = 0 then
+                        finished <- true
+                    else
+                        total <- total + int64 read
+
+                        if total > cap then
+                            // Stop at the ceiling: the bytes past it are
+                            // never copied anywhere, and the ones before
+                            // it are dropped with the MemoryStream.
+                            overflowed <- true
+                            finished <- true
+                        else
+                            collected.Write(buffer, 0, read)
+
+                if overflowed then
+                    return Error(PeerRequestTooLarge cap)
+                else
+                    return Ok(Encoding.UTF8.GetString(collected.ToArray()))
+        }
+
     /// Parse the request envelope and its structured payload in one step;
     /// either failing collapses to `PeerDeserialization`.
     let private tryParse (body: string) : Result<JsonRpcRequest * PeerWirePayload, PeerError> =
@@ -395,48 +521,69 @@ module JsonRpcPeerHost =
                     match originator with
                     | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
                     | Ok() ->
-                        let! body = ctx.ReadBodyFromRequestAsync()
+                        // Phase 315 — the size ceiling sits HERE, after
+                        // the credential and delegation checks and
+                        // before the read, which is the only position
+                        // that satisfies both neighbours. Moving it
+                        // above auth would answer 413 to an
+                        // unauthenticated caller, reopening exactly the
+                        // status-code oracle Phase 343 closed; moving it
+                        // below the read would be a measurement, not a
+                        // limit. Phase 330's ordering is untouched — the
+                        // body is still not read until the delegation
+                        // has been verified.
+                        let limits =
+                            tryGetService<PeerWireLimits> ctx |> Option.defaultValue PeerWireLimits.defaults
 
-                        match tryParse body with
-                        | Error e -> return! writeJson 400 (JsonRpc.failure "" e) next ctx
-                        | Ok(request, payload) ->
-                            // Trust the validated principal, never the
-                            // self-asserted wire payload's identity. The
-                            // `Delegated` originator inside it has been
-                            // signature-verified above (Phase 330).
-                            let trustedContext = {
-                                payload.Context with
-                                    Peer = principal.Caller
-                                    User = principal.User
-                            }
+                        let! bodyResult = readCappedBody ctx limits
 
-                            let! result =
-                                peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
-                                |> Async.StartAsTask
-
-                            do!
-                                auditPeerCall
-                                    ctx
-                                    contractId
-                                    request.Method
-                                    principal.Caller.PeerId
-                                    trustedContext.RootRequestId
-                                    result
-
-                            match result with
-                            | Ok resultJson ->
-                                // Build the response by hand so the
-                                // already-serialised result rides in
-                                // `Result` without a second JSON encode.
-                                let response = {
-                                    JsonRpc = JsonRpc.version
-                                    Result = Some resultJson
-                                    Error = None
-                                    Id = request.Id
+                        match bodyResult with
+                        // The request id is unknown — it lives in the
+                        // body we declined to read — so the refusal
+                        // carries `""`, the same as every other
+                        // pre-parse failure on this route.
+                        | Error e -> return! writeJson 413 (JsonRpc.failure "" e) next ctx
+                        | Ok body ->
+                            match tryParse body with
+                            | Error e -> return! writeJson 400 (JsonRpc.failure "" e) next ctx
+                            | Ok(request, payload) ->
+                                // Trust the validated principal, never the
+                                // self-asserted wire payload's identity. The
+                                // `Delegated` originator inside it has been
+                                // signature-verified above (Phase 330).
+                                let trustedContext = {
+                                    payload.Context with
+                                        Peer = principal.Caller
+                                        User = principal.User
                                 }
 
-                                return! writeJson 200 response next ctx
-                            | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
+                                let! result =
+                                    peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
+                                    |> Async.StartAsTask
+
+                                do!
+                                    auditPeerCall
+                                        ctx
+                                        contractId
+                                        request.Method
+                                        principal.Caller.PeerId
+                                        trustedContext.RootRequestId
+                                        result
+
+                                match result with
+                                | Ok resultJson ->
+                                    // Build the response by hand so the
+                                    // already-serialised result rides in
+                                    // `Result` without a second JSON encode.
+                                    let response = {
+                                        JsonRpc = JsonRpc.version
+                                        Result = Some resultJson
+                                        Error = None
+                                        Id = request.Id
+                                    }
+
+                                    return! writeJson 200 response next ctx
+                                | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
         }
 
     /// `GET /peer/v1/capabilities` — authenticate, then answer the
@@ -504,25 +651,45 @@ module JsonRpcPeerHost =
     /// the client transport's `PollJob` expects. `contractId` is part of
     /// the route for symmetry with the invoke leg; the store is keyed by
     /// scope + job id, so it is not needed for the lookup.
+    ///
+    /// **Phase 315 — the response `Id` correlates.** Every response this
+    /// route emits carries the polled `jobId` as its JSON-RPC `Id`,
+    /// where all of them previously carried `""`. A dispatch response
+    /// echoes `request.Id`, so a caller can pair it with the call that
+    /// produced it; a poll response could not be paired with anything,
+    /// which is a hole in the wire's own correlation contract and a real
+    /// problem for a non-F# peer SDK that pipelines polls over one
+    /// connection. The poll is a `GET` and carries no JSON-RPC request
+    /// envelope, so there is no request id to echo — the `jobId` is the
+    /// only identifier both sides already agree on, and it is the one
+    /// the caller addressed the request with.
+    ///
+    /// The in-tree client ignores `Id` on this leg (`HttpPeerClient`
+    /// reads `Result` / `Error` only), so no existing caller observes a
+    /// behaviour change — it gains a field it was not reading (GP 11).
+    /// Echoing it on the refusal paths too discloses nothing: it is the
+    /// value the caller put in the URL.
     let private jobStatusHandler (contractId: string) (jobId: Guid) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
             let auth = getService<IPeerAuthProvider> ctx
             let fusion = tryGetService<PeerJobFusion> ctx
+            let correlationId = string jobId
 
             match bearerToken ctx with
-            | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
+            | None ->
+                return! writeJson 401 (JsonRpc.failure correlationId (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
                 let! validation = authenticate auth token |> Async.StartAsTask
 
                 match validation with
-                | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
+                | Error e -> return! writeJson 401 (JsonRpc.failure correlationId e) next ctx
                 | Ok principal ->
                     match fusion with
                     | None ->
                         return!
                             writeJson
                                 200
-                                (JsonRpc.failure "" (PeerHandler "peer job-fusion substrate is not enabled"))
+                                (JsonRpc.failure correlationId (PeerHandler "peer job-fusion substrate is not enabled"))
                                 next
                                 ctx
                     | Some f ->
@@ -532,7 +699,7 @@ module JsonRpcPeerHost =
                             JsonRpc = JsonRpc.version
                             Result = Some(JsonRpc.serialize status)
                             Error = None
-                            Id = ""
+                            Id = correlationId
                         }
 
                         match record with
@@ -547,7 +714,7 @@ module JsonRpcPeerHost =
                                 writeJson
                                     401
                                     (JsonRpc.failure
-                                        ""
+                                        correlationId
                                         (PeerUnauthorized "peer job result is not owned by the calling peer"))
                                     next
                                     ctx

@@ -38,6 +38,7 @@ All F# DU / Option / record bodies are (de)serialised with the universal `FableC
 | `PeerHopLimitExceeded` | `-32004` | `hopLimitExceeded` |
 | `PeerHandler` | `-32005` | `handlerError` |
 | `PeerTransport` | `-32006` | `transportError` |
+| `PeerRequestTooLarge` | `-32007` | `requestTooLarge` |
 | `PeerMethodNotFound` | `-32601` | `methodNotFound` (standard) |
 | `PeerDeserialization` | `-32700` | `parseError` (standard) |
 
@@ -46,8 +47,21 @@ The structured `PeerError` rides in the error object's `Data` field (serialised)
 ### HTTP status codes
 
 - `401` — missing / invalid / expired bearer token (auth gate, before any dispatch).
+- `413` — the request body exceeded the receiver's ceiling (`PeerRequestTooLarge`). Checked *after* the auth + delegation gates and *before* the body is read, so an unauthenticated caller can neither learn the ceiling nor make the receiver buffer anything. See [Request-body ceiling](#request-body-ceiling).
 - `400` — request body failed to parse (`PeerDeserialization`).
 - `200` — auth passed and dispatch ran; a *peer-side* `PeerError` still returns `200` with the error in the JSON-RPC envelope (the HTTP transport succeeded; the RPC failed). This is standard JSON-RPC framing.
+
+### Request-body ceiling
+
+`POST /peer/v1/{contractId}` reads the inbound body under a configurable ceiling — `PeerWireLimits.MaxRequestBytes`, **8 MiB by default**, set with `PeerServerApp.withWireLimits`. Over-ceiling requests answer `413` with a structured `PeerRequestTooLarge` naming the limit.
+
+The ceiling is enforced twice, because either check alone is bypassable: a declared `Content-Length` over the limit is refused without reading a byte, and a request that declares nothing (chunked transfer-encoding, which the *caller* chooses) is stopped by a bounded read the moment it passes the limit. So the receiver never buffers more than the ceiling of a payload it has not agreed to — auth-gating bounds *who* can send one, not *how large* it is.
+
+The other `/peer/v1/*` routes are `GET` and carry no body.
+
+### Job-poll response correlation
+
+`GET /peer/v1/{contractId}/jobs/{jobId}` echoes the polled `jobId` as the response's JSON-RPC `Id`, on every answer including the refusals — the poll leg's counterpart to the dispatch leg echoing `request.Id`. There is no request envelope on a `GET`, so the `jobId` the caller addressed the request with is the correlation key both sides already share.
 
 ## Identity layer
 

@@ -98,6 +98,12 @@ type PeerServerApp = {
     /// genuinely predates `GET /peer/v1/capabilities/profile`. See
     /// `PeerRemoteProfile`.
     LegacyProfileFallback: bool
+    /// Phase 315 — the receiver-side wire limits the `/peer/v1/*`
+    /// handlers enforce. `PeerWireLimits.defaults` unless a composition
+    /// says otherwise; registered as a DI singleton so the parameterless
+    /// `JsonRpcPeerHost.routes` value can read it per request. Set it
+    /// with `withWireLimits`.
+    WireLimits: PeerWireLimits
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -136,6 +142,7 @@ module PeerServerApp =
         ConsumedContracts = []
         StrictAudienceBinding = false
         LegacyProfileFallback = false
+        WireLimits = PeerWireLimits.defaults
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -352,6 +359,25 @@ module PeerServerApp =
             LegacyProfileFallback = true
     }
 
+    /// Phase 315 — set the receiver-side wire limits the `/peer/v1/*`
+    /// handlers enforce (today: the inbound contract-body ceiling).
+    ///
+    /// A tunable, not a switch: the ceiling is always in force, and a
+    /// composition that never calls this runs under
+    /// `PeerWireLimits.defaults` (8 MiB), which is far above anything
+    /// the substrate is shaped to carry — so an existing deployment is
+    /// unaffected (GP 11). Raise it for a federation that genuinely
+    /// exchanges larger argument payloads; lower it for a tighter
+    /// boundary with a peer set whose call shapes are known.
+    ///
+    ///     app |> PeerServerApp.withWireLimits (PeerWireLimits.defaults
+    ///                                          |> PeerWireLimits.withMaxRequestBytes (32L * 1024L * 1024L))
+    ///
+    /// The limit is per-receiver policy, not a wire-format term: the two
+    /// peers need not agree on it, and a caller that exceeds it learns
+    /// the ceiling from the structured `PeerRequestTooLarge` refusal.
+    let withWireLimits (limits: PeerWireLimits) (app: PeerServerApp) : PeerServerApp = { app with WireLimits = limits }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -437,6 +463,7 @@ module PeerServerApp =
             let contracts = app.Contracts
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
+            let wireLimits = app.WireLimits
             let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
 
             let localIdentity =
@@ -503,6 +530,15 @@ module PeerServerApp =
 
             let peerServiceConfig (services: IServiceCollection) =
                 services
+                    // Phase 315 — the composed wire limits, resolved
+                    // per-request by the host handlers. Registered
+                    // unconditionally inside the enabled branch: the
+                    // host falls back to `PeerWireLimits.defaults` when
+                    // nothing is registered, so this only ever makes an
+                    // explicit `withWireLimits` reachable, and the
+                    // `NoPeerSubstrate` short-circuit above still
+                    // registers nothing at all (GP 13).
+                    .AddSingleton<PeerWireLimits>(wireLimits)
                     .AddSingleton<IPeerAuthProvider>(
                         System.Func<System.IServiceProvider, IPeerAuthProvider>(fun sp ->
                             let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore

@@ -1290,6 +1290,15 @@
              facts-free zero-cost twin. Every case drives the fact tier
              through FactsCompose, never by direct construction. -->
         <Compile Include="InProcess\ReactiveRecomputeComposeTests.fs" />
+        <!-- Phase 315 — peer host wire hardening: the contract route's
+             inbound body ceiling (asserted as a MEASUREMENT — the request
+             stream counts how many of its own bytes were pulled, so
+             "refused before it is fully buffered" is evidence rather than
+             inference), the Content-Length pre-check that reads nothing at
+             all, the negative control where a generous ceiling reads the
+             same payload end to end, and the job-poll response echoing the
+             polled jobId as its JSON-RPC `Id` where it used to send "". -->
+        <Compile Include="InProcess\PeerWireHardeningTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

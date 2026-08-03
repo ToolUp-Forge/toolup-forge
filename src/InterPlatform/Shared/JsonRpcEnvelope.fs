@@ -85,6 +85,13 @@ module JsonRpc =
     let handlerError = -32005
     let transportError = -32006
 
+    /// Phase 315 — the inbound body exceeded the receiver's ceiling. A
+    /// server code rather than a reuse of `invalidRequest`: the request
+    /// was never parsed, so nothing is known about its validity, and a
+    /// caller retrying with a smaller payload needs to be able to tell
+    /// "too big" from "malformed". The HTTP status is 413 alongside it.
+    let requestTooLarge = -32007
+
     /// The universal F# converter set, constructed once. Mirrors the
     /// SDK convention for SSE / non-Remoting JSON (`CLAUDE.md`).
     let options: JsonSerializerOptions = FableConverters.create ()
@@ -109,6 +116,7 @@ module JsonRpc =
         | PeerTransport _ -> transportError
         | PeerHandler _ -> handlerError
         | PeerDeserialization _ -> parseError
+        | PeerRequestTooLarge _ -> requestTooLarge
 
     /// One-line human-readable message for a `PeerError` (the JSON-RPC
     /// `message` field). The structured error rides in `Data`.
@@ -125,6 +133,8 @@ module JsonRpc =
         | PeerTransport message -> $"Peer transport error: {message}"
         | PeerHandler message -> $"Peer handler error: {message}"
         | PeerDeserialization message -> $"Peer (de)serialization error: {message}"
+        | PeerRequestTooLarge limitBytes ->
+            $"Peer request too large: the receiver accepts at most {limitBytes} bytes of request body"
 
     /// The `PeerError` DU case name, with no payload detail — the safe
     /// outcome label for audit (`PeerCallCompletedPayload.Outcome`) and
@@ -140,6 +150,7 @@ module JsonRpc =
         | PeerTransport _ -> "PeerTransport"
         | PeerHandler _ -> "PeerHandler"
         | PeerDeserialization _ -> "PeerDeserialization"
+        | PeerRequestTooLarge _ -> "PeerRequestTooLarge"
 
     /// Build a JSON-RPC success response carrying a serialised result.
     let success (id: string) (result: 'T) : JsonRpcResponse = {
