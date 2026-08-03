@@ -106,12 +106,17 @@ type private InMemorySecretStore() =
 /// receiver's audit row.
 type private RecordingPeerClient(inner: IPeerClient, captured: string ref) =
     interface IPeerClient with
-        member _.Invoke(target, contractId, methodName, payload) =
+        member _.Invoke(target, contractId, methodName, payload, ?cancellationToken) =
             captured.Value <- payload.Context.RootRequestId
-            inner.Invoke(target, contractId, methodName, payload)
 
-        member _.PollJob(target, contractId, jobId) =
-            inner.PollJob(target, contractId, jobId)
+            match cancellationToken with
+            | Some ct -> inner.Invoke(target, contractId, methodName, payload, ct)
+            | None -> inner.Invoke(target, contractId, methodName, payload)
+
+        member _.PollJob(target, contractId, jobId, ?cancellationToken) =
+            match cancellationToken with
+            | Some ct -> inner.PollJob(target, contractId, jobId, ct)
+            | None -> inner.PollJob(target, contractId, jobId)
 
 /// `IAuditLog` that retains every recorded event for inspection. The
 /// peer host records `PeerCallCompleted` best-effort per inbound call.

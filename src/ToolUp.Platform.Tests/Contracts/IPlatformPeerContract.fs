@@ -70,10 +70,12 @@ let private greeterImpl: GreeterContract = {
 /// exercise the typed proxy without standing up an HTTP host.
 type private LoopbackPeerClient(peer: IPlatformPeer) =
     interface IPeerClient with
-        member _.Invoke(_target: TargetPeer, contractId: string, methodName: string, payload: PeerWirePayload) =
+        member _.Invoke
+            (_target: TargetPeer, contractId: string, methodName: string, payload: PeerWirePayload, ?_cancellationToken)
+            =
             peer.Handle(contractId, payload.Context, methodName, payload.Arguments)
 
-        member _.PollJob(_target: TargetPeer, _contractId: string, _jobId: PeerJobId) = async {
+        member _.PollJob(_target: TargetPeer, _contractId: string, _jobId: PeerJobId, ?_cancellationToken) = async {
             return Error(PeerTransport "loopback client does not poll jobs")
         }
 

@@ -106,6 +106,18 @@ type IPeerFanout =
 /// the policy's early-return / deadline rules via a single cancellation
 /// token, and fills any un-awaited peer with a descriptive error so the
 /// result map is total. Stateless between calls (GP 12 rule 4).
+///
+/// **Reach (Phase 312).** Each child is started with `Async.Start(work,
+/// cts.Token)`, which makes `cts.Token` the AMBIENT token of `call` — so
+/// a transport that reads `Async.CancellationToken` (the in-tree
+/// `HttpPeerClient` does) issues its request under it, and `cts.Cancel()`
+/// below aborts the socket rather than merely stopping the wait. That is
+/// the load-bearing coupling between this file and the transport, and it
+/// is why nothing here threads a token by hand: a `call` closure the
+/// consumer supplies inherits the token by being run under it. A peer
+/// whose call is cut short still lands in the map as not-awaited, because
+/// a cancelled `Async` completes through the cancellation continuation
+/// and never writes its result slot.
 type DefaultPeerFanout() =
 
     /// Wrap a single peer call so an exception becomes a structured

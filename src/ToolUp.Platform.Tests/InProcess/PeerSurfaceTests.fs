@@ -234,6 +234,18 @@ let tests =
                 // about whether a tightening is a breaking change — that
                 // is the surface's own phase to make, not this one's.
                 "CleanRoomTemplates"
+                // Phase 312 — NOT projected, and this is the easiest
+                // exemption of the set. The per-call deadline governs how
+                // long THIS deployment waits on an outbound call; it
+                // registers nothing a counterparty is served by and,
+                // unlike `WireLimits`, it is not even observable from the
+                // other end — a receiver that gets abandoned mid-call
+                // sees a dropped connection, which is indistinguishable
+                // from any other. It belongs with `LegacyProfileFallback`
+                // as initiator-side policy, on the same argument: a
+                // `PeerSurface` is the face a counterparty sees, and it
+                // cannot see our patience.
+                "TransportPolicy"
             ]
 
             let actual =

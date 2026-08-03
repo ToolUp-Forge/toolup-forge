@@ -351,12 +351,12 @@ type private CapturingPeerClient() =
     member _.Last = calls |> Seq.tryLast
 
     interface IPeerClient with
-        member _.Invoke(_target, _contractId, _methodName, payload) = async {
+        member _.Invoke(_target, _contractId, _methodName, payload, ?_cancellationToken) = async {
             lock calls (fun () -> calls.Add payload.Context)
             return Ok(JsonRpc.serialize "echoed")
         }
 
-        member _.PollJob(_target, _contractId, _jobId) = async {
+        member _.PollJob(_target, _contractId, _jobId, ?_cancellationToken) = async {
             return Error(PeerTransport "the echo contract has no long-running method")
         }
 

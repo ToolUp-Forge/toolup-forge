@@ -156,10 +156,10 @@ let private argsFor (query: PeerAuditQuery) : string = JsonRpc.serialize [ query
 /// receiver's `Handle` — mirrors the foundation pack's loopback client.
 type private LoopbackPeerClient(peer: IPlatformPeer) =
     interface IPeerClient with
-        member _.Invoke(_target, contractId, methodName, payload) =
+        member _.Invoke(_target, contractId, methodName, payload, ?_cancellationToken) =
             peer.Handle(contractId, payload.Context, methodName, payload.Arguments)
 
-        member _.PollJob(_target, _contractId, _jobId) = async {
+        member _.PollJob(_target, _contractId, _jobId, ?_cancellationToken) = async {
             return Error(PeerTransport "loopback client does not poll jobs")
         }
 

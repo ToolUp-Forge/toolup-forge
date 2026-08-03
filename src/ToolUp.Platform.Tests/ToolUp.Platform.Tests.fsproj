@@ -1318,6 +1318,17 @@
              an honest `create` call and a `PeerCascade.deriveNext`
              continuation derive back to exactly what was sent. -->
         <Compile Include="InProcess\PeerCascadeBudgetAuthorityTests.fs" />
+        <!-- Phase 312 — peer transport timeout + cancellation
+             propagation. The stub transport waits on the token it was
+             actually handed and records, in a `finally`, whether that
+             token fired — so "the early return cancelled the socket" is
+             a MEASUREMENT rather than an inference from the result map's
+             shape (which already looked right before this phase).
+             `PeerTransportPolicy.unbounded` on the cancellation cases
+             makes the caller's token the only thing that could have
+             aborted the request, and a `FanoutPolicy.all` control pins
+             that nothing is cancelled without an early return. -->
+        <Compile Include="InProcess\PeerTransportTimeoutTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

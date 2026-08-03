@@ -1020,6 +1020,24 @@ let allTests =
         PeerCascadeBudgetAuthorityTests.budgetAuthorityTests
         PeerCascadeBudgetAuthorityTests.cascadeShapeTests
         PeerCascadeBudgetAuthorityTests.cascadeCompatibilityTests
+        // Phase 312 — peer transport timeout + cancellation propagation.
+        // `HttpPeerClient` now issues every request under a token linked
+        // from the workflow's ambient source, the caller's optional
+        // explicit one, and the policy's per-call deadline — so a
+        // fan-out that stops awaiting a peer aborts its socket instead
+        // of leaving it held for the shared client's 100 s default. The
+        // three non-answers are pinned APART: a deadline expiry is a
+        // timeout-classified `PeerTransport`, a caller-side cancellation
+        // completes the computation as cancelled (no value at all, so it
+        // can never be counted toward a quorum), and a receiver's own
+        // error survives unreclassified. Every cancellation claim is
+        // measured by a stub that reports the state of the token it was
+        // handed, recorded in a `finally` — F# async cancellation
+        // bypasses `with`, so an exception-type probe would be answering
+        // a different question.
+        PeerTransportTimeoutTests.deadlineTests
+        PeerTransportTimeoutTests.cancellationTests
+        PeerTransportTimeoutTests.fanoutReachTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`
         // signing-key lookup and the blob-backed peer directory, with

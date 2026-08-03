@@ -3,9 +3,11 @@
 
 namespace ToolUp.InterPlatform
 
+open System
 open System.Net.Http
 open System.Net.Http.Headers
 open System.Text
+open System.Threading
 
 // ─── Layer 4 — default initiator transport ───────────────────────────
 //
@@ -22,13 +24,38 @@ open System.Text
 // to `PeerTransport`; a structured `PeerError` the receiver returned is
 // reconstructed from the JSON-RPC error body's `Data` field, so the
 // caller sees the same DU case the receiver raised.
+//
+// Phase 312 — bounded and genuinely cancellable. Every request is issued
+// under a `CancellationToken` linked from three sources: the workflow's
+// ambient token, the caller's optional explicit token, and the policy's
+// per-call deadline. The three non-answers stay apart (see
+// `PeerTransportOutcome`): a deadline expiry is a `PeerTransport`
+// carrying the timeout prefix, a caller-side cancellation completes the
+// computation as cancelled rather than as any value at all, and
+// everything else is the peer's own failure. Before this, `SendAsync`
+// took no token, so a fan-out that stopped awaiting a peer left its
+// socket held for the client's default 100 s — the latency was hidden,
+// the resources were not reclaimed.
 
 /// `IPeerClient` over `HttpClient`. `localPeer` is the identity the poll
 /// leg vouches for (the invoke leg takes its caller from the propagated
-/// `PeerCallContext`, which the typed proxy populates).
-type HttpPeerClient(httpClient: HttpClient, auth: IPeerAuthProvider, localPeer: PeerIdentity) =
+/// `PeerCallContext`, which the typed proxy populates). `policy` bounds
+/// each call (Phase 312).
+type HttpPeerClient
+    (httpClient: HttpClient, auth: IPeerAuthProvider, localPeer: PeerIdentity, policy: PeerTransportPolicy) =
 
     let mediaType = "application/json"
+
+    /// Complete the surrounding workflow as CANCELLED — not as a value,
+    /// not as an exception. `Async.FromContinuations` is the only way to
+    /// reach the cancellation continuation deliberately; re-raising the
+    /// `OperationCanceledException` instead would travel the *exception*
+    /// path, where `DefaultPeerFanout`'s per-peer guard would catch it
+    /// and write a fabricated `Error` into the result slot of a peer
+    /// nobody is waiting for — turning a cancelled call into an answer
+    /// that counts toward quorum.
+    static let cancelledCall (firedToken: CancellationToken) : Async<Result<string, PeerError>> =
+        Async.FromContinuations(fun (_, _, ccont) -> ccont (OperationCanceledException firedToken))
 
     /// Reconstruct the caller-facing result string (or structured error)
     /// from a JSON-RPC response body.
@@ -50,49 +77,130 @@ type HttpPeerClient(httpClient: HttpClient, auth: IPeerAuthProvider, localPeer: 
         with ex ->
             Error(PeerDeserialization ex.Message)
 
-    let send (httpMethod: HttpMethod) (url: string) (token: string) (jsonBody: string option) = async {
-        try
-            use request = new HttpRequestMessage(httpMethod, url)
-            request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+    let send
+        (httpMethod: HttpMethod)
+        (url: string)
+        (token: string)
+        (jsonBody: string option)
+        (callerToken: CancellationToken)
+        =
+        async {
+            // GP 7 — the ambient token is how cancellation reaches the
+            // wire without every intermediate signature carrying one.
+            // `IPeerFanout` starts each peer call with `Async.Start(work,
+            // cts.Token)` and `IRoundOrchestrator` dispatches under the
+            // run's token, so reading it here is what makes their
+            // `cts.Cancel()` abort a socket rather than merely stop
+            // awaiting it.
+            let! ambientToken = Async.CancellationToken
 
-            match jsonBody with
-            | Some body -> request.Content <- new StringContent(body, Encoding.UTF8, mediaType)
-            | None -> ()
+            use linked =
+                CancellationTokenSource.CreateLinkedTokenSource(ambientToken, callerToken)
 
-            let! response = httpClient.SendAsync request |> Async.AwaitTask
-            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-            return parseResponse body
-        with ex ->
-            return Error(PeerTransport ex.Message)
-    }
+            let deadline = policy.CallTimeout
+
+            match deadline with
+            | Some d when d > TimeSpan.Zero -> linked.CancelAfter d
+            | _ -> ()
+
+            /// Which side gave up. Read only after an
+            /// `OperationCanceledException`, and it is the whole reason
+            /// the deadline lives on its own source rather than on
+            /// `HttpClient.Timeout`: with a client-level timeout both
+            /// answers are the same exception and this question has no
+            /// answer at all.
+            let callerWentAway () =
+                ambientToken.IsCancellationRequested || callerToken.IsCancellationRequested
+
+            try
+                use request = new HttpRequestMessage(httpMethod, url)
+                request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+
+                match jsonBody with
+                | Some body -> request.Content <- new StringContent(body, Encoding.UTF8, mediaType)
+                | None -> ()
+
+                let! response = httpClient.SendAsync(request, linked.Token) |> Async.AwaitTask
+                let! body = response.Content.ReadAsStringAsync linked.Token |> Async.AwaitTask
+                return parseResponse body
+            with
+            | :? OperationCanceledException ->
+                match deadline with
+                | Some d when not (callerWentAway ()) ->
+                    // Nothing else on the linked source could have
+                    // fired: the peer was still working when *our*
+                    // deadline elapsed. A distinct, recognisable
+                    // outcome — `PeerTransportOutcome.isTimeout` — and
+                    // deliberately NOT a retry signal, since the peer
+                    // may yet complete the call.
+                    return Error(PeerTransportOutcome.timedOut d)
+                | _ ->
+                    // The caller went away (or there was no deadline to
+                    // fire, which leaves only the caller). Cancelled is
+                    // not an answer — complete as cancelled.
+                    let fired =
+                        if ambientToken.IsCancellationRequested then
+                            ambientToken
+                        else
+                            callerToken
+
+                    return! cancelledCall fired
+            | ex ->
+                // The peer's own failure: connection refused, DNS,
+                // non-JSON body. Unchanged from pre-312.
+                return Error(PeerTransport ex.Message)
+        }
+
+    /// The pre-312 shape, on `PeerTransportPolicy.defaults` — a
+    /// secondary constructor rather than an optional argument, because
+    /// F# folds an optional argument into one widened constructor and
+    /// erases the narrower signature from the emitted public surface
+    /// (the same discipline `DefaultRoundOrchestrator` adopted). Every
+    /// existing `HttpPeerClient(client, auth, id)` call site compiles
+    /// and behaves exactly as it did (GP 11).
+    new(httpClient: HttpClient, auth: IPeerAuthProvider, localPeer: PeerIdentity) =
+        HttpPeerClient(httpClient, auth, localPeer, PeerTransportPolicy.defaults)
 
     interface IPeerClient with
-        member _.Invoke(target: TargetPeer, contractId: string, methodName: string, payload: PeerWirePayload) = async {
-            let! tokenResult = auth.IssuePeerToken(payload.Context.Peer, target.Peer, payload.Context.User)
+        member _.Invoke
+            (
+                target: TargetPeer,
+                contractId: string,
+                methodName: string,
+                payload: PeerWirePayload,
+                ?cancellationToken: CancellationToken
+            ) =
+            async {
+                let callerToken = defaultArg cancellationToken CancellationToken.None
+                let! tokenResult = auth.IssuePeerToken(payload.Context.Peer, target.Peer, payload.Context.User)
 
-            match tokenResult with
-            | Error e -> return Error e
-            | Ok token ->
-                let url = $"{target.BaseUrl}/peer/v1/{contractId}"
-                let envelope = JsonRpc.request payload.Context.RootRequestId methodName payload
-                return! send HttpMethod.Post url token (Some(JsonRpc.serialize envelope))
-        }
+                match tokenResult with
+                | Error e -> return Error e
+                | Ok token ->
+                    let url = $"{target.BaseUrl}/peer/v1/{contractId}"
+                    let envelope = JsonRpc.request payload.Context.RootRequestId methodName payload
+                    return! send HttpMethod.Post url token (Some(JsonRpc.serialize envelope)) callerToken
+            }
 
-        member _.PollJob(target: TargetPeer, contractId: string, jobId: PeerJobId) = async {
-            let! tokenResult = auth.IssuePeerToken(localPeer, target.Peer, Anonymous)
+        member _.PollJob
+            (target: TargetPeer, contractId: string, jobId: PeerJobId, ?cancellationToken: CancellationToken)
+            =
+            async {
+                let callerToken = defaultArg cancellationToken CancellationToken.None
+                let! tokenResult = auth.IssuePeerToken(localPeer, target.Peer, Anonymous)
 
-            match tokenResult with
-            | Error e -> return Error e
-            | Ok token ->
-                let url = $"{target.BaseUrl}/peer/v1/{contractId}/jobs/{jobId}"
-                let! parsed = send HttpMethod.Get url token None
+                match tokenResult with
+                | Error e -> return Error e
+                | Ok token ->
+                    let url = $"{target.BaseUrl}/peer/v1/{contractId}/jobs/{jobId}"
+                    let! parsed = send HttpMethod.Get url token None callerToken
 
-                return
-                    match parsed with
-                    | Error e -> Error e
-                    | Ok statusJson ->
-                        try
-                            Ok(JsonRpc.deserialize<PeerJobStatus<string>> statusJson)
-                        with ex ->
-                            Error(PeerDeserialization ex.Message)
-        }
+                    return
+                        match parsed with
+                        | Error e -> Error e
+                        | Ok statusJson ->
+                            try
+                                Ok(JsonRpc.deserialize<PeerJobStatus<string>> statusJson)
+                            with ex ->
+                                Error(PeerDeserialization ex.Message)
+            }

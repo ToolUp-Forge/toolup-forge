@@ -595,12 +595,12 @@ type private CapturingPeerClient() =
     member _.Sent = List.ofSeq sent
 
     interface IPeerClient with
-        member _.Invoke(target, contractId, _, payload) = async {
+        member _.Invoke(target, contractId, _, payload, ?_cancellationToken) = async {
             sent.Add((target, contractId, payload))
             return Ok(JsonRpc.serialize "ok")
         }
 
-        member _.PollJob(_, _, _) = async { return Ok PeerJobStatus.Pending }
+        member _.PollJob(_, _, _, ?_cancellationToken) = async { return Ok PeerJobStatus.Pending }
 
 let cascadeCompatibilityTests =
     testList "Phase 331 — the legitimate cascade shapes are byte-for-byte unchanged (GP 11)" [

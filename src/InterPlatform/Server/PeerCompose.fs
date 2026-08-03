@@ -123,6 +123,12 @@ type PeerServerApp = {
     /// Empty unless a composition calls `withCleanRoomTemplate`, and an
     /// empty list wraps nothing (GP 13).
     CleanRoomTemplates: (string * CleanRoomTemplate) list
+    /// Phase 312 — the per-call deadline the composed outbound
+    /// `IPeerClient` issues every request under.
+    /// `PeerTransportPolicy.defaults` (100 s — the bound the shared
+    /// client already inherited from the BCL) unless a composition says
+    /// otherwise. Set it with `withTransportPolicy`.
+    TransportPolicy: PeerTransportPolicy
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -164,6 +170,7 @@ module PeerServerApp =
         WireLimits = PeerWireLimits.defaults
         CascadePolicy = PeerCascadePolicy.defaults
         CleanRoomTemplates = []
+        TransportPolicy = PeerTransportPolicy.defaults
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -472,6 +479,34 @@ module PeerServerApp =
             CleanRoomTemplates = app.CleanRoomTemplates @ [ contractId, template ]
     }
 
+    /// Phase 312 — set the per-call deadline the composed outbound
+    /// `IPeerClient` issues every peer request under.
+    ///
+    ///     app |> PeerServerApp.withTransportPolicy (PeerTransportPolicy.defaults
+    ///                                               |> PeerTransportPolicy.withCallTimeout (TimeSpan.FromSeconds 5.0))
+    ///
+    /// A tunable, not a switch: the deadline is always in force, and a
+    /// composition that never calls this runs under
+    /// `PeerTransportPolicy.defaults` — 100 s, which is exactly the
+    /// bound a `Timeout`-less `HttpClient` already imposed, so an
+    /// existing deployment is unaffected (GP 11).
+    ///
+    /// **The deadline is per-call, not `HttpClient.Timeout`, and the
+    /// distinction is the point.** The composed client is shared with
+    /// the capability handshake and the profile fetch, whose latency
+    /// profiles are not the contract transport's; and a client-level
+    /// timeout raises the same `TaskCanceledException` a caller's own
+    /// cancellation does, so the transport could not report "this peer
+    /// is slow" separately from "my caller went away". Lower it for a
+    /// latency-sensitive federation; `PeerTransportPolicy.unbounded`
+    /// removes the deadline for calls bounded by something else (a
+    /// receiver-side budget, a caller-held token), which still leaves
+    /// them fully cancellable.
+    let withTransportPolicy (policy: PeerTransportPolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TransportPolicy = policy
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -636,6 +671,7 @@ module PeerServerApp =
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
+            let transportPolicy = app.TransportPolicy
             let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
 
             let localIdentity =
@@ -656,6 +692,14 @@ module PeerServerApp =
             // transport and the handshake's capability fetch. Lives until
             // process exit (the documented single-long-lived-client
             // pattern); never disposed.
+            //
+            // Phase 312 — deliberately left on the BCL's default
+            // `Timeout`. The contract transport's deadline rides
+            // `PeerTransportPolicy` and is applied per request, so
+            // lowering it does not silently re-bound the handshake and
+            // profile fetches that share this client, and an expiry
+            // stays distinguishable from a caller's cancellation. See
+            // `PeerServerApp.withTransportPolicy`.
             let sharedHttpClient = new HttpClient()
 
             // The handshake's outbound capability fetch. The receiver's
@@ -843,7 +887,10 @@ module PeerServerApp =
                     .AddSingleton<IPeerClient>(
                         System.Func<System.IServiceProvider, IPeerClient>(fun sp ->
                             let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
-                            HttpPeerClient(sharedHttpClient, auth, localIdentity) :> IPeerClient)
+                            // Phase 312 — the composed per-call deadline
+                            // travels with the transport, not with the
+                            // shared client.
+                            HttpPeerClient(sharedHttpClient, auth, localIdentity, transportPolicy) :> IPeerClient)
                     )
                     .AddSingleton<IPeerProfileProvider>(
                         // Phase 18d — aggregates the author-declared

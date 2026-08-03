@@ -215,7 +215,7 @@ let private inProcessClient (members: (string * IPlatformPeer) list) (log: Resiz
     let table = Map.ofList members
 
     { new IPeerClient with
-        member _.Invoke(target, contractId, methodName, payload) = async {
+        member _.Invoke(target, contractId, methodName, payload, ?_cancellationToken) = async {
             lock log (fun () -> log.Add(target.Peer.PeerId, contractId, methodName))
 
             match Map.tryFind target.Peer.PeerId table with
@@ -223,7 +223,7 @@ let private inProcessClient (members: (string * IPlatformPeer) list) (log: Resiz
             | None -> return Error(PeerTransport $"no member registered for {target.Peer.PeerId}")
         }
 
-        member _.PollJob(_, _, _) = async {
+        member _.PollJob(_, _, _, ?_cancellationToken) = async {
             return Error(PeerTransport "the gateway shape does not front the long-running poll leg")
         }
     }
