@@ -946,6 +946,14 @@ let allTests =
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.
         PeerJobRetentionTests.tests
+        // Phase 338 — peer-token replay defence + call scoping: the
+        // `jti` seen-set (bounded, fail-closed, distributed-ready) and
+        // the optional `cid` contract binding, each rejection paired
+        // with a control asserting the same sequence succeeds once the
+        // defence is removed.
+        PeerJwtReplayTests.guardTests
+        PeerJwtReplayTests.replayDefenceTests
+        PeerJwtReplayTests.callScopingTests
         // Phase 483 — multi-round protocol orchestrator: a three-round
         // two-party protocol expressed as a step function alone, each
         // DropoutPolicy variant against a missed round deadline,

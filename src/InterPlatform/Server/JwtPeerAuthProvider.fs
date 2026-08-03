@@ -29,6 +29,23 @@ open ToolUp.Platform.Secrets
 // (`CryptographicOperations.FixedTimeEquals`). The signing key is read
 // from `ISecretStore` on every call (GP 12 rule 4) so a rotated key
 // flows through immediately with no cached state.
+//
+// **Replay defence + call scoping (Phase 338).** Every minted token now
+// carries a `jti` nonce. When a `PeerTokenPolicy` supplies an
+// `IPeerReplayGuard`, `ValidatePeerToken` claims that nonce *after* the
+// signature, `exp`, `nbf` and `aud` have all checked out and refuses a
+// nonce that was already spent inside the freshness window — so a
+// captured token is single-use rather than a bearer capability for its
+// whole 300 s + skew lifetime. Under `ContractBoundCalls` a token may
+// additionally carry a `cid` claim naming the one contract it may be
+// spent against (`IPeerCallScopedAuth`). Both are off by default: the
+// default `PeerTokenPolicy.unscoped` validates exactly as before
+// (GP 11) and consults no store at all (GP 13).
+//
+// **Claim order is load-bearing.** The replay claim is the LAST check.
+// Claiming before the signature verifies would let an unauthenticated
+// attacker burn seen-set entries with forged tokens — turning the
+// defence into the denial-of-service vector it exists to prevent.
 
 /// HS256 JWT helpers. The base64url codec, HMAC, HS256 alg-check,
 /// fixed-time compare, clock-skew constant and the Result CE are the
@@ -149,11 +166,75 @@ module private PeerJwt =
             | Some _ -> Error "Token audience does not match this peer"
             | None -> Error "Missing 'aud' claim"
 
+    /// Phase 338 — the single wording for "replay defence is on and this
+    /// token has no usable nonce", so an absent claim and a blank one
+    /// cannot disagree about why they were refused.
+    let missingNonceMessage =
+        "Missing 'jti' claim — this receiver enforces single-use peer tokens, and a token with no nonce cannot be de-duplicated"
+
+    /// Phase 338 — the instant a validated token stops being accepted:
+    /// its `exp` plus the same clock skew `checkExpiry` allows. Past
+    /// that, a replayed nonce is refused by `exp` anyway, so the
+    /// seen-set entry carries no information and may be reclaimed.
+    /// `None` when `exp` is absent or unreadable — unreachable in the
+    /// validation path (`checkExpiry` runs first and rejects both), and
+    /// treated as a refusal rather than an unbounded claim if it ever is.
+    let freshnessDeadline (doc: JsonDocument) : DateTimeOffset option =
+        match doc.RootElement.TryGetProperty("exp") with
+        | true, expElem ->
+            try
+                Some(DateTimeOffset.FromUnixTimeSeconds(expElem.GetInt64() + JwtCrypto.clockSkewSeconds))
+            with _ ->
+                None
+        | false, _ -> None
+
+    /// Phase 338 — bind the token to the contract it is being spent
+    /// against. Under `UnscopedCalls` the `cid` claim is neither minted
+    /// nor examined, so this is `Ok` unconditionally and the pre-338
+    /// path is byte-for-byte preserved (GP 11).
+    ///
+    /// Under `ContractBoundCalls`, `expected` is `Some` on the scoped
+    /// validation path and `None` on the plain `ValidatePeerToken` one.
+    /// A `cid`-carrying token arriving on the plain path is REFUSED
+    /// rather than waved through: this receiver cannot see which
+    /// contract the call is for, so it cannot honour a binding the
+    /// issuer asked for, and accepting anyway would make the claim
+    /// decorative. A token with no `cid` was never claimed to be bound,
+    /// so nothing is being ignored and it proceeds on the other checks.
+    /// Compared in constant time, matching `checkAudience`.
+    let checkContractScope (scope: PeerCallScope) (expected: string option) (doc: JsonDocument) =
+        match scope with
+        | UnscopedCalls -> Ok()
+        | ContractBoundCalls ->
+            match expected, getClaim "cid" doc with
+            | Some contractId, Some cid when constantTimeEquals contractId cid -> Ok()
+            | Some _, Some _ -> Error "Token is bound to a different contract"
+            | Some _, None ->
+                Error "Missing 'cid' claim — this receiver binds peer tokens to the contract they are spent against"
+            | None, Some _ ->
+                Error
+                    "Contract-bound token presented on an unscoped validation path — validate it through IPeerCallScopedAuth.ValidateScopedPeerToken"
+            | None, None -> Ok()
+
     /// Mint a signed HS256 token. `uctx` carries the serialised
     /// `UserContext` as a string claim (round-tripped through the
     /// universal converter set so the DU survives the wire). Lifetime is
     /// five minutes — a peer token is minted per call, not cached.
-    let encode (secret: byte[]) (caller: PeerIdentity) (audience: PeerIdentity) (user: UserContext) =
+    ///
+    /// Phase 338 — a `jti` nonce is minted UNCONDITIONALLY, whether or
+    /// not this deployment enforces replay defence. A receiver ignores
+    /// claims it does not know, so the extra claim is inert against a
+    /// pre-338 peer; minting it always is what lets a fleet upgrade
+    /// first and switch enforcement on second, rather than needing both
+    /// halves of every peer pair to move in one step. `contractId` is
+    /// `Some` only on the call-scoped issue path.
+    let encode
+        (secret: byte[])
+        (caller: PeerIdentity)
+        (audience: PeerIdentity)
+        (user: UserContext)
+        (contractId: string option)
+        =
         let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
 
         let header = JsonObject()
@@ -168,6 +249,11 @@ module private PeerJwt =
         payload["iat"] <- JsonValue.Create(now)
         payload["exp"] <- JsonValue.Create(now + 300L)
         payload["nbf"] <- JsonValue.Create(now)
+        payload["jti"] <- JsonValue.Create(Guid.NewGuid().ToString "N")
+
+        match contractId with
+        | Some cid -> payload["cid"] <- JsonValue.Create(cid)
+        | None -> ()
 
         let encodedHeader = Base64Url.encode (Encoding.UTF8.GetBytes(header.ToJsonString()))
 
@@ -188,23 +274,46 @@ module private PeerJwt =
         let chain = String.concat ">" assertion.DelegationChain
         $"{assertion.Subject}|{chain}"
 
-/// BCL-only, fail-closed HS256 implementation of `IPeerAuthProvider`.
-/// Reads the symmetric per-peer signing key from `ISecretStore` on every
-/// call; there is no cached key and no "auth disabled" path.
+/// BCL-only, fail-closed HS256 implementation of `IPeerAuthProvider`
+/// (and, since Phase 338, of `IPeerCallScopedAuth`). Reads the symmetric
+/// per-peer signing key from `ISecretStore` on every call; there is no
+/// cached key and no "auth disabled" path.
 ///
 /// `expectedAudience` is this receiver's own peer id (composed via
 /// `PeerServerApp.withLocalPeer`). When non-empty, `ValidatePeerToken`
 /// binds every inbound token's `aud` claim to it (Phase 130 — confused-
-/// deputy / cross-receiver-replay defence). The parameter is optional so
-/// existing call sites that constructed `JwtPeerAuthProvider(secrets)`
-/// keep compiling and keep their pre-Phase-130 behaviour (audience
-/// binding off — GP 11); a receiver that never composed a `LocalPeer`
-/// identity cannot bind audience.
-type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
-    let expectedAudience = defaultArg expectedAudience ""
+/// deputy / cross-receiver-replay defence). An `expectedAudience` of ""
+/// keeps the pre-Phase-130 behaviour (audience binding off — GP 11); a
+/// receiver that never composed a `LocalPeer` identity cannot bind
+/// audience.
+///
+/// `policy` (Phase 338) carries the replay guard and the call-scope
+/// mode. Its default — `PeerTokenPolicy.unscoped`, what the
+/// two-argument constructors supply — consults no store and examines no
+/// `jti` / `cid`, so an existing deployment validates exactly as it did
+/// before (GP 11) and pays nothing (GP 13).
+///
+/// **The constructors are explicit overloads, not optional arguments.**
+/// F# folds `?policy` into ONE widened constructor, which erases the
+/// pre-338 `(ISecretStore, string option)` signature from the emitted
+/// surface — source-compatible, but a binary break the public-API
+/// baseline correctly reports as a removal. The separate three-argument
+/// form keeps this phase's surface diff purely additive.
+type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy: PeerTokenPolicy) =
 
-    interface IPeerAuthProvider with
-        member _.IssuePeerToken(caller: PeerIdentity, audience: PeerIdentity, user: UserContext) = async {
+    /// The pre-338 call shapes, unchanged: `JwtPeerAuthProvider(secrets)`
+    /// (audience unbound) and `JwtPeerAuthProvider(secrets, "peer-c")`
+    /// (Phase 130 audience binding), both on the unscoped policy.
+    new(secrets: ISecretStore, ?expectedAudience: string) =
+        JwtPeerAuthProvider(secrets, defaultArg expectedAudience "", PeerTokenPolicy.unscoped)
+
+    /// Mint a token, optionally bound to one contract id. Shared by the
+    /// unscoped and call-scoped issue paths so the signing-key strength
+    /// guard cannot drift between them.
+    member private _.Issue
+        (caller: PeerIdentity, audience: PeerIdentity, user: UserContext, contractId: string option)
+        : Async<Result<string, PeerError>> =
+        async {
             let! secretOpt = secrets.GetSecret(PeerJwt.platformScope, PeerJwt.signingKeyFor caller.PeerId)
 
             match secretOpt with
@@ -219,11 +328,52 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                             $"Signing key for peer '{caller.PeerId}' is empty or below the {PeerJwt.minSigningKeyBytes}-byte minimum — refusing to issue a token signed with a weak key"
                     )
             | Some secret ->
-                let token = PeerJwt.encode (Encoding.UTF8.GetBytes secret) caller audience user
+                let token =
+                    PeerJwt.encode (Encoding.UTF8.GetBytes secret) caller audience user contractId
+
                 return Ok token
         }
 
-        member _.ValidatePeerToken(token: string) = async {
+    /// Phase 338 — claim the token's `jti` against the replay guard.
+    /// Runs only once every other check has passed (see the claim-order
+    /// note in this file's header). Without a guard composed this is
+    /// `Ok` without touching the token at all, so the `jti` claim is
+    /// inert for a deployment that has not opted in.
+    member private _.ClaimNonce(doc: JsonDocument) : Async<Result<unit, string>> = async {
+        match policy.ReplayGuard with
+        | None -> return Ok()
+        | Some guard ->
+            match PeerJwt.getClaim "jti" doc with
+            | None -> return Error PeerJwt.missingNonceMessage
+            | Some jti when String.IsNullOrWhiteSpace jti -> return Error PeerJwt.missingNonceMessage
+            | Some jti ->
+                match PeerJwt.freshnessDeadline doc with
+                | None -> return Error "Token carries no usable 'exp' claim to bound its replay-guard entry"
+                | Some deadline ->
+                    let! verdict = guard.ClaimTokenId(jti, deadline)
+
+                    match verdict with
+                    | ReplayFirstUse -> return Ok()
+                    | ReplayDetected ->
+                        return
+                            Error "Peer token replayed — its 'jti' has already been spent inside the freshness window"
+                    | ReplayGuardUnavailable reason ->
+                        // Fail CLOSED. A guard that cannot see its state has
+                        // no basis for calling a token fresh, and answering
+                        // "not seen" here would silently restore the pre-338
+                        // posture exactly when it is under attack.
+                        return
+                            Error
+                                $"Replay guard unavailable ({reason}) — refusing the call rather than accepting an unchecked token"
+    }
+
+    /// The whole validation path. `expectedContract` is `Some` on the
+    /// call-scoped entry point and `None` on the plain one; every other
+    /// check is identical, so the two cannot drift.
+    member private this.Validate
+        (token: string, expectedContract: string option)
+        : Async<Result<PeerPrincipal, PeerError>> =
+        async {
             match PeerJwt.split token with
             | Error e -> return Error(PeerUnauthorized e)
             | Ok(header, payload, signature) ->
@@ -257,29 +407,43 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                                 do! PeerJwt.checkExpiry doc
                                 do! PeerJwt.checkNotBefore doc
                                 do! PeerJwt.checkAudience expectedAudience doc
+                                do! PeerJwt.checkContractScope policy.CallScope expectedContract doc
                                 return ()
                             }
 
                             match validated with
                             | Error e -> return Error(PeerUnauthorized e)
                             | Ok() ->
-                                let name = PeerJwt.getClaim "name" doc |> Option.defaultValue iss
+                                // LAST: only an otherwise-valid token gets to
+                                // consume a seen-set entry.
+                                let! claimed = this.ClaimNonce doc
 
-                                let user =
-                                    match PeerJwt.getClaim "uctx" doc with
-                                    | Some u ->
-                                        try
-                                            JsonRpc.deserialize<UserContext> u
-                                        with _ ->
-                                            Anonymous
-                                    | None -> Anonymous
+                                match claimed with
+                                | Error e -> return Error(PeerUnauthorized e)
+                                | Ok() ->
+                                    let name = PeerJwt.getClaim "name" doc |> Option.defaultValue iss
 
-                                return
-                                    Ok {
-                                        Caller = { PeerId = iss; DisplayName = name }
-                                        User = user
-                                    }
+                                    let user =
+                                        match PeerJwt.getClaim "uctx" doc with
+                                        | Some u ->
+                                            try
+                                                JsonRpc.deserialize<UserContext> u
+                                            with _ ->
+                                                Anonymous
+                                        | None -> Anonymous
+
+                                    return
+                                        Ok {
+                                            Caller = { PeerId = iss; DisplayName = name }
+                                            User = user
+                                        }
         }
+
+    interface IPeerAuthProvider with
+        member this.IssuePeerToken(caller: PeerIdentity, audience: PeerIdentity, user: UserContext) =
+            this.Issue(caller, audience, user, None)
+
+        member this.ValidatePeerToken(token: string) = this.Validate(token, None)
 
         member _.VerifyDelegation(assertion: DelegatedAssertion) = async {
             match List.tryLast assertion.DelegationChain with
@@ -311,3 +475,27 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                     else
                         return Error(PeerUnauthorized "Delegation signature verification failed")
         }
+
+    // Phase 338 — the call-scoped half. Under the default
+    // `UnscopedCalls` policy both members behave exactly like their
+    // unscoped counterparts (no `cid` is minted, none is examined), so a
+    // caller may hold this seam unconditionally and let the composed
+    // policy decide whether binding is in force.
+    interface IPeerCallScopedAuth with
+        member this.IssueScopedPeerToken
+            (caller: PeerIdentity, audience: PeerIdentity, user: UserContext, contractId: string)
+            =
+            let bound =
+                match policy.CallScope with
+                | UnscopedCalls -> None
+                | ContractBoundCalls -> Some contractId
+
+            this.Issue(caller, audience, user, bound)
+
+        member this.ValidateScopedPeerToken(token: string, contractId: string) =
+            let expected =
+                match policy.CallScope with
+                | UnscopedCalls -> None
+                | ContractBoundCalls -> Some contractId
+
+            this.Validate(token, expected)

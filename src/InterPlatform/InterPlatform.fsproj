@@ -22,6 +22,14 @@
     <Compile Include="Server\IPeerAuthProvider.fs" />
     <Compile Include="Server\IPeerHandshake.fs" />
     <Compile Include="Server\IPeerRegistry.fs" />
+    <!-- Phase 338 — peer-token replay defence + call scoping. Carries the
+         `IPeerReplayGuard` seam + its two in-tree implementations, the
+         `PeerTokenPolicy` the provider reads, and the `IPeerCallScopedAuth`
+         seam. Compiles AFTER `IPeerAuthProvider.fs` (it returns that file's
+         `PeerPrincipal`) and BEFORE the provider that applies it. Nothing
+         composes a policy by default — `PeerTokenPolicy.unscoped` is the
+         pre-338 behaviour (GP 11 / GP 13). -->
+    <Compile Include="Server\PeerTokenPolicy.fs" />
     <Compile Include="Server\JwtPeerAuthProvider.fs" />
     <Compile Include="Server\DefaultPlatformPeer.fs" />
     <Compile Include="Server\BlobPeerRegistry.fs" />

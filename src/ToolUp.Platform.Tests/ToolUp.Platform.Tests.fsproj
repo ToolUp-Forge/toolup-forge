@@ -1176,6 +1176,12 @@
              with a poll-grace window, and blob reclamation, over the real
              BlobPeerJobResultStore with an injected clock. -->
         <Compile Include="InProcess\PeerJobRetentionTests.fs" />
+        <!-- Phase 338 — peer-token replay defence + call scoping: the
+             IPeerReplayGuard seam (bounded growth, fail-closed, the
+             distributed claim seen by a second replica) and the provider
+             behaviour over it, each rejection paired with a control that
+             asserts the same sequence SUCCEEDS with the defence removed. -->
+        <Compile Include="InProcess\PeerJwtReplayTests.fs" />
         <!-- Phase 483 — multi-round protocol orchestrator: the round
              barrier + accumulated-state thread, each DropoutPolicy
              variant, restart-resume from persisted state, and
