@@ -157,6 +157,20 @@ module private PeerJwt =
     /// `expectedAudience` of "" (no local identity composed) cannot bind
     /// audience and falls back to the pre-Phase-130 behaviour; the
     /// migration doc flags composing `LocalPeer` to activate the check.
+    ///
+    /// **Phase 309 — an empty `expectedAudience` is a deliberately weaker
+    /// posture, not a neutral one.** Because `ValidatePeerToken` finds the
+    /// signing key by the token's own `iss`, a token peer X minted for
+    /// receiver Y is accepted verbatim by any other receiver Z that also
+    /// trusts X — unless Z binds `aud = Z`. So the empty case is exactly
+    /// the confused-deputy exposure the claim exists to close, and it is
+    /// preserved here only for compatibility (GP 11). This function stays
+    /// policy-free: it is handed an expected audience and cannot tell a
+    /// host-only deployment's deliberate choice from a composition
+    /// oversight. Deciding which it is needs the hosted-contract set, so
+    /// the enforcement lives at the composition seam —
+    /// `PeerCompose.PeerServerApp.enforceAudienceBinding`, which warns at
+    /// startup and, under `withStrictAudienceBinding`, refuses to start.
     let checkAudience (expectedAudience: string) (doc: JsonDocument) =
         if String.IsNullOrEmpty expectedAudience then
             Ok()
@@ -285,7 +299,12 @@ module private PeerJwt =
 /// deputy / cross-receiver-replay defence). An `expectedAudience` of ""
 /// keeps the pre-Phase-130 behaviour (audience binding off — GP 11); a
 /// receiver that never composed a `LocalPeer` identity cannot bind
-/// audience.
+/// audience. **That empty case is a weaker posture, not a neutral one**
+/// (see `PeerJwt.checkAudience`) — Phase 309 makes a composition that
+/// lands in it say so at startup, and lets a deployment turn it into a
+/// compose-time failure with `PeerServerApp.withStrictAudienceBinding`.
+/// The provider itself is unchanged by that phase: it stays a stateless,
+/// policy-free validator (GP 12 rule 4).
 ///
 /// `policy` (Phase 338) carries the replay guard and the call-scope
 /// mode. Its default — `PeerTokenPolicy.unscoped`, what the

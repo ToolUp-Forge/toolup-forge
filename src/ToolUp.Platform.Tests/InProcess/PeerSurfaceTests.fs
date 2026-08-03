@@ -172,6 +172,12 @@ let tests =
                 "AuditTransparency" // → the reserved audit contract in Serves
                 "ContractProfiles" // method-lifecycle overlay; served live at /peer/v1/capabilities/profile, not re-projected here
                 "ConsumedContracts" // → Consumes
+                // Phase 309 — deliberately NOT projected. It registers
+                // nothing and changes nothing a counterparty can observe:
+                // it only decides whether a missing `LocalPeer` is an
+                // advisory or a compose-time refusal, and the posture it
+                // guards is already reported as `TrustPosture.AudienceBound`.
+                "StrictAudienceBinding"
             ]
 
             let actual =

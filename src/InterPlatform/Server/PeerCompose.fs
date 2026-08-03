@@ -80,7 +80,39 @@ type PeerServerApp = {
     /// from this list. Declare entries with `PeerSurface.consumes<'TApi>`
     /// (typed) or a literal `ConsumedContract`.
     ConsumedContracts: ConsumedContract list
+    /// Phase 309 — when `true`, a composition that hosts peer contracts
+    /// without a `LocalPeer` identity FAILS at `run` instead of logging
+    /// the advisory. Off by default, so an existing host-only deployment
+    /// keeps starting exactly as it did (GP 11); opt in with
+    /// `withStrictAudienceBinding`. Purely a compose-time gate — it
+    /// changes no registration and reaches no request path.
+    StrictAudienceBinding: bool
 }
+
+/// Phase 309 — a composition's audience-binding posture, classified at
+/// compose time. `JwtPeerAuthProvider` binds an inbound token's `aud`
+/// claim to `localIdentity.PeerId`, and that id is `""` whenever no
+/// `LocalPeer` was composed — so the Phase 130 confused-deputy defence is
+/// silently *off* on exactly the host-only deployments documented as
+/// omitting it. This DU makes the posture a value rather than an
+/// inference, so a deployment (or a test) asserts on data instead of
+/// scraping a log line — the same shape `ModuleLoadOutcome` takes for
+/// module-load observability.
+type PeerAudienceBinding =
+    /// `ServerConfig.PeerSubstrate = NoPeerSubstrate` — no peer token is
+    /// validated here at all, so there is nothing to bind.
+    | AudienceBindingOff
+    /// A usable `LocalPeer` is composed: every inbound token must carry
+    /// `aud` equal to `receiverId`, fixed-time compared.
+    | AudienceBindingEnforced of receiverId: string
+    /// **The composition defect.** Contracts are hosted (or the
+    /// audit-transparency contract is), but no usable `LocalPeer` id was
+    /// composed, so no `aud` check fires on the exposed surface.
+    | AudienceBindingMissing
+    /// No `LocalPeer`, and nothing is hosted — the deployment exposes no
+    /// contract for a mis-addressed token to be spent against, so the
+    /// absent binding costs nothing.
+    | AudienceBindingIdle
 
 module PeerServerApp =
 
@@ -91,6 +123,7 @@ module PeerServerApp =
         AuditTransparency = false
         ContractProfiles = []
         ConsumedContracts = []
+        StrictAudienceBinding = false
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -264,6 +297,86 @@ module PeerServerApp =
                 }
         }
 
+    /// Phase 309 — refuse to start when this deployment hosts peer
+    /// contracts without a `LocalPeer` identity, instead of logging the
+    /// advisory and carrying on with audience binding disabled.
+    ///
+    /// **Opt-in, and deliberately not the default.** The advisory is
+    /// enough for an operator who is watching; the hard gate is for a
+    /// deployment that wants the composition defect to be impossible to
+    /// ship rather than merely visible. Defaulting to failure would
+    /// break every existing host-only composition on upgrade (GP 11) —
+    /// the exact deployments the advisory is written for.
+    ///
+    /// Compose-time only: it registers nothing, decides nothing per
+    /// request, and a composition that never calls it is byte-for-byte
+    /// unchanged (GP 13).
+    let withStrictAudienceBinding (app: PeerServerApp) : PeerServerApp = {
+        app with
+            StrictAudienceBinding = true
+    }
+
+    /// Phase 309 — classify this composition's audience-binding posture.
+    /// Pure and total; exposed so a deployment can assert its own posture
+    /// in its own tests without booting a server, and so the advisory /
+    /// strict paths cannot drift from what the provider will actually do.
+    ///
+    /// A `LocalPeer` whose `PeerId` is blank counts as **absent**, not
+    /// present: `PeerJwt.checkAudience` short-circuits on an empty
+    /// expected audience, so `withLocalPeer { PeerId = ""; … }` binds
+    /// nothing while looking composed.
+    let auditAudienceBinding (app: PeerServerApp) : PeerAudienceBinding =
+        match app.Base.Config.PeerSubstrate with
+        | NoPeerSubstrate -> AudienceBindingOff
+        | EnabledPeerSubstrate ->
+            match app.LocalPeer with
+            | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
+                AudienceBindingEnforced identity.PeerId
+            | _ ->
+                if List.isEmpty app.Contracts && not app.AuditTransparency then
+                    AudienceBindingIdle
+                else
+                    AudienceBindingMissing
+
+    /// Phase 309 — the diagnosis shared by the advisory log line and the
+    /// strict refusal, so the two can never disagree about what is wrong
+    /// or which lever fixes it.
+    let audienceBindingDiagnosis =
+        "peer-audience-binding: this deployment hosts peer contracts but composed no LocalPeer identity, so JwtPeerAuthProvider validates inbound tokens against an empty expected audience and the 'aud' check never fires. A token another peer minted for a DIFFERENT receiver is accepted here whenever that receiver trusts the same issuer — the confused-deputy / cross-receiver replay the 'aud' claim exists to stop. Compose PeerServerApp.withLocalPeer with this deployment's own peer id to activate the check."
+
+    /// The advisory emitted at `run` when the binding is missing.
+    let audienceBindingAdvisory =
+        $"{audienceBindingDiagnosis} (Advisory only — PeerServerApp.withStrictAudienceBinding turns this into a compose-time failure.)"
+
+    /// The refusal raised at `run` when the binding is missing and
+    /// `withStrictAudienceBinding` is composed.
+    let audienceBindingRefusal =
+        $"{audienceBindingDiagnosis} Refusing to start: PeerServerApp.withStrictAudienceBinding is composed."
+
+    /// Phase 309 — apply the posture. Loud `Warn` by default, `failwith`
+    /// under `withStrictAudienceBinding`, silence in every other state.
+    /// Called by `run` before any peer registration; exposed so a
+    /// deployment can run the same gate from its own preflight.
+    ///
+    /// The enforcement lives HERE, at the composition seam, and not in
+    /// `JwtPeerAuthProvider`: the provider is a stateless, policy-free
+    /// validator that is handed an expected audience and has no way to
+    /// know whether an empty one is a host-only deployment's deliberate
+    /// posture or a composition oversight (GP 12 rule 4). The compose
+    /// root is the only place that can tell the two apart, because it is
+    /// the only place that can see the hosted-contract set.
+    let enforceAudienceBinding (app: PeerServerApp) : unit =
+        match auditAudienceBinding app with
+        | AudienceBindingOff
+        | AudienceBindingEnforced _
+        | AudienceBindingIdle -> ()
+        | AudienceBindingMissing ->
+            if app.StrictAudienceBinding then
+                failwith audienceBindingRefusal
+            else
+                app.Base.Logger
+                |> Option.iter (fun logger -> logger.Warn audienceBindingAdvisory)
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -277,6 +390,14 @@ module PeerServerApp =
             // never imported.
             ServerApp.run app.Base
         | EnabledPeerSubstrate ->
+            // Phase 309 — surface the audience-binding posture before
+            // anything registers. A host-only deployment that never
+            // composed `LocalPeer` gets a startup `Warn`; under
+            // `withStrictAudienceBinding` it does not start at all. Kept
+            // inside this branch so the `NoPeerSubstrate` short-circuit
+            // above stays byte-for-byte a bare `ServerApp.run` (GP 13).
+            enforceAudienceBinding app
+
             let contracts = app.Contracts
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
@@ -368,7 +489,13 @@ module PeerServerApp =
                             // receiver's own peer id. Empty when no
                             // `LocalPeer` was composed (host-only-without-
                             // identity): audience binding stays off, matching
-                            // the pre-130 behaviour (GP 11).
+                            // the pre-130 behaviour (GP 11). Phase 309 —
+                            // `enforceAudienceBinding` (above) has already
+                            // surfaced that case as an advisory, or refused
+                            // to start under `withStrictAudienceBinding`, so
+                            // an empty audience reaching here is a posture
+                            // the operator was told about rather than a
+                            // silent default.
                             JwtPeerAuthProvider(secrets, localIdentity.PeerId) :> IPeerAuthProvider)
                     )
                     .AddSingleton<IPeerJobResultStore>(

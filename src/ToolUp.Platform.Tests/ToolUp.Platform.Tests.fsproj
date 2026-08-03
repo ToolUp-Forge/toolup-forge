@@ -1182,6 +1182,12 @@
              behaviour over it, each rejection paired with a control that
              asserts the same sequence SUCCEEDS with the defence removed. -->
         <Compile Include="InProcess\PeerJwtReplayTests.fs" />
+        <!-- Phase 309 — peer audience binding for contract hosts: the
+             cross-receiver exposure an unbound receiver carries (pinned
+             by a negative control that ADMITS the mis-addressed token),
+             and the compose-time posture the advisory / strict gate
+             derives from the hosted-contract set. -->
+        <Compile Include="InProcess\PeerAudienceBindingTests.fs" />
         <!-- Phase 483 — multi-round protocol orchestrator: the round
              barrier + accumulated-state thread, each DropoutPolicy
              variant, restart-resume from persisted state, and

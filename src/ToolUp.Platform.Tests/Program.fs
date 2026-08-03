@@ -954,6 +954,13 @@ let allTests =
         PeerJwtReplayTests.guardTests
         PeerJwtReplayTests.replayDefenceTests
         PeerJwtReplayTests.callScopingTests
+        // Phase 309 — peer audience binding for contract hosts: a
+        // wrong-audience token is refused by a bound receiver and
+        // ADMITTED by an unbound one (the negative control that makes
+        // the exposure falsifiable), plus the compose-time advisory /
+        // opt-in strict refusal derived from the hosted-contract set.
+        PeerAudienceBindingTests.bindingTests
+        PeerAudienceBindingTests.postureTests
         // Phase 483 — multi-round protocol orchestrator: a three-round
         // two-party protocol expressed as a step function alone, each
         // DropoutPolicy variant against a missed round deadline,
