@@ -962,6 +962,30 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> j)
     }
     {
+        EventType = "FederationRoundCompleted"
+        TryEncode =
+            (function
+            | FederationRoundCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FederationRoundCompleted(fromAuditJson<FederationRoundCompletedPayload> j)
+    }
+    {
+        EventType = "FederationParticipantDropped"
+        TryEncode =
+            (function
+            | FederationParticipantDropped p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FederationParticipantDropped(fromAuditJson<FederationParticipantDroppedPayload> j)
+    }
+    {
+        EventType = "FederationRunAborted"
+        TryEncode =
+            (function
+            | FederationRunAborted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FederationRunAborted(fromAuditJson<FederationRunAbortedPayload> j)
+    }
+    {
         EventType = "ArtefactSigned"
         TryEncode =
             (function

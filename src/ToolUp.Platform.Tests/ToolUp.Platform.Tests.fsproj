@@ -1169,6 +1169,11 @@
              with a poll-grace window, and blob reclamation, over the real
              BlobPeerJobResultStore with an injected clock. -->
         <Compile Include="InProcess\PeerJobRetentionTests.fs" />
+        <!-- Phase 483 — multi-round protocol orchestrator: the round
+             barrier + accumulated-state thread, each DropoutPolicy
+             variant, restart-resume from persisted state, and
+             cancellation reaching the in-flight participant calls. -->
+        <Compile Include="InProcess\RoundOrchestratorTests.fs" />
         <!-- Giraffe stock-helper DI defaults — RequestErrors.* / negotiate /
              json resolve INegotiationConfig + Json.ISerializer from DI;
              ComposeBootstrap.registerGiraffeDefaults registers them

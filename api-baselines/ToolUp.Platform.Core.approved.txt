@@ -720,6 +720,9 @@ ToolUp.Platform.AuditEvent.IsEncryptionKeyRotated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityUpdated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsFederationParticipantDropped : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsFederationRoundCompleted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsFederationRunAborted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileReprocessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileUploaded : System.Boolean { get }
@@ -901,6 +904,12 @@ ToolUp.Platform.AuditEvent+EntityDeleted (class)
 ToolUp.Platform.AuditEvent+EntityDeleted.Item : ToolUp.Platform.EntityLifecycleEventPayload { get }
 ToolUp.Platform.AuditEvent+EntityUpdated (class)
 ToolUp.Platform.AuditEvent+EntityUpdated.Item : ToolUp.Platform.EntityLifecycleEventPayload { get }
+ToolUp.Platform.AuditEvent+FederationParticipantDropped (class)
+ToolUp.Platform.AuditEvent+FederationParticipantDropped.Item : ToolUp.Platform.FederationParticipantDroppedPayload { get }
+ToolUp.Platform.AuditEvent+FederationRoundCompleted (class)
+ToolUp.Platform.AuditEvent+FederationRoundCompleted.Item : ToolUp.Platform.FederationRoundCompletedPayload { get }
+ToolUp.Platform.AuditEvent+FederationRunAborted (class)
+ToolUp.Platform.AuditEvent+FederationRunAborted.Item : ToolUp.Platform.FederationRunAbortedPayload { get }
 ToolUp.Platform.AuditEvent+FileDeleted (class)
 ToolUp.Platform.AuditEvent+FileDeleted.Item : ToolUp.Platform.FileDeletedPayload { get }
 ToolUp.Platform.AuditEvent+FileReprocessed (class)
@@ -1080,6 +1089,9 @@ ToolUp.Platform.AuditEvent+Tags.EncryptionKeyRotated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityUpdated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.FederationParticipantDropped : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.FederationRoundCompleted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.FederationRunAborted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileReprocessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileUploaded : System.Int32 (literal)
@@ -3696,6 +3708,27 @@ ToolUp.Platform.FeatureFlagApi.routeBuilder(System.String, System.String) : Syst
 ToolUp.Platform.FeatureFlagEvents (class)
 ToolUp.Platform.FeatureFlagEvents.FlagChanged : System.String (literal)
 ToolUp.Platform.FeatureFlagEvents.SourceModule : System.String (literal)
+ToolUp.Platform.FederationParticipantDroppedPayload (class)
+ToolUp.Platform.FederationParticipantDroppedPayload..ctor(System.String, System.Int32, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FederationParticipantDroppedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.FederationParticipantDroppedPayload.PeerId : System.String { get }
+ToolUp.Platform.FederationParticipantDroppedPayload.Reason : System.String { get }
+ToolUp.Platform.FederationParticipantDroppedPayload.RoundNumber : System.Int32 { get }
+ToolUp.Platform.FederationParticipantDroppedPayload.RunId : System.String { get }
+ToolUp.Platform.FederationRoundCompletedPayload (class)
+ToolUp.Platform.FederationRoundCompletedPayload..ctor(System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.DateTimeOffset)
+ToolUp.Platform.FederationRoundCompletedPayload.DroppedCount : System.Int32 { get }
+ToolUp.Platform.FederationRoundCompletedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.FederationRoundCompletedPayload.ParticipantCount : System.Int32 { get }
+ToolUp.Platform.FederationRoundCompletedPayload.RespondedCount : System.Int32 { get }
+ToolUp.Platform.FederationRoundCompletedPayload.RoundNumber : System.Int32 { get }
+ToolUp.Platform.FederationRoundCompletedPayload.RunId : System.String { get }
+ToolUp.Platform.FederationRunAbortedPayload (class)
+ToolUp.Platform.FederationRunAbortedPayload..ctor(System.String, System.Int32, System.String, System.DateTimeOffset)
+ToolUp.Platform.FederationRunAbortedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.FederationRunAbortedPayload.Reason : System.String { get }
+ToolUp.Platform.FederationRunAbortedPayload.RoundNumber : System.Int32 { get }
+ToolUp.Platform.FederationRunAbortedPayload.RunId : System.String { get }
 ToolUp.Platform.FieldChange (class)
 ToolUp.Platform.FieldChange..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.FieldChange.From : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

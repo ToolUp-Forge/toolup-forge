@@ -940,6 +940,12 @@ let allTests =
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.
         PeerJobRetentionTests.tests
+        // Phase 483 — multi-round protocol orchestrator: a three-round
+        // two-party protocol expressed as a step function alone, each
+        // DropoutPolicy variant against a missed round deadline,
+        // restart-resume from persisted state, and cancellation reaching
+        // the participant calls already on the wire.
+        RoundOrchestratorTests.tests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /

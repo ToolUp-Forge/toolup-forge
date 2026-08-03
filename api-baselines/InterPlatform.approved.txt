@@ -9,6 +9,8 @@ ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IB
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.BlobPeerRegistry (class)
 ToolUp.InterPlatform.BlobPeerRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.InterPlatform.BlobRoundStateStore (class)
+ToolUp.InterPlatform.BlobRoundStateStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.CleanRoomBroker (class)
 ToolUp.InterPlatform.CleanRoomBroker.create() : ToolUp.InterPlatform.ICleanRoomBroker
 ToolUp.InterPlatform.CleanRoomTemplate (class)
@@ -52,6 +54,11 @@ ToolUp.InterPlatform.DefaultPeerProfileProvider (class)
 ToolUp.InterPlatform.DefaultPeerProfileProvider..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile])
 ToolUp.InterPlatform.DefaultPlatformPeer (class)
 ToolUp.InterPlatform.DefaultPlatformPeer..ctor()
+ToolUp.InterPlatform.DefaultRoundOrchestrator (class)
+ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout)
+ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout, ToolUp.InterPlatform.IRoundStateStore)
+ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout, ToolUp.InterPlatform.IRoundStateStore, ToolUp.InterPlatform.IRoundObserver)
+ToolUp.InterPlatform.DefaultRoundOrchestrator..ctor(ToolUp.InterPlatform.IPeerFanout, ToolUp.InterPlatform.IRoundStateStore, ToolUp.InterPlatform.IRoundObserver, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.DelegatedAssertion (class)
 ToolUp.InterPlatform.DelegatedAssertion..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
 ToolUp.InterPlatform.DelegatedAssertion.DelegationChain : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -62,6 +69,20 @@ ToolUp.InterPlatform.DeprecationNotice..ctor(ToolUp.InterPlatform.ContractVersio
 ToolUp.InterPlatform.DeprecationNotice.DeprecatedSince : ToolUp.InterPlatform.ContractVersion { get }
 ToolUp.InterPlatform.DeprecationNotice.Note : System.String { get }
 ToolUp.InterPlatform.DeprecationNotice.RemovedIn : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ContractVersion] { get }
+ToolUp.InterPlatform.DropoutPolicy (class)
+ToolUp.InterPlatform.DropoutPolicy.AbortRun : ToolUp.InterPlatform.DropoutPolicy { get }
+ToolUp.InterPlatform.DropoutPolicy.IsAbortRun : System.Boolean { get }
+ToolUp.InterPlatform.DropoutPolicy.IsContinueWithout : System.Boolean { get }
+ToolUp.InterPlatform.DropoutPolicy.IsWaitUntil : System.Boolean { get }
+ToolUp.InterPlatform.DropoutPolicy.Tag : System.Int32 { get }
+ToolUp.InterPlatform.DropoutPolicy+ContinueWithout (class)
+ToolUp.InterPlatform.DropoutPolicy+ContinueWithout.minParticipants : System.Int32 { get }
+ToolUp.InterPlatform.DropoutPolicy+Tags (class)
+ToolUp.InterPlatform.DropoutPolicy+Tags.AbortRun : System.Int32 (literal)
+ToolUp.InterPlatform.DropoutPolicy+Tags.ContinueWithout : System.Int32 (literal)
+ToolUp.InterPlatform.DropoutPolicy+Tags.WaitUntil : System.Int32 (literal)
+ToolUp.InterPlatform.DropoutPolicy+WaitUntil (class)
+ToolUp.InterPlatform.DropoutPolicy+WaitUntil.grace : System.TimeSpan { get }
 ToolUp.InterPlatform.FanoutPolicy (class)
 ToolUp.InterPlatform.FanoutPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.InterPlatform.FanoutPolicy.CancelOnFirstSuccess : System.Boolean { get }
@@ -125,8 +146,18 @@ ToolUp.InterPlatform.IPlatformPeer (interface)
 ToolUp.InterPlatform.IPlatformPeer.Capabilities() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability]]
 ToolUp.InterPlatform.IPlatformPeer.Handle(System.String, ToolUp.InterPlatform.PeerCallContext, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]]
 ToolUp.InterPlatform.IPlatformPeer.RegisterContract(ToolUp.InterPlatform.PeerContractRegistration) : System.Void
+ToolUp.InterPlatform.IRoundObserver (interface)
+ToolUp.InterPlatform.IRoundObserver.Observe(System.String, ToolUp.InterPlatform.RoundEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.IRoundOrchestrator (interface)
+ToolUp.InterPlatform.IRoundOrchestrator.RunRounds(ToolUp.InterPlatform.RoundRunPlan, ToolUp.InterPlatform.RoundStep, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]]]]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.RoundRunResult]
+ToolUp.InterPlatform.IRoundStateStore (interface)
+ToolUp.InterPlatform.IRoundStateStore.Clear(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.IRoundStateStore.Save(System.String, ToolUp.InterPlatform.RoundState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.IRoundStateStore.TryLoad(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.RoundState]]
 ToolUp.InterPlatform.InMemoryPeerHandshake (class)
 ToolUp.InterPlatform.InMemoryPeerHandshake..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], ToolUp.InterPlatform.PeerHandshakeError]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], ToolUp.InterPlatform.PeerHandshakeError]]])
+ToolUp.InterPlatform.InMemoryRoundStateStore (class)
+ToolUp.InterPlatform.InMemoryRoundStateStore..ctor()
 ToolUp.InterPlatform.JsonRpc (class)
 ToolUp.InterPlatform.JsonRpc.contractNotFound : System.Int32 { get }
 ToolUp.InterPlatform.JsonRpc.deserialize`1(System.String) : T
@@ -242,6 +273,19 @@ ToolUp.InterPlatform.OutputShape+Tags (class)
 ToolUp.InterPlatform.OutputShape+Tags.Aggregate : System.Int32 (literal)
 ToolUp.InterPlatform.OutputShape+Tags.Count : System.Int32 (literal)
 ToolUp.InterPlatform.OutputShape+Tags.Histogram : System.Int32 (literal)
+ToolUp.InterPlatform.ParticipantStatus (class)
+ToolUp.InterPlatform.ParticipantStatus.Awaiting : ToolUp.InterPlatform.ParticipantStatus { get }
+ToolUp.InterPlatform.ParticipantStatus.IsAwaiting : System.Boolean { get }
+ToolUp.InterPlatform.ParticipantStatus.IsDropped : System.Boolean { get }
+ToolUp.InterPlatform.ParticipantStatus.IsResponded : System.Boolean { get }
+ToolUp.InterPlatform.ParticipantStatus.Responded : ToolUp.InterPlatform.ParticipantStatus { get }
+ToolUp.InterPlatform.ParticipantStatus.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ParticipantStatus+Dropped (class)
+ToolUp.InterPlatform.ParticipantStatus+Dropped.reason : System.String { get }
+ToolUp.InterPlatform.ParticipantStatus+Tags (class)
+ToolUp.InterPlatform.ParticipantStatus+Tags.Awaiting : System.Int32 (literal)
+ToolUp.InterPlatform.ParticipantStatus+Tags.Dropped : System.Int32 (literal)
+ToolUp.InterPlatform.ParticipantStatus+Tags.Responded : System.Int32 (literal)
 ToolUp.InterPlatform.PeerAudit (class)
 ToolUp.InterPlatform.PeerAudit.contractId : System.String (literal)
 ToolUp.InterPlatform.PeerAudit.defaultLimit : System.Int32 (literal)
@@ -576,6 +620,8 @@ ToolUp.InterPlatform.PeerWirePayload (class)
 ToolUp.InterPlatform.PeerWirePayload..ctor(ToolUp.InterPlatform.PeerCallContext, System.String)
 ToolUp.InterPlatform.PeerWirePayload.Arguments : System.String { get }
 ToolUp.InterPlatform.PeerWirePayload.Context : ToolUp.InterPlatform.PeerCallContext { get }
+ToolUp.InterPlatform.PlatformRoundObserver (class)
+ToolUp.InterPlatform.PlatformRoundObserver..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
 ToolUp.InterPlatform.PrivacyCell (class)
 ToolUp.InterPlatform.PrivacyCell..ctor(System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double])
 ToolUp.InterPlatform.PrivacyCell.Count : System.Int32 { get }
@@ -592,6 +638,110 @@ ToolUp.InterPlatform.PrivacyGateModule.isStricterOrEqual(ToolUp.InterPlatform.Pr
 ToolUp.InterPlatform.PythonClientGen (class)
 ToolUp.InterPlatform.PythonClientGen.emit(ToolUp.InterPlatform.PeerContractSchema) : System.String
 ToolUp.InterPlatform.PythonClientGen.pyType(ToolUp.InterPlatform.PeerTypeRef) : System.String
+ToolUp.InterPlatform.RoundEvent (class)
+ToolUp.InterPlatform.RoundEvent.IsParticipantDropped : System.Boolean { get }
+ToolUp.InterPlatform.RoundEvent.IsRoundCompleted : System.Boolean { get }
+ToolUp.InterPlatform.RoundEvent.IsRoundStarted : System.Boolean { get }
+ToolUp.InterPlatform.RoundEvent.IsRunAborted : System.Boolean { get }
+ToolUp.InterPlatform.RoundEvent.Tag : System.Int32 { get }
+ToolUp.InterPlatform.RoundEvent+ParticipantDropped (class)
+ToolUp.InterPlatform.RoundEvent+ParticipantDropped.peerId : System.String { get }
+ToolUp.InterPlatform.RoundEvent+ParticipantDropped.reason : System.String { get }
+ToolUp.InterPlatform.RoundEvent+ParticipantDropped.roundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundEvent+ParticipantDropped.runId : System.String { get }
+ToolUp.InterPlatform.RoundEvent+RoundCompleted (class)
+ToolUp.InterPlatform.RoundEvent+RoundCompleted.dropped : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.RoundEvent+RoundCompleted.responded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.RoundEvent+RoundCompleted.roundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundEvent+RoundCompleted.runId : System.String { get }
+ToolUp.InterPlatform.RoundEvent+RoundStarted (class)
+ToolUp.InterPlatform.RoundEvent+RoundStarted.participants : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.RoundEvent+RoundStarted.roundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundEvent+RoundStarted.runId : System.String { get }
+ToolUp.InterPlatform.RoundEvent+RunAborted (class)
+ToolUp.InterPlatform.RoundEvent+RunAborted.reason : System.String { get }
+ToolUp.InterPlatform.RoundEvent+RunAborted.roundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundEvent+RunAborted.runId : System.String { get }
+ToolUp.InterPlatform.RoundEvent+Tags (class)
+ToolUp.InterPlatform.RoundEvent+Tags.ParticipantDropped : System.Int32 (literal)
+ToolUp.InterPlatform.RoundEvent+Tags.RoundCompleted : System.Int32 (literal)
+ToolUp.InterPlatform.RoundEvent+Tags.RoundStarted : System.Int32 (literal)
+ToolUp.InterPlatform.RoundEvent+Tags.RunAborted : System.Int32 (literal)
+ToolUp.InterPlatform.RoundObserver (class)
+ToolUp.InterPlatform.RoundObserver.auditOnly(ToolUp.Platform.IAuditLog) : ToolUp.InterPlatform.IRoundObserver
+ToolUp.InterPlatform.RoundObserver.create(ToolUp.Platform.IAuditLog, ToolUp.Platform.INotificationChannel) : ToolUp.InterPlatform.IRoundObserver
+ToolUp.InterPlatform.RoundObserver.none : ToolUp.InterPlatform.IRoundObserver { get }
+ToolUp.InterPlatform.RoundObserver.notifyOnly(ToolUp.Platform.INotificationChannel) : ToolUp.InterPlatform.IRoundObserver
+ToolUp.InterPlatform.RoundOrchestrator (class)
+ToolUp.InterPlatform.RoundOrchestrator.create() : ToolUp.InterPlatform.IRoundOrchestrator
+ToolUp.InterPlatform.RoundOrchestrator.createWith(ToolUp.InterPlatform.IRoundStateStore, ToolUp.InterPlatform.IRoundObserver) : ToolUp.InterPlatform.IRoundOrchestrator
+ToolUp.InterPlatform.RoundOutcome (class)
+ToolUp.InterPlatform.RoundOutcome.IsAbortRunWith : System.Boolean { get }
+ToolUp.InterPlatform.RoundOutcome.IsContinueRun : System.Boolean { get }
+ToolUp.InterPlatform.RoundOutcome.IsFinishRun : System.Boolean { get }
+ToolUp.InterPlatform.RoundOutcome.Tag : System.Int32 { get }
+ToolUp.InterPlatform.RoundOutcome+AbortRunWith (class)
+ToolUp.InterPlatform.RoundOutcome+AbortRunWith.reason : System.String { get }
+ToolUp.InterPlatform.RoundOutcome+ContinueRun (class)
+ToolUp.InterPlatform.RoundOutcome+ContinueRun.accumulated : System.String { get }
+ToolUp.InterPlatform.RoundOutcome+FinishRun (class)
+ToolUp.InterPlatform.RoundOutcome+FinishRun.accumulated : System.String { get }
+ToolUp.InterPlatform.RoundOutcome+Tags (class)
+ToolUp.InterPlatform.RoundOutcome+Tags.AbortRunWith : System.Int32 (literal)
+ToolUp.InterPlatform.RoundOutcome+Tags.ContinueRun : System.Int32 (literal)
+ToolUp.InterPlatform.RoundOutcome+Tags.FinishRun : System.Int32 (literal)
+ToolUp.InterPlatform.RoundProgress (class)
+ToolUp.InterPlatform.RoundProgress..ctor(System.String, System.Int32, System.String, System.Int32, System.Int32, System.Int32, System.String)
+ToolUp.InterPlatform.RoundProgress.Detail : System.String { get }
+ToolUp.InterPlatform.RoundProgress.DroppedCount : System.Int32 { get }
+ToolUp.InterPlatform.RoundProgress.ParticipantCount : System.Int32 { get }
+ToolUp.InterPlatform.RoundProgress.RespondedCount : System.Int32 { get }
+ToolUp.InterPlatform.RoundProgress.RoundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundProgress.RunId : System.String { get }
+ToolUp.InterPlatform.RoundProgress.Stage : System.String { get }
+ToolUp.InterPlatform.RoundProgressModule (class)
+ToolUp.InterPlatform.RoundProgressModule.NotificationKey : System.String (literal)
+ToolUp.InterPlatform.RoundProgressModule.ofEvent(ToolUp.InterPlatform.RoundEvent) : ToolUp.InterPlatform.RoundProgress
+ToolUp.InterPlatform.RoundRunPlan (class)
+ToolUp.InterPlatform.RoundRunPlan..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TargetPeer], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.InterPlatform.DropoutPolicy, System.String)
+ToolUp.InterPlatform.RoundRunPlan.Dropout : ToolUp.InterPlatform.DropoutPolicy { get }
+ToolUp.InterPlatform.RoundRunPlan.InitialState : System.String { get }
+ToolUp.InterPlatform.RoundRunPlan.MaxConcurrency : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.InterPlatform.RoundRunPlan.MaxRounds : System.Int32 { get }
+ToolUp.InterPlatform.RoundRunPlan.Participants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TargetPeer] { get }
+ToolUp.InterPlatform.RoundRunPlan.RoundTimeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.InterPlatform.RoundRunPlan.RunId : System.String { get }
+ToolUp.InterPlatform.RoundRunPlan.ScopeId : System.String { get }
+ToolUp.InterPlatform.RoundRunPlanModule (class)
+ToolUp.InterPlatform.RoundRunPlanModule.create(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TargetPeer], System.Int32) : ToolUp.InterPlatform.RoundRunPlan
+ToolUp.InterPlatform.RoundRunPlanModule.withDropout(ToolUp.InterPlatform.DropoutPolicy, ToolUp.InterPlatform.RoundRunPlan) : ToolUp.InterPlatform.RoundRunPlan
+ToolUp.InterPlatform.RoundRunPlanModule.withInitialState(System.String, ToolUp.InterPlatform.RoundRunPlan) : ToolUp.InterPlatform.RoundRunPlan
+ToolUp.InterPlatform.RoundRunPlanModule.withMaxConcurrency(System.Int32, ToolUp.InterPlatform.RoundRunPlan) : ToolUp.InterPlatform.RoundRunPlan
+ToolUp.InterPlatform.RoundRunPlanModule.withRoundTimeout(System.TimeSpan, ToolUp.InterPlatform.RoundRunPlan) : ToolUp.InterPlatform.RoundRunPlan
+ToolUp.InterPlatform.RoundRunResult (class)
+ToolUp.InterPlatform.RoundRunResult.IsRunHalted : System.Boolean { get }
+ToolUp.InterPlatform.RoundRunResult.IsRunSucceeded : System.Boolean { get }
+ToolUp.InterPlatform.RoundRunResult.Tag : System.Int32 { get }
+ToolUp.InterPlatform.RoundRunResult+RunHalted (class)
+ToolUp.InterPlatform.RoundRunResult+RunHalted.reason : System.String { get }
+ToolUp.InterPlatform.RoundRunResult+RunHalted.state : ToolUp.InterPlatform.RoundState { get }
+ToolUp.InterPlatform.RoundRunResult+RunSucceeded (class)
+ToolUp.InterPlatform.RoundRunResult+RunSucceeded.state : ToolUp.InterPlatform.RoundState { get }
+ToolUp.InterPlatform.RoundRunResult+Tags (class)
+ToolUp.InterPlatform.RoundRunResult+Tags.RunHalted : System.Int32 (literal)
+ToolUp.InterPlatform.RoundRunResult+Tags.RunSucceeded : System.Int32 (literal)
+ToolUp.InterPlatform.RoundState (class)
+ToolUp.InterPlatform.RoundState..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.ParticipantStatus], System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.RoundState.Accumulated : System.String { get }
+ToolUp.InterPlatform.RoundState.Participants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerIdentity] { get }
+ToolUp.InterPlatform.RoundState.RoundNumber : System.Int32 { get }
+ToolUp.InterPlatform.RoundState.RunId : System.String { get }
+ToolUp.InterPlatform.RoundState.Statuses : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.ParticipantStatus] { get }
+ToolUp.InterPlatform.RoundState.UpdatedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.RoundStep (class)
+ToolUp.InterPlatform.RoundStep..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.RoundState, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.RoundState, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.InterPlatform.PeerIdentity, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]], ToolUp.InterPlatform.RoundOutcome]])
+ToolUp.InterPlatform.RoundStep.Fold : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.RoundState, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.InterPlatform.PeerIdentity, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]], ToolUp.InterPlatform.RoundOutcome]] { get }
+ToolUp.InterPlatform.RoundStep.Payload : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.RoundState, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, System.String]] { get }
 ToolUp.InterPlatform.ServedContract (class)
 ToolUp.InterPlatform.ServedContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.InterPlatform.ServedContract.ContractId : System.String { get }

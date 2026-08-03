@@ -1973,6 +1973,80 @@ type PeerCallCompletedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+// ─── Phase 483 — multi-round federation-run audit payloads ─────────────
+//
+// Emitted by `ToolUp.InterPlatform`'s `IRoundOrchestrator` as an
+// iterative cross-party protocol (split-learning rounds, multi-round PSI,
+// federated aggregation) advances. Reserved `SourceModule =
+// "_platform.peer"`, the same family as `PeerCallCompleted`, because a
+// round is a federation event and an operator reconstructs a run from the
+// same trail as the calls it fanned out.
+//
+// The three cases carry the `Federation` qualifier at the F# surface even
+// though the phase names them `RoundCompleted` / `ParticipantDropped` /
+// `RunAborted`: `RoundEvent` in `ToolUp.InterPlatform` uses those bare
+// names for the observer stream, and two DUs one `open` apart sharing
+// case names is exactly how a call site silently binds the wrong one.
+// The emitted `EventType` discriminators carry the qualifier too — these
+// are new events, so there is no pinned legacy wire name to preserve.
+//
+// All three are PII-free: run / peer ids plus counts and a reason label,
+// never a protocol payload (GP 1 — forge owns the round mechanics and
+// never reads the content, so it could not audit it even if it wanted to).
+
+/// Phase 483 — one round of a multi-round federated run reached its
+/// barrier and its responses were folded. Emitted once per completed
+/// round, whatever the dropout outcome.
+type FederationRoundCompletedPayload = {
+    /// Caller-assigned stable id of the run this round belongs to.
+    RunId: string
+    /// 1-based round number within the run.
+    RoundNumber: int
+    /// Participants the round was fanned out to.
+    ParticipantCount: int
+    /// Participants that answered before the round's effective deadline.
+    RespondedCount: int
+    /// Participants recorded as dropped for this round.
+    DroppedCount: int
+    /// Wall-clock time the round's barrier resolved.
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 483 — a participant failed to answer a round before its
+/// effective deadline (or answered with an error) and the run's
+/// `DropoutPolicy` classified it as dropped. One row per dropped
+/// participant per round, so every dropout decision is auditable
+/// individually rather than as a count.
+type FederationParticipantDroppedPayload = {
+    /// Caller-assigned stable id of the run.
+    RunId: string
+    /// 1-based round number the participant dropped out of.
+    RoundNumber: int
+    /// `PeerId` of the dropped participant.
+    PeerId: string
+    /// Short, PII-free explanation — the `PeerError` DU case name or the
+    /// substrate's own deadline label.
+    Reason: string
+    /// Wall-clock time the dropout was decided.
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 483 — a multi-round run terminated without reaching its
+/// completion condition: the dropout policy refused to continue, the
+/// consumer's fold aborted, or the run was cancelled. The persisted
+/// `RoundState` survives, so an aborted run is resumable.
+type FederationRunAbortedPayload = {
+    /// Caller-assigned stable id of the run.
+    RunId: string
+    /// The round the run was in when it aborted (0 before the first
+    /// round completed).
+    RoundNumber: int
+    /// Short, PII-free explanation of the abort.
+    Reason: string
+    /// Wall-clock time the run aborted.
+    OccurredAt: DateTimeOffset
+}
+
 // ─── Phase 40 — artefact-signing substrate audit payloads ──────────────
 //
 // Emitted by the `ToolUp.ArtefactSigning` companion's
@@ -3081,6 +3155,18 @@ type AuditEvent =
     /// contract handler after dispatch reaches a terminal outcome.
     /// Reserved `SourceModule = "_platform.peer"`.
     | PeerCallCompleted of PeerCallCompletedPayload
+    /// Phase 483 — one round of a multi-round federated run reached its
+    /// barrier and its responses were folded. Emitted by
+    /// `IRoundOrchestrator` once per completed round. Reserved
+    /// `SourceModule = "_platform.peer"`.
+    | FederationRoundCompleted of FederationRoundCompletedPayload
+    /// Phase 483 — a participant was classified as dropped for a round by
+    /// the run's `DropoutPolicy`. One row per dropped participant per
+    /// round. Reserved `SourceModule = "_platform.peer"`.
+    | FederationParticipantDropped of FederationParticipantDroppedPayload
+    /// Phase 483 — a multi-round run terminated without reaching its
+    /// completion condition. Reserved `SourceModule = "_platform.peer"`.
+    | FederationRunAborted of FederationRunAbortedPayload
     /// Phase 40 — `IArtefactSigner.Sign` produced a detached-JWS
     /// signature over an arbitrary artefact. Reserved `SourceModule =
     /// "_platform.signing"`. Payload carries the key id + artefact
@@ -3349,6 +3435,9 @@ module AuditEvent =
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | PeerCallCompleted _ -> "PeerCallCompleted"
+        | FederationRoundCompleted _ -> "FederationRoundCompleted"
+        | FederationParticipantDropped _ -> "FederationParticipantDropped"
+        | FederationRunAborted _ -> "FederationRunAborted"
         | ArtefactSigned _ -> "ArtefactSigned"
         | SigningKeyRotated _ -> "SigningKeyRotated"
         | ClassifiedFieldRead _ -> "ClassifiedFieldRead"
