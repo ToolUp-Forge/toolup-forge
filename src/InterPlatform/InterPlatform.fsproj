@@ -57,6 +57,13 @@
          stays single-sourced rather than re-derived proxy-side. Cascade
          depends only on `Shared/PeerTypes.fs`. -->
     <Compile Include="Server\PeerCascade.fs" />
+    <!-- Phase 331 — the receiver-side dual of the cascade bookkeeping:
+         the policy record + the pure derivation the JSON-RPC host runs
+         over the self-asserted wire context. Depends only on
+         `Shared/PeerTypes.fs`; compiles beside `PeerCascade.fs` (its
+         sender-side twin) and before both `DefaultPlatformPeer.fs`'s
+         consumers and the host that calls it. -->
+    <Compile Include="Server\PeerCascadeAuthority.fs" />
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />
     <Compile Include="Server\PeerAuditContractHost.fs" />

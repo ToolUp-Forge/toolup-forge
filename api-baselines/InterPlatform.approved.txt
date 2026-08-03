@@ -126,6 +126,7 @@ ToolUp.InterPlatform.DefaultPeerProfileProvider (class)
 ToolUp.InterPlatform.DefaultPeerProfileProvider..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile])
 ToolUp.InterPlatform.DefaultPlatformPeer (class)
 ToolUp.InterPlatform.DefaultPlatformPeer..ctor()
+ToolUp.InterPlatform.DefaultPlatformPeer..ctor(System.String)
 ToolUp.InterPlatform.DefaultPrivateSetIntersection (class)
 ToolUp.InterPlatform.DefaultPrivateSetIntersection..ctor(ToolUp.InterPlatform.ICommutativeCipher)
 ToolUp.InterPlatform.DefaultPrivateSetIntersection..ctor(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]])
@@ -454,6 +455,25 @@ ToolUp.InterPlatform.PeerCapabilityNegotiation.profileFor`1(System.String, Micro
 ToolUp.InterPlatform.PeerCascade (class)
 ToolUp.InterPlatform.PeerCascade.create() : ToolUp.InterPlatform.IPeerCascade
 ToolUp.InterPlatform.PeerCascade.deriveNext(ToolUp.InterPlatform.PeerCallContext, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.TargetPeer) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerCallContext, ToolUp.InterPlatform.PeerError]
+ToolUp.InterPlatform.PeerCascadeAuthority (class)
+ToolUp.InterPlatform.PeerCascadeAuthority.derive(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.UserContext, System.String, ToolUp.InterPlatform.PeerCallContext) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerCallContext, ToolUp.InterPlatform.PeerError]
+ToolUp.InterPlatform.PeerCascadeAuthority.isWellShapedIdentifier(System.Int32, System.String) : System.Boolean
+ToolUp.InterPlatform.PeerCascadeAuthority.malformedRouteEntry : System.String { get }
+ToolUp.InterPlatform.PeerCascadePolicy (class)
+ToolUp.InterPlatform.PeerCascadePolicy..ctor(System.String, System.Int32, System.Int32, System.Int32)
+ToolUp.InterPlatform.PeerCascadePolicy.LocalPeerId : System.String { get }
+ToolUp.InterPlatform.PeerCascadePolicy.MaxHopsRemaining : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicy.MaxIdentifierLength : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicy.MaxRouteLength : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicyModule (class)
+ToolUp.InterPlatform.PeerCascadePolicyModule.defaultMaxHopsRemaining : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicyModule.defaultMaxIdentifierLength : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicyModule.defaultMaxRouteLength : System.Int32 { get }
+ToolUp.InterPlatform.PeerCascadePolicyModule.defaults : ToolUp.InterPlatform.PeerCascadePolicy { get }
+ToolUp.InterPlatform.PeerCascadePolicyModule.withLocalPeerId(System.String, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
+ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxHopsRemaining(System.Int32, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
+ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxIdentifierLength(System.Int32, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
+ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxRouteLength(System.Int32, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
 ToolUp.InterPlatform.PeerCompose (class)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding (class)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding.AudienceBindingIdle : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding { get }
@@ -472,9 +492,10 @@ ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingIdle : 
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingMissing : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingOff : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerServerApp (class)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits)
+ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy)
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.AuditTransparency : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.Base : ToolUp.Platform.ServerApp { get }
+ToolUp.InterPlatform.PeerCompose+PeerServerApp.CascadePolicy : ToolUp.InterPlatform.PeerCascadePolicy { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.ConsumedContracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.ContractProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.Contracts : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]] { get }
@@ -493,6 +514,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.create() : ToolUp.InterPlat
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCascadePolicy(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCommutativeCipher(ToolUp.InterPlatform.ICommutativeCipher, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp

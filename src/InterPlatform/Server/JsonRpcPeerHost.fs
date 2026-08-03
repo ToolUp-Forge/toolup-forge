@@ -44,6 +44,16 @@ open PeerReflection
 // subject as the originator, which is what the delegation-chain
 // signature exists to prevent.
 //
+// **Cascade authority (Phase 331).** "Rebuilds the call context from the
+// validated principal" was true of `Peer` and `User` and of nothing else:
+// `HopsRemaining`, `Route`, `RootRequestId` and `ParentRequestId` were
+// copied verbatim out of the request body, and the minted token carries
+// none of them, so they were unauthenticated by construction. The
+// contract handler now derives all four through
+// `PeerCascadeAuthority.derive` — see that file for the threat and the
+// per-field rule — which is what makes the receiver's hop-limit and loop
+// guards bind on something the caller cannot set.
+//
 // **Wire hardening (Phase 315).** Two wire-level fixes, both narrow:
 // the contract route reads the inbound body under a configurable
 // ceiling instead of buffering whatever arrives, and the job-poll route
@@ -547,43 +557,75 @@ module JsonRpcPeerHost =
                             match tryParse body with
                             | Error e -> return! writeJson 400 (JsonRpc.failure "" e) next ctx
                             | Ok(request, payload) ->
-                                // Trust the validated principal, never the
-                                // self-asserted wire payload's identity. The
-                                // `Delegated` originator inside it has been
-                                // signature-verified above (Phase 330).
-                                let trustedContext = {
-                                    payload.Context with
-                                        Peer = principal.Caller
-                                        User = principal.User
-                                }
+                                // Phase 331 — the trusted context is
+                                // DERIVED, not copied. Identity came from
+                                // the validated principal before this
+                                // phase (and the `Delegated` originator
+                                // inside it has been signature-verified
+                                // above, Phase 330); the cascade
+                                // bookkeeping — hop budget, route
+                                // history, correlation ids — was still
+                                // copied verbatim from the wire, which is
+                                // the half the caller controls and the
+                                // half the receiver's guards run on.
+                                let cascade =
+                                    tryGetService<PeerCascadePolicy> ctx
+                                    |> Option.defaultValue PeerCascadePolicy.defaults
 
-                                let! result =
-                                    peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
-                                    |> Async.StartAsTask
+                                let derived =
+                                    PeerCascadeAuthority.derive
+                                        cascade
+                                        principal.Caller
+                                        principal.User
+                                        request.Id
+                                        payload.Context
 
-                                do!
-                                    auditPeerCall
-                                        ctx
-                                        contractId
-                                        request.Method
-                                        principal.Caller.PeerId
-                                        trustedContext.RootRequestId
-                                        result
-
-                                match result with
-                                | Ok resultJson ->
-                                    // Build the response by hand so the
-                                    // already-serialised result rides in
-                                    // `Result` without a second JSON encode.
-                                    let response = {
-                                        JsonRpc = JsonRpc.version
-                                        Result = Some resultJson
-                                        Error = None
-                                        Id = request.Id
-                                    }
-
-                                    return! writeJson 200 response next ctx
+                                match derived with
+                                // A refused shape answers 200 with the
+                                // structured error, the same wire shape
+                                // `Handle` gives the identical `PeerError`
+                                // cases — one answer per case, whichever
+                                // stage raised it. No audit row, matching
+                                // every other pre-dispatch refusal on this
+                                // route (the parse failure above, the size
+                                // ceiling before it): nothing was
+                                // dispatched, and the row would have to be
+                                // filed under a correlation id the
+                                // receiver just declined to accept.
                                 | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
+                                | Ok trustedContext ->
+                                    let! result =
+                                        peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
+                                        |> Async.StartAsTask
+
+                                    // The audit row carries the DERIVED
+                                    // correlation id, so a caller cannot
+                                    // file its calls under somebody else's
+                                    // cascade (or under an unbounded
+                                    // string) in this receiver's log.
+                                    do!
+                                        auditPeerCall
+                                            ctx
+                                            contractId
+                                            request.Method
+                                            principal.Caller.PeerId
+                                            trustedContext.RootRequestId
+                                            result
+
+                                    match result with
+                                    | Ok resultJson ->
+                                        // Build the response by hand so the
+                                        // already-serialised result rides in
+                                        // `Result` without a second JSON encode.
+                                        let response = {
+                                            JsonRpc = JsonRpc.version
+                                            Result = Some resultJson
+                                            Error = None
+                                            Id = request.Id
+                                        }
+
+                                        return! writeJson 200 response next ctx
+                                    | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
         }
 
     /// `GET /peer/v1/capabilities` — authenticate, then answer the

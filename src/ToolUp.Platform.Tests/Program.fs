@@ -999,6 +999,19 @@ let allTests =
         // carry "", with the in-tree client asserted unchanged.
         PeerWireHardeningTests.requestBodyCapTests
         PeerWireHardeningTests.pollCorrelationTests
+        // Phase 331 — receiver-side cascade-budget authority: the host
+        // derives `HopsRemaining` / `Route` / `RootRequestId` /
+        // `ParentRequestId` from the validated principal + its own policy
+        // instead of copying them out of the request body, so the
+        // hop-limit and loop guards stop evaluating numbers the caller
+        // chose. Every probe is paired — a PRE-331 control that admits
+        // the identical forgery through the same `DefaultPlatformPeer`
+        // (so "refused" cannot mean "refuses everything"), and record-
+        // equality proofs that an honest `create` call and a Phase 314
+        // `forward` continuation derive back to exactly what was sent.
+        PeerCascadeBudgetAuthorityTests.budgetAuthorityTests
+        PeerCascadeBudgetAuthorityTests.cascadeShapeTests
+        PeerCascadeBudgetAuthorityTests.cascadeCompatibilityTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`
         // signing-key lookup and the blob-backed peer directory, with

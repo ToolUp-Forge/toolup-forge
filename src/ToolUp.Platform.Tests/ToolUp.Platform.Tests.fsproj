@@ -1299,6 +1299,16 @@
              same payload end to end, and the job-poll response echoing the
              polled jobId as its JSON-RPC `Id` where it used to send "". -->
         <Compile Include="InProcess\PeerWireHardeningTests.fs" />
+        <!-- Phase 331 — receiver-side cascade-budget authority: the
+             forged-budget / erased-route / forged-correlation-id body
+             driven through the real `/peer/v1/{contractId}` route with a
+             capturing dispatch, so what is asserted is the context that
+             reached the guards. Paired throughout with a PRE-331 control
+             that admits the same forgery through the same
+             `DefaultPlatformPeer`, and with record-equality proofs that
+             an honest `create` call and a `PeerCascade.deriveNext`
+             continuation derive back to exactly what was sent. -->
+        <Compile Include="InProcess\PeerCascadeBudgetAuthorityTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

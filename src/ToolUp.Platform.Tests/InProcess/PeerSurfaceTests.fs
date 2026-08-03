@@ -205,6 +205,15 @@ let tests =
                 // that is a `formatVersion` bump, which belongs to the
                 // surface's own phase, not to this one.
                 "WireLimits"
+                // Phase 331 — NOT projected, on exactly the WireLimits
+                // argument. It is observable (an over-ceiling budget is
+                // clamped, an over-deep route refused `PeerHopLimitExceeded`)
+                // and it is still receiver-side capacity policy an operator
+                // retunes at a restart, not a term of the contract a
+                // counterparty pins. The one field that is not merely
+                // policy — `LocalPeerId` — is already projected, from
+                // `LocalPeer`, which is where it comes from.
+                "CascadePolicy"
             ]
 
             let actual =

@@ -181,6 +181,22 @@ That last row is deliberate: a forwarding deployment vouches for the outbound le
 
 **A doomed hop never leaves the forwarding peer.** If the derivation is rejected — the target is already on the route (`PeerLoopDetected`), or the budget is exhausted (`PeerHopLimitExceeded`) — the call short-circuits to a raised `PeerInvocationException` carrying that `PeerError`, **before** the wire round-trip. This is the same caller-side defence in depth `IPeerCascade` already provided, now reachable from the typed proxy.
 
+### The receiver derives the same fields, it does not trust them (Phase 331)
+
+Everything above is the *sender's* bookkeeping, and a sender that wants the guards to bind is not the one to worry about. Those four fields ride inside the request body, and the peer token carries none of them, so on arrival they are a self-assertion: `HopsRemaining = Int32.MaxValue` would put the receiver's hop-limit guard out of reach and `Route = []` would put its loop guard out of reach.
+
+The receiver therefore derives its trusted `PeerCallContext` rather than copying it — `PeerCascadeAuthority.derive`, governed by a `PeerCascadePolicy`:
+
+| Field | Receiver's rule |
+|---|---|
+| `Route` | the validated caller is guaranteed to be on it, last. An honest route (from `create` or `deriveNext`) already is, so it passes through untouched; a route deeper than `MaxRouteLength`, or carrying an empty / over-length / control-character entry, is refused. |
+| `HopsRemaining` | clamped to `MaxHopsRemaining`. The decrement stays sender-side — clamping is not a second decrement. |
+| `RootRequestId` | preserved when well-shaped (that is what keeps a cascade one cascade for audit), minted by the receiver when absent or unusable. |
+| `ParentRequestId` | derived from the inbound JSON-RPC envelope id, never from the body; `None` at the originating hop. |
+| `ContractVersion` | left alone — `IPlatformPeer.Handle` already measures it against the receiver's own supported set. |
+
+Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route entries, 128-character identifiers), so an existing federation is unaffected; tune them with `PeerServerApp.withCascadePolicy`. What this does **not** claim to stop is two colluding peers bouncing a call between themselves, each hop presenting a fresh in-ceiling budget — no receiver-side rule can see that from a single message. What it closes is the unilateral escape: one peer, one call, claiming a budget or a history the receiver never agreed to.
+
 ## Audit transparency (Phase 18a)
 
 The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").

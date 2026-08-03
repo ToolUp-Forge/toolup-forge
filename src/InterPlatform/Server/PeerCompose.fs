@@ -104,6 +104,17 @@ type PeerServerApp = {
     /// `JsonRpcPeerHost.routes` value can read it per request. Set it
     /// with `withWireLimits`.
     WireLimits: PeerWireLimits
+    /// Phase 331 — the receiver-side cascade ceilings the contract route
+    /// derives the trusted `PeerCallContext` under.
+    /// `PeerCascadePolicy.defaults` unless a composition says otherwise;
+    /// registered as a DI singleton so the parameterless
+    /// `JsonRpcPeerHost.routes` value can read it per request. `run`
+    /// fills its `LocalPeerId` in from the composed `LocalPeer` — a
+    /// composition never sets that field by hand, because the whole
+    /// point is that the receiver's own identity is the one thing it
+    /// does not take from the caller. Set the ceilings with
+    /// `withCascadePolicy`.
+    CascadePolicy: PeerCascadePolicy
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -143,6 +154,7 @@ module PeerServerApp =
         StrictAudienceBinding = false
         LegacyProfileFallback = false
         WireLimits = PeerWireLimits.defaults
+        CascadePolicy = PeerCascadePolicy.defaults
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -378,6 +390,28 @@ module PeerServerApp =
     /// the ceiling from the structured `PeerRequestTooLarge` refusal.
     let withWireLimits (limits: PeerWireLimits) (app: PeerServerApp) : PeerServerApp = { app with WireLimits = limits }
 
+    /// Phase 331 — set the receiver-side cascade ceilings the contract
+    /// route derives the trusted call context under (the hop budget it
+    /// will carry forward from a wire assertion, the deepest route it
+    /// accepts, and the longest correlation id / route entry).
+    ///
+    /// A tunable, not a switch: the derivation is always in force, and a
+    /// composition that never calls this runs under
+    /// `PeerCascadePolicy.defaults` — ceilings set far above the
+    /// documented `HopBudget` guidance, so an existing deployment is
+    /// unaffected (GP 11).
+    ///
+    ///     app |> PeerServerApp.withCascadePolicy (PeerCascadePolicy.defaults
+    ///                                             |> PeerCascadePolicy.withMaxHopsRemaining 4)
+    ///
+    /// `LocalPeerId` on the supplied policy is ignored — `run` overwrites
+    /// it with the composed `LocalPeer`'s id. The receiver's own identity
+    /// is the one field this policy must not let anyone else name.
+    let withCascadePolicy (policy: PeerCascadePolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            CascadePolicy = policy
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -469,6 +503,17 @@ module PeerServerApp =
             let localIdentity =
                 app.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
 
+            // Phase 331 — the composition owns the ceilings; the compose
+            // root owns the identity. A blank `LocalPeerId` (no
+            // `LocalPeer` composed) leaves only the receiver-on-route arm
+            // of the loop guard dormant — the same posture, and the same
+            // single cause, `enforceAudienceBinding` above has already
+            // surfaced as an advisory or a refusal.
+            let cascadePolicy = {
+                app.CascadePolicy with
+                    LocalPeerId = localIdentity.PeerId
+            }
+
             // One process-lifetime client shared by the outbound
             // transport and the handshake's capability fetch. Lives until
             // process exit (the documented single-long-lived-client
@@ -539,6 +584,15 @@ module PeerServerApp =
                     // `NoPeerSubstrate` short-circuit above still
                     // registers nothing at all (GP 13).
                     .AddSingleton<PeerWireLimits>(wireLimits)
+                    // Phase 331 — the composed cascade ceilings plus this
+                    // deployment's own peer id, resolved per-request by
+                    // the contract route's context derivation. Registered
+                    // on the same terms as the wire limits: the host
+                    // falls back to `PeerCascadePolicy.defaults` when
+                    // nothing is registered, so this only ever carries an
+                    // explicit `withCascadePolicy` and the receiver's
+                    // identity through.
+                    .AddSingleton<PeerCascadePolicy>(cascadePolicy)
                     .AddSingleton<IPeerAuthProvider>(
                         System.Func<System.IServiceProvider, IPeerAuthProvider>(fun sp ->
                             let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
@@ -572,7 +626,10 @@ module PeerServerApp =
                         // handler on the scheduler, so handlers are present
                         // before any `LongRunning` dispatch schedules a job.
                         System.Func<System.IServiceProvider, IPlatformPeer>(fun sp ->
-                            let peer = DefaultPlatformPeer() :> IPlatformPeer
+                            // Phase 331 — the receiver's own id, so the
+                            // loop guard can refuse a route that already
+                            // names this deployment.
+                            let peer = DefaultPlatformPeer(localIdentity.PeerId) :> IPlatformPeer
 
                             let fusion =
                                 sp.GetService(typeof<PeerJobFusion>)
