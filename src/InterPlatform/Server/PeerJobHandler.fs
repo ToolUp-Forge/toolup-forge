@@ -46,6 +46,19 @@ open PeerReflection
 type PeerJobPayload = {
     OwnerPeerId: string
     ArgsJson: string
+    /// Phase 310 — the cascade-wide correlation id the receiver *derived*
+    /// for the scheduling request (Phase 331), carried across the job
+    /// boundary for the same reason the owner is: `JobContext` has no
+    /// request, no principal and no ambient context, so anything the
+    /// execution side must attribute has to arrive as data (GP 12 rule 4).
+    /// Without it the terminal audit row would either mint a fresh id — and
+    /// correlate to nothing — or re-derive one from a request that ended
+    /// minutes earlier.
+    ///
+    /// A job scheduled before this phase carries no such field; it
+    /// deserialises to `null` and is normalised to `""` at the read site,
+    /// which records an uncorrelated terminal row rather than losing it.
+    RootRequestId: string
 }
 
 /// A parked long-running result together with the `PeerId` of the peer
@@ -311,6 +324,20 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
 type PeerJobFusion = {
     Scheduler: IJobScheduler
     ResultStore: IPeerJobResultStore
+    /// Phase 310 — the audit log the execution side records a long-running
+    /// call's terminal outcome on. `None` in a partial host with no
+    /// `IAuditLog` registered, which records nothing — matching the
+    /// immediate path, where `auditPeerCall` resolves the log per-request
+    /// and no-ops when it is absent.
+    ///
+    /// It rides here because this record is the ONLY thing the compose hook
+    /// hands a contract builder, and the builder is what constructs the job
+    /// handlers. The execution side has no other route to it: a job handler
+    /// is built once at contract-registration time and `JobContext` carries
+    /// no service provider, so a per-invocation DI resolve is not available
+    /// the way it is on the request path. Consumers receive this record from
+    /// `withContract` and pass it through — they do not construct it.
+    AuditLog: IAuditLog option
 }
 
 /// Conventions shared by the dispatch side (which schedules the job) and
@@ -361,7 +388,30 @@ type private PeerJobInvoker =
 /// *capturing the terminal status* succeeded); a peer-side failure is
 /// recorded as a `Failed` status, not a job retry — re-running a
 /// deterministic peer computation would double-execute it.
-type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, resultStore: IPeerJobResultStore) =
+///
+/// **Phase 310 — the terminal audit row.** The receiver's audit trail used
+/// to stop at dispatch for a long-running call: the host emits
+/// `PeerCallCompleted` when `peer.Handle` returns the assigned `JobId`, so
+/// every such call was logged `ok` whatever the background computation went
+/// on to do, and the Phase 18a transparency contract reported that back to
+/// the caller as the truth. This handler now records the real outcome as
+/// `PeerJobCompleted`, correlated to the schedule-time row by the
+/// `RootRequestId` carried on the payload.
+///
+/// The identity, contract id and method name are all constructor-captured
+/// or payload-carried rather than resolved here, because the execution side
+/// has neither a request nor a principal — which is the same reason the
+/// audit log itself is captured at construction (see `PeerJobFusion`).
+type PeerJobHandler
+    (
+        funcValue: obj,
+        argTypes: Type list,
+        innerType: Type,
+        resultStore: IPeerJobResultStore,
+        auditLog: IAuditLog option,
+        contractId: string,
+        methodName: string
+    ) =
 
     // NonPublic is load-bearing: `PeerJobInvoker` is a `private` type, so
     // F# emits its (F#-public) static members with non-public IL
@@ -373,6 +423,62 @@ type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, result
 
     let resolveSerialize = resolveSerializeMethod.MakeGenericMethod(innerType)
 
+    /// Record the terminal outcome, best-effort. `IAuditLog.Record` is
+    /// already documented as swallowing its own write failures, but the
+    /// resolution and the projection in front of it are not, and a handler
+    /// that threw here would fail a job whose result is already durably
+    /// parked — a flaky audit store must never change the job's outcome.
+    ///
+    /// Runs AFTER `SaveResult` deliberately: the parked result is what the
+    /// caller is polling for, so it is the primary write, and the audit row
+    /// is the observation of it. There is no post-response hazard on this
+    /// path — a job handler runs on the scheduler's own async, with no HTTP
+    /// response started and no per-request resource to read after disposal
+    /// — but the ordering keeps the primary write first regardless.
+    let recordTerminalOutcome (envelope: PeerJobPayload) (jobId: PeerJobId) (status: PeerJobStatus<string>) = async {
+        match auditLog with
+        | None -> ()
+        | Some log ->
+            try
+                let succeeded =
+                    match status with
+                    | PeerJobStatus.Completed _ -> true
+                    | _ -> false
+
+                let payload: PeerJobCompletedPayload = {
+                    ContractId = contractId
+                    MethodName = methodName
+                    CallerPeerId = envelope.OwnerPeerId
+                    RootRequestId = envelope.RootRequestId
+                    JobId = jobId
+                    Succeeded = succeeded
+                    Outcome =
+                        match status with
+                        | PeerJobStatus.Completed _ -> "ok"
+                        | PeerJobStatus.Failed e -> JsonRpc.errorCaseName e
+                        // Unreachable: `ResolveSerialize` resolves the
+                        // handle before returning, so the handler never
+                        // sees `Pending`. Labelled rather than ignored so
+                        // a future non-terminal status is visible in the
+                        // trail instead of silently reading as success.
+                        | PeerJobStatus.Pending -> "pending"
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
+
+                do! log.Record(PeerJob.Scope, PeerJobCompleted payload)
+            with _ ->
+                ()
+    }
+
+    /// The pre-310 call shape, unchanged: no audit emission and no contract
+    /// / method attribution. Kept as an explicit secondary constructor
+    /// (rather than widening the original with optional arguments, which F#
+    /// compiles into one replacement signature) so this phase's public
+    /// surface diff is purely additive — the same reasoning
+    /// `BlobPeerJobResultStore` records for its Phase 316 overloads.
+    new(funcValue: obj, argTypes: Type list, innerType: Type, resultStore: IPeerJobResultStore) =
+        PeerJobHandler(funcValue, argTypes, innerType, resultStore, None, "", "")
+
     interface IJobHandler with
         member _.Execute(ctx: JobContext) = async {
             // The dispatch side schedules the owner-stamped `PeerJobPayload`
@@ -381,13 +487,26 @@ type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, result
             // owner-unknown: the whole payload is treated as the args and
             // the parked record is owned by no peer, so the poll route
             // fails closed rather than guessing an owner.
-            let envelope =
+            let parsed =
                 try
                     JsonRpc.deserialize<PeerJobPayload> ctx.Payload
                 with _ -> {
                     OwnerPeerId = ""
                     ArgsJson = ctx.Payload
+                    RootRequestId = ""
                 }
+
+            // A job scheduled before Phase 310 parses cleanly and leaves
+            // `RootRequestId` null — a missing field is absence, not a
+            // parse failure — so normalise rather than trusting the shape.
+            let envelope = {
+                parsed with
+                    RootRequestId =
+                        if isNull (box parsed.RootRequestId) then
+                            ""
+                        else
+                            parsed.RootRequestId
+            }
 
             let! status = async {
                 try
@@ -405,6 +524,7 @@ type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, result
             }
 
             do! resultStore.SaveResult(ctx.ScopeId, ctx.JobId, envelope.OwnerPeerId, status)
+            do! recordTerminalOutcome envelope ctx.JobId status
             return Success
         }
 

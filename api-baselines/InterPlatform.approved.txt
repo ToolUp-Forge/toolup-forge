@@ -636,7 +636,8 @@ ToolUp.InterPlatform.PeerJobDocument.OwnerPeerId : System.String { get }
 ToolUp.InterPlatform.PeerJobDocument.ReadExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
 ToolUp.InterPlatform.PeerJobDocument.Status : ToolUp.InterPlatform.PeerJobStatus`1[System.String] { get }
 ToolUp.InterPlatform.PeerJobFusion (class)
-ToolUp.InterPlatform.PeerJobFusion..ctor(ToolUp.Platform.IJobScheduler, ToolUp.InterPlatform.IPeerJobResultStore)
+ToolUp.InterPlatform.PeerJobFusion..ctor(ToolUp.Platform.IJobScheduler, ToolUp.InterPlatform.IPeerJobResultStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.InterPlatform.PeerJobFusion.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 ToolUp.InterPlatform.PeerJobFusion.ResultStore : ToolUp.InterPlatform.IPeerJobResultStore { get }
 ToolUp.InterPlatform.PeerJobFusion.Scheduler : ToolUp.Platform.IJobScheduler { get }
 ToolUp.InterPlatform.PeerJobHandle (class)
@@ -650,10 +651,12 @@ ToolUp.InterPlatform.PeerJobHandle`1.JobId : System.Guid { get }
 ToolUp.InterPlatform.PeerJobHandle`1.Poll : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PeerJobStatus`1[T]]] { get }
 ToolUp.InterPlatform.PeerJobHandler (class)
 ToolUp.InterPlatform.PeerJobHandler..ctor(System.Object, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type, ToolUp.InterPlatform.IPeerJobResultStore)
+ToolUp.InterPlatform.PeerJobHandler..ctor(System.Object, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type, ToolUp.InterPlatform.IPeerJobResultStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String)
 ToolUp.InterPlatform.PeerJobPayload (class)
-ToolUp.InterPlatform.PeerJobPayload..ctor(System.String, System.String)
+ToolUp.InterPlatform.PeerJobPayload..ctor(System.String, System.String, System.String)
 ToolUp.InterPlatform.PeerJobPayload.ArgsJson : System.String { get }
 ToolUp.InterPlatform.PeerJobPayload.OwnerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerJobPayload.RootRequestId : System.String { get }
 ToolUp.InterPlatform.PeerJobRecord (class)
 ToolUp.InterPlatform.PeerJobRecord..ctor(System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String])
 ToolUp.InterPlatform.PeerJobRecord.OwnerPeerId : System.String { get }

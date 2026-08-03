@@ -961,6 +961,16 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> j)
     }
+    // Phase 310 — the terminal row for a long-running peer call. Its
+    // schedule-time twin above records only that the call was accepted.
+    {
+        EventType = "PeerJobCompleted"
+        TryEncode =
+            (function
+            | PeerJobCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PeerJobCompleted(fromAuditJson<PeerJobCompletedPayload> j)
+    }
     {
         EventType = "FederationRoundCompleted"
         TryEncode =

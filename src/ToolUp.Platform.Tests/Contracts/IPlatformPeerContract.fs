@@ -183,6 +183,95 @@ type private RecordingScheduler() =
         member _.NotifyEventWritten(_scopeId, _eventType, _eventId) =
             failwith "RecordingScheduler.NotifyEventWritten must not be invoked by the contract pack"
 
+// ─── Phase 310 — terminal-outcome fixtures ───────────────────────────
+//
+// A separate contract from `GreeterContract` so the Phase 310 tests can
+// exercise a *failing* long-running method without perturbing the
+// handler-count assertions the fusion-seam tests make about the greeter.
+// Two long-running methods, one of each terminal shape.
+
+type TerminalOutcomeContract = {
+    Compute: int -> Async<PeerJobHandle<int>>
+    Refuse: string -> Async<PeerJobHandle<int>>
+}
+
+let private terminalImpl: TerminalOutcomeContract = {
+    Compute =
+        fun n -> async {
+            return {
+                JobId = Guid.NewGuid()
+                Poll = fun () -> async { return PeerJobStatus.Completed(n * 2) }
+            }
+        }
+    Refuse =
+        fun reason -> async {
+            return {
+                JobId = Guid.NewGuid()
+                // A typed peer-side refusal, not an exception — the shape a
+                // real gate produces, and one whose `PeerError` case name is
+                // distinguishable from the generic `PeerHandler` collapse.
+                Poll = fun () -> async { return PeerJobStatus.Failed(PeerUnauthorized reason) }
+            }
+        }
+}
+
+/// The pre-Phase-310 `PeerJobPayload` shape. Kept as its own type so the
+/// back-compat test schedules a genuinely old payload through the same
+/// serialiser, rather than hand-rolling the JSON it hopes the old one had.
+type private LegacyPeerJobPayload = {
+    OwnerPeerId: string
+    ArgsJson: string
+}
+
+/// `IAuditLog` that keeps every recorded event in order. Reads are not
+/// exercised by the job path — the handler only writes.
+type private RecordingAuditLog() =
+    let recorded = ResizeArray<string * AuditEvent>()
+
+    member _.Recorded = recorded |> List.ofSeq
+
+    member this.PeerJobRows =
+        this.Recorded
+        |> List.choose (fun (_, e) ->
+            match e with
+            | PeerJobCompleted p -> Some p
+            | _ -> None)
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+
+/// `IAuditLog` whose writes always throw — the flaky-store control. The
+/// job's parked result must be unaffected.
+type private ThrowingAuditLog() =
+    interface IAuditLog with
+        member _.Record(_scopeId, _audit) = failwith "audit store is unavailable"
+
+        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+
+/// Drive one long-running job handler to completion over `payload` and
+/// return the `JobId` it ran under, so a test can assert the parked record
+/// and the audit row against the same id.
+let private runJobHandler (handler: IJobHandler) (payload: string) = async {
+    let jobId = Guid.NewGuid()
+
+    let jobCtx: JobContext = {
+        JobId = jobId
+        ScopeId = PeerJob.Scope
+        AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
+        Attempt = 1
+        Trigger = Manual
+        TriggerSource = TriggerSource.ScheduledManually "_system"
+        ScheduledAt = DateTime.UtcNow
+        RunningAt = DateTime.UtcNow
+        Payload = payload
+        DeadLetterDestination = None
+    }
+
+    let! result = handler.Execute jobCtx
+    return jobId, result
+}
+
 /// A call context with explicit version / route / hop budget — for the
 /// guard-path tests. Identity is the buyer; user is anonymous.
 let private mkContext (version: ContractVersion) (route: string list) (hops: int) : PeerCallContext = {
@@ -414,6 +503,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = InMemoryResultStore()
+                AuditLog = None
             }
 
             let host = registerGreeter peer [ v1 ] (Some fusion)
@@ -437,6 +527,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = scheduler
                 ResultStore = InMemoryResultStore()
+                AuditLog = None
             }
 
             registerGreeter peer [ v1 ] (Some fusion) |> ignore
@@ -471,6 +562,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = store
+                AuditLog = None
             }
 
             let host = registerGreeter peer [ v1 ] (Some fusion)
@@ -480,6 +572,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let envelope: PeerJobPayload = {
                 OwnerPeerId = buyerId.PeerId
                 ArgsJson = JsonRpc.serialize [ 3; 4 ]
+                RootRequestId = "root-308"
             }
 
             let jobCtx: JobContext = {
@@ -509,5 +602,312 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
                 | PeerJobStatus.Completed json ->
                     Expect.equal (JsonRpc.deserialize<int> json) 7 "SlowSum's typed result is parked for the owner"
                 | other -> failtestf "Expected Completed, got %A" other
+        }
+
+        // ─── Phase 310 — terminal-outcome audit ───────────────────
+        //
+        // Before this phase a long-running call's audit trail ended at
+        // dispatch: `peer.Handle` returns `Ok jobId`, so the only row said
+        // `Succeeded = true, Outcome = "ok"` however the background
+        // computation ended. These assert the *content* of the terminal
+        // row, not merely that one appeared — a test that counted rows
+        // would pass against an emitter writing the wrong outcome.
+
+        testCaseAsync "a long-running dispatch threads the derived RootRequestId onto the scheduled payload"
+        <| async {
+            let peer = factory ()
+            let scheduler = RecordingScheduler()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = scheduler
+                ResultStore = InMemoryResultStore()
+                AuditLog = None
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let ctx = mkContext v1 [ "buyer" ] 8
+            let! result = peer.Handle("terminal", ctx, "Compute", JsonRpc.serialize [ 21 ])
+
+            match result with
+            | Ok _ -> ()
+            | Error e -> failtestf "Expected the dispatch to schedule, got Error %A" e
+
+            match scheduler.Registered with
+            | None -> failtest "the dispatch never reached Schedule"
+            | Some registration ->
+                let envelope = JsonRpc.deserialize<PeerJobPayload> registration.Payload
+
+                Expect.equal
+                    envelope.RootRequestId
+                    ctx.RootRequestId
+                    "the correlation id the receiver derived rides the job payload, so the terminal row can join the schedule-time row"
+        }
+
+        testCaseAsync "a completed long-running job records a terminal audit row carrying the real outcome"
+        <| async {
+            let peer = factory ()
+            let store = InMemoryResultStore()
+            let audit = RecordingAuditLog()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = StubScheduler()
+                ResultStore = store
+                AuditLog = Some audit
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Compute")
+                |> snd
+
+            let envelope: PeerJobPayload = {
+                OwnerPeerId = buyerId.PeerId
+                ArgsJson = JsonRpc.serialize [ 21 ]
+                RootRequestId = "root-310-ok"
+            }
+
+            let! jobId, jobResult = runJobHandler handler (JsonRpc.serialize envelope)
+            Expect.equal jobResult Success "capturing the terminal status succeeds"
+
+            match audit.PeerJobRows with
+            | [ row ] ->
+                Expect.equal row.ContractId "terminal" "the row names the hosted contract"
+                Expect.equal row.MethodName "Compute" "the row names the contract method whose job resolved"
+                Expect.equal row.CallerPeerId buyerId.PeerId "the row attributes the scheduling caller"
+                Expect.equal row.RootRequestId "root-310-ok" "the row carries the schedule-time correlation id"
+                Expect.equal row.JobId jobId "the row carries the backing job id the caller polls with"
+                Expect.isTrue row.Succeeded "a Completed job records success"
+                Expect.equal row.Outcome "ok" "a Completed job records the ok outcome label"
+            | rows -> failtestf "Expected exactly one PeerJobCompleted row, got %i" (List.length rows)
+        }
+
+        testCaseAsync "a failed long-running job records the failing PeerError case name, not ok"
+        <| async {
+            let peer = factory ()
+            let audit = RecordingAuditLog()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = StubScheduler()
+                ResultStore = InMemoryResultStore()
+                AuditLog = Some audit
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Refuse")
+                |> snd
+
+            let envelope: PeerJobPayload = {
+                OwnerPeerId = buyerId.PeerId
+                ArgsJson = JsonRpc.serialize [ "k-anonymity gate" ]
+                RootRequestId = "root-310-fail"
+            }
+
+            let! _, jobResult = runJobHandler handler (JsonRpc.serialize envelope)
+
+            Expect.equal
+                jobResult
+                Success
+                "a peer-side refusal is a recorded Failed status, not a job failure — re-running would double-execute"
+
+            match audit.PeerJobRows with
+            | [ row ] ->
+                Expect.isFalse row.Succeeded "the trail no longer reports a failed computation as a success"
+
+                Expect.equal
+                    row.Outcome
+                    "PeerUnauthorized"
+                    "the specific PeerError case name is recorded, not a generic failure label"
+
+                Expect.equal row.RootRequestId "root-310-fail" "the failure is correlated to its schedule-time row"
+            | rows -> failtestf "Expected exactly one PeerJobCompleted row, got %i" (List.length rows)
+        }
+
+        testCaseAsync "the schedule-time row and the terminal row share one correlation id end to end"
+        <| async {
+            // The join that makes 18a's transparency read reconstructable:
+            // dispatch through `Handle` (which the host audits at schedule
+            // time under `trustedContext.RootRequestId`), then run the job
+            // the dispatch scheduled and read the terminal row's id.
+            let peer = factory ()
+            let scheduler = RecordingScheduler()
+            let audit = RecordingAuditLog()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = scheduler
+                ResultStore = InMemoryResultStore()
+                AuditLog = Some audit
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let ctx = mkContext v1 [ "buyer" ] 8
+            let! _ = peer.Handle("terminal", ctx, "Refuse", JsonRpc.serialize [ "gate" ])
+
+            let scheduledPayload =
+                match scheduler.Registered with
+                | Some r -> r.Payload
+                | None -> failtest "the dispatch never reached Schedule"
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Refuse")
+                |> snd
+
+            let! _ = runJobHandler handler scheduledPayload
+
+            match audit.PeerJobRows with
+            | [ row ] ->
+                Expect.equal
+                    row.RootRequestId
+                    ctx.RootRequestId
+                    "the terminal row files under the same correlation id the schedule-time row used"
+
+                Expect.equal row.CallerPeerId buyerId.PeerId "attribution survives the hop into the job substrate"
+            | rows -> failtestf "Expected exactly one PeerJobCompleted row, got %i" (List.length rows)
+        }
+
+        testCaseAsync "a host without an audit log records nothing and still parks the result"
+        <| async {
+            // The control for the three assertions above: same handler,
+            // same payload, audit log absent. A partial host records
+            // nothing — matching the immediate path, where `auditPeerCall`
+            // no-ops when no `IAuditLog` is registered.
+            let peer = factory ()
+            let store = InMemoryResultStore()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = StubScheduler()
+                ResultStore = store
+                AuditLog = None
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Compute")
+                |> snd
+
+            let envelope: PeerJobPayload = {
+                OwnerPeerId = buyerId.PeerId
+                ArgsJson = JsonRpc.serialize [ 4 ]
+                RootRequestId = "root-310-silent"
+            }
+
+            let! jobId, jobResult = runJobHandler handler (JsonRpc.serialize envelope)
+            Expect.equal jobResult Success "the job still completes"
+
+            let! record = (store :> IPeerJobResultStore).TryGetResult(PeerJob.Scope, jobId)
+
+            match record with
+            | Some r ->
+                match r.Status with
+                | PeerJobStatus.Completed json ->
+                    Expect.equal (JsonRpc.deserialize<int> json) 8 "the typed result is parked regardless of auditing"
+                | other -> failtestf "Expected Completed, got %A" other
+            | None -> failtest "the handler did not park a record"
+        }
+
+        testCaseAsync "a flaky audit store never changes the job result"
+        <| async {
+            let peer = factory ()
+            let store = InMemoryResultStore()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = StubScheduler()
+                ResultStore = store
+                AuditLog = Some(ThrowingAuditLog())
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Compute")
+                |> snd
+
+            let envelope: PeerJobPayload = {
+                OwnerPeerId = buyerId.PeerId
+                ArgsJson = JsonRpc.serialize [ 5 ]
+                RootRequestId = "root-310-flaky"
+            }
+
+            let! jobId, jobResult = runJobHandler handler (JsonRpc.serialize envelope)
+            Expect.equal jobResult Success "an audit-store failure does not fail the job"
+
+            let! record = (store :> IPeerJobResultStore).TryGetResult(PeerJob.Scope, jobId)
+
+            match record with
+            | Some r ->
+                match r.Status with
+                | PeerJobStatus.Completed json ->
+                    Expect.equal (JsonRpc.deserialize<int> json) 10 "the parked result survives the audit failure"
+                | other -> failtestf "Expected Completed, got %A" other
+            | None -> failtest "the handler did not park a record"
+        }
+
+        testCaseAsync "a job scheduled before this phase still records a terminal row, uncorrelated"
+        <| async {
+            // A pre-310 payload carries no `RootRequestId`; a missing JSON
+            // field is absence, not a parse failure, so it deserialises to
+            // null. The row must still be written — an uncorrelated
+            // terminal outcome beats a lost one — and must not carry null.
+            let peer = factory ()
+            let audit = RecordingAuditLog()
+
+            let fusion: PeerJobFusion = {
+                Scheduler = StubScheduler()
+                ResultStore = InMemoryResultStore()
+                AuditLog = Some audit
+            }
+
+            let host =
+                JsonRpcPeerHost.contract<TerminalOutcomeContract> "terminal" [ v1 ] (Some fusion) terminalImpl
+
+            peer.RegisterContract host.Registration
+
+            let handler =
+                host.JobHandlers
+                |> List.find (fun (n, _) -> n = PeerJob.handlerName "terminal" "Compute")
+                |> snd
+
+            let legacy: LegacyPeerJobPayload = {
+                OwnerPeerId = buyerId.PeerId
+                ArgsJson = JsonRpc.serialize [ 6 ]
+            }
+
+            let! _, jobResult = runJobHandler handler (JsonRpc.serialize legacy)
+            Expect.equal jobResult Success "an old payload still resolves"
+
+            match audit.PeerJobRows with
+            | [ row ] ->
+                Expect.equal row.CallerPeerId buyerId.PeerId "the pre-310 owner still attributes the row"
+                Expect.equal row.RootRequestId "" "the absent correlation id normalises to empty, never null"
+                Expect.equal row.Outcome "ok" "the terminal outcome is still recorded"
+            | rows -> failtestf "Expected exactly one PeerJobCompleted row, got %i" (List.length rows)
         }
     ]

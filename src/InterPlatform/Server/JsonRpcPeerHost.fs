@@ -181,6 +181,14 @@ module JsonRpcPeerHost =
     /// context, never the wire body — rides the job payload so the parked
     /// result is owned by that caller and the poll route can refuse any
     /// other peer (Phase 308, GP 4).
+    ///
+    /// **Phase 310 — the correlation id rides too.** The execution side
+    /// records the call's *terminal* outcome, and it has to file that row
+    /// under the same `RootRequestId` as the schedule-time row this dispatch
+    /// produces, or the pair cannot be joined. That id is the one Phase 331
+    /// DERIVED on `trustedContext` — not the caller's asserted value — so
+    /// taking it from the call context here is what keeps the terminal row
+    /// as unforgeable as the schedule-time one.
     let private scheduleDispatch
         (fusion: PeerJobFusion)
         (handlerName: string)
@@ -189,6 +197,7 @@ module JsonRpcPeerHost =
             let payload: PeerJobPayload = {
                 OwnerPeerId = context.Peer.PeerId
                 ArgsJson = argsJson
+                RootRequestId = context.RootRequestId
             }
 
             let registration: JobRegistration = {
@@ -258,8 +267,22 @@ module JsonRpcPeerHost =
                         let hName = PeerJob.handlerName contractId field.Name
                         let dispatch = scheduleDispatch f hName
 
+                        // Phase 310 — the handler is told which contract
+                        // method it serves, and given the fusion's audit
+                        // log, so its terminal row is attributable. Both
+                        // are known here and nowhere downstream: a job
+                        // handler runs without a request.
                         let jobHandler =
-                            PeerJobHandler(funcValue, argTypes, innerType, f.ResultStore) :> IJobHandler
+                            PeerJobHandler(
+                                funcValue,
+                                argTypes,
+                                innerType,
+                                f.ResultStore,
+                                f.AuditLog,
+                                contractId,
+                                field.Name
+                            )
+                            :> IJobHandler
 
                         (field.Name, dispatch), Some(hName, jobHandler)
                     | None ->

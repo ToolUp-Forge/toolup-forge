@@ -53,6 +53,29 @@ let private mkRow
         OccurredAt = occurredAt
     }
 
+/// Phase 310 — a *terminal* row for a long-running call. Takes the
+/// correlation id explicitly, because the whole point of the pair is that
+/// the terminal row and its schedule-time twin share one.
+let private mkJobRow
+    (caller: string)
+    (contractId: string)
+    (methodName: string)
+    (rootRequestId: string)
+    (succeeded: bool)
+    (outcome: string)
+    (occurredAt: DateTimeOffset)
+    : AuditEvent =
+    PeerJobCompleted {
+        ContractId = contractId
+        MethodName = methodName
+        CallerPeerId = caller
+        RootRequestId = rootRequestId
+        JobId = Guid.NewGuid()
+        Succeeded = succeeded
+        Outcome = outcome
+        OccurredAt = occurredAt
+    }
+
 /// Seed: three buyer rows (one failure) + two rival rows, plus a
 /// non-peer audit event that must never appear in a peer audit answer.
 let private seed = [
@@ -63,9 +86,24 @@ let private seed = [
     mkRow "rival-corp" "clean-room" "RunQuery" false "PeerUnauthorized" (t 35)
 ]
 
+/// Phase 310 — one long-running call per peer, each as the pair of rows it
+/// really produces: the schedule-time row (always `ok` — the receiver
+/// accepted the call) and the terminal row recording how the computation
+/// actually ended. The buyer's failed; the rival's succeeded, so a
+/// `FailuresOnly` answer that leaked across peers would be visible.
+let private longRunningCorrelationId = "root-long-running-buyer"
+
+let private longRunningSeed = [
+    mkRow "buyer-acme" "clean-room" "RunCohort" true "ok" (t 40)
+    mkJobRow "buyer-acme" "clean-room" "RunCohort" longRunningCorrelationId false "PeerHandler" (t 55)
+    mkRow "rival-corp" "clean-room" "RunCohort" true "ok" (t 41)
+    mkJobRow "rival-corp" "clean-room" "RunCohort" "root-long-running-rival" true "ok" (t 56)
+]
+
 /// In-memory `IAuditLog` returning the seeded trail. Honours the
 /// `eventType` filter exactly the way the real `DefaultAuditLog` does, so
-/// the host's `Some "PeerCallCompleted"` filter is genuinely exercised.
+/// the host's per-event-type reads are genuinely exercised — including
+/// (Phase 310) the second read for the terminal rows.
 type private StubAuditLog(events: AuditEvent list) =
     interface IAuditLog with
         member _.Record(_scopeId, _audit) = async { return () }
@@ -78,6 +116,12 @@ type private StubAuditLog(events: AuditEvent list) =
                     |> List.filter (fun e ->
                         match e with
                         | PeerCallCompleted _ -> true
+                        | _ -> false)
+                | Some "PeerJobCompleted" ->
+                    events
+                    |> List.filter (fun e ->
+                        match e with
+                        | PeerJobCompleted _ -> true
                         | _ -> false)
                 | Some _ -> []
                 | None -> events
@@ -276,5 +320,74 @@ let tests =
             let! entries = proxy.QueryCalls { allQuery with FailuresOnly = true }
             Expect.equal entries.Length 1 "the typed proxy resolves the buyer's single failed call"
             Expect.equal entries.Head.Outcome "PeerHandler" "the failure outcome label round-trips typed"
+        }
+
+        // ─── Phase 310 — terminal rows join the transparency read ─
+
+        testCase "project returns both the schedule-time and terminal rows for a long-running call"
+        <| fun _ ->
+            let entries = PeerAuditContractHost.project "buyer-acme" allQuery longRunningSeed
+            Expect.equal entries.Length 2 "the buyer sees the call it made and how it ended"
+
+            Expect.isTrue
+                (entries |> List.forall (fun e -> e.MethodName = "RunCohort"))
+                "both rows describe the same long-running method"
+
+        testCase "the terminal row correlates to its schedule-time row"
+        <| fun _ ->
+            let entries = PeerAuditContractHost.project "buyer-acme" allQuery longRunningSeed
+
+            let terminal =
+                entries |> List.find (fun e -> e.RootRequestId = longRunningCorrelationId)
+
+            Expect.isFalse terminal.Succeeded "the terminal row carries the real failure"
+
+            Expect.equal
+                terminal.Outcome
+                "PeerHandler"
+                "the terminal row reports the failing PeerError case, not the schedule-time ok"
+
+        testCase "FailuresOnly surfaces a long-running failure the schedule-time row reported as ok"
+        <| fun _ ->
+            // The defect this phase closes: before the terminal row
+            // existed, this query answered EMPTY for a call that failed —
+            // `peer.Handle` had returned `Ok jobId`, so the only row said
+            // `ok`. It now returns exactly one row, and exactly the right
+            // one (no double-count from the schedule-time twin).
+            let q = { allQuery with FailuresOnly = true }
+            let entries = PeerAuditContractHost.project "buyer-acme" q longRunningSeed
+
+            Expect.equal entries.Length 1 "one failure, counted once"
+
+            Expect.equal
+                entries.Head.RootRequestId
+                longRunningCorrelationId
+                "the returned failure is the buyer's own terminal outcome"
+
+        testCase "project never leaks another peer's terminal rows"
+        <| fun _ ->
+            let entries = PeerAuditContractHost.project "buyer-acme" allQuery longRunningSeed
+
+            Expect.isFalse
+                (entries |> List.exists (fun e -> e.RootRequestId = "root-long-running-rival"))
+                "the rival's terminal row is scoped out by the same caller check as its schedule-time row"
+
+        testCaseAsync "dispatch reads the terminal rows as well as the schedule-time rows"
+        <| async {
+            // Guards the host's second `GetAuditTrail` read: the stub
+            // answers `Some "PeerJobCompleted"` only when it is asked, so a
+            // host that still made one read would return half the answer.
+            let reg = PeerAuditContractHost.registration (StubAuditLog longRunningSeed)
+            let! result = reg.Dispatch (ctxFor buyer) PeerAudit.queryMethod (argsFor allQuery)
+
+            match result with
+            | Ok json ->
+                let entries = JsonRpc.deserialize<PeerAuditEntry list> json
+                Expect.equal entries.Length 2 "the buyer sees both halves of its long-running call over the wire"
+
+                Expect.isTrue
+                    (entries |> List.exists (fun e -> e.RootRequestId = longRunningCorrelationId))
+                    "the terminal row survives the serialised round trip"
+            | Error e -> failtestf "Expected Ok, got Error %A" e
         }
     ]

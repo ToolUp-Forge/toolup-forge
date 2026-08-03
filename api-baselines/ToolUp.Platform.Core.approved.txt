@@ -768,6 +768,7 @@ ToolUp.Platform.AuditEvent.IsOAuthTokenRefreshed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRegistered : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPeerCallCompleted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPeerJobCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPermissionChanged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPlatformAdminAssigned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPlatformAdminRevoked : System.Boolean { get }
@@ -1000,6 +1001,8 @@ ToolUp.Platform.AuditEvent+PasskeyCredentialRemoved (class)
 ToolUp.Platform.AuditEvent+PasskeyCredentialRemoved.Item : ToolUp.Platform.PasskeyCredentialRemovedPayload { get }
 ToolUp.Platform.AuditEvent+PeerCallCompleted (class)
 ToolUp.Platform.AuditEvent+PeerCallCompleted.Item : ToolUp.Platform.PeerCallCompletedPayload { get }
+ToolUp.Platform.AuditEvent+PeerJobCompleted (class)
+ToolUp.Platform.AuditEvent+PeerJobCompleted.Item : ToolUp.Platform.PeerJobCompletedPayload { get }
 ToolUp.Platform.AuditEvent+PermissionChanged (class)
 ToolUp.Platform.AuditEvent+PermissionChanged.Item : ToolUp.Platform.PermissionChangedPayload { get }
 ToolUp.Platform.AuditEvent+PlatformAdminAssigned (class)
@@ -1137,6 +1140,7 @@ ToolUp.Platform.AuditEvent+Tags.OAuthTokenRefreshed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRegistered : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PeerCallCompleted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PeerJobCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PermissionChanged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PlatformAdminAssigned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PlatformAdminRevoked : System.Int32 (literal)
@@ -6319,6 +6323,16 @@ ToolUp.Platform.PeerCallCompletedPayload.OccurredAt : System.DateTimeOffset { ge
 ToolUp.Platform.PeerCallCompletedPayload.Outcome : System.String { get }
 ToolUp.Platform.PeerCallCompletedPayload.RootRequestId : System.String { get }
 ToolUp.Platform.PeerCallCompletedPayload.Succeeded : System.Boolean { get }
+ToolUp.Platform.PeerJobCompletedPayload (class)
+ToolUp.Platform.PeerJobCompletedPayload..ctor(System.String, System.String, System.String, System.String, System.Guid, System.Boolean, System.String, System.DateTimeOffset)
+ToolUp.Platform.PeerJobCompletedPayload.CallerPeerId : System.String { get }
+ToolUp.Platform.PeerJobCompletedPayload.ContractId : System.String { get }
+ToolUp.Platform.PeerJobCompletedPayload.JobId : System.Guid { get }
+ToolUp.Platform.PeerJobCompletedPayload.MethodName : System.String { get }
+ToolUp.Platform.PeerJobCompletedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PeerJobCompletedPayload.Outcome : System.String { get }
+ToolUp.Platform.PeerJobCompletedPayload.RootRequestId : System.String { get }
+ToolUp.Platform.PeerJobCompletedPayload.Succeeded : System.Boolean { get }
 ToolUp.Platform.PeerSubstrateMode (class)
 ToolUp.Platform.PeerSubstrateMode.EnabledPeerSubstrate : ToolUp.Platform.PeerSubstrateMode { get }
 ToolUp.Platform.PeerSubstrateMode.IsEnabledPeerSubstrate : System.Boolean { get }

@@ -1973,6 +1973,65 @@ type PeerCallCompletedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 310 — a *long-running* peer call reached its terminal outcome on
+/// the receiver. Emitted once per finished job by `PeerJobHandler.Execute`,
+/// after the typed result has been parked in the `IPeerJobResultStore`.
+/// Reserved `SourceModule = "_platform.peer"`, the same family as
+/// `PeerCallCompleted`. PII-free on the same terms: peer ids, a correlation
+/// id, and a short outcome label — never the computed result.
+///
+/// **Why a distinct case rather than a field on `PeerCallCompletedPayload`.**
+/// A long-running call already emits one `PeerCallCompleted` row, and it is
+/// emitted at *schedule* time: `peer.Handle` returns `Ok jobId`, so that row
+/// records `Succeeded = true, Outcome = "ok"` however the background
+/// computation later ends. The two rows answer different questions — "the
+/// receiver accepted the call" versus "the receiver's computation finished
+/// like this" — and they land minutes apart. Marking the phase on the
+/// existing payload would have changed the wire shape of every immediate
+/// call's row for the sake of the minority that are long-running; a new case
+/// leaves that payload byte-for-byte identical (GP 11) and lets an operator
+/// query terminal outcomes without scanning schedule-time noise.
+///
+/// The pair is correlated by `RootRequestId` — the cascade-wide id the
+/// receiver *derived* (Phase 331), threaded to the execution side on the job
+/// payload so the terminal row is filed under the same correlation as the
+/// schedule-time row rather than a freshly-minted one.
+///
+/// **Expiry is deliberately not a terminal outcome here.** Phase 316's
+/// retention can retire a parked result before anyone polls it, but that is
+/// the lifetime of the *record*, not the outcome of the *call*: this row is
+/// written when the computation finishes, so the trail stays truthful
+/// whether or not the result is ever collected. Auditing expiry would also
+/// mean emitting from `IPeerJobResultStore.TryGetResult`, i.e. from inside
+/// the poll route's read path — a write in a read seam, and the shape the
+/// estate's post-response side-effect hazard lives in.
+type PeerJobCompletedPayload = {
+    /// The hosted `contractId` the long-running call targeted.
+    ContractId: string
+    /// The contract method name whose job resolved.
+    MethodName: string
+    /// `PeerId` of the peer that *scheduled* the call, taken from the
+    /// validated `PeerCallContext` at dispatch time and carried on the job
+    /// payload — never re-derived on the execution side, which has no
+    /// request and therefore no principal to read.
+    CallerPeerId: string
+    /// The same cascade-wide correlation id the schedule-time
+    /// `PeerCallCompleted` row carries, so the two rows line up.
+    RootRequestId: string
+    /// Substrate `JobId` of the backing job — the id the caller polls with,
+    /// so an operator can join this row to a poll trace.
+    JobId: Guid
+    /// `true` when the job resolved `Completed`; `false` on `Failed`.
+    Succeeded: bool
+    /// Short outcome label: `"ok"` on `Completed`, else the `PeerError` DU
+    /// case name (e.g. `"PeerHandler"`). Same vocabulary as
+    /// `PeerCallCompletedPayload.Outcome`, so a dashboard groups both rows
+    /// on one axis.
+    Outcome: string
+    /// Wall-clock time the job's terminal status was recorded.
+    OccurredAt: DateTimeOffset
+}
+
 // ─── Phase 483 — multi-round federation-run audit payloads ─────────────
 //
 // Emitted by `ToolUp.InterPlatform`'s `IRoundOrchestrator` as an
@@ -3155,6 +3214,13 @@ type AuditEvent =
     /// contract handler after dispatch reaches a terminal outcome.
     /// Reserved `SourceModule = "_platform.peer"`.
     | PeerCallCompleted of PeerCallCompletedPayload
+    /// Phase 310 — a long-running peer call reached its terminal outcome.
+    /// Emitted by `PeerJobHandler.Execute` once the backing job has
+    /// resolved and its typed result is parked. Distinct from
+    /// `PeerCallCompleted`, which for a long-running method records only
+    /// that the call was *accepted and scheduled*. Reserved
+    /// `SourceModule = "_platform.peer"`.
+    | PeerJobCompleted of PeerJobCompletedPayload
     /// Phase 483 — one round of a multi-round federated run reached its
     /// barrier and its responses were folded. Emitted by
     /// `IRoundOrchestrator` once per completed round. Reserved
@@ -3435,6 +3501,7 @@ module AuditEvent =
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | PeerCallCompleted _ -> "PeerCallCompleted"
+        | PeerJobCompleted _ -> "PeerJobCompleted"
         | FederationRoundCompleted _ -> "FederationRoundCompleted"
         | FederationParticipantDropped _ -> "FederationParticipantDropped"
         | FederationRunAborted _ -> "FederationRunAborted"

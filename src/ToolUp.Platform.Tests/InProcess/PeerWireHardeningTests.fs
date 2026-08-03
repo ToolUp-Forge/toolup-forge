@@ -444,6 +444,7 @@ let private buildPollReceiver (auth: IPeerAuthProvider) =
     let fusion: PeerJobFusion = {
         Scheduler = IPlatformPeerContract.StubScheduler()
         ResultStore = store
+        AuditLog = None
     }
 
     let peer = DefaultPlatformPeer() :> IPlatformPeer

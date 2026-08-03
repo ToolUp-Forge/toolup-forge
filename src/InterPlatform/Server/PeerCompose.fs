@@ -705,9 +705,20 @@ module PeerServerApp =
                                     let resultStore =
                                         sp.GetService(typeof<IPeerJobResultStore>) :?> IPeerJobResultStore
 
+                                    // Phase 310 — the execution side's audit
+                                    // log. Optional on the same terms the
+                                    // request path treats it: a partial host
+                                    // without one records nothing rather
+                                    // than failing to compose.
+                                    let auditLog =
+                                        sp.GetService(typeof<IAuditLog>)
+                                        |> Option.ofObj
+                                        |> Option.map (fun x -> x :?> IAuditLog)
+
                                     {
                                         Scheduler = scheduler
                                         ResultStore = resultStore
+                                        AuditLog = auditLog
                                     })
                             )
                         else
