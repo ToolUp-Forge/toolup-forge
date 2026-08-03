@@ -1194,6 +1194,13 @@
              live-surface == derived-aggregate). Pure derive + an
              in-process peer client; no TestServer. -->
         <Compile Include="InProcess\AggregatePeerSurfaceTests.fs" />
+        <!-- Phase 591 — federation-graph preflight against pinned
+             counterparty surfaces: unsatisfied contract, version skew,
+             trust mismatch (including an aggregate's `mixed:` facet) and
+             a stale pin, each paired with the control that clears it,
+             plus pin-document verification. Pure describe / derive /
+             check; no TestServer. -->
+        <Compile Include="InProcess\FederationPreflightTests.fs" />
         <!-- Phase 316 — peer job-result retention: TTL expiry, delete-on-read
              with a poll-grace window, and blob reclamation, over the real
              BlobPeerJobResultStore with an injected clock. -->

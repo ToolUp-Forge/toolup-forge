@@ -212,6 +212,42 @@ ToolUp.InterPlatform.FanoutPolicyModule.firstSuccess : ToolUp.InterPlatform.Fano
 ToolUp.InterPlatform.FanoutPolicyModule.quorum(System.Int32) : ToolUp.InterPlatform.FanoutPolicy
 ToolUp.InterPlatform.FanoutPolicyModule.withMaxConcurrency(System.Int32, ToolUp.InterPlatform.FanoutPolicy) : ToolUp.InterPlatform.FanoutPolicy
 ToolUp.InterPlatform.FanoutPolicyModule.withTimeout(System.TimeSpan) : ToolUp.InterPlatform.FanoutPolicy
+ToolUp.InterPlatform.FederationPin (class)
+ToolUp.InterPlatform.FederationPin.ofExport(System.String, System.String, System.DateTimeOffset, ToolUp.InterPlatform.PeerSurfaceExport) : ToolUp.InterPlatform.PinnedPeerSurface
+ToolUp.InterPlatform.FederationPin.ofExportJson(System.String, System.String, System.String, System.DateTimeOffset, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PinnedPeerSurface, System.String]
+ToolUp.InterPlatform.FederationPin.ofSurface(System.String, System.String, System.DateTimeOffset, ToolUp.InterPlatform.PeerSurface) : ToolUp.InterPlatform.PinnedPeerSurface
+ToolUp.InterPlatform.FederationPin.trustFacets(ToolUp.InterPlatform.PeerTrustPosture) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PinnedTrustFacet]
+ToolUp.InterPlatform.FederationPinStore (class)
+ToolUp.InterPlatform.FederationPinStore..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PinnedPeerSurface], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerTrustRequirement])
+ToolUp.InterPlatform.FederationPinStore.MaxPinAge : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.InterPlatform.FederationPinStore.Pins : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PinnedPeerSurface] { get }
+ToolUp.InterPlatform.FederationPinStore.RequiredTrust : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerTrustRequirement] { get }
+ToolUp.InterPlatform.FederationPinStoreModule (class)
+ToolUp.InterPlatform.FederationPinStoreModule.empty : ToolUp.InterPlatform.FederationPinStore { get }
+ToolUp.InterPlatform.FederationPinStoreModule.withMaxPinAge(System.TimeSpan, ToolUp.InterPlatform.FederationPinStore) : ToolUp.InterPlatform.FederationPinStore
+ToolUp.InterPlatform.FederationPinStoreModule.withPin(ToolUp.InterPlatform.PinnedPeerSurface, ToolUp.InterPlatform.FederationPinStore) : ToolUp.InterPlatform.FederationPinStore
+ToolUp.InterPlatform.FederationPinStoreModule.withRequiredTrust(ToolUp.InterPlatform.PeerTrustRequirement, ToolUp.InterPlatform.FederationPinStore) : ToolUp.InterPlatform.FederationPinStore
+ToolUp.InterPlatform.FederationPreflight (class)
+ToolUp.InterPlatform.FederationPreflight.ValidatorName : System.String (literal)
+ToolUp.InterPlatform.FederationPreflight.check(ToolUp.InterPlatform.FederationPreflightInput) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
+ToolUp.InterPlatform.FederationPreflight.classifiedRuleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ClassifiedCompositionRule] { get }
+ToolUp.InterPlatform.FederationPreflight.ruleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor] { get }
+ToolUp.InterPlatform.FederationPreflight.structuralRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.FederationPreflight+FederationRule] { get }
+ToolUp.InterPlatform.FederationPreflight.toValidationResult(ToolUp.InterPlatform.FederationPreflightInput) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.InterPlatform.FederationPreflight+FederationPreflightValidator (class)
+ToolUp.InterPlatform.FederationPreflight+FederationPreflightValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.InterPlatform.FederationPreflightInput])
+ToolUp.InterPlatform.FederationPreflight+FederationRule (class)
+ToolUp.InterPlatform.FederationPreflight+FederationRule..ctor(System.String, ToolUp.Platform.CompositionDefectSeverity, System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.FederationPreflightInput, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.InterPlatform.FederationPreflight+FederationRule.Code : System.String { get }
+ToolUp.InterPlatform.FederationPreflight+FederationRule.Description : System.String { get }
+ToolUp.InterPlatform.FederationPreflight+FederationRule.Evaluate : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.FederationPreflightInput, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.InterPlatform.FederationPreflight+FederationRule.Severity : ToolUp.Platform.CompositionDefectSeverity { get }
+ToolUp.InterPlatform.FederationPreflightInput (class)
+ToolUp.InterPlatform.FederationPreflightInput..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], ToolUp.InterPlatform.FederationPinStore, System.DateTimeOffset)
+ToolUp.InterPlatform.FederationPreflightInput.Consumes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
+ToolUp.InterPlatform.FederationPreflightInput.LocalPeerId : System.String { get }
+ToolUp.InterPlatform.FederationPreflightInput.Now : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FederationPreflightInput.Pins : ToolUp.InterPlatform.FederationPinStore { get }
 ToolUp.InterPlatform.GateDecision (class)
 ToolUp.InterPlatform.GateDecision.IsReleased : System.Boolean { get }
 ToolUp.InterPlatform.GateDecision.IsWithheld : System.Boolean { get }
@@ -535,7 +571,7 @@ ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingIdle : 
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingMissing : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingOff : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerServerApp (class)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy])
+ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy], ToolUp.InterPlatform.FederationPinStore)
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.AuditTransparency : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.Base : ToolUp.Platform.ServerApp { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.CascadePolicy : ToolUp.InterPlatform.PeerCascadePolicy { get }
@@ -543,6 +579,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerApp.CleanRoomTemplates : Microsoft.FS
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.ConsumedContracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.ContractProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.Contracts : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]] { get }
+ToolUp.InterPlatform.PeerCompose+PeerServerApp.FederationPins : ToolUp.InterPlatform.FederationPinStore { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.LegacyProfileFallback : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.LocalPeer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.StrictAudienceBinding : System.Boolean { get }
@@ -557,6 +594,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingDiagnosis : 
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingRefusal : System.String { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditFederationGraph(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateMap(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
@@ -565,6 +603,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceAudienceBinding(Tool
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTransportSecurity(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.federationPreflightInput(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.FederationPreflightInput
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.insecureTransportAdvisory : System.String { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.templateApprovalRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
@@ -586,8 +625,11 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLocalPeer(ToolUp.InterP
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPeerAuditTransparency(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPinnedCounterparty(ToolUp.InterPlatform.PinnedPeerSurface, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPinnedSurfaceMaxAge(System.TimeSpan, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPostMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withRequiredPeerTrust(ToolUp.InterPlatform.PeerTrustRequirement, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStrictAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTemplateApprovals(ToolUp.InterPlatform.TemplateApprovalPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
@@ -904,6 +946,16 @@ ToolUp.InterPlatform.PeerTrustPosture.AuthProfile : System.String { get }
 ToolUp.InterPlatform.PeerTrustPosture.DelegationVerification : System.String { get }
 ToolUp.InterPlatform.PeerTrustPosture.ReplayStance : System.String { get }
 ToolUp.InterPlatform.PeerTrustPosture.TransportSecurity : System.String { get }
+ToolUp.InterPlatform.PeerTrustRequirement (class)
+ToolUp.InterPlatform.PeerTrustRequirement..ctor(System.String, System.String)
+ToolUp.InterPlatform.PeerTrustRequirement.Facet : System.String { get }
+ToolUp.InterPlatform.PeerTrustRequirement.RequiredValue : System.String { get }
+ToolUp.InterPlatform.PeerTrustRequirementModule (class)
+ToolUp.InterPlatform.PeerTrustRequirementModule.audienceBound : ToolUp.InterPlatform.PeerTrustRequirement { get }
+ToolUp.InterPlatform.PeerTrustRequirementModule.authProfile(System.String) : ToolUp.InterPlatform.PeerTrustRequirement
+ToolUp.InterPlatform.PeerTrustRequirementModule.delegationVerification(System.String) : ToolUp.InterPlatform.PeerTrustRequirement
+ToolUp.InterPlatform.PeerTrustRequirementModule.replayStance(System.String) : ToolUp.InterPlatform.PeerTrustRequirement
+ToolUp.InterPlatform.PeerTrustRequirementModule.transportSecurity(System.String) : ToolUp.InterPlatform.PeerTrustRequirement
 ToolUp.InterPlatform.PeerTypeRef (class)
 ToolUp.InterPlatform.PeerTypeRef.IsListOf : System.Boolean { get }
 ToolUp.InterPlatform.PeerTypeRef.IsOptionOf : System.Boolean { get }
@@ -959,6 +1011,19 @@ ToolUp.InterPlatform.PeerWirePayload (class)
 ToolUp.InterPlatform.PeerWirePayload..ctor(ToolUp.InterPlatform.PeerCallContext, System.String)
 ToolUp.InterPlatform.PeerWirePayload.Arguments : System.String { get }
 ToolUp.InterPlatform.PeerWirePayload.Context : ToolUp.InterPlatform.PeerCallContext { get }
+ToolUp.InterPlatform.PinnedPeerSurface (class)
+ToolUp.InterPlatform.PinnedPeerSurface..ctor(System.String, System.String, System.Int32, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PinnedTrustFacet])
+ToolUp.InterPlatform.PinnedPeerSurface.CounterpartyId : System.String { get }
+ToolUp.InterPlatform.PinnedPeerSurface.FormatVersion : System.Int32 { get }
+ToolUp.InterPlatform.PinnedPeerSurface.PinnedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PinnedPeerSurface.Serves : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability] { get }
+ToolUp.InterPlatform.PinnedPeerSurface.Source : System.String { get }
+ToolUp.InterPlatform.PinnedPeerSurface.SurfaceHash : System.String { get }
+ToolUp.InterPlatform.PinnedPeerSurface.TrustFacets : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PinnedTrustFacet] { get }
+ToolUp.InterPlatform.PinnedTrustFacet (class)
+ToolUp.InterPlatform.PinnedTrustFacet..ctor(System.String, System.String)
+ToolUp.InterPlatform.PinnedTrustFacet.Facet : System.String { get }
+ToolUp.InterPlatform.PinnedTrustFacet.Value : System.String { get }
 ToolUp.InterPlatform.PlatformRoundObserver (class)
 ToolUp.InterPlatform.PlatformRoundObserver..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
 ToolUp.InterPlatform.PrivacyCell (class)

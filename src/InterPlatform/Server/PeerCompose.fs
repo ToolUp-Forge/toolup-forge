@@ -153,6 +153,23 @@ type PeerServerApp = {
     /// `None` is byte-for-byte the pre-480 gate (GP 11 / GP 13) — no
     /// registry read, no contract, no allocation.
     TemplateApprovals: TemplateApprovalPolicy option
+    /// Phase 591 — the pinned counterparty labels this deployment
+    /// validates its federation edges against, plus the pin-age and
+    /// trust-posture policy read alongside them.
+    ///
+    /// You cannot introspect another organisation's deployment, so the
+    /// preflight validates against what each counterparty *published*: a
+    /// hash-stamped `PeerSurface` export (Phase 590), pinned here with
+    /// `withPinnedCounterparty`. `run` registers the structural-class
+    /// `FederationPreflightValidator` over this store, so a consumed
+    /// contract nothing serves — or a trust facet a counterparty never
+    /// declared — is refused before traffic rather than discovered at
+    /// call time.
+    ///
+    /// `FederationPinStore.empty` (the default) leaves every rule
+    /// dormant and registers no validator, so a composition that pins
+    /// nothing is byte-for-byte a pre-591 composition (GP 11 / GP 13).
+    FederationPins: FederationPinStore
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -222,6 +239,7 @@ module PeerServerApp =
         CleanRoomTemplates = []
         TransportPolicy = PeerTransportPolicy.defaults
         TemplateApprovals = None
+        FederationPins = FederationPinStore.empty
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -643,6 +661,66 @@ module PeerServerApp =
             TemplateApprovals = Some policy
     }
 
+    /// Phase 591 — pin a counterparty's published `PeerSurface` label, so
+    /// this deployment's federation edges are validated against what the
+    /// counterparty *claimed to serve* before any traffic flows.
+    ///
+    ///     let pin =
+    ///         FederationPin.ofExportJson "seller-ssp" "peers/seller-ssp.surface.json"
+    ///             agreedHash DateTimeOffset.UtcNow document
+    ///
+    ///     app
+    ///     |> PeerServerApp.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
+    ///     |> PeerServerApp.withPinnedCounterparty pin
+    ///
+    /// **Labels, never compositions.** Nothing here inspects, requires,
+    /// or reasons about a counterparty's internals — that is what makes
+    /// contract-level checking safe across a heterogeneous federation.
+    /// Only the pinned wire faces have to agree, and the wire face is the
+    /// surface both sides already publish.
+    ///
+    /// The first pin arms the preflight: `run` registers the
+    /// structural-class `FederationPreflightValidator`, which
+    /// `SkipPreflight` cannot bypass. A composition that never calls this
+    /// registers nothing, checks nothing, and is byte-for-byte a pre-591
+    /// composition (GP 11 / GP 13).
+    let withPinnedCounterparty (pin: PinnedPeerSurface) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            FederationPins = FederationPinStore.withPin pin app.FederationPins
+    }
+
+    /// Phase 591 — declare how long a pinned counterparty label stays
+    /// acceptable before `peer-surface-stale` reports it.
+    ///
+    /// Reports, never refuses: an aged pin is the absence of fresh
+    /// evidence rather than evidence of drift, and taking a deployment
+    /// down over a clock is not what an operator asked for by declaring a
+    /// refresh cadence. Undeclared (the default) the rule is dormant —
+    /// forge cannot know a federation's cadence and will not invent one.
+    let withPinnedSurfaceMaxAge (maxAge: System.TimeSpan) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            FederationPins = FederationPinStore.withMaxPinAge maxAge app.FederationPins
+    }
+
+    /// Phase 591 — require a trust facet of every pinned counterparty
+    /// this deployment consumes contracts from.
+    ///
+    ///     app |> PeerServerApp.withRequiredPeerTrust PeerTrustRequirement.audienceBound
+    ///
+    /// Checked against the counterparty's published label and nothing
+    /// else — a posture claim is exactly what a label IS, so there is
+    /// nothing further to ask it for. A facet the label omits asserts
+    /// nothing about that facet and fails the requirement; an aggregate
+    /// group's `mixed:a|b` facet (Phase 595) fails it too, because a
+    /// counterparty reading `mixed:` may rely on neither stance.
+    ///
+    /// Multiple calls accumulate. A composition that declares none leaves
+    /// `peer-trust-mismatch` dormant (GP 13).
+    let withRequiredPeerTrust (requirement: PeerTrustRequirement) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            FederationPins = FederationPinStore.withRequiredTrust requirement app.FederationPins
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -851,6 +929,35 @@ module PeerServerApp =
             let gated = app.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
             failwith (templateApprovalRefusal gated)
 
+    /// Phase 591 — the federation facts the preflight reads, derived from
+    /// the composition rather than hand-listed: this deployment's own peer
+    /// id, what it declared it consumes, and the pinned counterparty
+    /// labels it validates those declarations against.
+    ///
+    /// `now` is a parameter and not a read of the ambient clock, so the
+    /// stale rule is a pure function of its inputs and a test can age a
+    /// pin without waiting. `run` supplies `DateTimeOffset.UtcNow` at the
+    /// moment the preflight actually runs.
+    let federationPreflightInput (now: System.DateTimeOffset) (app: PeerServerApp) : FederationPreflightInput = {
+        LocalPeerId = app.LocalPeer |> Option.map _.PeerId |> Option.defaultValue ""
+        Consumes = app.ConsumedContracts
+        Pins = app.FederationPins
+        Now = now
+    }
+
+    /// Phase 591 — classify this composition's federation graph against
+    /// its pinned counterparty labels. Pure and total; exposed so a
+    /// deployment can assert its own edges in its own tests without
+    /// booting a server (the posture `auditAudienceBinding` /
+    /// `auditCleanRoomTemplates` / `auditTemplateApprovals` take), and so
+    /// the preflight validator cannot drift from what a deployment can
+    /// check for itself.
+    ///
+    /// Empty on a composition that pinned nothing, whatever it consumes
+    /// (GP 13).
+    let auditFederationGraph (now: System.DateTimeOffset) (app: PeerServerApp) : CompositionDefect list =
+        FederationPreflight.check (federationPreflightInput now app)
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -899,6 +1006,12 @@ module PeerServerApp =
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
             let transportPolicy = app.TransportPolicy
+            // Phase 591 — captured from the FINAL composition, so the
+            // preflight reads every `withConsumedContract` /
+            // `withPinnedCounterparty` declaration regardless of the order
+            // a composition made them in.
+            let federationPins = app.FederationPins
+            let consumedContracts = app.ConsumedContracts
             let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
 
             let localIdentity =
@@ -1235,6 +1348,33 @@ module PeerServerApp =
                     withFusion.TryAddSingleton<IPeerFanout>(DefaultPeerFanout() :> IPeerFanout)
                     withFusion.TryAddSingleton<IPeerCascade>(DefaultPeerCascade() :> IPeerCascade)
                     withFusion.TryAddSingleton<ICleanRoomBroker>(DefaultCleanRoomBroker() :> ICleanRoomBroker)
+
+                    // Phase 591 — the federation-graph preflight, folded
+                    // into the Phase 9m preflight set as a
+                    // structural-class validator (so `SkipPreflight`
+                    // cannot bypass it: every rule is a pure sweep over
+                    // declared data already in memory, reaching no
+                    // counterparty). Registered ONLY when the composition
+                    // pinned at least one counterparty label — a
+                    // deployment that declared no federation graph pays
+                    // not even a singleton (GP 13), and can never be
+                    // refused for edges it never declared (GP 11).
+                    //
+                    // The input is a thunk so the pin ages are measured
+                    // when the preflight runs, not when the composition
+                    // was built.
+                    if not federationPins.Pins.IsEmpty then
+                        withFusion.AddSingleton<ConfigValidation.IConfigValidator>(
+                            FederationPreflight.FederationPreflightValidator(fun () -> {
+                                LocalPeerId = localIdentity.PeerId
+                                Consumes = consumedContracts
+                                Pins = federationPins
+                                Now = System.DateTimeOffset.UtcNow
+                            })
+                            :> ConfigValidation.IConfigValidator
+                        )
+                        |> ignore
+
                     withFusion
 
             let baseExt = app.Base.Extensions

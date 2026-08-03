@@ -38,6 +38,7 @@ The wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-
 | JSON-RPC host | [`Server/JsonRpcPeerHost.fs`](Server/JsonRpcPeerHost.fs) | module `JsonRpcPeerHost` (`contract`, `routes`) |
 | Compose pipeline | [`Server/PeerCompose.fs`](Server/PeerCompose.fs) | `PeerServerApp` record + `run` |
 | Cross-instance face descriptor (Phase 590) | [`Server/PeerSurface.fs`](Server/PeerSurface.fs) | `ConsumedContract` (in `Shared/PeerTypes.fs`), `ServedContract`, `PeerServes`, `PeerTrustPosture`, `PeerBudgetShape`, `PeerSurface`, `PeerSurfaceExport`, module `PeerSurface` (`describe`, `consumes`, `export`, `exportJson`) |
+| Federation-graph preflight (Phase 591) | [`Server/FederationPreflight.fs`](Server/FederationPreflight.fs), [`Server/FederationPin.fs`](Server/FederationPin.fs) | `PinnedTrustFacet`, `PinnedPeerSurface`, `PeerTrustRequirement`, `FederationPinStore`, `FederationPreflightInput`, module `FederationPreflight` (`structuralRules`, `ruleManifest`, `classifiedRuleManifest`, `check`, `FederationPreflightValidator`), module `FederationPin` (`ofSurface`, `ofExport`, `ofExportJson`) |
 
 The audit payload (`PeerCallCompletedPayload`) and the `PeerCallCompleted` `AuditEvent` case live in the core platform's audit types ([`../ToolUp.Platform.Core/Shared/AuditTypes.fs`](../ToolUp.Platform.Core/Shared/AuditTypes.fs)), serialised by [`../ToolUp.Platform.Server/Server/AuditLog.fs`](../ToolUp.Platform.Server/Server/AuditLog.fs) — the substrate is a *producer* of that event, not its owner.
 
@@ -319,6 +320,36 @@ let pinned  = PeerSurface.exportJson surface // canonical JSON + SHA-256 stamp
 ```
 
 The export is **deterministic and hash-stamped**: every list is sorted before serialisation, so the same composition always yields the same bytes and the same `SurfaceHash` regardless of registration order — and any registration change produces a new hash. A counterparty (or an external federation-composition tool) pins the export of an instance it can never introspect live and detects staleness by re-hashing; the live handshake endpoints answer "what do you serve *right now*", the export answers "what did the instance I validated against look like". A deployment on `NoPeerSubstrate` yields the empty surface without running a single contract builder — zero cost when unused.
+
+## Federation-graph preflight (Phase 591)
+
+A deployment that consumes a peer contract no counterparty serves — at an incompatible version, or under a trust posture the counterparty never declared — used to discover it at call time. You cannot introspect another organisation's deployment, so the preflight validates against the label each counterparty **published**: pin its `PeerSurface` export and the composition's federation edges are checked before traffic.
+
+```fsharp
+// The counterparty's published export, verified against the stamp agreed out of band.
+let sellerPin =
+    FederationPin.ofExportJson "seller-ssp" "peers/seller-ssp.surface.json" agreedHash DateTimeOffset.UtcNow document
+
+let app =
+    PeerServerApp.create ()
+    |> PeerServerApp.withConfig config
+    |> PeerServerApp.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
+    |> PeerServerApp.withPinnedCounterparty (sellerPin |> Result.defaultWith failwith)
+    |> PeerServerApp.withRequiredPeerTrust PeerTrustRequirement.audienceBound
+    |> PeerServerApp.withPinnedSurfaceMaxAge (TimeSpan.FromDays 90.0)
+```
+
+Three rules, exported as data through `FederationPreflight.ruleManifest` / `classifiedRuleManifest` (the same `CompositionRuleDescriptor` / `ClassifiedCompositionRule` shapes the intra-app composition rules project, so an external pre-build checker needs no new vocabulary):
+
+| Code | Severity | Fires when |
+|---|---|---|
+| `peer-contract-unsatisfied` | Error | A consumed contract no pinned counterparty serves, or one serves at no version this deployment speaks. Compatibility is a non-empty version intersection — the handshake's own highest-mutual discipline. |
+| `peer-trust-mismatch` | Error | A required trust facet a pinned counterparty's label contradicts, or does not declare at all (an omitted facet is no claim, not a weaker one). |
+| `peer-surface-stale` | Warning | A pin older than the declared maximum age. An aged pin is the *absence* of fresh evidence rather than evidence of drift, so it reports and never refuses. |
+
+The rules run as a **structural-class** `IConfigValidator` in the composition-validator pass, so `ServerConfig.SkipPreflight` does not bypass them — every rule is a pure sweep over declared data already in memory and reaches no counterparty. `PeerServerApp.auditFederationGraph` runs the identical check as a value, so a deployment can assert its own edges without booting a server.
+
+**Contract-level checking is what makes a heterogeneous federation safe**: nothing here inspects a counterparty's *composition*, only the wire face it already publishes. An aggregate group (Phase 595) pins exactly like a single instance — its posture facets are floors over the exposing members, and a facet the members disagree on publishes as `mixed:a|b`, which satisfies no requirement because a counterparty may rely on neither stance. A composition that pins nothing registers no validator, checks nothing, and is byte-for-byte a pre-591 composition.
 
 ## Routes
 

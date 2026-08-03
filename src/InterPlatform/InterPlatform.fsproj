@@ -118,6 +118,19 @@
          caller. Nothing is composed unless a deployment calls
          `withTemplateApprovals` (GP 13). -->
     <Compile Include="Server\TemplateApprovalRegistry.fs" />
+    <!-- Phase 591 — the federation-graph preflight rule family: the
+         pinned-counterparty store, the three declared rules
+         (peer-contract-unsatisfied / peer-trust-mismatch /
+         peer-surface-stale), the Phase 294 manifest projection, and the
+         structural-class IConfigValidator that runs them. Compiles
+         BEFORE PeerCompose.fs — the compose record carries the pin store
+         and `run` registers the validator — and reads only
+         `Shared/PeerTypes.fs` (ConsumedContract / CapabilityList) plus
+         the platform's own defect + rule-descriptor types, never
+         PeerSurface itself. Taking a pin FROM a published PeerSurface
+         export is the later `FederationPin.fs`. Dormant with zero pinned
+         surfaces (GP 13). -->
+    <Compile Include="Server\FederationPreflight.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
          derived from the composed PeerServerApp (compiles after it). -->
@@ -130,6 +143,15 @@
          registers onto a PeerServerApp). Nothing composes it — the opt-in
          hook is PeerGateway.withAggregate (GP 13). -->
     <Compile Include="Server\AggregatePeerSurface.fs" />
+    <!-- Phase 591 — the one road from a counterparty's published
+         PeerSurface export to a PinnedPeerSurface: hash-stamp
+         verification, format-version refusal, and the reflection-sourced
+         trust-facet projection. Compiles AFTER PeerSurface.fs (it reads
+         that file's export envelope + posture) and after
+         AggregatePeerSurface.fs, so a gateway-fronted group's derived
+         surface pins through the identical path a single instance's
+         does. -->
+    <Compile Include="Server\FederationPin.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

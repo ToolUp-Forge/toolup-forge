@@ -968,6 +968,12 @@ let allTests =
         // exposing member, vocabulary pins on unanimity only), and the
         // gateway that fronts it by delegating to the owning member.
         AggregatePeerSurfaceTests.tests
+        // Phase 591 — federation-graph preflight: the deployment's
+        // consumed peer contracts checked against the pinned labels its
+        // counterparties published, before traffic — unsatisfied
+        // contract and version skew refuse, a required trust facet a
+        // label contradicts refuses, an aged pin reports.
+        FederationPreflightTests.tests
         // Phase 316 — peer job-result retention: a parked federated
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.

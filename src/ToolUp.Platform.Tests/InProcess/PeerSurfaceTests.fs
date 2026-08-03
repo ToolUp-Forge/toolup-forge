@@ -265,6 +265,25 @@ let tests =
                 // `WireLimits` argument: receiver-side policy an
                 // operator retunes at a restart.
                 "TemplateApprovals"
+                // Phase 591 — NOT projected, and this one is exempt for
+                // a reason none of the others share: it is not a
+                // statement about this deployment at all. The pin store
+                // holds what OTHER instances published about themselves,
+                // held here as inbound evidence to validate this
+                // deployment's own consumed declarations against. A
+                // `PeerSurface` is the face this instance presents; who
+                // it has pinned is the opposite direction.
+                //
+                // It would also be actively wrong to publish. The pin set
+                // names this deployment's counterparties, their label
+                // hashes, and (through `RequiredTrust`) the postures it
+                // insists on — a map of who a participant federates with,
+                // handed to every counterparty that reads its face. A
+                // federation's whole safety argument is that only the
+                // wire faces are shared and the compositions stay
+                // un-inspected; the counterparty SET is composition, not
+                // face.
+                "FederationPins"
             ]
 
             let actual =
