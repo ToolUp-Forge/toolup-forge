@@ -137,6 +137,22 @@ type PeerServerApp = {
     /// transport that dials it, not with the composition record. Opt out
     /// with `withInsecurePeerTransport`.
     TransportPolicy: PeerTransportPolicy
+    /// Phase 480 — the bilateral template-approval posture: the registry
+    /// holding signed propose / review / approve / revoke records, plus
+    /// the clock-skew tolerance their validity windows are read under.
+    ///
+    /// When composed, two things happen. Every clean-room gate installed
+    /// by `withCleanRoomTemplate` additionally requires a LIVE bilateral
+    /// approval of the exact template version it is about to enforce —
+    /// checked per dispatch, before the handler runs. And the reserved
+    /// approval-handshake contract is registered, so a counterparty can
+    /// submit its own signed records and read back what this deployment
+    /// holds about agreements it is a party to.
+    ///
+    /// `None` unless a composition calls `withTemplateApprovals`, and
+    /// `None` is byte-for-byte the pre-480 gate (GP 11 / GP 13) — no
+    /// registry read, no contract, no allocation.
+    TemplateApprovals: TemplateApprovalPolicy option
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -164,6 +180,32 @@ type PeerAudienceBinding =
     /// absent binding costs nothing.
     | AudienceBindingIdle
 
+/// Phase 480 — a composition's bilateral-approval posture, classified at
+/// compose time. The same shape `PeerAudienceBinding` takes and for the
+/// same reason: a deployment (or a test) asserts on data rather than
+/// scraping a log line, and the audit / enforcement paths cannot drift
+/// from what `run` will actually wire.
+type TemplateApprovalPosture =
+    /// No registry composed (or the peer substrate is off) — clean-room
+    /// gates behave exactly as they did before this phase.
+    | TemplateApprovalOff
+    /// A registry is composed and this deployment gates contracts, so
+    /// every named contract's answers additionally require a live
+    /// bilateral approval of the exact template version.
+    | TemplateApprovalEnforced of receiverId: string * gatedContracts: string list
+    /// A registry is composed but this deployment gates nothing. **Not
+    /// a defect**: recording and serving approvals is a legitimate
+    /// posture on its own — a deployment approves the *counterparty's*
+    /// template so the counterparty can enforce it, and holds the trail
+    /// for its own auditors.
+    | TemplateApprovalRecordingOnly
+    /// **The composition defect.** Contracts are gated and a registry is
+    /// composed, but no usable `LocalPeer` id was composed — so this
+    /// deployment has no identity to be one half of a bilateral
+    /// agreement, every approval check resolves against an empty peer
+    /// id, and every gated call is withheld forever.
+    | TemplateApprovalUnidentified
+
 module PeerServerApp =
 
     let create () : PeerServerApp = {
@@ -179,6 +221,7 @@ module PeerServerApp =
         CascadePolicy = PeerCascadePolicy.defaults
         CleanRoomTemplates = []
         TransportPolicy = PeerTransportPolicy.defaults
+        TemplateApprovals = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -550,6 +593,56 @@ module PeerServerApp =
             TransportPolicy = PeerTransportPolicy.allowInsecureTransport app.TransportPolicy
     }
 
+    /// Phase 480 — require every clean-room template this deployment
+    /// enforces to be **bilaterally approved**: signed off by both this
+    /// deployment and the calling counterparty, for the exact template
+    /// content, within a live validity window.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ])
+    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerServerApp.withTemplateApprovals (
+    ///            TemplateApprovalPolicy.forRegistry (BlobTemplateApprovalRegistry(blobs, signer)))
+    ///
+    /// **What this adds to Phase 311.** The gate already applies the
+    /// floor by construction; what it could not say is who agreed to the
+    /// floor. A template was a deployment-configured value, asserted by
+    /// one side. With a registry composed, the same structural path
+    /// additionally refuses any answer whose template version lacks a
+    /// live counterparty approval — so an unapproved template is not
+    /// merely undocumented, it is unusable, and through the same
+    /// dispatch closure the handler has no say in.
+    ///
+    /// **An edit invalidates prior approvals by construction.** A
+    /// template's version is the SHA-256 of its canonical content
+    /// (`TemplateCanonical.version`), and the dispatch check asks for
+    /// approvals of the version it is about to enforce. Editing the
+    /// floor, the method surface, or the id yields a different version
+    /// for which no approval exists. Nothing has to remember to
+    /// invalidate anything.
+    ///
+    /// It also registers the reserved approval-handshake contract
+    /// (`TemplateApprovalContract.contractId`), so a counterparty can
+    /// submit its signed records and read back the ones it is a party
+    /// to. That contract is registered whether or not this deployment
+    /// gates anything — approving a counterparty's template while gating
+    /// none of your own is a legitimate posture, and the trail is the
+    /// artefact a regulated buyer asks for.
+    ///
+    /// Composing a registry while gating contracts **without** a
+    /// `LocalPeer` identity is a composition defect and `run` REFUSES TO
+    /// START on it, for the reason Phase 311 refuses an unbound
+    /// template: this deployment would have no identity to be one half
+    /// of a bilateral agreement, so every gated call would be withheld
+    /// forever with no composed lever to fix it.
+    ///
+    /// A composition that never calls this is byte-for-byte a pre-480
+    /// composition (GP 11 / GP 13).
+    let withTemplateApprovals (policy: TemplateApprovalPolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TemplateApprovals = Some policy
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -656,7 +749,18 @@ module PeerServerApp =
             else
                 []
 
-        Set.ofList (authored @ transparency)
+        // Phase 480 — the approval-handshake contract is registered
+        // alongside the author contracts whenever a registry is
+        // composed, so a template naming it binds rather than reading as
+        // unbound (an odd thing to gate, but the seam must not have an
+        // exception in it).
+        let approvals =
+            if app.TemplateApprovals.IsSome then
+                [ TemplateApprovalContract.contractId ]
+            else
+                []
+
+        Set.ofList (authored @ transparency @ approvals)
 
     /// Phase 311 — the contract ids named by `withCleanRoomTemplate` that
     /// no hosted contract answers to. Empty on a healthy composition.
@@ -704,6 +808,49 @@ module PeerServerApp =
         | [] -> ()
         | unbound -> failwith (cleanRoomTemplateRefusal unbound)
 
+    /// Phase 480 — classify this composition's bilateral-approval
+    /// posture. Pure and total; exposed so a deployment can assert its
+    /// own posture in its own tests without booting a server, and so the
+    /// refusal path cannot drift from what `run` will wire.
+    ///
+    /// A `LocalPeer` whose `PeerId` is blank counts as **absent**, on
+    /// the same argument `auditAudienceBinding` makes: an empty peer id
+    /// is not an identity, it just looks composed.
+    let auditTemplateApprovals (app: PeerServerApp) : TemplateApprovalPosture =
+        match app.Base.Config.PeerSubstrate, app.TemplateApprovals with
+        | NoPeerSubstrate, _
+        | _, None -> TemplateApprovalOff
+        | EnabledPeerSubstrate, Some _ ->
+            let gated = app.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
+
+            if List.isEmpty gated then
+                TemplateApprovalRecordingOnly
+            else
+                match app.LocalPeer with
+                | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
+                    TemplateApprovalEnforced(identity.PeerId, gated)
+                | _ -> TemplateApprovalUnidentified
+
+    /// The refusal raised at `run` when a composition gates contracts
+    /// under an approval registry without a `LocalPeer` identity.
+    let templateApprovalRefusal (gated: string list) =
+        let named = String.concat ", " gated
+
+        $"peer-template-approval: PeerServerApp.withTemplateApprovals is composed and contract(s) [{named}] are clean-room gated, but this deployment composed no LocalPeer identity — so it has no peer id to be one half of a bilateral agreement, no counterparty can address an approval to it, and every gated call would be withheld forever with no composed lever to fix it. Refusing to start: compose PeerServerApp.withLocalPeer with this deployment's own peer id."
+
+    /// Phase 480 — apply the posture. No advisory mode, on Phase 311's
+    /// argument: `withTemplateApprovals` did not exist before this
+    /// phase, so every reachable case is a defect in code written after
+    /// it, and nothing pre-480 can trip it (GP 11).
+    let enforceTemplateApprovals (app: PeerServerApp) : unit =
+        match auditTemplateApprovals app with
+        | TemplateApprovalOff
+        | TemplateApprovalEnforced _
+        | TemplateApprovalRecordingOnly -> ()
+        | TemplateApprovalUnidentified ->
+            let gated = app.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
+            failwith (templateApprovalRefusal gated)
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -731,6 +878,13 @@ module PeerServerApp =
             // composition that gates nothing does not run it (GP 13).
             enforceCleanRoomTemplates app
 
+            // Phase 480 — refuse a bilateral-approval posture that can
+            // never resolve (gated contracts, a composed registry, no
+            // local identity), before anything registers. Pure over the
+            // compose record; a composition with no registry short-
+            // circuits on the first match arm (GP 13).
+            enforceTemplateApprovals app
+
             // Phase 339 — one line per start when the composition has
             // opted out of peer-transport TLS enforcement. Silent in
             // every other state, and inside this branch so the
@@ -740,6 +894,7 @@ module PeerServerApp =
 
             let contracts = app.Contracts
             let cleanRoomTemplates = cleanRoomTemplateMap app
+            let templateApprovals = app.TemplateApprovals
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
@@ -928,6 +1083,16 @@ module PeerServerApp =
                             // registered exactly as it was before this
                             // phase — same value, no branch on the call
                             // path (GP 13).
+                            // Phase 480 — the bilateral-approval check
+                            // the gate runs as invariant 0, built once
+                            // per composition and closed over this
+                            // deployment's own peer id. `None` when no
+                            // registry is composed, which is the
+                            // pre-480 gate exactly.
+                            let approvalCheck =
+                                templateApprovals
+                                |> Option.map (fun policy -> TemplateApprovalGate.check policy localIdentity.PeerId)
+
                             let gate (registration: PeerContractRegistration) =
                                 match Map.tryFind registration.ContractId cleanRoomTemplates with
                                 | None -> registration
@@ -947,7 +1112,8 @@ module PeerServerApp =
                                             fun payload ->
                                                 auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
 
-                                    (CleanRoomGate.wrap broker template sink registration).Registration
+                                    (CleanRoomGate.wrapApproved broker template approvalCheck sink registration)
+                                        .Registration
 
                             for builder in contracts do
                                 let host = builder fusion
@@ -975,6 +1141,21 @@ module PeerServerApp =
                                     peer.RegisterContract(
                                         gate (PeerAuditContractHost.registration (svc :?> IAuditLog))
                                     )
+
+                            // Phase 480 — the approval handshake. Needs
+                            // no substrate beyond the composed registry
+                            // (which already carries its own storage +
+                            // signer), so unlike the audit contract it
+                            // cannot be skipped for a missing
+                            // dependency. Through `gate` on the same
+                            // terms: the seam must not have an
+                            // exception in it.
+                            match templateApprovals with
+                            | None -> ()
+                            | Some policy ->
+                                peer.RegisterContract(
+                                    gate (TemplateApprovalContract.registration localIdentity.PeerId policy.Registry)
+                                )
 
                             peer)
                     )

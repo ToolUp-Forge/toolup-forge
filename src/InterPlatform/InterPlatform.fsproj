@@ -105,6 +105,19 @@
          (the legacy degrade), IPeerAuthProvider.fs and IPeerHandshake.fs;
          compiles immediately before its only caller. -->
     <Compile Include="Server\PeerRemoteProfile.fs" />
+    <!-- Phase 480 — bilateral clean-room template approval: the content-
+         hashed template version, the signed lifecycle record, the
+         blob-backed registry + its signer seam, the pure bilateral
+         evaluation, the approval-queue projection, and the reserved
+         handshake contract. Compiles AFTER CleanRoomGate.fs (it supplies
+         that file's `CleanRoomApprovalCheck`), AFTER
+         AsymmetricPeerAuthProvider.fs (it signs with the same
+         `PeerAsymmetricKeys` custody) and AFTER PeerReflection.fs (the
+         handshake host unmarshals with the same shim the typed proxy
+         marshals with), and before PeerCompose.fs, its only in-tree
+         caller. Nothing is composed unless a deployment calls
+         `withTemplateApprovals` (GP 13). -->
+    <Compile Include="Server\TemplateApprovalRegistry.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
          derived from the composed PeerServerApp (compiles after it). -->

@@ -1170,6 +1170,16 @@
              broker, and the compose-time refusal of a template that
              binds to no hosted contract. -->
         <Compile Include="InProcess\CleanRoomGateTests.fs" />
+        <!-- Phase 480 — bilateral clean-room template approval: the
+             content-hashed template version (every field covered, set
+             order irrelevant, delimiter injection impossible), real
+             P-256-signed lifecycle records verified on arrival, the
+             fail-closed bilateral evaluation with revocation / expiry /
+             skew, and the dispatch-time check composed into the Phase
+             311 wrapper — the template-mutation probe paired with a
+             pre-480 control that releases. Pure orchestration + an
+             in-memory blob/secret store; no TestServer. -->
+        <Compile Include="InProcess\TemplateApprovalTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

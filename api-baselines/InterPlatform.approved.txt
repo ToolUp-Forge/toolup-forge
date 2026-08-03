@@ -54,6 +54,27 @@ ToolUp.InterPlatform.AsymmetricPeerAuthProvider (class)
 ToolUp.InterPlatform.AsymmetricPeerAuthProvider..ctor(ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.InterPlatform.PeerSignatureAlgorithm)
 ToolUp.InterPlatform.AsymmetricPeerAuthProvider..ctor(ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.InterPlatform.PeerSignatureAlgorithm, ToolUp.InterPlatform.PeerTokenPolicy)
 ToolUp.InterPlatform.AsymmetricPeerAuthProvider..ctor(ToolUp.Platform.Secrets+ISecretStore, ToolUp.InterPlatform.PeerSignatureAlgorithm)
+ToolUp.InterPlatform.BilateralApprovalStatus (class)
+ToolUp.InterPlatform.BilateralApprovalStatus.IsApprovalExpired : System.Boolean { get }
+ToolUp.InterPlatform.BilateralApprovalStatus.IsApprovalPending : System.Boolean { get }
+ToolUp.InterPlatform.BilateralApprovalStatus.IsApprovalRevoked : System.Boolean { get }
+ToolUp.InterPlatform.BilateralApprovalStatus.IsBilaterallyApproved : System.Boolean { get }
+ToolUp.InterPlatform.BilateralApprovalStatus.Tag : System.Int32 { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalExpired (class)
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalExpired.at : System.DateTimeOffset { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalExpired.byPeerId : System.String { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalPending (class)
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalPending.awaiting : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalRevoked (class)
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalRevoked.at : System.DateTimeOffset { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+ApprovalRevoked.byPeerId : System.String { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+BilaterallyApproved (class)
+ToolUp.InterPlatform.BilateralApprovalStatus+BilaterallyApproved.effectiveFrom : System.DateTimeOffset { get }
+ToolUp.InterPlatform.BilateralApprovalStatus+Tags (class)
+ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalExpired : System.Int32 (literal)
+ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalPending : System.Int32 (literal)
+ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalRevoked : System.Int32 (literal)
+ToolUp.InterPlatform.BilateralApprovalStatus+Tags.BilaterallyApproved : System.Int32 (literal)
 ToolUp.InterPlatform.BlobPeerJobResultStore (class)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy)
@@ -67,11 +88,14 @@ ToolUp.InterPlatform.BlobPeerReplayGuard..ctor(ToolUp.Platform.BlobStorage+IBlob
 ToolUp.InterPlatform.BlobPeerReplayGuard.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerReplayGuard]
 ToolUp.InterPlatform.BlobRoundStateStore (class)
 ToolUp.InterPlatform.BlobRoundStateStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.InterPlatform.BlobTemplateApprovalRegistry (class)
+ToolUp.InterPlatform.BlobTemplateApprovalRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.ITemplateApprovalSigner)
 ToolUp.InterPlatform.CleanRoomBroker (class)
 ToolUp.InterPlatform.CleanRoomBroker.create() : ToolUp.InterPlatform.ICleanRoomBroker
 ToolUp.InterPlatform.CleanRoomGate (class)
 ToolUp.InterPlatform.CleanRoomGate.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.CleanRoomGate.wrap(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.CleanRoomGate.wrapApproved(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
 ToolUp.InterPlatform.CleanRoomTemplate (class)
 ToolUp.InterPlatform.CleanRoomTemplate..ctor(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.InterPlatform.PrivacyGate)
 ToolUp.InterPlatform.CleanRoomTemplate.AllowedMethods : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -264,6 +288,17 @@ ToolUp.InterPlatform.IRoundStateStore (interface)
 ToolUp.InterPlatform.IRoundStateStore.Clear(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.Save(System.String, ToolUp.InterPlatform.RoundState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.TryLoad(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.RoundState]]
+ToolUp.InterPlatform.ITemplateApprovalApi (class)
+ToolUp.InterPlatform.ITemplateApprovalApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TemplateApprovalRecord, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.TemplateApprovalAck]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]]])
+ToolUp.InterPlatform.ITemplateApprovalApi.QueryApprovals : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]]] { get }
+ToolUp.InterPlatform.ITemplateApprovalApi.SubmitApproval : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TemplateApprovalRecord, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.TemplateApprovalAck]] { get }
+ToolUp.InterPlatform.ITemplateApprovalRegistry (interface)
+ToolUp.InterPlatform.ITemplateApprovalRegistry.Accept(ToolUp.InterPlatform.TemplateApprovalRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.ITemplateApprovalRegistry.Issue(ToolUp.InterPlatform.TemplateApprovalRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.TemplateApprovalRecord, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.ITemplateApprovalRegistry.Records(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]]
+ToolUp.InterPlatform.ITemplateApprovalSigner (interface)
+ToolUp.InterPlatform.ITemplateApprovalSigner.Sign(System.String, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
+ToolUp.InterPlatform.ITemplateApprovalSigner.Verify(System.String, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.InterPlatform.InMemoryCommutativeCipher (class)
 ToolUp.InterPlatform.InMemoryCommutativeCipher..ctor()
 ToolUp.InterPlatform.InMemoryCommutativeCipherModule (class)
@@ -500,7 +535,7 @@ ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingIdle : 
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingMissing : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingOff : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerServerApp (class)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy)
+ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy])
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.AuditTransparency : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.Base : ToolUp.Platform.ServerApp { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.CascadePolicy : ToolUp.InterPlatform.PeerCascadePolicy { get }
@@ -511,6 +546,7 @@ ToolUp.InterPlatform.PeerCompose+PeerServerApp.Contracts : Microsoft.FSharp.Coll
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.LegacyProfileFallback : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.LocalPeer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.StrictAudienceBinding : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+PeerServerApp.TemplateApprovals : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy] { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.TransportPolicy : ToolUp.InterPlatform.PeerTransportPolicy { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerApp.WireLimits : ToolUp.InterPlatform.PeerWireLimits { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule (class)
@@ -521,14 +557,17 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingDiagnosis : 
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingRefusal : System.String { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateMap(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.create() : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTransportSecurity(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.insecureTransportAdvisory : System.String { get }
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.templateApprovalRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCascadePolicy(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCleanRoomTemplate(System.String, ToolUp.InterPlatform.CleanRoomTemplate, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
@@ -551,9 +590,27 @@ ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPostMiddleware(Microsof
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStrictAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTemplateApprovals(ToolUp.InterPlatform.TemplateApprovalPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTransportPolicy(ToolUp.InterPlatform.PeerTransportPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
 ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withWireLimits(ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture (class)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalEnforced : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalOff : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalRecordingOnly : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalUnidentified : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.TemplateApprovalOff : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.TemplateApprovalRecordingOnly : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.TemplateApprovalUnidentified : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+Tags (class)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+Tags.TemplateApprovalEnforced : System.Int32 (literal)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+Tags.TemplateApprovalOff : System.Int32 (literal)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+Tags.TemplateApprovalRecordingOnly : System.Int32 (literal)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+Tags.TemplateApprovalUnidentified : System.Int32 (literal)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforced (class)
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforced.gatedContracts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforced.receiverId : System.String { get }
 ToolUp.InterPlatform.PeerContractHost (class)
 ToolUp.InterPlatform.PeerContractHost..ctor(ToolUp.InterPlatform.PeerContractRegistration, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.IJobHandler]])
 ToolUp.InterPlatform.PeerContractHost.JobHandlers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.IJobHandler]] { get }
@@ -709,6 +766,9 @@ ToolUp.InterPlatform.PeerJobStatus`1+Tags (class)
 ToolUp.InterPlatform.PeerJobStatus`1+Tags.Completed : System.Int32 (literal)
 ToolUp.InterPlatform.PeerJobStatus`1+Tags.Failed : System.Int32 (literal)
 ToolUp.InterPlatform.PeerJobStatus`1+Tags.Pending : System.Int32 (literal)
+ToolUp.InterPlatform.PeerKeyTemplateApprovalSigner (class)
+ToolUp.InterPlatform.PeerKeyTemplateApprovalSigner..ctor(ToolUp.Platform.Secrets+ISecretStore)
+ToolUp.InterPlatform.PeerKeyTemplateApprovalSigner..ctor(ToolUp.Platform.Secrets+ISecretStore, ToolUp.InterPlatform.PeerSignatureAlgorithm)
 ToolUp.InterPlatform.PeerMethodLifetime (class)
 ToolUp.InterPlatform.PeerMethodLifetime.ImmediateMethod : ToolUp.InterPlatform.PeerMethodLifetime { get }
 ToolUp.InterPlatform.PeerMethodLifetime.IsImmediateMethod : System.Boolean { get }
@@ -1066,6 +1126,83 @@ ToolUp.InterPlatform.TargetPeer (class)
 ToolUp.InterPlatform.TargetPeer..ctor(ToolUp.InterPlatform.PeerIdentity, System.String)
 ToolUp.InterPlatform.TargetPeer.BaseUrl : System.String { get }
 ToolUp.InterPlatform.TargetPeer.Peer : ToolUp.InterPlatform.PeerIdentity { get }
+ToolUp.InterPlatform.TemplateApproval (class)
+ToolUp.InterPlatform.TemplateApproval.defaultSkew : System.TimeSpan { get }
+ToolUp.InterPlatform.TemplateApproval.explain(System.String, System.String, ToolUp.InterPlatform.BilateralApprovalStatus) : System.String
+ToolUp.InterPlatform.TemplateApproval.status(System.TimeSpan, System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]) : ToolUp.InterPlatform.BilateralApprovalStatus
+ToolUp.InterPlatform.TemplateApprovalAck (class)
+ToolUp.InterPlatform.TemplateApprovalAck..ctor(System.Boolean, System.String)
+ToolUp.InterPlatform.TemplateApprovalAck.Accepted : System.Boolean { get }
+ToolUp.InterPlatform.TemplateApprovalAck.Reason : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalAction (class)
+ToolUp.InterPlatform.TemplateApprovalAction.IsTemplateApproved : System.Boolean { get }
+ToolUp.InterPlatform.TemplateApprovalAction.IsTemplateProposed : System.Boolean { get }
+ToolUp.InterPlatform.TemplateApprovalAction.IsTemplateReviewed : System.Boolean { get }
+ToolUp.InterPlatform.TemplateApprovalAction.IsTemplateRevoked : System.Boolean { get }
+ToolUp.InterPlatform.TemplateApprovalAction.Tag : System.Int32 { get }
+ToolUp.InterPlatform.TemplateApprovalAction.TemplateApproved : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalAction.TemplateProposed : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalAction.TemplateReviewed : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalAction.TemplateRevoked : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalAction+Tags (class)
+ToolUp.InterPlatform.TemplateApprovalAction+Tags.TemplateApproved : System.Int32 (literal)
+ToolUp.InterPlatform.TemplateApprovalAction+Tags.TemplateProposed : System.Int32 (literal)
+ToolUp.InterPlatform.TemplateApprovalAction+Tags.TemplateReviewed : System.Int32 (literal)
+ToolUp.InterPlatform.TemplateApprovalAction+Tags.TemplateRevoked : System.Int32 (literal)
+ToolUp.InterPlatform.TemplateApprovalContract (class)
+ToolUp.InterPlatform.TemplateApprovalContract.contractId : System.String (literal)
+ToolUp.InterPlatform.TemplateApprovalContract.queryMethod : System.String (literal)
+ToolUp.InterPlatform.TemplateApprovalContract.registration(System.String, ToolUp.InterPlatform.ITemplateApprovalRegistry) : ToolUp.InterPlatform.PeerContractRegistration
+ToolUp.InterPlatform.TemplateApprovalContract.submitMethod : System.String (literal)
+ToolUp.InterPlatform.TemplateApprovalContract.v1 : ToolUp.InterPlatform.ContractVersion { get }
+ToolUp.InterPlatform.TemplateApprovalGate (class)
+ToolUp.InterPlatform.TemplateApprovalGate.check(ToolUp.InterPlatform.TemplateApprovalPolicy, System.String, ToolUp.InterPlatform.PeerCallContext, ToolUp.InterPlatform.CleanRoomTemplate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.InterPlatform.TemplateApprovalPolicy (class)
+ToolUp.InterPlatform.TemplateApprovalPolicy..ctor(ToolUp.InterPlatform.ITemplateApprovalRegistry, System.TimeSpan)
+ToolUp.InterPlatform.TemplateApprovalPolicy.Registry : ToolUp.InterPlatform.ITemplateApprovalRegistry { get }
+ToolUp.InterPlatform.TemplateApprovalPolicy.SkewTolerance : System.TimeSpan { get }
+ToolUp.InterPlatform.TemplateApprovalPolicyModule (class)
+ToolUp.InterPlatform.TemplateApprovalPolicyModule.forRegistry(ToolUp.InterPlatform.ITemplateApprovalRegistry) : ToolUp.InterPlatform.TemplateApprovalPolicy
+ToolUp.InterPlatform.TemplateApprovalPolicyModule.withSkewTolerance(System.TimeSpan, ToolUp.InterPlatform.TemplateApprovalPolicy) : ToolUp.InterPlatform.TemplateApprovalPolicy
+ToolUp.InterPlatform.TemplateApprovalQueue (class)
+ToolUp.InterPlatform.TemplateApprovalQueue.project(System.TimeSpan, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalQueueEntry]
+ToolUp.InterPlatform.TemplateApprovalQueueEntry (class)
+ToolUp.InterPlatform.TemplateApprovalQueueEntry..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalAction], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalAction], ToolUp.InterPlatform.BilateralApprovalStatus)
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.CounterpartyAction : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalAction] { get }
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.CounterpartyPeerId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.LocalAction : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalAction] { get }
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.Status : ToolUp.InterPlatform.BilateralApprovalStatus { get }
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.TemplateId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalQueueEntry.TemplateVersion : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRecord (class)
+ToolUp.InterPlatform.TemplateApprovalRecord..ctor(System.String, System.String, System.String, System.String, ToolUp.InterPlatform.TemplateApprovalAction, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.String)
+ToolUp.InterPlatform.TemplateApprovalRecord.ActingPeerId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.Action : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.CounterpartyPeerId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.IssuedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.NotBefore : System.DateTimeOffset { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.Signature : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.TemplateId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRecord.TemplateVersion : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRequest (class)
+ToolUp.InterPlatform.TemplateApprovalRequest..ctor(ToolUp.InterPlatform.CleanRoomTemplate, System.String, System.String, ToolUp.InterPlatform.TemplateApprovalAction, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.InterPlatform.TemplateApprovalRequest.ActingPeerId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRequest.Action : ToolUp.InterPlatform.TemplateApprovalAction { get }
+ToolUp.InterPlatform.TemplateApprovalRequest.CounterpartyPeerId : System.String { get }
+ToolUp.InterPlatform.TemplateApprovalRequest.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.TemplateApprovalRequest.NotBefore : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.TemplateApprovalRequest.Template : ToolUp.InterPlatform.CleanRoomTemplate { get }
+ToolUp.InterPlatform.TemplateCanonical (class)
+ToolUp.InterPlatform.TemplateCanonical.actionName(ToolUp.InterPlatform.TemplateApprovalAction) : System.String
+ToolUp.InterPlatform.TemplateCanonical.recordBytes(ToolUp.InterPlatform.TemplateApprovalRecord) : System.Byte[]
+ToolUp.InterPlatform.TemplateCanonical.recordDomain : System.String (literal)
+ToolUp.InterPlatform.TemplateCanonical.recordId(ToolUp.InterPlatform.TemplateApprovalRecord) : System.String
+ToolUp.InterPlatform.TemplateCanonical.shapeName(ToolUp.InterPlatform.OutputShape) : System.String
+ToolUp.InterPlatform.TemplateCanonical.templateBytes(ToolUp.InterPlatform.CleanRoomTemplate) : System.Byte[]
+ToolUp.InterPlatform.TemplateCanonical.templateDomain : System.String (literal)
+ToolUp.InterPlatform.TemplateCanonical.truncate(System.DateTimeOffset) : System.DateTimeOffset
+ToolUp.InterPlatform.TemplateCanonical.version(ToolUp.InterPlatform.CleanRoomTemplate) : System.String
 ToolUp.InterPlatform.TypeScriptClientGen (class)
 ToolUp.InterPlatform.TypeScriptClientGen.emit(ToolUp.InterPlatform.PeerContractSchema) : System.String
 ToolUp.InterPlatform.TypeScriptClientGen.tsType(ToolUp.InterPlatform.PeerTypeRef) : System.String

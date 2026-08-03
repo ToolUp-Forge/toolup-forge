@@ -307,12 +307,32 @@ module PeerSurface =
                 else
                     []
 
+            // Phase 480 — the bilateral-approval opt-in registers the
+            // reserved handshake contract under the same id + version
+            // constants read here
+            // (`TemplateApprovalContract.registration`). Projected on
+            // exactly the Phase 18a argument: it is a contract a
+            // counterparty CALLS, so it belongs in the face. The
+            // approval *state* is live registry data, not a compose-time
+            // registration, and is read through the contract itself.
+            let approvalContract =
+                if app.TemplateApprovals.IsSome then
+                    [
+                        {
+                            ContractId = TemplateApprovalContract.contractId
+                            Versions = [ TemplateApprovalContract.v1 ]
+                            Routines = []
+                        }
+                    ]
+                else
+                    []
+
             // A re-registered contract id overwrites the previous
             // binding at dispatch time (`IPlatformPeer.RegisterContract`
             // is idempotent-overwrite), so the last registration wins
             // here too.
             let served =
-                authored @ auditContract
+                authored @ auditContract @ approvalContract
                 |> List.rev
                 |> List.distinctBy _.ContractId
                 |> List.sortBy _.ContractId

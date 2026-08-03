@@ -940,6 +940,17 @@ let allTests =
         CleanRoomGateTests.substitutionTests
         CleanRoomGateTests.compositionTests
         CleanRoomGateTests.wireTests
+        // Phase 480 — the bilateral half: a template version is its
+        // content hash, an approval is a signature over exactly those
+        // bytes, and the composed gate refuses any answer whose
+        // template version lacks a live counterparty approval.
+        TemplateApprovalTests.mutationTests
+        TemplateApprovalTests.signatureTests
+        TemplateApprovalTests.lifecycleTests
+        TemplateApprovalTests.gateTests
+        TemplateApprovalTests.compositionTests
+        TemplateApprovalTests.handshakeTests
+        TemplateApprovalTests.queueTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

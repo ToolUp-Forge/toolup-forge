@@ -246,6 +246,25 @@ let tests =
                 // `PeerSurface` is the face a counterparty sees, and it
                 // cannot see our patience.
                 "TransportPolicy"
+                // Phase 480 — PARTLY projected, and the split is the
+                // honest one. The registration it makes — the reserved
+                // `_platform.peer.template-approval` contract — IS in
+                // `Serves`, on exactly the Phase 18a argument: it is a
+                // contract a counterparty calls, so it belongs in the
+                // face, and a counterparty that cannot see it cannot
+                // submit an approval at all.
+                //
+                // What stays out is the approval STATE (who has signed
+                // what, for which template version, under which validity
+                // window). That is live registry data read through the
+                // contract, not a compose-time registration — and it
+                // changes every time either party signs anything, so
+                // projecting it into a hash-stamped descriptor
+                // counterparties pin would invalidate every pinned copy
+                // on each approval. The skew tolerance stays out on the
+                // `WireLimits` argument: receiver-side policy an
+                // operator retunes at a restart.
+                "TemplateApprovals"
             ]
 
             let actual =

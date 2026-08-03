@@ -80,6 +80,21 @@ open ToolUp.Platform
 // built. There is no middleware, no allocation, and no per-call branch
 // on an ungated path.
 
+/// Phase 480 — the bilateral-approval pre-check a gated dispatch runs
+/// before anything else: given the validated call context and the LIVE
+/// template the composition is about to enforce, decide whether both
+/// parties have a live, signed approval of that exact template content.
+///
+/// A function rather than an interface because it is a decision, not a
+/// service: the substrate needs one answer per call and holds nothing
+/// between them (GP 12 rule 4). `Error` carries the audit-facing reason,
+/// which is recorded receiver-side and never sent on the wire.
+///
+/// The implementation the SDK ships is `TemplateApprovalGate.check` over
+/// a composed `ITemplateApprovalRegistry`; a deployment whose consent
+/// record lives somewhere else supplies its own.
+type CleanRoomApprovalCheck = PeerCallContext -> CleanRoomTemplate -> Async<Result<unit, string>>
+
 /// Phase 311 — a `PeerContractRegistration` that has been through the
 /// clean-room gate wrapper.
 ///
@@ -157,12 +172,24 @@ module CleanRoomGate =
     let private withheld (template: CleanRoomTemplate) =
         Error(PeerCleanRoomWithheld template.TemplateId)
 
-    /// Install `template`'s gate on `registration`'s dispatch.
+    /// Phase 480 — install `template`'s gate on `registration`'s
+    /// dispatch, optionally behind a bilateral-approval pre-check.
     ///
     /// Every method the contract exposes is gated — the template's
     /// `AllowedMethods` decides which are *answerable*, not which are
     /// checked, so there is no per-method escape hatch and adding a
     /// method to a gated contract cannot quietly add an ungated one.
+    ///
+    /// `approval` is `None` on a composition that declares no approval
+    /// registry, and that path is the pre-480 `wrap` exactly: one
+    /// `option` match and then Phase 311's invariants, with no store
+    /// read and nothing allocated (GP 11 / GP 13). `Some check` makes
+    /// approval **invariant 0** — it runs before the surface check and
+    /// therefore before the handler computes anything, because a
+    /// template neither party has agreed to is not a contract this
+    /// deployment answers questions under at all, and deciding otherwise
+    /// after the sensitive computation would be work done for an answer
+    /// that was never releasable.
     ///
     /// `sink` receives one `PeerCleanRoomDecision` payload per gated
     /// dispatch (`noAudit` to record nothing). It is passed in rather
@@ -170,9 +197,10 @@ module CleanRoomGate =
     /// — the broker holds no state and neither does the wrapper (GP 12
     /// rule 4), which is what keeps a gated contract as portable as an
     /// ungated one.
-    let wrap
+    let wrapApproved
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
         (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
@@ -196,76 +224,120 @@ module CleanRoomGate =
                         OccurredAt = DateTimeOffset.UtcNow
                     }
 
-                // Invariant 1 — surface. Checked before the handler runs
-                // at all: a method off the template's declared surface is
-                // not a question this contract answers, so computing the
-                // answer and discarding it would be work done over
-                // sensitive data for nobody's benefit.
-                if not (Set.contains methodName template.AllowedMethods) then
-                    do!
-                        record
-                            sink
-                            (decision
-                                false
-                                []
-                                $"method '{methodName}' is not on clean-room template '{template.TemplateId}'")
+                // Phase 311's invariants 1–3, verbatim. Lifted into a
+                // local so Phase 480's approval check can sit in front
+                // of them without either half being restated — a second
+                // copy of this body is exactly how a gate acquires a
+                // path that enforces slightly less.
+                let enforce () = async {
+                    // Invariant 1 — surface. Checked before the handler runs
+                    // at all: a method off the template's declared surface is
+                    // not a question this contract answers, so computing the
+                    // answer and discarding it would be work done over
+                    // sensitive data for nobody's benefit.
+                    if not (Set.contains methodName template.AllowedMethods) then
+                        do!
+                            record
+                                sink
+                                (decision
+                                    false
+                                    []
+                                    $"method '{methodName}' is not on clean-room template '{template.TemplateId}'")
 
-                    return withheld template
-                else
-                    let! inner = registration.Dispatch context methodName argsJson
+                        return withheld template
+                    else
+                        let! inner = registration.Dispatch context methodName argsJson
 
-                    match inner with
-                    // The handler (or a guard above it) already refused.
-                    // Nothing was produced, so there is nothing to gate
-                    // and nothing to record — the host's own
-                    // `PeerCallCompleted` row carries the outcome.
-                    | Error e -> return Error e
-                    | Ok resultJson ->
-                        // Invariant 2 — checkability.
-                        match tryParseCohort resultJson with
-                        | None ->
-                            do!
-                                record
-                                    sink
-                                    (decision
-                                        false
-                                        []
-                                        $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it")
+                        match inner with
+                        // The handler (or a guard above it) already refused.
+                        // Nothing was produced, so there is nothing to gate
+                        // and nothing to record — the host's own
+                        // `PeerCallCompleted` row carries the outcome.
+                        | Error e -> return Error e
+                        | Ok resultJson ->
+                            // Invariant 2 — checkability.
+                            match tryParseCohort resultJson with
+                            | None ->
+                                do!
+                                    record
+                                        sink
+                                        (decision
+                                            false
+                                            []
+                                            $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it")
 
-                            return withheld template
-                        | Some cohort ->
-                            // The composed mechanism gets its say. The
-                            // requested gate is `None`: the peer wire
-                            // format carries no caller-supplied
-                            // `PrivacyGate`, so the effective gate on
-                            // this path is the composed floor. A bespoke
-                            // caller that HAS a caller-requested gate
-                            // still reaches `ICleanRoomBroker.Enforce`
-                            // directly — that API is unchanged.
-                            match broker.Enforce(template, methodName, None, cohort) with
-                            | Withheld reason ->
-                                do! record sink (decision false [] reason)
                                 return withheld template
-                            | Released(released, suppressedCells) ->
-                                // Invariant 3 — release post-condition.
-                                // The seam is substitutable; the floor is
-                                // not.
-                                if PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released) then
-                                    do! record sink (decision true suppressedCells "")
-                                    return Ok(JsonRpc.serialize released)
-                                else
-                                    do!
-                                        record
-                                            sink
-                                            (decision
-                                                false
-                                                suppressedCells
-                                                $"the resolved ICleanRoomBroker released an answer that does not clear the composed floor of template '{template.TemplateId}'; the substrate withheld it")
-
+                            | Some cohort ->
+                                // The composed mechanism gets its say. The
+                                // requested gate is `None`: the peer wire
+                                // format carries no caller-supplied
+                                // `PrivacyGate`, so the effective gate on
+                                // this path is the composed floor. A bespoke
+                                // caller that HAS a caller-requested gate
+                                // still reaches `ICleanRoomBroker.Enforce`
+                                // directly — that API is unchanged.
+                                match broker.Enforce(template, methodName, None, cohort) with
+                                | Withheld reason ->
+                                    do! record sink (decision false [] reason)
                                     return withheld template
+                                | Released(released, suppressedCells) ->
+                                    // Invariant 3 — release post-condition.
+                                    // The seam is substitutable; the floor is
+                                    // not.
+                                    if PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released) then
+                                        do! record sink (decision true suppressedCells "")
+                                        return Ok(JsonRpc.serialize released)
+                                    else
+                                        do!
+                                            record
+                                                sink
+                                                (decision
+                                                    false
+                                                    suppressedCells
+                                                    $"the resolved ICleanRoomBroker released an answer that does not clear the composed floor of template '{template.TemplateId}'; the substrate withheld it")
+
+                                        return withheld template
+                }
+
+                // Invariant 0 — bilateral approval (Phase 480). `None` is
+                // a composition that declared no approval registry: the
+                // call goes straight to Phase 311's invariants, having
+                // read no store and allocated nothing (GP 11 / GP 13).
+                match approval with
+                | None -> return! enforce ()
+                | Some check ->
+                    let! approved = check context template
+
+                    match approved with
+                    | Error reason ->
+                        // The reason names the missing / revoked /
+                        // expired party and is recorded here only. The
+                        // caller gets `PeerCleanRoomWithheld` carrying
+                        // the template id, exactly as every other
+                        // withhold does.
+                        do! record sink (decision false [] reason)
+                        return withheld template
+                    | Ok() -> return! enforce ()
             }
 
         Gated {
             registration with
                 Dispatch = gatedDispatch
         }
+
+    /// Phase 311 — install `template`'s gate on `registration`'s
+    /// dispatch. The pre-480 shape, preserved exactly: no bilateral
+    /// approval is required, so the gate is Phase 311's three
+    /// invariants and nothing else.
+    ///
+    /// Defined in terms of `wrapApproved` rather than beside it so the
+    /// two cannot drift — the whole argument for a structural gate is
+    /// that there is one path, and two implementations of "the gate" is
+    /// how a second path appears.
+    let wrap
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        wrapApproved broker template None sink registration
