@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.PeerFederationTests
 
 open System
+open System.Threading
 open Expecto
 open ToolUp.InterPlatform
 
@@ -143,6 +144,105 @@ let fanoutTests =
             match result[peer "slow"] with
             | Error _ -> ()
             | Ok _ -> failtest "the timed-out peer must not surface as Ok"
+        }
+
+        // ─── Phase 313 — max-concurrency bound ───────────────────────
+
+        testCaseAsync "MaxConcurrency caps in-flight calls and still returns a total map"
+        <| async {
+            let targets = [ for i in 1..6 -> target (sprintf "p%d" i) ]
+            let inFlight = ref 0
+            let peakInFlight = ref 0
+
+            let call (_: TargetPeer) = async {
+                let now = Interlocked.Increment(&inFlight.contents)
+                // Non-atomic max is fine: `inFlight` is atomic, and any
+                // breach of the bound would have to be observed by at
+                // least one of the six samples.
+                if now > peakInFlight.Value then
+                    peakInFlight.Value <- now
+
+                do! Async.Sleep 60
+                Interlocked.Decrement(&inFlight.contents) |> ignore
+                return Ok 1
+            }
+
+            let policy = FanoutPolicy.all |> FanoutPolicy.withMaxConcurrency 2
+            let! result = fanout.Fanout(targets, policy, call)
+            Expect.equal result.Count 6 "map total over targets under the bound"
+            Expect.isLessThanOrEqual peakInFlight.Value 2 "never more than two calls in flight"
+
+            for i in 1..6 do
+                Expect.equal result[peer (sprintf "p%d" i)] (Ok 1) (sprintf "p%d answered Ok" i)
+        }
+
+        testCaseAsync "no bound (the default) launches every target at once"
+        <| async {
+            let targets = [ for i in 1..6 -> target (sprintf "p%d" i) ]
+            let inFlight = ref 0
+            let peakInFlight = ref 0
+
+            let call (_: TargetPeer) = async {
+                let now = Interlocked.Increment(&inFlight.contents)
+
+                if now > peakInFlight.Value then
+                    peakInFlight.Value <- now
+
+                do! Async.Sleep 60
+                Interlocked.Decrement(&inFlight.contents) |> ignore
+                return Ok 1
+            }
+
+            let! result = fanout.Fanout(targets, FanoutPolicy.all, call)
+            Expect.equal result.Count 6 "map total over targets"
+            Expect.isGreaterThan peakInFlight.Value 2 "unbounded default is not throttled"
+        }
+
+        testCaseAsync "the bound composes with quorum — early return still yields a total map"
+        <| async {
+            let targets = [ for i in 1..6 -> target (sprintf "p%d" i) ]
+
+            let call (t: TargetPeer) = async {
+                if t.Peer.PeerId = "p1" || t.Peer.PeerId = "p2" then
+                    return Ok 9
+                else
+                    do! Async.Sleep 2000
+                    return Ok 0
+            }
+
+            let policy = FanoutPolicy.quorum 2 |> FanoutPolicy.withMaxConcurrency 2
+            let! result = fanout.Fanout(targets, policy, call)
+            Expect.equal result.Count 6 "map total over targets even on early return under a bound"
+            Expect.equal result[peer "p1"] (Ok 9) "first quorum member captured"
+            Expect.equal result[peer "p2"] (Ok 9) "second quorum member captured"
+
+            // p3–p6 were still queued behind the bound when the quorum
+            // fired, so they must read as not-awaited, never as Ok.
+            for i in 3..6 do
+                match result[peer (sprintf "p%d" i)] with
+                | Error _ -> ()
+                | Ok _ -> failtestf "queued peer p%d must not surface as Ok" i
+        }
+
+        testCaseAsync "a bound above the target count degrades to unbounded"
+        <| async {
+            let targets = [ target "a"; target "b" ]
+            let call (t: TargetPeer) = async { return Ok t.Peer.PeerId }
+            let policy = FanoutPolicy.all |> FanoutPolicy.withMaxConcurrency 99
+            let! result = fanout.Fanout(targets, policy, call)
+            Expect.equal result.Count 2 "clamped to targetCount, map still total"
+            Expect.equal result[peer "a"] (Ok "a") "a answered Ok"
+            Expect.equal result[peer "b"] (Ok "b") "b answered Ok"
+        }
+
+        testCaseAsync "a non-positive bound clamps to one rather than deadlocking"
+        <| async {
+            let targets = [ target "a"; target "b"; target "c" ]
+            let call (t: TargetPeer) = async { return Ok t.Peer.PeerId }
+            let policy = FanoutPolicy.all |> FanoutPolicy.withMaxConcurrency 0
+            let! result = fanout.Fanout(targets, policy, call)
+            Expect.equal result.Count 3 "clamped to 1, every peer still answers"
+            Expect.equal result[peer "b"] (Ok "b") "serialised fan-out still completes"
         }
     ]
 

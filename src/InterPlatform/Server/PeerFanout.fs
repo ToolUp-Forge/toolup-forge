@@ -23,8 +23,8 @@ open System.Collections.Concurrent
 //   1. Identity by value — `TargetPeer` / `PeerIdentity` records keyed by
 //      string id; no live handle crosses the seam.
 //   2. Async at every boundary — `Fanout` returns `Async<_>`.
-//   3. Policy as data — timeout / quorum / cancel-on-first ride a
-//      `FanoutPolicy` record, not callbacks.
+//   3. Policy as data — timeout / quorum / cancel-on-first / the
+//      max-concurrency bound ride a `FanoutPolicy` record, not callbacks.
 //   4. Stateless between calls — every `Fanout` is self-contained; the
 //      default impl holds no cross-call state.
 //   5. No cross-peer ordering — concurrent calls carry no ordering
@@ -46,6 +46,14 @@ type FanoutPolicy = {
     /// Return as soon as ANY peer answers `Ok`; cancel the rest. Layered
     /// over `Quorum` — whichever condition fires first wins.
     CancelOnFirstSuccess: bool
+    /// Ceiling on peer calls in flight at any instant — the back-pressure
+    /// lever for a large federation graph, where launching every target at
+    /// once exhausts the connection pool and overloads downstream. `None`
+    /// = unbounded (every target launches at once). `Some k` is clamped to
+    /// `[1, targetCount]` at fan-out time, like `Quorum`. A peer still
+    /// queued behind the bound when an early-return policy or the deadline
+    /// fires is recorded as not-awaited, exactly like a cut-short call.
+    MaxConcurrency: int option
 }
 
 [<RequireQualifiedAccess>]
@@ -56,6 +64,7 @@ module FanoutPolicy =
         Timeout = None
         Quorum = None
         CancelOnFirstSuccess = false
+        MaxConcurrency = None
     }
 
     /// Wait for every peer but bound the wall-clock by `timeout`.
@@ -68,6 +77,14 @@ module FanoutPolicy =
     /// Return the first `Ok` and cancel the rest. Useful for redundant
     /// read replicas where any one authoritative answer suffices.
     let firstSuccess: FanoutPolicy = { all with CancelOnFirstSuccess = true }
+
+    /// Bound the number of peer calls in flight to `k`. Unlike the three
+    /// builders above this one takes the policy it refines, so a fan-out
+    /// can bound parallelism AND early-return:
+    /// `FanoutPolicy.quorum 2 |> FanoutPolicy.withMaxConcurrency 4`, or
+    /// `FanoutPolicy.withMaxConcurrency 4 FanoutPolicy.all` for the bound
+    /// alone. `k` is clamped to `[1, targetCount]` at fan-out time.
+    let withMaxConcurrency (k: int) (policy: FanoutPolicy) : FanoutPolicy = { policy with MaxConcurrency = Some k }
 
 /// Fan one logical call out to N peers, collecting a per-peer result map.
 /// The default implementation is `DefaultPeerFanout`; the interface is a
@@ -121,6 +138,18 @@ type DefaultPeerFanout() =
 
                 let quorumTarget = policy.Quorum |> Option.map (fun k -> max 1 (min k total))
 
+                let concurrencyLimit =
+                    policy.MaxConcurrency |> Option.map (fun k -> max 1 (min k total))
+
+                // Back-pressure gate. `None` allocates nothing and every
+                // target launches at once — byte-for-byte the behaviour
+                // before this bound existed (GP 11 / GP 13). Deliberately
+                // NOT disposed: a child cancelled by an early return can
+                // release its slot after this fan-out has already returned,
+                // and `SemaphoreSlim` holds no unmanaged resource unless
+                // `AvailableWaitHandle` is read, which it never is here.
+                let gate = concurrencyLimit |> Option.map (fun k -> new SemaphoreSlim(k))
+
                 // Evaluate the stop condition after each answer.
                 let checkDone () =
                     let answered = results.Count
@@ -136,14 +165,35 @@ type DefaultPeerFanout() =
                     if answered >= total || firstSuccessMet || quorumMet then
                         stop.TrySetResult(()) |> ignore
 
-                // Launch one guarded child per target. Each records its
-                // own slot, then re-checks the stop condition.
+                // One guarded child per target: record its own slot, then
+                // re-check the stop condition.
+                let answer (target: TargetPeer) = async {
+                    let! r = callGuarded call target
+                    results[target.Peer.PeerId] <- r
+                    checkDone ()
+                }
+
+                // Launch them. Under a bound, a child holds a semaphore
+                // slot for the duration of its call, so at most `k` are
+                // ever on the wire; a child still queued when the stop
+                // condition fires is cancelled before it launches, writes
+                // no slot, and lands in the map as not-awaited — the same
+                // outcome as a call that was cut short.
                 for target in targets do
-                    let work = async {
-                        let! r = callGuarded call target
-                        results[target.Peer.PeerId] <- r
-                        checkDone ()
-                    }
+                    let work =
+                        match gate with
+                        | None -> answer target
+                        | Some g -> async {
+                            try
+                                do! g.WaitAsync(cts.Token) |> Async.AwaitTask
+
+                                try
+                                    do! answer target
+                                finally
+                                    g.Release() |> ignore
+                            with :? OperationCanceledException ->
+                                ()
+                          }
 
                     Async.Start(work, cts.Token)
 

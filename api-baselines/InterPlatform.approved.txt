@@ -61,14 +61,16 @@ ToolUp.InterPlatform.DeprecationNotice.DeprecatedSince : ToolUp.InterPlatform.Co
 ToolUp.InterPlatform.DeprecationNotice.Note : System.String { get }
 ToolUp.InterPlatform.DeprecationNotice.RemovedIn : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ContractVersion] { get }
 ToolUp.InterPlatform.FanoutPolicy (class)
-ToolUp.InterPlatform.FanoutPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean)
+ToolUp.InterPlatform.FanoutPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.InterPlatform.FanoutPolicy.CancelOnFirstSuccess : System.Boolean { get }
+ToolUp.InterPlatform.FanoutPolicy.MaxConcurrency : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.InterPlatform.FanoutPolicy.Quorum : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.InterPlatform.FanoutPolicy.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.InterPlatform.FanoutPolicyModule (class)
 ToolUp.InterPlatform.FanoutPolicyModule.all : ToolUp.InterPlatform.FanoutPolicy { get }
 ToolUp.InterPlatform.FanoutPolicyModule.firstSuccess : ToolUp.InterPlatform.FanoutPolicy { get }
 ToolUp.InterPlatform.FanoutPolicyModule.quorum(System.Int32) : ToolUp.InterPlatform.FanoutPolicy
+ToolUp.InterPlatform.FanoutPolicyModule.withMaxConcurrency(System.Int32, ToolUp.InterPlatform.FanoutPolicy) : ToolUp.InterPlatform.FanoutPolicy
 ToolUp.InterPlatform.FanoutPolicyModule.withTimeout(System.TimeSpan) : ToolUp.InterPlatform.FanoutPolicy
 ToolUp.InterPlatform.GateDecision (class)
 ToolUp.InterPlatform.GateDecision.IsReleased : System.Boolean { get }
