@@ -1385,6 +1385,17 @@
              one field, so a classifier that collapsed rungs or returned a
              constant fails here rather than passing quietly. -->
         <Compile Include="InProcess\PeerAuthPostureTests.fs" />
+        <!-- Phase 596 — federation-seam wire specification + conformance
+             corpus. `FederationWireCorpus.fs` holds the reference values
+             of every specified shape family and emits
+             docs/interplatform/wire-fixtures/ through the live emitters;
+             `FederationWireConformanceTests.fs` certifies the emitters
+             against the committed corpus and fails on any drift that did
+             not regenerate it. Compiled AFTER the peer/aggregate/pin
+             test files it shares no state with, and immediately before
+             Program.fs. -->
+        <Compile Include="InProcess\FederationWireCorpus.fs" />
+        <Compile Include="InProcess\FederationWireConformanceTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

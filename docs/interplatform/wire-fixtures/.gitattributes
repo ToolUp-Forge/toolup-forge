@@ -1,0 +1,5 @@
+# A fixture file's bytes ARE the wire document, and the manifest records a
+# digest of those bytes. The documents contain no line endings at all, so
+# normalisation cannot reach them; the manifest does, and a CRLF checkout
+# would make it read as drift on one machine and not another. Pin LF.
+* text eol=lf

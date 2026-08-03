@@ -393,5 +393,6 @@ Four routes, all auth-gated (fail-closed — a missing / invalid / expired beare
 
 ## See also
 
+- [`../../docs/interplatform/FEDERATION_WIRE.md`](../../docs/interplatform/FEDERATION_WIRE.md) — the **language-neutral federation-seam wire specification** and its conformance corpus. A participant implemented in any language joins by conforming to that document, not by adopting this substrate; this substrate is its first certified emitter.
 - [`TECHNICAL_GUIDE.md`](TECHNICAL_GUIDE.md) — wire format + error-code map, the fail-closed JWT identity layer, job-fusion internals, the six-rule GP 12 portability audit verdict, and the Phase 18a–18e follow-on boundaries.
 - [`../ToolUp.Scheduling/README.md`](../ToolUp.Scheduling/README.md) — the companion-package shape this mirrors.

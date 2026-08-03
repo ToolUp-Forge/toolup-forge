@@ -73,3 +73,7 @@ A non-F# peer must be registered in the receiver's peer directory (`IPeerRegistr
 ## Verification status
 
 The generators are **emit-verified**: deterministic from the schema and pinned by the `IPeerNonFSharpSdkContract` snapshot tests. Executing a generated client against a live `JsonRpcPeerHost` end-to-end (the cross-runtime round-trip harness under Node / Python) is the **18e.tail** follow-on — it pins the exact F#-DU wire encoding of the call context that the generated `context()` constructs.
+
+## Writing a peer without a generator
+
+The generators are a convenience, not the boundary. The wire itself — every document, its canonical encoding, its hashes, its error and refusal classes, and the versioning discipline — is specified language-neutrally in [`FEDERATION_WIRE.md`](FEDERATION_WIRE.md), with an executable conformance corpus in [`wire-fixtures/`](wire-fixtures/). An implementation in any language certifies against a named profile by round-tripping, re-stamping and refusing those fixtures; the exact call-context encoding the section above calls out is pinned there as `contract-invocation/request.json`.

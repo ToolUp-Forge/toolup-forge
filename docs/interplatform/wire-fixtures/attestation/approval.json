@@ -1,0 +1,1 @@
+{"TemplateId":"example.cohort-report","TemplateVersion":"sha256:4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5","ActingPeerId":"seller-ssp","CounterpartyPeerId":"buyer-acme","Action":"TemplateApproved","IssuedAt":"2026-07-16T09:30:00+00:00","NotBefore":"2026-07-16T09:30:00+00:00","ExpiresAt":null,"Signature":"c2lnbmF0dXJlLXBsYWNlaG9sZGVy"}

@@ -1,0 +1,179 @@
+{
+  "specification": "federation-seam-wire",
+  "formatVersion": 1,
+  "families": [
+    "peer-surface",
+    "aggregate-surface",
+    "pinned-exchange",
+    "attestation",
+    "contract-invocation",
+    "host-envelope"
+  ],
+  "profiles": {
+    "participant": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation" ],
+    "gateway": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "aggregate-surface" ],
+    "module-host": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "aggregate-surface", "host-envelope" ]
+  },
+  "vectors": [
+    {
+      "id": "peer-surface/instance",
+      "family": "peer-surface",
+      "profile": "participant",
+      "kind": "hash",
+      "file": "peer-surface/instance.json",
+      "sha256": "465131b67e8000aff97760acd4183c0b2240fbc4166d81a5c392f18e642a44f7",
+      "description": "A federating deployment's hash-stamped export: two served contracts (one carrying a long-running routine), one consumed contract, trust posture and cascade budget."
+    },
+    {
+      "id": "peer-surface/empty",
+      "family": "peer-surface",
+      "profile": "participant",
+      "kind": "hash",
+      "file": "peer-surface/empty.json",
+      "sha256": "f9e5e5153f729101a9cd18e853e84d318d6c9e0e5ac20027ffc9e20c1ebbac49",
+      "description": "A deployment with no federation surface at all — the honest empty label, which is a conformant document and not an error."
+    },
+    {
+      "id": "aggregate-surface/group",
+      "family": "aggregate-surface",
+      "profile": "gateway",
+      "kind": "hash",
+      "file": "aggregate-surface/group.json",
+      "sha256": "ecc8842b199421bee8040ea163d0a974978f3619f1a0448e794eed33a63f8f53",
+      "description": "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing."
+    },
+    {
+      "id": "aggregate-surface/solo",
+      "family": "aggregate-surface",
+      "profile": "gateway",
+      "kind": "hash",
+      "file": "aggregate-surface/solo.json",
+      "sha256": "3b93ae694b5a1812d7420ab98090f2d5f3c0e566d5f934398150d1be4a94224b",
+      "description": "A group with one exposing member that agrees with the gateway edge on every facet — the control that separates a floor which collapsed to unanimity from a floor that was never applied, and the case where every pack the member pins does carry."
+    },
+    {
+      "id": "pinned-exchange/pin",
+      "family": "pinned-exchange",
+      "profile": "participant",
+      "kind": "round-trip",
+      "file": "pinned-exchange/pin.json",
+      "sha256": "7acd096a27da367ebfd647e6d78d76a3c0f2e17dec448ff56f38d21b2de78821",
+      "description": "The projection a consumer holds of a counterparty's published export: what it claimed to serve, its posture as name/value facets, and the stamp both sides quote."
+    },
+    {
+      "id": "pinned-exchange/reject-stamp-mismatch",
+      "family": "pinned-exchange",
+      "profile": "participant",
+      "kind": "reject",
+      "file": "pinned-exchange/reject-stamp-mismatch.json",
+      "sha256": "59386a8d64ba8e6c7392d10fdfcaef03890bf63a96c640b275f1fc5da6ab3f29",
+      "reject": "pin-stamp-mismatch",
+      "description": "An export whose stamp does not match a recomputation over its own surface. Corrupt or edited after stamping — refused at pinning time, never held as a stale pin."
+    },
+    {
+      "id": "pinned-exchange/reject-format-version",
+      "family": "pinned-exchange",
+      "profile": "participant",
+      "kind": "reject",
+      "file": "pinned-exchange/reject-format-version.json",
+      "sha256": "b843408cb2d5d26a3afdfcd1083497f641018db4b0dc3d6e55ca923d8a21cfef",
+      "reject": "pin-format-version-unreadable",
+      "description": "An export declaring a format version the reader cannot interpret. A half-read label would satisfy a trust requirement by omission, so it is refused rather than truncated."
+    },
+    {
+      "id": "pinned-exchange/reject-malformed",
+      "family": "pinned-exchange",
+      "profile": "participant",
+      "kind": "reject",
+      "file": "pinned-exchange/reject-malformed.json",
+      "sha256": "d53fbf10db089ad767718872ef78f33709f34eccece2d1a8ef891d8dbd339cc8",
+      "reject": "pin-unparseable",
+      "description": "A document that is not a well-formed export at all."
+    },
+    {
+      "id": "pinned-exchange/reject-unagreed-hash",
+      "family": "pinned-exchange",
+      "profile": "participant",
+      "kind": "reject",
+      "file": "pinned-exchange/reject-unagreed-hash.json",
+      "sha256": "465131b67e8000aff97760acd4183c0b2240fbc4166d81a5c392f18e642a44f7",
+      "reject": "pin-hash-not-agreed",
+      "agreedHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "description": "An internally consistent export whose stamp is not the one agreed out of band — which a substituted document also is. Internal consistency is not provenance."
+    },
+    {
+      "id": "attestation/approval",
+      "family": "attestation",
+      "profile": "participant",
+      "kind": "hash",
+      "file": "attestation/approval.json",
+      "sha256": "e2a5a2e1fb0284cd20b981eed8096bf1d92512629b53c2f545b019769174e4d9",
+      "digest": "b9e6069ae3d0c48db8626214271d4fbdbc2981454e944eb6b8c30408467b04df",
+      "description": "A signed lifecycle record agreeing one exact content-addressed template version, with no end date. The digest is over the length-prefixed signing input, not over this JSON."
+    },
+    {
+      "id": "attestation/revocation",
+      "family": "attestation",
+      "profile": "participant",
+      "kind": "hash",
+      "file": "attestation/revocation.json",
+      "sha256": "cba85a1eb42b765464c18792e618a16dfdcb873f0a73f3a2abdc1eb3cd8ef635",
+      "digest": "a0d2f03f566f47a989a49ca87af0f107ca010dd1177e106cfe0acbc45b060e5d",
+      "description": "The same agreement withdrawn, and carrying an end date — the two fields whose encoding a signer must get right for an expiry to be verifiable."
+    },
+    {
+      "id": "contract-invocation/request",
+      "family": "contract-invocation",
+      "profile": "participant",
+      "kind": "round-trip",
+      "file": "contract-invocation/request.json",
+      "sha256": "86d3b41f7123585a36eaef4551cb4e7b2bf9ce8280432900978d3dfbfb180873",
+      "description": "A contract call: the JSON-RPC request envelope carrying the propagated call context and the method's positional arguments."
+    },
+    {
+      "id": "contract-invocation/response",
+      "family": "contract-invocation",
+      "profile": "participant",
+      "kind": "round-trip",
+      "file": "contract-invocation/response.json",
+      "sha256": "f838645d05dbe2893b1c33bae072a985b751573036872d1dcb304359e295f998",
+      "description": "The success response to that call, with the method's result riding as an embedded document."
+    },
+    {
+      "id": "contract-invocation/errors",
+      "family": "contract-invocation",
+      "profile": "participant",
+      "kind": "round-trip",
+      "file": "contract-invocation/errors.json",
+      "sha256": "982eda6040cf3410d6ad575aba99e5ac96451dca250cb8ca48bb36648ad49df7",
+      "description": "One failure response per structured error the seam defines, pinning the whole code mapping rather than the cases an implementation happened to hit."
+    },
+    {
+      "id": "contract-invocation/job-poll",
+      "family": "contract-invocation",
+      "profile": "participant",
+      "kind": "round-trip",
+      "file": "contract-invocation/job-poll.json",
+      "sha256": "b2268fb59750cecb25862645a86b7713ab1bb7e6c932313d9c2443254ba96011",
+      "description": "The three terminal states of the long-running poll leg, in the shape the poll response carries them."
+    },
+    {
+      "id": "host-envelope/envelope",
+      "family": "host-envelope",
+      "profile": "module-host",
+      "kind": "round-trip",
+      "file": "host-envelope/envelope.json",
+      "sha256": "5fd8ce802debc00c3cd879b8ba45c1b68941367266e0c410a3b4a3e1fa10e4ac",
+      "description": "What a host offers a module it will run: composed capability layers, filled and open companion slots, each module's surface, config knobs with resolved values, and occupied routes."
+    },
+    {
+      "id": "host-envelope/stamp",
+      "family": "host-envelope",
+      "profile": "module-host",
+      "kind": "hash",
+      "file": "host-envelope/stamp.json",
+      "sha256": "9323bb084e0570e5ceec766ddd0b1e97279a4cd4c8eeb6918e119bab611f5255",
+      "description": "The sidecar stamp a consumer pins beside a generated module, so it can tell later whether the host moved underneath it."
+    }
+  ]
+}

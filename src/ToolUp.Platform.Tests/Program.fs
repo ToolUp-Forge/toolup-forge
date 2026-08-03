@@ -983,6 +983,12 @@ let allTests =
         // contract and version skew refuse, a required trust facet a
         // label contradicts refuses, an aged pin reports.
         FederationPreflightTests.tests
+        // Phase 596 — the federation seam certifies against its own wire
+        // specification: every fixture in the committed corpus
+        // round-trips / re-stamps / is refused as specified, the corpus
+        // and its manifest agree in both directions, and an emitter
+        // shape change that did not regenerate the corpus fails here.
+        FederationWireConformanceTests.tests
         // Phase 316 — peer job-result retention: a parked federated
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.
