@@ -687,6 +687,8 @@ let allTests =
         GroundingCertificateTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
+        // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).
+        MetadataFilterContract.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests

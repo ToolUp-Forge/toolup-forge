@@ -905,6 +905,9 @@
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />
+        <!-- Phase 502 — RetrievalRequest.Filters parity pack: one set of
+             metadata-filter behaviours bound to BOTH shipped pipelines. -->
+        <Compile Include="RAG\MetadataFilterContract.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />

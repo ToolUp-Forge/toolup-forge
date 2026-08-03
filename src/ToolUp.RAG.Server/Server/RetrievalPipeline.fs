@@ -344,6 +344,40 @@ module RetrievalPipelineOptions =
 /// with a single dense and single sparse hit produces no signal for either.
 let private inflateForHybridOrRerank (topK: int) = max (topK * 4) 32
 
+// ─── Metadata-equality filter (Phase 502) ─────────────────────────
+
+/// Normalise `RetrievalRequest.Filters` to "is there an actual narrowing
+/// intent here?". `None` and `Some (empty map)` both mean "no filter" —
+/// an empty map constrains nothing, so treating it as a live filter would
+/// inflate the candidate pool and add a trace stage for a no-op (GP 11:
+/// a filter-less request stays byte-identical).
+let private activeFilters (filters: Map<string, string> option) : Map<string, string> option =
+    filters |> Option.filter (Map.isEmpty >> not)
+
+/// Does a candidate match satisfy every requested metadata pair?
+///
+/// Strict equality on every key: a chunk missing the key does NOT pass.
+/// This is deliberately the opposite of `OriginFilter`'s absent-key
+/// leniency, and it is the semantic the static-corpus pipeline has always
+/// applied (`StaticCorpusRetrievalPipeline`, pinned by its contract pack).
+/// A filter is a narrowing / isolation intent (GP 4) — "only document X",
+/// "only tag=policy" — so a chunk that cannot prove it belongs to the
+/// requested slice must not reach the model. Leniency here would silently
+/// re-admit exactly the content the caller asked to exclude, which is the
+/// defect this phase exists to close.
+let private matchesMetadataFilters (filters: Map<string, string>) (m: VectorMatch) : bool =
+    filters |> Map.forall (fun key value -> m.Metadata.TryFind key = Some value)
+
+/// Candidate-pool inflation for a metadata-filtered query. The filter is
+/// applied *after* the store returns its top-N, so without inflation a
+/// `TopK = 5` query against a store dominated by out-of-filter chunks
+/// would return far fewer than 5 in-filter results even when plenty
+/// exist — filtering would cost recall inside the very slice the caller
+/// scoped to. `IVectorStore` carries no filter-pushdown contract, so the
+/// pipeline compensates by over-fetching. Same shape (and the same
+/// bounded, best-effort promise) as the hybrid/rerank inflation above.
+let private inflateForMetadataFilter (topK: int) = max (topK * 8) 64
+
 // ─── Fact-first stage (Phase 522) ─────────────────────────────────
 
 /// Score stamped on a resolved-fact match. Facts are exact hits, not
@@ -618,12 +652,25 @@ type RetrievalPipeline
                 do! emitTrace factMatches 0 false None
                 return factMatches
             else
+                // Phase 502 — the request's metadata-equality filter, if it
+                // carries a live one. Resolved once here: it drives both the
+                // candidate-pool size below and the post-search filter stage.
+                let metadataFilters = activeFilters request.Filters
+
                 // Stage 1: candidate retrieval (dense [+ sparse]).
+                //
+                // Phase 502 — a metadata filter narrows the pool *after* the
+                // store has ranked it, so over-fetch when one is present or
+                // the filtered result set is short-changed. Take the larger
+                // of the two inflations when both apply. `Filters = None`
+                // leaves the pool exactly as before (GP 11).
                 let pool =
-                    if needsHybridPool then
-                        inflateForHybridOrRerank request.TopK
-                    else
-                        request.TopK
+                    match needsHybridPool, metadataFilters with
+                    | false, None -> request.TopK
+                    | true, None -> inflateForHybridOrRerank request.TopK
+                    | false, Some _ -> inflateForMetadataFilter request.TopK
+                    | true, Some _ ->
+                        max (inflateForHybridOrRerank request.TopK) (inflateForMetadataFilter request.TopK)
 
                 stages.Add "Dense"
 
@@ -676,17 +723,43 @@ type RetrievalPipeline
                         return fused
                       }
 
+                // Phase 502 — optional `Filters`: drop chunks whose metadata
+                // does not match every requested key/value pair exactly.
+                // Applied at the same site as `OriginFilter` (immediately
+                // below), before rerank / MMR / topK, so every downstream
+                // stage sees a pool that already respects the caller's
+                // scoping intent.
+                //
+                // This field was documented and honoured by the static-corpus
+                // pipeline but never read here, so a caller passing `Filters`
+                // silently got unfiltered results — content they had asked to
+                // exclude reached the model with no diagnostic. GP 10: a
+                // shared contract field must mean the same thing on both
+                // pipelines; `MetadataFilterContract` pins the parity.
+                //
+                // Scope note: like `OriginFilter`, this applies to the vector
+                // candidate set only. Resolved facts (Phase 522) are merged
+                // in separately after every ranking stage and do not carry
+                // chunk metadata, so a chunk-metadata filter is not a
+                // meaningful predicate over them.
+                let metadataFiltered =
+                    match metadataFilters with
+                    | None -> rawInitial
+                    | Some pairs ->
+                        stages.Add "MetadataFilter"
+                        rawInitial |> List.filter (matchesMetadataFilters pairs)
+
                 // Optional `OriginFilter`: drop chunks whose `_origin`
                 // metadata isn't in the request's allow-set. Applied here,
                 // before rerank / MMR / topK, so the pool fed to those
                 // downstream stages already respects the filter.
                 let filtered =
                     match request.OriginFilter with
-                    | None -> rawInitial
+                    | None -> metadataFiltered
                     | Some allowed ->
                         stages.Add "OriginFilter"
 
-                        rawInitial
+                        metadataFiltered
                         |> List.filter (fun m ->
                             match m.Metadata.TryFind ChunkMetadata.OriginKey with
                             | None ->

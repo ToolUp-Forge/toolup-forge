@@ -592,8 +592,19 @@ type RetrievalRequest = {
     Scopes: VectorScope list
     TopK: int
     Merge: MergeStrategy
-    /// Optional metadata-equality filter applied at retrieval time. Each
-    /// pair must match the chunk's `Metadata` exactly. `None` = no filter.
+    /// Optional metadata-equality filter applied at retrieval time. Every
+    /// pair must match the chunk's `Metadata` exactly (AND-combined), and a
+    /// chunk missing the key does NOT pass — a filter is a narrowing /
+    /// isolation intent ("only document X", "only tag=policy"), so a chunk
+    /// that cannot prove it belongs to the requested slice is excluded
+    /// rather than admitted (GP 4). Note this is deliberately stricter than
+    /// `OriginFilter`, which keeps chunks with no `_origin` stamp.
+    ///
+    /// `None` (and an empty map) = no filter, and the pipeline is then
+    /// byte-identical to a filter-unaware one (GP 11). Honoured by every
+    /// shipped `IRetrievalPipeline` — the default pipeline and the
+    /// static-corpus pipeline are held to the same behaviour by the
+    /// `MetadataFilterContract` parity pack (Phase 502).
     Filters: Map<string, string> option
     /// Prior conversation turns, oldest-first. Used by query-rewrite stages
     /// to disambiguate pronouns / follow-up references. `None` = first turn.
