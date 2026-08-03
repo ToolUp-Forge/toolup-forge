@@ -257,6 +257,16 @@ let configurePipeline
     if not (List.isEmpty config.PeerRoutePrefixes) then
         app.UseMiddleware<PeerBearerAuthMiddleware>(config) |> ignore
 
+        // Phase 317 — one line per start when a registered static-bearer
+        // prefix covers the `/peer/v1/` namespace the signed-JWT peer
+        // host serves, so the weaker of the two peer-auth substrates
+        // gating federation traffic is a visible choice rather than an
+        // inference from which config field was set. Advisory only —
+        // neither auth path changes. Silent in every other posture, and
+        // inside this branch so a deployment with no peer prefixes never
+        // runs the classifier (GP 13).
+        advisePeerAuthPosture resolvedLogger config
+
     // Phase 66 Stream A.6 — surface-requirement enforcement. Replaces
     // the retired `AuthEnforcementMiddleware`. Reads the resolved
     // `Subject` stashed by `ScopeResolutionMiddleware` and the per-

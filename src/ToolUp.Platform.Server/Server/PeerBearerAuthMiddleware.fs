@@ -57,6 +57,43 @@ open ToolUp.Platform.Auth
 // register the Phase 18 substrate at `/api/peer/federated/` at the
 // same time.
 //
+// **Security posture — what this substrate does NOT provide (Phase 317).**
+// The two flavours are legitimately different tools, not two attempts at
+// one, and the difference is worth stating plainly at the top of the
+// weaker one. A static shared bearer has:
+//
+//   * **no expiry** — the credential is valid until an operator rotates
+//     the `ISecretStore` entry. There is no `exp`, so a leaked token is
+//     leaked until someone notices.
+//   * **no audience** — the token names no receiver, so the same secret
+//     presented to any deployment that trusts the same peer name is
+//     accepted. The signed-JWT flavour binds `aud` to the receiver's own
+//     peer id (Phase 130 / Phase 309).
+//   * **no per-call minting** — one long-lived value is replayed
+//     verbatim on every call, so there is no freshness window and
+//     nothing for a replay guard to key on (contrast Phase 338's
+//     `IPeerReplayGuard` + call scoping over per-call 5-minute tokens).
+//   * **no delegated-assertion verification** — `X-Peer-Name` is a
+//     self-asserted header admitted on the strength of the shared
+//     secret; there is no originator chain to verify (contrast Phase
+//     330, where the host verifies a `Delegated` originator before
+//     dispatch).
+//   * **no asymmetric option** — the secret is symmetric and shared, so
+//     the receiver can mint anything the caller can. Phase 343's
+//     `AsymmetricPeerAuthProvider` (ES256 / RS256) exists precisely for
+//     counterparties who will not share one.
+//   * **no transport posture of its own** — confidentiality on the wire
+//     is the deployment's ingress problem (contrast Phase 339, which
+//     refuses cleartext peer transport off loopback by default).
+//
+// None of that makes it wrong. A static bearer is the right tool for a
+// small, operator-controlled set of internal callers on a route the
+// deployment already fronts with TLS, and it needs no key ceremony. It
+// is the wrong tool for a federation edge with an organisation you do
+// not operate. The compose-time advisory at the foot of this file exists
+// so the choice between them is visible rather than inferred from which
+// config field someone happened to set.
+//
 // ─── Six-rule portability audit (Phase 9c — Guiding Principle 12) ────
 //
 //   1. Identity by value      — `peerName : string` (request header
@@ -375,3 +412,170 @@ type PeerBearerAuthMiddleware(next: RequestDelegate, config: ServerConfig) =
                     do! reject401 None RejectionReason.NoSecretStore
         }
         :> System.Threading.Tasks.Task
+
+// ─── Phase 317 — peer-auth posture advisory ──────────────────────────
+//
+// The two peer-auth substrates are documented as coexisting on
+// different prefixes, and nothing checked that they did. A
+// `PeerRoutePrefixes` entry is an ordinary `StartsWith` prefix, so
+// `"/peer/"` — the most natural name an operator would reach for —
+// covers the `/peer/v1/` namespace `JsonRpcPeerHost.routes` serves.
+// When it does, this middleware is registered AHEAD of the Giraffe
+// router, so the static-bearer gate runs first and the signed-JWT host
+// is only reached by requests that already satisfied the weaker
+// substrate. The failure is quiet in both directions:
+//
+//   * A `JsonRpcPeerClient` presents a signed peer JWT and NO
+//     `X-Peer-Name` header, so every federation call is answered `401
+//     missing_peer_name_header` before dispatch. The federation surface
+//     looks composed and answers nothing.
+//   * If the operator does seed static bearers and callers do send
+//     `X-Peer-Name`, the federation edge has grown a second, weaker,
+//     never-expiring credential that must be distributed out of band —
+//     and its refusals are audited under `_platform.peer.bearer` rather
+//     than the peer call trail.
+//
+// So the posture is classified at compose time and the live shadow is
+// surfaced as one startup `Warn`. **Advisory only** — there is nothing
+// to refuse here: a deployment may genuinely intend to front its own
+// federation routes with a shared bearer, and refusing would break an
+// existing composition on upgrade (GP 11). Nothing about either auth
+// path changes; this adds no per-request work and, when no prefix is
+// registered, no work at all (GP 13).
+//
+// The classification is a value rather than an inference — the same
+// shape `PeerAudienceBinding` (Phase 309) and `TemplateApprovalPosture`
+// (Phase 480) take — so a deployment asserts its own posture in its own
+// preflight instead of scraping a log line, and the advisory cannot
+// drift from what was classified.
+
+/// The route namespace the signed-JWT peer host serves
+/// (`POST /peer/v1/{contractId}`, `GET /peer/v1/capabilities`, …).
+///
+/// **Duplicated deliberately** from the peer companion's own route
+/// table: that companion depends on this assembly, so the literal
+/// cannot be imported from it without inverting the dependency. Same
+/// structurally-forced duplication (and the same maintenance hazard) as
+/// the `"/api/csrf-token"` literal in `SurfaceEnforcementMiddleware` —
+/// if the peer host's namespace ever moves, both definitions move in
+/// lockstep.
+[<Literal>]
+let SignedPeerRouteNamespace = "/peer/v1/"
+
+/// A deployment's peer-auth posture, classified from `ServerConfig` at
+/// compose time. Ordered weakest-guarantee-last: the two flagged rungs
+/// are the ones where a static-bearer prefix has reached into the
+/// namespace the signed-JWT substrate owns.
+type PeerAuthPosture =
+    /// Neither substrate composed — this deployment exposes no
+    /// cross-deployment surface, so there is no posture to compare.
+    | NoPeerAuthSurface
+    /// Only the signed-JWT substrate (`PeerSubstrate =
+    /// EnabledPeerSubstrate`, no static-bearer prefixes). The strongest
+    /// rung: per-call minting, `exp` / `aud`, host-verified delegation,
+    /// https-by-default transport, and an asymmetric-key option.
+    | SignedPeerAuthOnly
+    /// Only the static-bearer substrate, on prefixes of its own. A
+    /// legitimate posture, and the weaker of the two — see the file
+    /// header for exactly which guarantees are absent.
+    | StaticBearerOnly of prefixes: string list
+    /// Only the static-bearer substrate, but on a prefix that covers the
+    /// namespace the signed-JWT host would serve. Nothing is shadowed
+    /// today — the peer substrate is off — so this is latent, not a
+    /// defect: enabling `PeerSubstrate` later would put the bearer gate
+    /// in front of every federation call without a line changing here.
+    | StaticBearerOnReservedNamespace of prefixes: string list
+    /// Both substrates composed, on disjoint prefixes. The documented
+    /// coexistence: the bearer flavour guards its own routes and the
+    /// signed-JWT host serves `/peer/v1/*` untouched.
+    | BothSubstratesDisjoint of bearerPrefixes: string list
+    /// **The composition defect.** The signed-JWT host is serving and a
+    /// static-bearer prefix covers its namespace, so the bearer gate
+    /// decides who reaches federation. Carries only the shadowing
+    /// prefixes, not every registered one.
+    | StaticBearerShadowsSignedPeer of prefixes: string list
+
+/// True when a `PeerRoutePrefixes` entry would claim any path under the
+/// signed-JWT peer namespace. Both directions matter and each is a real
+/// shape: a prefix SHORTER than the namespace (`"/"`, `"/peer/"`)
+/// swallows all of it, and one LONGER (`"/peer/v1/ledger"`) claims part
+/// of it. An empty prefix matches every path, so it swallows it too —
+/// `String.StartsWith ""` is `true`, which is exactly how the runtime
+/// registry behaves.
+///
+/// Case-insensitive, mirroring `PeerRouteRegistry.isPeerRoute`: the
+/// classification must agree with the gate that will actually run.
+let shadowsSignedPeerNamespace (prefix: string) : bool =
+    match prefix with
+    | null -> false
+    | p ->
+        SignedPeerRouteNamespace.StartsWith(p, StringComparison.OrdinalIgnoreCase)
+        || p.StartsWith(SignedPeerRouteNamespace, StringComparison.OrdinalIgnoreCase)
+
+/// Classify this deployment's peer-auth posture. Pure and total over
+/// `ServerConfig`; exposed so a deployment (or a test) asserts on data
+/// rather than on a log line, and so the advisory cannot disagree with
+/// the classification it was derived from.
+let auditPeerAuthPosture (config: ServerConfig) : PeerAuthPosture =
+    let signedHostServing =
+        match config.PeerSubstrate with
+        | EnabledPeerSubstrate -> true
+        | NoPeerSubstrate -> false
+
+    match config.PeerRoutePrefixes with
+    | [] ->
+        if signedHostServing then
+            SignedPeerAuthOnly
+        else
+            NoPeerAuthSurface
+    | bearerPrefixes ->
+        match bearerPrefixes |> List.filter shadowsSignedPeerNamespace with
+        | [] ->
+            if signedHostServing then
+                BothSubstratesDisjoint bearerPrefixes
+            else
+                StaticBearerOnly bearerPrefixes
+        | shadowing ->
+            if signedHostServing then
+                StaticBearerShadowsSignedPeer shadowing
+            else
+                StaticBearerOnReservedNamespace shadowing
+
+/// The guarantee delta, shared by the advisory and the docs so the two
+/// cannot drift. Deliberately enumerated rather than summarised as
+/// "weaker": an operator reading a startup line needs to know which
+/// properties they gave up, not that a value judgement was made.
+let peerAuthSubstrateDelta =
+    "The static-bearer substrate has no expiry, no audience, no per-call minting or replay window, no delegated-assertion verification, no asymmetric-key option and no transport posture of its own. The signed-JWT peer substrate has all six."
+
+/// The advisory for a posture, or `None` when there is nothing to say.
+///
+/// Only the live shadow warns. `StaticBearerOnReservedNamespace` is
+/// classified but silent: warning a deployment that has not composed the
+/// peer substrate about a collision with a host it does not run is a
+/// warning about a composition that does not exist, and an advisory that
+/// fires on a correct configuration is one operators learn to ignore.
+/// The rung is still data, so a deployment that wants to hold the line
+/// early can assert it in its own preflight.
+let peerAuthPostureAdvisory (posture: PeerAuthPosture) : string option =
+    match posture with
+    | NoPeerAuthSurface
+    | SignedPeerAuthOnly
+    | StaticBearerOnly _
+    | StaticBearerOnReservedNamespace _
+    | BothSubstratesDisjoint _ -> None
+    | StaticBearerShadowsSignedPeer prefixes ->
+        let named = String.concat ", " prefixes
+
+        Some
+            $"peer-auth-posture: ServerConfig.PeerRoutePrefixes entr(ies) [{named}] cover the '{SignedPeerRouteNamespace}' namespace this deployment's signed-JWT peer host serves, so PeerBearerAuthMiddleware gates every federation call FIRST and the weaker of the two peer-auth substrates decides who reaches the host. A typed peer client presents a signed peer JWT and no '{PeerNameHeader}' header, so those calls are answered 401 ({RejectionReason.MissingPeerNameHeader}) before dispatch and the federation surface answers nothing. {peerAuthSubstrateDelta} If the federation surface is what you meant to expose, move the static-bearer prefix off '{SignedPeerRouteNamespace}' (the two substrates are documented as coexisting on DIFFERENT prefixes — e.g. '/api/peer/echo'); if the static-bearer flavour is what you meant to guard these routes with, say so deliberately and treat this as an accepted posture."
+
+/// Emit the advisory once at startup, best-effort. Called by
+/// `configurePipeline` at the point the middleware is registered — so a
+/// deployment with no peer prefixes never runs the classifier at all
+/// (GP 13) — and exposed so a deployment can run the same check from its
+/// own preflight.
+let advisePeerAuthPosture (logger: ILogger) (config: ServerConfig) : unit =
+    auditPeerAuthPosture config
+    |> peerAuthPostureAdvisory
+    |> Option.iter (fun advisory -> logger.Warn advisory)

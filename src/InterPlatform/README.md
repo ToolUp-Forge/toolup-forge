@@ -96,6 +96,14 @@ When `PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to `ServerApp.run a
 secrets.SetSecret("_platform", "peers/buyer/signing-key", sharedKey) |> Async.RunSynchronously |> ignore
 ```
 
+### Don't guard `/peer/` with the *other* peer-auth substrate
+
+The SDK also ships a **static shared-bearer** peer gate — `ServerConfig.PeerRoutePrefixes` + `PeerBearerAuthMiddleware`, in `ToolUp.Platform.Server`. It is a different tool with weaker guarantees: no expiry, no audience, no per-call minting or replay window, no delegated-originator verification, no asymmetric-key option. The two are documented as coexisting on **different prefixes**, and that is load-bearing.
+
+`PeerRoutePrefixes` entries are case-insensitive `StartsWith` prefixes, so a `"/peer/"` entry claims the whole `/peer/v1/` namespace these routes serve — and the bearer middleware runs *ahead of the router*, so it then decides who reaches this companion at all. A typed peer client sends a signed JWT and no `X-Peer-Name` header, so every federation call is answered `401` before dispatch while the composition still looks correct. Mount the bearer flavour on a prefix of its own (`"/api/peer/echo"`).
+
+A composition that trips this logs one `peer-auth-posture:` `Warn` at startup (Phase 317); `PeerBearerAuthMiddleware.auditPeerAuthPosture` returns the same classification as data for a deployment's own preflight. Full posture comparison and the six-rung ladder: [`TECHNICAL_GUIDE.md`](TECHNICAL_GUIDE.md#two-peer-auth-substrates-and-which-one-guards-what-phase-317).
+
 ## How to author a contract
 
 A contract is a **record whose fields are functions**. Declare it once, shared by both peers:

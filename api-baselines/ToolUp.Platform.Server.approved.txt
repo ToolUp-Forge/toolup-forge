@@ -4199,11 +4199,17 @@ ToolUp.Platform.PeerBearerAuthMiddleware (class)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerBearerSourceModule : System.String (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerNameHeader : System.String (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware.SecretStoreScope : System.String (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware.SignedPeerRouteNamespace : System.String (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware.advisePeerAuthPosture(ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.PeerBearerAuthMiddleware.auditPeerAuthPosture(ToolUp.Platform.ServerConfig) : ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture
 ToolUp.Platform.PeerBearerAuthMiddleware.authenticate(ToolUp.Platform.Secrets+ISecretStore, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome]
 ToolUp.Platform.PeerBearerAuthMiddleware.constantTimeEquals(System.String, System.String) : System.Boolean
 ToolUp.Platform.PeerBearerAuthMiddleware.emitAccepted(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.PeerBearerAuthMiddleware+PeerCallAcceptedPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PeerBearerAuthMiddleware.emitRejected(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.PeerBearerAuthMiddleware+PeerCallRejectedPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.PeerBearerAuthMiddleware.peerAuthPostureAdvisory(ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.PeerBearerAuthMiddleware.peerAuthSubstrateDelta : System.String { get }
 ToolUp.Platform.PeerBearerAuthMiddleware.secretKeyFor(System.String) : System.String
+ToolUp.Platform.PeerBearerAuthMiddleware.shadowsSignedPeerNamespace(System.String) : System.Boolean
 ToolUp.Platform.PeerBearerAuthMiddleware.tryParseBearer(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome (class)
 ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome.IsAccepted : System.Boolean { get }
@@ -4217,6 +4223,31 @@ ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome+Rejected.reason : System.St
 ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome+Tags (class)
 ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome+Tags.Accepted : System.Int32 (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware+AuthOutcome+Tags.Rejected : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsBothSubstratesDisjoint : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsNoPeerAuthSurface : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsSignedPeerAuthOnly : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsStaticBearerOnReservedNamespace : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsStaticBearerOnly : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.IsStaticBearerShadowsSignedPeer : System.Boolean { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.NoPeerAuthSurface : ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.SignedPeerAuthOnly : ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture.Tag : System.Int32 { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+BothSubstratesDisjoint (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+BothSubstratesDisjoint.bearerPrefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerOnReservedNamespace (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerOnReservedNamespace.prefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerOnly (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerOnly.prefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerShadowsSignedPeer (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+StaticBearerShadowsSignedPeer.prefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags (class)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.BothSubstratesDisjoint : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.NoPeerAuthSurface : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.SignedPeerAuthOnly : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.StaticBearerOnReservedNamespace : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.StaticBearerOnly : System.Int32 (literal)
+ToolUp.Platform.PeerBearerAuthMiddleware+PeerAuthPosture+Tags.StaticBearerShadowsSignedPeer : System.Int32 (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware+PeerBearerAuthMiddleware (class)
 ToolUp.Platform.PeerBearerAuthMiddleware+PeerBearerAuthMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.PeerBearerAuthMiddleware+PeerBearerAuthMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task

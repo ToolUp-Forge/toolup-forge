@@ -1229,6 +1229,15 @@ let allTests =
         // driving invalidation end to end, and the facts-free twin that
         // proves a deployment without facts is byte-for-byte unchanged.
         ReactiveRecomputeComposeTests.tests
+        // Phase 317 — peer-auth posture advisory: the compose-time ladder
+        // separating the static-bearer substrate from the signed-JWT one,
+        // the namespace-overlap predicate (both directions, plus the
+        // '/peerish/' boundary a naive stem match gets wrong), and the
+        // startup advisory's reason text. Every flagged rung is paired
+        // with a control differing in one config field.
+        PeerAuthPostureTests.ladderTests
+        PeerAuthPostureTests.overlapTests
+        PeerAuthPostureTests.advisoryTests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

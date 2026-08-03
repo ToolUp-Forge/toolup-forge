@@ -64,6 +64,47 @@ The other `/peer/v1/*` routes are `GET` and carry no body.
 
 `GET /peer/v1/{contractId}/jobs/{jobId}` echoes the polled `jobId` as the response's JSON-RPC `Id`, on every answer including the refusals — the poll leg's counterpart to the dispatch leg echoing `request.Id`. There is no request envelope on a `GET`, so the `jobId` the caller addressed the request with is the correlation key both sides already share.
 
+## Two peer-auth substrates, and which one guards what (Phase 317)
+
+The SDK ships **two unrelated ways** for one deployment to authenticate another, and they are legitimately different tools rather than two attempts at one:
+
+- **The static-bearer substrate** — `ServerConfig.PeerRoutePrefixes` + `PeerBearerAuthMiddleware` (Phase 37 / Phase 137), in `ToolUp.Platform.Server`. A caller names itself in `X-Peer-Name` and presents a shared secret read from `ISecretStore` at `peers/{peerName}/bearer`; a constant-time match stamps `HttpContext.Items["PeerName"]` and the request continues.
+- **The signed-JWT substrate** — this companion. Per-call HS256 (or Phase 343 ES256 / RS256) tokens, validated fail-closed by `IPeerAuthProvider` inside the `/peer/v1/*` handlers.
+
+They are **not** the same guarantee, and the gap is the whole reason this section exists:
+
+| Property | Static bearer | Signed-JWT peer substrate |
+|---|---|---|
+| Expiry | none — valid until an operator rotates the secret | `exp` required, 5-minute minted lifetime, 60 s skew ([Validation is fail-closed at every step](#validation-is-fail-closed-at-every-step)) |
+| Audience | none — the token names no receiver | `aud` fixed-time compared against the receiver's own peer id (Phase 130 / 309) |
+| Per-call minting | none — one long-lived value replayed verbatim | minted per call; `IPeerReplayGuard` + call scoping available on top (Phase 338) |
+| Delegated originator | none — `X-Peer-Name` is self-asserted | `VerifyDelegation` run by the host before dispatch, mandatory (Phase 330) |
+| Asymmetric keys | no — symmetric and shared, so the receiver can mint what the caller can | `AsymmetricPeerAuthProvider`, ES256 / RS256, verify-only custody (Phase 343) |
+| Transport posture | the deployment's ingress problem | https-only off loopback by default (Phase 339) |
+| Trust boundary | the header is the identity | the call context is rebuilt from the **validated principal**, never the wire body ([Trust boundary](#trust-boundary)) |
+
+**When each is right.** A static bearer needs no key ceremony and is the right tool for a small, operator-controlled set of internal callers on a route the deployment already fronts with TLS. It is the wrong tool for a federation edge with an organisation you do not operate — that is what this companion is for.
+
+### The overlap advisory
+
+`PeerRoutePrefixes` entries are ordinary case-insensitive `StartsWith` prefixes, so `"/peer/"` — the most natural name to reach for — claims the whole `/peer/v1/` namespace [the host routes](README.md#routes) serve. `PeerBearerAuthMiddleware` is registered *ahead of the Giraffe router*, so when that happens the static-bearer gate runs first and decides who reaches the signed-JWT host. It fails quietly in both directions:
+
+- A typed peer client presents a signed peer JWT and **no** `X-Peer-Name` header, so every federation call is answered `401 missing_peer_name_header` before dispatch. The federation surface looks composed and answers nothing.
+- If static bearers *are* seeded and callers *do* send `X-Peer-Name`, the federation edge has grown a second, weaker, never-expiring credential to distribute out of band — and its refusals are audited under `_platform.peer.bearer`, not the peer call trail.
+
+`PeerBearerAuthMiddleware.auditPeerAuthPosture : ServerConfig -> PeerAuthPosture` classifies the composition at compose time. Six rungs, weakest-guarantee-last:
+
+| Rung | Meaning |
+|---|---|
+| `NoPeerAuthSurface` | neither substrate composed |
+| `SignedPeerAuthOnly` | this companion alone — the strongest posture |
+| `StaticBearerOnly` | the bearer flavour on prefixes of its own; legitimate |
+| `StaticBearerOnReservedNamespace` | bearer prefix covers `/peer/v1/`, but `PeerSubstrate = NoPeerSubstrate`, so nothing is shadowed **yet** |
+| `BothSubstratesDisjoint` | both composed, disjoint prefixes — the documented coexistence |
+| `StaticBearerShadowsSignedPeer` | the defect: the host is serving and a bearer prefix covers its namespace |
+
+`configurePipeline` logs one `peer-auth-posture:` `Warn` at startup for the last rung only, naming the offending prefixes, the `401` symptom and the fix. **Advisory only** — neither auth path changes behaviour, and a composition that registers no peer prefix never runs the classifier at all (GP 13). `StaticBearerOnReservedNamespace` is deliberately silent: warning about a collision with a host the deployment does not run is a warning about a composition that does not exist, and an advisory that fires on a correct configuration is one operators learn to ignore. It stays classified so a deployment that wants to hold the line early can assert it in its own preflight — the same posture-as-data shape `auditAudienceBinding` (Phase 309) and `auditFederationGraph` (Phase 591) take.
+
 ## Identity layer
 
 `JwtPeerAuthProvider` is the BCL-only (no package dependency), fail-closed default `IPeerAuthProvider`. It mints and validates **HS256** bearer tokens using a symmetric per-peer signing key read from `ISecretStore` at scope `_platform`, key `peers/{peerId}/signing-key`. The same secret is shared out of band with the peers a deployment talks to; both sides sign / verify with it.

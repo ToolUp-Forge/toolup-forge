@@ -1376,6 +1376,15 @@
              file's shared `deterministicOrderingContract` rather than
              restating it. -->
         <Compile Include="InProcess\PgvectorVectorStoreTests.fs" />
+        <!-- Phase 317 — peer-auth posture advisory. The six-rung ladder a
+             composition is classified against (from "no peer surface" up
+             to the static-bearer prefix that shadows the signed-JWT
+             namespace), the overlap predicate's boundaries in both
+             directions, and the advisory's own reason text — each flagged
+             rung paired with a control whose config differs in exactly
+             one field, so a classifier that collapsed rungs or returned a
+             constant fails here rather than passing quietly. -->
+        <Compile Include="InProcess\PeerAuthPostureTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
