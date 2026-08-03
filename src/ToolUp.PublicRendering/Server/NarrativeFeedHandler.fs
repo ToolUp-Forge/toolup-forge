@@ -85,10 +85,21 @@ module NarrativeFeedHandler =
     /// tag-matched (Phase 97), Narrative-bodied pages, newest-first,
     /// capped at `MaxEntries`. Extracted so the filter is unit-testable
     /// without an HTTP context.
-    let selectEntries (config: NarrativeFeedConfig) (pages: PublicPage list) : NarrativeDocument list =
+    ///
+    /// `selectEntries` is this function at the current wall clock; take
+    /// this overload to pin `now` (deterministic tests).
+    let selectEntriesAt
+        (now: System.DateTimeOffset)
+        (config: NarrativeFeedConfig)
+        (pages: PublicPage list)
+        : NarrativeDocument list =
         pages
         // Phase 86 — gated (non-`Public`) pages never surface in a feed.
-        |> List.filter PublicPage.isPublic
+        // Phase 38 — nor do unpublished ones (`Draft` / `Archived` /
+        // future-`Scheduled`). A feed entry carries the page's title AND
+        // its rendered body, so filtering on audience alone leaked draft
+        // *content*, not merely the slug the sitemap would have exposed.
+        |> List.filter (PublicPage.isPubliclyDiscoverable now)
         |> List.filter (collectionMatches config.Collection)
         // Phase 97 — taxonomy-axis filter.
         |> List.filter (fun p ->
@@ -101,6 +112,10 @@ module NarrativeFeedHandler =
             |> Option.defaultValue (System.DateTimeOffset(System.DateTime.MinValue, System.TimeSpan.Zero)))
         |> List.truncate config.MaxEntries
         |> List.map snd
+
+    /// `selectEntriesAt` at the current wall clock. Signature unchanged.
+    let selectEntries (config: NarrativeFeedConfig) (pages: PublicPage list) : NarrativeDocument list =
+        selectEntriesAt System.DateTimeOffset.UtcNow config pages
 
     let private gatherEntityStorePages (entityStore: IEntityStore) : Async<PublicPage list> = async {
         // ListAll returns refs; for v1 we fetch the head version of

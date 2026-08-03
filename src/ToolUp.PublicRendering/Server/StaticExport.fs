@@ -42,9 +42,13 @@ open ToolUp.Platform.Server
 //   internal `href` / `src` in the emitted HTML resolves to a file on
 //   disk, logging dead links before deploy.
 //
-// Gated pages (Phase 86 — `Audience <> Public`) are excluded from every
-// tree, the sitemap, and the host-config — `pages` is filtered through
-// `PublicPage.isPublic` exactly as in the pre-93 path.
+// Gated pages (Phase 86 — `Audience <> Public`) and unpublished ones
+// (Phase 89 — `Draft` / `Archived` / not-yet-`Scheduled`) are excluded
+// from every tree, the sitemap, and the host-config: `pages` is filtered
+// through `PublicPage.isPubliclyDiscoverable` (Phase 38), which conjoins
+// both gates. A static export is served by a dumb file host with no
+// publish gate of its own, so anything written to disk here is
+// permanently and anonymously readable.
 
 /// Static-host targets for host-config emission.
 type HostConfigTarget =
@@ -271,10 +275,17 @@ module StaticExport =
             // some pages doesn't enumerate them, so nothing private leaks).
             let anonCtx = AccessContext.unrestricted (AnonymousSession "static-export")
 
+            // Phase 38 — a content source synthesises its own pages, so an
+            // enumerated route can still resolve to a `Draft` / `Archived`
+            // / future-`Scheduled` one. Gate the write the same way the
+            // file-backed set above was gated; the anonymous context
+            // covers audience, not publish status.
+            let dynamicNow = System.DateTimeOffset.UtcNow
+
             for Slug s in dynamicSlugs do
                 let! pageOpt = api.GetPageInContext(s, anonCtx)
 
-                match pageOpt with
+                match pageOpt |> Option.filter (PublicPage.isPubliclyDiscoverable dynamicNow) with
                 | Some page -> writePage page s
                 | None -> ()
 
@@ -422,10 +433,19 @@ module StaticExport =
 
                 let! allPages = api.ListPages ""
 
+                // Phase 38 — one clock for the whole export pass, so a
+                // `Scheduled` page cannot land in the sitemap but miss the
+                // page write (or vice versa) because the wall clock crossed
+                // its publish instant mid-run.
+                let exportNow = System.DateTimeOffset.UtcNow
+
                 // Phase 86 — emit only `Public` pages; a gated slug is
                 // never written to disk and is excluded from the sitemap +
-                // host-config below.
-                let pages = allPages |> List.filter PublicPage.isPublic
+                // host-config below. Phase 38 — and only *published* ones:
+                // a static export is served by a dumb file host with no
+                // publish gate of its own, so a `Draft` written to disk is
+                // permanently, anonymously readable.
+                let pages = allPages |> List.filter (PublicPage.isPubliclyDiscoverable exportNow)
 
                 let! dynamicSlugs = ContentSource.enumerateAll contentSources
 

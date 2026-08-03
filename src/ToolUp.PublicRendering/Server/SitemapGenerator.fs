@@ -44,19 +44,28 @@ module SitemapGenerator =
     /// The public URL universe as a deduped `(Slug * lastmod)` list — the
     /// single source of truth shared by `sitemap.xml` and the Phase 109
     /// IndexNow push channel, so the two can never disagree about what
-    /// exists. Pages whose frontmatter sets `sitemap = "exclude"` and
-    /// non-`Public` (gated) pages are dropped (Phase 86 — a crawler must
-    /// not discover an authenticated / tenant-private slug); the surviving
-    /// pages carry their `PublishedAt` (formatted `yyyy-MM-dd`) as the
-    /// lastmod. Phase 95 `dynamicSlugs` (content-source-enumerated routes —
-    /// e.g. `/tag/{x}`) are appended with no lastmod, deduped against the
-    /// page slugs. Order: pages first (input order), then dynamic routes.
-    let entries (pages: PublicPage list) (dynamicSlugs: Slug list) : (Slug * string option) list =
+    /// exists. Pages whose frontmatter sets `sitemap = "exclude"`, non-
+    /// `Public` (gated) pages, and pages not yet publicly visible at `now`
+    /// (Phase 38 — `Draft` / `Archived` / future-`Scheduled`) are dropped;
+    /// a crawler must not discover an authenticated / tenant-private slug,
+    /// nor an unpublished one. The surviving pages carry their
+    /// `PublishedAt` (formatted `yyyy-MM-dd`) as the lastmod. Phase 95
+    /// `dynamicSlugs` (content-source-enumerated routes — e.g. `/tag/{x}`)
+    /// are appended with no lastmod, deduped against the page slugs.
+    /// Order: pages first (input order), then dynamic routes.
+    ///
+    /// `entries` is this function at the current wall clock; take this
+    /// overload to pin `now` (deterministic tests, a build-time export).
+    let entriesAt
+        (now: DateTimeOffset)
+        (pages: PublicPage list)
+        (dynamicSlugs: Slug list)
+        : (Slug * string option) list =
         let pageEntries =
             pages
             |> List.choose (fun page ->
                 let excluded =
-                    not (PublicPage.isPublic page)
+                    not (PublicPage.isPubliclyDiscoverable now page)
                     || page.Frontmatter
                        |> Map.tryFind "sitemap"
                        |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
@@ -74,6 +83,12 @@ module SitemapGenerator =
             |> List.distinct
 
         pageEntries @ dynamicEntries
+
+    /// `entriesAt` at the current wall clock — the shape every existing
+    /// caller (sitemap handler + shards, search index, static export, the
+    /// IndexNow universe thunk) uses. Signature unchanged from Phase 149.
+    let entries (pages: PublicPage list) (dynamicSlugs: Slug list) : (Slug * string option) list =
+        entriesAt DateTimeOffset.UtcNow pages dynamicSlugs
 
     /// Build the `<urlset>` body for a precomputed universe + base URL.
     /// Trailing slashes on `baseUrl` are normalised away. Shared by the

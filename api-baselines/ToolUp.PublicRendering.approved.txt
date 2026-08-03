@@ -341,6 +341,7 @@ ToolUp.PublicRendering.NarrativeFeedConfigModule.defaults : ToolUp.PublicRenderi
 ToolUp.PublicRendering.NarrativeFeedHandler (class)
 ToolUp.PublicRendering.NarrativeFeedHandler.handler(ToolUp.PublicRendering.NarrativeFeedConfig, ToolUp.PublicRendering.IPublicContentApi, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.PublicRendering.NarrativeFeedHandler.selectEntries(ToolUp.PublicRendering.NarrativeFeedConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeDocument]
+ToolUp.PublicRendering.NarrativeFeedHandler.selectEntriesAt(System.DateTimeOffset, ToolUp.PublicRendering.NarrativeFeedConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.PublicRendering.NarrativeFromData (class)
 ToolUp.PublicRendering.NarrativeFromData.annotate(ToolUp.Platform.Narrative.Severity, System.String) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.chart(ToolUp.PublicRendering.NarrativeFromData+ChartKind, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : ToolUp.Platform.Narrative.NarrativeElement
@@ -559,6 +560,7 @@ ToolUp.PublicRendering.PublicPageHandler.handlerKeyed(Microsoft.FSharp.Core.FSha
 ToolUp.PublicRendering.PublicPageModule (class)
 ToolUp.PublicRendering.PublicPageModule.hasTag(System.String, ToolUp.PublicRendering.PublicPage) : System.Boolean
 ToolUp.PublicRendering.PublicPageModule.isPublic(ToolUp.PublicRendering.PublicPage) : System.Boolean
+ToolUp.PublicRendering.PublicPageModule.isPubliclyDiscoverable(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : System.Boolean
 ToolUp.PublicRendering.PublicPageModule.isPubliclyVisible(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : System.Boolean
 ToolUp.PublicRendering.PublicPageModule.tags(ToolUp.PublicRendering.PublicPage) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.PublicRendering.PublicPageRevisions (class)
@@ -878,6 +880,7 @@ ToolUp.PublicRendering.SiteRuntime.Loader : ToolUp.PublicRendering.MarkdownConte
 ToolUp.PublicRendering.SitemapGenerator (class)
 ToolUp.PublicRendering.SitemapGenerator.applyDefaultLastmod(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]
 ToolUp.PublicRendering.SitemapGenerator.entries(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Slug]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]
+ToolUp.PublicRendering.SitemapGenerator.entriesAt(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Slug]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]
 ToolUp.PublicRendering.SitemapGenerator.generate(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : System.String
 ToolUp.PublicRendering.SitemapGenerator.generateSitemapIndex(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]]]) : System.String
 ToolUp.PublicRendering.SitemapGenerator.generateWith(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Slug]) : System.String

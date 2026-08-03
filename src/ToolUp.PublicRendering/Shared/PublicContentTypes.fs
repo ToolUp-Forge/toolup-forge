@@ -330,6 +330,28 @@ module PublicPage =
         | PageAudience.Public -> true
         | _ -> false
 
+    /// Phase 38 — the single **egress** gate for every anonymous public
+    /// surface that ENUMERATES pages: `sitemap.xml` (and its shards), the
+    /// Atom feeds, the JSON search index, the IndexNow push channel, and
+    /// static export.
+    ///
+    /// The two gates are orthogonal and both are load-bearing:
+    /// `isPublic` answers *who* may see a page once it is published
+    /// (Phase 86 `Audience`), `isPubliclyVisible` answers *whether it is
+    /// published at all* (Phase 89 `Status`). Filtering on audience alone
+    /// admits a `Draft` / `Archived` / not-yet-`Scheduled` page onto every
+    /// discovery surface even though `PublicPageHandler` correctly 404s
+    /// the page itself — leaking the slug to crawlers (and, via the feed,
+    /// the title and full body). Enumeration surfaces therefore filter on
+    /// **both**, which is what this predicate is.
+    ///
+    /// GP 11: `Status` defaults to `Published` at every construction site,
+    /// so a deployment that never adopted the publish lifecycle is
+    /// byte-for-byte unchanged — only a page an operator explicitly marked
+    /// non-public changes behaviour, which is the intent.
+    let isPubliclyDiscoverable (now: DateTimeOffset) (page: PublicPage) : bool =
+        isPublic page && isPubliclyVisible now page
+
     // ─── Phase 90 — taxonomy (tags / categories) ─────────────────────
     //
     // Tags generalise the single-valued `Collection` into a multi-valued

@@ -6,6 +6,7 @@ open System.Text.Json
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 
 // ─── Sitemap (Phase 149/150) + search index (Phase 157) ─────────────
@@ -490,9 +491,164 @@ let private searchIndex157Tests =
             Expect.isFalse (body.Contains "[") "declines a non-matching path (no JSON body)"
     ]
 
+// ─── Phase 38 — publish-status gate on the discovery/egress surfaces ──
+//
+// `PublicPageHandler` has always filtered the page READ path through
+// `PublicPage.isPubliclyVisible`, so fetching an unpublished slug 404s.
+// The ENUMERATION surfaces — sitemap.xml (+ shards), the Atom feed, the
+// JSON search index, IndexNow, static export — filtered only on
+// `PublicPage.isPublic` (Phase 86 audience), which is an orthogonal
+// axis. A `Draft` / `Archived` / not-yet-`Scheduled` page therefore had
+// `Audience = Public` and sailed through: its slug reached crawlers (and
+// IndexNow actively PUSHED it to search engines), its title and
+// description reached the search index, and — worst — the feed carried
+// its full rendered body.
+//
+// These cases pin the gate. Each is paired with a published control, so
+// a regression that over-corrects into "nothing is served" fails too.
+
+let private mkPageStatus (slug: string) (status: PublishStatus) : PublicPage = {
+    mkPage slug (Some(DateTimeOffset.Parse "2026-05-22")) with
+        Status = status
+}
+
+let private phase38EgressTests =
+    testList "PublicRendering — Phase 38 publish gate on egress surfaces" [
+
+        // The negative control, stated as a measurement rather than a
+        // claim: the PRE-38 predicate (`isPublic` alone, which is what
+        // every egress surface used) ADMITS a draft. That is the leak,
+        // asserted directly — so if someone reverts the egress filters to
+        // `isPublic`, this case documents exactly what they restore, and
+        // the surface cases below go red.
+        testCase "the pre-38 audience-only filter admits a draft; the Phase 38 gate rejects it"
+        <| fun _ ->
+            let now = DateTimeOffset.Parse "2026-06-01"
+            let draft = mkPageStatus "secret-launch" PublishStatus.Draft
+
+            Expect.isTrue
+                (PublicPage.isPublic draft)
+                "PRE-38 GATE LEAKS: a draft is `Audience = Public`, so an audience-only egress filter admits it"
+
+            Expect.isFalse (PublicPage.isPubliclyDiscoverable now draft) "the Phase 38 gate rejects the same page"
+
+            // …and it still rejects for the right reason on each axis.
+            let gated = {
+                mkPage "gated" None with
+                    Audience = PageAudience.Authenticated
+            }
+
+            Expect.isFalse (PublicPage.isPubliclyDiscoverable now gated) "audience axis still gates"
+
+            Expect.isTrue
+                (PublicPage.isPubliclyDiscoverable now (mkPageStatus "live" Published))
+                "CONTROL: a published, public page is discoverable"
+
+        testCase "sitemap.xml omits draft / archived / future-scheduled and keeps published + due-scheduled"
+        <| fun _ ->
+            let now = DateTimeOffset.Parse "2026-06-01"
+
+            let pages = [
+                mkPageStatus "live" Published
+                mkPageStatus "secret-launch" PublishStatus.Draft
+                mkPageStatus "retired" Archived
+                mkPageStatus "embargoed" (Scheduled(now.AddDays 7.0))
+                mkPageStatus "released" (Scheduled(now.AddDays -7.0))
+            ]
+
+            let slugs =
+                SitemapGenerator.entriesAt now pages [] |> List.map (fun (Slug s, _) -> s)
+
+            Expect.contains slugs "live" "CONTROL: a published page is in the sitemap"
+            Expect.contains slugs "released" "CONTROL: a scheduled page past its date is in the sitemap"
+            Expect.isFalse (List.contains "secret-launch" slugs) "a draft slug never reaches a crawler"
+            Expect.isFalse (List.contains "retired" slugs) "an archived slug never reaches a crawler"
+            Expect.isFalse (List.contains "embargoed" slugs) "a future-scheduled slug never reaches a crawler"
+
+        testCase "the rendered sitemap body carries no unpublished slug"
+        <| fun _ ->
+            let api =
+                fakeApi [
+                    mkPageStatus "live" Published
+                    mkPageStatus "secret-launch" PublishStatus.Draft
+                ]
+
+            let handler = SitemapGenerator.handler "https://example.com" api noDynamic
+            let _, body = runHandler handler (mkCtxWith [])
+
+            Expect.stringContains body "https://example.com/live" "CONTROL: the published URL is emitted"
+            Expect.isFalse (body.Contains "secret-launch") "the draft URL is absent from the emitted XML"
+
+        testCase "the search index leaks neither the slug nor the title of an unpublished page"
+        <| fun _ ->
+            let draft = {
+                mkPageStatus "secret-launch" PublishStatus.Draft with
+                    Title = "Project Nightingale"
+            }
+
+            let api = fakeApi [ mkPageStatus "live" Published; draft ]
+
+            let handler =
+                SearchIndexEmitter.handler SearchIndexConfig.defaults "https://example.com" api noDynamic
+
+            let _, body = runHandler handler (mkCtxPath "/search-index.json")
+
+            Expect.stringContains body "/live" "CONTROL: the published page is indexed"
+            Expect.isFalse (body.Contains "secret-launch") "the draft slug is absent from the index"
+            Expect.isFalse (body.Contains "Project Nightingale") "the draft TITLE is absent from the index"
+
+        testCase "the Atom feed carries no unpublished entry (the body-leak case)"
+        <| fun _ ->
+            let now = DateTimeOffset.Parse "2026-06-01"
+
+            let docOf (title: string) : NarrativeDocument = {
+                Title = title
+                Subtitle = None
+                Sections = []
+                Provenance = None
+                Lang = None
+                CanonicalUrl = None
+            }
+
+            let withDoc (slug: string) (status: PublishStatus) (title: string) = {
+                mkPageStatus slug status with
+                    Body = Narrative(docOf title)
+            }
+
+            let entries =
+                NarrativeFeedHandler.selectEntriesAt now NarrativeFeedConfig.defaults [
+                    withDoc "live" Published "Published Post"
+                    withDoc "secret-launch" PublishStatus.Draft "Project Nightingale"
+                    withDoc "embargoed" (Scheduled(now.AddDays 7.0)) "Embargoed Announcement"
+                ]
+
+            let titles = entries |> List.map _.Title
+
+            Expect.contains titles "Published Post" "CONTROL: the published entry is syndicated"
+
+            Expect.isFalse
+                (List.contains "Project Nightingale" titles)
+                "the draft's title AND body never reach the feed"
+
+            Expect.isFalse (List.contains "Embargoed Announcement" titles) "a future-scheduled entry is not syndicated"
+
+        testCase "a scheduled page crosses into the sitemap exactly at its publish instant"
+        <| fun _ ->
+            let at = DateTimeOffset.Parse "2026-06-01T12:00:00Z"
+            let page = mkPageStatus "embargoed" (Scheduled at)
+
+            let slugsAt (now: DateTimeOffset) =
+                SitemapGenerator.entriesAt now [ page ] [] |> List.map (fun (Slug s, _) -> s)
+
+            Expect.isFalse (List.contains "embargoed" (slugsAt (at.AddSeconds -1.0))) "absent one second before"
+            Expect.contains (slugsAt at) "embargoed" "present exactly at the publish instant"
+            Expect.contains (slugsAt (at.AddSeconds 1.0)) "embargoed" "present after"
+    ]
+
 let tests =
     testList "PublicRendering — sitemap & search index (Phase 149/150/157)" [
         sitemap149Tests
         sitemap150Tests
         searchIndex157Tests
+        phase38EgressTests
     ]
