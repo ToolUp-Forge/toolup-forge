@@ -989,6 +989,15 @@ let allTests =
         // and its manifest agree in both directions, and an emitter
         // shape change that did not regenerate the corpus fails here.
         FederationWireConformanceTests.tests
+        // Phase 189 — the GENERATED non-F# peer clients certify against
+        // that same corpus: the requests PythonClientGen /
+        // TypeScriptClientGen output puts on the wire are round-tripped
+        // and member-order-checked against the corpus request vector, the
+        // responses it reads are corpus bytes served verbatim, and three
+        // legs are dispatched by a live IPlatformPeer.Handle behind a
+        // live JwtPeerAuthProvider. A runtime that is absent skips with
+        // the probe's reason; a corrupted client must make it go red.
+        CrossRuntimeFederationConformanceTests.tests
         // Phase 316 — peer job-result retention: a parked federated
         // result is bounded by a TTL and/or reclaimed after a
         // delete-on-read grace window, and reads as absent once retired.

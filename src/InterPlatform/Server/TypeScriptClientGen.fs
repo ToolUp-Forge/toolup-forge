@@ -19,13 +19,42 @@ open System.Text
 // generation snapshot test. The exact F#-DU wire encoding of the call
 // context (`User = "Anonymous"` etc.) follows the universal converter
 // set's Fable.SimpleJson-compatible shape and is execution-verified by the
-// cross-runtime round-trip harness (18e.tail).
+// cross-runtime conformance harness (Phase 189), which runs this
+// generator's output under a real Node against a live receiver and
+// certifies the documents it produces against the federation-seam wire
+// corpus.
+//
+// ─── Phase 189 — the emitted TypeScript is erasable-syntax-only ───────
+//
+// The class declares its fields and assigns them in the constructor body
+// rather than using TypeScript parameter properties
+// (`constructor(private baseUrl: string)`). A parameter property is the
+// one construct here that a type *eraser* cannot handle — it has to
+// synthesise an assignment — so Node refuses it with
+// `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` in strip-only mode. Emitting the
+// longer form means a generated client runs directly on any Node with
+// type stripping (>= 22.6 behind `--experimental-strip-types`, >= 23.6
+// by default) with **no build step and no toolchain**, which is the same
+// promise the dependency-free `fetch` transport already makes.
 
 let private pascal (s: string) : string =
     if String.IsNullOrEmpty s then
         s
     else
         string (Char.ToUpperInvariant s[0]) + s.Substring 1
+
+/// The generated client's class name. A contract id is a dotted path by
+/// convention (`example.orders`), and neither TypeScript nor Python
+/// accepts a dot in an identifier — so the id is split on its separators
+/// and PascalCased segment by segment (`example.orders` →
+/// `ExampleOrdersClient`). A single-segment id is unaffected.
+let internal clientClassName (contractId: string) : string =
+    let segments =
+        contractId.Split([| '.'; '-'; '_'; '/'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map pascal
+        |> String.concat ""
+
+    $"{segments}Client"
 
 /// Map a neutral type reference to a TypeScript type expression.
 let rec tsType (t: PeerTypeRef) : string =
@@ -52,6 +81,19 @@ let emit (schema: PeerContractSchema) : string =
     line $"// Contract: {schema.ContractId} (schema v{schema.SchemaVersion})"
     line ""
 
+    // The handshake shapes. Emitted unconditionally so `capabilities()`
+    // below is typed without the schema having to carry them.
+    line "export interface PeerContractVersion {"
+    line "  Major: number;"
+    line "  Minor: number;"
+    line "}"
+    line ""
+    line "export interface PeerContractCapability {"
+    line "  ContractId: string;"
+    line "  Versions: PeerContractVersion[];"
+    line "}"
+    line ""
+
     // One interface per referenced record.
     for record in schema.Records do
         line $"export interface {record.Name} {{"
@@ -62,10 +104,18 @@ let emit (schema: PeerContractSchema) : string =
         line "}"
         line ""
 
-    let className = $"{pascal schema.ContractId}Client"
+    let className = clientClassName schema.ContractId
 
     line $"export class {className} {{"
-    line "  constructor(private baseUrl: string, private token: string, private callerPeerId: string) {}"
+    line "  private baseUrl: string;"
+    line "  private token: string;"
+    line "  private callerPeerId: string;"
+    line ""
+    line "  constructor(baseUrl: string, token: string, callerPeerId: string) {"
+    line "    this.baseUrl = baseUrl;"
+    line "    this.token = token;"
+    line "    this.callerPeerId = callerPeerId;"
+    line "  }"
     line ""
     line "  private context() {"
     line "    return {"
@@ -93,6 +143,18 @@ let emit (schema: PeerContractSchema) : string =
     line "    const env = await res.json();"
     line "    if (env.Error) throw new Error(`peer error ${env.Error.Code}: ${env.Error.Message}`);"
     line "    return env.Result as string;"
+    line "  }"
+    line ""
+    // The capability handshake. A non-F# peer that cannot ask which
+    // contract versions the receiver supports has to hard-code one and
+    // find out from a `PeerVersionMismatch` — so the generated client
+    // carries the same first-contact call the F# initiator makes.
+    line "  async capabilities(): Promise<PeerContractCapability[]> {"
+    line "    const res = await fetch(`${this.baseUrl}/peer/v1/capabilities`, {"
+    line "      headers: { \"Authorization\": `Bearer ${this.token}` },"
+    line "    });"
+    line "    if (!res.ok) throw new Error(`peer handshake failed with status ${res.status}`);"
+    line "    return await res.json();"
     line "  }"
     line ""
 

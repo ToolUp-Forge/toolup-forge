@@ -52,7 +52,9 @@ Records referenced by a method are flattened into the schema's `Records` table a
 
 ## Using a generated client
 
-Both clients take `(baseUrl, token, callerPeerId)`. `token` is a bearer token the receiver's `JwtPeerAuthProvider` validates (HS256, shared secret) — see "Identity" below. Immediate methods return the typed result; long-running methods return a `jobId` and a `poll*` helper.
+Both clients take `(baseUrl, token, callerPeerId)`. `token` is a bearer token the receiver's `JwtPeerAuthProvider` validates (HS256, shared secret) — see "Identity" below. Immediate methods return the typed result; long-running methods return a `jobId` and a `poll*` helper. Both also carry `capabilities()`, the first-contact handshake against `GET /peer/v1/capabilities`, so a non-F# peer can read the receiver's supported contract versions rather than hard-coding one.
+
+The class name is the contract id split on its separators and PascalCased segment by segment, so `"buyer-seller"` yields `BuyerSellerClient`. The generated TypeScript is erasable-syntax-only: Node runs it directly (≥ 23.6, or ≥ 22.6 with `--experimental-strip-types`) with no build step.
 
 ```typescript
 const client = new BuyerSellerClient("https://seller.example", token, "buyer-acme");
@@ -72,7 +74,9 @@ A non-F# peer must be registered in the receiver's peer directory (`IPeerRegistr
 
 ## Verification status
 
-The generators are **emit-verified**: deterministic from the schema and pinned by the `IPeerNonFSharpSdkContract` snapshot tests. Executing a generated client against a live `JsonRpcPeerHost` end-to-end (the cross-runtime round-trip harness under Node / Python) is the **18e.tail** follow-on — it pins the exact F#-DU wire encoding of the call context that the generated `context()` constructs.
+The generators are **execution-verified**. They were emit-verified first — deterministic from the schema, pinned by the `IPeerNonFSharpSdkContract` snapshot tests — and the generated output is now additionally *run*: a real Node and a real Python drive the emitted client against a live `JsonRpcPeerHost` dispatch behind a live bearer-token check, and the documents it produces and consumes are certified against the wire corpus. See [`cross-runtime/`](cross-runtime/).
+
+That step was worth taking rather than assuming. Running the output found three defects reading it had not — the Python client emitted non-canonical JSON, its poll helper crashed on the ordinary `Pending` state, and a dotted contract id produced a class name neither language could parse. String-containment assertions cannot see any of those. The fixes and what a consumer holding a checked-in generated client should do about them are in [`../migrations/189-cross-runtime-federation-conformance-harness.md`](../migrations/189-cross-runtime-federation-conformance-harness.md).
 
 ## Writing a peer without a generator
 

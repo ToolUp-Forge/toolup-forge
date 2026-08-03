@@ -16,14 +16,39 @@ open System.Text
 // symmetric with the TypeScript generator's dependency-free `fetch`.
 //
 // Deterministic from the schema (snapshot-tested); the exact F#-DU wire
-// encoding is execution-verified by the cross-runtime round-trip harness
-// (18e.tail).
+// encoding is execution-verified by the cross-runtime conformance harness
+// (Phase 189), which runs this generator's output under a real Python
+// against a live receiver and certifies the documents it produces against
+// the federation-seam wire corpus.
+//
+// ─── Phase 189 — the emitted client writes CANONICAL JSON ────────────
+//
+// `json.dumps` defaults to `separators=(", ", ": ")` and
+// `ensure_ascii=True`, so the obvious call produces a document with
+// insignificant whitespace and `\uXXXX`-escaped non-ASCII — both of which
+// the wire specification's canonical encoding forbids (§3.1 rules 1 and
+// 5). The generated module therefore routes every outbound document
+// through a `_canonical` helper rather than calling `json.dumps`
+// directly. This was not a theoretical divergence: it is what the
+// cross-runtime harness found the first time the Python and Node clients'
+// request bytes were compared to each other.
 
 let private pascal (s: string) : string =
     if String.IsNullOrEmpty s then
         s
     else
         string (Char.ToUpperInvariant s[0]) + s.Substring 1
+
+/// The generated client's class name — see `TypeScriptClientGen`, whose
+/// rule this mirrors so a contract yields the same class name in both
+/// languages.
+let private clientClassName (contractId: string) : string =
+    let segments =
+        contractId.Split([| '.'; '-'; '_'; '/'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map pascal
+        |> String.concat ""
+
+    $"{segments}Client"
 
 /// Map a neutral type reference to a Python type annotation.
 let rec pyType (t: PeerTypeRef) : string =
@@ -54,6 +79,17 @@ let emit (schema: PeerContractSchema) : string =
     line "from dataclasses import dataclass"
     line "from typing import Optional, List, Any"
     line ""
+    line ""
+    line "def _canonical(value) -> str:"
+    line "    \"\"\"Canonical JSON per the federation-seam wire specification, §3.1."
+    line ""
+    line "    Rule 1 forbids insignificant whitespace and rule 5 requires non-ASCII"
+    line "    characters to be emitted literally. json.dumps defaults violate both,"
+    line "    so never call it directly for a document that goes on the wire."
+    line "    \"\"\""
+    line "    return json.dumps(value, separators=(\",\", \":\"), ensure_ascii=False)"
+    line ""
+    line ""
 
     for record in schema.Records do
         line "@dataclass"
@@ -67,7 +103,7 @@ let emit (schema: PeerContractSchema) : string =
 
         line ""
 
-    let className = $"{pascal schema.ContractId}Client"
+    let className = clientClassName schema.ContractId
 
     line $"class {className}:"
     line "    def __init__(self, base_url: str, token: str, caller_peer_id: str):"
@@ -87,19 +123,26 @@ let emit (schema: PeerContractSchema) : string =
     line "        }"
     line ""
     line "    def _rpc(self, method: str, args: list) -> str:"
-    line "        payload = {\"Context\": self._context(), \"Arguments\": json.dumps(args)}"
+    line "        payload = {\"Context\": self._context(), \"Arguments\": _canonical(args)}"
 
     line
-        "        body = {\"JsonRpc\": \"2.0\", \"Method\": method, \"Params\": json.dumps(payload), \"Id\": str(uuid.uuid4())}"
+        "        body = {\"JsonRpc\": \"2.0\", \"Method\": method, \"Params\": _canonical(payload), \"Id\": str(uuid.uuid4())}"
 
     line $"        req = urllib.request.Request(f\"{{self.base_url}}/peer/v1/{schema.ContractId}\","
-    line "            data=json.dumps(body).encode(), method=\"POST\","
+    line "            data=_canonical(body).encode(\"utf-8\"), method=\"POST\","
     line "            headers={\"Authorization\": f\"Bearer {self.token}\", \"Content-Type\": \"application/json\"})"
     line "        with urllib.request.urlopen(req) as resp:"
     line "            env = json.loads(resp.read())"
     line "        if env.get(\"Error\"):"
     line "            raise RuntimeError(f\"peer error {env['Error']['Code']}: {env['Error']['Message']}\")"
     line "        return env[\"Result\"]"
+    line ""
+    // The capability handshake — see the TypeScript generator's note.
+    line "    def capabilities(self) -> List[Any]:"
+    line "        req = urllib.request.Request(f\"{self.base_url}/peer/v1/capabilities\","
+    line "            headers={\"Authorization\": f\"Bearer {self.token}\"})"
+    line "        with urllib.request.urlopen(req) as resp:"
+    line "            return json.loads(resp.read())"
     line ""
 
     for m in schema.Methods do
@@ -130,6 +173,12 @@ let emit (schema: PeerContractSchema) : string =
             line "        with urllib.request.urlopen(req) as resp:"
             line "            env = json.loads(resp.read())"
             line "        status = json.loads(env[\"Result\"])"
+            line "        # A union case with no payload rides as a bare string (wire"
+            line "        # spec §3.1 rule 11), so `Pending` — the ordinary not-yet-done"
+            line "        # state — arrives as \"Pending\", not as an object. Calling"
+            line "        # .get on it raised AttributeError until Phase 189."
+            line "        if not isinstance(status, dict):"
+            line "            return None"
             line "        return status.get(\"Completed\")"
             line ""
 

@@ -1396,6 +1396,17 @@
              Program.fs. -->
         <Compile Include="InProcess\FederationWireCorpus.fs" />
         <Compile Include="InProcess\FederationWireConformanceTests.fs" />
+        <!-- Phase 189 — cross-runtime federation conformance. The Phase
+             596 corpus above certifies the .NET emitters; this pair
+             certifies the clients the SDK GENERATES, by running
+             PythonClientGen / TypeScriptClientGen output under a real
+             Python and a real Node against a live IPlatformPeer.Handle,
+             then holding the documents they produce and consume to the
+             same corpus. Compiled after FederationWireCorpus.fs, whose
+             corpus-reading helpers it reuses rather than re-deriving. A
+             runtime that is absent skips with the probe's own reason. -->
+        <Compile Include="InProcess\CrossRuntimeConformanceHarness.fs" />
+        <Compile Include="InProcess\CrossRuntimeFederationConformanceTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
