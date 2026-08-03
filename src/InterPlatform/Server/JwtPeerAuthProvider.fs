@@ -46,6 +46,23 @@ open ToolUp.Platform.Secrets
 // Claiming before the signature verifies would let an unauthenticated
 // attacker burn seen-set entries with forged tokens — turning the
 // defence into the denial-of-service vector it exists to prevent.
+//
+// **Asserted end-user context (Phase 330).** The `uctx` claim rides
+// inside the caller's own signed payload, so the outer signature proves
+// the *calling peer* sent it and nothing more. Two consequences the
+// provider owns:
+//
+//   * An unreadable `uctx` is now an explicit `PeerUnauthorized` rather
+//     than a silent downgrade to `Anonymous`. A tampered or
+//     shape-mismatched claim is exactly the case a downgrade hides, and
+//     "anonymous caller" is not a safe reading of "I could not parse
+//     what this peer asserted". An ABSENT claim is still `Anonymous` —
+//     nothing was asserted, so nothing is being ignored (GP 11).
+//   * A `Delegated` assertion is returned to the host **unverified** —
+//     `VerifyDelegation` is a separate member precisely so the provider
+//     stays a stateless, policy-free validator (GP 12 rule 4). The host
+//     seam (`JsonRpcPeerHost`) is what MUST call it before acting on a
+//     delegated originator; see the contract note on `IPeerAuthProvider`.
 
 /// HS256 JWT helpers. The base64url codec, HMAC, HS256 alg-check,
 /// fixed-time compare, clock-skew constant and the Result CE are the
@@ -229,6 +246,49 @@ module private PeerJwt =
                 Error
                     "Contract-bound token presented on an unscoped validation path — validate it through IPeerCallScopedAuth.ValidateScopedPeerToken"
             | None, None -> Ok()
+
+    /// Phase 330 — the single wording for "this token asserts an end-user
+    /// context that cannot be read", so the two malformed shapes (a
+    /// non-string claim, and a string that will not deserialise) cannot
+    /// disagree about why they were refused.
+    let malformedUserContextMessage =
+        "Malformed 'uctx' claim — the asserted end-user context did not deserialise, and this receiver refuses rather than downgrading a tampered claim to anonymous"
+
+    /// Phase 330 — read the `uctx` claim into the `UserContext` the
+    /// receiver will act on.
+    ///
+    /// An **absent** claim is `Anonymous`. A token that never asserted an
+    /// end user is not asserting a tampered one, and a plain
+    /// deployment-to-deployment token legitimately carries no `uctx` at
+    /// all — so this path is byte-for-byte the pre-330 behaviour (GP 11).
+    ///
+    /// A **present but unreadable** claim is an explicit reject. It used
+    /// to degrade silently to `Anonymous`, which is the wrong answer in
+    /// both directions: the claim sits inside the signed payload, so an
+    /// unreadable value means either the two ends disagree about the wire
+    /// shape or the payload was hand-built — and continuing as "anonymous
+    /// caller" lets the call proceed under an identity nobody asserted,
+    /// while hiding the disagreement that produced it. Both malformed
+    /// shapes are covered: a `uctx` that is not a JSON string at all, and
+    /// a string whose contents will not round-trip back to a
+    /// `UserContext`.
+    let readUserContext (doc: JsonDocument) : Result<UserContext, string> =
+        match doc.RootElement.TryGetProperty "uctx" with
+        | false, _ -> Ok Anonymous
+        | true, elem when elem.ValueKind <> JsonValueKind.String -> Error malformedUserContextMessage
+        | true, elem ->
+            try
+                let parsed = JsonRpc.deserialize<UserContext> (elem.GetString())
+
+                // A converter that answers `null` rather than throwing
+                // would otherwise hand a null DU to the dispatch path,
+                // where it reads as neither `Anonymous` nor a case.
+                if obj.ReferenceEquals(parsed, null) then
+                    Error malformedUserContextMessage
+                else
+                    Ok parsed
+            with _ ->
+                Error malformedUserContextMessage
 
     /// Mint a signed HS256 token. `uctx` carries the serialised
     /// `UserContext` as a string claim (round-tripped through the
@@ -433,29 +493,28 @@ type JwtPeerAuthProvider(secrets: ISecretStore, expectedAudience: string, policy
                             match validated with
                             | Error e -> return Error(PeerUnauthorized e)
                             | Ok() ->
-                                // LAST: only an otherwise-valid token gets to
-                                // consume a seen-set entry.
-                                let! claimed = this.ClaimNonce doc
-
-                                match claimed with
+                                // Phase 330 — the asserted end-user context is
+                                // read (and refused if unreadable) BEFORE the
+                                // nonce claim: a token that is going to be
+                                // rejected on its payload shape should not
+                                // spend a seen-set entry on the way out.
+                                match PeerJwt.readUserContext doc with
                                 | Error e -> return Error(PeerUnauthorized e)
-                                | Ok() ->
-                                    let name = PeerJwt.getClaim "name" doc |> Option.defaultValue iss
+                                | Ok user ->
+                                    // LAST: only an otherwise-valid token gets to
+                                    // consume a seen-set entry.
+                                    let! claimed = this.ClaimNonce doc
 
-                                    let user =
-                                        match PeerJwt.getClaim "uctx" doc with
-                                        | Some u ->
-                                            try
-                                                JsonRpc.deserialize<UserContext> u
-                                            with _ ->
-                                                Anonymous
-                                        | None -> Anonymous
+                                    match claimed with
+                                    | Error e -> return Error(PeerUnauthorized e)
+                                    | Ok() ->
+                                        let name = PeerJwt.getClaim "name" doc |> Option.defaultValue iss
 
-                                    return
-                                        Ok {
-                                            Caller = { PeerId = iss; DisplayName = name }
-                                            User = user
-                                        }
+                                        return
+                                            Ok {
+                                                Caller = { PeerId = iss; DisplayName = name }
+                                                User = user
+                                            }
         }
 
     interface IPeerAuthProvider with

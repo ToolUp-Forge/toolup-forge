@@ -961,6 +961,15 @@ let allTests =
         // opt-in strict refusal derived from the hosted-contract set.
         PeerAudienceBindingTests.bindingTests
         PeerAudienceBindingTests.postureTests
+        // Phase 330 — delegation assertions verified before dispatch: a
+        // forged `Delegated` originator is refused at the host seam and
+        // never reaches dispatch, a correctly-signed single- and
+        // multi-hop delegation drives the trusted call context, and a
+        // malformed `uctx` rejects rather than degrading to Anonymous.
+        // The negative control ADMITS the forged assertion once the
+        // delegation check is neutered — the pre-330 posture.
+        PeerDelegationVerificationTests.hostVerificationTests
+        PeerDelegationVerificationTests.userContextClaimTests
         // Phase 483 — multi-round protocol orchestrator: a three-round
         // two-party protocol expressed as a step function alone, each
         // DropoutPolicy variant against a missed round deadline,

@@ -30,6 +30,24 @@ namespace ToolUp.InterPlatform
 // key. A receiver that composed no `LocalPeer` identity cannot bind
 // audience and keeps the pre-130 behaviour (signature + exp + nbf only).
 //
+// **Delegation is verified separately, and verifying it is mandatory
+// (Phase 330).** `ValidatePeerToken` authenticates the *calling peer*.
+// The end-user identity it returns arrived inside that peer's own signed
+// payload, so on the `Delegated` case the caller is asserting "I am
+// acting for user U, and peer P authorised me to" — a claim the outer
+// signature says nothing about. The only thing separating a genuine
+// multi-hop delegation from an invented one is
+// `DelegatedAssertion.Signature`, checked by `VerifyDelegation` against
+// the delegating peer's own trust anchor. **A receiver that acts on a
+// `Delegated` principal without calling `VerifyDelegation` first has no
+// delegation security at all** — any peer holding a valid signing key
+// can name any subject. The split is deliberate rather than folded into
+// `ValidatePeerToken`: the provider stays a stateless, policy-free
+// validator (GP 12 rule 4), and the *host* seam owns the enforcement,
+// where the call context is rebuilt. `JsonRpcPeerHost` does exactly that
+// on the contract-dispatch path; a bespoke host built on this interface
+// must do the same.
+//
 // Six portability rules (GP 12):
 //   1. Identity by value — tokens are strings; identities are records.
 //   2. Async at every boundary — every method returns `Async<_>`.
@@ -68,7 +86,13 @@ type IPeerAuthProvider =
     /// claim is bound to it: a token addressed to a different peer (even
     /// under a shared issuer key) and a token with no `aud` are both
     /// rejected (Phase 130). Fails closed: there is no path that returns
-    /// a principal for an unverified token.
+    /// a principal for an unverified token — and an end-user context the
+    /// token asserts but that will not deserialise is a rejection too,
+    /// never a silent downgrade to `Anonymous` (Phase 330).
+    ///
+    /// The returned `User` is the caller's *assertion*, authenticated
+    /// only as far as "this peer sent it". A `Delegated` case is NOT
+    /// verified here — pass it to `VerifyDelegation` before acting on it.
     abstract ValidatePeerToken: token: string -> Async<Result<PeerPrincipal, PeerError>>
 
     /// Verify the signature chain on a `Delegated` assertion that
@@ -76,4 +100,11 @@ type IPeerAuthProvider =
     /// immediate delegating peer's signature over the assertion payload
     /// against that peer's registered trust anchor. `Ok ()` authorises
     /// the delegated identity; `Error (PeerUnauthorized …)` rejects it.
+    ///
+    /// **Mandatory before dispatch (Phase 330).** Every receiver path
+    /// that would act on a `Delegated` principal — rebuild a call
+    /// context from it, authorise against its `Subject`, audit it as the
+    /// originator — MUST call this first and fail closed on `Error`.
+    /// Skipping it makes the assertion self-asserted, which is the
+    /// confused-deputy vector the signature exists to close.
     abstract VerifyDelegation: assertion: DelegatedAssertion -> Async<Result<unit, PeerError>>

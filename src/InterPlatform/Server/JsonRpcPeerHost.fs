@@ -30,6 +30,17 @@ open PeerReflection
 // the `PeerCallContext` from the *validated* `PeerPrincipal`, never from
 // the self-asserted wire payload, so a caller cannot spoof its identity
 // by editing the request body.
+//
+// **Delegation verification (Phase 330).** The validated principal's
+// *end-user* identity is a different question from its *peer* identity:
+// it arrived inside the caller's own signed payload, so the token
+// signature says who sent the assertion and nothing about whether it is
+// true. Before rebuilding the call context, the contract handler
+// therefore runs a `Delegated` originator through
+// `IPeerAuthProvider.VerifyDelegation` and refuses `PeerUnauthorized` on
+// failure — otherwise any peer with a valid signing key could name any
+// subject as the originator, which is what the delegation-chain
+// signature exists to prevent.
 
 /// Reflection shim: awaits a boxed `Async<'R>` and serialises its result
 /// to the wire. Invoked via `MakeGenericMethod(retType)` from the
@@ -297,8 +308,36 @@ module JsonRpcPeerHost =
                 do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
         }
 
-    /// `POST /peer/v1/{contractId}` — authenticate, rebuild the trusted
-    /// call context from the validated principal, dispatch.
+    /// Phase 330 — verify the *originator* a validated principal asserts,
+    /// before anything acts on it.
+    ///
+    /// `ValidatePeerToken` authenticates the calling peer; the `uctx` it
+    /// carries rides inside that peer's own signed payload, so the outer
+    /// signature proves who sent the assertion and nothing about whether
+    /// it is true. On the `Delegated` case the caller is claiming "I am
+    /// acting for user U, and peer P authorised me to" — the classic
+    /// confused-deputy shape — and the only thing separating a genuine
+    /// buyer→broker→seller delegation from an invented one is
+    /// `DelegatedAssertion.Signature`, checked against the delegating
+    /// peer's own trust anchor. Without this call any peer holding a
+    /// valid signing key could name any subject, and the whole delegation
+    /// signature would be decorative.
+    ///
+    /// `Anonymous` and `Direct` short-circuit without touching the auth
+    /// provider, so a non-delegating deployment runs exactly the code it
+    /// ran before this phase and pays nothing for the check (GP 11 /
+    /// GP 13). `Direct` is deliberately NOT covered: it is a single-hop
+    /// "this peer vouches for its own user" claim, already bounded by the
+    /// authenticated caller, and it carries no signature to verify.
+    let private verifyOriginator (auth: IPeerAuthProvider) (principal: PeerPrincipal) : Async<Result<unit, PeerError>> =
+        match principal.User with
+        | Anonymous
+        | Direct _ -> async { return Ok() }
+        | Delegated assertion -> auth.VerifyDelegation assertion
+
+    /// `POST /peer/v1/{contractId}` — authenticate, verify any asserted
+    /// delegation, rebuild the trusted call context from the validated
+    /// principal, dispatch.
     let private contractHandler (contractId: string) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
             let auth = getService<IPeerAuthProvider> ctx
@@ -312,46 +351,57 @@ module JsonRpcPeerHost =
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
                 | Ok principal ->
-                    let! body = ctx.ReadBodyFromRequestAsync()
+                    // Fail closed on an unverifiable delegation BEFORE the
+                    // body is read: the request never reaches dispatch, and
+                    // no audit row attributes work to an originator this
+                    // receiver could not authenticate.
+                    let! originator = verifyOriginator auth principal |> Async.StartAsTask
 
-                    match tryParse body with
-                    | Error e -> return! writeJson 400 (JsonRpc.failure "" e) next ctx
-                    | Ok(request, payload) ->
-                        // Trust the validated principal, never the
-                        // self-asserted wire payload's identity.
-                        let trustedContext = {
-                            payload.Context with
-                                Peer = principal.Caller
-                                User = principal.User
-                        }
+                    match originator with
+                    | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
+                    | Ok() ->
+                        let! body = ctx.ReadBodyFromRequestAsync()
 
-                        let! result =
-                            peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
-                            |> Async.StartAsTask
-
-                        do!
-                            auditPeerCall
-                                ctx
-                                contractId
-                                request.Method
-                                principal.Caller.PeerId
-                                trustedContext.RootRequestId
-                                result
-
-                        match result with
-                        | Ok resultJson ->
-                            // Build the response by hand so the
-                            // already-serialised result rides in
-                            // `Result` without a second JSON encode.
-                            let response = {
-                                JsonRpc = JsonRpc.version
-                                Result = Some resultJson
-                                Error = None
-                                Id = request.Id
+                        match tryParse body with
+                        | Error e -> return! writeJson 400 (JsonRpc.failure "" e) next ctx
+                        | Ok(request, payload) ->
+                            // Trust the validated principal, never the
+                            // self-asserted wire payload's identity. The
+                            // `Delegated` originator inside it has been
+                            // signature-verified above (Phase 330).
+                            let trustedContext = {
+                                payload.Context with
+                                    Peer = principal.Caller
+                                    User = principal.User
                             }
 
-                            return! writeJson 200 response next ctx
-                        | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
+                            let! result =
+                                peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
+                                |> Async.StartAsTask
+
+                            do!
+                                auditPeerCall
+                                    ctx
+                                    contractId
+                                    request.Method
+                                    principal.Caller.PeerId
+                                    trustedContext.RootRequestId
+                                    result
+
+                            match result with
+                            | Ok resultJson ->
+                                // Build the response by hand so the
+                                // already-serialised result rides in
+                                // `Result` without a second JSON encode.
+                                let response = {
+                                    JsonRpc = JsonRpc.version
+                                    Result = Some resultJson
+                                    Error = None
+                                    Id = request.Id
+                                }
+
+                                return! writeJson 200 response next ctx
+                            | Error e -> return! writeJson 200 (JsonRpc.failure request.Id e) next ctx
         }
 
     /// `GET /peer/v1/capabilities` — authenticate, then answer the

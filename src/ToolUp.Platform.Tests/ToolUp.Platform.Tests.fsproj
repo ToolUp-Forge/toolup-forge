@@ -1188,6 +1188,13 @@
              and the compose-time posture the advisory / strict gate
              derives from the hosted-contract set. -->
         <Compile Include="InProcess\PeerAudienceBindingTests.fs" />
+        <!-- Phase 330 — delegation assertions verified before dispatch: the
+             host seam actually calling VerifyDelegation (over a TestServer,
+             with a recording IPlatformPeer proving a refused call never
+             reaches dispatch) and the provider's explicit reject on a
+             malformed `uctx`. The forged-assertion exposure is pinned by a
+             NEGATIVE CONTROL that ADMITS it when the check is neutered. -->
+        <Compile Include="InProcess\PeerDelegationVerificationTests.fs" />
         <!-- Phase 483 — multi-round protocol orchestrator: the round
              barrier + accumulated-state thread, each DropoutPolicy
              variant, restart-resume from persisted state, and

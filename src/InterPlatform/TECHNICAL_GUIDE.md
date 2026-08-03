@@ -72,6 +72,8 @@ Clock-skew tolerance is 60 seconds (second-precision, the JWT standard's lower b
 
 `VerifyDelegation` validates a `DelegatedAssertion` by HMAC over the canonical `{Subject}|{chain}` byte string, signed by the **last** peer in the delegation chain (its key read from `ISecretStore`), compared constant-time. An empty chain is rejected. The `Delegated` `UserContext` case + the cascade fields are wired from day one so a future federation phase does not force a v2 wire break — but the foundation only *verifies* a delegation assertion; it does not yet mint cascades.
 
+**Verification is mandatory, and the host performs it (Phase 330).** `ValidatePeerToken` authenticates the *calling peer*; the `uctx` it returns rode inside that peer's own signed payload, so a `Delegated` case is an assertion the outer signature says nothing about. `JsonRpcPeerHost`'s contract-dispatch path therefore runs a `Delegated` originator through `VerifyDelegation` **before** rebuilding the call context and refuses `PeerUnauthorized` on failure — without it, any peer holding a valid signing key could name any subject as the originator. `Anonymous` / `Direct` short-circuit untouched. A bespoke host built on `IPeerAuthProvider` must do the same; the compatibility consequences are in [`docs/migrations/330-peer-delegation-verification.md`](../../docs/migrations/330-peer-delegation-verification.md). Relatedly, a `uctx` claim that is present but will not deserialise is now an explicit rejection rather than a silent downgrade to `Anonymous`.
+
 ### Trust boundary
 
 The JSON-RPC host rebuilds the `PeerCallContext` from the **validated `PeerPrincipal`**, never from the self-asserted wire payload:
