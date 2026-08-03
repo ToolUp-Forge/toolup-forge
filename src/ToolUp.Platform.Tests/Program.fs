@@ -200,6 +200,11 @@ let allTests =
         TwilioNotificationSinkTests.tests
         WebPushNotificationSinkTests.tests
         HnswVectorStoreTests.tests
+        // Phase 507 — the external rung of the vector-store scale story.
+        // Structural arm always on (scope isolation read off the SQL,
+        // create-time guards, codecs); live arm Pending unless
+        // TOOLUP_PGVECTOR_CONNECTION_STRING is set.
+        PgvectorVectorStoreTests.tests
         KnowledgeUserScopeIsolationTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests

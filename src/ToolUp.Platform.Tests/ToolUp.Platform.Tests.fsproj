@@ -1353,6 +1353,11 @@
              very same cleartext call — so "refused" cannot mean
              "refuses everything". -->
         <Compile Include="InProcess\PeerTransportTlsTests.fs" />
+        <!-- Phase 507 — Pgvector IVectorStore companion. Compiled AFTER
+             InProcess\HnswVectorStoreTests.fs: the live arm binds that
+             file's shared `deterministicOrderingContract` rather than
+             restating it. -->
+        <Compile Include="InProcess\PgvectorVectorStoreTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -1446,6 +1451,7 @@
         <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
         <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
+        <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <!-- Phase 46.B — Sample client-resident-tool reference companion.
              Tests project consumes Core + Server tiers; Client tier is
              Fable and never reached by the .NET runner. -->

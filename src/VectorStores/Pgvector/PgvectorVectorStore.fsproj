@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.VectorStores.Pgvector</PackageId>
+    <AssemblyName>ToolUp.VectorStores.Pgvector</AssemblyName>
+    <Description>PostgreSQL + pgvector IVectorStore for ToolUp.RAG. Durable, multi-replica-safe vectors — the external rung of the scale story above the in-process InMemory and HNSW stores. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;rag;vector-store;pgvector;postgresql;npgsql;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 507 — external IVectorStore companion. GP 1 — the Npgsql
+       dependency is isolated to this companion; it never reaches
+       ToolUp.Platform.*. GP 2 — both PostgreSQL and pgvector are OSS and
+       Npgsql is PostgreSQL-licensed, so there is no paid default. -->
+  <ItemGroup>
+    <Compile Include="PgvectorVectorStore.fs" />
+    <Compile Include="PgvectorVectorStoreHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

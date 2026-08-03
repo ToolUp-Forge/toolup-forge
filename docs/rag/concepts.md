@@ -107,13 +107,21 @@ and ChunkOrigin = UserContent | Narrative | Note | Synthetic
 - `Vacuum` hard-removes tombstones past the retention window.
 - `DeleteByScope` is a config-grade reset — bypasses tombstone semantics for "delete everything in scope X" (e.g., crypto-shred companion's scope-key destruction).
 
-Ceiling: ~50,000 chunks before query latency becomes noticeable (1M+ comparisons per search). For larger corpora, swap to `ToolUp.VectorStores.Hnsw`.
+Ceiling: ~50,000 chunks before query latency becomes noticeable (1M+ comparisons per search). For larger corpora, swap to `ToolUp.VectorStores.Hnsw`; for durable, multi-replica-safe vectors, to `ToolUp.VectorStores.Pgvector`.
 
 ### `ToolUp.VectorStores.Hnsw`
 
 Hierarchical Navigable Small World index. Approximate nearest-neighbour; trades ~5% recall accuracy for orders-of-magnitude speedup. Persists the index to `IBlobStorage` for warm restart. Suitable for low-millions of chunks per scope.
 
-For multi-million-chunk or horizontal-scale deployments, a distributed vector store (Qdrant, Pinecone, Weaviate, pgvector) is the right target — future companion work. The `IVectorStore` contract is portable; the `IVectorStoreContract` test pack ensures any impl is drop-in.
+Still a **single-process** store: the graph lives in process memory and is snapshotted asynchronously, so two replicas each own a private index.
+
+### `ToolUp.VectorStores.Pgvector`
+
+PostgreSQL + [pgvector](https://github.com/pgvector/pgvector) — the external rung, and the one to reach for when the constraint is *replicas* rather than corpus size. The index is the database, so every replica reads and writes the same rows: retrieval is consistent across replicas with no per-process index state, which is precisely what the single-instance startup validators guard against. Scope is a `scope` column in the composite primary key and every chunk-touching statement carries a `scope = @scope` predicate, so isolation is structural (GP 4) exactly as the per-scope HNSW graph is. Exact cosine search by default; an HNSW / IVFFlat index inside the database is an opt-in at scale. Connection, extension and schema failures are raised at `create` time, never at first query.
+
+See [`companions/vector-stores.md`](../companions/vector-stores.md) for the full comparison, the schema, and the composition snippets.
+
+The `IVectorStore` contract is portable; the shared contract cases (deterministic ordering, scope isolation, the tombstone lifecycle) are bound against every implementation, so any impl is drop-in.
 
 ## Retrieval pipeline
 
