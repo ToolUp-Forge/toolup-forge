@@ -124,6 +124,11 @@ type InMemoryResultStore() =
     let store = ConcurrentDictionary<string * PeerJobId, PeerJobRecord>()
 
     interface IPeerJobResultStore with
+        // Phase 316 — the pack's double retains everything; retention
+        // behaviour is exercised against the real blob-backed store in
+        // `InProcess/PeerJobRetentionTests.fs`.
+        member _.Retention = PeerJobRetentionPolicy.keepForever
+
         member _.SaveResult(scopeId: string, jobId: PeerJobId, ownerPeerId: string, status: PeerJobStatus<string>) = async {
             store[(scopeId, jobId)] <- {
                 OwnerPeerId = ownerPeerId

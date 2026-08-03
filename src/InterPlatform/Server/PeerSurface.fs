@@ -189,7 +189,9 @@ module PeerSurface =
     /// A never-invoked `PeerJobFusion` that lets `describe` materialise
     /// the same `PeerContractHost` the compose path builds — including
     /// the long-running job-handler names — without a composed job
-    /// substrate. Every member raises (see `probeUnreachable`).
+    /// substrate. Every *operation* raises (see `probeUnreachable`); the
+    /// data-only `Retention` property reports `keepForever`, since the
+    /// probe stores nothing there is nothing to retain.
     let private probeFusion: PeerJobFusion = {
         Scheduler =
             { new IJobScheduler with
@@ -207,6 +209,7 @@ module PeerSurface =
             }
         ResultStore =
             { new IPeerJobResultStore with
+                member _.Retention = PeerJobRetentionPolicy.keepForever
                 member _.SaveResult(_, _, _, _) = probeUnreachable "SaveResult"
                 member _.TryGetResult(_, _) = probeUnreachable "TryGetResult"
             }

@@ -1165,6 +1165,10 @@
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->
         <Compile Include="InProcess\PeerSurfaceTests.fs" />
+        <!-- Phase 316 — peer job-result retention: TTL expiry, delete-on-read
+             with a poll-grace window, and blob reclamation, over the real
+             BlobPeerJobResultStore with an injected clock. -->
+        <Compile Include="InProcess\PeerJobRetentionTests.fs" />
         <!-- Giraffe stock-helper DI defaults — RequestErrors.* / negotiate /
              json resolve INegotiationConfig + Json.ISerializer from DI;
              ComposeBootstrap.registerGiraffeDefaults registers them

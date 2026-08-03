@@ -5,6 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.InterPlatform.BlobPeerJobResultStore (class)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy)
+ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.BlobPeerRegistry (class)
 ToolUp.InterPlatform.BlobPeerRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.CleanRoomBroker (class)
@@ -109,6 +111,7 @@ ToolUp.InterPlatform.IPeerHandshake.LocalProfile() : Microsoft.FSharp.Control.FS
 ToolUp.InterPlatform.IPeerHandshake.Negotiate(ToolUp.InterPlatform.TargetPeer, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ContractVersion, ToolUp.InterPlatform.PeerHandshakeError]]
 ToolUp.InterPlatform.IPeerHandshake.NegotiateMethod(ToolUp.InterPlatform.TargetPeer, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.MethodResolution, ToolUp.InterPlatform.MethodNegotiationError]]
 ToolUp.InterPlatform.IPeerJobResultStore (interface)
+ToolUp.InterPlatform.IPeerJobResultStore.Retention : ToolUp.InterPlatform.PeerJobRetentionPolicy { get }
 ToolUp.InterPlatform.IPeerJobResultStore.SaveResult(System.String, System.Guid, System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IPeerJobResultStore.TryGetResult(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobRecord]]
 ToolUp.InterPlatform.IPeerProfileProvider (interface)
@@ -401,6 +404,12 @@ ToolUp.InterPlatform.PeerJob (class)
 ToolUp.InterPlatform.PeerJob.Scope : System.String (literal)
 ToolUp.InterPlatform.PeerJob.SourceModule : System.String (literal)
 ToolUp.InterPlatform.PeerJob.handlerName(System.String, System.String) : System.String
+ToolUp.InterPlatform.PeerJobDocument (class)
+ToolUp.InterPlatform.PeerJobDocument..ctor(System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.InterPlatform.PeerJobDocument.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.PeerJobDocument.OwnerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerJobDocument.ReadExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.PeerJobDocument.Status : ToolUp.InterPlatform.PeerJobStatus`1[System.String] { get }
 ToolUp.InterPlatform.PeerJobFusion (class)
 ToolUp.InterPlatform.PeerJobFusion..ctor(ToolUp.Platform.IJobScheduler, ToolUp.InterPlatform.IPeerJobResultStore)
 ToolUp.InterPlatform.PeerJobFusion.ResultStore : ToolUp.InterPlatform.IPeerJobResultStore { get }
@@ -424,6 +433,17 @@ ToolUp.InterPlatform.PeerJobRecord (class)
 ToolUp.InterPlatform.PeerJobRecord..ctor(System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String])
 ToolUp.InterPlatform.PeerJobRecord.OwnerPeerId : System.String { get }
 ToolUp.InterPlatform.PeerJobRecord.Status : ToolUp.InterPlatform.PeerJobStatus`1[System.String] { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicy (class)
+ToolUp.InterPlatform.PeerJobRetentionPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Boolean, System.TimeSpan)
+ToolUp.InterPlatform.PeerJobRetentionPolicy.DeleteOnRead : System.Boolean { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicy.GraceWindow : System.TimeSpan { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicy.Ttl : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule (class)
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule.default' : ToolUp.InterPlatform.PeerJobRetentionPolicy { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule.keepForever : ToolUp.InterPlatform.PeerJobRetentionPolicy { get }
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule.withDeleteOnRead(System.TimeSpan, ToolUp.InterPlatform.PeerJobRetentionPolicy) : ToolUp.InterPlatform.PeerJobRetentionPolicy
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule.withTtl(System.TimeSpan, ToolUp.InterPlatform.PeerJobRetentionPolicy) : ToolUp.InterPlatform.PeerJobRetentionPolicy
+ToolUp.InterPlatform.PeerJobRetentionPolicyModule.withoutTtl(ToolUp.InterPlatform.PeerJobRetentionPolicy) : ToolUp.InterPlatform.PeerJobRetentionPolicy
 ToolUp.InterPlatform.PeerJobStatus`1 (class)
 ToolUp.InterPlatform.PeerJobStatus`1.IsCompleted : System.Boolean { get }
 ToolUp.InterPlatform.PeerJobStatus`1.IsFailed : System.Boolean { get }

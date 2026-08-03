@@ -32,7 +32,7 @@ The wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-
 | Default receiver | [`Server/DefaultPlatformPeer.fs`](Server/DefaultPlatformPeer.fs) | `DefaultPlatformPeer` (contract table + cascade guards) |
 | Default directory | [`Server/BlobPeerRegistry.fs`](Server/BlobPeerRegistry.fs) | `BlobPeerRegistry` |
 | Default handshake | [`Server/InMemoryPeerHandshake.fs`](Server/InMemoryPeerHandshake.fs) | `InMemoryPeerHandshake` |
-| Job-substrate fusion | [`Server/PeerJobHandler.fs`](Server/PeerJobHandler.fs) | `IPeerJobResultStore`, `BlobPeerJobResultStore`, `PeerJobFusion`, `PeerJobHandler`, module `PeerJob`, `PeerContractHost` |
+| Job-substrate fusion | [`Server/PeerJobHandler.fs`](Server/PeerJobHandler.fs) | `IPeerJobResultStore`, `BlobPeerJobResultStore`, `PeerJobRetentionPolicy`, `PeerJobDocument`, `PeerJobFusion`, `PeerJobHandler`, module `PeerJob`, `PeerContractHost` |
 | Outbound HTTP transport | [`Server/HttpPeerClient.fs`](Server/HttpPeerClient.fs) | `HttpPeerClient` |
 | Typed initiator proxy | [`Server/JsonRpcPeerClient.fs`](Server/JsonRpcPeerClient.fs) | `PeerProxyConfig`, module `JsonRpcPeerClient` |
 | JSON-RPC host | [`Server/JsonRpcPeerHost.fs`](Server/JsonRpcPeerHost.fs) | module `JsonRpcPeerHost` (`contract`, `routes`) |

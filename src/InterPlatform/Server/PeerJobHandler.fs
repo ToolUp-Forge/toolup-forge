@@ -24,7 +24,9 @@ open PeerReflection
 //     substrate's `JobResult` is `Success | …Failure`, with no payload,
 //     so a finished peer call parks its *typed* (serialised) result
 //     here, keyed by `JobId` and stamped with the scheduling caller's
-//     `PeerId`, for the polling *owner* to retrieve (Phase 308).
+//     `PeerId`, for the polling *owner* to retrieve (Phase 308), under
+//     a `PeerJobRetentionPolicy` that bounds how long it stays there
+//     (Phase 316).
 //   • `PeerJobHandler` — the `IJobHandler` the scheduler dispatches: it
 //     unmarshals the call arguments from the job payload, applies the
 //     contract implementation, resolves the returned `PeerJobHandle<'T>`
@@ -55,6 +57,78 @@ type PeerJobRecord = {
     Status: PeerJobStatus<string>
 }
 
+/// How long a parked peer job result is retained (Phase 316). Expressed
+/// as a value so a distributed `IPeerJobResultStore` honours the same
+/// contract rather than re-deriving its own — policy as data, never a
+/// callback (GP 12 rule 3).
+///
+/// Retention here is not only a storage-growth question. These documents
+/// hold the *typed* federated results of a long-running peer call, so an
+/// unbounded store is a data-retention exposure for a clean-room or
+/// privacy-sensitive federation (GP 4), and it compounds the Phase 308
+/// ownership posture: without a bound, a stale result stays readable by
+/// its owner forever.
+type PeerJobRetentionPolicy = {
+    /// Time from the terminal write to expiry. An expired record reads as
+    /// absent and its blob is reclaimed on that read. `None` keeps the
+    /// record until an external lifecycle removes it — the behaviour
+    /// before retention existed.
+    Ttl: TimeSpan option
+    /// Reclaim a record once it has been read, rather than waiting out
+    /// `Ttl`. The first read stamps a deadline `GraceWindow` ahead of
+    /// itself; reads inside that window still resolve, so a retried or
+    /// duplicated poll is not punished for the first one having landed.
+    DeleteOnRead: bool
+    /// How long a delete-on-read record stays readable after its first
+    /// read. Ignored when `DeleteOnRead` is `false`. `TimeSpan.Zero`
+    /// means the record is absent from the next read onwards.
+    GraceWindow: TimeSpan
+}
+
+[<RequireQualifiedAccess>]
+module PeerJobRetentionPolicy =
+    /// No TTL, no delete-on-read: byte-for-byte the behaviour before
+    /// retention existed. The escape hatch for a deployment whose own
+    /// lifecycle already owns these blobs.
+    let keepForever: PeerJobRetentionPolicy = {
+        Ttl = None
+        DeleteOnRead = false
+        GraceWindow = TimeSpan.Zero
+    }
+
+    /// What a deployment gets without configuring anything: a
+    /// deliberately generous 30-day TTL, no delete-on-read (GP 11). A
+    /// poll cycle is a minutes-scale conversation between two peers, so
+    /// 30 days is several orders of magnitude of headroom — a deployment
+    /// that never thinks about retention keeps every result far longer
+    /// than any caller could still be polling for it, and stops
+    /// accumulating them forever.
+    let default': PeerJobRetentionPolicy = {
+        keepForever with
+            Ttl = Some(TimeSpan.FromDays 30.0)
+            GraceWindow = TimeSpan.FromMinutes 5.0
+    }
+
+    /// Bound the record's lifetime to `ttl` from the terminal write.
+    let withTtl (ttl: TimeSpan) (policy: PeerJobRetentionPolicy) : PeerJobRetentionPolicy = {
+        policy with
+            Ttl = Some ttl
+    }
+
+    /// Drop the TTL, keeping whatever delete-on-read behaviour the policy
+    /// already carries.
+    let withoutTtl (policy: PeerJobRetentionPolicy) : PeerJobRetentionPolicy = { policy with Ttl = None }
+
+    /// Reclaim a record `grace` after its first read. `Ttl` stays as the
+    /// backstop for a result nobody ever polls — delete-on-read is lazy
+    /// by construction (a stateless store has no timer of its own), so a
+    /// never-read record is reclaimed by the TTL, not by this.
+    let withDeleteOnRead (grace: TimeSpan) (policy: PeerJobRetentionPolicy) : PeerJobRetentionPolicy = {
+        policy with
+            DeleteOnRead = true
+            GraceWindow = grace
+    }
+
 /// Persists a long-running peer call's terminal status, keyed by the
 /// backing `JobId`. `IJobScheduler`'s `JobResult` carries no result
 /// payload, so the typed (serialised) result rides here instead. Async
@@ -71,40 +145,162 @@ type IPeerJobResultStore =
     /// Read a peer job's owner-stamped terminal record. `None` means the
     /// job has not yet finished (the caller keeps polling); `Some` is
     /// terminal.
+    ///
+    /// A record retired by `Retention` — expired past its TTL, or swept
+    /// after a delete-on-read grace window — reads as `None` too, so a
+    /// caller cannot distinguish *expired* from *never existed*. That
+    /// indistinguishability is deliberate and matches the Phase 308
+    /// non-disclosure posture, where an unknown `jobId` is answered
+    /// `Pending` precisely so possession of an id discloses nothing. The
+    /// cost is that a caller who polls too late sees `Pending` forever
+    /// rather than a "gone" signal; the TTL is generous enough
+    /// (`PeerJobRetentionPolicy.default'`) that reaching it means the
+    /// caller had already abandoned the call.
     abstract TryGetResult: scopeId: string * jobId: PeerJobId -> Async<PeerJobRecord option>
+
+    /// The retention policy this store applies (Phase 316). Data, not
+    /// behaviour: a distributed implementation reports the policy it
+    /// honours, and an admin / diagnostic surface can show a deployment
+    /// what its federated results' lifetime actually is without knowing
+    /// which store is registered.
+    abstract Retention: PeerJobRetentionPolicy
+
+/// The document `BlobPeerJobResultStore` writes per job: the fields a
+/// poll returns (`PeerJobRecord`) plus the retention stamps that decide
+/// when it stops being returned.
+///
+/// Deliberately a separate type from `PeerJobRecord` rather than two more
+/// fields on it: the record is the value every caller — and every
+/// alternative `IPeerJobResultStore` — constructs, so widening it would
+/// be a compile break at every construction site (GP 11). The stamps are
+/// this store's own bookkeeping, not part of what a poll answers.
+///
+/// A document written before retention existed carries neither stamp;
+/// both absent fields deserialise to `None`, so a pre-316 blob is kept
+/// forever and no deployment loses a result to the upgrade.
+type PeerJobDocument = {
+    OwnerPeerId: string
+    Status: PeerJobStatus<string>
+    /// Absolute expiry derived from `PeerJobRetentionPolicy.Ttl` at the
+    /// terminal write. `None` = no TTL applied.
+    ExpiresAt: DateTimeOffset option
+    /// Absolute expiry stamped by the first read under a delete-on-read
+    /// policy. `None` = never read (or delete-on-read is off).
+    ReadExpiresAt: DateTimeOffset option
+}
 
 /// `IBlobStorage`-backed default. One JSON document per job under the
 /// reserved `_platform` container at `peers/jobs/{scopeId}/{jobId}.json`,
 /// matching the `BlobPeerRegistry` layout. Stateless between calls
 /// (GP 12 rule 4) — every method reads / writes through to the blob
-/// store.
-type BlobPeerJobResultStore(blobs: IBlobStorage) =
+/// store, including the retention stamps, so nothing is held in memory
+/// across a poll and a second instance behaves identically.
+///
+/// Retention is enforced **lazily, on read**: an expired document is
+/// reported absent and its blob deleted in the same call. That keeps the
+/// store free of a background sweeper (no hosted service, no scheduler
+/// dependency — GP 13) at the cost of a never-polled result occupying
+/// storage until something reads it. A deployment that wants eager
+/// reclamation fuses its own sweep onto `IJobScheduler` over the
+/// `peers/jobs/` prefix; the stamps it needs are in the document.
+///
+/// The policy and the clock arrive as **overloads**, not optional
+/// arguments: F# compiles `?retention` / `?now` into one widened
+/// constructor, which erases the pre-316 `(IBlobStorage)` signature from
+/// the emitted surface — source-compatible, but a binary break the
+/// public-API baseline correctly reports as a removal. Explicit
+/// secondary constructors keep the original signature intact, so this
+/// phase's surface diff is purely additive (GP 11).
+type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPolicy, now: unit -> DateTimeOffset) =
     let container = "_platform"
+    let policy = retention
+    let clock = now
     let blobNameFor (scopeId: string) (jobId: PeerJobId) = $"peers/jobs/{scopeId}/{jobId}.json"
 
+    /// The instant this document stops being readable — the earlier of
+    /// the TTL stamp and the delete-on-read stamp, since either alone is
+    /// sufficient to retire it.
+    let deadlineOf (doc: PeerJobDocument) =
+        match doc.ExpiresAt, doc.ReadExpiresAt with
+        | Some ttl, Some read -> Some(min ttl read)
+        | Some ttl, None -> Some ttl
+        | None, Some read -> Some read
+        | None, None -> None
+
+    let writeDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
+        let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize doc)
+        let! _ = blobs.Upload(container, blobNameFor scopeId jobId, payload)
+        return ()
+    }
+
+    /// The pre-316 call shape, unchanged: the generous default policy on
+    /// the system clock.
+    new(blobs: IBlobStorage) =
+        BlobPeerJobResultStore(blobs, PeerJobRetentionPolicy.default', (fun () -> DateTimeOffset.UtcNow))
+
+    /// A deployment-chosen retention policy on the system clock. The
+    /// three-argument form takes the clock too, for tests that need to
+    /// cross a TTL horizon without waiting one out.
+    new(blobs: IBlobStorage, retention: PeerJobRetentionPolicy) =
+        BlobPeerJobResultStore(blobs, retention, (fun () -> DateTimeOffset.UtcNow))
+
     interface IPeerJobResultStore with
+        member _.Retention = policy
+
         member _.SaveResult(scopeId: string, jobId: PeerJobId, ownerPeerId: string, status: PeerJobStatus<string>) = async {
-            let record = {
+            let writtenAt = clock ()
+
+            let doc = {
                 OwnerPeerId = ownerPeerId
                 Status = status
+                ExpiresAt = policy.Ttl |> Option.map (fun ttl -> writtenAt.Add ttl)
+                ReadExpiresAt = None
             }
 
-            let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize record)
-            let! _ = blobs.Upload(container, blobNameFor scopeId jobId, payload)
-            return ()
+            do! writeDocument scopeId jobId doc
         }
 
         member _.TryGetResult(scopeId: string, jobId: PeerJobId) = async {
             let! result = blobs.Download(container, blobNameFor scopeId jobId)
 
-            return
+            let decoded =
                 match result with
                 | Ok bytes ->
                     try
-                        Some(JsonRpc.deserialize<PeerJobRecord> (Encoding.UTF8.GetString bytes))
+                        Some(JsonRpc.deserialize<PeerJobDocument> (Encoding.UTF8.GetString bytes))
                     with _ ->
                         None
                 | Error _ -> None
+
+            match decoded with
+            | None -> return None
+            | Some doc ->
+                let readAt = clock ()
+
+                match deadlineOf doc with
+                | Some deadline when readAt >= deadline ->
+                    // Retired. Reclaim the blob on the way past — this is
+                    // the whole sweep, and it runs on the read that would
+                    // otherwise have served a stale federated result.
+                    let! _ = blobs.Delete(container, blobNameFor scopeId jobId)
+                    return None
+                | _ ->
+                    // A delete-on-read record starts its grace clock on
+                    // the FIRST read only; a later read must not slide the
+                    // window forward, or a polling loop would keep the
+                    // result alive indefinitely.
+                    if policy.DeleteOnRead && Option.isNone doc.ReadExpiresAt then
+                        do!
+                            writeDocument scopeId jobId {
+                                doc with
+                                    ReadExpiresAt = Some(readAt.Add policy.GraceWindow)
+                            }
+
+                    return
+                        Some {
+                            OwnerPeerId = doc.OwnerPeerId
+                            Status = doc.Status
+                        }
         }
 
 /// The scheduler + result-store pair the host fuses long-running calls

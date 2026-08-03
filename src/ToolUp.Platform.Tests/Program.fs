@@ -936,6 +936,10 @@ let allTests =
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.
         PeerSurfaceTests.tests
+        // Phase 316 — peer job-result retention: a parked federated
+        // result is bounded by a TTL and/or reclaimed after a
+        // delete-on-read grace window, and reads as absent once retired.
+        PeerJobRetentionTests.tests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /
