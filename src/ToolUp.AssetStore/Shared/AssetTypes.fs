@@ -158,6 +158,156 @@ type AssetRecord = {
     DerivativeProfile: DerivativeProfileId
 }
 
+// ─── Phase 186 — upload content-validation seam ──────────────────
+//
+// `UploadRequest.create` validates what the *caller asserts*: the
+// declared `Content-Type` header, the filename, the alt text, the
+// byte count. None of that inspects the bytes, and a declared MIME
+// is an assertion the uploader chooses freely. This seam is where a
+// deployment plugs the checks that trust the bytes instead — a
+// magic-byte cross-check, a malware/AV scan, a domain-specific
+// content rule — without forking the upload handler.
+//
+// The rejection vocabulary is deliberately small and typed, and the
+// third case is the one that carries the whole security posture:
+// `ValidationUnavailable` is NOT `Ok`. A scanner that answers
+// "clean" because its backend is unreachable is worse than no
+// scanner at all — it converts an outage into a silent admission —
+// so the seam gives "cannot answer" its own case and every caller
+// treats it as a refusal. Same shape as `PeerReplayVerdict`'s
+// `ReplayGuardUnavailable` in the peer substrate.
+
+/// Why the content-validation seam refused an upload whose
+/// *declared* metadata already passed `UploadRequest.create`.
+/// Deterministic in the bytes + declared MIME, except
+/// `ValidationUnavailable`, which reports a transient backend
+/// condition and is always a refusal (never an admission).
+type UploadRejection =
+    /// The bytes do not corroborate the declared `Content-Type`.
+    /// `sniffed` is what the validator concluded the bytes actually
+    /// are — `"application/octet-stream"` when it recognised
+    /// nothing, `"text/html"` when the payload carries executable
+    /// markup behind a valid image header (a polyglot).
+    | MimeMismatch of declared: string * sniffed: string
+    /// A scan backend positively identified the payload. `detail`
+    /// is the backend's signature / verdict string, surfaced so an
+    /// operator can correlate with the scanner's own log; it is
+    /// never interpreted by the SDK.
+    | MalwareDetected of detail: string
+    /// The validator could not reach a verdict — scanner
+    /// unreachable, credential expired, the validator itself
+    /// raised. Callers MUST treat this as a refusal: a validator
+    /// that cannot see its backing state has no basis for calling
+    /// an upload clean.
+    | ValidationUnavailable of reason: string
+
+/// Magic-byte inspection — pure BCL, no vendor dependency (GP 1),
+/// so it is safe in the shared tier and costs a deployment that
+/// never composes a validator exactly nothing (GP 13).
+///
+/// The table is deliberately narrow: the five image types the SDK's
+/// default accept-list carries, plus the handful of shapes a
+/// *spoofed* image usually turns out to be (archive, executable,
+/// PDF). An unrecognised prefix returns `None` rather than a guess —
+/// the caller decides whether "cannot corroborate" is admissible.
+[<RequireQualifiedAccess>]
+module MagicBytes =
+
+    /// What a validator reports as `sniffed` when the prefix
+    /// matched nothing in the table.
+    let unrecognised = "application/octet-stream"
+
+    /// What a validator reports as `sniffed` for a polyglot — bytes
+    /// carrying a legitimate image header *and* markup a browser
+    /// would execute if it ever sniffed past the declared type.
+    let markup = "text/html"
+
+    let private ascii (s: string) = Text.Encoding.ASCII.GetBytes s
+
+    let private matchesAt (bytes: byte[]) (offset: int) (pattern: byte[]) =
+        if isNull bytes || bytes.Length < offset + pattern.Length then
+            false
+        else
+            let mutable ok = true
+
+            for i in 0 .. pattern.Length - 1 do
+                if bytes[offset + i] <> pattern[i] then
+                    ok <- false
+
+            ok
+
+    /// The MIME type the leading bytes actually describe, or `None`
+    /// when the prefix matches nothing known. Never raises, never
+    /// reads past the prefix it needs.
+    let sniff (bytes: byte[]) : string option =
+        let at offset (text: string) = matchesAt bytes offset (ascii text)
+        let atB offset pattern = matchesAt bytes offset pattern
+
+        if atB 0 [| 0x89uy; 0x50uy; 0x4Euy; 0x47uy; 0x0Duy; 0x0Auy; 0x1Auy; 0x0Auy |] then
+            Some "image/png"
+        elif atB 0 [| 0xFFuy; 0xD8uy; 0xFFuy |] then
+            Some "image/jpeg"
+        elif at 0 "GIF87a" || at 0 "GIF89a" then
+            Some "image/gif"
+        elif at 0 "RIFF" && at 8 "WEBP" then
+            Some "image/webp"
+        elif at 4 "ftyp" && (at 8 "avif" || at 8 "avis") then
+            Some "image/avif"
+        elif at 0 "%PDF-" then
+            Some "application/pdf"
+        elif at 0 "BM" then
+            Some "image/bmp"
+        elif
+            atB 0 [| 0x49uy; 0x49uy; 0x2Auy; 0x00uy |]
+            || atB 0 [| 0x4Duy; 0x4Duy; 0x00uy; 0x2Auy |]
+        then
+            Some "image/tiff"
+        elif atB 0 [| 0x50uy; 0x4Buy; 0x03uy; 0x04uy |] then
+            Some "application/zip"
+        elif atB 0 [| 0x1Fuy; 0x8Buy |] then
+            Some "application/gzip"
+        elif atB 0 [| 0x7Fuy; 0x45uy; 0x4Cuy; 0x46uy |] then
+            Some "application/x-elf"
+        elif atB 0 [| 0x4Duy; 0x5Auy |] then
+            Some "application/vnd.microsoft.portable-executable"
+        else
+            None
+
+    /// Is `mime` a raster image — i.e. a type whose whole file is
+    /// opaque binary, so ASCII markup appearing inside it is a
+    /// deliberate polyglot rather than legitimate content? Vector
+    /// and document formats are excluded precisely because markup
+    /// there is normal.
+    let isRasterImage (mime: string) =
+        match mime with
+        | "image/png"
+        | "image/jpeg"
+        | "image/gif"
+        | "image/webp"
+        | "image/avif"
+        | "image/bmp"
+        | "image/tiff" -> true
+        | _ -> false
+
+    /// Does the leading `scanBytes` window carry a marker a browser
+    /// or a server-side interpreter would treat as executable?
+    ///
+    /// This is the polyglot check. A GIF whose 6-byte header is
+    /// followed by `<script>` is a *valid* GIF by every magic-byte
+    /// test and also a valid HTML document; served back from an
+    /// asset route on the deployment's own origin, a content-sniffing
+    /// browser can be persuaded to run it. Sniffing the header alone
+    /// would pass it.
+    let containsMarkup (scanBytes: int) (bytes: byte[]) : bool =
+        if isNull bytes || bytes.Length = 0 || scanBytes <= 0 then
+            false
+        else
+            let window =
+                Text.Encoding.ASCII.GetString(bytes, 0, min scanBytes bytes.Length).ToLowerInvariant()
+
+            [ "<!doctype html"; "<html"; "<script"; "<iframe"; "<svg"; "<?php" ]
+            |> List.exists window.Contains
+
 /// Why an upload failed. Discriminated DU (GP 12.3 — retry /
 /// failure expressed as data, not exception messages). All
 /// cases are deterministic in the input — callers re-validating
@@ -181,6 +331,84 @@ type AssetUploadError =
     /// `IBlobStorage.Upload` returned `Error`. Carries the
     /// provider's diagnostic so the caller can surface it.
     | StorageError of message: string
+    /// Phase 186 — the composed `IUploadValidator` refused the
+    /// upload's *content* after its declared metadata had already
+    /// passed. Never produced when `AssetStoreOptions.UploadValidation`
+    /// is `NoUploadValidator` (the default), so no pre-existing
+    /// deployment can observe this case (GP 11).
+    | ValidationRejected of rejection: UploadRejection
+
+/// Content-validation seam invoked between `UploadRequest.create`
+/// and `IAssetStore.Upload` — the point at which the bytes exist,
+/// the declared metadata has already passed, and nothing has been
+/// written to storage yet.
+///
+/// **Six portability rules (GP 12):**
+///   1. Identity by value      — `byte[]` + `string` in, a
+///                               `Result<unit, UploadRejection>`
+///                               value out. No handles, no streams
+///                               held across calls.
+///   2. Async at the boundary  — `Validate` returns `Async<_>`; a
+///                               scan backend is a network call.
+///   3. Retry / supervision as
+///      data                   — refusal is a `UploadRejection`
+///                               value, never a thrown exception
+///                               and never a callback.
+///   4. Stateless between
+///      invocations            — a validator holds no per-upload
+///                               state; every call carries the
+///                               whole payload it judges.
+///   5. No cross-shard
+///      ordering               — validations are independent; two
+///                               concurrent uploads may resolve in
+///                               any order.
+///   6. Precision at the lower
+///      bound                  — no timing promise is made or
+///                               needed; the seam is synchronous
+///                               with respect to the upload it
+///                               gates.
+///
+/// **The scan backend never reaches this package (GP 1).** A ClamAV
+/// daemon client, a cloud scan API, an ICAP proxy — each lives in
+/// its own companion implementing this interface, exactly as
+/// `IAuditSink` and `INotificationChannel` keep their vendors out of
+/// the core.
+type IUploadValidator =
+    /// Stable identifier for the validator, surfaced in
+    /// `ValidationUnavailable` reasons and operator diagnostics.
+    /// Identity by value (rule 1) — a string, not the instance.
+    abstract Name: string
+
+    /// Judge `bytes` against `declaredMime` (already trimmed and
+    /// lower-cased by `UploadRequest.create`).
+    ///
+    /// Implementations MUST return `Error(ValidationUnavailable …)`
+    /// rather than `Ok` when they cannot reach a verdict, and MUST
+    /// NOT throw as a control-flow signal — though the seam's
+    /// caller defends against that anyway, mapping any raised
+    /// exception to `ValidationUnavailable` so a broken validator
+    /// closes the door rather than opening it.
+    abstract Validate: bytes: byte[] * declaredMime: string -> Async<Result<unit, UploadRejection>>
+
+/// Whether the upload path runs a content validator (GP 11 / GP 13).
+///
+///   * `NoUploadValidator` (default) — the seam short-circuits
+///     before allocating anything. The upload path is byte-for-byte
+///     what it was before this phase: declared MIME accept-list,
+///     size cap, alt-text, filename. A deployment that says nothing
+///     is unchanged.
+///   * `EnabledUploadValidator v` — `v.Validate` runs after
+///     `UploadRequest.create` succeeds and before
+///     `IAssetStore.Upload`, so a refusal means the bytes never
+///     reach storage.
+///
+/// Composing two checks (sniff *and* scan) is the deployment's own
+/// composition — an `IUploadValidator` that calls both — deliberately
+/// rather than a list here, so the ordering and the short-circuit
+/// policy stay the deployment's to choose.
+type UploadValidation =
+    | NoUploadValidator
+    | EnabledUploadValidator of validator: IUploadValidator
 
 /// Why fetching a derivative failed.
 type AssetDerivativeError =
@@ -229,6 +457,12 @@ type AssetStoreOptions = {
     /// audit emission entirely — only for deployments with
     /// strict audit-volume budgets.
     EmitAudit: bool
+    /// Phase 186 — the content-validation seam. `NoUploadValidator`
+    /// (the default) leaves the upload path exactly as it was:
+    /// declared metadata only, no byte inspection, no scan (GP 11).
+    /// Opting in is one field —
+    /// `{ AssetStoreOptions.defaults with UploadValidation = EnabledUploadValidator v }`.
+    UploadValidation: UploadValidation
 }
 
 module AssetStoreOptions =
@@ -240,6 +474,14 @@ module AssetStoreOptions =
         AcceptedMimeTypes = defaultMimeTypes
         AltTextMaxChars = 1024
         EmitAudit = true
+        UploadValidation = NoUploadValidator
+    }
+
+    /// Opt into a content validator. The one-line form the migration
+    /// doc points at; equivalent to setting the field directly.
+    let withUploadValidator (validator: IUploadValidator) (options: AssetStoreOptions) : AssetStoreOptions = {
+        options with
+            UploadValidation = EnabledUploadValidator validator
     }
 
 /// Asset-store substrate opt-in (GP 13 — default off, strip-

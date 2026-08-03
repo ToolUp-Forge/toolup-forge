@@ -3,6 +3,132 @@
 
 namespace ToolUp.AssetStore
 
+// ─── Phase 186 — running the upload-validation seam ──────────────
+//
+// `IUploadValidator` / `UploadValidation` / `UploadRejection` are
+// declared in the shared tier (they are pure data + one interface,
+// and `AssetStoreOptions` has to be able to name the mode). What
+// lives here is the *server-side* half: the runner that the upload
+// handler calls, and the in-tree reference validator that gives the
+// seam a vendor-free default worth composing.
+
+/// Tuning for `SniffingUploadValidator`.
+type MimeSniffOptions = {
+    /// What to do when `MagicBytes.sniff` recognises nothing.
+    /// `false` (default) refuses — the validator exists to
+    /// corroborate a declared type, and "I cannot corroborate it"
+    /// is not corroboration. `true` admits unrecognised payloads,
+    /// for a deployment whose accept-list carries types the table
+    /// does not cover (SVG, plain text) and that has other reasons
+    /// to trust them.
+    AllowUnrecognisedBytes: bool
+    /// Reject a raster image that also carries executable markup in
+    /// its leading window (a polyglot). `true` by default — the
+    /// header check alone passes these.
+    RejectMarkupPolyglots: bool
+    /// How far into the payload the polyglot scan looks. 1 KiB
+    /// covers the shapes that matter (a polyglot has to put its
+    /// markup early enough for a sniffing browser to find it) and
+    /// keeps the check O(1) in the upload size.
+    MarkupScanBytes: int
+}
+
+[<RequireQualifiedAccess>]
+module MimeSniffOptions =
+
+    let defaults: MimeSniffOptions = {
+        AllowUnrecognisedBytes = false
+        RejectMarkupPolyglots = true
+        MarkupScanBytes = 1024
+    }
+
+/// In-tree reference `IUploadValidator`: cross-checks the declared
+/// `Content-Type` against what the bytes actually are, and refuses a
+/// raster image that smuggles executable markup.
+///
+/// Vendor-free by construction (GP 1) — it is a byte-prefix table
+/// and a substring scan, nothing more — so it ships in this package
+/// rather than a companion. It is still **opt-in**: a deployment
+/// composes it deliberately via
+/// `AssetStoreOptions.withUploadValidator`, and one that does not is
+/// unchanged (GP 11 / GP 13).
+///
+/// It is deliberately NOT a malware scanner and makes no claim to
+/// be one. A scanner is a network call to a vendor backend and
+/// belongs in a companion behind this same seam; a deployment
+/// wanting both composes a validator that calls both.
+type SniffingUploadValidator(options: MimeSniffOptions) =
+
+    /// Defaults: fail-closed on unrecognised bytes, polyglot scan on.
+    /// An explicit overload rather than an optional parameter — F#
+    /// folds optional constructor arguments into one widened
+    /// constructor, which reads as a removal against the public-API
+    /// baseline the moment a second one is added.
+    new() = SniffingUploadValidator(MimeSniffOptions.defaults)
+
+    member _.Options = options
+
+    interface IUploadValidator with
+        member _.Name = "sniffing"
+
+        member _.Validate(bytes, declaredMime) = async {
+            let declared =
+                if isNull declaredMime then
+                    ""
+                else
+                    declaredMime.Trim().ToLowerInvariant()
+
+            match MagicBytes.sniff bytes with
+            | None when options.AllowUnrecognisedBytes -> return Ok()
+            | None -> return Error(MimeMismatch(declared, MagicBytes.unrecognised))
+            | Some sniffed when sniffed <> declared -> return Error(MimeMismatch(declared, sniffed))
+            | Some sniffed ->
+                if
+                    options.RejectMarkupPolyglots
+                    && MagicBytes.isRasterImage sniffed
+                    && MagicBytes.containsMarkup options.MarkupScanBytes bytes
+                then
+                    return Error(MimeMismatch(declared, MagicBytes.markup))
+                else
+                    return Ok()
+        }
+
+/// The single call site every upload path uses to consult the seam.
+[<RequireQualifiedAccess>]
+module UploadValidator =
+
+    /// Run the composed validation mode over an upload's bytes.
+    ///
+    /// Two behaviours are load-bearing and both are here rather than
+    /// in each caller, so no caller can get them wrong:
+    ///
+    ///   * `NoUploadValidator` short-circuits without touching the
+    ///     bytes and without an `async` state machine — the zero-cost
+    ///     default (GP 13).
+    ///   * A configured validator that RAISES is mapped to
+    ///     `ValidationUnavailable`, i.e. a refusal. This is the
+    ///     fail-closed rule stated once: a scan backend that throws a
+    ///     socket exception must not be indistinguishable from one
+    ///     that returned "clean", which is exactly what letting the
+    ///     exception escape (and be caught by some outer handler
+    ///     that logs and continues) would produce.
+    let run
+        (validation: UploadValidation)
+        (bytes: byte[])
+        (declaredMime: string)
+        : Async<Result<unit, UploadRejection>> =
+        match validation with
+        | NoUploadValidator -> async.Return(Ok())
+        | EnabledUploadValidator validator ->
+            let name = validator.Name
+
+            async {
+                try
+                    return! validator.Validate(bytes, declaredMime)
+                with ex ->
+                    return Error(ValidationUnavailable $"validator '%s{name}' raised: %s{ex.Message}")
+            }
+
 /// Server-side substrate for uploading and retrieving image
 /// assets — what differentiates this from `IBlobStorage` is
 /// per-asset records, mandatory alt-text-at-upload validation,

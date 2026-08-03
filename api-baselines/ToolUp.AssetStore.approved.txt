@@ -104,13 +104,15 @@ ToolUp.AssetStore.AssetStoreMode+Tags (class)
 ToolUp.AssetStore.AssetStoreMode+Tags.EnabledAssetStore : System.Int32 (literal)
 ToolUp.AssetStore.AssetStoreMode+Tags.NoAssetStore : System.Int32 (literal)
 ToolUp.AssetStore.AssetStoreOptions (class)
-ToolUp.AssetStore.AssetStoreOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, System.Boolean)
+ToolUp.AssetStore.AssetStoreOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, System.Boolean, ToolUp.AssetStore.UploadValidation)
 ToolUp.AssetStore.AssetStoreOptions.AcceptedMimeTypes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.AssetStore.AssetStoreOptions.AltTextMaxChars : System.Int32 { get }
 ToolUp.AssetStore.AssetStoreOptions.EmitAudit : System.Boolean { get }
 ToolUp.AssetStore.AssetStoreOptions.MaxBytes : System.Int64 { get }
+ToolUp.AssetStore.AssetStoreOptions.UploadValidation : ToolUp.AssetStore.UploadValidation { get }
 ToolUp.AssetStore.AssetStoreOptionsModule (class)
 ToolUp.AssetStore.AssetStoreOptionsModule.defaults : ToolUp.AssetStore.AssetStoreOptions { get }
+ToolUp.AssetStore.AssetStoreOptionsModule.withUploadValidator(ToolUp.AssetStore.IUploadValidator, ToolUp.AssetStore.AssetStoreOptions) : ToolUp.AssetStore.AssetStoreOptions
 ToolUp.AssetStore.AssetUploadError (class)
 ToolUp.AssetStore.AssetUploadError.AltTextRequired : ToolUp.AssetStore.AssetUploadError { get }
 ToolUp.AssetStore.AssetUploadError.InvalidFilename : ToolUp.AssetStore.AssetUploadError { get }
@@ -120,6 +122,7 @@ ToolUp.AssetStore.AssetUploadError.IsFileTooLarge : System.Boolean { get }
 ToolUp.AssetStore.AssetUploadError.IsInvalidFilename : System.Boolean { get }
 ToolUp.AssetStore.AssetUploadError.IsStorageError : System.Boolean { get }
 ToolUp.AssetStore.AssetUploadError.IsUnsupportedMimeType : System.Boolean { get }
+ToolUp.AssetStore.AssetUploadError.IsValidationRejected : System.Boolean { get }
 ToolUp.AssetStore.AssetUploadError.Tag : System.Int32 { get }
 ToolUp.AssetStore.AssetUploadError+AltTextTooLong (class)
 ToolUp.AssetStore.AssetUploadError+AltTextTooLong.length : System.Int32 { get }
@@ -135,9 +138,13 @@ ToolUp.AssetStore.AssetUploadError+Tags.FileTooLarge : System.Int32 (literal)
 ToolUp.AssetStore.AssetUploadError+Tags.InvalidFilename : System.Int32 (literal)
 ToolUp.AssetStore.AssetUploadError+Tags.StorageError : System.Int32 (literal)
 ToolUp.AssetStore.AssetUploadError+Tags.UnsupportedMimeType : System.Int32 (literal)
+ToolUp.AssetStore.AssetUploadError+Tags.ValidationRejected : System.Int32 (literal)
 ToolUp.AssetStore.AssetUploadError+UnsupportedMimeType (class)
 ToolUp.AssetStore.AssetUploadError+UnsupportedMimeType.mime : System.String { get }
+ToolUp.AssetStore.AssetUploadError+ValidationRejected (class)
+ToolUp.AssetStore.AssetUploadError+ValidationRejected.rejection : ToolUp.AssetStore.UploadRejection { get }
 ToolUp.AssetStore.AssetUploadHandler (class)
+ToolUp.AssetStore.AssetUploadHandler.readCapped(System.IO.Stream, System.Int64) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.Int64]]
 ToolUp.AssetStore.AssetUploadHandler.uploadHandler(ToolUp.AssetStore.AssetStoreOptions) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.AssetStore.AssetUploadHandler+UploadResponse (class)
 ToolUp.AssetStore.AssetUploadHandler+UploadResponse.IsBadRequest : System.Boolean { get }
@@ -274,6 +281,9 @@ ToolUp.AssetStore.IDerivativeRenderer.Probe(System.Byte[]) : Microsoft.FSharp.Co
 ToolUp.AssetStore.IDerivativeRenderer.Render(System.Byte[], ToolUp.AssetStore.DerivativeSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], ToolUp.AssetStore.DerivativeRenderError]]
 ToolUp.AssetStore.IMimeDerivativeRenderer (interface)
 ToolUp.AssetStore.IMimeDerivativeRenderer.Render(System.Byte[], System.String, ToolUp.AssetStore.GeneralDerivativeSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], ToolUp.AssetStore.DerivativeRenderError]]
+ToolUp.AssetStore.IUploadValidator (interface)
+ToolUp.AssetStore.IUploadValidator.Name : System.String { get }
+ToolUp.AssetStore.IUploadValidator.Validate(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AssetStore.UploadRejection]]
 ToolUp.AssetStore.ImageFormat (class)
 ToolUp.AssetStore.ImageFormat.Avif : ToolUp.AssetStore.ImageFormat { get }
 ToolUp.AssetStore.ImageFormat.IsAvif : System.Boolean { get }
@@ -292,11 +302,24 @@ ToolUp.AssetStore.ImageFormat+Tags.Webp : System.Int32 (literal)
 ToolUp.AssetStore.ImageFormatModule (class)
 ToolUp.AssetStore.ImageFormatModule.fileExtension(ToolUp.AssetStore.ImageFormat) : System.String
 ToolUp.AssetStore.ImageFormatModule.mimeType(ToolUp.AssetStore.ImageFormat) : System.String
+ToolUp.AssetStore.MagicBytes (class)
+ToolUp.AssetStore.MagicBytes.containsMarkup(System.Int32, System.Byte[]) : System.Boolean
+ToolUp.AssetStore.MagicBytes.isRasterImage(System.String) : System.Boolean
+ToolUp.AssetStore.MagicBytes.markup : System.String { get }
+ToolUp.AssetStore.MagicBytes.sniff(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AssetStore.MagicBytes.unrecognised : System.String { get }
 ToolUp.AssetStore.MimeRendererRegistry (class)
 ToolUp.AssetStore.MimeRendererRegistryModule (class)
 ToolUp.AssetStore.MimeRendererRegistryModule.empty : ToolUp.AssetStore.MimeRendererRegistry { get }
 ToolUp.AssetStore.MimeRendererRegistryModule.register(System.String, ToolUp.AssetStore.IMimeDerivativeRenderer, ToolUp.AssetStore.MimeRendererRegistry) : ToolUp.AssetStore.MimeRendererRegistry
 ToolUp.AssetStore.MimeRendererRegistryModule.resolve(System.String, ToolUp.AssetStore.MimeRendererRegistry) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IMimeDerivativeRenderer]
+ToolUp.AssetStore.MimeSniffOptions (class)
+ToolUp.AssetStore.MimeSniffOptions..ctor(System.Boolean, System.Boolean, System.Int32)
+ToolUp.AssetStore.MimeSniffOptions.AllowUnrecognisedBytes : System.Boolean { get }
+ToolUp.AssetStore.MimeSniffOptions.MarkupScanBytes : System.Int32 { get }
+ToolUp.AssetStore.MimeSniffOptions.RejectMarkupPolyglots : System.Boolean { get }
+ToolUp.AssetStore.MimeSniffOptionsModule (class)
+ToolUp.AssetStore.MimeSniffOptionsModule.defaults : ToolUp.AssetStore.MimeSniffOptions { get }
 ToolUp.AssetStore.ProfileEntry (class)
 ToolUp.AssetStore.ProfileEntry.IsGeneralDerivative : System.Boolean { get }
 ToolUp.AssetStore.ProfileEntry.IsImageDerivative : System.Boolean { get }
@@ -312,6 +335,26 @@ ToolUp.AssetStore.ProfileEntryModule (class)
 ToolUp.AssetStore.ProfileEntryModule.name(ToolUp.AssetStore.ProfileEntry) : System.String
 ToolUp.AssetStore.SkiaSharpDerivativeRenderer (class)
 ToolUp.AssetStore.SkiaSharpDerivativeRenderer..ctor()
+ToolUp.AssetStore.SniffingUploadValidator (class)
+ToolUp.AssetStore.SniffingUploadValidator..ctor()
+ToolUp.AssetStore.SniffingUploadValidator..ctor(ToolUp.AssetStore.MimeSniffOptions)
+ToolUp.AssetStore.SniffingUploadValidator.Options : ToolUp.AssetStore.MimeSniffOptions { get }
+ToolUp.AssetStore.UploadRejection (class)
+ToolUp.AssetStore.UploadRejection.IsMalwareDetected : System.Boolean { get }
+ToolUp.AssetStore.UploadRejection.IsMimeMismatch : System.Boolean { get }
+ToolUp.AssetStore.UploadRejection.IsValidationUnavailable : System.Boolean { get }
+ToolUp.AssetStore.UploadRejection.Tag : System.Int32 { get }
+ToolUp.AssetStore.UploadRejection+MalwareDetected (class)
+ToolUp.AssetStore.UploadRejection+MalwareDetected.detail : System.String { get }
+ToolUp.AssetStore.UploadRejection+MimeMismatch (class)
+ToolUp.AssetStore.UploadRejection+MimeMismatch.declared : System.String { get }
+ToolUp.AssetStore.UploadRejection+MimeMismatch.sniffed : System.String { get }
+ToolUp.AssetStore.UploadRejection+Tags (class)
+ToolUp.AssetStore.UploadRejection+Tags.MalwareDetected : System.Int32 (literal)
+ToolUp.AssetStore.UploadRejection+Tags.MimeMismatch : System.Int32 (literal)
+ToolUp.AssetStore.UploadRejection+Tags.ValidationUnavailable : System.Int32 (literal)
+ToolUp.AssetStore.UploadRejection+ValidationUnavailable (class)
+ToolUp.AssetStore.UploadRejection+ValidationUnavailable.reason : System.String { get }
 ToolUp.AssetStore.UploadRequest (class)
 ToolUp.AssetStore.UploadRequest.AltText : System.String { get }
 ToolUp.AssetStore.UploadRequest.Bytes : System.Byte[] { get }
@@ -322,3 +365,15 @@ ToolUp.AssetStore.UploadRequest.Profile : ToolUp.AssetStore.DerivativeProfileId 
 ToolUp.AssetStore.UploadRequest.UploadedBy : System.String { get }
 ToolUp.AssetStore.UploadRequestModule (class)
 ToolUp.AssetStore.UploadRequestModule.create(ToolUp.AssetStore.AssetStoreOptions, System.Byte[], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.AssetStore.DerivativeProfileId) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AssetStore.UploadRequest, ToolUp.AssetStore.AssetUploadError]
+ToolUp.AssetStore.UploadValidation (class)
+ToolUp.AssetStore.UploadValidation.IsEnabledUploadValidator : System.Boolean { get }
+ToolUp.AssetStore.UploadValidation.IsNoUploadValidator : System.Boolean { get }
+ToolUp.AssetStore.UploadValidation.NoUploadValidator : ToolUp.AssetStore.UploadValidation { get }
+ToolUp.AssetStore.UploadValidation.Tag : System.Int32 { get }
+ToolUp.AssetStore.UploadValidation+EnabledUploadValidator (class)
+ToolUp.AssetStore.UploadValidation+EnabledUploadValidator.validator : ToolUp.AssetStore.IUploadValidator { get }
+ToolUp.AssetStore.UploadValidation+Tags (class)
+ToolUp.AssetStore.UploadValidation+Tags.EnabledUploadValidator : System.Int32 (literal)
+ToolUp.AssetStore.UploadValidation+Tags.NoUploadValidator : System.Int32 (literal)
+ToolUp.AssetStore.UploadValidator (class)
+ToolUp.AssetStore.UploadValidator.run(ToolUp.AssetStore.UploadValidation, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AssetStore.UploadRejection]]

@@ -1253,6 +1253,14 @@ let allTests =
         PeerAuthPostureTests.ladderTests
         PeerAuthPostureTests.overlapTests
         PeerAuthPostureTests.advisoryTests
+        // Phase 186 — IAssetStore upload-validation seam: the
+        // IUploadValidator contract bound to the in-tree sniffing
+        // validator, the magic-byte + polyglot table, the fail-closed
+        // runner (unavailable / raising validators both refuse), the
+        // bounded read measured with a counting stream, and the handler
+        // ordering that keeps a refused upload out of storage.
+        UploadValidationTests.contractTests
+        UploadValidationTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

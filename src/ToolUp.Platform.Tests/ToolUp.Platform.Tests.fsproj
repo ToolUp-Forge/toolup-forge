@@ -1407,6 +1407,13 @@
              runtime that is absent skips with the probe's own reason. -->
         <Compile Include="InProcess\CrossRuntimeConformanceHarness.fs" />
         <Compile Include="InProcess\CrossRuntimeFederationConformanceTests.fs" />
+        <!-- Phase 186 — IAssetStore upload-validation seam. The contract
+             pack is parametrised over any IUploadValidator; the InProcess
+             file binds it to the in-tree SniffingUploadValidator and adds
+             the seam's fail-closed, bounded-read and handler-ordering
+             coverage. Compiled as a pair, contract first. -->
+        <Compile Include="Contracts\IUploadValidatorContract.fs" />
+        <Compile Include="InProcess\UploadValidationTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
