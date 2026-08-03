@@ -162,23 +162,21 @@ let private verifyStamp (entry: ManifestEntry) (document: string) : unit =
             $"the stamp on '{entry.Id}' must be reproducible from the envelope document it stamps"
     | family -> failwithf "no stamp rule is bound to corpus family '%s'" family
 
-/// The stable refusal classes a pinned-exchange reject vector may name,
-/// mapped to the phrase the refusal carries. Named classes rather than
-/// message matching in the vector itself: an implementation in another
+/// The phrase this implementation's pinning refusal carries, per class.
+/// The corpus names a CLASS, not a message: an implementation in another
 /// language will word its refusal differently, and the class is what the
-/// specification actually requires of it.
-let private refusalPhrase =
+/// specification actually requires of it. The mapping lives here because
+/// it is this host's business, not the corpus's.
+let private pinRefusalPhrase =
     function
     | "pin-unparseable" -> "could not be parsed"
     | "pin-format-version-unreadable" -> "declares FormatVersion"
     | "pin-stamp-mismatch" -> "carries stamp"
     | "pin-hash-not-agreed" -> "expected hash agreed out of band"
-    | other -> failwithf "the corpus names refusal class '%s', which this harness does not implement" other
+    | other -> failwithf "the corpus names pinning refusal class '%s', which this harness does not implement" other
 
-let private verifyRejection (entry: ManifestEntry) (document: string) : unit =
-    let reason =
-        Expect.wantSome entry.Reject $"'{entry.Id}' is a reject vector and must name its refusal class"
-
+/// Take a pin from a published export and require it to be refused.
+let private verifyPinRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
     // The document's own stamp is the agreed hash unless the vector is
     // specifically about the two disagreeing.
     let agreed =
@@ -199,8 +197,31 @@ let private verifyRejection (entry: ManifestEntry) (document: string) : unit =
     | Error message ->
         Expect.stringContains
             message
-            (refusalPhrase reason)
+            (pinRefusalPhrase reason)
             $"'{entry.Id}' must be refused as '{reason}'; the refusal said: {message}"
+
+/// A malformed request envelope must not decode. The receiver's own
+/// pre-dispatch parse collapses exactly this failure to the JSON-RPC
+/// parse-error code, so refusing to decode IS the specified behaviour —
+/// there is no partial read of a call the receiver cannot understand.
+let private verifyInvocationRejection (entry: ManifestEntry) (document: string) : unit =
+    let decoded =
+        try
+            Some(JsonRpc.deserialize<JsonRpcRequest> document)
+        with _ ->
+            None
+
+    Expect.isNone decoded $"'{entry.Id}' must be refused before dispatch, and it decoded"
+
+let private verifyRejection (entry: ManifestEntry) (document: string) : unit =
+    let reason =
+        Expect.wantSome entry.Reject $"'{entry.Id}' is a reject vector and must name its refusal class"
+
+    match entry.Family, reason with
+    | "pinned-exchange", _ -> verifyPinRejection entry reason document
+    | "contract-invocation", "invocation-unparseable" -> verifyInvocationRejection entry document
+    | family, cls ->
+        failwithf "the corpus names refusal class '%s' in family '%s', which this harness does not implement" cls family
 
 // ─── Tests ───────────────────────────────────────────────────────────
 

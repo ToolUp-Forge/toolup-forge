@@ -774,6 +774,18 @@ let vectors () : WireVector list =
             "contract-invocation/errors.json"
             (JsonRpc.serialize (invocationErrors ()))
 
+        {
+            vector
+                "contract-invocation/reject-malformed"
+                "contract-invocation"
+                Participant
+                Reject
+                "A request envelope that is not well-formed. A receiver refuses it before dispatch as a decode failure rather than attempting a partial read of a call it cannot understand."
+                "contract-invocation/reject-malformed.json"
+                "{\"JsonRpc\":\"2.0\",\"Method\":\"PlaceOrder\",\"Params\":" with
+                Reject = Some "invocation-unparseable"
+        }
+
         vector
             "contract-invocation/job-poll"
             "contract-invocation"

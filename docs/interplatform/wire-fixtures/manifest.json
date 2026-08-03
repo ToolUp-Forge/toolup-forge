@@ -149,6 +149,16 @@
       "description": "One failure response per structured error the seam defines, pinning the whole code mapping rather than the cases an implementation happened to hit."
     },
     {
+      "id": "contract-invocation/reject-malformed",
+      "family": "contract-invocation",
+      "profile": "participant",
+      "kind": "reject",
+      "file": "contract-invocation/reject-malformed.json",
+      "sha256": "528d1b8119cf18bf35e38d31fd88b66cb493b389acca49cb1aaee6fac134a6da",
+      "reject": "invocation-unparseable",
+      "description": "A request envelope that is not well-formed. A receiver refuses it before dispatch as a decode failure rather than attempting a partial read of a call it cannot understand."
+    },
+    {
       "id": "contract-invocation/job-poll",
       "family": "contract-invocation",
       "profile": "participant",

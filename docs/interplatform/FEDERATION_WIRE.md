@@ -549,16 +549,17 @@ GET /peer/v1/{contractId}/jobs/{jobId}
 
 ### 7.2 Refusal classes
 
-Stable identifiers for the pinning refusals in §5.3, used by the corpus. The *class* is normative;
-the wording of a refusal is not, and an implementation in another language will and should word it
-differently.
+Stable identifiers for the documents an implementation MUST refuse, used by the corpus's `reject`
+vectors. The *class* is normative; the wording of a refusal is not, and an implementation in
+another language will and should word it differently.
 
-| Class | Condition |
-|---|---|
-| `pin-unparseable` | Not a well-formed export document. |
-| `pin-format-version-unreadable` | `FormatVersion` beyond what the reader supports. |
-| `pin-stamp-mismatch` | The document's stamp does not match a recomputation over its own surface. |
-| `pin-hash-not-agreed` | Internally consistent, but not the document agreed out of band. |
+| Class | Family | Condition |
+|---|---|---|
+| `pin-unparseable` | pinned exchange | Not a well-formed export document. |
+| `pin-format-version-unreadable` | pinned exchange | `FormatVersion` beyond what the reader supports. |
+| `pin-stamp-mismatch` | pinned exchange | The document's stamp does not match a recomputation over its own surface. |
+| `pin-hash-not-agreed` | pinned exchange | Internally consistent, but not the document agreed out of band. |
+| `invocation-unparseable` | contract invocation | Not a well-formed request envelope. Refused before dispatch as a decode failure (`-32700`, HTTP `400`) — never partially read. |
 
 ---
 
