@@ -362,6 +362,21 @@ let withRetrievalToolAware
             let request = {
                 RetrievalRequest.create query scopes defaults.TopK defaults.Merge with
                     OriginFilter = defaults.OriginFilter
+                    // Phase 502.D — the metadata-equality scope for this
+                    // turn. This is the wiring that makes `Filters` reachable
+                    // from the prompt path at all: 502.A taught the default
+                    // pipeline to HONOUR the field, but this builder
+                    // constructs its own `RetrievalRequest` and left it
+                    // `None`, so the AI panel and every deployment composing
+                    // `RAGServerApp` could not scope a query however much the
+                    // pipeline was willing to. The deployment-level bound
+                    // (`RetrievalDefaults.Filters`, set via
+                    // `RAGServerApp.withRetrievalFilters`) and the per-request
+                    // one (`PromptContext.RetrievalFilters`, arriving from
+                    // `AIMessageRequest`) merge here, deployment winning any
+                    // shared key. Both `None` ⇒ `None`, so an unscoped turn
+                    // is byte-identical to its pre-502.D request (GP 11).
+                    Filters = RetrievalDefaults.mergeFilters defaults.Filters ctx.RetrievalFilters
                     ActiveModule = ctx.ActiveModule
                     // Phase 506 — the prior turns, forwarded so a composed
                     // `IQueryRewriter` can resolve a follow-up query against

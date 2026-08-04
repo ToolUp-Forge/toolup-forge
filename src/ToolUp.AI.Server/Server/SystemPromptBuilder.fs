@@ -45,6 +45,19 @@ type PromptContext = {
     /// that do not perform retrieval ignore it; an empty list leaves every
     /// downstream stage byte-identical to its pre-506 behaviour (GP 11).
     ConversationHistory: string list
+    /// Phase 502.D — per-request metadata-equality filter scoping this
+    /// turn's retrieval, as reported by `AIMessageRequest.RetrievalFilters`.
+    /// `None` on every turn that did not ask to be scoped.
+    ///
+    /// Merged with the deployment-level `RetrievalDefaults.Filters` by
+    /// `RAGPromptBuilder` (deployment wins on a shared key — see
+    /// `RetrievalDefaults.mergeFilters`) and threaded onto
+    /// `RetrievalRequest.Filters`. This is the seam that makes a filter
+    /// reachable from the AI panel at all: `withRetrievalToolAware` builds
+    /// its own `RetrievalRequest`, so before 502.D a caller on the prompt
+    /// path had no way to scope one. Builders that do not retrieve ignore
+    /// it; `None` leaves every downstream stage byte-identical (GP 11).
+    RetrievalFilters: Map<string, string> option
     /// Mutable cell collecting `RetrievedSource`s populated by RAG-style
     /// builders (`RAGPromptBuilder.withRetrieval`) so the assistant
     /// handler can attach them to the outbound `ConversationMessage`

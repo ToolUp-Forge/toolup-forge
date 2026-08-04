@@ -348,6 +348,27 @@ type AIMessageRequest = {
     /// See `src/ToolUp.AI/TECHNICAL_GUIDE.md` §"Surface determination &
     /// trust model".
     Surface: AISurface
+    /// Phase 502.D — per-message metadata-equality filter scoping this
+    /// turn's retrieval ("answer from document X only", "only tag=policy").
+    /// Threaded onto `PromptContext.RetrievalFilters` by the assistant
+    /// handler and merged with the deployment-level `RetrievalDefaults.Filters`
+    /// by `RAGPromptBuilder`, which puts the result on
+    /// `RetrievalRequest.Filters`. `None` (the default, and what an older
+    /// client sending no field deserialises to) leaves the retrieval request
+    /// byte-identical to its pre-502.D shape (GP 11), and the field has no
+    /// effect at all on a deployment that composes no RAG prompt builder
+    /// (GP 13).
+    ///
+    /// TRUST MODEL: this is a **client-supplied** field and the server takes
+    /// it at face value — deliberately, and unlike `Surface` above, because
+    /// a filter can only ever REMOVE candidates. It is AND-combined on top
+    /// of the scope set the prompt builder derives server-side from the
+    /// resolved `AccessContext`, so no value here reaches a chunk the caller
+    /// could not already retrieve: the worst a hostile client achieves is a
+    /// worse answer to its own question. It is therefore not a security
+    /// boundary in either direction — do not use it to withhold content a
+    /// caller should not have at all; that is what scopes are for (GP 4).
+    RetrievalFilters: Map<string, string> option
 }
 
 // ─── API contract (Fable.Remoting) ──────────────────────────────

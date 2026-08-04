@@ -48,13 +48,14 @@ ToolUp.AI.AILatencyRecordModule (class)
 ToolUp.AI.AILatencyRecordModule.EventType : System.String (literal)
 ToolUp.AI.AILatencyRecordModule.SourceModule : System.String (literal)
 ToolUp.AI.AIMessageRequest (class)
-ToolUp.AI.AIMessageRequest..ctor(System.Guid, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.AISurface)
+ToolUp.AI.AIMessageRequest..ctor(System.Guid, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]])
 ToolUp.AI.AIMessageRequest.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIMessageRequest.ActivePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIMessageRequest.ActivePageNarrative : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument] { get }
 ToolUp.AI.AIMessageRequest.Content : System.String { get }
 ToolUp.AI.AIMessageRequest.ConversationId : System.Guid { get }
 ToolUp.AI.AIMessageRequest.OverrideProviderLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIMessageRequest.RetrievalFilters : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]] { get }
 ToolUp.AI.AIMessageRequest.Surface : ToolUp.AI.AISurface { get }
 ToolUp.AI.AIProviderBuilder (class)
 ToolUp.AI.AIProviderBuilder..ctor(ToolUp.AI.AIProviderDescriptor, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.IAIProvider]])

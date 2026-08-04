@@ -316,6 +316,7 @@ let tests =
                 ModuleContexts = Map.empty
                 CurrentMessage = Some "what was revenue?"
                 ConversationHistory = []
+                RetrievalFilters = None
                 RetrievedSources = sources
                 ShortCircuit = ref None
             }
@@ -378,6 +379,7 @@ let tests =
                 ModuleContexts = Map.empty
                 CurrentMessage = Some "what was revenue?"
                 ConversationHistory = []
+                RetrievalFilters = None
                 RetrievedSources = sources
                 ShortCircuit = ref None
             }

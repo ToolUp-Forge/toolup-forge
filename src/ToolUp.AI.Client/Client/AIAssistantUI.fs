@@ -369,6 +369,13 @@ let update msg model =
                     // Client-resident `_platform.ui.*` tools are visible
                     // here when a companion that registers them is wired in.
                     Surface = FullPage
+                    // Phase 502.D — the built-in panel does not scope its own
+                    // retrieval; `None` keeps the request byte-identical to
+                    // its pre-502.D shape. A deployment wanting "answer from
+                    // this document only" sets it from its own submit path,
+                    // or sets a deployment-wide bound with
+                    // `RAGServerApp.withRetrievalFilters`.
+                    RetrievalFilters = None
                 }
 
                 Cmd.batch [

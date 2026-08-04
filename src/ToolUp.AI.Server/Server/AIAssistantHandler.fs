@@ -673,6 +673,14 @@ let aiAssistantApi
                             ModuleContexts = moduleContexts
                             CurrentMessage = Some request.Content
                             ConversationHistory = promptHistory
+                            // Phase 502.D — the client's per-turn retrieval
+                            // scope, forwarded verbatim. Taken at face value
+                            // by design: a filter only ever narrows, and it
+                            // AND-combines on top of the scopes the builder
+                            // derives from `accessContext`, so it cannot
+                            // reach a chunk this caller could not already
+                            // retrieve (see `AIMessageRequest.RetrievalFilters`).
+                            RetrievalFilters = request.RetrievalFilters
                             RetrievedSources = retrievedSourcesCell
                             ShortCircuit = shortCircuitCell
                         }

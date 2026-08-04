@@ -88,6 +88,7 @@ let private printReport (report: EvalReport) =
     printfn "  nDCG@10:        %.3f" report.NdcgAt10
     printfn "  MRR:            %.3f" report.Mrr
     printfn "  Avg latency:    %.1f ms" report.AvgLatencyMs
+    printfn "  Filter leaks:   %d query/queries" report.FilterViolationCount
 
     printfn ""
     printfn "Per-query:"
@@ -99,6 +100,13 @@ let private printReport (report: EvalReport) =
             | _ -> string (List.min q.RelevantRanks)
 
         printfn "  [%s] firstRelevant=%-3s latency=%dms" q.QueryId firstRank q.LatencyMs
+
+        // Phase 502.E — name the offending ids, not just the count. A
+        // filtered-retrieval regression is diagnosed by WHICH chunk escaped
+        // the slice ("the untagged one", "the other document's").
+        match q.FilterViolations with
+        | [] -> ()
+        | ids -> printfn "        ✗ out-of-filter chunks returned: %s" (String.Join(", ", ids))
 
     printfn ""
 
@@ -195,6 +203,22 @@ let main argv =
                     let pipeline = buildPipeline tempDir analyzer.Value
                     let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
                     printReport report
+
+                    // Phase 502.E — a filter leak fails the run outright, and
+                    // is checked BEFORE the baseline comparison because it is
+                    // not a quality metric with a tolerance: a filter is a
+                    // narrowing / isolation intent (GP 4), so returning
+                    // content the query asked to exclude is wrong at any
+                    // recall. There is no `--baseline` in which it is
+                    // acceptable, and no fixture-declared floor to breach —
+                    // the correct count is always zero.
+                    if report.FilterViolationCount > 0 then
+                        eprintfn
+                            "✗ %d filtered query/queries returned out-of-filter chunks in %s"
+                            report.FilterViolationCount
+                            fixture.Name
+
+                        regressionFound <- true
 
                     match outArg with
                     | Some path -> writeReport path report

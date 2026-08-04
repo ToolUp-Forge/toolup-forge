@@ -1,0 +1,75 @@
+{
+  "name": "metadata-filtered-retrieval",
+  "description": "Phase 502.E — the 14j fixture for metadata-filtered retrieval. Every chunk answers the SAME question ('what is the refund window?') and every chunk says something DIFFERENT, so a query cannot be answered correctly without being scoped: the 2024 handbook says 14 days, the retired 2019 archive says 60, and one chunk carries no documentId at all. That construction is what makes the filter's effect observable rather than confounded with a query that simply missed — an unfiltered run finds all six, and only the scope decides which are correct.\n\nThe harness scores each filtered query twice over. Recall/nDCG/MRR answer 'is recall unaffected WITHIN the slice' — the relevant ids are the in-slice chunks, so a pipeline that over-narrows scores 0. QueryResult.FilterViolations answers 'did anything OUTSIDE the slice come back' — derived from the metadata on the returned matches, so a pipeline that ignores Filters leaks and fails the run regardless of how good its recall looks. Neither half detects the other's failure, which is why both are here.\n\nRun: dotnet run --project src/ToolUp.RAG.Evaluation -- src/ToolUp.RAG.Evaluation/fixtures/eval-filtered.json",
+  "corpus": [
+    {
+      "chunkId": "handbook-refunds",
+      "scope": "deployment",
+      "content": "Refund window. A customer may request a full refund within 14 days of purchase. Refund requests are processed by the billing team within one working day of receipt.",
+      "metadata": { "documentId": "doc-handbook", "tag": "policy" }
+    },
+    {
+      "chunkId": "handbook-refund-exceptions",
+      "scope": "deployment",
+      "content": "Refund exceptions. The 14 day refund window does not apply to usage-metered charges already consumed. A partial refund of the unconsumed balance may be requested instead.",
+      "metadata": { "documentId": "doc-handbook", "tag": "policy" }
+    },
+    {
+      "chunkId": "handbook-onboarding",
+      "scope": "deployment",
+      "content": "Onboarding guide. New customers are walked through workspace setup, billing details and a refund policy summary during their first session with an account manager.",
+      "metadata": { "documentId": "doc-handbook", "tag": "guide" }
+    },
+    {
+      "chunkId": "archive-refunds",
+      "scope": "deployment",
+      "content": "Refund window. A customer may request a full refund within 60 days of purchase. Refund requests are processed by the billing team on a best-effort basis.",
+      "metadata": { "documentId": "doc-archive", "tag": "policy" }
+    },
+    {
+      "chunkId": "archive-refund-exceptions",
+      "scope": "deployment",
+      "content": "Refund exceptions. The 60 day refund window does not apply to professional services already delivered. No partial refund of delivered services is offered.",
+      "metadata": { "documentId": "doc-archive", "tag": "policy" }
+    },
+    {
+      "chunkId": "unkeyed-refunds",
+      "scope": "deployment",
+      "content": "Refund window. Refund handling is under review and the current refund window should be confirmed with the billing team before quoting it to a customer.",
+      "metadata": { "tag": "policy" }
+    }
+  ],
+  "queries": [
+    {
+      "id": "control-unfiltered",
+      "query": "what is the refund window",
+      "scopes": ["deployment"],
+      "relevantChunkIds": ["handbook-refunds", "archive-refunds", "unkeyed-refunds"],
+      "comment": "Negative control. No filters key at all — exercises the pre-502.E load path and pins that an unscoped query still reaches every document. Without this row a filtered assertion could pass vacuously against a pipeline that had simply stopped returning anything."
+    },
+    {
+      "id": "scoped-to-handbook",
+      "query": "what is the refund window",
+      "scopes": ["deployment"],
+      "relevantChunkIds": ["handbook-refunds", "handbook-refund-exceptions"],
+      "filters": { "documentId": "doc-handbook" },
+      "comment": "The headline case — 'restrict this query to document X'. Recall must stay 1.000 within the slice; the archive and unkeyed chunks must not come back. Note unkeyed-refunds is EXCLUDED here rather than merely deprioritised: a chunk that cannot prove it belongs to the requested document is not in the slice (GP 4), which is the semantics that separates Filters from OriginFilter's absent-key leniency."
+    },
+    {
+      "id": "scoped-to-archive",
+      "query": "what is the refund window",
+      "scopes": ["deployment"],
+      "relevantChunkIds": ["archive-refunds", "archive-refund-exceptions"],
+      "filters": { "documentId": "doc-archive" },
+      "comment": "The same query scoped to the OTHER document, so the fixture cannot be satisfied by a pipeline that happens to favour the handbook. One of these two rows must fail for any ranking that is not genuinely filtered."
+    },
+    {
+      "id": "scoped-to-handbook-policy",
+      "query": "what is the refund window",
+      "scopes": ["deployment"],
+      "relevantChunkIds": ["handbook-refunds", "handbook-refund-exceptions"],
+      "filters": { "documentId": "doc-handbook", "tag": "policy" },
+      "comment": "Two keys, AND-combined. The handbook's onboarding chunk satisfies documentId but not tag, so it must drop — pinning that a multi-key filter narrows on every key rather than on the first one the implementation happens to read."
+    }
+  ]
+}

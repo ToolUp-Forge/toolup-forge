@@ -22,6 +22,8 @@
 <None Include="fixtures\platform-readme.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Phase 501 — the morphology fixture for the analyzer comparison. -->
     <None Include="fixtures\eval-morphology.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Phase 502.E — the metadata-filtered-retrieval fixture. -->
+    <None Include="fixtures\eval-filtered.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- SDK server infrastructure (interfaces + storage + logger) — wired via
        <ProjectReference> below. AI + LocalEmbeddingProvider companion sources

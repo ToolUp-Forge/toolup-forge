@@ -460,6 +460,10 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                     // Side-panel chat — Mode 1 only. Tools declared as
                     // FullPageOnly are filtered out for this request.
                     Surface = SidePanel
+                    // Phase 502.D — see the full-page site in AIAssistantUI:
+                    // the built-in side panel does not scope its own
+                    // retrieval, so `None` leaves the request unchanged.
+                    RetrievalFilters = None
                 }
 
                 let watchdogId = Guid.NewGuid()

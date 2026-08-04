@@ -2362,6 +2362,27 @@ module RAGServerApp =
             }
     }
 
+    /// Phase 502.D — set the deployment-level metadata-equality filter every
+    /// prompt-path retrieval is scoped by. AND-combined, strict equality, and
+    /// a chunk MISSING the key does not pass — the same semantics
+    /// `RetrievalRequest.Filters` carries on both shipped pipelines.
+    ///
+    /// This is the operator's bound, not a default a caller can override: a
+    /// per-request filter (`AIMessageRequest.RetrievalFilters`) merges on top
+    /// and wins nothing on a key set here. A deployment scoped to
+    /// `Map.ofList [ "tag", "policy" ]` therefore never surfaces a
+    /// non-policy chunk to the model, whatever any client asks for.
+    ///
+    /// `None` (the default) leaves retrieval unfiltered and byte-identical
+    /// to a filter-unaware deployment (GP 11).
+    let withRetrievalFilters (filters: Map<string, string> option) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalDefaults = {
+                app.RetrievalDefaults with
+                    Filters = filters
+            }
+    }
+
     /// Enable conversation-history indexing (WS3.4 — scaffolded only,
     /// implementation lands in a follow-up phase). When `true`, completed
     /// AI conversations will be vectorised under

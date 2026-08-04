@@ -96,5 +96,10 @@ let buildReport (fixtureName: string) (results: QueryResult list) : EvalReport =
             0.0
         else
             results |> List.averageBy (fun r -> float r.LatencyMs)
+    // Phase 502.E — count QUERIES that leaked, not leaked chunks: one
+    // query returning five out-of-filter chunks is one broken query, and
+    // scaling the number with corpus size would make the signal read as
+    // worse on a bigger fixture for the same defect.
+    FilterViolationCount = results |> List.sumBy (fun r -> if r.FilterViolations.IsEmpty then 0 else 1)
     PerQuery = results
 }

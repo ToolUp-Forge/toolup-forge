@@ -271,6 +271,7 @@ ToolUp.RAG.RAGCompose+RAGServerAppModule.withPreMiddleware(Microsoft.FSharp.Core
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withReranker(ToolUp.Platform.IReranker+IReranker, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalDefaults(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
+ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalFilters(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalFraming(System.String, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalPipeline(ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp

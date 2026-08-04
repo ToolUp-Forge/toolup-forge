@@ -11,6 +11,20 @@ type LabelledQuery = {
     Query: string
     Scopes: VectorScope list
     RelevantChunkIds: Set<string>
+    /// Phase 502.E — optional metadata-equality scope for this query, put
+    /// straight onto `RetrievalRequest.Filters`. AND-combined, strict
+    /// equality, and a chunk MISSING the key does not pass — the semantics
+    /// both shipped pipelines are held to.
+    ///
+    /// `None` (the default, and what a fixture with no `filters` key loads
+    /// as) issues exactly the request the harness issued before 502.E, so
+    /// every pre-existing fixture measures what it always measured.
+    ///
+    /// A query that DOES set it is scored twice over: the ordinary
+    /// recall/nDCG/MRR metrics say whether the right chunks were still found
+    /// *within* the slice, and `QueryResult.FilterViolations` says whether
+    /// anything outside the slice came back at all.
+    Filters: Map<string, string> option
 }
 
 /// A corpus entry — content the harness seeds into the in-memory index
@@ -42,6 +56,17 @@ type QueryResult = {
     Found: string list
     RelevantRanks: int list
     LatencyMs: int64
+    /// Phase 502.E — chunk ids the pipeline returned that do NOT satisfy
+    /// this query's `Filters`. Always empty for an unfiltered query.
+    ///
+    /// Derived from the metadata on the returned `VectorMatch`es rather
+    /// than from the fixture's corpus declaration, so it measures what the
+    /// pipeline actually handed back and a fixture cannot mislabel its way
+    /// to green. This is the assertion half of "a filtered query returns
+    /// only in-filter chunks": recall alone cannot see it, because a
+    /// pipeline that ignored the filter entirely still finds every relevant
+    /// chunk and scores 1.000.
+    FilterViolations: string list
 }
 
 /// Aggregated evaluation report. Recall and nDCG are computed at multiple
@@ -58,5 +83,14 @@ type EvalReport = {
     NdcgAt10: float
     Mrr: float
     AvgLatencyMs: float
+    /// Phase 502.E — how many queries in this fixture returned at least one
+    /// out-of-filter chunk. A non-zero count fails the harness run: unlike a
+    /// recall dip (a quality signal, judged against a baseline tolerance),
+    /// leaking content the caller asked to exclude is a correctness defect
+    /// with no acceptable tolerance.
+    ///
+    /// An older baseline report deserialises this as `0`, which is the
+    /// honest value — it was produced by a run that issued no filters.
+    FilterViolationCount: int
     PerQuery: QueryResult list
 }

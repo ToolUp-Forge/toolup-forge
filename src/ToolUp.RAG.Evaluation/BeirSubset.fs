@@ -220,6 +220,9 @@ let loadFixture (datasetName: string) (spec: SubsetSpec) : Async<Fixture> = asyn
             Query = queryTextById[queryId]
             Scopes = [ Deployment ]
             RelevantChunkIds = relevant
+            // Phase 502.E — BEIR queries carry no metadata scope; the
+            // ablation gate measures pipeline composition, not filtering.
+            Filters = None
         })
 
     return {

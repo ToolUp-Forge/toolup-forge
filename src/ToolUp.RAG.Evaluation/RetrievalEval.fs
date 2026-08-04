@@ -32,13 +32,34 @@ let private rankRelevant (relevant: Set<string>) (matches: VectorMatch list) : i
     |> List.mapi (fun i m -> if relevant.Contains m.ChunkId then Some(i + 1) else None)
     |> List.choose id
 
+/// Phase 502.E — does a returned match satisfy the query's filter?
+///
+/// Deliberately restates the contract rather than calling into the pipeline:
+/// AND-combined, strict equality, and a chunk MISSING the key does NOT pass.
+/// A checker that shared code with the thing it checks would agree with any
+/// implementation, including a broken one.
+let private satisfiesFilter (filters: Map<string, string>) (m: VectorMatch) : bool =
+    filters
+    |> Map.forall (fun key expected ->
+        match m.Metadata.TryFind key with
+        | Some actual -> actual = expected
+        | None -> false)
+
+let private filterViolations (filters: Map<string, string> option) (matches: VectorMatch list) : string list =
+    match filters with
+    | None -> []
+    | Some pairs when pairs.IsEmpty -> []
+    | Some pairs -> matches |> List.filter (satisfiesFilter pairs >> not) |> List.map _.ChunkId
+
 let private runQuery (pipeline: IRetrievalPipeline) (q: LabelledQuery) : Async<QueryResult> = async {
     let request: RetrievalRequest = {
         Query = q.Query
         Scopes = q.Scopes
         TopK = 10
         Merge = Interleaved
-        Filters = None
+        // Phase 502.E — the fixture's per-query scope. `None` on every
+        // pre-502.E fixture, so those runs issue the identical request.
+        Filters = q.Filters
         History = None
         AdaptiveK = None
         OriginFilter = None
@@ -56,6 +77,7 @@ let private runQuery (pipeline: IRetrievalPipeline) (q: LabelledQuery) : Async<Q
         Found = matches |> List.map _.ChunkId
         RelevantRanks = rankRelevant q.RelevantChunkIds matches
         LatencyMs = sw.ElapsedMilliseconds
+        FilterViolations = filterViolations q.Filters matches
     }
 }
 

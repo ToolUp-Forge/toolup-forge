@@ -28,6 +28,13 @@ type JsonQuery = {
     query: string
     scopes: string array
     relevantChunkIds: string array
+    /// Phase 502.E — optional per-query metadata filter. Absent in every
+    /// fixture written before 502.E, and `[<CLIMutable>]` + STJ leave an
+    /// absent object as `null`, which `toLabelledQuery` folds to `None` —
+    /// the same defensive shape `metadata` on a corpus entry already used.
+    /// So an existing fixture loads unchanged, with no schema version and
+    /// no migration.
+    filters: System.Collections.Generic.Dictionary<string, string>
 }
 
 [<CLIMutable>]
@@ -68,6 +75,14 @@ let private toLabelledQuery (j: JsonQuery) : LabelledQuery = {
     Query = j.query
     Scopes = j.scopes |> Array.map parseScope |> Array.toList
     RelevantChunkIds = Set.ofArray j.relevantChunkIds
+    // An absent `filters` key, and an explicitly-empty one, both mean "no
+    // filter" — `Some Map.empty` would only differ from `None` by putting a
+    // vacuous value on the wire.
+    Filters =
+        if isNull j.filters || j.filters.Count = 0 then
+            None
+        else
+            Some(j.filters |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq)
 }
 
 let load (path: string) : Fixture =

@@ -795,6 +795,20 @@ type RetrievalDefaults = {
     /// re-retrieving would double-inject. Operators wanting AI-context
     /// chunks back in the retrieval set pass `None` to clear the gate.
     OriginFilter: Set<ChunkOrigin> option
+    /// Phase 502.D — deployment-level metadata-equality filter applied to
+    /// every retrieval the prompt-builder path performs. Same semantics as
+    /// `RetrievalRequest.Filters`: AND-combined, strict equality, and a
+    /// chunk MISSING the key does not pass. `None` (the default) = no
+    /// deployment filter, and the retrieval request is then byte-identical
+    /// to its pre-502.D shape (GP 11).
+    ///
+    /// This is a **constraint, not a suggestion**: `RAGPromptBuilder` merges
+    /// it with the per-request filter carried on `PromptContext`, and on a
+    /// key both set the DEPLOYMENT value wins. A per-request filter can
+    /// therefore narrow further on other keys but can never relax a bound
+    /// the operator set — an operator who scopes a deployment to
+    /// `tag = "policy"` gets that regardless of what any client sends.
+    Filters: Map<string, string> option
 }
 
 module RetrievalDefaults =
@@ -813,7 +827,33 @@ module RetrievalDefaults =
         Merge = Interleaved
         SnippetCharLimit = 240
         OriginFilter = Some defaultOriginFilter
+        Filters = None
     }
+
+    /// Merge a deployment-level filter with a per-request one (Phase 502.D).
+    ///
+    /// Both are narrowing intents, so the merge is a union of key/value
+    /// pairs — the result constrains at least as much as either input. On a
+    /// key BOTH set, the deployment value wins: a deployment filter is an
+    /// operator-set bound and a per-request filter must not be able to
+    /// relax it. (The alternative — honest AND, which for a contradictory
+    /// pair matches nothing — is equally safe but silently returns an empty
+    /// result set for a request that merely disagreed with a bound it could
+    /// not see; deployment-wins keeps the operator's slice intact.)
+    ///
+    /// `None`/`None` returns `None`, so a deployment that set no filter and
+    /// a request that carried none produce a `RetrievalRequest` identical to
+    /// the pre-502.D one, not a `Some Map.empty` that would merely *behave*
+    /// the same (GP 11).
+    let mergeFilters
+        (deployment: Map<string, string> option)
+        (perRequest: Map<string, string> option)
+        : Map<string, string> option =
+        match deployment, perRequest with
+        | None, None -> None
+        | Some d, None -> Some d
+        | None, Some r -> Some r
+        | Some d, Some r -> Some(d |> Map.fold (fun acc k v -> Map.add k v acc) r)
 
     /// Clamp a `RetrievalDefaults` to sane bounds. The targeted fluent
     /// setters (`withTopK` / `withMinScore` / `withSnippetCharLimit`)
