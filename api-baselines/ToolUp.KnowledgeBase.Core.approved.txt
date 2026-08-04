@@ -46,6 +46,7 @@ SharedTypes+IngestionStatus.IsComplete : System.Boolean { get }
 SharedTypes+IngestionStatus.IsEmbedding : System.Boolean { get }
 SharedTypes+IngestionStatus.IsExtractingText : System.Boolean { get }
 SharedTypes+IngestionStatus.IsFailed : System.Boolean { get }
+SharedTypes+IngestionStatus.IsOcrUnavailable : System.Boolean { get }
 SharedTypes+IngestionStatus.IsQueued : System.Boolean { get }
 SharedTypes+IngestionStatus.IsUnsupportedFormat : System.Boolean { get }
 SharedTypes+IngestionStatus.IsUploadRejected : System.Boolean { get }
@@ -58,11 +59,14 @@ SharedTypes+IngestionStatus+Embedding.chunksProcessed : System.Int32 { get }
 SharedTypes+IngestionStatus+Embedding.chunksTotal : System.Int32 { get }
 SharedTypes+IngestionStatus+Failed (class)
 SharedTypes+IngestionStatus+Failed.reason : System.String { get }
+SharedTypes+IngestionStatus+OcrUnavailable (class)
+SharedTypes+IngestionStatus+OcrUnavailable.detail : System.String { get }
 SharedTypes+IngestionStatus+Tags (class)
 SharedTypes+IngestionStatus+Tags.Complete : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.Embedding : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.ExtractingText : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.Failed : System.Int32 (literal)
+SharedTypes+IngestionStatus+Tags.OcrUnavailable : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.Queued : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.UnsupportedFormat : System.Int32 (literal)
 SharedTypes+IngestionStatus+Tags.UploadRejected : System.Int32 (literal)

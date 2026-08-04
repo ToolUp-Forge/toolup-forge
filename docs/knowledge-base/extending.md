@@ -176,20 +176,28 @@ If you want the AI side panel to surface your module's ingestion too, match the 
 
 ## Adding an OCR provider
 
-The KB extractor for PDFs uses `UglyToad.PdfPig` for native text extraction. Scanned PDFs (image-only pages) get empty text. To OCR them, register an `IOcrProvider`:
+The KB extractor for PDFs uses `UglyToad.PdfPig` for native text extraction. Scanned PDFs (image-only pages) have no text layer, so they extract nothing — and an image upload has none by construction.
+
+**Without an OCR companion, such an upload is stored and reports `IngestionStatus.OcrUnavailable`** rather than the misleading `Complete 0` it used to report. That status is the signal that this section is the remedy; it is not an error, and the original stays downloadable.
+
+The shipped companion is `ToolUp.OcrProviders.Tesseract` (in-process, no per-page cost, operator-supplied language data). Register any `IOcrProvider` in DI **before** `composeWithRAG` runs — the RAG composition probes for one and only falls back to the no-op when it finds none:
 
 ```fsharp skip=fragment
-let ocrProvider = AzureDocIntelligenceOcrProvider.create azureClient :> IOcrProvider
+open ToolUp.RAG.OcrProviders.Tesseract
 
-RAGServerApp.create (...)
-|> ...
-|> RAGServerApp.withOcrProvider ocrProvider
-|> ...
+let ocr = TesseractOcrProvider.createForTessData "/var/lib/tessdata"
+
+services.AddSingleton<ToolUp.Platform.IOcrProvider.IOcrProvider>(ocr)
 ```
 
-The KB extractor checks `IsScanned` on the document bytes; if true, falls back to `ExtractText` from the OCR provider. The result chunks the same way as native-extracted text.
+The extractor then routes through it on two paths:
 
-OCR is expensive (~$1.50 per 1000 pages with Azure Document Intelligence). Use sparingly; check `IsScanned` cheaply before invoking.
+1. **Declared.** `IsScanned` returns `true` for the document bytes ⇒ the whole file goes through `ExtractText`, one chunk per OCR page.
+2. **Fallback.** `IsScanned` said `false` but native extraction produced *nothing at all*, and a real companion is composed ⇒ `ExtractText` runs anyway. `IsScanned` is a cheap heuristic and is allowed to be wrong; this is what stops it being *silently* wrong on a PDF carrying a stray scanner watermark. With the no-op default the fallback is skipped entirely, so an uncomposed deployment does not even pay the extra call (GP 13).
+
+Either way the resulting chunks carry 1-based page numbers and cite exactly like natively-extracted text.
+
+OCR is by far the most expensive step an ingestion path can take — in wall-clock time for an in-process engine, and in money for a hosted one (~$1.50 per 1000 pages with a commercial document-understanding service). The companion's page, time, size and concurrency caps exist for that reason; see [`companions/ocr-providers.md`](../companions/ocr-providers.md).
 
 ## Adding a table extractor
 

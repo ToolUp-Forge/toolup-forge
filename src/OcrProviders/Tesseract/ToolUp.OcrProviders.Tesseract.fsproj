@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.OcrProviders.Tesseract</PackageId>
+    <AssemblyName>ToolUp.OcrProviders.Tesseract</AssemblyName>
+    <Description>Tesseract IOcrProvider for ToolUp.KnowledgeBase / ToolUp.RAG. Recovers text from scanned PDFs and image uploads that carry no text layer, so they index and become retrievable instead of landing empty. Server-only companion with a native (P/Invoke) dependency; language data is operator-supplied.</Description>
+    <PackageTags>fsharp;sdk;rag;knowledgebase;ocr;tesseract;scanned;pdf;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 500 — the first concrete IOcrProvider. GP 1 — the Tesseract
+       wrapper and the native libtesseract / libleptonica beneath it are
+       isolated to this companion; they never reach ToolUp.Platform.*.
+       GP 2 — Tesseract and its trained data are Apache-2.0, so there is
+       no paid default. GP 13 — a deployment that does not compose it
+       keeps the no-op IOcrProvider, loads no native library, and pays
+       nothing. Native-dependency posture (vendored RIDs, hash pinning,
+       licensing) is documented in TesseractOcrProvider.fs and README.md. -->
+  <ItemGroup>
+    <Compile Include="TesseractOcrProvider.fs" />
+    <Compile Include="TesseractOcrHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. Tesseract is the
+         managed wrapper + the win-x64 / win-x86 native binaries; PdfPig
+         reads the page images out of a scanned PDF (already pinned
+         centrally, shared with ToolUp.KnowledgeBase.Server). -->
+    <PackageReference Include="Tesseract" />
+    <PackageReference Include="PdfPig" />
+  </ItemGroup>
+</Project>

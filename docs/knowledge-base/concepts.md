@@ -85,7 +85,8 @@ Shipped extractors:
 
 | Format | Library | Output |
 |---|---|---|
-| PDF | `UglyToad.PdfPig` | Per-page text, page-numbered. Scanned PDFs → empty text (no OCR by default; pair with `IOcrProvider`). |
+| PDF | `UglyToad.PdfPig` | Per-page text, page-numbered. Scanned PDFs have no text layer → `IngestionStatus.OcrUnavailable` unless an `IOcrProvider` companion is composed (`ToolUp.OcrProviders.Tesseract`). |
+| Images (`png` `jpg` `tiff` `bmp` `gif` `webp`) | `IOcrProvider` companion | One OCR page. Without a companion: stored, `OcrUnavailable`. Not in `supportedExtensions`, so the upload policy's allowlist / reject behaviour is unchanged. |
 | PPTX | `DocumentFormat.OpenXml` | Per-slide text + speaker notes; preserves slide order. |
 | DOCX | `DocumentFormat.OpenXml` | Paragraph-by-paragraph; tables flattened to comma-separated rows. |
 | XLSX | `DocumentFormat.OpenXml` | Per-sheet; passed to `Chunking.chunkSpreadsheet` for header-aware chunking. |

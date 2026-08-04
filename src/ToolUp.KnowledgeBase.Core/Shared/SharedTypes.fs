@@ -28,6 +28,21 @@ type IngestionStatus =
     /// file) so the UI badges "stored, not searchable" honestly rather
     /// than implying a successful index.
     | UnsupportedFormat of detail: string
+    /// Phase 500 — the document was stored, its type IS recognised, and
+    /// it yielded no text because it has no text layer to yield: a
+    /// scanned PDF, a photographed page, an image upload. Recovering
+    /// that content needs an `IOcrProvider` companion, and this
+    /// deployment composed none.
+    ///
+    /// This exists because the honest alternative did not: before it,
+    /// such an upload reported `Complete 0` — a successful index of
+    /// nothing — so the user was told their scan was searchable when it
+    /// was not, and the operator got no signal that OCR was the missing
+    /// piece. Distinct from `UnsupportedFormat` (the type itself is not
+    /// recognised) and from `Failed` (nothing went wrong; a capability
+    /// is simply absent). `detail` names the remedy, not just the
+    /// symptom.
+    | OcrUnavailable of detail: string
 
 // ─── Provenance ───────────────────────────────────────────────────
 

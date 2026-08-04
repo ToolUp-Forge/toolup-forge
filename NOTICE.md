@@ -99,6 +99,17 @@ operate on Community-tier components only.
   Copyright (c) Eliot Jones. https://github.com/UglyToad/PdfPig
 - **DocumentFormat.OpenXml** — Office document parsing. MIT License.
   Copyright (c) Microsoft Corporation. https://github.com/dotnet/Open-XML-SDK
+- **Tesseract** — managed wrapper over the Tesseract OCR engine, used by the
+  `ToolUp.OcrProviders.Tesseract` companion. Apache License 2.0.
+  Copyright (c) 2012-2020 Charles Weld. https://github.com/charlesw/tesseract
+  The package vendors the native **Tesseract** OCR engine (Apache License 2.0,
+  copyright (c) Google Inc. and contributors, https://github.com/tesseract-ocr/tesseract)
+  and **Leptonica** (BSD 2-Clause, copyright (c) Leptonica,
+  http://www.leptonica.org/) as dynamically-loaded binaries for win-x64 and
+  win-x86. Both are shipped unmodified and are user-replaceable. Trained
+  language data (`*.traineddata`) is **not** redistributed here — an operator
+  supplies it (tessdata / tessdata_fast, Apache License 2.0,
+  https://github.com/tesseract-ocr/tessdata).
 
 ### Numerical computing
 

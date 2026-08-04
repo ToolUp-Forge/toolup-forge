@@ -156,7 +156,11 @@ let private isTerminal (status: IngestionStatus) =
     // Phase 119 — both are end-states; neither progresses, so the poll
     // loop must not keep waiting on them.
     | IngestionStatus.UploadRejected _
-    | IngestionStatus.UnsupportedFormat _ -> true
+    | IngestionStatus.UnsupportedFormat _
+    // Phase 500 — terminal: no OCR companion is composed, so nothing
+    // further will happen to this document. Polling it forever would
+    // keep the 2s loop alive on a state that cannot change.
+    | IngestionStatus.OcrUnavailable _ -> true
     | _ -> false
 
 let private hasNonTerminal (docs: KnowledgeDocument list) =

@@ -32,6 +32,64 @@ let makeChunk
             ]
     }
 
+// ─── OCR availability (Phase 500) ─────────────────────────────────
+//
+// The `IOcrProvider` seam has always resolved to *something* — DI hands
+// back `NoOpOcrProvider` when a deployment composed no companion, so
+// every call site could consult it unconditionally. That is a good
+// property and this does not change it. What it adds is the ability to
+// ASK which one you got, because two situations that look identical to
+// the extractor are completely different to the user:
+//
+//   * a real OCR provider ran and recovered nothing — the page really is
+//     blank;
+//   * no OCR provider exists, so nothing was even attempted.
+//
+// Before this, both landed as `Complete 0` — "indexed successfully, zero
+// chunks" — which told a user their scanned contract was searchable when
+// it was not, and told the operator nothing at all. Distinguishing them
+// is the whole of the observability half of Phase 500 (GP 13: the core
+// stays zero-cost, but a deployment must be able to SEE what it is not
+// paying for).
+//
+// The discriminator is a type test against the no-op, not a string
+// comparison on `Name`. `Name` is documented as a free-form trace label,
+// so a companion is entitled to call itself anything; the identity of
+// the default is a fact about this codebase and is checked as one. The
+// `Name` fallback below only catches a hand-rolled stand-in that
+// deliberately adopts the no-op's identifier.
+
+/// `true` when the composed `IOcrProvider` is a real companion rather
+/// than the no-op default (or a null the DI probe failed to fill).
+let ocrComposed (ocr: IOcrProvider) : bool =
+    not (isNull (box ocr))
+    && not (ocr :? ToolUp.RAG.NoOpDocUnderstanding.NoOpOcrProvider)
+    && not (String.Equals(ocr.Name, "noop", StringComparison.OrdinalIgnoreCase))
+
+/// Extensions (lower-case, no leading dot) that carry no text layer at
+/// all and are therefore *only* indexable through OCR. Distinct from
+/// `supportedExtensions` below on purpose: these are not "supported"
+/// in the Phase 119 upload-policy sense — a deployment with no OCR
+/// companion cannot index them, and the policy's allowlist / reject
+/// levers must keep behaving exactly as they did (GP 11).
+let ocrOnlyExtensions: Set<string> =
+    Set.ofList [ "png"; "jpg"; "jpeg"; "tif"; "tiff"; "bmp"; "gif"; "webp" ]
+
+/// MIME type for an OCR-eligible image extension. `IOcrProvider` takes
+/// `mimeType` rather than a filename, so the extractor is the one place
+/// that knows the mapping.
+let private imageMimeType (ext: string) : string =
+    match ext with
+    | "png" -> "image/png"
+    | "jpg"
+    | "jpeg" -> "image/jpeg"
+    | "tif"
+    | "tiff" -> "image/tiff"
+    | "bmp" -> "image/bmp"
+    | "gif" -> "image/gif"
+    | "webp" -> "image/webp"
+    | other -> sprintf "image/%s" other
+
 /// Extract (TextChunk * SourceReference) pairs from a PDF file.
 /// Three-stage path:
 ///   1. `IOcrProvider.IsScanned` — if the document looks like a scanned
@@ -65,21 +123,25 @@ let private extractPdf
             IndexedAt = DateTimeOffset.UtcNow
         }
 
+        // One projection for both OCR routes below — the declared
+        // `IsScanned` route and the Phase 500 empty-text fallback — so
+        // the two can never emit differently-shaped chunks.
+        let ocrChunks (pages: OcrPage list) = [
+            for p in pages do
+                let text = p.Text.Trim()
+
+                if text.Length > 10 then
+                    let src = makeSrc (Page p.PageNumber)
+                    let header = sprintf "Page %d (OCR)" p.PageNumber
+                    let chunk = makeChunk Document fileName header text src
+                    (chunk, src)
+        ]
+
         let! isScanned = ocr.IsScanned bytes mimeType
 
         if isScanned then
             let! pages = ocr.ExtractText bytes mimeType
-
-            return [
-                for p in pages do
-                    let text = p.Text.Trim()
-
-                    if text.Length > 10 then
-                        let src = makeSrc (Page p.PageNumber)
-                        let header = sprintf "Page %d (OCR)" p.PageNumber
-                        let chunk = makeChunk Document fileName header text src
-                        (chunk, src)
-            ]
+            return ocrChunks pages
         else
             let! extractedTables = tables.ExtractTables bytes mimeType
 
@@ -144,7 +206,68 @@ let private extractPdf
                             (chunk, src)
             ]
 
-            return textChunks @ tableChunks
+            // Phase 500 — the empty-text fallback. `IsScanned` is a
+            // cheap up-front heuristic and a heuristic can be wrong: a
+            // PDF carrying a stray text artefact (a scanner watermark, a
+            // page-number stamp, an OCR'd-then-stripped layer) reads as
+            // "not scanned" and then yields nothing from PdfPig. Before
+            // this, that document indexed as zero chunks with an OCR
+            // engine sitting right there unused. When native extraction
+            // produced NOTHING and a real companion is composed, run OCR
+            // anyway — the direct reading of 500.B's "route through the
+            // composed provider when text extraction yields empty /
+            // near-empty output".
+            //
+            // Deliberately gated on `ocrComposed`: with the no-op
+            // default this whole branch is skipped, so an uncomposed
+            // deployment does not even pay the extra `ExtractText` call
+            // that would return `[]` (GP 13), and the path stays
+            // byte-equivalent to the pre-500 extractor.
+            if textChunks.IsEmpty && tableChunks.IsEmpty && ocrComposed ocr then
+                let! pages = ocr.ExtractText bytes mimeType
+                return ocrChunks pages
+            else
+                return textChunks @ tableChunks
+    }
+
+/// Extract (TextChunk * SourceReference) pairs from an image upload
+/// (Phase 500). An image has no text layer by construction, so the
+/// composed `IOcrProvider` is the *only* route — with the no-op default
+/// this returns `[]` and the caller reports "OCR unavailable" rather
+/// than a successful index of nothing.
+let private extractImage
+    (ocr: IOcrProvider)
+    (docId: string)
+    (fileName: string)
+    (ext: string)
+    (bytes: byte[])
+    : Async<(TextChunk * SourceReference) list> =
+    async {
+        if not (ocrComposed ocr) then
+            return []
+        else
+            let mimeType = imageMimeType ext
+            let! pages = ocr.ExtractText bytes mimeType
+
+            return [
+                for p in pages do
+                    let text = p.Text.Trim()
+
+                    if text.Length > 10 then
+                        // An image is one page. `Page 1` keeps the
+                        // citation locator uniform with the PDF path, so
+                        // a Sources panel opens it the same way.
+                        let src: SourceReference = {
+                            DocumentId = docId
+                            DocumentName = fileName
+                            FileType = ext
+                            Location = Page(max 1 p.PageNumber)
+                            IndexedAt = DateTimeOffset.UtcNow
+                        }
+
+                        let chunk = makeChunk Document fileName (sprintf "%s (OCR)" fileName) text src
+                        (chunk, src)
+            ]
     }
 
 /// Extract (TextChunk * SourceReference) pairs from a PPTX file.
@@ -604,6 +727,90 @@ let supportedExtensions: Set<string> =
 let isSupportedExtension (ext: string) : bool =
     supportedExtensions.Contains(ext.ToLowerInvariant())
 
+// ─── "OCR unavailable" classification (Phase 500) ─────────────────
+//
+// The observability half of the phase. `extractChunks` returning `[]`
+// has three quite different causes and the upload path has to tell them
+// apart before it picks a terminal status:
+//
+//   * no extractor for the type          → `UnsupportedFormat` (Phase 119)
+//   * a recognised, genuinely empty file → `Complete 0`
+//   * a recognised file with no TEXT LAYER, and no OCR composed
+//                                        → `OcrUnavailable` (here)
+//
+// The third was previously indistinguishable from the second, which is
+// how a scanned PDF came to be reported as a successful index. Note the
+// direction of the guard: this classifies only when NO companion is
+// composed. With a real provider in place an empty result means the
+// engine looked and found nothing, which is a genuine `Complete 0` and
+// must not be dressed up as a missing capability.
+
+/// A PDF's extractable-text length and whether any page carries an
+/// embedded raster image. Total: a PDF that will not open answers
+/// `(0, false)` so the caller falls through to its ordinary paths —
+/// adjudicating PDF validity belongs to `ExtractionErrors.classify`,
+/// which sees the actual exception.
+let private inspectPdf (bytes: byte[]) : int * bool =
+    try
+        use doc = UglyToad.PdfPig.PdfDocument.Open(bytes)
+        let mutable textChars = 0
+        let mutable hasImage = false
+
+        for page in doc.GetPages() do
+            let text = page.Text
+
+            if not (isNull text) then
+                textChars <- textChars + text.Trim().Length
+
+            if not hasImage then
+                hasImage <- page.GetImages() |> Seq.isEmpty |> not
+
+        textChars, hasImage
+    with _ ->
+        0, false
+
+/// Threshold below which a PDF's text layer counts as absent rather
+/// than sparse. A scanned page routinely carries a handful of stray
+/// characters (a stamped page number, a scanner watermark); a genuine
+/// text page does not stop at 32.
+[<Literal>]
+let private ScannedTextThreshold = 32
+
+/// `Some detail` when this document yielded nothing BECAUSE it needs OCR
+/// and no `IOcrProvider` companion is composed; `None` in every other
+/// case. Called only on the empty-extraction path, so a deployment with
+/// no scanned uploads never opens a PDF twice (GP 13).
+///
+/// `detail` is surfaced verbatim to the user through
+/// `IngestionStatus.OcrUnavailable`, so it names the remedy — an
+/// operator reading "OCR unavailable" with no idea what to install has
+/// been told the symptom and nothing else.
+let ocrUnavailableDetail (ocr: IOcrProvider) (fileName: string) (bytes: byte[]) : string option =
+    if ocrComposed ocr then
+        None
+    else
+        let ext = Path.GetExtension(fileName).ToLowerInvariant().TrimStart('.')
+
+        if ocrOnlyExtensions.Contains ext then
+            Some(
+                sprintf
+                    "'%s' is an image, so its text can only be recovered by OCR — no IOcrProvider companion is composed, so it was stored but not indexed. Compose one (e.g. ToolUp.OcrProviders.Tesseract) to make image uploads searchable."
+                    fileName
+            )
+        elif ext = "pdf" then
+            let textChars, hasImage = inspectPdf bytes
+
+            if hasImage && textChars < ScannedTextThreshold then
+                Some(
+                    sprintf
+                        "'%s' looks like a scanned PDF — its pages carry images but no text layer, so nothing could be indexed. No IOcrProvider companion is composed; compose one (e.g. ToolUp.OcrProviders.Tesseract) to make scanned documents searchable."
+                        fileName
+                )
+            else
+                None
+        else
+            None
+
 let extractChunks
     (ocr: IOcrProvider)
     (tables: ITableExtractor)
@@ -626,7 +833,22 @@ let extractChunks
         | ".xlsx" -> return extractXlsx docId fileName bytes
         | ".csv" -> return extractCsv docId fileName bytes
         | ".txt" -> return extractTxt docId fileName bytes
-        | _ -> return []
+        | other ->
+            // Phase 500 — image uploads. Kept OUT of
+            // `supportedExtensions` deliberately: that set drives the
+            // Phase 119 upload policy, and an image is genuinely not
+            // indexable without an OCR companion, so a deployment's
+            // allowlist / reject decisions must not silently change
+            // (GP 11). What changes is only what happens once an image
+            // HAS been stored — with a companion composed it now
+            // indexes, and without one it reports "OCR unavailable"
+            // instead of "no extractor for this type".
+            let ext = other.TrimStart('.')
+
+            if ocrOnlyExtensions.Contains ext then
+                return! extractImage ocr docId fileName ext bytes
+            else
+                return []
     }
 
 // ─── Document index persistence ───────────────────────────────────

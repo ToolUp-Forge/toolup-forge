@@ -270,6 +270,15 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.7" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />
     <PackageVersion Include="System.Text.Json" Version="8.0.6" />
+    <!-- Phase 500 — the Tesseract IOcrProvider companion
+         (`src/OcrProviders/Tesseract/`). Apache-2.0 managed wrapper over
+         libtesseract 5 + libleptonica, vendoring the native binaries for
+         win-x64 / win-x86 inside the package (GP 1 — never referenced by
+         `ToolUp.Platform.*`; the native dependency is the companion's
+         alone). Language data (`*.traineddata`) is NOT shipped by the
+         package and is operator-supplied — the companion probes for it
+         at `create` and fails loud when absent. -->
+    <PackageVersion Include="Tesseract" Version="5.2.0" />
     <PackageVersion Include="WebPush" Version="1.0.13" />
   </ItemGroup>
 

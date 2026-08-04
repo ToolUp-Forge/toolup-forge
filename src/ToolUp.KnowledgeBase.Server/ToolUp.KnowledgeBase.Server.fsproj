@@ -31,6 +31,12 @@
              `internal`, so the pack needs visibility (same shape as
              Platform.Server → Platform.Tests). -->
         <InternalsVisibleTo Include="ToolUp.OpenXml.Tests" />
+        <!-- Phase 500 — the OCR-availability + "OCR unavailable"
+             classification cases live in the Platform pack (they are
+             about the KB extraction seam, not about OpenXml), and the
+             extractor module is `internal`, so that pack needs the same
+             visibility. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->

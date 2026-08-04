@@ -195,11 +195,27 @@ let private persistAndIngest
                     // file. The pre-119 code reported both as `Complete 0`, which
                     // read as a successful index of an empty document and hid the
                     // fact that an unsupported upload would never be retrievable.
+                    //
+                    // Phase 500 adds the third case the pair above could
+                    // not express: a recognised file with no TEXT LAYER
+                    // (a scanned PDF, an image) and no `IOcrProvider`
+                    // composed. That is neither an unrecognised type nor
+                    // a successful index of an empty document — it is a
+                    // missing capability, and reporting it as `Complete
+                    // 0` told the user their scan was searchable when it
+                    // was not. Checked FIRST because a scanned PDF is a
+                    // *supported* extension and would otherwise be
+                    // absorbed by the `Complete 0` arm. The probe reads
+                    // nothing at all when an OCR companion IS composed
+                    // (GP 13).
                     let terminal =
-                        if isSupportedExtension ext then
-                            Complete 0
-                        else
-                            UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
+                        match ocrUnavailableDetail deps.OcrProvider safeName bytes with
+                        | Some detail -> OcrUnavailable detail
+                        | None ->
+                            if isSupportedExtension ext then
+                                Complete 0
+                            else
+                                UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
 
                     statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
                     do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal

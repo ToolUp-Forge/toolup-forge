@@ -359,11 +359,11 @@ The `KnowledgeRetrieved` event type is a wire-format contract. Use it for retrie
 
 `/health/rag` exposes a 60-second rolling-window snapshot from `IRagTelemetry`: embedding latency, ingestion queue depth, flush latency, retrieval hit / miss / empty counts. The `HealthMonitorUI` admin module surfaces it for operators.
 
-## Multi-modal extensions (deferred)
+## Multi-modal extensions
 
-The `IOcrProvider`, `ITableExtractor`, and `IImageEmbedder` extension points reserve the surface for future multimodal work:
+The `IOcrProvider`, `ITableExtractor`, and `IImageEmbedder` extension points carry the multimodal surface. OCR is shipped; the other two remain deferred.
 
-- `IOcrProvider` — scanned-document OCR. Default no-op (assumes documents are text-extractable).
+- `IOcrProvider` — scanned-document OCR. Default no-op (assumes documents are text-extractable), so an uncomposed deployment pays nothing. A concrete companion ships: `ToolUp.OcrProviders.Tesseract` — see [`companions/ocr-providers.md`](../companions/ocr-providers.md). Note the default is not "OCR off" but "OCR impossible": with the no-op in place, a scanned upload lands as `IngestionStatus.OcrUnavailable` rather than being silently reported as indexed.
 - `ITableExtractor` — table extraction with structure preserved. Default no-op.
 - `IImageEmbedder` — CLIP-style image vectors in a shared modality space. No default registered (no honest no-op).
 

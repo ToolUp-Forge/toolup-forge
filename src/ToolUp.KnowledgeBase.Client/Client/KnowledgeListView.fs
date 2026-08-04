@@ -66,6 +66,19 @@ module Badges =
                 prop.title detail
                 prop.text "Stored · not searchable"
             ]
+        // Phase 500 — the type IS supported; what is missing is an OCR
+        // companion. Amber like `UnsupportedFormat` (both mean "stored,
+        // not searchable") but worded differently, because the remedy is
+        // completely different: this one is fixed by the operator
+        // composing OCR, not by the user re-exporting the file. The
+        // detail tooltip names the companion.
+        | OcrUnavailable detail ->
+            Html.span [
+                prop.className
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700"
+                prop.title detail
+                prop.text "Scanned · OCR unavailable"
+            ]
 
     let sourceBadge (source: KnowledgeSource) =
         match source with
@@ -183,6 +196,7 @@ let private statusKey (status: IngestionStatus) =
     | Failed _ -> "Failed"
     | UploadRejected _ -> "Rejected"
     | UnsupportedFormat _ -> "Stored · not searchable"
+    | OcrUnavailable _ -> "Scanned · OCR unavailable"
 
 let private monthKey (dt: DateTimeOffset) = dt.ToString("yyyy-MM")
 

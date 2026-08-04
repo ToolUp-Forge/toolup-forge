@@ -217,6 +217,10 @@ let allTests =
         // Phase 513 — Redis IEmbeddingCache companion. Structural arm
         // always on; live arm Pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisEmbeddingCacheTests.tests
+        // Phase 500 — the Tesseract IOcrProvider companion and the
+        // "OCR unavailable" ingestion signal. Structural arm always on;
+        // native arm Pending unless TOOLUP_TESSDATA is set.
+        OcrProviderTests.tests
         KnowledgeUserScopeIsolationTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests

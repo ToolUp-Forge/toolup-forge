@@ -1520,6 +1520,7 @@
              arm env-gated on TOOLUP_REDIS_CONNECTION, the same server the
              Redis notification-channel and distributed-lock packs use. -->
         <Compile Include="InProcess\RedisEmbeddingCacheTests.fs" />
+        <Compile Include="InProcess\OcrProviderTests.fs" />
         <!-- Phase 317 — peer-auth posture advisory. The six-rung ladder a
              composition is classified against (from "no peer surface" up
              to the static-bearer prefix that shadows the signed-JWT
@@ -1668,6 +1669,7 @@
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
+        <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />
         <!-- Phase 501 — the sparse-index analyzer companions. -->
         <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
         <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />

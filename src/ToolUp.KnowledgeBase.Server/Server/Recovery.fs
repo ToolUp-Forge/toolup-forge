@@ -75,7 +75,12 @@ let recoverStuckDocumentsAtStartup (storage: IBlobStorage) (containers: string l
         // end-state, `UploadRejected` is never persisted (so never seen
         // here), but neither is a restart-stuck document to re-fail.
         | UploadRejected _
-        | UnsupportedFormat _ -> false
+        | UnsupportedFormat _
+        // Phase 500 — also terminal: the document was stored and its
+        // content needs an OCR companion this deployment does not have.
+        // Re-failing it on restart would replace an accurate, actionable
+        // status with a generic one.
+        | OcrUnavailable _ -> false
 
     let mutable total = 0
 

@@ -137,9 +137,10 @@ RAG-specific builders:
 - `withRetrievalTracer: IRetrievalTracer -> RAGServerApp -> RAGServerApp`
 - `withVectorStore: IVectorStore -> RAGServerApp -> RAGServerApp` (default `InMemoryVectorStore`)
 - `withEmbeddingCache: IEmbeddingCache -> RAGServerApp -> RAGServerApp`
-- `withOcrProvider: IOcrProvider -> RAGServerApp -> RAGServerApp`
 - `withTableExtractor: ITableExtractor -> RAGServerApp -> RAGServerApp`
 - `withReranker: IReranker -> RAGServerApp -> RAGServerApp`
+
+> `IOcrProvider` has no `with*` builder: `composeWithRAG` probes DI for an already-registered provider and falls back to the no-op only when it finds none, so an OCR companion is composed by `services.AddSingleton<IOcrProvider>(...)` before the RAG composition runs. See [`companions/ocr-providers.md`](../companions/ocr-providers.md).
 - `withTextSummariser: ITextSummariser -> RAGServerApp -> RAGServerApp`
 
 Terminal:

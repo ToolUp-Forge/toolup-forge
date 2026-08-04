@@ -102,7 +102,8 @@ These are the only contracts. Internally, `KnowledgeBase.Server` is just an `IFo
 ## Multi-format extraction
 
 The shipped extractors:
-- **PDF** — `UglyToad.PdfPig`. Per-page text extraction. Scanned PDFs (image-only) get empty text; pair with an `IOcrProvider` companion (deferred) to fill them.
+- **PDF** — `UglyToad.PdfPig`. Per-page text extraction. Scanned PDFs (image-only) have no text layer and report `IngestionStatus.OcrUnavailable`; compose an `IOcrProvider` companion (`ToolUp.OcrProviders.Tesseract`) to index them.
+- **Images** (`png` `jpg` `tiff` `bmp` `gif` `webp`) — via a composed `IOcrProvider`; `OcrUnavailable` without one.
 - **PPTX** — `DocumentFormat.OpenXml`. Per-slide text + speaker notes.
 - **DOCX** — `DocumentFormat.OpenXml`. Paragraph-by-paragraph; tables flattened to row-comma-separated.
 - **XLSX** — `DocumentFormat.OpenXml`. Per-sheet, header-aware chunking.
