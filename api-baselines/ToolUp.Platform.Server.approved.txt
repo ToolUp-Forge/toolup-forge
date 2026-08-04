@@ -623,6 +623,25 @@ ToolUp.Platform.CapabilityGateDecision+Denied.Item : ToolUp.Platform.CapabilityD
 ToolUp.Platform.CapabilityGateDecision+Tags (class)
 ToolUp.Platform.CapabilityGateDecision+Tags.Denied : System.Int32 (literal)
 ToolUp.Platform.CapabilityGateDecision+Tags.Granted : System.Int32 (literal)
+ToolUp.Platform.CapacityDecision (class)
+ToolUp.Platform.CapacityDecision.IsBudgetExceeded : System.Boolean { get }
+ToolUp.Platform.CapacityDecision.IsUnbudgeted : System.Boolean { get }
+ToolUp.Platform.CapacityDecision.IsWithinBudget : System.Boolean { get }
+ToolUp.Platform.CapacityDecision.Tag : System.Int32 { get }
+ToolUp.Platform.CapacityDecision.Unbudgeted : ToolUp.Platform.CapacityDecision { get }
+ToolUp.Platform.CapacityDecision+BudgetExceeded (class)
+ToolUp.Platform.CapacityDecision+BudgetExceeded.Item : ToolUp.Platform.Usage.QuotaBreached { get }
+ToolUp.Platform.CapacityDecision+Tags (class)
+ToolUp.Platform.CapacityDecision+Tags.BudgetExceeded : System.Int32 (literal)
+ToolUp.Platform.CapacityDecision+Tags.Unbudgeted : System.Int32 (literal)
+ToolUp.Platform.CapacityDecision+Tags.WithinBudget : System.Int32 (literal)
+ToolUp.Platform.CapacityDecision+WithinBudget (class)
+ToolUp.Platform.CapacityDecision+WithinBudget.limit : System.Int64 { get }
+ToolUp.Platform.CapacityDecision+WithinBudget.requested : System.Int64 { get }
+ToolUp.Platform.CapacityGrant (class)
+ToolUp.Platform.CapacityGrant..ctor(System.String, System.Int64)
+ToolUp.Platform.CapacityGrant.Dimension : System.String { get }
+ToolUp.Platform.CapacityGrant.Limit : System.Int64 { get }
 ToolUp.Platform.ChampionChallengerGate (class)
 ToolUp.Platform.ChampionChallengerGate..ctor(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelEvaluationRunner, ToolUp.Platform.IAuditLog, ToolUp.Platform.ChampionChallengerPolicy)
 ToolUp.Platform.ChampionChallengerGate.PromoteChallenger(System.String, System.String, System.String, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.PromotionError]]
@@ -2183,6 +2202,149 @@ ToolUp.Platform.EncryptionKeyProvisionLifecycle (class)
 ToolUp.Platform.EncryptionKeyProvisionLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.EncryptionKeyProvisionLifecycle+EncryptionKeyProvisionLifecycle (class)
 ToolUp.Platform.EncryptionKeyProvisionLifecycle+EncryptionKeyProvisionLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.EntitlementBudget (class)
+ToolUp.Platform.EntitlementBudget..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, ToolUp.Platform.CapacityDecision]])
+ToolUp.Platform.EntitlementBudget.Check : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, ToolUp.Platform.CapacityDecision]] { get }
+ToolUp.Platform.EntitlementBudget.TryLimit : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64]] { get }
+ToolUp.Platform.EntitlementBudgetModule (class)
+ToolUp.Platform.EntitlementBudgetModule.ofStatus(ToolUp.Platform.EntitlementStatus) : ToolUp.Platform.EntitlementBudget
+ToolUp.Platform.EntitlementBudgetModule.unbounded : ToolUp.Platform.EntitlementBudget { get }
+ToolUp.Platform.EntitlementClaims (class)
+ToolUp.Platform.EntitlementClaims..ctor(System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CapacityGrant], System.TimeSpan)
+ToolUp.Platform.EntitlementClaims.Capabilities : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.EntitlementClaims.Capacities : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CapacityGrant] { get }
+ToolUp.Platform.EntitlementClaims.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementClaims.GraceWindow : System.TimeSpan { get }
+ToolUp.Platform.EntitlementClaims.HolderId : System.String { get }
+ToolUp.Platform.EntitlementClaims.IssuedAt : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementClaims.NotBefore : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementClaims.TokenId : System.String { get }
+ToolUp.Platform.EntitlementClaimsModule (class)
+ToolUp.Platform.EntitlementClaimsModule.canonicalBytes(ToolUp.Platform.EntitlementClaims) : System.Byte[]
+ToolUp.Platform.EntitlementClaimsModule.canonicalJson(ToolUp.Platform.EntitlementClaims) : System.String
+ToolUp.Platform.EntitlementClaimsModule.canonicalPropertyNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EntitlementClaimsModule.lifetime(ToolUp.Platform.EntitlementClaims) : System.TimeSpan
+ToolUp.Platform.EntitlementClaimsModule.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntitlementClaims, ToolUp.Platform.EntitlementRefusal]
+ToolUp.Platform.EntitlementClaimsModule.toToken(System.String, System.String, System.String, ToolUp.Platform.EntitlementClaims) : ToolUp.Platform.EntitlementToken
+ToolUp.Platform.EntitlementCompose (class)
+ToolUp.Platform.EntitlementCompose.resolveAndCap(ToolUp.Platform.EntitlementValidation, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementToken], System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.FlagEvaluator+FlagEvaluator) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`3[ToolUp.Platform.FlagEvaluator+FlagEvaluator, ToolUp.Platform.EntitlementBudget, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.DependencyInjection.IServiceCollection]]]
+ToolUp.Platform.EntitlementCompose.serviceRegistration(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ToolUp.Platform.EntitlementStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementRefusal]]]], System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.EntitlementGovernance, ToolUp.Platform.RenewalPolicy, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.EntitlementFlagCeiling (class)
+ToolUp.Platform.EntitlementFlagCeiling.decorate(ToolUp.Platform.EntitlementStatus, ToolUp.Platform.EntitlementGovernance, ToolUp.Platform.FlagEvaluator+FlagEvaluator) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
+ToolUp.Platform.EntitlementFloor (class)
+ToolUp.Platform.EntitlementFloor.ExportOwnData : System.String (literal)
+ToolUp.Platform.EntitlementFloor.ReadOwnData : System.String (literal)
+ToolUp.Platform.EntitlementFloor.capabilities : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.EntitlementGovernance (class)
+ToolUp.Platform.EntitlementGovernance..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.UnprovisionedPosture)
+ToolUp.Platform.EntitlementGovernance.GovernedKeys : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.EntitlementGovernance.Unprovisioned : ToolUp.Platform.UnprovisionedPosture { get }
+ToolUp.Platform.EntitlementGovernanceModule (class)
+ToolUp.Platform.EntitlementGovernanceModule.declare(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntitlementGovernance, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.EntitlementGovernanceModule.governs(System.String, ToolUp.Platform.EntitlementGovernance) : System.Boolean
+ToolUp.Platform.EntitlementGovernanceModule.none : ToolUp.Platform.EntitlementGovernance { get }
+ToolUp.Platform.EntitlementGovernanceModule.withUnprovisioned(ToolUp.Platform.UnprovisionedPosture, ToolUp.Platform.EntitlementGovernance) : ToolUp.Platform.EntitlementGovernance
+ToolUp.Platform.EntitlementPhase (class)
+ToolUp.Platform.EntitlementPhase.IsActive : System.Boolean { get }
+ToolUp.Platform.EntitlementPhase.IsGrace : System.Boolean { get }
+ToolUp.Platform.EntitlementPhase.IsLapsed : System.Boolean { get }
+ToolUp.Platform.EntitlementPhase.IsUnentitled : System.Boolean { get }
+ToolUp.Platform.EntitlementPhase.Tag : System.Int32 { get }
+ToolUp.Platform.EntitlementPhase.Unentitled : ToolUp.Platform.EntitlementPhase { get }
+ToolUp.Platform.EntitlementPhase+Active (class)
+ToolUp.Platform.EntitlementPhase+Active.daysRemaining : System.Double { get }
+ToolUp.Platform.EntitlementPhase+Grace (class)
+ToolUp.Platform.EntitlementPhase+Grace.daysSinceExpiry : System.Double { get }
+ToolUp.Platform.EntitlementPhase+Grace.graceDaysRemaining : System.Double { get }
+ToolUp.Platform.EntitlementPhase+Lapsed (class)
+ToolUp.Platform.EntitlementPhase+Lapsed.daysSinceExpiry : System.Double { get }
+ToolUp.Platform.EntitlementPhase+Tags (class)
+ToolUp.Platform.EntitlementPhase+Tags.Active : System.Int32 (literal)
+ToolUp.Platform.EntitlementPhase+Tags.Grace : System.Int32 (literal)
+ToolUp.Platform.EntitlementPhase+Tags.Lapsed : System.Int32 (literal)
+ToolUp.Platform.EntitlementPhase+Tags.Unentitled : System.Int32 (literal)
+ToolUp.Platform.EntitlementPhaseModule (class)
+ToolUp.Platform.EntitlementPhaseModule.describe(ToolUp.Platform.EntitlementPhase) : System.String
+ToolUp.Platform.EntitlementPhaseModule.grantsGovernedCapabilities(ToolUp.Platform.EntitlementPhase) : System.Boolean
+ToolUp.Platform.EntitlementPhaseModule.status(ToolUp.Platform.EntitlementPhase) : System.String
+ToolUp.Platform.EntitlementPreflight (class)
+ToolUp.Platform.EntitlementPreflight.ValidatorName : System.String (literal)
+ToolUp.Platform.EntitlementPreflight.auditGovernance(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.EntitlementGovernance) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.EntitlementPreflight.auditRenewal(ToolUp.Platform.RenewalPolicy, ToolUp.Platform.EntitlementStatus) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.EntitlementPreflight.describe(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.EntitlementGovernance, ToolUp.Platform.RenewalPolicy, ToolUp.Platform.EntitlementStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementRefusal]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.EntitlementPreflight+EntitlementConfigValidator (class)
+ToolUp.Platform.EntitlementPreflight+EntitlementConfigValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ToolUp.Platform.EntitlementStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementRefusal]]]], System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.EntitlementGovernance, ToolUp.Platform.RenewalPolicy)
+ToolUp.Platform.EntitlementRefusal (class)
+ToolUp.Platform.EntitlementRefusal.IsAlgorithmNotPinned : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsClaimsIncomplete : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsClaimsUnparseable : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsKeyIdNotPinned : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsNotYetValid : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsSignatureRejected : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.IsValidityWindowInverted : System.Boolean { get }
+ToolUp.Platform.EntitlementRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.EntitlementRefusal+AlgorithmNotPinned (class)
+ToolUp.Platform.EntitlementRefusal+AlgorithmNotPinned.pinned : System.String { get }
+ToolUp.Platform.EntitlementRefusal+AlgorithmNotPinned.presented : System.String { get }
+ToolUp.Platform.EntitlementRefusal+ClaimsIncomplete (class)
+ToolUp.Platform.EntitlementRefusal+ClaimsIncomplete.field : System.String { get }
+ToolUp.Platform.EntitlementRefusal+ClaimsUnparseable (class)
+ToolUp.Platform.EntitlementRefusal+ClaimsUnparseable.reason : System.String { get }
+ToolUp.Platform.EntitlementRefusal+KeyIdNotPinned (class)
+ToolUp.Platform.EntitlementRefusal+KeyIdNotPinned.pinned : System.String { get }
+ToolUp.Platform.EntitlementRefusal+KeyIdNotPinned.presented : System.String { get }
+ToolUp.Platform.EntitlementRefusal+NotYetValid (class)
+ToolUp.Platform.EntitlementRefusal+NotYetValid.notBefore : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementRefusal+NotYetValid.now : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementRefusal+NotYetValid.skewAllowance : System.TimeSpan { get }
+ToolUp.Platform.EntitlementRefusal+SignatureRejected (class)
+ToolUp.Platform.EntitlementRefusal+SignatureRejected.reason : System.String { get }
+ToolUp.Platform.EntitlementRefusal+Tags (class)
+ToolUp.Platform.EntitlementRefusal+Tags.AlgorithmNotPinned : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.ClaimsIncomplete : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.ClaimsUnparseable : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.KeyIdNotPinned : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.NotYetValid : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.SignatureRejected : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+Tags.ValidityWindowInverted : System.Int32 (literal)
+ToolUp.Platform.EntitlementRefusal+ValidityWindowInverted (class)
+ToolUp.Platform.EntitlementRefusal+ValidityWindowInverted.expiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementRefusal+ValidityWindowInverted.notBefore : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementRefusalModule (class)
+ToolUp.Platform.EntitlementRefusalModule.describe(ToolUp.Platform.EntitlementRefusal) : System.String
+ToolUp.Platform.EntitlementStatus (class)
+ToolUp.Platform.EntitlementStatus..ctor(ToolUp.Platform.EntitlementPhase, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int64], System.TimeSpan)
+ToolUp.Platform.EntitlementStatus.Capacities : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int64] { get }
+ToolUp.Platform.EntitlementStatus.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.EntitlementStatus.GrantedCapabilities : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.EntitlementStatus.HolderId : System.String { get }
+ToolUp.Platform.EntitlementStatus.Lifetime : System.TimeSpan { get }
+ToolUp.Platform.EntitlementStatus.Phase : ToolUp.Platform.EntitlementPhase { get }
+ToolUp.Platform.EntitlementStatus.TokenId : System.String { get }
+ToolUp.Platform.EntitlementStatusModule (class)
+ToolUp.Platform.EntitlementStatusModule.grants(System.String, ToolUp.Platform.EntitlementStatus) : System.Boolean
+ToolUp.Platform.EntitlementStatusModule.unentitled : ToolUp.Platform.EntitlementStatus { get }
+ToolUp.Platform.EntitlementToken (class)
+ToolUp.Platform.EntitlementToken..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.EntitlementToken.Algorithm : System.String { get }
+ToolUp.Platform.EntitlementToken.ClaimsJson : System.String { get }
+ToolUp.Platform.EntitlementToken.DetachedJws : System.String { get }
+ToolUp.Platform.EntitlementToken.KeyId : System.String { get }
+ToolUp.Platform.EntitlementValidation (class)
+ToolUp.Platform.EntitlementValidation..ctor(ToolUp.Platform.PinnedEntitlementKey, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], System.TimeSpan, ToolUp.Platform.EntitlementGovernance, ToolUp.Platform.RenewalPolicy)
+ToolUp.Platform.EntitlementValidation.Clock : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.EntitlementValidation.ClockSkewTolerance : System.TimeSpan { get }
+ToolUp.Platform.EntitlementValidation.Governance : ToolUp.Platform.EntitlementGovernance { get }
+ToolUp.Platform.EntitlementValidation.Pin : ToolUp.Platform.PinnedEntitlementKey { get }
+ToolUp.Platform.EntitlementValidation.Renewal : ToolUp.Platform.RenewalPolicy { get }
+ToolUp.Platform.EntitlementValidation.Verify : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
+ToolUp.Platform.EntitlementValidationModule (class)
+ToolUp.Platform.EntitlementValidationModule.create(ToolUp.Platform.PinnedEntitlementKey, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.EntitlementGovernance) : ToolUp.Platform.EntitlementValidation
+ToolUp.Platform.EntitlementValidationModule.resolve(ToolUp.Platform.EntitlementValidation, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementToken]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntitlementStatus, ToolUp.Platform.EntitlementRefusal]]
+ToolUp.Platform.EntitlementValidationModule.resolveFailSafe(ToolUp.Platform.EntitlementValidation, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementToken]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ToolUp.Platform.EntitlementStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntitlementRefusal]]]
+ToolUp.Platform.EntitlementValidationModule.skewFromApplianceProfile(ToolUp.Platform.ApplianceProfile) : System.TimeSpan
+ToolUp.Platform.EntitlementValidationModule.withClockSkew(System.TimeSpan, ToolUp.Platform.EntitlementValidation) : ToolUp.Platform.EntitlementValidation
+ToolUp.Platform.EntitlementValidationModule.withRenewal(ToolUp.Platform.RenewalPolicy, ToolUp.Platform.EntitlementValidation) : ToolUp.Platform.EntitlementValidation
 ToolUp.Platform.EntityOutbox (class)
 ToolUp.Platform.EntityOutbox.defaultAbandonWindow : System.TimeSpan { get }
 ToolUp.Platform.EntityOutbox.defaultSettleWindow : System.TimeSpan { get }
@@ -4698,6 +4860,10 @@ ToolUp.Platform.PersistentNarrativeStore+PersistentNarrativeStore (class)
 ToolUp.Platform.PersistentNarrativeStore+PersistentNarrativeStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.PersistentNarrativeStore+PersistentNarrativeStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, System.Int32)
 ToolUp.Platform.PersistentNarrativeStore+PersistentNarrativeStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Narrative.NarrativeRetentionPolicy)
+ToolUp.Platform.PinnedEntitlementKey (class)
+ToolUp.Platform.PinnedEntitlementKey..ctor(System.String, System.String)
+ToolUp.Platform.PinnedEntitlementKey.Algorithm : System.String { get }
+ToolUp.Platform.PinnedEntitlementKey.KeyId : System.String { get }
 ToolUp.Platform.PkceChallenge (class)
 ToolUp.Platform.PkceChallenge..ctor(System.String, System.String)
 ToolUp.Platform.PkceChallenge.Challenge : System.String { get }
@@ -4982,6 +5148,13 @@ ToolUp.Platform.RegistrationCatalogueModule.tryResolve(ToolUp.Platform.Component
 ToolUp.Platform.RemotingHelpers (class)
 ToolUp.Platform.RemotingHelpers.makeApi`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, impl]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.RemotingHelpers.makePermissionGuardedApi`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.RenewalPolicy (class)
+ToolUp.Platform.RenewalPolicy..ctor(System.TimeSpan, System.TimeSpan)
+ToolUp.Platform.RenewalPolicy.MaxTokenLifetime : System.TimeSpan { get }
+ToolUp.Platform.RenewalPolicy.RenewalNotice : System.TimeSpan { get }
+ToolUp.Platform.RenewalPolicyModule (class)
+ToolUp.Platform.RenewalPolicyModule.conventional : ToolUp.Platform.RenewalPolicy { get }
+ToolUp.Platform.RenewalPolicyModule.silent : ToolUp.Platform.RenewalPolicy { get }
 ToolUp.Platform.RequestContextBuilder (class)
 ToolUp.Platform.RequestContextBuilder.ofHttpContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.Auth+RequestContext
 ToolUp.Platform.RequestTimingMiddleware (class)
@@ -6102,6 +6275,15 @@ ToolUp.Platform.TreePatchReceipt+Tags.Duplicate : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceipt+Tags.Gap : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceiver (class)
 ToolUp.Platform.TreePatchReceiver.classify(System.Int64, ToolUp.Platform.TreePatchEnvelope) : ToolUp.Platform.TreePatchReceipt
+ToolUp.Platform.UnprovisionedPosture (class)
+ToolUp.Platform.UnprovisionedPosture.IsReducedWhenUnprovisioned : System.Boolean { get }
+ToolUp.Platform.UnprovisionedPosture.IsUnlockedWhenUnprovisioned : System.Boolean { get }
+ToolUp.Platform.UnprovisionedPosture.ReducedWhenUnprovisioned : ToolUp.Platform.UnprovisionedPosture { get }
+ToolUp.Platform.UnprovisionedPosture.Tag : System.Int32 { get }
+ToolUp.Platform.UnprovisionedPosture.UnlockedWhenUnprovisioned : ToolUp.Platform.UnprovisionedPosture { get }
+ToolUp.Platform.UnprovisionedPosture+Tags (class)
+ToolUp.Platform.UnprovisionedPosture+Tags.ReducedWhenUnprovisioned : System.Int32 (literal)
+ToolUp.Platform.UnprovisionedPosture+Tags.UnlockedWhenUnprovisioned : System.Int32 (literal)
 ToolUp.Platform.UpgradeCandidate (class)
 ToolUp.Platform.UpgradeCandidate..ctor(ToolUp.Platform.ArtefactProvenance, System.Byte[], System.Byte[], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements])
 ToolUp.Platform.UpgradeCandidate.ArtefactBytes : System.Byte[] { get }

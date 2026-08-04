@@ -293,6 +293,16 @@ let allTests =
         // (no string anywhere in its transitive closure; off by default means
         // zero outbound), and the data-class-aware support-bundle redaction.
         ApplianceProfileTests.tests
+        // Phase 492 — offline entitlement verification: a real ECDSA signature
+        // admitted through the Phase 488.B seam and a different key pair
+        // refused with the mismatch named, clock skew applied in the holder's
+        // favour (with a zero-skew control), grace as a full-capability state
+        // and lapse reducing only governed flag keys while read + export stay
+        // reachable, the capacity budget, GP 13 unconfigured-means-unrestricted,
+        // the floor's structural ungovernability, an offline-by-construction
+        // closure walk falsified against a networked control, and the
+        // exhaustive proof that the boot preflight never returns Error.
+        EntitlementTokenTests.tests
         // Phase 438 — authorization-surface manifest: what each component
         // exposes and what each entry requires, derived from the live
         // registrations + the dispatcher's own Phase 69d classifier; the

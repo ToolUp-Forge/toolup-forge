@@ -980,6 +980,32 @@
              ComponentRequirements (the 432 join), CompositionManifest and
              CompositionValidator (reuses its defect / rule-descriptor types). -->
         <Compile Include="Server\ApplianceProfile.fs" />
+        <!-- Phase 492.A — offline entitlement verification: the signed
+             capability-token model (capability set + capacity grants + validity
+             window + holder id), its canonical signed byte form, and the
+             offline resolve that establishes a lifecycle phase without a
+             network call in the path. Verification reuses Phase 488.B's
+             structural VerifyDetachedJws seam rather than inventing a second
+             shape, so it comes after ApplianceProfile; it also reads that
+             file's ApplianceProfile.ClockSkewTolerance through a one-line
+             bridge, which is a value read and not a dependency — entitlements
+             are not appliance-only. Expiry is NOT a refusal here (that is the
+             whole fail-safe posture), and EntitlementFloor's read + export
+             capabilities are refused by EntitlementGovernance.declare, so no
+             representable configuration withholds a customer's own data. -->
+        <Compile Include="Server\EntitlementToken.fs" />
+        <!-- Phase 492.B/C — the two places entitlement state has to reach: the
+             flag ceiling that caps governed Phase 5c keys at what the
+             entitlement grants (a decorator OVER FlagEvaluator, not an
+             IFlagSource — a source is consulted only when no scope set the key,
+             so one Platform-scope override would lift the entitlement
+             entirely), and the structural-class boot preflight that surfaces
+             days-remaining / grace / lapse loudly and NEVER returns Error,
+             because a Phase 9m Error aborts the boot and a boot that will not
+             start is the most complete way to withhold a customer's own data.
+             After EntitlementToken (its types) and FlagEvaluator (the record it
+             decorates). -->
+        <Compile Include="Server\EntitlementValidator.fs" />
         <!-- Phase 597 — the prover's own lifecycle: a manifest version +
              per-rule semver over every rule family that exports in the Phase
              294 CompositionRuleDescriptor vocabulary, preflight-result

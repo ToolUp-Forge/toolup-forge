@@ -470,6 +470,20 @@
              against the Phase 41/188 classification vocabulary (likewise
              falsified against an unmasked bundle). -->
         <Compile Include="InProcess\ApplianceProfileTests.fs" />
+        <!-- Phase 492 — offline entitlement verification: a REAL ECDSA P-256
+             signature admitted through the Phase 488.B VerifyDetachedJws seam
+             (and a genuinely different key pair refused), tampered / unpinned-key
+             / unpinned-algorithm refusals with the mismatch NAMED, clock skew
+             applied in the holder's favour against a zero-skew control, grace as
+             a full-capability state and lapse reducing only governed keys, the
+             capacity budget in the existing QuotaBreached vocabulary, GP 13
+             unconfigured-means-unrestricted by three independent routes, the
+             floor's ungovernability falsified against an ordinary key, an
+             offline-by-construction closure walk falsified against a networked
+             control type, and the exhaustive across-every-refusal-and-phase
+             proof that the boot preflight never returns Error — falsified
+             against a control validator that does. -->
+        <Compile Include="InProcess\EntitlementTokenTests.fs" />
         <!-- Phase 438 — authorization-surface manifest: the per-ComponentId
              exposed surface derived from route prefixes / exact route
              overrides / AI tools / OnEvent job triggers, plus a remoting API
