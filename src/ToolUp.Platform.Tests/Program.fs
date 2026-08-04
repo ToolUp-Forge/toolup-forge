@@ -280,6 +280,12 @@ let allTests =
         // stores and where, derived from the live registrations; the
         // composition join, the DSR/offboarding coverage rule, and the diff.
         DataFootprintTests.tests
+        // Phase 434 — composition scale-readiness planner: the Phase 282
+        // readiness declarations joined across the manifest into a verdict
+        // (the meet of the parts), the Phase 293-derived unblock suggestions,
+        // and the opt-in preflight gate keyed on the topology intent
+        // ServerConfig already declares.
+        ScaleReadinessTests.tests
         // Phase 438 — authorization-surface manifest: what each component
         // exposes and what each entry requires, derived from the live
         // registrations + the dispatcher's own Phase 69d classifier; the

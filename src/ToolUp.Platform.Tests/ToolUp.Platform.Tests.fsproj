@@ -446,6 +446,15 @@
              on a synthetic gap; and the id-keyed diff + wire projection the
              golden-file gate runs on. -->
         <Compile Include="InProcess\DataFootprintTests.fs" />
+        <!-- Phase 434 — composition scale-readiness planner: the Phase 282
+             readiness declarations joined across a Phase 280 manifest (an
+             all-in-memory composition is SingleInstanceOnly with per-component
+             attributions; swapping the distributed companions in flips the
+             verdict), the meet semilattice laws, the Phase 293-derived unblock
+             suggestions, and the opt-in preflight gate firing only when
+             ServerConfig.ReplicaCount / ServerlessHost declares a topology
+             that needs it. -->
+        <Compile Include="InProcess\ScaleReadinessTests.fs" />
         <!-- Phase 438 — authorization-surface manifest: the per-ComponentId
              exposed surface derived from route prefixes / exact route
              overrides / AI tools / OnEvent job triggers, plus a remoting API

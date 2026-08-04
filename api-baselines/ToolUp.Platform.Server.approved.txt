@@ -724,6 +724,26 @@ ToolUp.Platform.ComponentRequirementsPreflight+RequirementDefect.Kind : System.S
 ToolUp.Platform.ComponentRequirementsPreflight+RequirementDefect.Message : System.String { get }
 ToolUp.Platform.ComponentRequirementsPreflight+RequirementDefect.Requirement : System.String { get }
 ToolUp.Platform.ComponentRequirementsPreflight+RequirementDefect.Severity : ToolUp.Platform.CompositionDefectSeverity { get }
+ToolUp.Platform.ComponentScale (class)
+ToolUp.Platform.ComponentScale.IsMultiInstanceSafe : System.Boolean { get }
+ToolUp.Platform.ComponentScale.IsMultiInstanceWith : System.Boolean { get }
+ToolUp.Platform.ComponentScale.IsSingleInstanceOnly : System.Boolean { get }
+ToolUp.Platform.ComponentScale.MultiInstanceSafe : ToolUp.Platform.ComponentScale { get }
+ToolUp.Platform.ComponentScale.SingleInstanceOnly : ToolUp.Platform.ComponentScale { get }
+ToolUp.Platform.ComponentScale.Tag : System.Int32 { get }
+ToolUp.Platform.ComponentScale+MultiInstanceWith (class)
+ToolUp.Platform.ComponentScale+MultiInstanceWith.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
+ToolUp.Platform.ComponentScale+Tags (class)
+ToolUp.Platform.ComponentScale+Tags.MultiInstanceSafe : System.Int32 (literal)
+ToolUp.Platform.ComponentScale+Tags.MultiInstanceWith : System.Int32 (literal)
+ToolUp.Platform.ComponentScale+Tags.SingleInstanceOnly : System.Int32 (literal)
+ToolUp.Platform.ComponentScaleModule (class)
+ToolUp.Platform.ComponentScaleModule.describe(ToolUp.Platform.ComponentScale) : System.String
+ToolUp.Platform.ComponentScaleModule.meet(ToolUp.Platform.ComponentScale, ToolUp.Platform.ComponentScale) : ToolUp.Platform.ComponentScale
+ToolUp.Platform.ComponentScaleModule.meetAll(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.ComponentScale]) : ToolUp.Platform.ComponentScale
+ToolUp.Platform.ComponentScaleModule.needs(ToolUp.Platform.ComponentScale) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]
+ToolUp.Platform.ComponentScaleModule.ofNeeds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]) : ToolUp.Platform.ComponentScale
+ToolUp.Platform.ComponentScaleModule.ofReadiness(ToolUp.Platform.Readiness) : ToolUp.Platform.ComponentScale
 ToolUp.Platform.ComponentSelection (class)
 ToolUp.Platform.ComponentSelection..ctor(ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ComponentSelection.Id : ToolUp.Platform.ComponentId { get }
@@ -4782,6 +4802,56 @@ ToolUp.Platform.SSEConnectionManager.Broadcast(System.String, System.Byte[]) : S
 ToolUp.Platform.SSEConnectionManager.BroadcastWithKind(System.String, System.Byte[], System.String) : System.Void
 ToolUp.Platform.SSEConnectionManager.Remove(System.String, ToolUp.Platform.IConnectionSink) : System.Void
 ToolUp.Platform.SSEConnectionManager.Snapshot() : ToolUp.Platform.SseManagerSnapshot
+ToolUp.Platform.ScaleDeclarations (class)
+ToolUp.Platform.ScaleDeclarations..ctor(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]])
+ToolUp.Platform.ScaleDeclarations.Capabilities : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability] { get }
+ToolUp.Platform.ScaleDeclarations.Prerequisites : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]] { get }
+ToolUp.Platform.ScaleDeclarationsModule (class)
+ToolUp.Platform.ScaleDeclarationsModule.empty : ToolUp.Platform.ScaleDeclarations { get }
+ToolUp.Platform.ScaleFinding (class)
+ToolUp.Platform.ScaleFinding..ctor(ToolUp.Platform.ComponentId, System.String, ToolUp.Platform.ComponentScale, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ScaleFinding.Component : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.ScaleFinding.Label : System.String { get }
+ToolUp.Platform.ScaleFinding.Scale : ToolUp.Platform.ComponentScale { get }
+ToolUp.Platform.ScaleFinding.Unblock : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ScaleIntent (class)
+ToolUp.Platform.ScaleIntent.IsMultiInstance : System.Boolean { get }
+ToolUp.Platform.ScaleIntent.IsServerless : System.Boolean { get }
+ToolUp.Platform.ScaleIntent.IsSingleInstance : System.Boolean { get }
+ToolUp.Platform.ScaleIntent.Serverless : ToolUp.Platform.ScaleIntent { get }
+ToolUp.Platform.ScaleIntent.SingleInstance : ToolUp.Platform.ScaleIntent { get }
+ToolUp.Platform.ScaleIntent.Tag : System.Int32 { get }
+ToolUp.Platform.ScaleIntent+MultiInstance (class)
+ToolUp.Platform.ScaleIntent+MultiInstance.instances : System.Int32 { get }
+ToolUp.Platform.ScaleIntent+Tags (class)
+ToolUp.Platform.ScaleIntent+Tags.MultiInstance : System.Int32 (literal)
+ToolUp.Platform.ScaleIntent+Tags.Serverless : System.Int32 (literal)
+ToolUp.Platform.ScaleIntent+Tags.SingleInstance : System.Int32 (literal)
+ToolUp.Platform.ScaleReadiness (class)
+ToolUp.Platform.ScaleReadiness.assess(ToolUp.Platform.CompositionManifest) : ToolUp.Platform.ScaleReport
+ToolUp.Platform.ScaleReadiness.assessDeclared(ToolUp.Platform.ScaleDeclarations, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.ScaleReport
+ToolUp.Platform.ScaleReadiness.assessWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComposableSlot], ToolUp.Platform.ScaleDeclarations, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.ScaleReport
+ToolUp.Platform.ScaleReadiness.describeIntent(ToolUp.Platform.ScaleIntent) : System.String
+ToolUp.Platform.ScaleReadiness.intentEngaged(ToolUp.Platform.ScaleIntent) : System.Boolean
+ToolUp.Platform.ScaleReadiness.intentOf(ToolUp.Platform.ServerConfig) : ToolUp.Platform.ScaleIntent
+ToolUp.Platform.ScaleReadiness.limitingFindings(ToolUp.Platform.ScaleReport) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScaleFinding]
+ToolUp.Platform.ScaleReadiness.satisfies(ToolUp.Platform.ScaleIntent, ToolUp.Platform.ComponentScale) : System.Boolean
+ToolUp.Platform.ScaleReadiness.unblockLines(ToolUp.Platform.ScaleReport) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.ScaleReadinessPreflight (class)
+ToolUp.Platform.ScaleReadinessPreflight.IntentUnsatisfiableRule : System.String (literal)
+ToolUp.Platform.ScaleReadinessPreflight.ValidatorName : System.String (literal)
+ToolUp.Platform.ScaleReadinessPreflight.classifiedRuleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ClassifiedCompositionRule] { get }
+ToolUp.Platform.ScaleReadinessPreflight.defects(ToolUp.Platform.ScaleIntent, ToolUp.Platform.ScaleReport) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
+ToolUp.Platform.ScaleReadinessPreflight.ruleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor] { get }
+ToolUp.Platform.ScaleReadinessPreflight.serviceRegistration(ToolUp.Platform.ScaleIntent, ToolUp.Platform.ScaleReport, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ScaleReadinessPreflight.serviceRegistrationForConfig(ToolUp.Platform.ServerConfig, ToolUp.Platform.ScaleDeclarations, ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.DependencyInjection.IServiceCollection]
+ToolUp.Platform.ScaleReadinessPreflight.toValidationResult(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.ScaleReadinessPreflight+ScaleReadinessValidator (class)
+ToolUp.Platform.ScaleReadinessPreflight+ScaleReadinessValidator..ctor(ToolUp.Platform.ScaleIntent, ToolUp.Platform.ScaleReport)
+ToolUp.Platform.ScaleReport (class)
+ToolUp.Platform.ScaleReport..ctor(ToolUp.Platform.ComponentScale, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScaleFinding])
+ToolUp.Platform.ScaleReport.Findings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScaleFinding] { get }
+ToolUp.Platform.ScaleReport.Verdict : ToolUp.Platform.ComponentScale { get }
 ToolUp.Platform.ScheduledDeprovisionJobHandler (class)
 ToolUp.Platform.ScheduledDeprovisionJobHandler.create(System.IServiceProvider) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ScheduledDeprovisionJobHandler+ScheduledDeprovisionJobHandler (class)

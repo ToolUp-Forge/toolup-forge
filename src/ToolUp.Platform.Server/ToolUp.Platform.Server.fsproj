@@ -943,6 +943,19 @@
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside EventTopology, the sibling derived lens. -->
         <Compile Include="Server\DataFootprint.fs" />
+        <!-- Phase 434 — composition scale-readiness planner: the Phase 282
+             per-companion distributed-readiness declarations joined across a
+             Phase 280 manifest into a per-component scale finding + a
+             whole-composition verdict (the MEET of the parts), the Phase 293
+             vocabulary consulted for the companion swap that would lift a
+             scale-limiting finding, and an opt-in structural-class preflight
+             gate reading the topology intent a deployment already declares
+             (ServerConfig.ReplicaCount / ServerlessHost). After
+             ComposableSurface (reads its slot vocabulary), CompositionManifest
+             (the join walks it) and CompositionValidator (reuses its defect /
+             rule-descriptor types); beside EventTopology / DataFootprint, the
+             sibling derived lenses. -->
+        <Compile Include="Server\ScaleReadiness.fs" />
         <!-- Phase 597 — the prover's own lifecycle: a manifest version +
              per-rule semver over every rule family that exports in the Phase
              294 CompositionRuleDescriptor vocabulary, preflight-result
