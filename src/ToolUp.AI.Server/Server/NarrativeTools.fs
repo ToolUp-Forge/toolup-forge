@@ -152,6 +152,7 @@ let private listDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeList (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -199,6 +200,7 @@ let private getDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -296,6 +298,7 @@ let private getSectionDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -483,6 +486,7 @@ let private publishDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private parseCollisionPolicy (raw: string option) : SlugCollisionPolicy =
@@ -671,6 +675,7 @@ let private listLayoutsDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeListLayouts (ctx: HttpContext) (_argsJson: string) : Async<string> = async {

@@ -128,6 +128,7 @@ module FactQueryTool =
         EmitsActions = None
         Location = ServerResident
         Surface = Both
+        IsLiveInterface = false
     }
 
     // ── Argument parsing + validation (559.A / 559.D) ─────────────

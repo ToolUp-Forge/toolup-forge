@@ -127,6 +127,7 @@ let private buildToolRegistry (toolName: string) : AIToolRegistry.AIToolRegistry
         EmitsActions = None
         Location = ClientResident
         Surface = Both
+        IsLiveInterface = false
     }
 
     let executor _ctx _argsJson = async {

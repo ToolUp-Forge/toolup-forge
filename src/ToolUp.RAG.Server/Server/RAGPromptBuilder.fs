@@ -44,15 +44,29 @@ module ToolFraming =
     let none = { HasLiveUiTools = false }
 
     /// A tool counts as a "live-interface" tool when it reads or drives
-    /// the user's on-screen module state: the platform `_platform.ui.*`
-    /// inspection / mutation family, or any client-resident tool (whose
-    /// body runs in the browser against live UI state). Server-resident
-    /// analytical tools — including the `_platform.ai.*` cross-module read
-    /// family — are *not* live-interface tools: they read persisted data,
-    /// so the knowledge-base-first framing still applies to them.
+    /// the user's on-screen module state. Two triggers, both typed
+    /// (Phase 538):
+    ///
+    ///  * `IsLiveInterface = true` — the tool *declares* the capability.
+    ///    This is the provider-agnostic opt-in: a host adapter, a
+    ///    companion, or a forge-native tool says what it is rather than
+    ///    hoping its name matches a convention.
+    ///  * `Location = ClientResident` — implied by construction: the
+    ///    body runs in the browser against live UI state.
+    ///
+    /// Server-resident analytical tools — including the `_platform.ai.*`
+    /// cross-module read family — are *not* live-interface tools: they
+    /// read persisted data, so the knowledge-base-first framing still
+    /// applies to them.
+    ///
+    /// The pre-538 third arm matched the tool *name* against the
+    /// `_platform.ui.` prefix. That coupled forge's own framing to a
+    /// naming convention forge never emits — a differently-named
+    /// live-interface tool silently missed the framing, and a
+    /// server-resident tool that merely happened to carry the prefix
+    /// wrongly tripped it. The flag replaces it; no name is inspected.
     let private isLiveUiTool (def: AIToolDefinition) : bool =
-        def.Location = ClientResident
-        || def.Name.StartsWith("_platform.ui.", System.StringComparison.Ordinal)
+        def.IsLiveInterface || def.Location = ClientResident
 
     /// Derive the framing summary from the deployment's full tool list
     /// (the `AIToolDefinition`s aggregated on the base `ServerApp`, which

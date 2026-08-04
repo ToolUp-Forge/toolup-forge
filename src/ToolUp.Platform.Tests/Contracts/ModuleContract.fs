@@ -351,6 +351,7 @@ let private referenceTool: AIToolDefinition = {
     EmitsActions = Some [ referenceAction ]
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private referenceServer () : ServerModule =

@@ -64,6 +64,7 @@ let toolDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ClientResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 /// Server-side stub executor. Never runs in a correctly-wired

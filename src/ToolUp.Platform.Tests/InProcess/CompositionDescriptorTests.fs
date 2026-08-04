@@ -39,6 +39,7 @@ let private stubTool (name: string) : AIToolDefinition * (HttpContext -> string 
         EmitsActions = None
         Location = ServerResident
         Surface = Both
+        IsLiveInterface = false
     },
     (fun _ _ -> async { return "" })
 

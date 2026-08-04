@@ -71,6 +71,7 @@ let private listDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeList (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -121,6 +122,7 @@ let private getDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = async {

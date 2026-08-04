@@ -906,11 +906,13 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let config = b.Config
 
     // Phase 14r — derive the tool-aware framing summary once, from the
-    // deployment's aggregated module tool list (the `_platform.ui.*`
-    // family / client-resident tools land here via `withAITools`). Drives
-    // both the framing companion below and the retrieval builder's
-    // empty-result message. A deployment with no live-interface tools
-    // yields `HasLiveUiTools = false` ⇒ historical framing, no regression.
+    // deployment's aggregated module tool list (tools land here via
+    // `withAITools`). Phase 538 — the derivation reads each tool's typed
+    // `IsLiveInterface` declaration (or its `ClientResident` location),
+    // never its name. Drives both the framing companion below and the
+    // retrieval builder's empty-result message. A deployment with no
+    // live-interface tools yields `HasLiveUiTools = false` ⇒ historical
+    // framing, no regression.
     let toolFraming = RAGPromptBuilder.ToolFraming.fromTools (b.AITools |> List.map fst)
 
     // Phase 63.A — retrieval-pipeline override seam. When a consumer supplies

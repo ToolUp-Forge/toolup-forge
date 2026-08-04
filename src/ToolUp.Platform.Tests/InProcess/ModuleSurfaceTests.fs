@@ -63,6 +63,7 @@ let private toolDefinition (name: string) : AIToolDefinition = {
     EmitsActions = None
     Location = ServerResident
     Surface = Both
+    IsLiveInterface = false
 }
 
 let private configSchema: ModuleConfigSchema = {

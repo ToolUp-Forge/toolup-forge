@@ -114,4 +114,29 @@ type AIToolDefinition = {
     /// drive; `_platform.ui.inspect_active_module` declares `Both`
     /// because read-only awareness is useful in either surface.
     Surface: AISurfaceFilter
+    /// Declares that this tool reads or drives the **live interface** —
+    /// the browser-resident module state the user is currently looking
+    /// at — so a question about on-screen state is answerable without
+    /// consulting the knowledge base. `false` (the default every
+    /// pre-Phase-538 tool carries) leaves behaviour byte-for-byte
+    /// unchanged (GP 11).
+    ///
+    /// Read by `RAGPromptBuilder.ToolFraming.fromTools` to decide
+    /// whether a RAG deployment's knowledge-base-first framing needs the
+    /// live-interface companion. `Location = ClientResident` implies
+    /// live-interface by construction (the body runs in the browser
+    /// against live UI state) and is honoured independently, so a
+    /// client-resident tool need not set this flag; it exists for the
+    /// cases `Location` cannot express — a **server-resident** tool that
+    /// nonetheless projects live interface state, or a host-adapter tool
+    /// whose live-interface intent must be declared rather than inferred
+    /// from its name.
+    ///
+    /// This replaces the pre-538 `_platform.ui.*` name-prefix trigger:
+    /// forge never emits that name itself, so keying framing off it
+    /// coupled the SDK to a naming convention owned elsewhere — a
+    /// differently-named live-interface tool silently missed the
+    /// framing, and a server-resident tool that merely happened to start
+    /// with `_platform.ui.` wrongly tripped it.
+    IsLiveInterface: bool
 }

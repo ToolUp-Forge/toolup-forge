@@ -99,6 +99,7 @@ let private buildRegistry (allowedName: string) (deniedName: string) : AIToolReg
         EmitsActions = None
         Location = ClientResident
         Surface = Both
+        IsLiveInterface = false
     }
 
     // Executor never runs — Allow path completes via the simulator's

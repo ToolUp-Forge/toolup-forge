@@ -44,6 +44,7 @@ let private stubTool
         EmitsActions = emits
         Location = ServerResident
         Surface = Both
+        IsLiveInterface = false
     },
     (fun _ _ -> async { return "" })
 

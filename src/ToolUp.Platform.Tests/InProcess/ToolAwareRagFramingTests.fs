@@ -11,9 +11,12 @@ open ToolUp.RAG
 //
 // Pure-function coverage for the three shipped surfaces:
 //   1. `RAGPromptBuilder.ToolFraming.fromTools` — a live-interface tool
-//      (`_platform.ui.*` or any client-resident tool) flips
-//      `HasLiveUiTools`; server-resident analytical tools (incl. the
-//      `_platform.ai.*` read family) do not.
+//      (one declaring `IsLiveInterface = true`, or any client-resident
+//      tool) flips `HasLiveUiTools`; server-resident analytical tools
+//      (incl. the `_platform.ai.*` read family) do not.
+//      Phase 538 retargeted this from the `_platform.ui.*` name-prefix
+//      trigger to the typed flag — see the by-flag and
+//      false-positive-guard cases below.
 //   2. `RAGCompose.resolveFramingWithTools` — the live-interface companion
 //      is appended only under `Preferred` + `HasLiveUiTools`; `Permissive`
 //      / `StrictlyGrounded` and the no-UI-tools case are unchanged (no
@@ -30,6 +33,7 @@ let private mkTool (name: string) (location: ToolLocation) : AIToolDefinition = 
     EmitsActions = None
     Location = location
     Surface = Both
+    IsLiveInterface = false
 }
 
 /// Stub pipeline whose `Retrieve` always returns `[]` — exercises the
@@ -53,19 +57,52 @@ let private mkContext () : PromptContext = {
     ShortCircuit = ref None
 }
 
+/// Phase 538 — a tool that DECLARES the live-interface capability. Named
+/// off the `_platform.ui.*` convention deliberately: the flag, not the
+/// name, is what the framing keys off.
+let private declaredLiveInterfaceTool = {
+    mkTool "acme_host.read_active_view" ServerResident with
+        IsLiveInterface = true
+}
+
 let private uiInspectTool =
     mkTool "_platform.ui.inspect_active_module" ClientResident
 
 let private serverReadTool =
     mkTool "_platform.ai.list_accessible_modules" ServerResident
 
+/// Phase 538 — the pre-538 FALSE POSITIVE: a server-resident tool that
+/// merely happens to carry the `_platform.ui.` name prefix. It reads
+/// persisted data like any other server tool and must NOT trip the
+/// live-interface framing.
+let private serverToolWithUiName = mkTool "_platform.ui.audit_report" ServerResident
+
 [<Tests>]
 let tests =
     testList "Phase 14r — Tool-aware RAG framing" [
 
-        test "fromTools flags the _platform.ui inspect tool as live-interface" {
+        test "Phase 538 — fromTools flags a tool DECLARING IsLiveInterface" {
+            let framing = RAGPromptBuilder.ToolFraming.fromTools [ declaredLiveInterfaceTool ]
+
+            Expect.isTrue
+                framing.HasLiveUiTools
+                "a tool declaring IsLiveInterface = true is a live-interface tool, whatever it is called"
+        }
+
+        test "Phase 538 — a server-resident tool NAMED _platform.ui.* is NOT flagged" {
+            let framing = RAGPromptBuilder.ToolFraming.fromTools [ serverToolWithUiName ]
+
+            Expect.isFalse
+                framing.HasLiveUiTools
+                "the pre-538 name-prefix trigger's false positive: a server tool must not trip framing on its name"
+        }
+
+        test "fromTools still flags the client-resident inspect tool (ClientResident implication retained)" {
             let framing = RAGPromptBuilder.ToolFraming.fromTools [ uiInspectTool ]
-            Expect.isTrue framing.HasLiveUiTools "a _platform.ui.* tool is a live-interface tool"
+
+            Expect.isTrue
+                framing.HasLiveUiTools
+                "a client-resident tool is live-interface by construction, flag or no flag"
         }
 
         test "fromTools flags any client-resident tool as live-interface" {
