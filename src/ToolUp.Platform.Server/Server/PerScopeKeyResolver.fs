@@ -70,6 +70,42 @@ open ToolUp.Platform.BlobEncryption
 // `IAuditLog.Record`. If `IAuditLog` is not provided (constructor
 // `auditLog: IAuditLog option = None`), audit emission is silently
 // skipped — useful for tests that don't wire `IEventStore`.
+//
+// ─── Channel wiring: optional on one replica, REQUIRED on more ───────
+//
+// Phase 458. `WireToChannel` is what turns the destruction broadcast on,
+// and `channel` starts as `None`, so the rule is worth stating in one
+// place rather than inferring from the publish site:
+//
+//   * **Single replica — optional.** There is no sibling cache to evict,
+//     so the broadcast is a no-op and `DestroyKey` really is complete
+//     when it returns. A deployment that cannot use the fanout pays
+//     nothing for it (GP 13).
+//   * **More than one replica — REQUIRED, and enforced at startup.**
+//     Without wiring, `DestroyKey` on replica A evicts only A's cache:
+//     every sibling keeps decrypting the just-offboarded tenant's blobs
+//     from its own warm cache for up to the 5-minute sliding TTL, and
+//     the audit trail records no `EncryptionKeyDestroyAcknowledged`
+//     rows — which reads identically to "there are no siblings", so the
+//     hole does not announce itself.
+//     `PerScopeKeyResolverDistributedValidator` refuses startup with a
+//     security-class `Error` for that shape (`ServerConfig.ReplicaCount
+//     > 1` — or the `TOOLUP_REPLICA_COUNT` env declaration — with this
+//     resolver active and either no wiring at all or a channel that
+//     cannot leave the process).
+//
+// Compose wires this for you: `ComposeEncryption`
+// .wirePerScopeResolverToNotificationChannel` calls `WireToChannel` for
+// every composed `PerScopeKeyResolver`. So an UNWIRED resolver in
+// practice means one built and driven outside `compose` — direct admin
+// tooling, a bespoke composition root, a test. That path used to publish
+// nothing and say nothing; since Phase 458 the first unwired `DestroyKey`
+// per process emits a security-class `ILogger.Warn` naming the staleness
+// window (pass a logger via the four-argument constructor /
+// `createWithLogger`), and every unwired destroy is counted and surfaced
+// on the `/dev/inspect` "Crypto-shred fanout" panel. Counting as well as
+// logging is deliberate: a resolver built without a logger would
+// otherwise still be silent, and the count needs no logger to be true.
 
 [<Literal>]
 let private SecretScope = "_platform"
@@ -195,10 +231,23 @@ let private generateKey () : byte[] =
 /// the trail proves the shred reached the whole fleet. The propagation
 /// window is the active channel companion's fanout latency — minute-grain
 /// per the `INotificationChannel` precision contract, not instant.
-type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option) =
+///
+/// Phase 458 — `logger` is optional and additive (GP 11): the
+/// three-argument constructor still exists and behaves exactly as before
+/// apart from the unwired-destroy counter, which costs one `int`. A logger
+/// is only ever used for the unwired-`DestroyKey` security warning; every
+/// other diagnostic on this path goes through `IAuditLog`.
+type PerScopeKeyResolver
+    (secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option, logger: ILogger option) =
 
     let mutable channel: INotificationChannel option = None
     let mutable subscriptionId: NotificationSubscriptionId option = None
+
+    /// Phase 458 — how many `DestroyKey` calls were served with no
+    /// channel wired, i.e. how many crypto-shreds published no
+    /// destruction broadcast. `Interlocked` because `DestroyKey` is
+    /// reachable from any request thread.
+    let mutable unwiredDestroyCount = 0
 
     /// Phase 22b — this replica's identity, stamped on published
     /// envelopes and recorded on acknowledgements. Defaults to the
@@ -355,6 +404,15 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
                         return Error(StorageFailure(sprintf "Stored key parse failure: %s" ex.Message))
     }
 
+    /// Backwards-compatible three-argument form — the shape every
+    /// pre-Phase-458 call site (and `create`) uses, preserved byte-for-byte
+    /// so no consumer had to change (GP 11). No logger means the
+    /// unwired-`DestroyKey` warning has nowhere to go; the counter behind
+    /// `UnwiredDestroyKeyCount` still records it and the `/dev/inspect`
+    /// "Crypto-shred fanout" panel still surfaces it.
+    new(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option) =
+        PerScopeKeyResolver(secretStore, cache, auditLog, None)
+
     interface IBlobEncryptionKeyResolver with
         member _.ResolveKey(scope: StorageScope) = resolveScopeKey scope.ScopeId
 
@@ -430,11 +488,46 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
                         )
                 with _ ->
                     ()
-            | None -> ()
+            // Phase 458 — an unwired destroy published nothing. On one
+            // replica that is correct; on more than one it is a
+            // GDPR-erasure hole that lasts the full sliding TTL and
+            // leaves no acknowledgement rows behind to reveal itself. So
+            // it is no longer a silent `()`: counted always, and logged
+            // once per process at security class.
+            | None ->
+                let count = Interlocked.Increment &unwiredDestroyCount
+
+                if count = 1 then
+                    match logger with
+                    | Some log ->
+                        log.Warn(
+                            sprintf
+                                "[PerScopeKeyResolver] event=crypto_shred_unwired_destroy class=security scope=%s — DestroyKey crypto-shredded this scope's key, but the resolver is not wired to an INotificationChannel (WireToChannel was never called), so NO destruction broadcast was published. On a single-replica deployment this is correct and complete. On more than one replica, every SIBLING replica keeps decrypting this tenant's blobs from its own warm cache for up to the resolver's %g-minute sliding TTL, and the audit trail records no EncryptionKeyDestroyAcknowledged rows — indistinguishable from having no siblings, so the gap does not announce itself. Fix: compose the resolver through ServerApp.withEncryptedBlobStorage (compose calls WireToChannel for you) and configure a distributed channel companion (ServerConfig.Notifications = RedisNotifications \"<connection-string>\"). Logged once per process; every unwired destroy is counted and surfaced on the /dev/inspect \"Crypto-shred fanout\" panel."
+                                scopeId
+                                cacheSlidingTtl.TotalMinutes
+                        )
+                    | None -> ()
 
             return Ok()
         | Error msg -> return Error(StorageFailure msg)
     }
+
+    /// Phase 458 — `true` once `WireToChannel` has been called, i.e. once
+    /// `DestroyKey` publishes a destruction broadcast. Read by
+    /// `PerScopeKeyResolverDistributedValidator` (which refuses startup
+    /// when a multi-instance deployment leaves this `false`) and by the
+    /// `/dev/inspect` "Crypto-shred fanout" panel, so an operator can
+    /// confirm cache-coherence wiring without reading compose code.
+    member _.IsWiredToChannel: bool = channel.IsSome
+
+    /// Phase 458 — how many `DestroyKey` calls have published no
+    /// destruction broadcast because no channel was wired. `0` on a
+    /// correctly-wired deployment and on one that has never shredded a
+    /// key; any non-zero value on a multi-replica deployment means that
+    /// many tenants stayed decryptable on sibling replicas for up to the
+    /// sliding TTL. Surfaced on `/dev/inspect` because the log line fires
+    /// once per process and a logger is optional.
+    member _.UnwiredDestroyKeyCount: int = Volatile.Read &unwiredDestroyCount
 
     /// Gap audit #1 — wire this resolver to a cross-process notification
     /// channel for multi-instance cache coherence. After this call, every
@@ -546,3 +639,57 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
 /// `ResolveKey` call when none is stored.
 let create (secretStore: ISecretStore) (cache: IMemoryCache) (auditLog: IAuditLog option) : PerScopeKeyResolver =
     PerScopeKeyResolver(secretStore, cache, auditLog)
+
+/// Phase 458 — `create` plus a logger for the unwired-`DestroyKey`
+/// security warning. Worth reaching for when the resolver is driven
+/// OUTSIDE `compose` (bespoke admin tooling, a custom composition root),
+/// because that is the only way it can still be unwired: compose calls
+/// `WireToChannel` for every resolver it composes. A resolver built with
+/// `create` still counts unwired destroys — it just cannot narrate them.
+let createWithLogger
+    (secretStore: ISecretStore)
+    (cache: IMemoryCache)
+    (auditLog: IAuditLog option)
+    (logger: ILogger)
+    : PerScopeKeyResolver =
+    PerScopeKeyResolver(secretStore, cache, auditLog, Some logger)
+
+/// Phase 458 — the wired/unwired state of the crypto-shred fanout, as one
+/// `/dev/inspect` panel row. Answers "is cross-replica cache eviction
+/// actually on in this deployment?" without reading compose code, which
+/// was previously only inferable from a preflight validator's silence.
+type CryptoShredFanoutStatus = {
+    /// The resolver class whose fanout this describes. Constant today —
+    /// `PerScopeKeyResolver` is the only resolver with a `DestroyKey` — but
+    /// named so the panel stays readable if a KMS-backed resolver grows one.
+    Resolver: string
+    /// `true` once `WireToChannel` has been called. Compose calls it for
+    /// every composed `PerScopeKeyResolver`, so `false` here means the
+    /// resolver is being driven outside compose.
+    WiredToChannel: bool
+    /// The window a sibling replica keeps decrypting a destroyed scope for
+    /// when no broadcast reaches it. The resolver's cache TTL, stated in
+    /// the panel so the operator does not have to know it.
+    UnwiredStalenessWindowMinutes: float
+    /// Crypto-shreds that published no broadcast. Non-zero on a
+    /// multi-replica deployment is a GDPR-erasure gap that already happened.
+    UnwiredDestroyKeyCalls: int
+}
+
+/// `IDevDiagnosticsContributor` surfacing the crypto-shred fanout wiring
+/// as a `"Crypto-shred fanout"` panel. Registered by `ComposeEncryption`
+/// only when the composed resolver is a `PerScopeKeyResolver`, so a
+/// deployment with no crypto-shred surface gains no panel and no cost
+/// (GP 13). Cheap: two field reads, well inside the contributor budget.
+type CryptoShredFanoutContributor(resolver: PerScopeKeyResolver) =
+    interface IDevDiagnosticsContributor with
+        member _.Contribute() = async {
+            return
+                "Crypto-shred fanout",
+                box {
+                    Resolver = ResolverName
+                    WiredToChannel = resolver.IsWiredToChannel
+                    UnwiredStalenessWindowMinutes = cacheSlidingTtl.TotalMinutes
+                    UnwiredDestroyKeyCalls = resolver.UnwiredDestroyKeyCount
+                }
+        }

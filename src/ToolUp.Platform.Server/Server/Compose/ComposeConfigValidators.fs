@@ -93,10 +93,14 @@ let registerFirstPartyConfigValidators
     addConfigValidator (AdminTokenValidator.AdminTokenValidator(encryptionKeyResolver)) // warn crypto-shred admin endpoint mounted but TOOLUP_ADMIN_TOKEN unset
 
     addConfigValidator (
-        PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(encryptionKeyResolver)
-    ) // refuse per-scope key resolver + in-proc channel under multi-instance
+        PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(
+            config,
+            encryptionKeyResolver,
+            services
+        )
+    ) // refuse per-scope key resolver with an unwired or in-process channel under declared multi-instance (Phase 458 — the replica count now reads ServerConfig.ReplicaCount as well as TOOLUP_REPLICA_COUNT, and the channel is probed from DI as well as the env var)
 
-    addConfigValidator (KeyDestroyAckCoverageValidator.KeyDestroyAckCoverageValidator(config, services)) // Phase 22b — warn per-scope key resolver + in-proc channel in a Team/MultiTeam shape (crypto-shred fanout reaches no sibling replica; the Error arm above only fires when ReplicaCount is declared)
+    addConfigValidator (KeyDestroyAckCoverageValidator.KeyDestroyAckCoverageValidator(config, services)) // Phase 22b — warn per-scope key resolver + in-proc channel in a Team/MultiTeam shape (crypto-shred fanout reaches no sibling replica; the Error arm above only fires when the replica count is declared)
 
     addConfigValidator (
         ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(config, secretStore)

@@ -4348,14 +4348,26 @@ ToolUp.Platform.PeerRouteRegistry.PeerNameItemsKey : System.String (literal)
 ToolUp.Platform.PeerRouteRegistry.isPeerRoute(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.AspNetCore.Http.PathString) : System.Boolean
 ToolUp.Platform.PerScopeKeyResolver (class)
 ToolUp.Platform.PerScopeKeyResolver.create(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver
+ToolUp.Platform.PerScopeKeyResolver.createWithLogger(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutContributor (class)
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutContributor..ctor(ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver)
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus (class)
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus..ctor(System.String, System.Boolean, System.Double, System.Int32)
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus.Resolver : System.String { get }
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus.UnwiredDestroyKeyCalls : System.Int32 { get }
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus.UnwiredStalenessWindowMinutes : System.Double { get }
+ToolUp.Platform.PerScopeKeyResolver+CryptoShredFanoutStatus.WiredToChannel : System.Boolean { get }
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver (class)
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.DestroyKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EncryptionTypes+KeyResolutionError]]
+ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.IsWiredToChannel : System.Boolean { get }
+ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.UnwiredDestroyKeyCount : System.Int32 { get }
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.WireToChannel(ToolUp.Platform.INotificationChannel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.WireToChannel(ToolUp.Platform.INotificationChannel, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator (class)
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator (class)
-ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.PermissionStore (class)
 ToolUp.Platform.PermissionStore+IPermissionStore (interface)
 ToolUp.Platform.PermissionStore+IPermissionStore.GetEffectivePermissions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]]

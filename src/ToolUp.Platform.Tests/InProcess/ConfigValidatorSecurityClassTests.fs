@@ -56,7 +56,8 @@ let private shippedSecurityClassValidators () : (string * IConfigValidator) list
         (OAuthStateStoreInstanceValidator.OAuthStateStoreInstanceValidator(cfg, InMemoryOAuthStateStore())
         :> IConfigValidator)
         "per-scope-key-resolver-distributed",
-        (PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(None) :> IConfigValidator)
+        (PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(cfg, None, ServiceCollection())
+        :> IConfigValidator)
         "auto-bootstrap-dev-admin-mode",
         (AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(cfg) :> IConfigValidator)
         "csrf-default-mode", (CsrfDefaultModeValidator.CsrfDefaultModeValidator(cfg) :> IConfigValidator)

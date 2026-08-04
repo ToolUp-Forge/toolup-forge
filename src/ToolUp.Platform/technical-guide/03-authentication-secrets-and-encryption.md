@@ -380,7 +380,27 @@ Phase 22b closes the window by broadcasting rather than waiting for it to expire
 | `RedisNotifications` (or another distributed companion) | every subscribed replica | the companion's pub/sub delivery latency, typically sub-second, contractually minute-grain |
 
 - **A single-replica deployment needs no distributed channel.** There is no sibling cache to evict, so the broadcast is a harmless no-op and the shred really is complete on return (GP 11 / GP 13 — the fanout costs a deployment that cannot use it nothing).
-- **A multi-replica deployment needs one, and two preflight validators say so.** `PerScopeKeyResolverDistributedValidator` fails startup with `Error` when the operator has declared `TOOLUP_REPLICA_COUNT > 1` alongside an in-process channel. `KeyDestroyAckCoverageValidator` (Phase 22b) emits a `Warning` for the shape that does *not* declare it — a `Team` / `MultiTeam` deployment with `PerScopeKeyResolver` and an in-process channel — because with an in-process channel a fleet-wide gap and a fleet of one produce byte-identical evidence: zero acknowledgements either way.
+- **A multi-replica deployment needs one, and two preflight validators say so.** `PerScopeKeyResolverDistributedValidator` fails startup with `Error` when the operator has declared more than one replica alongside a fanout that cannot reach a sibling. `KeyDestroyAckCoverageValidator` (Phase 22b) emits a `Warning` for the shape that does *not* declare it — a `Team` / `MultiTeam` deployment with `PerScopeKeyResolver` and an in-process channel — because with an in-process channel a fleet-wide gap and a fleet of one produce byte-identical evidence: zero acknowledgements either way.
+
+#### `WireToChannel`: optional on one replica, REQUIRED on more (Phase 458)
+
+**This is the whole rule, and it is enforced at startup rather than left to convention:**
+
+| Replica count | `WireToChannel` | Distributed channel companion | What preflight does |
+|---|---|---|---|
+| 1 (declared or defaulted) | optional | not needed | nothing — the fanout is a correct no-op |
+| more than 1, **declared** | **required** | **required** | `Error`, startup refused |
+| more than 1, undeclared but `Team` / `MultiTeam` shaped | required in fact | required in fact | `Warning` (a legitimate one-replica Team deployment must still boot) |
+
+`compose` calls `WireToChannel` for every `PerScopeKeyResolver` it composes, so a deployment built through `ServerApp.withEncryptedBlobStorage` satisfies the wiring half automatically and only has to choose a channel companion. An *unwired* resolver in practice means one built and driven outside `compose` — bespoke admin tooling, a custom composition root, a test.
+
+Three things changed in Phase 458, each closing a way the requirement could be true and unenforced:
+
+- **The declared replica count is read from `ServerConfig.ReplicaCount` as well as `TOOLUP_REPLICA_COUNT`** (the greater of the two wins, so a stale env var can only raise the count). It previously read the environment *only*, while all six sibling topology validators read the config field — so a deployment declaring `{ config with ReplicaCount = 3 }` in code tripped every other multi-instance check and silently skipped this one. It was the single hard-`Error` guard in that set, and the one bypassable by configuring in the ordinary way.
+- **An unwired resolver is refused too, not just an in-process channel.** Wiring and channel choice are two independent ways for the broadcast to reach nobody; the validator now names which one is missing.
+- **An unwired `DestroyKey` is no longer silent.** The first one per process logs a security-class `ILogger.Warn` naming the up-to-five-minute staleness window, the remedy, and the affected scope; every one is counted. The count — not just the log — is what the `/dev/inspect` panel below reports, because a resolver built with `PerScopeKeyResolver.create` has no logger to warn through (`createWithLogger` supplies one).
+
+**Confirming the wiring without reading compose code:** the `/dev/inspect` **"Crypto-shred fanout"** panel reports `WiredToChannel`, the staleness window that applies when it is `false`, and `UnwiredDestroyKeyCalls` — shreds that already published no broadcast, which on a multi-replica deployment is a list of tenants that stayed decryptable on every sibling. The panel is registered only when the composed resolver is a `PerScopeKeyResolver`; a `SingleKeyResolver` has no shred and gets no panel.
 
 That last point is why the acknowledgement event is per replica and names the replica that made it (`AcknowledgedBy`, defaulting to `{machine-name}/{process-id}` — the pod identity in a container deployment). Auditing a shred means counting acknowledgements against expected replicas; a single undifferentiated "destroyed" row cannot answer that. `AcknowledgedAt - RequestedAt` gives the measured fanout delay per replica, so the window above is observable in the trail rather than merely asserted here.
 

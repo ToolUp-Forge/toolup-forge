@@ -24,11 +24,14 @@ open ToolUp.Platform.ConfigValidation
 // worth stating because the two look alike at a glance:
 //
 //   * `PerScopeKeyResolverDistributedValidator` gates on the operator
-//     DECLARING multi-instance (`TOOLUP_REPLICA_COUNT > 1`) and refuses
-//     startup with `Error`. It is precise and unambiguous — the operator
-//     said there are N replicas — but it is silent whenever the count is
-//     left at its default, which is exactly the deployment that scales
-//     out behind a load balancer without anyone revisiting the env var.
+//     DECLARING multi-instance (`ServerConfig.ReplicaCount > 1` or
+//     `TOOLUP_REPLICA_COUNT > 1` — either counts since Phase 458; it read
+//     only the env var before, and so skipped every deployment that set
+//     the config field in code) and refuses startup with `Error`. It is
+//     precise and unambiguous — the operator said there are N replicas —
+//     but it is silent whenever the count is left at its default, which
+//     is exactly the deployment that scales out behind a load balancer
+//     without anyone revisiting the declaration.
 //   * This validator gates on the deployment SHAPE instead
 //     (`Team` / `MultiTeam` surfaces — a multi-tenant posture that is
 //     usually horizontally scaled) and emits `Warning`. A Team
@@ -59,47 +62,30 @@ open ToolUp.Platform.ConfigValidation
 let private RecommendedCompanion =
     "RedisNotifications (ServerConfig.Notifications = RedisNotifications \"<connection-string>\", the src/NotificationChannels/Redis companion)"
 
-/// Registered implementation instance for `'T`, when compose registered
-/// one as a singleton instance. `None` covers both "not registered" and
-/// "registered as a factory / open generic", neither of which this
-/// validator can inspect without building the container.
-let private registeredInstance<'T> (services: IServiceCollection) : obj option =
-    services
-    |> Seq.tryPick (fun d ->
-        if
-            not (isNull d.ServiceType)
-            && d.ServiceType = typeof<'T>
-            && not (isNull d.ImplementationInstance)
-        then
-            Some d.ImplementationInstance
-        else
-            None)
-
 /// True when the composed `INotificationChannel` cannot cross a process
 /// boundary. Both shipped in-process implementations count: the in-memory
 /// channel delivers to same-process subscribers only, and the no-op
 /// channel delivers to nobody at all.
 ///
-/// An UNRECOGNISED channel type is treated as distributed — a companion
-/// this SDK has never heard of is far more likely to be a real pub/sub
-/// backend than a third in-process variant, and a false Warning aimed at
-/// a correctly-configured deployment teaches operators to ignore the
-/// preflight. When no channel instance is registered at all, there is no
-/// fanout path to assess and the check abstains.
+/// Phase 458 — the classification now lives once, in
+/// `PerScopeKeyResolverDistributedValidator`, and both validators call it.
+/// They previously carried a copy each, and a copy that drifted would make
+/// the Error arm and the Warning arm contradict each other about what the
+/// composed channel is — the exact confusion the two-validator split was
+/// documented to avoid. An UNRECOGNISED channel type is treated as
+/// distributed there (a false Warning aimed at a correctly-configured
+/// deployment teaches operators to ignore the preflight); `None` — no
+/// channel instance registered — means there is no fanout path to assess,
+/// and this Warning arm abstains rather than guessing.
 let private inProcessChannel (services: IServiceCollection) : bool =
-    match registeredInstance<INotificationChannel> services with
-    | Some instance ->
-        match instance with
-        | :? NotificationChannel.InMemoryNotificationChannel
-        | :? NotificationChannel.NoOpNotificationChannel -> true
-        | _ -> false
-    | None -> false
+    PerScopeKeyResolverDistributedValidator.composedChannelIsInProcess services
+    |> Option.defaultValue false
 
 /// True when the composed encryption-key resolver is the per-scope
 /// (crypto-shredding) one. A `SingleKeyResolver` has no `DestroyKey`
 /// path, and a custom resolver owns its own coherence story.
 let private perScopeResolverComposed (services: IServiceCollection) : bool =
-    match registeredInstance<IBlobEncryptionKeyResolver> services with
+    match PerScopeKeyResolverDistributedValidator.registeredInstance<IBlobEncryptionKeyResolver> services with
     | Some instance -> instance :? PerScopeKeyResolver.PerScopeKeyResolver
     | None -> false
 

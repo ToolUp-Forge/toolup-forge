@@ -385,6 +385,11 @@ let allTests =
         EncryptedBlobStorageTests.tests
         // Phase 22b — cross-replica encryption-key destruction.
         CrossReplicaKeyDestructionTests.tests
+        // Phase 458 — the wiring the 22b fanout depends on: optional on one
+        // replica, required on more, and now enforced rather than assumed.
+        PerScopeKeyResolverWiringTests.unwiredDestroyTests
+        PerScopeKeyResolverWiringTests.wiringValidatorTests
+        PerScopeKeyResolverWiringTests.wiringDiagnosticsTests
         TenantLifecycleAggregatorTests.tests
         LifecycleSummaryStoreTests.tests
         OffboardConfirmationTests.tests

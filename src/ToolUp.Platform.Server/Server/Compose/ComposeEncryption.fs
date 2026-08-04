@@ -38,12 +38,28 @@ let applyEncryptionDecorator
 /// resolves it per-request to dispatch the destroy-scope-key endpoint
 /// on `PerScopeKeyResolver`. Apps that didn't call
 /// `ServerApp.withEncryptedBlobStorage` skip this registration entirely.
+///
+/// Phase 458 — a composed `PerScopeKeyResolver` additionally registers a
+/// `"Crypto-shred fanout"` `/dev/inspect` contributor, so the wired /
+/// unwired state of the cross-replica cache eviction is readable without
+/// reaching into compose source. Only for that resolver: a
+/// `SingleKeyResolver` has no `DestroyKey` and no fanout to report, and a
+/// deployment with no encryption at all gains no panel (GP 13).
 let registerEncryptionResolver
     (services: IServiceCollection)
     (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
     : unit =
     match encryptionKeyResolver with
-    | Some r -> services.AddSingleton<IBlobEncryptionKeyResolver>(r) |> ignore
+    | Some r ->
+        services.AddSingleton<IBlobEncryptionKeyResolver>(r) |> ignore
+
+        match r with
+        | :? PerScopeKeyResolver.PerScopeKeyResolver as perScope ->
+            services.AddSingleton<IDevDiagnosticsContributor>(
+                PerScopeKeyResolver.CryptoShredFanoutContributor(perScope) :> IDevDiagnosticsContributor
+            )
+            |> ignore
+        | _ -> ()
     | None -> ()
 
 /// Stable id for the crypto-shred cross-silo cache-eviction capability
@@ -59,8 +75,10 @@ let CryptoShredCacheEvictionCapability = "crypto-shred-cache-eviction"
 /// reserved scope; other silos' subscribed handlers evict their local
 /// caches synchronously. Distributed channels (Redis pub/sub) bridge the
 /// publish across silos; the in-process default doesn't
-/// (`PerScopeKeyResolverDistributedValidator` warns about the
-/// combination at preflight). Best-effort: `WireToChannel` runs
+/// (`PerScopeKeyResolverDistributedValidator` REFUSES startup for that
+/// combination at preflight when more than one replica is declared —
+/// wiring is optional on one replica and required on more). Best-effort:
+/// `WireToChannel` runs
 /// synchronously here, but a network glitch on subscribe shouldn't
 /// crash compose — the resolver still functions single-instance.
 ///

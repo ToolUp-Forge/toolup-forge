@@ -709,9 +709,16 @@ section eliminates structurally.
 > call returns, and completes across the remaining replicas at minute grain.** A
 > destroy broadcasts a key-destroyed envelope over the notification channel so
 > every other replica drops its cached copy of the key; the propagation window is
-> the configured channel companion's fanout latency, and a deployment running more
-> than one replica on the in-process default channel is warned at startup preflight
-> because that default cannot cross a process boundary. The administrative endpoint
+> the configured channel companion's fanout latency. **Channel wiring is optional
+> on a single replica and required on more than one, and the difference is
+> enforced rather than documented:** a deployment that *declares* more than one
+> replica — in configuration or through the environment; either counts — is
+> **refused at startup** when the broadcast cannot reach a sibling, whether
+> because the resolver was never wired to a channel or because the wired channel
+> is the in-process default that cannot cross a process boundary. A deployment
+> whose *shape* implies several replicas without declaring a count is warned
+> rather than refused, because a single-replica multi-tenant deployment is
+> legitimate and its fanout is correctly a no-op. The administrative endpoint
 > is role-gated, and four audit events fire — key creation, rotation, destruction,
 > and one destruction-acknowledgement per replica that drops the key, so the trail
 > evidences fleet-wide erasure rather than only the replica that served the
@@ -728,8 +735,11 @@ section eliminates structurally.
 > and `src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyLifecycle.fs`
 > (mint on tenant provision, shred on deprovision) ·
 > `src/ToolUp.Platform.Server/Server/PerScopeKeyResolverDistributedValidator.fs`
-> (refuses a single-process resolver in a scale-out shape, because shred must
-> invalidate every replica's key cache) ·
+> (refuses a declared scale-out deployment whose shred cannot reach a sibling —
+> either unwired or on an in-process channel — because shred must invalidate
+> every replica's key cache; the declaration is read from
+> `ServerConfig.ReplicaCount` as well as `TOOLUP_REPLICA_COUNT`, so configuring
+> the count in code cannot bypass the refusal) ·
 > `src/ToolUp.Platform.Server/Server/KeyDestroyAckCoverageValidator.fs` (warns
 > when the same combination appears in a multi-tenant shape that has not declared
 > its replica count — the case the refusal above cannot see) ·

@@ -580,6 +580,15 @@
              sibling replica, per-replica acknowledgement audit, the wire
              envelope, and KeyDestroyAckCoverageValidator. -->
         <Compile Include="InProcess\CrossReplicaKeyDestructionTests.fs" />
+        <!-- Phase 458 — the fanout WIRING rather than the fanout: the
+             unwired-DestroyKey security warning (once per process, counted
+             every time), the preflight guard reading ServerConfig.ReplicaCount
+             and not only TOOLUP_REPLICA_COUNT, and the /dev/inspect panel that
+             makes wired/unwired readable. Each assertion is paired with a
+             control (a wired destroy warns nothing; the same composition at
+             ReplicaCount = 1 boots) so a green run is evidence of the
+             mechanism. Pure describe; no TestServer. -->
+        <Compile Include="InProcess\PerScopeKeyResolverWiringTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
         <!-- Phase 54e — durable last-LifecycleSummary store (blob round-trip,
              restart survival, corrupt-blob tolerance). -->
