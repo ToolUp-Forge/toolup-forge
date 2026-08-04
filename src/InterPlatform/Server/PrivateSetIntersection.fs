@@ -682,6 +682,18 @@ type DefaultPrivateSetIntersection(cipher: ICommutativeCipher, shuffle: string l
 
             match gate.Broker.Enforce(gate.Template, gate.MethodName, gate.Requested, result) with
             | Withheld reason -> ReleaseWithheld reason
+            | NoisedRelease _ ->
+                // Phase 481 — a noised cardinality is not a cardinality
+                // this protocol can carry. The whole point of the branch
+                // below is that the released number must equal the
+                // intersection that was computed; a calibrated draw makes
+                // that false by construction, and reporting it as an
+                // exact intersection size would be a wrong answer wearing
+                // a success. A deployment wanting a noised PSI cardinality
+                // asks for it as a gated aggregate, where the mechanism is
+                // composed and audited.
+                ReleaseWithheld
+                    $"the clean-room broker for template '{gate.Template.TemplateId}' returned a noised release; a private-set-intersection cardinality is exact or it is withheld"
             | Released(cleared, suppressed) ->
                 // A release is only carried through when the broker
                 // cleared the WHOLE cohort. A suppressed cell would leave

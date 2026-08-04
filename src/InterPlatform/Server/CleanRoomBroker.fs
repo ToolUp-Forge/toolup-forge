@@ -104,6 +104,25 @@ type GateDecision =
     /// audit-friendly explanation (shape not permitted / cohort below
     /// floor / method not on the template surface).
     | Withheld of reason: string
+    /// Phase 481 — the result cleared the effective gate AND had
+    /// calibrated noise applied to it. `Result` is the noised answer;
+    /// `Noise` is the policy that calibrated it.
+    ///
+    /// **The spec travels with the answer on purpose.** ε, δ and
+    /// sensitivity are declared parameters of a public mechanism, not
+    /// secrets — Kerckhoffs applies, and a mechanism whose safety
+    /// depended on hiding its calibration would not be one. What stays
+    /// receiver-side is what the *ledger* knows (remaining budget), for
+    /// the reason `PeerCleanRoomDecisionPayload` documents: a caller
+    /// that can read its own remaining ε back while varying its query
+    /// has an oracle the k-floor already refuses it.
+    ///
+    /// A `Released` becomes this only through `CohortNoise.applyTo`. An
+    /// `ICleanRoomBroker` that returns it directly is **withheld** by
+    /// `CleanRoomGate` — see that module's header. The substrate's
+    /// release post-condition is evaluated over TRUE counts, and a
+    /// broker-noised answer carries none for it to check.
+    | NoisedRelease of result: CohortResult * suppressedCells: string list * noise: NoisedReleasePolicy
 
 /// A declarative clean-room contract: the query surface a counterparty
 /// may invoke, plus the privacy floor every answer must clear. Registered
@@ -236,3 +255,71 @@ module CleanRoomBroker =
     /// Construct the default broker behind the `ICleanRoomBroker` seam.
     let create () : ICleanRoomBroker =
         DefaultCleanRoomBroker() :> ICleanRoomBroker
+
+/// Phase 481 — applying a `NoisedReleasePolicy` to a cleared release.
+///
+/// The module is `CohortNoise` and not `NoisedRelease` because that name
+/// is already a `GateDecision` case, and a module sharing a union case's
+/// name is how a call site resolves to the one you did not mean.
+///
+/// **Order is the whole design.** Suppression and the k-floor are decided
+/// on TRUE counts, by the broker and then re-checked by the substrate;
+/// noise is applied afterwards, to what survived. Reversing that would
+/// let a cell whose true count is 1 be pushed above the suppression
+/// threshold by a lucky draw and released — the floor would then hold
+/// only in expectation, which is not what a floor is. DP is closed under
+/// post-processing, so noising a cleared release is sound; deciding
+/// clearance from a noised value is not.
+[<RequireQualifiedAccess>]
+module CohortNoise =
+
+    /// Noise one cell. A `Value` of `None` is left `None`: there is
+    /// nothing to noise, and substituting a zero would disclose that the
+    /// handler produced no aggregate for this bucket.
+    ///
+    /// A noised count may come out negative, and it is left negative.
+    /// Clamping is legal post-processing but biases the estimator, and
+    /// choosing that trade is a deployment's call, not the SDK's (GP 1).
+    let private noiseCell (mechanism: INoiseMechanism) (policy: NoisedReleasePolicy) (cell: PrivacyCell) =
+        let count =
+            match policy.CountNoise with
+            | None -> cell.Count
+            | Some spec ->
+                let noised = NoiseMechanism.release mechanism spec (float cell.Count)
+                int (max (float System.Int32.MinValue) (min (float System.Int32.MaxValue) noised))
+
+        let value =
+            match policy.ValueNoise, cell.Value with
+            | Some spec, Some v -> Some(NoiseMechanism.release mechanism spec v)
+            | _, existing -> existing
+
+        {
+            cell with
+                Count = count
+                Value = value
+        }
+
+    /// Apply `policy` to every cell of `result`, drawing an INDEPENDENT
+    /// sample per cell per target.
+    ///
+    /// Independence per cell is not an optimisation to share away: one
+    /// draw reused across a histogram's buckets is a single random
+    /// offset an observer can difference out, and the mechanism would be
+    /// deterministic in every way that matters. It also means a
+    /// histogram's ε is the per-cell ε only when the cells are disjoint
+    /// (parallel composition, Dwork & Roth §3.5) — which is the usual
+    /// case for a bucketed cohort, and is the caller's to confirm.
+    let apply (mechanism: INoiseMechanism) (policy: NoisedReleasePolicy) (result: CohortResult) : CohortResult = {
+        result with
+            Cells = result.Cells |> List.map (noiseCell mechanism policy)
+    }
+
+    /// Turn a cleared `Released` into a `NoisedRelease`. A `Withheld`
+    /// passes through untouched — there is nothing released to noise —
+    /// and an already-`NoisedRelease` is returned as-is, because noising
+    /// twice would spend ε that was never reserved.
+    let applyTo (mechanism: INoiseMechanism) (policy: NoisedReleasePolicy) (decision: GateDecision) : GateDecision =
+        match decision with
+        | Withheld _
+        | NoisedRelease _ -> decision
+        | Released(result, suppressedCells) -> NoisedRelease(apply mechanism policy result, suppressedCells, policy)

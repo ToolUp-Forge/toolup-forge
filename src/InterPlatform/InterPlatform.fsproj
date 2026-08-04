@@ -72,6 +72,16 @@
          Neutral substrate; aggregation + domain privacy policy stay out.
          (`PeerCascade.fs` moved above the typed proxy by Phase 314.) -->
     <Compile Include="Server\PeerFanout.fs" />
+    <!-- Phase 481 — the calibrated differential-privacy noise mechanism:
+         the `NoiseSpec` vocabulary, the CSPRNG bit-source seam, the exact
+         discrete Laplace / discrete Gaussian samplers, and the
+         `NoisedReleasePolicy` a gate applies. Compiles BEFORE
+         CleanRoomBroker.fs because that file's `GateDecision` carries a
+         `NoisedRelease` case over these types; it depends on nothing from
+         InterPlatform itself (BCL only), so this is the earliest it could
+         sit. Nothing composes it unless a deployment calls
+         `withNoisedRelease` (GP 13). -->
+    <Compile Include="Server\NoiseMechanism.fs" />
     <Compile Include="Server\CleanRoomBroker.fs" />
     <!-- Phase 190 — the cumulative half of the clean-room story: the
          epsilon-budget ledger seam, its three in-tree implementations

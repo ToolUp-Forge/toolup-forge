@@ -43,7 +43,8 @@ let tests =
 
             match broker.Enforce(template, "exportRows", None, result) with
             | Withheld reason -> Expect.stringContains reason "not on clean-room template" "surface enforcement fires"
-            | Released _ -> failtest "a non-template method must never release data"
+            | Released _
+            | NoisedRelease _ -> failtest "a non-template method must never release data"
 
         testCase "an output shape outside the gate is withheld"
         <| fun () ->
@@ -60,7 +61,8 @@ let tests =
 
             match broker.Enforce(template, "histogram", Some countOnly, result) with
             | Withheld reason -> Expect.stringContains reason "shape" "shape constraint fires"
-            | Released _ -> failtest "a disallowed shape must be withheld"
+            | Released _
+            | NoisedRelease _ -> failtest "a disallowed shape must be withheld"
 
         testCase "a cohort below the k-anonymity floor is withheld whole"
         <| fun () ->
@@ -71,7 +73,8 @@ let tests =
 
             match broker.Enforce(template, "estimateReach", None, result) with
             | Withheld reason -> Expect.stringContains reason "k-anonymity floor" "k-floor fires"
-            | Released _ -> failtest "a sub-k cohort must be withheld"
+            | Released _
+            | NoisedRelease _ -> failtest "a sub-k cohort must be withheld"
 
         testCase "sub-threshold cells are suppressed; survivors clearing k are released"
         <| fun () ->
@@ -85,7 +88,7 @@ let tests =
             | Released(released, suppressed) ->
                 Expect.equal (List.map _.Label released.Cells) [ "big1"; "big2" ] "only ≥-threshold cells survive"
                 Expect.equal (List.sort suppressed) [ "small1"; "small2" ] "suppressed labels reported for audit"
-            | Withheld r -> failtestf "expected Released, got Withheld %s" r
+            | other -> failtestf "expected Released, got %A" other
 
         testCase "a caller may tighten the floor: a stricter requested k withholds a borderline cohort"
         <| fun () ->
@@ -99,7 +102,8 @@ let tests =
 
             match broker.Enforce(template, "estimateReach", Some stricter, result) with
             | Withheld reason -> Expect.stringContains reason "20" "the stricter requested k is the effective floor"
-            | Released _ -> failtest "a caller-tightened gate must apply"
+            | Released _
+            | NoisedRelease _ -> failtest "a caller-tightened gate must apply"
 
         testCase "a caller cannot loosen the floor: a requested k below the floor does not relax it"
         <| fun () ->
@@ -114,7 +118,8 @@ let tests =
 
             match broker.Enforce(template, "estimateReach", Some looser, result) with
             | Withheld reason -> Expect.stringContains reason "k-anonymity floor" "floor wins over a looser request"
-            | Released _ -> failtest "a caller must not be able to relax the floor below the template"
+            | Released _
+            | NoisedRelease _ -> failtest "a caller must not be able to relax the floor below the template"
 
         testCase "PrivacyGate.compose is the stricter of two gates"
         <| fun () ->

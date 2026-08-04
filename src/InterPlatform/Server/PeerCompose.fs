@@ -186,6 +186,23 @@ type PeerServerApp = {
     /// is byte-for-byte the pre-190 gate (GP 11 / GP 13) — no ledger
     /// read, no reservation, no allocation.
     PrivacyBudget: PrivacyBudgetMeter option
+    /// Phase 481 — the calibrated-noise posture per gated contract id:
+    /// which released quantities carry noise, and with what ε, δ,
+    /// sensitivity and lattice.
+    ///
+    /// This is what makes the Phase 190 ledger's ε a privacy loss rather
+    /// than a query quota. Until a policy is composed the gate's only
+    /// release tool is suppression, and suppression is deterministic, so
+    /// summing ε over it bounds nothing formally — the point
+    /// `PrivacyBudgetLedger.fs`'s header makes at length.
+    ///
+    /// Keyed by contract id rather than folded into `CleanRoomTemplate`
+    /// so an existing template value is unchanged (GP 11), and resolved
+    /// last-wins exactly as `CleanRoomTemplates` is. Empty unless a
+    /// composition calls `withNoisedRelease`, and empty registers no
+    /// `INoiseMechanism` and takes no branch on the release path
+    /// (GP 13).
+    NoisedReleases: (string * NoisedReleasePolicy) list
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -257,6 +274,7 @@ module PeerServerApp =
         TemplateApprovals = None
         FederationPins = FederationPinStore.empty
         PrivacyBudget = None
+        NoisedReleases = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -727,6 +745,51 @@ module PeerServerApp =
             PrivacyBudget = Some meter
     }
 
+    /// Phase 481 — release CALIBRATED-NOISE aggregates from a gated
+    /// contract instead of only suppressing what falls below the floor.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
+    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerServerApp.withNoisedRelease "reach" (
+    ///            NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m))
+    ///     |> PeerServerApp.withPrivacyBudget (
+    ///            PrivacyBudgetMeter.create
+    ///                (BlobPrivacyBudgetLedger blobs)
+    ///                (PrivacyBudgetPolicy.create 50m 1m))
+    ///
+    /// **This is what makes the Phase 190 ε mean something.** That
+    /// phase's header is explicit that it accounts a number called ε over
+    /// answers nothing randomises, so summing the charges bounds nothing
+    /// formally — it bounds how many questions may be asked. Compose a
+    /// policy here and the released cells carry a draw from a named,
+    /// cited mechanism (discrete Laplace or discrete Gaussian, sampled
+    /// exactly over a CSPRNG — see `NoiseMechanism.fs`), so the charge
+    /// the ledger books is the mechanism's real privacy loss.
+    ///
+    /// **Sensitivity is yours and getting it wrong voids the guarantee**
+    /// (GP 1). Forge ships the sampler and holds no view on what one
+    /// subject's presence can move your answer by. That is why the policy
+    /// carries a spec per target — a count's sensitivity is not a sum's,
+    /// and one shared number would silently be wrong for one of them.
+    ///
+    /// Applies to the named contract's gate, last-wins, and only where a
+    /// `withCleanRoomTemplate` gate exists to apply it: naming a contract
+    /// with no template refuses to start, because a noise policy that
+    /// nothing applies is the "composed and inert" shape Phase 311
+    /// exists to make impossible. The mechanism is resolved from DI, so
+    /// a deployment with an accredited implementation registers its own
+    /// `INoiseMechanism`; the SDK default is the exact discrete sampler
+    /// over `RandomNumberGenerator`.
+    ///
+    /// A composition that never calls this draws nothing, registers no
+    /// mechanism, and is byte-for-byte a pre-481 composition (GP 11 /
+    /// GP 13).
+    let withNoisedRelease (contractId: string) (policy: NoisedReleasePolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            NoisedReleases = app.NoisedReleases @ [ contractId, policy ]
+    }
+
     /// Phase 591 — pin a counterparty's published `PeerSurface` label, so
     /// this deployment's federation edges are validated against what the
     /// counterparty *claimed to serve* before any traffic flows.
@@ -952,6 +1015,70 @@ module PeerServerApp =
         | [] -> ()
         | unbound -> failwith (cleanRoomTemplateRefusal unbound)
 
+    /// Phase 481 — the effective noised-release policy per contract id,
+    /// last-wins. Exposed on the same terms as `cleanRoomTemplateMap`:
+    /// so a deployment can assert its own calibration posture without
+    /// booting a server, and so the compose path and any preflight read
+    /// one resolution rule.
+    let noisedReleaseMap (app: PeerServerApp) : Map<string, NoisedReleasePolicy> =
+        app.NoisedReleases
+        |> List.fold (fun acc (contractId, policy) -> Map.add contractId policy acc) Map.empty
+
+    /// Phase 481 — everything wrong with this composition's calibrated-
+    /// noise posture, as data. Empty on a healthy composition.
+    ///
+    /// Two families, both refusals rather than warnings:
+    ///
+    ///   * A policy naming a contract with **no clean-room template**.
+    ///     Nothing would apply it — the noise lives on the gate, and an
+    ///     ungated contract has no gate. That is the "composed and
+    ///     inert" shape Phase 311 exists to make unreachable, and it is
+    ///     worse here than there: an operator reading the composition
+    ///     would believe answers were being randomised when they were
+    ///     being released raw.
+    ///   * A spec that is not calibratable at all (`NoiseSpec.validate`
+    ///     / `NoisedReleasePolicy.validate`) — an unbounded sensitivity,
+    ///     a non-positive ε, a Gaussian with no δ. Every one of those
+    ///     would throw on the first call, and a privacy parameter that
+    ///     is wrong is wrong at compose time.
+    let auditNoisedRelease (app: PeerServerApp) : string list =
+        match app.Base.Config.PeerSubstrate, app.NoisedReleases with
+        | NoPeerSubstrate, _
+        | _, [] -> []
+        | EnabledPeerSubstrate, _ ->
+            let gated = app.CleanRoomTemplates |> List.map fst |> Set.ofList
+
+            noisedReleaseMap app
+            |> Map.toList
+            |> List.collect (fun (contractId, policy) ->
+                let ungated =
+                    if Set.contains contractId gated then
+                        []
+                    else
+                        [
+                            $"contract '{contractId}' has a noised-release policy but no clean-room template, so nothing would apply the noise"
+                        ]
+
+                ungated
+                @ (NoisedReleasePolicy.validate policy
+                   |> List.map (fun reason -> $"contract '{contractId}': {reason}")))
+
+    /// The refusal raised at `run` when the calibrated-noise posture
+    /// cannot be honoured.
+    let noisedReleaseRefusal (problems: string list) =
+        let named = String.concat "; " problems
+
+        $"peer-noised-release: PeerServerApp.withNoisedRelease was composed with a posture that cannot be honoured — {named}. Refusing to start: a noise policy that nothing applies, or one whose calibration is invalid, is a deployment that looks like it randomises its answers and does not."
+
+    /// Phase 481 — apply the posture. No advisory mode, on Phase 311's
+    /// argument: `withNoisedRelease` did not exist before this phase, so
+    /// every reachable case is a defect in code written after it and
+    /// nothing pre-481 can trip it (GP 11).
+    let enforceNoisedRelease (app: PeerServerApp) : unit =
+        match auditNoisedRelease app with
+        | [] -> ()
+        | problems -> failwith (noisedReleaseRefusal problems)
+
     /// Phase 480 — classify this composition's bilateral-approval
     /// posture. Pure and total; exposed so a deployment can assert its
     /// own posture in its own tests without booting a server, and so the
@@ -1051,6 +1178,11 @@ module PeerServerApp =
             // composition that gates nothing does not run it (GP 13).
             enforceCleanRoomTemplates app
 
+            // Phase 481 — refuse a calibrated-noise policy that no gate
+            // would apply, or one whose calibration is not valid. Runs
+            // only when a policy is composed (GP 13).
+            enforceNoisedRelease app
+
             // Phase 480 — refuse a bilateral-approval posture that can
             // never resolve (gated contracts, a composed registry, no
             // local identity), before anything registers. Pure over the
@@ -1069,6 +1201,7 @@ module PeerServerApp =
             let cleanRoomTemplates = cleanRoomTemplateMap app
             let templateApprovals = app.TemplateApprovals
             let privacyBudget = app.PrivacyBudget
+            let noisedReleases = noisedReleaseMap app
             let auditTransparency = app.AuditTransparency
             let contractProfiles = app.ContractProfiles
             let wireLimits = app.WireLimits
@@ -1292,15 +1425,33 @@ module PeerServerApp =
                                             fun payload ->
                                                 auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
 
+                                    // Phase 481 — the calibrated-noise
+                                    // posture for THIS contract, paired
+                                    // with the resolved mechanism. `None`
+                                    // for a composition that declared no
+                                    // policy, which is the pre-481 gate
+                                    // exactly. The mechanism is resolved
+                                    // per gated contract rather than once
+                                    // per composition so a deployment
+                                    // registering its own `INoiseMechanism`
+                                    // through the base `ServiceConfig` is
+                                    // honoured on the same terms the
+                                    // broker is.
+                                    let noise =
+                                        Map.tryFind registration.ContractId noisedReleases
+                                        |> Option.map (fun policy ->
+                                            sp.GetService(typeof<INoiseMechanism>) :?> INoiseMechanism, policy)
+
                                     // Phase 190 — the composed ε meter,
                                     // or `None` for a composition that
                                     // declared no budget (the pre-190
                                     // gate exactly).
-                                    (CleanRoomGate.wrapMetered
+                                    (CleanRoomGate.wrapNoised
                                         broker
                                         template
                                         approvalCheck
                                         privacyBudget
+                                        noise
                                         sink
                                         registration)
                                         .Registration
@@ -1425,6 +1576,19 @@ module PeerServerApp =
                     withFusion.TryAddSingleton<IPeerFanout>(DefaultPeerFanout() :> IPeerFanout)
                     withFusion.TryAddSingleton<IPeerCascade>(DefaultPeerCascade() :> IPeerCascade)
                     withFusion.TryAddSingleton<ICleanRoomBroker>(DefaultCleanRoomBroker() :> ICleanRoomBroker)
+
+                    // Phase 481 — the calibrated-noise mechanism, and
+                    // ONLY when a policy was composed. Unlike the three
+                    // above it is not a default the substrate wants
+                    // present-but-idle: a mechanism that exists without a
+                    // policy draws nothing, and registering it anyway
+                    // would put a CSPRNG-backed sampler in every peer
+                    // deployment's container for no reachable caller
+                    // (GP 13). `TryAdd` so a deployment that registered
+                    // an accredited implementation through the base
+                    // `ServiceConfig` keeps it.
+                    if not (List.isEmpty app.NoisedReleases) then
+                        withFusion.TryAddSingleton<INoiseMechanism>(NoiseMechanism.create ())
 
                     // Phase 591 — the federation-graph preflight, folded
                     // into the Phase 9m preflight set as a

@@ -313,6 +313,39 @@ let tests =
                 // handshake there is no reserved contract here, so there
                 // is nothing owed to `Serves` either.
                 "PrivacyBudget"
+                // Phase 481 — NOT projected, and the argument is
+                // `PrivacyBudget`'s, one degree further along again.
+                //
+                // A composed noise policy is observable in the plainest
+                // way of all: the answers come back randomised, and the
+                // calibration (ε, δ, sensitivity, lattice) is a public
+                // parameter of a public mechanism that a counterparty is
+                // entitled to know — it is what tells them how much of
+                // the variation in an answer is theirs and how much is
+                // the mechanism's. So the case for publishing it is the
+                // strongest in this list.
+                //
+                // It stays out for the same structural reason the two
+                // above do, not for a privacy one. The policy is
+                // compose-time *policy*, and an operator who tightens it
+                // — spending less ε, drawing wider noise, which can only
+                // make the release safer — should be free to do so at a
+                // restart without invalidating every pinned copy of a
+                // hash-stamped descriptor. Advertising the calibration
+                // properly means a `formatVersion` bump and a decision
+                // about whether a tightening is a breaking change, which
+                // is the surface's own phase to make.
+                //
+                // In the meantime the calibration is not withheld from
+                // the counterparty in any meaningful sense: it is
+                // recorded on every gated decision row, and the bilateral
+                // template-approval handshake (Phase 480) is where two
+                // parties agree the terms of a clean-room release,
+                // including what noise it carries.
+                //
+                // Like the ledger and unlike the approval registry, it
+                // registers no contract, so nothing is owed to `Serves`.
+                "NoisedReleases"
             ]
 
             let actual =

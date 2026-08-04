@@ -60,6 +60,35 @@ open ToolUp.Platform
 // not to reimplement it but to make sure its output cannot be worse than
 // the composed floor.
 //
+// ── Phase 481 — calibrated noise, and why it sits AFTER invariant 3 ──
+//
+// `PrivacyBudgetLedger.fs` (Phase 190) is explicit that it accounts ε
+// over deterministic answers and therefore bounds nothing formally: the
+// gate's only release tool was suppression. `withNoisedRelease` adds the
+// missing half — a `NoisedReleasePolicy` whose calibrated draw is added
+// to the released cells, so the ε the ledger charges is a real privacy
+// loss rather than a query quota wearing the name.
+//
+// It runs LAST, on what invariant 3 already cleared, and the ordering is
+// the design:
+//
+//   * Suppression and the k-floor are decided on TRUE counts. Deciding
+//     them from a noised value would let a cell whose true count is 1 be
+//     lifted over the suppression threshold by a lucky draw — the floor
+//     would hold in expectation, which is not what a floor is.
+//   * DP is closed under post-processing, so noising an answer the floor
+//     already cleared is sound. The reverse is not.
+//
+// **An `ICleanRoomBroker` that returns `NoisedRelease` itself is
+// WITHHELD.** That looks harsh and is the only coherent reading: the
+// substrate's release post-condition is `PrivacyGate.observed` over the
+// released counts, and a broker-noised answer carries noised counts, so
+// there is nothing left for the floor to bind against. A deployment
+// shipping its own differential-privacy implementation substitutes
+// `INoiseMechanism` — the seam that exists for exactly that — and keeps
+// both halves. Silently accepting a broker's word for its own
+// calibration would undo the entire argument of this file.
+//
 // ── The witness type ──
 //
 // `GatedContractRegistration` has a private representation and exactly
@@ -223,11 +252,34 @@ module CleanRoomGate =
     /// settlement written from a broken call path, which is the
     /// direction that never hands budget back for an answer that
     /// shipped.
-    let wrapMetered
+    /// Phase 481 — `noise` is the calibrated-release posture: the
+    /// composed `INoiseMechanism` and the `NoisedReleasePolicy` that
+    /// calibrates it. `None` is every pre-481 composition exactly — one
+    /// `option` match on the release path, no draw, no allocation (GP 11
+    /// / GP 13).
+    ///
+    /// When it IS composed, two things change and both are deliberate:
+    ///
+    ///   * The released cells carry calibrated noise, applied AFTER the
+    ///     substrate's release post-condition has bound on the true
+    ///     counts (see the file header for why that order and not the
+    ///     other).
+    ///   * The ε reserved for the call becomes the policy's own
+    ///     `totalEpsilon` rather than `PrivacyBudgetPolicy`'s per-method
+    ///     schedule. The schedule was always a stand-in for a privacy
+    ///     loss nothing was actually incurring; once a mechanism incurs
+    ///     one, charging anything else would be accounting a number that
+    ///     is not the number. A budget that cannot afford the draw
+    ///     withholds — **there is no un-noised fallback**, because
+    ///     falling back to the raw answer when the budget runs out is
+    ///     the one behaviour that would make the whole arrangement
+    ///     worse than not having it.
+    let wrapNoised
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
         (approval: CleanRoomApprovalCheck option)
         (budget: PrivacyBudgetMeter option)
+        (noise: (INoiseMechanism * NoisedReleasePolicy) option)
         (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
@@ -307,13 +359,71 @@ module CleanRoomGate =
                                 | Withheld reason ->
                                     do! record sink (decision false [] reason)
                                     return withheld template
+                                | NoisedRelease(_, suppressedCells, _) ->
+                                    // Phase 481 — a broker that noised the
+                                    // answer itself has left the substrate
+                                    // nothing to bind the floor against:
+                                    // invariant 3 reads TRUE counts, and
+                                    // these are not. Calibration this
+                                    // substrate did not perform is
+                                    // calibration it cannot check, so it is
+                                    // refused rather than taken on trust.
+                                    do!
+                                        record
+                                            sink
+                                            (decision
+                                                false
+                                                suppressedCells
+                                                $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerServerApp.withNoisedRelease instead")
+
+                                    return withheld template
                                 | Released(released, suppressedCells) ->
                                     // Invariant 3 — release post-condition.
                                     // The seam is substitutable; the floor is
                                     // not.
                                     if PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released) then
-                                        do! record sink (decision true suppressedCells "")
-                                        return Ok(JsonRpc.serialize released)
+                                        // Invariant 4 — calibrated noise
+                                        // (Phase 481), applied to what the
+                                        // floor already cleared. `None` is
+                                        // the pre-481 release, byte for
+                                        // byte.
+                                        let final =
+                                            match noise with
+                                            | None -> Released(released, suppressedCells)
+                                            | Some(mechanism, policy) ->
+                                                CohortNoise.applyTo
+                                                    mechanism
+                                                    policy
+                                                    (Released(released, suppressedCells))
+
+                                        match final with
+                                        | Released(answer, cells) ->
+                                            do! record sink (decision true cells "")
+                                            return Ok(JsonRpc.serialize answer)
+                                        | NoisedRelease(answer, cells, applied) ->
+                                            // The calibration is recorded
+                                            // receiver-side beside the
+                                            // suppression trail, so an
+                                            // auditor reads what was spent
+                                            // and on what mechanism from
+                                            // the same row.
+                                            do!
+                                                record
+                                                    sink
+                                                    (decision
+                                                        true
+                                                        cells
+                                                        $"released with calibrated noise — {NoisedReleasePolicy.describe applied}")
+
+                                            return Ok(JsonRpc.serialize answer)
+                                        | Withheld reason ->
+                                            // Unreachable: `applyTo` never
+                                            // withholds a `Released`. Kept
+                                            // total rather than assumed —
+                                            // a privacy gate's default
+                                            // branch must be silence.
+                                            do! record sink (decision false suppressedCells reason)
+                                            return withheld template
                                     else
                                         do!
                                             record
@@ -343,8 +453,23 @@ module CleanRoomGate =
                     match budget with
                     | None -> return! enforce ()
                     | Some meter ->
-                        let held =
+                        let scheduled =
                             PrivacyBudgetMeter.spendFor template.TemplateId context.Peer.PeerId methodName meter
+
+                        // Phase 481 — with a noise policy composed the
+                        // charge is the MECHANISM's ε, not the declared
+                        // schedule. Before 481 the schedule was a proxy
+                        // for a privacy loss nothing was incurring; now
+                        // something is, and the ledger must account the
+                        // number the mechanism actually spends or it is
+                        // back to accounting a quota.
+                        let held =
+                            match noise with
+                            | None -> scheduled
+                            | Some(_, policy) -> {
+                                scheduled with
+                                    Epsilon = NoisedReleasePolicy.totalEpsilon policy
+                              }
 
                         let! reserved = meter.Ledger.ReserveBudget(held, meter.Policy.EpsilonCeiling)
 
@@ -359,7 +484,8 @@ module CleanRoomGate =
                             let reason =
                                 match PrivacyBudgetMeter.refusalDecision template.TemplateId refusal with
                                 | Withheld r -> r
-                                | Released _ -> ""
+                                | Released _
+                                | NoisedRelease _ -> ""
 
                             do! record sink (decision false [] reason)
                             return withheld template
@@ -428,16 +554,29 @@ module CleanRoomGate =
                 Dispatch = gatedDispatch
         }
 
+    /// Phase 190 — install `template`'s gate with cumulative ε
+    /// accounting and no calibrated noise. The pre-481 shape, preserved
+    /// exactly.
+    ///
+    /// Defined in terms of `wrapNoised` for the reason every wrapper in
+    /// this module is defined in terms of the one below it: the whole
+    /// argument for a structural gate is that there is ONE path, and a
+    /// second implementation of "the gate" is how a path that enforces
+    /// slightly less appears.
+    let wrapMetered
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
+        (budget: PrivacyBudgetMeter option)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        wrapNoised broker template approval budget None sink registration
+
     /// Phase 480 — install `template`'s gate on `registration`'s
     /// dispatch, optionally behind a bilateral-approval pre-check and
     /// with no cumulative ε accounting. The pre-190 shape, preserved
     /// exactly.
-    ///
-    /// Defined in terms of `wrapMetered` rather than beside it for the
-    /// reason `wrap` is defined in terms of this: the whole argument for
-    /// a structural gate is that there is ONE path, and a second
-    /// implementation of "the gate" is how a path that enforces slightly
-    /// less appears.
     let wrapApproved
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
