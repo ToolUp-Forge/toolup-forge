@@ -39,8 +39,8 @@
       "profile": "gateway",
       "kind": "hash",
       "file": "aggregate-surface/group.json",
-      "sha256": "ecc8842b199421bee8040ea163d0a974978f3619f1a0448e794eed33a63f8f53",
-      "description": "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing."
+      "sha256": "a07e83651a460cd957041265a4f81f2d4bb10c949e8ffc2d8e5178a11cd90c22",
+      "description": "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing, and `LongRunningEnabled` floored across the exposing members (Phase 630 — every exposing member here dispatches long-running work, so the group does)."
     },
     {
       "id": "aggregate-surface/solo",
@@ -48,7 +48,7 @@
       "profile": "gateway",
       "kind": "hash",
       "file": "aggregate-surface/solo.json",
-      "sha256": "3b93ae694b5a1812d7420ab98090f2d5f3c0e566d5f934398150d1be4a94224b",
+      "sha256": "7cb0d027501e0f9e31f6cbad297ed30f767abb3f280fab712f5fd9e1406a3dd0",
       "description": "A group with one exposing member that agrees with the gateway edge on every facet — the control that separates a floor which collapsed to unanimity from a floor that was never applied, and the case where every pack the member pins does carry."
     },
     {

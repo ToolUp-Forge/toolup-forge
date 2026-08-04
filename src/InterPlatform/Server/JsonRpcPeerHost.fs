@@ -467,6 +467,74 @@ module JsonRpcPeerHost =
                 do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
         }
 
+    /// Phase 630 — the group edge's terminal-outcome row.
+    ///
+    /// Phase 310 gave the *receiver* a `PeerJobCompleted` row when a
+    /// long-running call finished, emitted by the job handler that
+    /// resolved it. A gateway runs no such handler — it brokers the work
+    /// and never executes it — so without this its trail would stop at the
+    /// dispatch-time `PeerCallCompleted` row and be permanently silent
+    /// about how the work it brokered actually ended. An operator
+    /// reconstructing a federated call from the group's own log would see
+    /// a call begin and never conclude.
+    ///
+    /// **The existing `PeerJobCompleted` case, not a new one.** Its payload
+    /// already carries every field the group edge has to attribute —
+    /// contract, method, the caller that scheduled, the cascade
+    /// `RootRequestId`, the job id, and the terminal outcome — and the id
+    /// it files under is the **group's** handle, which is the identifier
+    /// the caller polls with and therefore the one an operator can join a
+    /// poll trace to. A distinct case would have split one question ("how
+    /// did this long-running call end") across two axes for no gain.
+    ///
+    /// Emitted **once** per handle: `MarkTerminalObserved` claims the right
+    /// before the row is written, so a caller that keeps polling a
+    /// completed job does not multiply the trail. Best-effort throughout —
+    /// the poll has already succeeded by the time this runs, and neither a
+    /// flaky audit store nor a flaky map may turn a served result into a
+    /// failure.
+    let private auditGroupJobTerminal
+        (ctx: HttpContext)
+        (map: IPeerGroupJobMap)
+        (groupJobId: PeerJobId)
+        (binding: PeerGroupJobBinding)
+        (status: PeerJobStatus<string>)
+        : System.Threading.Tasks.Task =
+        task {
+            try
+                match status, tryGetService<IAuditLog> ctx with
+                // Still running: nothing has concluded, so there is nothing
+                // to record — and recording it would burn the one-shot
+                // claim on a non-outcome.
+                | PeerJobStatus.Pending, _
+                | _, None -> ()
+                | terminal, Some auditLog ->
+                    let! first = map.MarkTerminalObserved(PeerJob.Scope, groupJobId) |> Async.StartAsTask
+
+                    if first then
+                        let payload: PeerJobCompletedPayload = {
+                            ContractId = binding.ContractId
+                            MethodName = binding.MethodName
+                            CallerPeerId = binding.OwnerPeerId
+                            RootRequestId = binding.RootRequestId
+                            JobId = groupJobId
+                            Succeeded =
+                                match terminal with
+                                | PeerJobStatus.Completed _ -> true
+                                | _ -> false
+                            Outcome =
+                                match terminal with
+                                | PeerJobStatus.Completed _ -> "ok"
+                                | PeerJobStatus.Failed e -> JsonRpc.errorCaseName e
+                                | PeerJobStatus.Pending -> "pending"
+                            OccurredAt = DateTimeOffset.UtcNow
+                        }
+
+                        do! auditLog.Record(PeerJob.Scope, PeerJobCompleted payload) |> Async.StartAsTask
+            with _ ->
+                ()
+        }
+
     /// Phase 343 — authenticate an inbound token, fail-closed even when
     /// the provider *throws*.
     ///
@@ -790,11 +858,51 @@ module JsonRpcPeerHost =
     /// behaviour change — it gains a field it was not reading (GP 11).
     /// Echoing it on the refusal paths too discloses nothing: it is the
     /// value the caller put in the URL.
+    ///
+    /// **Phase 630 — a group-minted handle resolves by forwarding.** A
+    /// `PeerGateway` fronts a group of deployments as one peer, and a
+    /// member's long-running result parks in that *member's* store, which
+    /// this receiver cannot read. When a `PeerGroupJobFronting` is
+    /// registered (only a gateway composed with a group job map registers
+    /// one) the polled id is first resolved against the group handle map;
+    /// a hit forwards the poll to the owning member over the gateway's own
+    /// transport and projects the member's `PeerJobStatus` verbatim. A
+    /// miss falls through to the local result store, so a gateway that is
+    /// also an ordinary receiver serves both, and a deployment with no
+    /// fronting registered takes the pre-630 path exactly (GP 11 / GP 13).
+    ///
+    /// Three properties are preserved across the forward, and each is the
+    /// group-edge dual of one the member already enforces:
+    ///
+    ///   * **Correlation (Phase 315).** The response echoes the id the
+    ///     caller asked about — the *group's* handle, never the member's.
+    ///     The member's id appears nowhere in the answer.
+    ///   * **Caller ownership (Phase 308).** The binding records the peer
+    ///     that dispatched through the group; a different validated peer
+    ///     polling the same handle is refused with the identical message
+    ///     and status the local path uses, disclosing nothing about
+    ///     whether the handle resolves at all.
+    ///   * **Non-disclosure.** A member record retired by its own
+    ///     retention (Phase 316) makes the member answer `Pending`, which
+    ///     is what this route forwards — the same answer an unknown handle
+    ///     produces, so expired, never-existed and still-running stay
+    ///     indistinguishable end to end.
     let private jobStatusHandler (contractId: string) (jobId: Guid) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
             let auth = getService<IPeerAuthProvider> ctx
             let fusion = tryGetService<PeerJobFusion> ctx
+            let fronting = tryGetService<PeerGroupJobFronting> ctx
             let correlationId = string jobId
+
+            let statusResponse (status: PeerJobStatus<string>) = {
+                JsonRpc = JsonRpc.version
+                Result = Some(JsonRpc.serialize status)
+                Error = None
+                Id = correlationId
+            }
+
+            let notOwned =
+                JsonRpc.failure correlationId (PeerUnauthorized "peer job result is not owned by the calling peer")
 
             match bearerToken ctx with
             | None ->
@@ -805,38 +913,75 @@ module JsonRpcPeerHost =
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure correlationId e) next ctx
                 | Ok principal ->
-                    match fusion with
-                    | None ->
-                        return!
-                            writeJson
-                                200
-                                (JsonRpc.failure correlationId (PeerHandler "peer job-fusion substrate is not enabled"))
-                                next
-                                ctx
-                    | Some f ->
-                        let! record = f.ResultStore.TryGetResult(PeerJob.Scope, jobId) |> Async.StartAsTask
+                    // Phase 630 — resolve the group handle map first, and
+                    // only when a gateway registered one. `None` here is
+                    // both "no gateway composed" and "this id is not a
+                    // group handle"; either way the local path below runs
+                    // unchanged.
+                    let! groupBinding =
+                        match fronting with
+                        | None -> System.Threading.Tasks.Task.FromResult None
+                        | Some f -> f.Map.TryGet(PeerJob.Scope, jobId) |> Async.StartAsTask
 
-                        let statusResponse (status: PeerJobStatus<string>) = {
-                            JsonRpc = JsonRpc.version
-                            Result = Some(JsonRpc.serialize status)
-                            Error = None
-                            Id = correlationId
-                        }
+                    let owns (ownerPeerId: string) =
+                        ownerPeerId <> "" && ownerPeerId = principal.Caller.PeerId
 
-                        match record with
-                        | None -> return! writeJson 200 (statusResponse PeerJobStatus.Pending) next ctx
-                        | Some r when r.OwnerPeerId <> "" && r.OwnerPeerId = principal.Caller.PeerId ->
-                            return! writeJson 200 (statusResponse r.Status) next ctx
-                        | Some _ ->
-                            // Not the scheduling caller (or an owner-less
-                            // pre-ownership record, which matches nobody):
-                            // refuse without disclosing the stored status.
+                    match fronting, groupBinding with
+                    | Some f, Some binding when owns binding.OwnerPeerId ->
+                        let! forwarded =
+                            f.Client.PollJob(binding.MemberPeer, binding.ContractId, binding.MemberJobId)
+                            |> Async.StartAsTask
+
+                        match forwarded with
+                        | Ok status ->
+                            // Before the response is written, never after:
+                            // the estate's post-response side-effect hazard
+                            // is exactly a cross-cutting stage that touches
+                            // per-request state once the response has begun.
+                            do! auditGroupJobTerminal ctx f.Map jobId binding status
+                            return! writeJson 200 (statusResponse status) next ctx
+                        | Error e ->
+                            // A transport-level failure of the ONWARD poll.
+                            // Reported as the structured error at 200, the
+                            // shape every other non-answer on this route
+                            // takes; the caller retries the poll it already
+                            // holds a handle for.
+                            return! writeJson 200 (JsonRpc.failure correlationId e) next ctx
+                    | Some _, Some _ ->
+                        // A group handle this caller does not own. Refused
+                        // rather than fallen through, so possession of
+                        // another caller's handle buys nothing — the group
+                        // edge's dual of the local check below.
+                        return! writeJson 401 notOwned next ctx
+                    | _ ->
+                        match fusion, fronting with
+                        | Some f, _ ->
+                            let! record = f.ResultStore.TryGetResult(PeerJob.Scope, jobId) |> Async.StartAsTask
+
+                            match record with
+                            | None -> return! writeJson 200 (statusResponse PeerJobStatus.Pending) next ctx
+                            | Some r when owns r.OwnerPeerId -> return! writeJson 200 (statusResponse r.Status) next ctx
+                            | Some _ ->
+                                // Not the scheduling caller (or an owner-less
+                                // pre-ownership record, which matches nobody):
+                                // refuse without disclosing the stored status.
+                                return! writeJson 401 notOwned next ctx
+                        | None, Some _ ->
+                            // A gateway with no job substrate of its own:
+                            // it genuinely dispatches long-running work, so
+                            // "not enabled" would be false. An unresolved
+                            // handle answers `Pending`, the same answer the
+                            // local path gives an unknown id — which is what
+                            // keeps a retired binding indistinguishable from
+                            // one that never existed.
+                            return! writeJson 200 (statusResponse PeerJobStatus.Pending) next ctx
+                        | None, None ->
                             return!
                                 writeJson
-                                    401
+                                    200
                                     (JsonRpc.failure
                                         correlationId
-                                        (PeerUnauthorized "peer job result is not owned by the calling peer"))
+                                        (PeerHandler "peer job-fusion substrate is not enabled"))
                                     next
                                     ctx
         }

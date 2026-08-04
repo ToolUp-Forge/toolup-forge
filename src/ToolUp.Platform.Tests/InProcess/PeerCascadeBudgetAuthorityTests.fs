@@ -682,6 +682,11 @@ let cascadeCompatibilityTests =
                 ContractId = contractId
                 Versions = [ v1 ]
                 Owner = brokerTarget
+                // Phase 630 — the owner advertises no long-running routine,
+                // so every method on this route is immediate and the
+                // cascade bookkeeping under test is the only thing the
+                // dispatch does.
+                Routines = []
             }
 
             let client = CapturingPeerClient()

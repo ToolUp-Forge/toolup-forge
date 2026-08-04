@@ -1084,6 +1084,12 @@ let allTests =
         // exposing member, vocabulary pins on unanimity only), and the
         // gateway that fronts it by delegating to the owning member.
         AggregatePeerSurfaceTests.tests
+        // Phase 630 — long-running methods fronted through that same
+        // aggregate surface: the gateway mints a content-free group job
+        // handle, the host's poll route resolves it by forwarding to the
+        // owning member, and the group edge keeps the id echo, caller
+        // ownership, non-disclosure and its own terminal audit row.
+        AggregateLongRunningFrontingTests.tests
         // Phase 591 — federation-graph preflight: the deployment's
         // consumed peer contracts checked against the pinned labels its
         // counterparties published, before traffic — unsatisfied

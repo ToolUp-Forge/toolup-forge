@@ -649,7 +649,7 @@ let vectors () : WireVector list =
             "aggregate-surface"
             Gateway
             Hash
-            "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing."
+            "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing, and `LongRunningEnabled` floored across the exposing members (Phase 630 — every exposing member here dispatches long-running work, so the group does)."
             "aggregate-surface/group.json"
             (PeerSurface.exportJson (derived groupExposure))
 

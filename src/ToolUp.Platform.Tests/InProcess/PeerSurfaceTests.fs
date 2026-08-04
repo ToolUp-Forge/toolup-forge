@@ -409,6 +409,26 @@ let tests =
                 // exact moment it matters — `missing 'cid'`, `missing
                 // 'jti'`, or `replayed`, each naming what to do.
                 "TokenPolicy"
+                // Phase 630 — PROJECTED, but not by `describe`, which is
+                // why it sits at the end of this list with an argument of
+                // its own rather than beside an exemption.
+                //
+                // The map's presence is exactly what decides whether a
+                // gateway can serve the long-running poll leg, and that
+                // IS a term of the face: it is reported as
+                // `PeerBudgetShape.LongRunningEnabled`, narrowed from the
+                // members' floor by `PeerGateway.surface`. So nothing is
+                // being withheld.
+                //
+                // `PeerSurface.describe` still must not read it, because
+                // `describe` knows nothing about groups. A map composed on
+                // an ordinary deployment fronts nothing — no aggregate was
+                // ever derived, no forwarding contract registered — and
+                // `describe` reading it would report a capability from a
+                // field that, on its own, registers nothing at all. The
+                // gateway is the only thing that knows both halves, so the
+                // gateway is where the two are joined.
+                "GroupJobMap"
             ]
 
             let actual =

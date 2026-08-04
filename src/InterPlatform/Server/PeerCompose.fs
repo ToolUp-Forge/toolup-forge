@@ -235,6 +235,24 @@ type PeerServerApp = {
     /// with `withTokenPolicy`, or one axis at a time with
     /// `withReplayGuard` / `withContractBoundCalls`.
     TokenPolicy: PeerTokenPolicy
+    /// Phase 630 — the durable map a `PeerGateway` mints group job
+    /// handles into, so the group can front a member's *long-running*
+    /// methods and not only its immediate ones.
+    ///
+    /// `None` by default, and that absence is the whole GP 11 story: a
+    /// gateway composed without one fronts exactly what Phase 595's did
+    /// (the invoke leg), registers no extra singleton, and derives the
+    /// identical surface. Set it with `withGroupJobMap` — typically
+    /// `BlobPeerGroupJobMap(blobs)` over the same `IBlobStorage` the
+    /// deployment already composes — and `PeerGateway.withAggregate`
+    /// picks it up.
+    ///
+    /// It lives here rather than as an argument to `withAggregate`
+    /// because `PeerGateway.surface` has to read it: a gateway that
+    /// cannot resolve a group handle must not advertise
+    /// `LongRunningEnabled`, and the composed app is the only thing that
+    /// knows which of the two shapes was built.
+    GroupJobMap: IPeerGroupJobMap option
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -310,6 +328,7 @@ module PeerServerApp =
         JobRetention = PeerJobRetentionPolicy.default'
         RoundOrchestration = false
         TokenPolicy = PeerTokenPolicy.unscoped
+        GroupJobMap = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -915,6 +934,30 @@ module PeerServerApp =
     let withJobRetention (retention: PeerJobRetentionPolicy) (app: PeerServerApp) : PeerServerApp = {
         app with
             JobRetention = retention
+    }
+
+    /// Phase 630 — give a `PeerGateway` the durable map it mints group job
+    /// handles into, so the group fronts its members' **long-running**
+    /// methods as well as their immediate ones.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withGroupJobMap (BlobPeerGroupJobMap blobs)
+    ///     |> PeerGateway.withAggregate client members exposure
+    ///
+    /// The map is passed in rather than assembled from DI because the
+    /// gateway's forwarding dispatch closures are built at compose time,
+    /// before any service provider exists — the same reason
+    /// `withAggregate` already takes its `IPeerClient` explicitly. A
+    /// deployment that composes a gateway already resolves an
+    /// `IBlobStorage`, so `BlobPeerGroupJobMap(blobs)` is the one-liner.
+    ///
+    /// Composing this on a deployment that never calls
+    /// `PeerGateway.withAggregate` does nothing at all: the field is read
+    /// only there, so it registers no singleton and allocates nothing
+    /// beyond the map the caller constructed (GP 13).
+    let withGroupJobMap (map: IPeerGroupJobMap) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            GroupJobMap = Some map
     }
 
     /// Phase 483, composed by Phase 629 — register the multi-round

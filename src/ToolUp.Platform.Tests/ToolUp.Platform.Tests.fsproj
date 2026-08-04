@@ -1319,6 +1319,14 @@
              live-surface == derived-aggregate). Pure derive + an
              in-process peer client; no TestServer. -->
         <Compile Include="InProcess\AggregatePeerSurfaceTests.fs" />
+        <!-- Phase 630 — long-running methods fronted through the aggregate
+             surface: the group job-handle map (content-free, durable,
+             TTL-bounded), the host's poll-forwarding hook (id echo, caller
+             ownership, non-disclosure of a retired member record), the
+             LongRunningEnabled floor, and the group-edge PeerJobCompleted
+             row. TestServer for the poll leg + an in-process peer client
+             for the dispatch leg. -->
+        <Compile Include="InProcess\AggregateLongRunningFrontingTests.fs" />
         <!-- Phase 591 — federation-graph preflight against pinned
              counterparty surfaces: unsatisfied contract, version skew,
              trust mismatch (including an aggregate's `mixed:` facet) and

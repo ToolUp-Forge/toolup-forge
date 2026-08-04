@@ -537,3 +537,288 @@ type PeerContractHost = {
     Registration: PeerContractRegistration
     JobHandlers: (string * IJobHandler) list
 }
+
+// ─── Phase 630 — the gateway's group job-handle map ──────────────────
+//
+// Phase 595's `PeerGateway` presents a group of deployments as one peer,
+// but only for **immediate** methods: a member's long-running result
+// parks in that member's own `IPeerJobResultStore`, and the group's
+// `GET /peer/v1/{contractId}/jobs/{jobId}` route cannot read it. The
+// missing piece is **handle translation** — the gateway mints a handle of
+// its own, remembers what it stands for, and resolves a poll against it
+// by forwarding to the owning member.
+//
+// Three properties the binding has to hold, and each one is a constraint
+// on the shape rather than on the caller:
+//
+//   * **Content-free.** The handle an external caller receives is a fresh
+//     v4 `Guid` and nothing else. It is deliberately NOT the member's own
+//     job id, and it encodes no member identity, no route, and no
+//     ordinal — otherwise the id itself becomes a topology oracle,
+//     letting a counterparty partition a group's traffic by member (or
+//     correlate a group handle with a job it can see on a member it also
+//     talks to directly). Everything that identifies the member lives
+//     HERE, receiver-side, and never crosses the wire.
+//   * **Durable.** The gateway may restart while a member job runs, and a
+//     handle the gateway can no longer resolve is a call the caller can
+//     never collect. The shipped default is blob-backed for the same
+//     reason `BlobRoundStateStore` is: the in-memory alternative loses
+//     exactly the state the poll leg exists to serve.
+//   * **Lifetime-bounded.** A binding retained longer than the member
+//     record it points at is a routing tuple nothing stands behind. The
+//     bound is expressed in the *same* `PeerJobRetentionPolicy`
+//     vocabulary the member's own store honours (Phase 316) and defaults
+//     to the same value, so a binding written under the default can never
+//     outlive a member record written under the default.
+//
+// **Two levels of ownership, and both are load-bearing.** The member's
+// parked record is owned by *the gateway* — the gateway is the peer that
+// authenticated to the member and scheduled the work, so it is the only
+// peer the member's own Phase 308 check will serve. The group binding is
+// owned by *the external caller* — the peer that dispatched through the
+// group face. Neither check substitutes for the other: without the
+// member-side one any peer could poll the member directly, and without
+// this one any peer holding a group handle could collect another
+// caller's federated result.
+
+/// What one group-minted job handle stands for: the member the gateway
+/// routed the dispatch to, that member's own job id, and the external
+/// caller entitled to collect it. Receiver-side only — a caller sees the
+/// handle, never this. Identity by value (GP 12 rule 1).
+type PeerGroupJobBinding = {
+    /// `PeerId` of the peer that dispatched the long-running call
+    /// *through the group*, taken from the validated inbound
+    /// `PeerCallContext` at dispatch time. The poll route compares it
+    /// against the polling principal and refuses a mismatch — the group
+    /// edge's dual of the Phase 308 check the member applies to its own
+    /// parked record.
+    OwnerPeerId: string
+    /// The member the gateway delegated to, exactly as the resolved route
+    /// named it — the gateway polls this peer, at this base URL.
+    MemberPeer: TargetPeer
+    /// The contract the call was made against. The member's poll route
+    /// carries it in the path, so the binding has to remember it; the
+    /// group's own route carries the same id, but a binding that trusted
+    /// the *inbound* path would resolve a handle against whichever
+    /// contract the caller chose to name.
+    ContractId: string
+    /// The contract method whose job this is. Not needed to route the
+    /// poll — it is what makes the group-edge terminal audit row
+    /// attributable to a method rather than only to a contract.
+    MethodName: string
+    /// The member's own `PeerJobId`, as the member returned it from the
+    /// invoke leg. Never disclosed to the caller.
+    MemberJobId: PeerJobId
+    /// The cascade-wide correlation id the gateway *derived* for the
+    /// dispatching request (Phase 331), carried so the group-edge
+    /// `PeerJobCompleted` row joins the schedule-time `PeerCallCompleted`
+    /// row the gateway already wrote for the same call (Phase 310).
+    RootRequestId: string
+}
+
+/// The gateway's durable map from a group-minted handle to the member job
+/// it fronts. Async at every boundary + identity by value (GP 12 rules 1,
+/// 2); scoped per `scopeId` for isolation (GP 4), mirroring
+/// `IPeerJobResultStore`.
+type IPeerGroupJobMap =
+    /// Record what a freshly-minted group handle stands for. Called once,
+    /// on the dispatch that minted it, under a key no other writer can
+    /// hold — so this is a write-once insert and never a read-modify-write.
+    abstract Bind: scopeId: string * groupJobId: PeerJobId * binding: PeerGroupJobBinding -> Async<unit>
+
+    /// Resolve a group handle. `None` for a handle this gateway never
+    /// minted **and** for one whose binding has been retired — the same
+    /// indistinguishability `IPeerJobResultStore.TryGetResult` keeps, and
+    /// for the same Phase 308 reason: possession of an id must disclose
+    /// nothing.
+    abstract TryGet: scopeId: string * groupJobId: PeerJobId -> Async<PeerGroupJobBinding option>
+
+    /// Claim the right to emit the group-edge terminal audit row for this
+    /// handle. `true` exactly once per binding under sequential polling;
+    /// `false` on every later poll, so a caller that keeps polling after
+    /// completion does not multiply the trail.
+    ///
+    /// Best-effort de-duplication, deliberately: two *concurrent* polls
+    /// can both observe an unmarked binding and both emit. That is the
+    /// right trade here — audit sinks are already required to be
+    /// batch-idempotent (`IAuditSink`), a duplicated row is recoverable
+    /// where a missing one is not, and the alternative (a compare-and-swap
+    /// against `IConditionalBlobStorage`) would make a durable-map backend
+    /// a hard requirement for a property that is only cosmetic.
+    abstract MarkTerminalObserved: scopeId: string * groupJobId: PeerJobId -> Async<bool>
+
+    /// The retention policy this map applies. Data, not behaviour — the
+    /// same contract `IPeerJobResultStore.Retention` declares, so an admin
+    /// surface can report a group handle's lifetime beside the member
+    /// record's without knowing which implementation is registered.
+    abstract Retention: PeerJobRetentionPolicy
+
+/// The document `BlobPeerGroupJobMap` writes per handle: the binding a
+/// poll resolves, plus this store's own bookkeeping.
+///
+/// Separate from `PeerGroupJobBinding` for the reason `PeerJobDocument` is
+/// separate from `PeerJobRecord`: the binding is the value every caller —
+/// and every alternative `IPeerGroupJobMap` — constructs, so widening it
+/// would be a compile break at every construction site (GP 11).
+type PeerGroupJobDocument = {
+    Binding: PeerGroupJobBinding
+    /// Absolute expiry derived from `PeerJobRetentionPolicy.Ttl` at bind
+    /// time. `None` = no TTL applied.
+    ExpiresAt: DateTimeOffset option
+    /// When the group-edge terminal audit row was first claimed. `None` =
+    /// not yet observed terminal.
+    TerminalObservedAt: DateTimeOffset option
+}
+
+/// `IBlobStorage`-backed default. One JSON document per group handle under
+/// the reserved `_platform` container at
+/// `peers/groups/jobs/{scopeId}/{groupJobId}.json`, beside the member-side
+/// `peers/jobs/` layout. Stateless between calls (GP 12 rule 4) — every
+/// method reads / writes through to the blob store.
+///
+/// **Plain `IBlobStorage`, not `IConditionalBlobStorage`, and that is a
+/// judgement rather than an omission.** `BlobPeerReplayGuard` and
+/// `BlobPrivacyBudgetLedger` refuse a non-conditional backend at
+/// construction because in both the atomic compare-and-swap *is* the
+/// defence — a lost update there is a spent replay or a double epsilon
+/// spend. Nothing here has that shape: `Bind` is a write-once insert under
+/// a freshly-minted `Guid` that no concurrent writer can name, and the
+/// only read-modify-write (`MarkTerminalObserved`) guards an audit-row
+/// duplicate, which the sink contract already absorbs. Requiring
+/// conditional writes would cost every deployment a backend constraint to
+/// buy a property none of them needs.
+///
+/// Retention is enforced **lazily, on read**, exactly as
+/// `BlobPeerJobResultStore` does it: an expired document is reported
+/// absent and its blob deleted in the same call, so the map needs no
+/// background sweeper (GP 13).
+///
+/// **`DeleteOnRead` is deliberately not honoured for a binding**, though
+/// `Ttl` is. Delete-on-read exists to retire a *result* shortly after the
+/// caller has collected it; a binding carries no result, only a routing
+/// tuple, and it is read once per poll by construction — reclaiming it on
+/// the first read would break the very poll loop it exists to serve, and
+/// would do so precisely while the member job is still `Pending`. The
+/// member's own store still applies whatever delete-on-read policy the
+/// member composed to the thing that policy is about.
+///
+/// The policy and the clock arrive as **overloads**, not optional
+/// arguments — F# compiles `?retention` / `?now` into one widened
+/// constructor, which would erase the simple `(IBlobStorage)` signature
+/// from the emitted surface (the same reasoning `BlobPeerJobResultStore`
+/// records).
+type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy, now: unit -> DateTimeOffset) =
+    let container = "_platform"
+    let policy = retention
+    let clock = now
+
+    let blobNameFor (scopeId: string) (groupJobId: PeerJobId) =
+        $"peers/groups/jobs/{scopeId}/{groupJobId}.json"
+
+    let writeDocument (scopeId: string) (groupJobId: PeerJobId) (doc: PeerGroupJobDocument) = async {
+        let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize doc)
+        let! _ = blobs.Upload(container, blobNameFor scopeId groupJobId, payload)
+        return ()
+    }
+
+    let readDocument (scopeId: string) (groupJobId: PeerJobId) = async {
+        let! result = blobs.Download(container, blobNameFor scopeId groupJobId)
+
+        match result with
+        | Ok bytes ->
+            try
+                return Some(JsonRpc.deserialize<PeerGroupJobDocument> (Encoding.UTF8.GetString bytes))
+            with _ ->
+                return None
+        | Error _ -> return None
+    }
+
+    /// Has this document stopped being resolvable? Only the TTL retires a
+    /// binding — see the `DeleteOnRead` note in the type doc.
+    let isExpired (readAt: DateTimeOffset) (doc: PeerGroupJobDocument) =
+        match doc.ExpiresAt with
+        | Some deadline -> readAt >= deadline
+        | None -> false
+
+    /// The default retention on the system clock — the same generous
+    /// 30-day bound `BlobPeerJobResultStore(blobs)` selects, so a binding
+    /// and the member record it points at expire together when neither is
+    /// configured.
+    new(blobs: IBlobStorage) =
+        BlobPeerGroupJobMap(blobs, PeerJobRetentionPolicy.default', (fun () -> DateTimeOffset.UtcNow))
+
+    /// A deployment-chosen retention on the system clock. The
+    /// three-argument form takes the clock too, for tests that need to
+    /// cross a TTL horizon without waiting one out.
+    new(blobs: IBlobStorage, retention: PeerJobRetentionPolicy) =
+        BlobPeerGroupJobMap(blobs, retention, (fun () -> DateTimeOffset.UtcNow))
+
+    interface IPeerGroupJobMap with
+        member _.Retention = policy
+
+        member _.Bind(scopeId: string, groupJobId: PeerJobId, binding: PeerGroupJobBinding) = async {
+            let boundAt = clock ()
+
+            do!
+                writeDocument scopeId groupJobId {
+                    Binding = binding
+                    ExpiresAt = policy.Ttl |> Option.map (fun ttl -> boundAt.Add ttl)
+                    TerminalObservedAt = None
+                }
+        }
+
+        member _.TryGet(scopeId: string, groupJobId: PeerJobId) = async {
+            let! decoded = readDocument scopeId groupJobId
+
+            match decoded with
+            | None -> return None
+            | Some doc ->
+                if isExpired (clock ()) doc then
+                    // Retired. Reclaim the blob on the way past — the whole
+                    // sweep, running on the read that would otherwise have
+                    // routed a poll at a member record that is itself gone.
+                    let! _ = blobs.Delete(container, blobNameFor scopeId groupJobId)
+                    return None
+                else
+                    return Some doc.Binding
+        }
+
+        member _.MarkTerminalObserved(scopeId: string, groupJobId: PeerJobId) = async {
+            let! decoded = readDocument scopeId groupJobId
+
+            match decoded with
+            | None -> return false
+            | Some doc ->
+                let readAt = clock ()
+
+                if isExpired readAt doc || doc.TerminalObservedAt.IsSome then
+                    return false
+                else
+                    do!
+                        writeDocument scopeId groupJobId {
+                            doc with
+                                TerminalObservedAt = Some readAt
+                        }
+
+                    return true
+        }
+
+/// What the host's job-poll route needs to resolve a group-minted handle:
+/// the map that says what the handle stands for, and the transport the
+/// gateway polls the owning member over.
+///
+/// A single DI singleton rather than two, and registered **only** by a
+/// gateway composition that was given a map (`PeerServerApp.withGroupJobMap`
+/// + `PeerGateway.withAggregate`). An ordinary receiver registers nothing,
+/// the poll route resolves `None`, and its path through the handler is
+/// byte-for-byte the pre-630 one (GP 11 / GP 13).
+///
+/// The client rides here rather than being resolved independently because
+/// the gateway's transport is the one `withAggregate` was handed — a
+/// deployment may pass a thin forwarder over the composed `IPeerClient`
+/// singleton, or its own `HttpPeerClient` — and the poll leg must delegate
+/// over exactly the transport the invoke leg used.
+type PeerGroupJobFronting = {
+    Map: IPeerGroupJobMap
+    Client: IPeerClient
+}
