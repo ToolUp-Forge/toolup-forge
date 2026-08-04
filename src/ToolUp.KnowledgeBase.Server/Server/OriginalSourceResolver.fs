@@ -42,6 +42,36 @@ open SharedTypes
 // (GP 13). A deployment swapping THIS resolver automatically changes
 // what the preview seam resolves too — one resolution rule, not two.
 
+// ── Metadata-only resolution (Phase 108) ──────────────────────────
+// Phase 200 recorded a limitation it could not fix from where it sat:
+// signed-URL delivery makes the RESPONSE byte-light, but the resolver
+// still downloaded the whole original server-side just to establish
+// that it exists. `ResolveMetadata` is the fix it named — the same
+// per-`KnowledgeSource` branch, answering "does this have an original,
+// and WHERE is it" without reading a byte of content. Signing needs
+// exactly that: a blob name to sign and the metadata a viewer picks a
+// renderer from.
+
+/// Where a document's original lives and what it is, without its
+/// bytes. `BlobName` is the key within the caller's scope container —
+/// the handle a signed-URL mint (Phase 108) needs, and the one place
+/// the per-`KnowledgeSource` naming convention is derived.
+type OriginalLocation = {
+    /// Blob key within the scope container (e.g.
+    /// `knowledge/{docId}/{filename}`). `None` when the resolver can
+    /// describe the original but cannot name one signable blob for it
+    /// — a synthesised or multi-part original, or a custom resolver
+    /// delegating to `locationViaResolve`. Signed-URL delivery then
+    /// falls back to proxying, which is always correct.
+    BlobName: string option
+    /// Original file name, as `OriginalDocument.FileName`.
+    FileName: string
+    /// MIME content type, as `OriginalDocument.ContentType`.
+    ContentType: string
+    /// Size of the stored original in bytes.
+    SizeBytes: int64
+}
+
 /// Resolve the original document behind a KB index entry, branching on
 /// the entry's `KnowledgeSource`. Returns `None` when the source kind
 /// has no retrievable original (or the backing blob is gone) — the
@@ -52,6 +82,17 @@ open SharedTypes
 type IOriginalSourceResolver =
     abstract Resolve:
         storage: IBlobStorage * container: string * doc: KnowledgeDocument -> Async<OriginalDocument option>
+
+    /// Phase 108 — the same resolution decision, answered from metadata
+    /// alone. MUST agree with `Resolve` on presence: `None` here exactly
+    /// when `Resolve` would return `None`, so a caller that branches on
+    /// this cannot serve a link to something `Resolve` calls absent.
+    ///
+    /// A custom resolver with no cheap metadata path delegates to
+    /// `OriginalSourceResolver.locationViaResolve` — correct (it simply
+    /// downloads), and honest about the fact that it is not cheap.
+    abstract ResolveMetadata:
+        storage: IBlobStorage * container: string * doc: KnowledgeDocument -> Async<OriginalLocation option>
 
 /// MIME content type for a KB `FileType` extension. Unknown extensions
 /// degrade to `application/octet-stream` (a safe download disposition)
@@ -107,6 +148,66 @@ type DefaultOriginalSourceResolver() =
             | Note _ -> return! downloadAs (sprintf "knowledge/%s/note.md" doc.Id) "text/markdown"
             | FromNarrative _ -> return None
         }
+
+        member _.ResolveMetadata(storage, container, doc) = async {
+            // `GetMetadata` reads the blob's properties only — no
+            // content transfer — so this branch is O(1) in the
+            // original's size where `Resolve` is O(n). A missing blob
+            // resolves to `None`, exactly as a failed download does in
+            // `Resolve`: presence must agree between the two.
+            let describe (blobName: string) (contentType: string) = async {
+                let! result = storage.GetMetadata(container, blobName)
+
+                match result with
+                | Ok meta ->
+                    return
+                        Some {
+                            BlobName = Some blobName
+                            FileName = doc.FileName
+                            ContentType = contentType
+                            SizeBytes = meta.Size
+                        }
+                | Error _ -> return None
+            }
+
+            match doc.Source with
+            | UploadedFile ->
+                return! describe (sprintf "knowledge/%s/%s" doc.Id doc.FileName) (contentTypeFor doc.FileType)
+            | Note _ -> return! describe (sprintf "knowledge/%s/note.md" doc.Id) "text/markdown"
+            | FromNarrative _ -> return None
+        }
+
+/// Phase 108 — shared `ResolveMetadata` fallback for a custom
+/// `IOriginalSourceResolver` with no cheap metadata path. Correct
+/// against the "presence must agree with `Resolve`" contract, but NOT
+/// cheap: it downloads the original and describes what it got. The
+/// returned `BlobName` is `None`, so a caller that would have minted a
+/// signed URL falls back to proxying rather than signing a blob this
+/// helper cannot name.
+///
+/// Adopting the Phase 108 member on an existing custom resolver is
+/// therefore a one-liner:
+///
+///     member this.ResolveMetadata(storage, container, doc) =
+///         OriginalSourceResolver.locationViaResolve this storage container doc
+let locationViaResolve
+    (resolver: IOriginalSourceResolver)
+    (storage: IBlobStorage)
+    (container: string)
+    (doc: KnowledgeDocument)
+    : Async<OriginalLocation option> =
+    async {
+        let! resolved = resolver.Resolve(storage, container, doc)
+
+        return
+            resolved
+            |> Option.map (fun original -> {
+                BlobName = None
+                FileName = original.FileName
+                ContentType = original.ContentType
+                SizeBytes = original.SizeBytes
+            })
+    }
 
 /// Construct the default resolver. Deployments swap it via
 /// `withOriginalSourceResolver` (or by registering an

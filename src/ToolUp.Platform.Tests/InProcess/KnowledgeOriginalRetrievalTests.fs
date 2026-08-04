@@ -328,6 +328,12 @@ let private handlerTests =
                                 Content = Encoding.UTF8.GetBytes "rendered"
                             }
                     }
+
+                    // Phase 108 — this resolver synthesises its original,
+                    // so there is no single blob to sign; the canonical
+                    // adopt-the-new-member one-liner covers it.
+                    member this.ResolveMetadata(storage, container, doc) =
+                        locationViaResolve this storage container doc
                 }
 
             let deps = mkDeps storage None custom (IngestionQueue()) "team-a"
@@ -654,6 +660,7 @@ let private previewSeamTests =
             let exploding =
                 { new IOriginalSourceResolver with
                     member _.Resolve(_, _, _) = async { return failwith "storage exploded" }
+                    member _.ResolveMetadata(_, _, _) = async { return failwith "storage exploded" }
                 }
 
             let seam = PreviewSeam.createDefault exploding
@@ -684,6 +691,12 @@ let private previewSeamTests =
                                 Content = Encoding.UTF8.GetBytes "rendered"
                             }
                     }
+
+                    // Phase 108 — this resolver synthesises its original,
+                    // so there is no single blob to sign; the canonical
+                    // adopt-the-new-member one-liner covers it.
+                    member this.ResolveMetadata(storage, container, doc) =
+                        locationViaResolve this storage container doc
                 }
 
             let seam = PreviewSeam.createDefault custom

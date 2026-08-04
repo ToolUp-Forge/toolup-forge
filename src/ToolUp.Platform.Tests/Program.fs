@@ -727,6 +727,8 @@ let allTests =
         // audit, _originalRef chunk stamp + RetrievedSource.OriginalRef
         // projection + neutral SourceLocator mapping + wire backward-compat.
         KnowledgeOriginalRetrievalTests.tests
+        // Phase 108 — time-bound direct-download URLs for KB originals.
+        KnowledgeSignedOriginalUrlTests.tests
         KnowledgeScopeResetAuditTests.tests
         RAGVacuumJobHandlerTests.tests
         // Phase 14r — tool-aware RAG framing (live-interface detection + companion).

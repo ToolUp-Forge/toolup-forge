@@ -322,3 +322,132 @@ type IConditionalBlobStorage =
     abstract UploadWithETag:
         container: string * blobName: string * content: byte[] * condition: ETagCondition ->
             Async<Result<string, ConditionalWriteError>>
+
+// ─── Phase 108 — time-bound direct-download URLs (the signing seam) ──
+//
+// Streaming a multi-MB original through the server on every download is
+// wasteful once a deployment sits on object storage that can mint its
+// own time-bounded URL: hand the client the URL and the bytes never
+// touch the app tier.
+//
+// Deliberately NOT members on `IBlobStorage`, for the same reason as
+// the ETag seam above — thirteen in-tree implementers plus consumer-side
+// custom stores would break — and for a second reason the ETag seam
+// does not have: signing is not merely *unimplemented* on the local
+// filesystem, it is *meaningless* there. There is no URL to hand out.
+// A capability the default backend can never satisfy belongs behind a
+// probe, not in the contract every backend must answer (GP 3).
+//
+//     match blobStorage with
+//     | :? ISignedUrlBlobStorage as s -> // may still decline — see below
+//     | _ -> // proxy the bytes
+//
+// There are two levels of "no", and they answer different questions:
+//
+//   * the type test fails  — this backend family cannot sign at all
+//                            (local filesystem, in-memory test doubles).
+//   * `NotConfigured`      — this backend family can, but THIS instance
+//                            was not given what signing needs: a GCS
+//                            client on Application Default Credentials
+//                            holds no service-account key, an Azure
+//                            client built from a SAS-token connection
+//                            string holds no account key.
+//
+// Both mean the same thing to a caller — fall back to proxying — so
+// `BlobStorage.trySignedUrl` collapses them to `Ok None` and a caller
+// writes one branch, not two. `SigningFailed` is the third answer and
+// is emphatically NOT a fallback: an operational failure surfaces,
+// because silently shipping the megabytes a deployment deliberately
+// chose to keep out of the response is the one outcome nobody asked
+// for.
+//
+// **Scope discipline is the CALLER's, and it is load-bearing here.** A
+// signed URL is a bearer token: whoever holds it reads the object until
+// it expires, with no further authorisation check. The scope gate must
+// therefore run BEFORE the mint, never after and never on the URL —
+// `container` is scope-derived exactly as everywhere else on
+// `IBlobStorage` (GP 4), so a caller that resolves the scope first and
+// signs second cannot mint across tenants.
+
+/// Why a signed-URL mint did not produce a URL. Qualified access —
+/// `NotConfigured` is a common word and already names an unrelated
+/// `CredentialStatus` case in the server tier.
+[<RequireQualifiedAccess>]
+type SignedUrlRefusal =
+    /// The backend implements the capability but this instance has no
+    /// signing material (ADC-only GCS, SAS-credential Azure, …).
+    /// Advisory only — callers fall back to proxying. `reason` is a
+    /// diagnostic for logs, never shown to an end user.
+    | NotConfigured of reason: string
+    /// The mint was attempted and failed operationally. Callers surface
+    /// this rather than falling back.
+    | SigningFailed of message: string
+
+/// Time-bound direct-download capability over blob storage. A backend
+/// that can mint a URL the client fetches straight from object storage
+/// implements this alongside `IBlobStorage`; callers probe by type test
+/// (or via `BlobStorage.trySignedUrl`).
+///
+/// **Read-only, single-object, expiring.** An implementation MUST grant
+/// read access to exactly the named blob and MUST bound the grant by
+/// `ttl`. Minting is expected to be a *local* operation — no network
+/// round trip, no existence check — so callers that already established
+/// existence (via `GetMetadata`) pay nothing extra. A URL for a blob
+/// that does not exist is therefore permitted to be minted; it simply
+/// 404s when fetched.
+type ISignedUrlBlobStorage =
+    /// Mint a read-only URL for `container`/`blobName`, valid for `ttl`
+    /// from now. `container` must be a scope-derived name and the
+    /// caller's scope check must already have passed (see the seam
+    /// notes above).
+    abstract SignedUrl: container: string * blobName: string * ttl: TimeSpan -> Async<Result<string, SignedUrlRefusal>>
+
+/// Probe `storage` for the Phase 108 signing capability and mint.
+///
+///   * `Ok (Some url)` — a time-bound URL valid for `ttl`.
+///   * `Ok None`       — this deployment cannot sign (the backend does
+///                       not implement the capability, or implements it
+///                       and is not configured for it). The caller falls
+///                       back to proxying the bytes; this is the local-
+///                       filesystem answer and is not an error.
+///   * `Error msg`     — signing was attempted and failed. Do NOT fall
+///                       back: report it.
+///
+/// A non-positive `ttl` is a caller defect, not a backend one — it
+/// mints a link that is already expired — so it is refused here,
+/// before any implementation is reached.
+///
+/// **Server-tier only, and gated for a reason.** Fable cannot type-test
+/// an interface — it compiles the probe below to a constant `false` and
+/// says so ("Cannot type test (evals to false)"). The degradation would
+/// be harmless (a client would simply always see `Ok None`) but the
+/// warning is not: it is indistinguishable from the same construct
+/// appearing somewhere it *would* matter. `#if !FABLE_COMPILER` is the
+/// one gate a `fable/`-packed source file may use (see the
+/// source-in-nupkg conditional-directive rule), and no client ever holds
+/// an `IBlobStorage` to probe.
+#if !FABLE_COMPILER
+let trySignedUrl
+    (storage: IBlobStorage)
+    (container: string)
+    (blobName: string)
+    (ttl: TimeSpan)
+    : Async<Result<string option, string>> =
+    match storage with
+    | :? ISignedUrlBlobStorage as signer ->
+        if ttl <= TimeSpan.Zero then
+            async.Return(
+                Error
+                    "trySignedUrl: ttl must be strictly positive — a non-positive TTL mints links that are already expired"
+            )
+        else
+            async {
+                let! minted = signer.SignedUrl(container, blobName, ttl)
+
+                match minted with
+                | Ok url -> return Ok(Some url)
+                | Error(SignedUrlRefusal.NotConfigured _) -> return Ok None
+                | Error(SignedUrlRefusal.SigningFailed message) -> return Error message
+            }
+    | _ -> async.Return(Ok None)
+#endif

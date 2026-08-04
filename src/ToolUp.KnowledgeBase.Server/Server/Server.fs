@@ -29,6 +29,16 @@ open KnowledgeBase.ServerApiAIContext
 let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
     let deps = KnowledgeApiDeps.resolve ctx
 
+    // Phase 200 / 108 — the original-preview seam, resolved here rather
+    // than on `KnowledgeApiDeps` because exactly one handler consumes
+    // it. Unlike the Phase 104 resolver there is no default: an absent
+    // registration IS the opt-out, and `getOriginalDelivery` then runs
+    // the Phase 102 path unchanged.
+    let previewSeam =
+        match ctx.RequestServices.GetService(typeof<KnowledgeBase.ServerOriginalPreviewSeam.IOriginalPreviewSeam>) with
+        | :? KnowledgeBase.ServerOriginalPreviewSeam.IOriginalPreviewSeam as s -> Some s
+        | _ -> None
+
     {
         UploadDocument = uploadDocument deps
         GetDocuments = fun () -> getDocuments deps
@@ -43,6 +53,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         GetSuggestedQuestions = getSuggestedQuestions deps
         RefreshAIContext = fun () -> refreshAIContext deps
         GetOriginalDocument = getOriginalDocument deps
+        GetOriginalDelivery = getOriginalDelivery previewSeam deps
         GetScopeUsage = fun () -> getScopeUsage deps
         GetDocumentVersions = getDocumentVersions deps
     }
@@ -105,6 +116,18 @@ let withOriginalSourceResolver =
 /// (GP 13).
 let withOriginalPreviewSeam =
     KnowledgeBase.ServerOriginalPreviewSeam.withOriginalPreviewSeam
+
+/// Phase 108 — opt into time-bound direct-download URLs for originals.
+/// `GetOriginalDelivery` then returns a short-lived signed URL instead
+/// of the bytes, on any composed `IBlobStorage` that can mint one
+/// (Azure / S3 / GCS), and transparently proxies on any that cannot
+/// (local filesystem, encrypted-at-rest). Defined in
+/// `Server/IOriginalPreviewSeam.fs`; re-exported here so the public
+/// name `KnowledgeBase.Server.withSignedOriginalUrls` sits alongside
+/// the other compose-time hooks. Apps that never call this keep the
+/// Phase 102 proxy path byte-for-byte (GP 11 / GP 13).
+let withSignedOriginalUrls =
+    KnowledgeBase.ServerOriginalPreviewSeam.withSignedOriginalUrls
 
 /// Phase 119 — compose a Knowledge Base upload policy: a `MaxUploadBytes`
 /// size cap, an `AllowedExtensions` type allowlist, and how to treat an

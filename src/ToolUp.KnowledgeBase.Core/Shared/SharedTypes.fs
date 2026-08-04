@@ -957,6 +957,25 @@ type KnowledgeApi = {
     /// attribute here would double-row the trail.
     [<AllowAnonymous>]
     GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
+    /// Phase 108 — the same fetch, delivery-mode aware. Returns
+    /// `PreviewContent.Inline` carrying exactly what
+    /// `GetOriginalDocument` would have returned, unless the deployment
+    /// composed `withSignedOriginalUrls` AND its blob backend can mint
+    /// time-bound URLs, in which case it returns
+    /// `PreviewContent.SignedUrl` and the bytes are fetched straight
+    /// from object storage instead of streamed through this API.
+    ///
+    /// Scope-gated identically to `GetOriginalDocument` — the container
+    /// comes from the server-side resolver, an out-of-scope id returns
+    /// `NotInScope`, and the gate runs BEFORE any URL is minted, so a
+    /// signed URL cannot be obtained for another team's document
+    /// (GP 4). Emits the same Phase 107 audit events.
+    ///
+    /// A deployment that never opts in gets `Inline` every time, which
+    /// is why `GetOriginalDocument` is left exactly as Phase 102 shipped
+    /// it: this method is the opt-in surface, not a replacement.
+    [<AllowAnonymous>]
+    GetOriginalDelivery: string -> Async<Result<PreviewContent, KnowledgeBaseError>>
     /// Phase 512 — the caller's scope usage against the composed
     /// `KnowledgeQuotaPolicy` (document count / total bytes, the caps,
     /// and the remaining headroom). Read-only and derived from the

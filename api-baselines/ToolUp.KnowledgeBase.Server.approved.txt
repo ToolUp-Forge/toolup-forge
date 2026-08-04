@@ -32,6 +32,7 @@ KnowledgeBase.Server.withKnowledgeRetention : Microsoft.FSharp.Core.FSharpFunc`2
 KnowledgeBase.Server.withKnowledgeUsageEndpoint : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp] { get }
 KnowledgeBase.Server.withOriginalPreviewSeam : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withOriginalSourceResolver : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+KnowledgeBase.Server.withSignedOriginalUrls : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withUploadPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeUploadPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.ServerAIContext (class)
 KnowledgeBase.ServerAIContext.loadAIContext(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]]
@@ -78,6 +79,7 @@ KnowledgeBase.ServerApiDocuments (class)
 KnowledgeBase.ServerApiDocuments.deleteDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 KnowledgeBase.ServerApiDocuments.getDocumentVersions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
 KnowledgeBase.ServerApiDocuments.getDocuments(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
+KnowledgeBase.ServerApiDocuments.getOriginalDelivery(Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam], KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewContent, SharedTypes+KnowledgeBaseError]]
 KnowledgeBase.ServerApiDocuments.getOriginalDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+OriginalDocument, SharedTypes+KnowledgeBaseError]]
 KnowledgeBase.ServerApiDocuments.getScopeUsage(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]
 KnowledgeBase.ServerApiDocuments.getStatus(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]
@@ -124,10 +126,14 @@ KnowledgeBase.ServerNotes.buildNoteChunk(System.String, System.String, System.St
 KnowledgeBase.ServerNotes.chunkNoteBody(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 KnowledgeBase.ServerNotes.sanitiseTitle(System.String) : System.String
 KnowledgeBase.ServerOriginalPreviewSeam (class)
+KnowledgeBase.ServerOriginalPreviewSeam.createBlobSignedUrl(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions) : KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam
 KnowledgeBase.ServerOriginalPreviewSeam.createDefault(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver) : KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam
 KnowledgeBase.ServerOriginalPreviewSeam.createSignedUrl(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions) : KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam
 KnowledgeBase.ServerOriginalPreviewSeam.previewOriginal(KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewTarget, SharedTypes+KnowledgeBaseError]]
 KnowledgeBase.ServerOriginalPreviewSeam.withOriginalPreviewSeam(KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerOriginalPreviewSeam.withSignedOriginalUrls(KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerOriginalPreviewSeam+BlobSignedUrlOriginalPreviewSeam (class)
+KnowledgeBase.ServerOriginalPreviewSeam+BlobSignedUrlOriginalPreviewSeam..ctor(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions)
 KnowledgeBase.ServerOriginalPreviewSeam+DefaultOriginalPreviewSeam (class)
 KnowledgeBase.ServerOriginalPreviewSeam+DefaultOriginalPreviewSeam..ctor(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver)
 KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam (interface)
@@ -145,11 +151,19 @@ KnowledgeBase.ServerOriginalPreviewSeam+SignedUrlOriginalPreviewSeam..ctor(Knowl
 KnowledgeBase.ServerOriginalSourceResolver (class)
 KnowledgeBase.ServerOriginalSourceResolver.contentTypeFor(System.String) : System.String
 KnowledgeBase.ServerOriginalSourceResolver.createDefault() : KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver
+KnowledgeBase.ServerOriginalSourceResolver.locationViaResolve(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation]]
 KnowledgeBase.ServerOriginalSourceResolver.withOriginalSourceResolver(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 KnowledgeBase.ServerOriginalSourceResolver+DefaultOriginalSourceResolver (class)
 KnowledgeBase.ServerOriginalSourceResolver+DefaultOriginalSourceResolver..ctor()
 KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver (interface)
 KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver.Resolve(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+OriginalDocument]]
+KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver.ResolveMetadata(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation]]
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation (class)
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.Int64)
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation.BlobName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation.ContentType : System.String { get }
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation.FileName : System.String { get }
+KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation.SizeBytes : System.Int64 { get }
 KnowledgeBase.ServerPlatformAdmin (class)
 KnowledgeBase.ServerPlatformAdmin.platformKnowledgeApi(Microsoft.AspNetCore.Http.HttpContext) : PlatformKnowledgeApi+IPlatformKnowledgeApi
 KnowledgeBase.ServerRecovery (class)

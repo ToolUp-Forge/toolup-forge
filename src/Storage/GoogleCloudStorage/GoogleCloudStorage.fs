@@ -360,6 +360,47 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 | ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
+    // ─── Phase 108 — time-bound direct-download URLs ─────────────────
+    //
+    // A V4-signed GET URL, computed locally from the service-account
+    // key — no request is issued and no existence check is made (a
+    // signed URL for an absent object is well-formed and 404s on fetch,
+    // per the seam contract).
+    //
+    // GCS signing needs an RSA private key, which only a service-account
+    // credential carries. A deployment on the Application Default
+    // Credentials chain (`CredentialsJson = None`) may be running under
+    // a user credential, a workload identity, or the metadata server —
+    // none of which expose a signable key to this process — so that
+    // shape reports `NotConfigured` and the caller falls back to
+    // proxying, rather than throwing on a path the deployment never
+    // opted into. Deployments that want signed originals supply the
+    // service-account JSON explicitly (`CredentialsJson` /
+    // `CredentialsJsonProvider`).
+    interface ISignedUrlBlobStorage with
+        member _.SignedUrl(toolupContainer, blobName, ttl) = async {
+            let resolvedJson =
+                match config.CredentialsJsonProvider with
+                | Some provider -> Some(provider ())
+                | None -> config.CredentialsJson
+
+            match resolvedJson with
+            | None ->
+                return
+                    Error(
+                        SignedUrlRefusal.NotConfigured
+                            "GCS URL signing needs an explicit service-account key; this client resolved Application Default Credentials, which expose no signable private key to the process"
+                    )
+            | Some json ->
+                try
+                    let signer = UrlSigner.FromCredential(GoogleCredential.FromJson json)
+                    let key = blobKey toolupContainer blobName
+                    let! url = signer.SignAsync(config.BucketName, key, ttl) |> Async.AwaitTask
+                    return Ok url
+                with ex ->
+                    return Error(SignedUrlRefusal.SigningFailed ex.Message)
+        }
+
 // ─── Public entry points ─────────────────────────────────────────────
 
 let create (config: GoogleCloudStorageConfig) : IBlobStorage =

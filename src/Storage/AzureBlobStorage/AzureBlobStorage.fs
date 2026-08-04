@@ -5,6 +5,7 @@ open System.IO
 open Azure
 open Azure.Storage.Blobs
 open Azure.Storage.Blobs.Models
+open Azure.Storage.Sas
 open ToolUp.Platform.BlobStorage
 
 // ─── Configuration ───────────────────────────────────────────────────
@@ -288,6 +289,40 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 | Error msg ->
                     return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
             | ex -> return Error(ConditionalWriteFailure ex.Message)
+        }
+
+    // ─── Phase 108 — time-bound direct-download URLs ─────────────────
+    //
+    // A service SAS minted from the account key: read permission on one
+    // blob, expiring at `now + ttl`. Purely local — `GenerateSasUri`
+    // signs with the credential already held, issuing no request — so a
+    // caller that established existence via `GetMetadata` pays nothing
+    // extra here.
+    //
+    // `CanGenerateSasUri` is false when the `BlobServiceClient` was
+    // built from a connection string carrying a SAS token rather than
+    // an `AccountKey` (or from a token credential): the client can read
+    // and write, but holds no key to sign WITH. That is a legitimate
+    // deployment shape, not a fault, so it reports `NotConfigured` and
+    // the caller falls back to proxying.
+    interface ISignedUrlBlobStorage with
+        member _.SignedUrl(toolupContainer, blobName, ttl) = async {
+            try
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
+
+                if not blob.CanGenerateSasUri then
+                    return
+                        Error(
+                            SignedUrlRefusal.NotConfigured
+                                "the Azure client holds no account key to sign with (the connection string carries a SAS token or a token credential, not an AccountKey)"
+                        )
+                else
+                    let uri =
+                        blob.GenerateSasUri(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add ttl)
+
+                    return Ok(uri.ToString())
+            with ex ->
+                return Error(SignedUrlRefusal.SigningFailed ex.Message)
         }
 
 // ─── Public entry points ─────────────────────────────────────────────

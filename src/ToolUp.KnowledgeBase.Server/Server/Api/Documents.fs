@@ -925,6 +925,91 @@ let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<
         return Error(OriginalRetrievalFailed ex.Message)
 }
 
+// ─── Delivery-mode-aware original retrieval (Phase 108) ──────────
+
+/// Fetch the original for `docId` in whatever delivery mode the
+/// deployment composed (Phase 108).
+///
+/// **Unset is not "similar to" the Phase 102 path — it IS the Phase 102
+/// path.** With no preview seam registered this calls
+/// `getOriginalDocument` and wraps its result, so there is no second
+/// copy of the scope gate, the resolver branch, or the audit emission
+/// that could drift from the original. That is the whole reason the
+/// default arm is one line.
+///
+/// With a seam registered (`withSignedOriginalUrls`, or a custom
+/// `withOriginalPreviewSeam`), the scope gate runs FIRST — the index is
+/// loaded for the caller's resolved container and an id that is not in
+/// it refuses with `NotInScope`, identical to an id that does not exist
+/// (no existence oracle) — and only then is the seam entered, which is
+/// where a URL may be minted. **A signed URL is a bearer token, so this
+/// ordering is the access control** (GP 4): reverse it and a caller
+/// could hold a working link to a document they were about to be
+/// refused. Phase 108's ordering test pins it.
+///
+/// The Phase 107 audit trail is emitted on both arms, so switching
+/// delivery mode does not silently thin the access log.
+///
+/// The seam arrives as an explicit parameter rather than on
+/// `KnowledgeApiDeps`: it is the only handler that wants it, and
+/// `KnowledgeApiDeps` is constructed by a dozen test harnesses that
+/// would all have to be edited to add a field none of them use.
+let getOriginalDelivery
+    (seam: KnowledgeBase.ServerOriginalPreviewSeam.IOriginalPreviewSeam option)
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    : Async<Result<PreviewContent, KnowledgeBaseError>> =
+    async {
+        match seam with
+        | None ->
+            let! inlineResult = getOriginalDocument deps docId
+            return inlineResult |> Result.map PreviewContent.Inline
+        | Some seam ->
+            let denied (reason: string) =
+                recordOriginalAccessAudit
+                    deps
+                    (KnowledgeOriginalRetrievalDenied {
+                        UserId = deps.UserId
+                        DocumentId = docId
+                        ScopeId = deps.Scope.ScopeId
+                        Reason = reason
+                    })
+
+            try
+                let! index = loadIndex deps.Storage deps.Scope.Container
+
+                match index |> List.tryFind (fun d -> d.Id = docId) with
+                | None ->
+                    // Scope gate. Nothing below this line runs for a caller
+                    // who does not own the document — including the mint.
+                    do! denied "NotInScope"
+                    return Error NotInScope
+                | Some doc ->
+                    let! previewed = seam.Preview(deps.Storage, deps.Scope.Container, doc, None)
+
+                    match previewed with
+                    | Ok target ->
+                        do!
+                            recordOriginalAccessAudit
+                                deps
+                                (KnowledgeOriginalRetrieved {
+                                    UserId = deps.UserId
+                                    DocumentId = doc.Id
+                                    ScopeId = deps.Scope.ScopeId
+                                    SourceKind = sourceKindName doc.Source
+                                    FileName = doc.FileName
+                                })
+
+                        return Ok target.Content
+                    | Error NoOriginalAvailable ->
+                        do! denied "NoOriginalAvailable"
+                        return Error NoOriginalAvailable
+                    | Error other -> return Error other
+            with ex ->
+                deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDelivery failed for %s" docId, Some ex)
+                return Error(OriginalRetrievalFailed ex.Message)
+    }
+
 let getStatus (deps: KnowledgeApiDeps) (docId: string) : Async<IngestionStatus> = async {
     match statusCache.TryGetValue(docId) with
     | true, status -> return status

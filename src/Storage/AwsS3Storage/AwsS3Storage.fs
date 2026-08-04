@@ -300,6 +300,33 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             | ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
+    // ─── Phase 108 — time-bound direct-download URLs ─────────────────
+    //
+    // A presigned GET, computed locally from the credentials the client
+    // already resolved — no request is issued, and no existence check
+    // is made (a presigned URL for an absent key is well-formed and
+    // 404s on fetch, which is the contract the seam documents).
+    //
+    // Works unchanged against S3-compatible stores (MinIO / R2 / B2):
+    // the endpoint + path-style settings the client was built with are
+    // reflected in the signed URL. Deployments running on an IAM role
+    // whose session credentials expire before the requested TTL get a
+    // URL that stops working at whichever bound comes first — which is
+    // AWS's semantics, not something this seam can widen.
+    interface ISignedUrlBlobStorage with
+        member _.SignedUrl(toolupContainer, blobName, ttl) = async {
+            try
+                let req = GetPreSignedUrlRequest()
+                req.BucketName <- config.BucketName
+                req.Key <- blobKey toolupContainer blobName
+                req.Verb <- HttpVerb.GET
+                req.Expires <- DateTime.UtcNow.Add ttl
+                let! url = client.GetPreSignedURLAsync req |> Async.AwaitTask
+                return Ok url
+            with ex ->
+                return Error(SignedUrlRefusal.SigningFailed ex.Message)
+        }
+
 // ─── Public entry points ─────────────────────────────────────────────
 
 let create (config: AwsS3StorageConfig) : IBlobStorage = AwsS3Storage config :> IBlobStorage

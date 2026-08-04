@@ -949,6 +949,11 @@
              typed refusals, access/denial audit, _originalRef stamp +
              OriginalRef projection + SourceLocator + wire compat. -->
         <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
+        <!-- Phase 108 — time-bound direct-download URLs for KB originals:
+             the ISignedUrlBlobStorage capability probe, ResolveMetadata,
+             the signing seam's fall-back-vs-fail split, and the
+             scope-check-precedes-mint ordering guarantee. -->
+        <Compile Include="InProcess\KnowledgeSignedOriginalUrlTests.fs" />
         <!-- Phase 115 — KnowledgeScopeErased structured reset-audit emission. -->
         <Compile Include="InProcess\KnowledgeScopeResetAuditTests.fs" />
         <!-- Phase 14w — tombstone auto-vacuum sweep + KnowledgeVacuumCompleted. -->

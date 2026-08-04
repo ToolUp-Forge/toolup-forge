@@ -1582,6 +1582,7 @@ ToolUp.Platform.BindingTransparencyLog.none : ToolUp.Platform.IBindingTransparen
 ToolUp.Platform.BlobStorage (class)
 ToolUp.Platform.BlobStorage.downloadRangeViaDownload(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.BlobStorage.eraseByPrefix(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.BlobStorage.trySignedUrl(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
 ToolUp.Platform.BlobStorage+BlobMetadata (class)
 ToolUp.Platform.BlobStorage+BlobMetadata..ctor(System.Int64, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.BlobStorage+BlobMetadata.ContentType : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -1620,6 +1621,19 @@ ToolUp.Platform.BlobStorage+IBlobStorage.Upload(System.String, System.String, Sy
 ToolUp.Platform.BlobStorage+IConditionalBlobStorage (interface)
 ToolUp.Platform.BlobStorage+IConditionalBlobStorage.DownloadWithETag(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], System.String]]
 ToolUp.Platform.BlobStorage+IConditionalBlobStorage.UploadWithETag(System.String, System.String, System.Byte[], ToolUp.Platform.BlobStorage+ETagCondition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.BlobStorage+ConditionalWriteError]]
+ToolUp.Platform.BlobStorage+ISignedUrlBlobStorage (interface)
+ToolUp.Platform.BlobStorage+ISignedUrlBlobStorage.SignedUrl(System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.BlobStorage+SignedUrlRefusal]]
+ToolUp.Platform.BlobStorage+SignedUrlRefusal (class)
+ToolUp.Platform.BlobStorage+SignedUrlRefusal.IsNotConfigured : System.Boolean { get }
+ToolUp.Platform.BlobStorage+SignedUrlRefusal.IsSigningFailed : System.Boolean { get }
+ToolUp.Platform.BlobStorage+SignedUrlRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+NotConfigured (class)
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+NotConfigured.reason : System.String { get }
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+SigningFailed (class)
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+SigningFailed.message : System.String { get }
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags (class)
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.NotConfigured : System.Int32 (literal)
+ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.SigningFailed : System.Int32 (literal)
 ToolUp.Platform.Branding (class)
 ToolUp.Platform.Branding..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Branding.AppName : System.String { get }

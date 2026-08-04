@@ -154,11 +154,129 @@ type SignedUrlOriginalPreviewSeam
                 return Error(OriginalRetrievalFailed ex.Message)
         }
 
+/// Phase 108 — signed-URL delivery minted from the composed
+/// `IBlobStorage` itself, with a transparent fall back to proxying.
+///
+/// This is the seam `SignedUrlOriginalPreviewSeam` above wanted and
+/// could not have: Phase 200 had to take an `IPreviewUrlSigner` from
+/// the deployment because the SDK had no way to ask a blob backend for
+/// a URL. Phase 108's `ISignedUrlBlobStorage` capability is that way,
+/// so a deployment on Azure / S3 / GCS composes ONE option and writes
+/// no signer.
+///
+/// Three outcomes, and the middle one is the whole point:
+///
+///   * the backend signed          → `PreviewContent.SignedUrl`, and
+///                                   the bytes never touch the app tier.
+///   * the backend cannot sign     → INLINE delivery, silently. This is
+///                                   the local-filesystem answer, and
+///                                   an encrypted-at-rest deployment's
+///                                   too: `EncryptedBlobStorage` wraps
+///                                   the backend and does not implement
+///                                   the capability, so the probe fails
+///                                   and nobody is ever handed a URL to
+///                                   ciphertext. Structural, not a rule
+///                                   somebody has to remember.
+///   * signing failed operationally → `OriginalRetrievalFailed`. NOT a
+///                                   fallback: a deployment that chose
+///                                   to keep megabytes out of its
+///                                   responses does not want them
+///                                   silently reinstated by a transient
+///                                   storage fault.
+///
+/// **Byte-light on BOTH sides.** Resolution goes through
+/// `ResolveMetadata` (Phase 108), so establishing that the original
+/// exists costs a properties read rather than a full download —
+/// closing the limitation Phase 200 recorded and could only describe.
+/// The inline fallback path pays the download, because inline delivery
+/// needs the bytes anyway.
+///
+/// **Scope check precedes minting (GP 4).** A signed URL is a bearer
+/// token — whoever holds it reads the object until it expires. Nothing
+/// in this type resolves a scope: `previewOriginal` (and the KB API
+/// handler) resolve the caller's container and refuse an out-of-scope
+/// id with `NotInScope` BEFORE `Preview` is ever entered, so the mint
+/// is unreachable without a passing gate. Deliberately not defence in
+/// depth here — one gate, upstream, in the one place that knows the
+/// caller.
+type BlobSignedUrlOriginalPreviewSeam(resolver: IOriginalSourceResolver, options: PreviewSignedUrlOptions) =
+
+    do
+        if options.Ttl <= TimeSpan.Zero then
+            invalidArg
+                "options"
+                "PreviewSignedUrlOptions.Ttl must be strictly positive — a non-positive TTL mints links that are already expired."
+
+    /// Inline delivery, byte-for-byte the `DefaultOriginalPreviewSeam`
+    /// path — reached whenever the backend cannot mint.
+    let inlineFallback (storage: IBlobStorage) container doc locator = async {
+        let! resolved = resolver.Resolve(storage, container, doc)
+
+        match resolved with
+        | None -> return Error NoOriginalAvailable
+        | Some original -> return Ok(PreviewTarget.ofOriginal doc.Id (PreviewAnchor.ofLocator locator) original)
+    }
+
+    interface IOriginalPreviewSeam with
+        member _.Preview(storage, container, doc, locator) = async {
+            try
+                let! located = resolver.ResolveMetadata(storage, container, doc)
+
+                match located with
+                | None -> return Error NoOriginalAvailable
+                | Some location ->
+                    let! minted =
+                        match location.BlobName with
+                        // A resolver that cannot name one signable blob
+                        // (`locationViaResolve`, a synthesised original)
+                        // takes the same route as an unsigning backend.
+                        | None -> async.Return(Ok None)
+                        | Some blobName -> BlobStorage.trySignedUrl storage container blobName options.Ttl
+
+                    match minted with
+                    | Error reason -> return Error(OriginalRetrievalFailed reason)
+                    | Ok None -> return! inlineFallback storage container doc locator
+                    | Ok(Some url) ->
+                        let expiresAt = options.Now().Add options.Ttl
+
+                        // `PreviewTarget.withSignedUrl` reads only the
+                        // metadata fields off its `original` and drops
+                        // `Content` — so the empty array below is never
+                        // observable. Going through the smart
+                        // constructor rather than building the record
+                        // by hand is what keeps the top-level metadata
+                        // and the delivery mode from drifting.
+                        let metadataOnly: OriginalDocument = {
+                            FileName = location.FileName
+                            ContentType = location.ContentType
+                            SizeBytes = location.SizeBytes
+                            Content = Array.empty
+                        }
+
+                        return
+                            Ok(
+                                PreviewTarget.withSignedUrl
+                                    doc.Id
+                                    (PreviewAnchor.ofLocator locator)
+                                    metadataOnly
+                                    url
+                                    expiresAt
+                            )
+            with ex ->
+                return Error(OriginalRetrievalFailed ex.Message)
+        }
+
 /// Construct the inline-delivery seam over a resolver (typically
 /// `OriginalSourceResolver.createDefault ()`, or whatever the
 /// deployment composed).
 let createDefault (resolver: IOriginalSourceResolver) : IOriginalPreviewSeam =
     DefaultOriginalPreviewSeam(resolver) :> _
+
+/// Phase 108 — construct the blob-backed signed-URL seam over a
+/// resolver. Raises at **construction** (compose time, not on a request
+/// path) if the TTL is not strictly positive.
+let createBlobSignedUrl (resolver: IOriginalSourceResolver) (options: PreviewSignedUrlOptions) : IOriginalPreviewSeam =
+    BlobSignedUrlOriginalPreviewSeam(resolver, options) :> _
 
 /// Construct the signed-URL-delivery seam. Raises at **construction**
 /// (compose time, not on a request path) if the TTL is not strictly
@@ -220,3 +338,27 @@ let withOriginalPreviewSeam (seam: IOriginalPreviewSeam) (app: ServerApp) : Serv
                         | Some baseFn -> Some(fun s -> register (baseFn s))
             }
     }
+
+/// Phase 108 — opt into time-bound direct-download URLs for originals.
+/// One call, no signer to write: the seam mints through whatever
+/// `IBlobStorage` the deployment composed, and falls back to proxying
+/// the bytes on any backend that cannot sign (local filesystem,
+/// encrypted-at-rest, in-memory) — so composing this is safe even on a
+/// deployment that will not benefit from it.
+///
+/// **Default off, and off means unchanged (GP 11 / GP 13).** An app
+/// that never calls this registers no seam; `GetOriginalDocument` is
+/// the byte-for-byte Phase 102 path either way, and
+/// `GetOriginalDelivery` reports `PreviewContent.Inline` over exactly
+/// that path. Composing this changes what `GetOriginalDelivery` returns
+/// on a signing backend and nothing else.
+///
+/// Uses the default per-`KnowledgeSource` resolver. A deployment with a
+/// custom `IOriginalSourceResolver` composes
+/// `withOriginalPreviewSeam (createBlobSignedUrl myResolver options)`
+/// instead, so its own resolution branches (and its own
+/// `ResolveMetadata`) are the ones that run.
+let withSignedOriginalUrls (options: PreviewSignedUrlOptions) (app: ServerApp) : ServerApp =
+    withOriginalPreviewSeam
+        (createBlobSignedUrl (KnowledgeBase.ServerOriginalSourceResolver.createDefault ()) options)
+        app
