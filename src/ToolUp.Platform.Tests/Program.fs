@@ -985,6 +985,22 @@ let allTests =
         NoiseMechanismTests.cohortTests
         NoiseMechanismTests.gateTests
         NoiseMechanismTests.compositionTests
+        // Phase 490 — the governed activation seam: the step where a
+        // cohort stops being an analytical artefact and starts being
+        // used. An authorisation is the content hash of the whole
+        // (cohort, purpose, destination) triple, approved through Phase
+        // 480's existing bilateral machinery over a DERIVED template, so
+        // an edit, a second purpose, and a revocation are each refused
+        // by the same mechanism — and invariant 5, the egress
+        // projection, is the only thing this phase adds to the chain.
+        CohortActivationTests.canonicalTests
+        CohortActivationTests.authorisationTests
+        CohortActivationTests.purposeTests
+        CohortActivationTests.revocationTests
+        CohortActivationTests.pipelineTests
+        CohortActivationTests.egressTests
+        CohortActivationTests.tokenTests
+        CohortActivationTests.compositionTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

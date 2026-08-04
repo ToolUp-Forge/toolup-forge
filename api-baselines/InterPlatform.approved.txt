@@ -3,6 +3,115 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.InterPlatform.ActivationAuthorisation (class)
+ToolUp.InterPlatform.ActivationAuthorisation..ctor(ToolUp.InterPlatform.CohortSpec, ToolUp.InterPlatform.ActivationPurpose, ToolUp.InterPlatform.ActivationDestination)
+ToolUp.InterPlatform.ActivationAuthorisation.Cohort : ToolUp.InterPlatform.CohortSpec { get }
+ToolUp.InterPlatform.ActivationAuthorisation.Destination : ToolUp.InterPlatform.ActivationDestination { get }
+ToolUp.InterPlatform.ActivationAuthorisation.Purpose : ToolUp.InterPlatform.ActivationPurpose { get }
+ToolUp.InterPlatform.ActivationBucket (class)
+ToolUp.InterPlatform.ActivationBucket..ctor(System.String, System.Int32)
+ToolUp.InterPlatform.ActivationBucket.Count : System.Int32 { get }
+ToolUp.InterPlatform.ActivationBucket.Label : System.String { get }
+ToolUp.InterPlatform.ActivationCanonical (class)
+ToolUp.InterPlatform.ActivationCanonical.bytes(ToolUp.InterPlatform.ActivationAuthorisation) : System.Byte[]
+ToolUp.InterPlatform.ActivationCanonical.digest(ToolUp.InterPlatform.ActivationAuthorisation) : System.Byte[]
+ToolUp.InterPlatform.ActivationCanonical.domain : System.String (literal)
+ToolUp.InterPlatform.ActivationCanonical.id(ToolUp.InterPlatform.ActivationAuthorisation) : System.String
+ToolUp.InterPlatform.ActivationCanonical.template(ToolUp.InterPlatform.ActivationAuthorisation) : ToolUp.InterPlatform.CleanRoomTemplate
+ToolUp.InterPlatform.ActivationCanonical.templateIdPrefix : System.String (literal)
+ToolUp.InterPlatform.ActivationCanonical.version(ToolUp.InterPlatform.ActivationAuthorisation) : System.String
+ToolUp.InterPlatform.ActivationDeps (class)
+ToolUp.InterPlatform.ActivationDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], ToolUp.InterPlatform.ICohortResolver, ToolUp.InterPlatform.IActivationMatcher, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IActivationTokenMinter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.InterPlatform.ActivationDeps.Approval : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]] { get }
+ToolUp.InterPlatform.ActivationDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
+ToolUp.InterPlatform.ActivationDeps.Budget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyBudgetMeter] { get }
+ToolUp.InterPlatform.ActivationDeps.Matcher : ToolUp.InterPlatform.IActivationMatcher { get }
+ToolUp.InterPlatform.ActivationDeps.Noise : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
+ToolUp.InterPlatform.ActivationDeps.Resolver : ToolUp.InterPlatform.ICohortResolver { get }
+ToolUp.InterPlatform.ActivationDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.ActivationDeps.Tokens : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IActivationTokenMinter] { get }
+ToolUp.InterPlatform.ActivationDepsModule (class)
+ToolUp.InterPlatform.ActivationDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.ICohortResolver, ToolUp.InterPlatform.IActivationMatcher) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withApproval(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withBudget(ToolUp.InterPlatform.PrivacyBudgetMeter, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withNoise(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withTokenMinter(ToolUp.InterPlatform.IActivationTokenMinter, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDestination (class)
+ToolUp.InterPlatform.ActivationDestination..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.InterPlatform.ActivationShape], ToolUp.InterPlatform.PrivacyGate)
+ToolUp.InterPlatform.ActivationDestination.CounterpartyPeerId : System.String { get }
+ToolUp.InterPlatform.ActivationDestination.DestinationId : System.String { get }
+ToolUp.InterPlatform.ActivationDestination.Floor : ToolUp.InterPlatform.PrivacyGate { get }
+ToolUp.InterPlatform.ActivationDestination.PermittedShapes : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.InterPlatform.ActivationShape] { get }
+ToolUp.InterPlatform.ActivationPurpose (class)
+ToolUp.InterPlatform.ActivationPurpose..ctor(System.String, System.String)
+ToolUp.InterPlatform.ActivationPurpose.Description : System.String { get }
+ToolUp.InterPlatform.ActivationPurpose.PurposeId : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal (class)
+ToolUp.InterPlatform.ActivationRefusal.IsActivationCohortUnresolved : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.IsActivationDeliveryFailed : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.IsActivationEgressRefused : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.IsActivationMatchFailed : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.IsActivationUnauthorised : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.IsActivationWithheld : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationCohortUnresolved (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationCohortUnresolved.reason : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationDeliveryFailed (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationDeliveryFailed.reason : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationEgressRefused (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationEgressRefused.reason : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationMatchFailed (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationMatchFailed.error : ToolUp.InterPlatform.PsiError { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationUnauthorised (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationUnauthorised.reason : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal+ActivationWithheld (class)
+ToolUp.InterPlatform.ActivationRefusal+ActivationWithheld.templateId : System.String { get }
+ToolUp.InterPlatform.ActivationRefusal+Tags (class)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationCohortUnresolved : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationDeliveryFailed : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationEgressRefused : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationMatchFailed : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationUnauthorised : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRefusal+Tags.ActivationWithheld : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRelease (class)
+ToolUp.InterPlatform.ActivationRelease.IsActivatedCount : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRelease.IsActivatedHistogram : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRelease.IsActivatedTokens : System.Boolean { get }
+ToolUp.InterPlatform.ActivationRelease.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ActivationRelease+ActivatedCount (class)
+ToolUp.InterPlatform.ActivationRelease+ActivatedCount.matched : System.Int32 { get }
+ToolUp.InterPlatform.ActivationRelease+ActivatedHistogram (class)
+ToolUp.InterPlatform.ActivationRelease+ActivatedHistogram.buckets : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ActivationBucket] { get }
+ToolUp.InterPlatform.ActivationRelease+ActivatedTokens (class)
+ToolUp.InterPlatform.ActivationRelease+ActivatedTokens.tokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.ActivationRelease+Tags (class)
+ToolUp.InterPlatform.ActivationRelease+Tags.ActivatedCount : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRelease+Tags.ActivatedHistogram : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRelease+Tags.ActivatedTokens : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationRequest (class)
+ToolUp.InterPlatform.ActivationRequest..ctor(ToolUp.InterPlatform.ActivationAuthorisation, ToolUp.InterPlatform.IActivationDestination, ToolUp.InterPlatform.ActivationShape, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerCallContext])
+ToolUp.InterPlatform.ActivationRequest.Authorisation : ToolUp.InterPlatform.ActivationAuthorisation { get }
+ToolUp.InterPlatform.ActivationRequest.Bucket : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
+ToolUp.InterPlatform.ActivationRequest.Context : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerCallContext] { get }
+ToolUp.InterPlatform.ActivationRequest.Destination : ToolUp.InterPlatform.IActivationDestination { get }
+ToolUp.InterPlatform.ActivationRequest.Shape : ToolUp.InterPlatform.ActivationShape { get }
+ToolUp.InterPlatform.ActivationShape (class)
+ToolUp.InterPlatform.ActivationShape.IsReleaseCount : System.Boolean { get }
+ToolUp.InterPlatform.ActivationShape.IsReleaseHistogram : System.Boolean { get }
+ToolUp.InterPlatform.ActivationShape.IsReleaseTokens : System.Boolean { get }
+ToolUp.InterPlatform.ActivationShape.ReleaseCount : ToolUp.InterPlatform.ActivationShape { get }
+ToolUp.InterPlatform.ActivationShape.ReleaseHistogram : ToolUp.InterPlatform.ActivationShape { get }
+ToolUp.InterPlatform.ActivationShape.ReleaseTokens : ToolUp.InterPlatform.ActivationShape { get }
+ToolUp.InterPlatform.ActivationShape.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ActivationShape+Tags (class)
+ToolUp.InterPlatform.ActivationShape+Tags.ReleaseCount : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationShape+Tags.ReleaseHistogram : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationShape+Tags.ReleaseTokens : System.Int32 (literal)
+ToolUp.InterPlatform.ActivationShapeModule (class)
+ToolUp.InterPlatform.ActivationShapeModule.name(ToolUp.InterPlatform.ActivationShape) : System.String
+ToolUp.InterPlatform.ActivationShapeModule.outputShape(ToolUp.InterPlatform.ActivationShape) : ToolUp.InterPlatform.OutputShape
+ToolUp.InterPlatform.ActivationShapeModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ActivationShape]
 ToolUp.InterPlatform.AggregateDerivationError (class)
 ToolUp.InterPlatform.AggregateDerivationError.IsExposureDuplicated : System.Boolean { get }
 ToolUp.InterPlatform.AggregateDerivationError.IsExposureOwnerAmbiguous : System.Boolean { get }
@@ -157,13 +266,43 @@ ToolUp.InterPlatform.CleanRoomTemplate..ctor(System.String, Microsoft.FSharp.Col
 ToolUp.InterPlatform.CleanRoomTemplate.AllowedMethods : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.InterPlatform.CleanRoomTemplate.Floor : ToolUp.InterPlatform.PrivacyGate { get }
 ToolUp.InterPlatform.CleanRoomTemplate.TemplateId : System.String { get }
+ToolUp.InterPlatform.CohortActivation (class)
+ToolUp.InterPlatform.CohortActivation.activate(ToolUp.InterPlatform.ActivationDeps, ToolUp.InterPlatform.ActivationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ActivationRelease, ToolUp.InterPlatform.ActivationRefusal]]
+ToolUp.InterPlatform.CohortActivation.contextFor(ToolUp.InterPlatform.ActivationRequest) : ToolUp.InterPlatform.PeerCallContext
+ToolUp.InterPlatform.CohortActivation.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.CohortConstraints (class)
+ToolUp.InterPlatform.CohortConstraints..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.CohortPredicate])
+ToolUp.InterPlatform.CohortConstraints.MinCohortSize : System.Int32 { get }
+ToolUp.InterPlatform.CohortConstraints.Predicates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.CohortPredicate] { get }
+ToolUp.InterPlatform.CohortDefinition (class)
+ToolUp.InterPlatform.CohortDefinition.IsCohortMembers : System.Boolean { get }
+ToolUp.InterPlatform.CohortDefinition.IsCohortQuery : System.Boolean { get }
+ToolUp.InterPlatform.CohortDefinition.Tag : System.Int32 { get }
+ToolUp.InterPlatform.CohortDefinition+CohortMembers (class)
+ToolUp.InterPlatform.CohortDefinition+CohortMembers.ids : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.CohortDefinition+CohortQuery (class)
+ToolUp.InterPlatform.CohortDefinition+CohortQuery.expression : System.String { get }
+ToolUp.InterPlatform.CohortDefinition+Tags (class)
+ToolUp.InterPlatform.CohortDefinition+Tags.CohortMembers : System.Int32 (literal)
+ToolUp.InterPlatform.CohortDefinition+Tags.CohortQuery : System.Int32 (literal)
 ToolUp.InterPlatform.CohortNoise (class)
 ToolUp.InterPlatform.CohortNoise.apply(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.CohortResult) : ToolUp.InterPlatform.CohortResult
 ToolUp.InterPlatform.CohortNoise.applyTo(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.GateDecision) : ToolUp.InterPlatform.GateDecision
+ToolUp.InterPlatform.CohortPredicate (class)
+ToolUp.InterPlatform.CohortPredicate..ctor(System.String, System.String)
+ToolUp.InterPlatform.CohortPredicate.Name : System.String { get }
+ToolUp.InterPlatform.CohortPredicate.Value : System.String { get }
+ToolUp.InterPlatform.CohortResolver (class)
+ToolUp.InterPlatform.CohortResolver.membersOnly : ToolUp.InterPlatform.ICohortResolver { get }
 ToolUp.InterPlatform.CohortResult (class)
 ToolUp.InterPlatform.CohortResult..ctor(ToolUp.InterPlatform.OutputShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PrivacyCell])
 ToolUp.InterPlatform.CohortResult.Cells : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PrivacyCell] { get }
 ToolUp.InterPlatform.CohortResult.Shape : ToolUp.InterPlatform.OutputShape { get }
+ToolUp.InterPlatform.CohortSpec (class)
+ToolUp.InterPlatform.CohortSpec..ctor(System.String, ToolUp.InterPlatform.CohortDefinition, ToolUp.InterPlatform.CohortConstraints)
+ToolUp.InterPlatform.CohortSpec.CohortId : System.String { get }
+ToolUp.InterPlatform.CohortSpec.Constraints : ToolUp.InterPlatform.CohortConstraints { get }
+ToolUp.InterPlatform.CohortSpec.Definition : ToolUp.InterPlatform.CohortDefinition { get }
 ToolUp.InterPlatform.CommutativeCipher (class)
 ToolUp.InterPlatform.CommutativeCipher.bytesEqual(System.Byte[], System.Byte[]) : System.Boolean
 ToolUp.InterPlatform.CommutativeCipherError (class)
@@ -333,11 +472,24 @@ ToolUp.InterPlatform.GateDecision+Withheld (class)
 ToolUp.InterPlatform.GateDecision+Withheld.reason : System.String { get }
 ToolUp.InterPlatform.GatedContractRegistration (class)
 ToolUp.InterPlatform.GatedContractRegistration.Registration : ToolUp.InterPlatform.PeerContractRegistration { get }
+ToolUp.InterPlatform.HmacActivationTokenMinter (class)
+ToolUp.InterPlatform.HmacActivationTokenMinter..ctor(ToolUp.Platform.Secrets+ISecretStore)
 ToolUp.InterPlatform.HttpPeerClient (class)
 ToolUp.InterPlatform.HttpPeerClient..ctor(System.Net.Http.HttpClient, ToolUp.InterPlatform.IPeerAuthProvider, ToolUp.InterPlatform.PeerIdentity)
 ToolUp.InterPlatform.HttpPeerClient..ctor(System.Net.Http.HttpClient, ToolUp.InterPlatform.IPeerAuthProvider, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.PeerTransportPolicy)
+ToolUp.InterPlatform.IActivationDestination (interface)
+ToolUp.InterPlatform.IActivationDestination.Deliver(System.String, ToolUp.InterPlatform.ActivationRelease) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.InterPlatform.IActivationDestination.Descriptor : ToolUp.InterPlatform.ActivationDestination { get }
+ToolUp.InterPlatform.IActivationMatcher (interface)
+ToolUp.InterPlatform.IActivationMatcher.MatchMembers(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.ActivationDestination) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.PsiError]]
+ToolUp.InterPlatform.IActivationMatcher.MatchSize(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.ActivationDestination) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.InterPlatform.PsiError]]
+ToolUp.InterPlatform.IActivationTokenMinter (interface)
+ToolUp.InterPlatform.IActivationTokenMinter.Mint(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
+ToolUp.InterPlatform.IActivationTokenMinter.Verify(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, System.String]]
 ToolUp.InterPlatform.ICleanRoomBroker (interface)
 ToolUp.InterPlatform.ICleanRoomBroker.Enforce(ToolUp.InterPlatform.CleanRoomTemplate, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyGate], ToolUp.InterPlatform.CohortResult) : ToolUp.InterPlatform.GateDecision
+ToolUp.InterPlatform.ICohortResolver (interface)
+ToolUp.InterPlatform.ICohortResolver.Resolve(ToolUp.InterPlatform.CohortDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]
 ToolUp.InterPlatform.ICommutativeCipher (interface)
 ToolUp.InterPlatform.ICommutativeCipher.Apply(System.Byte[], System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.InterPlatform.CommutativeCipherError]
 ToolUp.InterPlatform.ICommutativeCipher.GenerateKey() : System.Byte[]
@@ -1230,6 +1382,8 @@ ToolUp.InterPlatform.PrivateSetIntersection.createModesWith(ToolUp.InterPlatform
 ToolUp.InterPlatform.PrivateSetIntersection.createWith(ToolUp.InterPlatform.ICommutativeCipher, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.InterPlatform.IPrivateSetIntersection
 ToolUp.InterPlatform.PrivateSetIntersection.overContract(ToolUp.InterPlatform.PsiApi, ToolUp.InterPlatform.PsiRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiResponse, ToolUp.InterPlatform.PeerError]]
 ToolUp.InterPlatform.PrivateSetIntersection.overModeContract(ToolUp.InterPlatform.PsiModeApi, ToolUp.InterPlatform.PsiModeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PeerError]]
+ToolUp.InterPlatform.PsiActivationMatcher (class)
+ToolUp.InterPlatform.PsiActivationMatcher..ctor(ToolUp.InterPlatform.IPrivateSetIntersectionModes, System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.ActivationDestination, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PsiModeRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PsiModeResponse, ToolUp.InterPlatform.PeerError]]]])
 ToolUp.InterPlatform.PsiAggregateError (class)
 ToolUp.InterPlatform.PsiAggregateError.AggregateMalformed : ToolUp.InterPlatform.PsiAggregateError { get }
 ToolUp.InterPlatform.PsiAggregateError.AggregateWidthMismatch : ToolUp.InterPlatform.PsiAggregateError { get }

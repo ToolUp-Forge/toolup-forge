@@ -1218,6 +1218,19 @@
              on an exhausted budget, and the compose-time refusal of a
              policy nothing would apply. Pure dispatch; no TestServer. -->
         <Compile Include="InProcess\NoiseMechanismTests.fs" />
+        <!-- Phase 490 — the governed cohort-activation seam: an
+             authorisation is the content hash of the whole (cohort,
+             purpose, destination) triple, so an edited cohort and a
+             second purpose are each refused under the original approval
+             (each paired with a control that releases); revocation from
+             either party stops the next activation; the counterparty is
+             not contacted until the activation is authorised and a
+             sub-floor cohort causes no membership-revealing exchange
+             (both observed with a call-counting matcher); and invariant
+             5 refuses a token release whose count the gate moved rather
+             than republishing the true cohort size. Real P-256 approval
+             signatures; no TestServer. -->
+        <Compile Include="InProcess\CohortActivationTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

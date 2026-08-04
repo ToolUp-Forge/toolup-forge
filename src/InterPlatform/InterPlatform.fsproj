@@ -175,6 +175,26 @@
          surface pins through the identical path a single instance's
          does. -->
     <Compile Include="Server\FederationPin.fs" />
+    <!-- Phase 490 — the governed cohort-activation seam: the activation
+         vocabulary + its canonical, content-addressed authorisation
+         encoding (`IActivationDestination.fs`), then the enforced
+         pipeline (`CohortActivation.fs`).
+
+         Appended at the END of the group rather than inserted beside the
+         clean-room files, because nothing downstream depends on either:
+         the pipeline is not composed by `PeerServerApp.run` (GP 13, the
+         posture `RoundOrchestrator` takes), so its position only has to
+         satisfy its own dependencies. Those are all far above —
+         `CleanRoomBroker.fs` + `CleanRoomGate.fs` (it dispatches THROUGH
+         the gate rather than beside it), `PrivacyBudgetLedger.fs` and
+         `NoiseMechanism.fs` (the optional invariants it passes along),
+         `PrivateSetIntersection.fs` (the Phase 479 `CardinalityOnly`
+         preflight and the `Members` run), and
+         `TemplateApprovalRegistry.fs`, whose content-hashed bilateral
+         approval IS the activation's invariant 0 over a DERIVED
+         template. -->
+    <Compile Include="Server\IActivationDestination.fs" />
+    <Compile Include="Server\CohortActivation.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
