@@ -1481,6 +1481,11 @@
              file's shared `deterministicOrderingContract` rather than
              restating it. -->
         <Compile Include="InProcess\PgvectorVectorStoreTests.fs" />
+        <!-- Phase 513 — Redis IEmbeddingCache companion. Structural arm
+             always on (key derivation, wire codec, option guards); live
+             arm env-gated on TOOLUP_REDIS_CONNECTION, the same server the
+             Redis notification-channel and distributed-lock packs use. -->
+        <Compile Include="InProcess\RedisEmbeddingCacheTests.fs" />
         <!-- Phase 317 — peer-auth posture advisory. The six-rung ladder a
              composition is classified against (from "no peer surface" up
              to the static-bearer prefix that shadows the signed-JWT
@@ -1613,6 +1618,7 @@
         <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
+        <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
         <!-- Phase 46.B — Sample client-resident-tool reference companion.
              Tests project consumes Core + Server tiers; Client tier is
              Fable and never reached by the .NET runner. -->

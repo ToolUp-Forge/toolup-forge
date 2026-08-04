@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.EmbeddingCaches.Redis</PackageId>
+    <AssemblyName>ToolUp.EmbeddingCaches.Redis</AssemblyName>
+    <Description>Redis IEmbeddingCache for ToolUp.RAG. A cross-replica embedding cache — every replica reads and writes the same entries, so a model's embedding is paid for once per fleet rather than once per process. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;rag;embeddings;cache;redis;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 513 — distributed IEmbeddingCache companion. GP 1 — the
+       StackExchange.Redis dependency is isolated to this companion; it
+       never reaches ToolUp.Platform.*. GP 2 — Redis is OSS, so there is
+       no paid default. GP 13 — a deployment that does not compose it
+       keeps the in-process InMemoryEmbeddingCache unchanged. -->
+  <ItemGroup>
+    <Compile Include="RedisEmbeddingCache.fs" />
+    <Compile Include="RedisEmbeddingCacheHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. StackExchange.Redis is
+         unique to this companion (version pinned centrally in
+         Directory.Packages.props, shared with NotificationChannels/Redis). -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+</Project>
