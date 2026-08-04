@@ -1515,6 +1515,15 @@ let allTests =
         // asserts exactly two — so the pair measures the CAS gate rather
         // than the harness's luck at interleaving.
         ExternalCallbackTests.tests
+        // Phase 322 — the generic HTTP/REST external-compute companion.
+        // Bound against a real in-process compute service on a real
+        // socket, and carrying the Phase 324 contract pack unmodified with
+        // HonoursIdempotency / ValidatesHandleScope declared FALSE — both
+        // substantive, since the pack asserts a real fallback law for each
+        // rather than skipping. The push-completion arm has the service
+        // call the real Phase 320 ingress back, with a forged-secret
+        // control proving the ingress is not simply accepting anything.
+        HttpComputeDispatcherTests.tests
         // Phase 486 — signed worker outcomes. Every refusal arm is paired
         // with a positive CONTROL on the same material: the tampered-body
         // test shows the identical genuine envelope verifying over the

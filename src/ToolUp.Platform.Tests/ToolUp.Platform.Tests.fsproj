@@ -1681,6 +1681,19 @@
              test is not measuring the gate), and the GP 13 pins that a
              default deployment composes neither store nor sink. -->
         <Compile Include="InProcess\ExternalCallbackTests.fs" />
+        <!-- Phase 322 — the generic HTTP/REST external-compute companion,
+             bound against a REAL in-process compute service on a real
+             socket (an HttpMessageHandler stub would verify the half that
+             is not in doubt and elide header names reaching the wire, a
+             404 arriving as a status code, and a budget expiring against a
+             server that genuinely does not answer). Carries the Phase 324
+             contract pack UNMODIFIED, the per-call credential read pinned
+             by a mid-run rotation with its own control, the retry
+             classification table (5xx / 408 / 429 / timeout retriable;
+             other 4xx terminal), and push completion end to end — the
+             service calls the real Phase 320 ingress back over a socket,
+             with a forged-secret control beside it. -->
+        <Compile Include="InProcess\HttpComputeDispatcherTests.fs" />
         <!-- Phase 486 — signed worker outcomes: the header envelope's
              parse/render round-trip and its refusal shapes, the
              IWorkerKeyRegistry laws bound over BOTH implementations
@@ -1887,6 +1900,10 @@
         <ProjectReference Include="..\ToolUp.Workflow.Server\ToolUp.Workflow.Server.fsproj" />
         <!-- Phase 239 — OpenFeature flag-provider companion. -->
         <ProjectReference Include="..\FeatureFlagProviders\OpenFeature\ToolUp.FeatureFlagProviders.OpenFeature.fsproj" />
+        <!-- Phase 322 — the generic HTTP/REST external-compute companion.
+             Binds the Phase 324 IExternalComputeDispatcher contract pack
+             unmodified against an in-process stub compute service. -->
+        <ProjectReference Include="..\ExternalCompute\ToolUp.ExternalCompute.Http\ToolUp.ExternalCompute.Http.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 239 — OpenFeature InMemoryProvider for the adapter test. -->

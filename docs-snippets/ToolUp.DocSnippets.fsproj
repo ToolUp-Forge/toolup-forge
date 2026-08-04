@@ -59,6 +59,7 @@
     <ProjectReference Include="../src/AuthProviders/OidcClient/OidcClient.fsproj" />
     <ProjectReference Include="../src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj" />
     <ProjectReference Include="../src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.fsproj" />
+    <ProjectReference Include="../src/ExternalCompute/ToolUp.ExternalCompute.Http/ToolUp.ExternalCompute.Http.fsproj" />
     <ProjectReference Include="../src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj" />
     <ProjectReference Include="../src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj" />
     <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />

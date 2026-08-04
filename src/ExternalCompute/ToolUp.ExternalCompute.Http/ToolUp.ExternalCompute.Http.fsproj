@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ExternalCompute.Http</PackageId>
+    <AssemblyName>ToolUp.ExternalCompute.Http</AssemblyName>
+    <Description>Generic HTTP/REST IExternalComputeDispatcher for ToolUp — hands a unit of work to any HTTP compute service (a training server, an inference endpoint, a batch REST facade) via config-driven submit / status / cancel requests, with dotted-path JSON selectors reading the job id, status, progress and result reference back out. Registers the completion-callback credential so push-completion works where the service supports webhooks. BCL HttpClient only; no vendor SDK. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;external-compute;gpu;batch;http;rest;dispatcher;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 322 — the reference IExternalComputeDispatcher companion.
+       GP 1 — no compute-service SDK reaches ToolUp.Platform.*; there is
+       no vendor SDK at all, because "POST a job, GET its status" needs
+       nothing beyond BCL HttpClient + System.Text.Json (the
+       companion-authoring guide's rule for HTTP-shaped companions).
+       GP 2 — every dependency is in the BCL, so there is no paid
+       default. GP 13 — a deployment that does not compose it keeps the
+       NoExternalCompute path byte-for-byte. -->
+  <ItemGroup>
+    <Compile Include="HttpComputeConfig.fs" />
+    <Compile Include="HttpComputeDispatcher.fs" />
+    <Compile Include="HttpComputeHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Core carries ISecretStore / ILogger / IHealthCheck /
+         IConfigValidator and the ExternalCompute value types; Server
+         carries IExternalComputeDispatcher, IExternalCallbackCapableBackend
+         and the ServerApp the compose helper folds into. -->
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. System.Net.Http and
+       System.Text.Json are BCL. There is deliberately no
+       PackageReference here, and no Directory.Packages.props entry to
+       add. -->
+</Project>

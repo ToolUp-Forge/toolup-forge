@@ -779,6 +779,139 @@ The dispatcher pack runs against a reference request/response backend and agains
 
 Binding more than one is the point rather than a bonus. An interface only one implementation has ever satisfied is a description of that implementation, and a pack cannot distinguish a portable clause from an accidental one until a second backend with a different primitive has run through it.
 
+## The shipped HTTP/REST backend
+
+`ToolUp.ExternalCompute.Http` is the reference `IExternalComputeDispatcher` (GP 2): it hands work to **any** HTTP compute service — a self-hosted training server, an inference endpoint, a container/batch API with a REST facade, a Flask wrapper around a fit script — using nothing but BCL `HttpClient` and `System.Text.Json`. There is no vendor SDK to isolate, because "POST a job, GET its status" does not need one.
+
+Everything service-specific is configuration: three URLs, an auth seam, the request-body field names, and the selectors that read a job id / status / progress / result reference back out of the service's own JSON.
+
+### A worked example
+
+An internal GPU training service. It answers a submit with `{"job":{"id":"…"}}`, a status read with `{"job":{"state":"RUNNING","percentComplete":40,…}}`, and it can POST a webhook when a run finishes.
+
+```fsharp
+open System.Net.Http
+open ToolUp.Platform.ExternalCompute.Http
+open ToolUp.Platform.Secrets
+open ToolUp.Platform.Server
+
+let composeTrainingCompute (secrets: ISecretStore) (httpClient: HttpClient) (logger: ILogger) =
+    let jobs = "https://training.internal/api/jobs"
+
+    let config =
+        HttpComputeConfig.create
+            "gpu-training" // the label stamped onto every handle's Backend
+            jobs // POST here to submit
+            (jobs + "/" + HttpComputeConfig.JobIdPlaceholder) // GET here to poll
+            (JsonPath.ofString "job.id") // the job id, in the submit response
+            (JsonPath.ofString "job.state") // the status, in the status response
+        |> HttpComputeConfig.withAuth (HttpComputeAuth.bearer "training-api-token")
+        |> HttpComputeConfig.withResultRef (JsonPath.ofString "job.artifact.uri")
+        // The service reports a PERCENTAGE, so declare the scale rather
+        // than let 40 be read as 4000%.
+        |> HttpComputeConfig.withProgress 100.0 (JsonPath.ofString "job.percentComplete")
+        |> HttpComputeConfig.withFailureDetail
+            (JsonPath.ofString "job.failure.message")
+            (Some(JsonPath.ofString "job.failure.retriable"))
+        |> HttpComputeConfig.withCancel "DELETE" (jobs + "/" + HttpComputeConfig.JobIdPlaceholder)
+        |> HttpComputeConfig.withHealthUrl "https://training.internal/healthz"
+        |> HttpComputeConfig.withCallback {
+            PublicBaseUrl = "https://app.example.com"
+            RegistrationUrlTemplate = jobs + "/" + HttpComputeConfig.JobIdPlaceholder + "/webhook"
+            RegistrationMethod = "POST"
+            UrlField = "callbackUrl"
+            SecretField = "callbackSecret"
+            HandleIdField = Some "handleId"
+        }
+
+    ServerApp.empty
+    |> HttpComputeCompose.withHttpCompute config secrets httpClient logger
+```
+
+`withHttpCompute` folds in everything the companion contributes: the dispatcher singleton, the readiness probe, the startup preflight, and `ServerConfig.ExternalCompute = CustomExternalCompute`. **That last part is not cosmetic** — under the `NoExternalCompute` default compose registers the no-op dispatcher, and a later registration of the same service type is what `GetService` resolves, so leaving the mode alone would make whether real work is submitted depend on registration order. A deployment that never calls the helper keeps the default and pays nothing (GP 11 + GP 13).
+
+Environment-bound alternative: `HttpComputeConfig.fromEnv ()` returns `None` unless `TOOLUP_EXTERNAL_COMPUTE=http`, and otherwise `Ok config` or `Error problems` — every problem at once, rather than one exception per restart — read from `TOOLUP_EXTERNAL_COMPUTE_HTTP_*` variables.
+
+### What goes on the wire
+
+A handler's `Submit` becomes one POST. Field names come from `HttpComputeSubmitFields`, and an `option` field that is `None` is simply omitted:
+
+```json
+{
+  "kind": "train-forecast",
+  "payload": { "series": "sales", "horizon": 12 },
+  "scope": "team-42",
+  "resources": { "gpu": "1", "accelerator": "a100" },
+  "timeoutSeconds": 5400,
+  "idempotencyKey": "sales-h12-v3",
+  "callbackUrl": "https://app.example.com/_platform/external-compute/callback"
+}
+```
+
+The **callback URL** rides the submit request because it is deployment-static. The per-handle **secret** cannot: it does not exist until the platform has durably registered the handle this very request is about to return. So it arrives in a second request, to `RegistrationUrlTemplate`, the moment `AcceptCallbackCredential` fires:
+
+```json
+{
+  "callbackUrl": "https://app.example.com/_platform/external-compute/callback",
+  "callbackSecret": "…",
+  "handleId": "6f1d5b0e-3a1c-4c8f-9f3e-2b7a5d4c1e08"
+}
+```
+
+That delivery is best-effort by contract. If it fails, the failure is logged (never the secret) and the run resolves by poll — the fallback that was always there. A service that cannot call back at all simply omits `withCallback` and is reconciled by polling.
+
+### The selector grammar, and where it deliberately stops
+
+A selector is a **dotted path**: a `.`-separated sequence of property names, each optionally followed by one or more `[n]` array indices. `state`, `job.status`, `items[0].phase`, `result.refs[1]`. That is the entire grammar.
+
+No wildcards, no filters, no expressions, no `$` root. Each of those buys a rarer response shape at the price of a second language inside the configuration — with its own parser, its own error messages, its own semantics to document and its own bugs. The line is drawn where the grammar would stop being describable in one sentence.
+
+A response shape a dotted path cannot describe is a signal to write a companion that knows the service, **not** to grow the grammar: `IExternalComputeDispatcher` is twenty lines, and a service whose status hides behind a query expression is better served by an implementation that understands it than by a configuration pretending to be generic.
+
+A malformed selector is refused with a reason rather than reinterpreted — `a..b`, `.a`, `a.`, `a[x]` and `a[-1]` are all errors, because a selector that quietly means something other than what was written is the worst outcome available.
+
+### Status vocabulary, and the label that is never guessed
+
+`HttpComputeStatusMap` maps the service's own status labels onto the five outcomes, case- and whitespace-insensitively. The defaults already cover most REST compute services (`queued` / `running` / `succeeded` / `failed` / `cancelled` plus the usual synonyms); a service that says `WORKING` adds it.
+
+A label the map does not declare is reported as a **terminal failure naming the label**. It is not guessed, because every guess available is a claim about whether the work finished. A label declared under two classes is refused at compose, since which one won would be an accident of list order deciding whether a job is reported as complete.
+
+The same restraint applies twice more. A `Succeeded` status with no readable result reference is a terminal failure, not a success — the caller's whole reason for polling is to learn where the result is. And a progress value that is absent, unreadable or negative yields `Running None` rather than a fabricated figure.
+
+### Error classification is the retry contract
+
+| Condition | `Retriable` |
+|---|---|
+| transport failure, or the per-request budget expired | **yes** — the request was never answered, so nothing was learned about the work |
+| `5xx` | **yes** — the service's own admission that this is its problem |
+| `408 Request Timeout`, `429 Too Many Requests` | **yes** — the two `4xx` codes that literally mean "ask again" |
+| any other non-`2xx` | no — a statement about the request, which re-sending cannot change |
+| `404` on a status read | no — the service has forgotten the unit |
+
+The `408` / `429` rows are the general rule ("`5xx` and timeouts retriable, `4xx` not") with its two well-known exceptions named. Treating a rate-limit as terminal abandons perfectly good work exactly when a queue is deepest.
+
+`Poll` returns `ExternalOutcome`, which has no error channel, so a transport failure has to be expressed as an outcome: it is reported as `Failed` carrying a **retriable** error — terminal in shape so the poller stops, with retriability as data so the scheduler decides. It never answers `Running` (which would keep a dead handle alive forever) and never a fabricated `Cancelled`.
+
+An accepted submission whose job id is unreadable is a **terminal** error, not a retriable one, and the distinction is deliberate: the work may well be running, and a retry flag there would start a second unit while the first ran on unobserved.
+
+### What this backend does not claim
+
+- **It does not honour `ExternalWorkSpec.Idempotency` itself.** The key is forwarded when the config names a field for it, and a service that dedupes returns the same `NativeRef` — but the handle id is platform-minted per `Submit`, so a resubmit yields a second handle for the one unit. That is why Phase 318 words idempotent resubmit as a *should*, and why [the memoization decorator](#memoizing-a-repeated-submission) is the portable answer. The conformance binding declares `HonoursIdempotency = false`.
+- **It does not validate the presented handle's scope.** `Poll` and `Cancel` address the service by the opaque `NativeRef`, which is all the service ever gave us, so a re-scoped handle is indistinguishable from here. GP 4 is enforced a layer up, where it is structural. Declared `ValidatesHandleScope = false`.
+- **It declares no isolation posture**, so an `ExecutionProfile.Isolated` spec is refused by the gate rather than handed to a service that has made no guarantee. A generic HTTP endpoint cannot honestly assert no-egress.
+
+### Health and preflight
+
+The readiness probe exists **only** when the config names a dedicated health URL. Nothing else is safe to probe: the submit URL would submit work on every readiness poll, and a status URL needs a job id there is no safe value for. An absent probe is honest; a probe that queued a job every fifteen seconds would be a defect wearing a health check's name.
+
+An unreachable service reports `Degraded`, not `Unhealthy`. External compute is a hand-off destination rather than a request path — the deployment still serves every page, every API and every in-process job; what it cannot do is accept new external work. Failing readiness would turn a partial outage into a total one.
+
+The startup validator answers the two questions only a running deployment can. Is the configured credential actually in `ISecretStore`? — the most common deployment miss, which otherwise surfaces as a `401` on the first submission hours after deploy. And is the service reachable? Both report rather than abort: a compute service that is briefly down must not take the whole deployment with it.
+
+### Conformance
+
+It passes the `IExternalComputeDispatcher` contract pack unmodified, bound against an in-process stub compute service on a **real socket** rather than an `HttpMessageHandler` stub. That choice is the point: a fake transport would verify the half that is not in doubt while eliding the half that is — header names actually reaching the wire, a `404` arriving as a status code rather than a thrown exception, a budget expiring against a server that genuinely does not answer. The push path is exercised the same way: the stub service POSTs to the real callback ingress over a socket, with a forged-secret control beside it proving the ingress is not simply accepting anything.
+
 ## See also
 
 - [`jobs.md`](jobs.md) — the in-process job scheduler this seam extends beyond the process.
