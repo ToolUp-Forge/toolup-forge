@@ -2595,6 +2595,38 @@ type ServerConfig = {
     /// override at the composition root.
     AcceptSharedEmbeddingCacheInTeamMode: bool
 
+    /// Phase 9m.B — explicit opt-in to running RAG with no durable
+    /// backing (neither an `IBlobStorage` nor an `IVectorStore`
+    /// override) in a deployment that otherwise carries persistent
+    /// authenticated storage. The in-memory vector store writes through
+    /// a null blob store that DISCARDS bytes, so the corpus starts
+    /// EMPTY after every process restart with no further signal.
+    /// Default `false` — `RagPersistenceValidator` refuses startup on a
+    /// persistent deployment. Set `true` (or
+    /// `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) for a deployment that
+    /// deliberately re-ingests its corpus on boot (a build-time-seeded
+    /// index, a demo/sandbox, an integration-test harness). The
+    /// validator then degrades to a `Warning` so the choice stays
+    /// visible in the `/dev/inspect` Validators panel rather than
+    /// becoming silent.
+    AcceptEphemeralRagIndex: bool
+
+    /// Phase 9m.B — explicit opt-in to running the dev-only,
+    /// process-stateful `LocalEmbeddingProvider` in a production-shaped
+    /// deployment (`Individual` / `AuthenticatedEphemeral` / `Team` /
+    /// `MultiTeam`). The local TF-IDF embedder derives vectors from an
+    /// IDF dictionary that evolves with the corpus *in this process*,
+    /// so embeddings are not reproducible across restarts or replicas
+    /// and retrieval quality drifts as the corpus grows. Default
+    /// `false` — `LocalEmbeddingProviderInProductionModeValidator`
+    /// (non-team shapes) and `TeamModeLocalEmbedderValidator` (team
+    /// shapes) each emit a `Warning`, and the companion's health probe
+    /// reports `Degraded`. Set `true` (or
+    /// `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`) to silence the family
+    /// at once for a single-replica deployment that has accepted the
+    /// trade-off.
+    AcceptLocalEmbedderAtScale: bool
+
     /// Explicit operator attestation that, with `ReplicaCount > 1` and
     /// AI composed, cancel / client-tool-result POSTs are pinned to the
     /// replica running the agent loop (sticky-session load balancer or
@@ -3215,6 +3247,40 @@ module DeploymentConfig =
             | SurfaceProfile.Team _ -> true
             | _ -> false)
 
+    /// True iff the deployment carries any `AuthenticatedUser` surface
+    /// — `Individual` (`Persistence = Persistent`) or
+    /// `AuthenticatedEphemeral` (`Persistence = Ephemeral`). The
+    /// non-team half of "this deployment serves real, identified
+    /// users", deliberately excluding `Team` so callers can pick the
+    /// two apart; `isProductionShapedForStatefulEmbedder` is the union.
+    let hasAuthenticatedUserScope (config: ServerConfig) : bool =
+        config.Surfaces
+        |> List.exists (function
+            | SurfaceProfile.AuthenticatedUser _ -> true
+            | _ -> false)
+
+    /// Phase 9m.B — true iff the deployment is one of the four shapes a
+    /// process-stateful embedder (the dev-only `LocalEmbeddingProvider`)
+    /// should not be serving: `Individual`, `AuthenticatedEphemeral`,
+    /// `Team`, `MultiTeam`. `Anonymous`-only and `ClaimBearer`-only
+    /// deployments are excluded — a public demo or a share-token surface
+    /// has no per-user corpus whose retrieval quality could drift, so
+    /// flagging them would be noise.
+    ///
+    /// Named here rather than re-derived per call site because three
+    /// consumers must agree on it exactly:
+    /// `LocalEmbeddingProviderInProductionModeValidator` (non-team half),
+    /// `TeamModeLocalEmbedderValidator` (team half), and the companion's
+    /// `LocalEmbeddingProviderHealth` probe (the union) — a split-brain
+    /// between the preflight warning and the health probe is precisely
+    /// the confusion the probe exists to remove.
+    let isProductionShapedForStatefulEmbedder (config: ServerConfig) : bool =
+        hasAuthenticatedUserScope config
+        || config.Surfaces
+           |> List.exists (function
+               | SurfaceProfile.Team _ -> true
+               | _ -> false)
+
     /// True iff the deployment supports multi-team switching — any
     /// `Team` surface whose `Switching = HeaderSwitcher`. Used by
     /// `NotificationMode.resolve`: membership-change events feed the
@@ -3361,6 +3427,8 @@ module ServerConfig =
         AcceptInProcessSchedulerInMultiInstance = false
         AcceptInProcessIngestionInMultiInstance = false
         AcceptSharedEmbeddingCacheInTeamMode = false
+        AcceptEphemeralRagIndex = false
+        AcceptLocalEmbedderAtScale = false
         AcceptStickyRoutedAiInMultiInstance = false
         AcceptNoRateLimitWhenAuthRequired = false
         AcceptUnsignedPublishable = false
@@ -4045,6 +4113,11 @@ module ServerConfig =
                 // refuses startup unless the operator opts in.
                 AcceptInProcessIngestionInMultiInstance = envFlag "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE"
                 AcceptSharedEmbeddingCacheInTeamMode = envFlag "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE"
+                // Phase 9m.B — the two RAG escape hatches this phase
+                // introduced. Same GP 11 shape as the rest of the family:
+                // unset ⇒ `false`, and the matching validator still fires.
+                AcceptEphemeralRagIndex = envFlag "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX"
+                AcceptLocalEmbedderAtScale = envFlag "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE"
                 AcceptStickyRoutedAiInMultiInstance = envFlag "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE"
                 AcceptUnboundAudienceWhenAuthRequired = envFlag "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE"
                 AcceptInMemoryOAuthStateInMultiInstance = envFlag "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"

@@ -312,8 +312,25 @@ ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator (class)
 ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator..ctor(System.String, ToolUp.RAG.Chunking+ChunkingConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+CitationDevEndpointValidator (class)
 ToolUp.RAG.RagConfigValidator+CitationDevEndpointValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+LocalEmbeddingProviderInProductionModeValidator (class)
+ToolUp.RAG.RagConfigValidator+LocalEmbeddingProviderInProductionModeValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+RAGConfigBoundsValidator (class)
+ToolUp.RAG.RagConfigValidator+RAGConfigBoundsValidator..ctor(ToolUp.RAG.RagConfigValidator+RagConfigBounds, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+RAGHandlersRegisteredValidator (class)
+ToolUp.RAG.RagConfigValidator+RAGHandlersRegisteredValidator..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+RAGRateLimitConfiguredValidator (class)
 ToolUp.RAG.RagConfigValidator+RAGRateLimitConfiguredValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+RagConfigBounds (class)
+ToolUp.RAG.RagConfigValidator+RagConfigBounds..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, System.Boolean, System.Int32, System.Int32, System.Int32)
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.IngestionConcurrency : System.Int32 { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.IngestionQueueCapacity : System.Int32 { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.MinScore : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.MmrEnabled : System.Boolean { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.MmrLambda : System.Double { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.SnippetCharLimit : System.Int32 { get }
+ToolUp.RAG.RagConfigValidator+RagConfigBounds.TopK : System.Int32 { get }
+ToolUp.RAG.RagConfigValidator+RagDurabilityContributor (class)
+ToolUp.RAG.RagConfigValidator+RagDurabilityContributor..ctor(System.Boolean, System.Boolean, System.Boolean)
 ToolUp.RAG.RagConfigValidator+RagIngestionInstanceValidator (class)
 ToolUp.RAG.RagConfigValidator+RagIngestionInstanceValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+RagPersistenceValidator (class)
@@ -326,6 +343,8 @@ ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator (class)
 ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator (class)
 ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+VectorisationHandlerContributor (class)
+ToolUp.RAG.RagConfigValidator+VectorisationHandlerContributor..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.RAG.RagHealthHandler (class)
 ToolUp.RAG.RagHealthHandler.healthHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.RAG.RagHealthHandler.route : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }

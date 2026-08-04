@@ -96,6 +96,34 @@ let tests =
                         Expect.isFalse (project cfg) $"{envName} unset must stay false (GP 11)")
             }
 
+            // ── 9m.B — the two RAG Accept* flags ──
+            //
+            // Same shape as the 71.A.2 pair above, pinned because the
+            // failure mode of a `fromEnv` wiring is silent by
+            // construction: a typo in the variable name reads as "the
+            // operator did not set it", which is indistinguishable from
+            // the default. That is precisely the class of silent-default
+            // defect Phase 9m.B exists to close, so leaving its own env
+            // wiring unpinned would be self-defeating.
+            test "Accept*: the two RAG escape-hatch env vars set to 1 land true" {
+                let ragAcceptFlags: (string * (ServerConfig -> bool)) list = [
+                    "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX", _.AcceptEphemeralRagIndex
+                    "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE", _.AcceptLocalEmbedderAtScale
+                ]
+
+                withEnv (ragAcceptFlags |> List.map (fun (n, _) -> n, Some "1")) (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+
+                    for envName, project in ragAcceptFlags do
+                        Expect.isTrue (project cfg) $"{envName}=1 must resolve true")
+
+                withEnv (ragAcceptFlags |> List.map (fun (n, _) -> n, None)) (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+
+                    for envName, project in ragAcceptFlags do
+                        Expect.isFalse (project cfg) $"{envName} unset must stay false (GP 11)")
+            }
+
             // ── 71.A.3 — Port read inside fromEnv ──
             test "Port: SERVER_PORT is read inside the fromEnv seam" {
                 withEnv [ "SERVER_PORT", Some "8137" ] (fun () ->

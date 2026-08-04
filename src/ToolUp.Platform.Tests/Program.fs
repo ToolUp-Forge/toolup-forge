@@ -1474,6 +1474,11 @@ let allTests =
         DataObjectOrphanSweepTests.tests
         DataObjectOrphanSweepTests.validatorTests
         DataObjectOrphanSweepTests.composeTests
+        // Phase 9m.B — RAG config validators (extension). The gating
+        // cases are the load-bearing ones: a validator that over-fires
+        // still looks like it works, and a family an operator learns to
+        // scroll past protects nothing.
+        RagConfigValidatorExtensionTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

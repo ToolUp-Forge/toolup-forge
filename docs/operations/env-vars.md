@@ -115,6 +115,23 @@ Each is `false` by default; setting it to `1`/`true`/`yes`/`on` opts the deploym
 | `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE` | `AcceptInMemoryShareTokenRateLimiterInMultiInstance` |
 | `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY` | `AcceptForwardedHeadersFromAnyProxy` |
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | `AcceptPendingInviteStoreInMultiInstance` |
+| `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX` | `AcceptEphemeralRagIndex` |
+| `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE` | `AcceptLocalEmbedderAtScale` |
+
+The two RAG flags (Phase 9m.B) are worth a note, because each governs a validator
+whose default is deliberately different:
+
+- **`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX`** degrades `rag-persistence` from `Error`
+  (refuses boot) to `Warning`. Set it only when the corpus is genuinely re-ingested
+  on every boot — a build-time-seeded index, a sandbox, a test harness. On a real
+  deployment the refusal is protecting you from a RAG that answers perfectly until
+  the first restart and then silently answers from an empty corpus.
+- **`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE`** silences the whole local-embedder
+  family at once — `rag-local-embedder-in-production-mode`,
+  `team-mode-local-embedder`, and the `embedding_provider:local` health probe's
+  `Degraded` verdict — because all three name the same remedy (swap to a stateless
+  embedder). One flag, not three, so silencing the warning you saw does not leave
+  the others waiting to reappear when the deployment shape changes.
 
 _Other already-honoured scalars (`TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES`, `TOOLUP_STORE_EVICTION_MINUTES`, `TOOLUP_RATE_LIMIT_*`) are documented at their field definitions in `SDK.Shared.fs`; they move into this table as the later Phase 71.A increments consolidate the parsers._
 

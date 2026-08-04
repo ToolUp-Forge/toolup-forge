@@ -31,6 +31,14 @@ open ToolUp.Platform.IEmbeddingProvider
 /// `/dev/inspect` validators panel pointing at the actionable
 /// remediation. Phase 14z structurally closes the leak via per-team
 /// IDF dictionaries, at which point this validator can be removed.
+///
+/// **Phase 9m.B** — honours `ServerConfig.AcceptLocalEmbedderAtScale`
+/// (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`), the escape hatch shared
+/// with `LocalEmbeddingProviderInProductionModeValidator`. The two
+/// validators cover disjoint deployment shapes but name the SAME
+/// remedy (swap to a stateless embedder), so an operator who has
+/// accepted the trade-off silences the family with one flag rather
+/// than learning two.
 type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbeddingProvider, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -41,7 +49,11 @@ type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbed
         member _.Validate() = async {
             let isTeamMode = DeploymentConfig.hasTeamScope serverConfig
 
-            if isTeamMode && embedder.ProviderId = "local" then
+            if
+                isTeamMode
+                && embedder.ProviderId = "local"
+                && not serverConfig.AcceptLocalEmbedderAtScale
+            then
                 return
                     Warning(
                         "LocalEmbeddingProvider is active in Team / MultiTeam mode. "
@@ -50,7 +62,9 @@ type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbed
                         + "(chunks themselves remain scope-isolated and never leak). This is acceptable for "
                         + "single-user dev / staging but should not run in multi-tenant production. "
                         + "Wire in a stateless embedder (OpenAI / Cohere / Anthropic embeddings) via "
-                        + "RAGServerApp.create. Phase 14z addresses this structurally via per-team IDF."
+                        + "RAGServerApp.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true "
+                        + "(TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off explicitly. "
+                        + "Phase 14z addresses this structurally via per-team IDF."
                     )
             else
                 return Ok
@@ -66,6 +80,18 @@ type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbed
 /// (Individual / Team / MultiTeam) treat this as a fatal
 /// misconfiguration; ephemeral modes (Anonymous / AuthenticatedEphemeral)
 /// are non-persistent by design, so a Warning is sufficient there.
+///
+/// **Phase 9m.B (2026-05-06 audit, Gap 3) — the escape hatch.** The
+/// refusal had no opt-out, so a deployment that *deliberately* runs an
+/// ephemeral index on a persistent surface — a build-time-seeded
+/// corpus re-ingested on boot, a sandbox, an integration-test harness —
+/// could not start at all. `ServerConfig.AcceptEphemeralRagIndex`
+/// (`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) degrades the refusal to a
+/// `Warning`, which is the GP 13 shape used across the `Accept*`
+/// family: default refuses, the operator opts past it by name, and the
+/// choice stays visible in the `/dev/inspect` Validators panel instead
+/// of going silent. `RagDurabilityContributor` surfaces the same fact
+/// as a "RAG durability: ephemeral" line in the same panel set.
 type RagPersistenceValidator
     (serverConfig: ServerConfig, blobStorageSupplied: bool, vectorStoreSupplied: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
@@ -84,7 +110,22 @@ type RagPersistenceValidator
                     "RAG is composed with neither an IBlobStorage nor an IVectorStore override. The in-memory vector store writes through a null blob store that DISCARDS bytes — every ingested chunk is lost on the next process restart with no further signal. Pass `Some storage` to composeWithRAG (or a durable IVectorStore companion, e.g. src/VectorStores/Hnsw) for a deployment whose corpus survives a restart."
 
                 if DeploymentConfig.hasPersistentAuthenticatedStorage serverConfig then
-                    return Error msg
+                    if serverConfig.AcceptEphemeralRagIndex then
+                        // Phase 9m.B — the operator has opted past the
+                        // refusal by name. Keep it visible (never silent)
+                        // so `/dev/inspect` still shows the deployment is
+                        // running an index that does not survive a restart.
+                        return
+                            Warning(
+                                msg
+                                + " ServerConfig.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) — RAG durability is EPHEMERAL by explicit operator opt-in: the corpus must be re-ingested after every restart."
+                            )
+                    else
+                        return
+                            Error(
+                                msg
+                                + " If the corpus is deliberately re-ingested on every boot (build-time-seeded index, sandbox, or test harness), set ServerConfig.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) to start with a Warning instead."
+                            )
                 else
                     // Ephemeral / public-only by design — non-durable
                     // RAG is consistent with the surface shape; still
@@ -359,4 +400,303 @@ type RAGRateLimitConfiguredValidator(serverConfig: ServerConfig, ?timeout: TimeS
                     )
             else
                 return Ok
+        }
+
+// ─── Phase 9m.B — the 2026-05-06 RAG gap audit, Gaps 4 / 6 / 7 ───────
+//
+// Three validators closing the "silent default / unvalidated config
+// knob / single-instance assumption" classes the audit named, plus the
+// two `/dev/inspect` contributors that make the same facts readable
+// without a restart. Gap 3 (RAG durability) is closed by the escape
+// hatch added to `RagPersistenceValidator` above rather than by a fifth
+// validator — a second check firing on the identical condition would
+// warn twice about one problem, which is the nagging this family is
+// explicitly gated to avoid.
+
+/// **Gap 4** — the dev-only `LocalEmbeddingProvider` serving a
+/// production-shaped deployment. The local embedder derives vectors
+/// from a TF-IDF dictionary that evolves with the corpus *in this
+/// process*: embeddings are therefore not reproducible across restarts
+/// (a re-ingest of the same document yields a different vector) and not
+/// comparable across replicas (each holds its own dictionary), so
+/// retrieval quality drifts as the corpus grows and diverges as the
+/// deployment scales out. It is the documented exception to the
+/// stateless-between-calls rule (portability rule 4) and its file
+/// header says so.
+///
+/// `Warning`, not `Error` — a single-replica `Individual` deployment
+/// running the local embedder is a legitimate, fully-working shape, and
+/// refusing it would break every offline / no-API-key deployment. The
+/// operator gets the signal; the choice stays theirs.
+///
+/// **Gating — this fires only where `TeamModeLocalEmbedderValidator`
+/// does not.** That validator already covers `Team` / `MultiTeam` with
+/// a sharper message (the shared IDF dictionary leaks term-frequency
+/// variance ACROSS tenants, a confidentiality concern this one is not
+/// about). Both name the same remedy, so firing both on a team
+/// deployment would report one problem twice. The two therefore
+/// partition the deployment space: this one takes
+/// `Individual` / `AuthenticatedEphemeral` with no team surface
+/// present. `Anonymous`-only and `ClaimBearer`-only deployments are
+/// outside both — no per-user corpus, nothing to drift.
+type LocalEmbeddingProviderInProductionModeValidator
+    (serverConfig: ServerConfig, embedder: IEmbeddingProvider, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-local-embedder-in-production-mode"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            // The team half belongs to TeamModeLocalEmbedderValidator —
+            // see the gating note above.
+            let nonTeamProductionShape =
+                DeploymentConfig.hasAuthenticatedUserScope serverConfig
+                && not (DeploymentConfig.hasTeamScope serverConfig)
+
+            if
+                nonTeamProductionShape
+                && embedder.ProviderId = "local"
+                && not serverConfig.AcceptLocalEmbedderAtScale
+            then
+                return
+                    Warning(
+                        sprintf
+                            "LocalEmbeddingProvider is active in a %s deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in THIS process, so the same document re-ingested later embeds differently, and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances (LocalEmbeddingProvider is the documented exception to portability rule 4, stateless-between-calls). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) as the third argument to RAGServerApp.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off on a single-replica deployment. The embedding_provider:local health probe reports Degraded for the same reason — see /dev/inspect."
+                            (DeploymentConfig.surfacesLabel serverConfig)
+                    )
+            else
+                return Ok
+        }
+
+/// **Gap 6** — RAG composed over a deployment whose modules register
+/// data types but contribute NO `VectorisationHandler`. Nothing is ever
+/// indexed: uploads succeed, the ingestion queue stays empty, retrieval
+/// returns nothing, and every symptom points at the embedder or the
+/// vector store rather than at the missing handler. There is no error
+/// anywhere in that path — this is the pure silent-default class.
+///
+/// Complementary to, not overlapping with, the core composition rule
+/// `unsatisfied-needs-data`, which checks the OTHER direction: a
+/// `VectorisationHandler` whose `DataTypeId` matches no registered data
+/// type. That rule cannot fire here, because the handler list is empty.
+///
+/// `Warning`, not `Error`. Two shapes legitimately index nothing:
+/// a retrieval-only deployment reading a corpus some other process
+/// wrote, and — checked explicitly below — a deployment that replaced
+/// the whole pipeline via `RAGServerApp.withRetrievalPipeline` (the
+/// static-corpus shape, where chunk embeddings are precomputed at build
+/// time and live ingestion is deliberately suppressed).
+type RAGHandlersRegisteredValidator
+    (dataTypeIds: string list, handlerDataTypeIds: string list, retrievalPipelineOverridden: bool, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-vectorisation-handlers-registered"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            // A composed pipeline override owns its own corpus — no
+            // handlers is the intended shape there, not a defect
+            // (`composeRAG` suppresses the ingestion services outright
+            // on exactly this condition).
+            if retrievalPipelineOverridden then
+                return Ok
+            elif not handlerDataTypeIds.IsEmpty then
+                return Ok
+            elif dataTypeIds.IsEmpty then
+                // No data types either — a document-only / KB-only
+                // deployment. Nothing to vectorise, nothing to warn about.
+                return Ok
+            else
+                let unhandled = dataTypeIds |> List.distinct |> List.sort
+
+                return
+                    Warning(
+                        sprintf
+                            "RAG is composed but NO module contributes a VectorisationHandler, while %d data type(s) are registered: %s. Nothing will ever be indexed — uploads succeed, the ingestion queue stays empty, and retrieval returns no matches with no error anywhere in the path, so the symptom looks like a broken embedder or vector store. Add a VectorisationHandler whose DataTypeId matches each type you want retrievable (ServerModule.withVectorisationHandlers), or compose a precomputed pipeline via RAGServerApp.withRetrievalPipeline if this deployment is retrieval-only by design. The /dev/inspect 'Vectorisation handlers' panel lists what is actually registered."
+                            (List.length unhandled)
+                            (String.concat ", " unhandled)
+                    )
+        }
+
+/// **Gap 7** — the resolved RAG tuning knobs, as data, for
+/// `RAGConfigBoundsValidator`. A record rather than seven constructor
+/// arguments so a new knob joins by adding a field, and so the compose
+/// site reads as an assignment of named values rather than a positional
+/// sequence of ints and floats that is trivially transposable.
+type RagConfigBounds = {
+    TopK: int
+    MinScore: float option
+    /// Only checked when `MmrEnabled` — an inert λ on a deployment that
+    /// never enabled MMR is not a misconfiguration worth a startup line.
+    MmrLambda: float
+    MmrEnabled: bool
+    SnippetCharLimit: int
+    IngestionConcurrency: int
+    IngestionQueueCapacity: int
+}
+
+/// **Gap 7** — explicit bounds validation for the RAG tuning knobs,
+/// replacing silence with a named contract.
+///
+/// The `with*` setters clamp on the way in (`withTopK 0` → `1`,
+/// `withMinScore (Some 1.5)` → `Some 0.99`), and
+/// `RetrievalDefaultsValidator` reports every clamp that fired — but the
+/// clamps are all one-sided lower bounds. Nothing rejects `withTopK 200`
+/// (a 200-match context block crowds out the conversation and dilutes
+/// per-source attention), `withSnippetCharLimit 20` (clamped only to
+/// 16 — below the ~32 chars a preview needs to be readable),
+/// `withIngestionConcurrency 500` (500 concurrent embedding calls are
+/// rate-limited by every hosted provider), or
+/// `withIngestionQueueCapacity 10` (a queue that saturates and drops
+/// documents on the first bulk upload). Each of those starts cleanly
+/// today and misbehaves later, far from the line that caused it.
+///
+/// Severity split follows the phase's rule: `Error` — and therefore a
+/// refused boot via `ConfigPreflightFailedException` — for a value
+/// outside the supported range, because there is no correct behaviour
+/// to fall back to. `Warning` for "legal but probably not what you
+/// meant" (`TopK > 50`). Every message names the setter that produced
+/// the value and the range it must land in, so the fix needs no doc
+/// lookup.
+///
+/// Gated by construction: every default (`TopK = 5`, `MinScore = None`,
+/// `SnippetCharLimit = 240`, `IngestionConcurrency = 8`,
+/// `IngestionQueueCapacity = 5000`) sits inside its range, so a
+/// deployment that tunes nothing is silent.
+type RAGConfigBoundsValidator(bounds: RagConfigBounds, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-config-bounds"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            let errors = ResizeArray<string>()
+            let warnings = ResizeArray<string>()
+
+            if bounds.TopK < 1 || bounds.TopK > 100 then
+                errors.Add(
+                    sprintf
+                        "TopK = %d is outside [1, 100] (RAGServerApp.withTopK / withRetrievalDefaults). TopK is the number of matches spliced into every system prompt: below 1 retrieval returns nothing at all, and above 100 the retrieval block crowds out the conversation and dilutes per-source attention long before it helps."
+                        bounds.TopK
+                )
+            elif bounds.TopK > 50 then
+                warnings.Add(
+                    sprintf
+                        "TopK = %d is legal but unusually high (RAGServerApp.withTopK). Typical deployments sit in 3-10; beyond ~50 the retrieval block dominates the prompt budget and per-source attention degrades. Confirm this was intended."
+                        bounds.TopK
+                )
+
+            match bounds.MinScore with
+            | Some score when score < 0.0 || score > 1.0 ->
+                errors.Add(
+                    sprintf
+                        "MinScore = %g is outside [0.0, 1.0] (RAGServerApp.withMinScore). It gates cosine similarity, which is bounded by that range: a negative threshold is a no-op gate and a threshold above 1.0 filters out EVERY match, so the assistant goes silent with no diagnostic."
+                        score
+                )
+            | _ -> ()
+
+            if bounds.MmrEnabled && (bounds.MmrLambda < 0.0 || bounds.MmrLambda > 1.0) then
+                errors.Add(
+                    sprintf
+                        "MmrLambda = %g is outside [0.0, 1.0] (RAGServerApp.withMmrLambda). Lambda interpolates relevance against diversity in the MMR re-rank; outside the unit interval the objective is no longer a convex combination and the ordering it produces is meaningless."
+                        bounds.MmrLambda
+                )
+
+            if bounds.SnippetCharLimit < 32 || bounds.SnippetCharLimit > 8192 then
+                errors.Add(
+                    sprintf
+                        "SnippetCharLimit = %d is outside [32, 8192] (RAGServerApp.withSnippetCharLimit). Below 32 characters a Sources-panel preview is truncated past the point of being identifiable; above 8192 the preview stops being a preview and ships whole documents to every client rendering the panel."
+                        bounds.SnippetCharLimit
+                )
+
+            if bounds.IngestionConcurrency < 1 || bounds.IngestionConcurrency > 64 then
+                errors.Add(
+                    sprintf
+                        "IngestionConcurrency = %d is outside [1, 64] (RAGServerApp.withIngestionConcurrency). Each slot is one in-flight batched embedding call, so this is the effective upstream request concurrency: 0 halts ingestion entirely, and above 64 every hosted embedding provider rate-limits you into the retry path instead of going faster."
+                        bounds.IngestionConcurrency
+                )
+
+            if bounds.IngestionQueueCapacity < 100 || bounds.IngestionQueueCapacity > 1_000_000 then
+                errors.Add(
+                    sprintf
+                        "IngestionQueueCapacity = %d is outside [100, 1000000] (RAGServerApp.withIngestionQueueCapacity). The queue is the buffer between upload and indexing: below 100 a single bulk upload saturates it and documents are dropped (saved but permanently unsearchable), and above 1000000 the pending backlog is a memory-exhaustion surface rather than a buffer."
+                        bounds.IngestionQueueCapacity
+                )
+
+            if errors.Count > 0 then
+                return Error(sprintf "RAG config knob(s) outside supported bounds — %s" (String.concat " | " errors))
+            elif warnings.Count > 0 then
+                return Warning(String.concat " | " warnings)
+            else
+                return Ok
+        }
+
+// ─── /dev/inspect contributors (Phase 9m.B) ─────────────────────────
+
+/// Surfaces the deployment's RAG durability posture as a
+/// `/dev/inspect` panel — "ephemeral" when the corpus does not survive
+/// a restart, "durable" when it does, plus which backing supplies the
+/// durability and whether the ephemeral state is an explicit opt-in
+/// (`AcceptEphemeralRagIndex`) or the by-design shape of an ephemeral
+/// deployment.
+///
+/// The preflight validator says this once, at boot, in a log line that
+/// has usually scrolled away by the time anyone asks "does this thing
+/// keep its index?". The panel answers it at any time without a restart.
+type RagDurabilityContributor(blobStorageSupplied: bool, vectorStoreSupplied: bool, acceptedEphemeral: bool) =
+    interface IDevDiagnosticsContributor with
+        member _.Contribute() = async {
+            let durable = blobStorageSupplied || vectorStoreSupplied
+
+            let payload = {|
+                durability = (if durable then "durable" else "ephemeral")
+                survivesRestart = durable
+                blobStorage = blobStorageSupplied
+                vectorStoreOverride = vectorStoreSupplied
+                acceptedEphemeralIndex = acceptedEphemeral
+                note =
+                    if durable then
+                        "Ingested chunks are written through to durable storage and reload after a restart."
+                    elif acceptedEphemeral then
+                        "RAG durability: ephemeral — accepted explicitly via ServerConfig.AcceptEphemeralRagIndex (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1). The corpus must be re-ingested after every process restart."
+                    else
+                        "RAG durability: ephemeral — the in-memory vector store writes through a null blob store that discards bytes. The corpus starts empty after every process restart."
+            |}
+
+            return "RAG durability", box payload
+        }
+
+/// Lists every registered `VectorisationHandler` by `DataTypeId`
+/// alongside the registered data types, so an operator can see which
+/// types are actually retrievable — whether or not
+/// `RAGHandlersRegisteredValidator` fired.
+///
+/// The panel is the point: the validator only speaks when the handler
+/// list is EMPTY, but the far more common production question is
+/// "which of my types are indexed?", which a partial handler set
+/// answers wrongly by silence. Registering the panel unconditionally
+/// makes the partial case readable without adding a warning that would
+/// fire on the many deployments where partial coverage is deliberate.
+type VectorisationHandlerContributor(dataTypeIds: string list, handlerDataTypeIds: string list) =
+    interface IDevDiagnosticsContributor with
+        member _.Contribute() = async {
+            let handlers = handlerDataTypeIds |> List.distinct |> List.sort
+            let handlerSet = Set.ofList handlers
+            let types = dataTypeIds |> List.distinct |> List.sort
+            let typeSet = Set.ofList types
+
+            let payload = {|
+                handlerCount = List.length handlers
+                handlers = handlers
+                registeredDataTypes = types
+                // The two asymmetries worth seeing at a glance: a type
+                // nothing will index, and a handler that will never fire.
+                unhandledDataTypes = types |> List.filter (handlerSet.Contains >> not)
+                handlersWithNoDataType = handlers |> List.filter (typeSet.Contains >> not)
+            |}
+
+            return "Vectorisation handlers", box payload
         }

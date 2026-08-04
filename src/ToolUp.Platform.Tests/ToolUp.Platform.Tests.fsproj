@@ -1618,6 +1618,14 @@
              validator's four arms and the GP 13 keystone asserted on the
              service collection. -->
         <Compile Include="InProcess\DataObjectOrphanSweepTests.fs" />
+        <!-- Phase 9m.B — RAG-specific config validators (extension).
+             Each of the four gap-audit validators is pinned by a red
+             case asserting on the REMEDY its message names, a green case
+             so the red one is not vacuous, and a gating case proving it
+             stays silent on deployments the concern does not apply to —
+             including the cross-validator pin that the local-embedder
+             pair never both fire on one deployment. -->
+        <Compile Include="InProcess\RagConfigValidatorExtensionTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

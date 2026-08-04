@@ -20,5 +20,7 @@ LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.KnownScopes() : Microsoft.F
 LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.ResetScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 LocalEmbeddingProviderHealth (class)
 LocalEmbeddingProviderHealth.create() : ToolUp.Platform.HealthChecks+IHealthCheck
+LocalEmbeddingProviderHealth.createForDeployment(System.Boolean) : ToolUp.Platform.HealthChecks+IHealthCheck
 LocalEmbeddingProviderHealth+LocalEmbeddingProviderHealthCheck (class)
 LocalEmbeddingProviderHealth+LocalEmbeddingProviderHealthCheck..ctor()
+LocalEmbeddingProviderHealth+LocalEmbeddingProviderHealthCheck..ctor(System.Boolean)

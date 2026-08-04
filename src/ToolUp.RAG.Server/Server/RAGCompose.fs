@@ -1626,10 +1626,35 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // stacks with the core first-party hooks. Self-`Skipped`s when no
         // `IVectorStore` is composed (here it always is), so the gate is
         // the only condition.
-        match config.TenantLifecycle with
-        | EnabledTenantLifecycle ->
-            s.AddSingleton<ITenantLifecycle>(fun (sp: System.IServiceProvider) -> RagVectorStoreLifecycle.create sp)
-        | NoTenantLifecycle -> s
+        let s =
+            match config.TenantLifecycle with
+            | EnabledTenantLifecycle ->
+                s.AddSingleton<ITenantLifecycle>(fun (sp: System.IServiceProvider) -> RagVectorStoreLifecycle.create sp)
+            | NoTenantLifecycle -> s
+
+        // Phase 9m.B — two `/dev/inspect` panels. Both are
+        // unconditional: they answer questions ("does this deployment
+        // keep its index?", "which of my data types are actually
+        // indexed?") whose ANSWER may be fine, so gating them on the
+        // matching validator having fired would hide exactly the healthy
+        // case an operator wants to confirm. Neither does I/O — the
+        // payload is closed over at compose time (GP 13: two records).
+        s
+            .AddSingleton<IDevDiagnosticsContributor>(
+                ToolUp.RAG.RagConfigValidator.RagDurabilityContributor(
+                    b.Storage.IsSome,
+                    app.VectorStore.IsSome,
+                    config.AcceptEphemeralRagIndex
+                )
+                :> IDevDiagnosticsContributor
+            )
+            .AddSingleton<IDevDiagnosticsContributor>(
+                ToolUp.RAG.RagConfigValidator.VectorisationHandlerContributor(
+                    b.DataTypes |> List.map _.Id,
+                    b.VectorisationHandlers |> List.map _.DataTypeId
+                )
+                :> IDevDiagnosticsContributor
+            )
 
     // RAG config validators (mirrors the set the former `composeWithRAG` /
     // `RAGServerApp.run` built). Constructed against the module-merged config
@@ -1674,6 +1699,37 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // loop burns embedding spend even behind a proxy (per-query cost, not
         // per-connection). Mode ≠ Anonymous AND RateLimit = RateLimitConfig.none.
         ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator finalConfig
+        // Phase 9m.B (2026-05-06 audit, Gap 4) — warn when the dev-only,
+        // process-stateful LocalEmbeddingProvider serves a non-team
+        // production shape. The team half is TeamModeLocalEmbedderValidator
+        // above; the two partition the deployment space so one problem is
+        // never reported twice.
+        ToolUp.RAG.RagConfigValidator.LocalEmbeddingProviderInProductionModeValidator(
+            finalConfig,
+            app.EmbeddingProvider
+        )
+        // Phase 9m.B (Gap 6) — warn when data types are registered but NO
+        // module contributes a VectorisationHandler: nothing is ever
+        // indexed and there is no error anywhere in that path. Skipped
+        // when a retrieval-pipeline override owns the corpus (the same
+        // condition `suppressIngestion` uses above).
+        ToolUp.RAG.RagConfigValidator.RAGHandlersRegisteredValidator(
+            b.DataTypes |> List.map _.Id,
+            b.VectorisationHandlers |> List.map _.DataTypeId,
+            app.RetrievalPipelineOverride.IsSome
+        )
+        // Phase 9m.B (Gap 7) — explicit bounds on the tuning knobs. The
+        // `with*` setters clamp lower bounds only, so nothing today
+        // rejects `withTopK 200` or `withIngestionQueueCapacity 10`.
+        ToolUp.RAG.RagConfigValidator.RAGConfigBoundsValidator {
+            TopK = app.RetrievalDefaults.TopK
+            MinScore = app.RetrievalDefaults.MinScore
+            MmrLambda = app.MmrLambda
+            MmrEnabled = app.EnableMmr
+            SnippetCharLimit = app.RetrievalDefaults.SnippetCharLimit
+            IngestionConcurrency = app.IngestionConcurrency
+            IngestionQueueCapacity = app.IngestionQueueCapacity
+        }
     ]
 
     // Merge RAG handlers + service config + the "RAG" notification-consumer

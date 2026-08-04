@@ -147,6 +147,44 @@ RAGServerApp.empty
 
 When fewer than two matches survive the `MinScore` gate, `RAGPromptBuilder.withRetrieval` emits a `KnowledgeRetrievalMiss` event via `IRetrievalTracer.Miss` — admin UIs scan these to spot teams whose KB is too thin / off-topic for their queries.
 
+#### Configuring RAG — the supported bounds (Phase 9m.B)
+
+Each knob has a supported range, checked at startup by the `rag-config-bounds`
+preflight validator. **An out-of-range value refuses boot** (`Error` ⇒
+`ConfigPreflightFailedException`) rather than being silently accepted: these are
+settings whose damage shows up later and somewhere else, so failing at the line that
+caused it is the cheaper outcome.
+
+| Knob | Setter | Range | Default | Notes |
+|---|---|---|---|---|
+| `TopK` | `withTopK` | `[1, 100]` | `5` | `> 50` warns rather than refuses — legal, but the retrieval block starts dominating the prompt budget. |
+| `MinScore` | `withMinScore` | `[0.0, 1.0]` or `None` | `None` | Cosine-similarity gate. `None` disables it. |
+| `MmrLambda` | `withMmrLambda` | `[0.0, 1.0]` | `0.5` | Only checked when MMR is enabled — an inert λ is not a misconfiguration. |
+| `SnippetCharLimit` | `withSnippetCharLimit` | `[32, 8192]` | `240` | Below 32 a Sources-panel preview is unidentifiable; above 8192 it ships whole documents to every client. |
+| `IngestionConcurrency` | `withIngestionConcurrency` | `[1, 64]` | `8` | Effective upstream embedding-call concurrency; above 64 hosted providers rate-limit you into the retry path. |
+| `IngestionQueueCapacity` | `withIngestionQueueCapacity` | `[100, 1000000]` | `5000` | Below 100 a single bulk upload saturates the queue and documents are dropped — saved, but permanently unsearchable. |
+
+The targeted setters also **clamp** lower bounds on the way in (`withTopK 0` → `1`),
+and the separate `rag-retrieval-defaults-clamp` validator reports every clamp that
+fired — so a typo is visible as *both* a clamp report and, where it lands outside the
+table above, a bounds refusal.
+
+Two `Accept*` escape hatches relax RAG preflight; both are documented in
+[`docs/operations/env-vars.md`](../../docs/operations/env-vars.md):
+
+- `ServerConfig.AcceptEphemeralRagIndex` (`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) —
+  degrades the no-durable-backing refusal to a `Warning` for a deployment that
+  deliberately re-ingests its corpus on every boot.
+- `ServerConfig.AcceptLocalEmbedderAtScale` (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`)
+  — accepts the dev-only, process-stateful `LocalEmbeddingProvider` in a
+  production-shaped deployment, silencing both local-embedder validators and the
+  `embedding_provider:local` probe's `Degraded` verdict together.
+
+`/dev/inspect` carries two matching panels: **RAG durability** (does this deployment's
+index survive a restart, and was that chosen?) and **Vectorisation handlers** (which
+registered data types are actually indexed — including the partial-coverage case no
+validator warns about).
+
 ### Benchmarks (Phase 14q)
 
 `src/ToolUp.RAG.Benchmarks/` is a sibling executable that scores the production retrieval pipeline against [BEIR](https://github.com/beir-cellar/beir) datasets — the standard IR benchmark suite. It composes the same `RetrievalPipeline`, `InMemoryVectorStore` / `HnswVectorStore`, `CachingEmbeddingProvider`, and `LocalEmbeddingProvider` / `OpenAIEmbeddingProvider` that ship in production; what it adds is a BEIR loader, a percentile-aware latency aggregator, and a CSV writer.
