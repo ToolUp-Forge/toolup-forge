@@ -287,10 +287,15 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > `docs/migrations/136-share-link-token-leak-hardening.md` (Phase 136)
 
 > **TI-6 — Per-tenant cryptographic separation is available, and destroying a
-> tenant's key renders that tenant's data unreadable immediately.**
+> tenant's key renders that tenant's data unreadable — on the replica serving the
+> request when the call returns, and across the remaining replicas at minute
+> grain.**
 > *Enablement:* Opt-in.
-> See [EN-3](#4-encryption). Listed here because crypto-shred is the isolation
-> control most often asked about in vendor questionnaires.
+> See [EN-3](#4-encryption) for the propagation mechanism and the two startup
+> preflight checks that cover a scale-out deployment. Listed here because
+> crypto-shred is the isolation control most often asked about in vendor
+> questionnaires — and because the honest timing answer to that question is a
+> bounded window, not "instantly", whenever more than one replica is serving.
 
 ---
 
@@ -697,12 +702,21 @@ section eliminates structurally.
 > (crypto-shred), gated by the platform-administrator role.**
 > *Enablement:* Opt-in (select the per-scope key resolver).
 > With the per-scope resolver, each tenant's data is encrypted under its own key.
-> Destroying that key makes the tenant's data unreadable immediately — the key id
-> in the envelope no longer resolves — which is materially faster and more
-> complete than walking and deleting every object. The administrative endpoint is
-> role-gated, and three audit events fire on key creation, rotation, and
-> destruction, each carrying the acting user, the target scope, and a
-> server-side timestamp.
+> Destroying that key makes the tenant's data unreadable — the key id in the
+> envelope no longer resolves — which is materially faster and more complete than
+> walking and deleting every object. **Timing is stated precisely rather than as
+> "immediate": the erasure is complete on the replica serving the request when the
+> call returns, and completes across the remaining replicas at minute grain.** A
+> destroy broadcasts a key-destroyed envelope over the notification channel so
+> every other replica drops its cached copy of the key; the propagation window is
+> the configured channel companion's fanout latency, and a deployment running more
+> than one replica on the in-process default channel is warned at startup preflight
+> because that default cannot cross a process boundary. The administrative endpoint
+> is role-gated, and four audit events fire — key creation, rotation, destruction,
+> and one destruction-acknowledgement per replica that drops the key, so the trail
+> evidences fleet-wide erasure rather than only the replica that served the
+> request. Each carries the acting user, the target scope, and a server-side
+> timestamp.
 > **Evidence:**
 > `src/ToolUp.Platform.Server/Server/PerScopeKeyResolver.fs` (one key per
 > scope, persisted through `ISecretStore`) ·
@@ -716,7 +730,14 @@ section eliminates structurally.
 > `src/ToolUp.Platform.Server/Server/PerScopeKeyResolverDistributedValidator.fs`
 > (refuses a single-process resolver in a scale-out shape, because shred must
 > invalidate every replica's key cache) ·
+> `src/ToolUp.Platform.Server/Server/KeyDestroyAckCoverageValidator.fs` (warns
+> when the same combination appears in a multi-tenant shape that has not declared
+> its replica count — the case the refusal above cannot see) ·
+> `src/ToolUp.Platform.Core/Shared/EncryptionTypes.fs` (the key-destroyed
+> broadcast envelope) ·
 > `docs/migrations/232-encryption-admin-token-hardening.md` ·
+> `src/ToolUp.Platform/technical-guide/03-authentication-secrets-and-encryption.md`
+> (§"Timing contract: minute-grain replica-fanout time, not instant") ·
 > `docs/platform/storage.md` (§"Key resolvers")
 
 > **EN-4 — Key custody can be delegated to an external KMS without changing the
