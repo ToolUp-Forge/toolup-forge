@@ -54,6 +54,13 @@ let allTests =
         IngestionEmbedderRetryTests.tests
         // Phase 303 — ingestion-queue backpressure observability.
         IngestionBackpressureTests.tests
+        // Phase 509 — durable ingestion queue. The seam arm pins that a
+        // deployment composing no store is unchanged; the store-contract
+        // arm pins the three properties the acceptance rests on (atomic
+        // claim under concurrent drainers, reclaim-and-redeliver across a
+        // simulated restart, attempt-capped redelivery), and runs against
+        // the Redis companion too when TOOLUP_REDIS_CONNECTION is set.
+        DurableIngestionQueueTests.tests
         ColumnMatcherTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests

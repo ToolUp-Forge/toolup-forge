@@ -24,9 +24,31 @@ ToolUp.RAG.IngestionTypes+EmbedFailureClass+Tags.Permanent : System.Int32 (liter
 ToolUp.RAG.IngestionTypes+EmbedFailureClass+Tags.Transient : System.Int32 (literal)
 ToolUp.RAG.IngestionTypes+EmbedFailureClass+Transient (class)
 ToolUp.RAG.IngestionTypes+EmbedFailureClass+Transient.retryAfter : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.RAG.IngestionTypes+IIngestionQueue (interface)
+ToolUp.RAG.IngestionTypes+IIngestionQueue.Abandon(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.Ack(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.Capacity : System.Int32 { get }
+ToolUp.RAG.IngestionTypes+IIngestionQueue.Dequeue(System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionLease]]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.EnqueueAsync(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.EnqueueBlockingAsync(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.IsDurable : System.Boolean { get }
+ToolUp.RAG.IngestionTypes+IIngestionQueue.Policy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
+ToolUp.RAG.IngestionTypes+IIngestionQueue.RecoverStranded() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore (interface)
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Claim(System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionLease]]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Complete(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Depth() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Enqueue(ToolUp.RAG.IngestionTypes+DocumentIngestionJob, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Name : System.String { get }
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.ReclaimExpired() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Release(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.IngestionTypes+IIngestionStatusObserver (interface)
 ToolUp.RAG.IngestionTypes+IIngestionStatusObserver.OnChunkFailed(ToolUp.RAG.IngestionTypes+IngestionJob, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.IngestionTypes+IIngestionStatusObserver.OnChunkIndexed(ToolUp.RAG.IngestionTypes+IngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore (class)
+ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore.Dropped : System.Int32 { get }
+ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore.MaxDeliveryAttempts : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionEventTypes (class)
 ToolUp.RAG.IngestionTypes+IngestionEventTypes.EmbeddingProviderUnavailable : System.String (literal)
 ToolUp.RAG.IngestionTypes+IngestionEventTypes.IngestionDeadLettered : System.String (literal)
@@ -40,6 +62,11 @@ ToolUp.RAG.IngestionTypes+IngestionJob.DocumentName : System.String { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.OriginatingUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.Scope : ToolUp.Platform.VectorKnowledgeTypes+VectorScope { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.ScopeId : System.String { get }
+ToolUp.RAG.IngestionTypes+IngestionLease (class)
+ToolUp.RAG.IngestionTypes+IngestionLease..ctor(System.String, ToolUp.RAG.IngestionTypes+DocumentIngestionJob, System.Int32)
+ToolUp.RAG.IngestionTypes+IngestionLease.Attempt : System.Int32 { get }
+ToolUp.RAG.IngestionTypes+IngestionLease.Job : ToolUp.RAG.IngestionTypes+DocumentIngestionJob { get }
+ToolUp.RAG.IngestionTypes+IngestionLease.LeaseId : System.String { get }
 ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy (class)
 ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy.Block : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
 ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy.DropWrite : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
@@ -53,13 +80,16 @@ ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy+Tags.Block : System.Int32 (lit
 ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy+Tags.DropWrite : System.Int32 (literal)
 ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy+Tags.Refuse : System.Int32 (literal)
 ToolUp.RAG.IngestionTypes+IngestionQueue (class)
-ToolUp.RAG.IngestionTypes+IngestionQueue..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy])
+ToolUp.RAG.IngestionTypes+IngestionQueue..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.IngestionTypes+IngestionQueue.BackingName : System.String { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Capacity : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Count : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Dropped : System.Int64 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.DroppedLast60s : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Enqueue(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : System.Boolean
+ToolUp.RAG.IngestionTypes+IngestionQueue.EnqueueAsync(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.RAG.IngestionTypes+IngestionQueue.EnqueueBlocking(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.IngestionTypes+IngestionQueue.IsDurable : System.Boolean { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Policy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Reader : System.Threading.Channels.ChannelReader`1[ToolUp.RAG.IngestionTypes+DocumentIngestionJob] { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.RecordDequeue() : System.Void

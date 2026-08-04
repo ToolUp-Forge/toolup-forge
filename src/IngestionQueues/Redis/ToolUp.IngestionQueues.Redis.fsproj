@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.IngestionQueues.Redis</PackageId>
+    <AssemblyName>ToolUp.IngestionQueues.Redis</AssemblyName>
+    <Description>Redis IIngestionQueueStore for ToolUp.RAG. A durable, cross-replica ingestion queue — documents survive a process restart, and N replicas drain one queue without double-processing (atomic LMOVE claim, lease expiry, attempt-capped redelivery). Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;rag;ingestion;queue;redis;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 509 — durable ingestion-queue companion. GP 1 — the
+       StackExchange.Redis dependency is isolated to this companion; it
+       never reaches ToolUp.Platform.*. GP 2 — Redis is OSS, so there is
+       no paid default. GP 13 — a deployment that does not compose it
+       keeps the in-process Channels queue unchanged. -->
+  <ItemGroup>
+    <Compile Include="RedisIngestionQueueStore.fs" />
+    <Compile Include="RedisIngestionQueueStoreHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. StackExchange.Redis is
+         version-pinned centrally in Directory.Packages.props, shared with
+         NotificationChannels/Redis and EmbeddingCaches/Redis. -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+</Project>

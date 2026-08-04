@@ -33,6 +33,13 @@ let private DeadLetterRateWindow = TimeSpan.FromMinutes 5.0
 [<Literal>]
 let private DeadLetterRateThreshold = 10
 
+/// Phase 509 — how often a durable queue is swept for leases stranded by
+/// a dead drainer. A crashed replica's documents are therefore picked up
+/// within roughly this window plus the lease's own expiry. Cheap enough
+/// to run unconditionally on a durable queue (one list read), and never
+/// runs at all on the in-memory default.
+let LeaseReclaimInterval = TimeSpan.FromSeconds 30.0
+
 /// Minimum spacing between repeat provider-unavailable alerts for one
 /// scope — dedups a provider outage that fails N chunks down to a
 /// single notification.
@@ -352,7 +359,7 @@ module Outcome =
 /// contract and event emission are unchanged.
 type IngestionBackgroundService
     (
-        queue: IngestionQueue,
+        queue: IIngestionQueue,
         pipeline: IRetrievalPipeline,
         embedder: IEmbeddingProvider,
         eventStore: IEventStore,
@@ -712,7 +719,18 @@ type IngestionBackgroundService
                     do! handleChunkFailure doc chunkIndex chunkId chunk job ex
     }
 
-    let processJob (doc: DocumentIngestionJob) = async {
+    /// Phase 509 — process one leased document, then settle the lease.
+    ///
+    /// **`Ack` is what makes a durable queue durable.** The lease is
+    /// released only after the document's chunks have each been reported
+    /// (indexed, dead-lettered, or handed to the retry scheduler), so a
+    /// process that dies part-way through leaves the lease to expire and
+    /// the job is redelivered by the next reclaim sweep. On the
+    /// in-memory default `Ack` / `Abandon` are no-ops — there is nothing
+    /// to redeliver from, which is exactly the gap the durable arm
+    /// closes.
+    let processJob (lease: IngestionLease) = async {
+        let doc = lease.Job
         do! sem.WaitAsync() |> Async.AwaitTask
 
         try
@@ -728,19 +746,35 @@ type IngestionBackgroundService
             // contradict an already-emitted per-chunk event.
             try
                 do! processJobCore doc
+                do! queue.Ack lease.LeaseId
             with ex ->
                 logger.Error(
-                    $"[IngestionBackgroundService] event=process_job_crashed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={embedder.ProviderId}/{embedder.ModelId}: document processing aborted before per-chunk reporting started; marking every chunk Failed (best-effort)",
+                    $"[IngestionBackgroundService] event=process_job_crashed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} attempt={lease.Attempt} provider={embedder.ProviderId}/{embedder.ModelId}: document processing aborted before per-chunk reporting started",
                     Some ex
                 )
 
-                let msg =
-                    sprintf "Document processing aborted before this chunk was attempted: %s" ex.Message
+                if queue.IsDurable then
+                    // Durable arm: hand the document BACK rather than
+                    // marking its chunks Failed. The store redelivers it
+                    // (up to its attempt cap), so a transient crash costs
+                    // a retry instead of a permanently unsearchable
+                    // document. Marking Failed here would contradict the
+                    // redelivery that is about to happen.
+                    do! queue.Abandon(lease.LeaseId, ex.Message)
+                else
+                    // In-memory arm: unchanged historical behaviour —
+                    // there is no redelivery, so the only honest outcome
+                    // is to mark every chunk Failed (best-effort) rather
+                    // than leave the document silently in progress.
+                    let msg =
+                        sprintf "Document processing aborted before this chunk was attempted: %s" ex.Message
 
-                for (chunkId, chunk) in doc.Chunks do
-                    let job = chunkJob doc chunkId chunk
-                    do! emitFailed job msg
-                    do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, msg))
+                    for (chunkId, chunk) in doc.Chunks do
+                        let job = chunkJob doc chunkId chunk
+                        do! emitFailed job msg
+                        do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, msg))
+
+                    do! queue.Ack lease.LeaseId
         finally
             sem.Release() |> ignore
     }
@@ -751,13 +785,50 @@ type IngestionBackgroundService
         // scheduler is composed.
         resolveScheduler () |> ignore
 
+        // Phase 509 — restart recovery. On a durable queue, a replica that
+        // died mid-document left its lease to expire; reclaiming those
+        // leases is what turns "a restart loses every in-flight document"
+        // into "a restart costs a redelivery". Runs once at startup (this
+        // instance's own crashed predecessor) and then on an interval (a
+        // SIBLING replica's crash, which no startup hook can observe).
+        // No-op on the in-memory default — it returns 0 and the loop is
+        // never started.
+        if queue.IsDurable then
+            let reclaimOnce () = async {
+                try
+                    let! reclaimed = queue.RecoverStranded()
+
+                    if reclaimed > 0 then
+                        logger.Warn(
+                            sprintf
+                                "[IngestionBackgroundService] event=ingestion_leases_reclaimed count=%d: document(s) whose drainer died mid-ingestion were returned to the queue for redelivery."
+                                reclaimed
+                        )
+                with ex ->
+                    logger.Error("[IngestionBackgroundService] event=lease_reclaim_failed", Some ex)
+            }
+
+            do! reclaimOnce () |> Async.StartAsTask
+
+            Async.Start(
+                async {
+                    while not stoppingToken.IsCancellationRequested do
+                        do! Async.Sleep LeaseReclaimInterval
+                        do! reclaimOnce ()
+                },
+                stoppingToken
+            )
+
         while not stoppingToken.IsCancellationRequested do
             try
-                let! job = queue.Reader.ReadAsync(stoppingToken).AsTask()
-                queue.RecordDequeue()
-                // Fire each job without awaiting — concurrency is controlled
-                // by the semaphore inside processJob.
-                Async.Start(processJob job, stoppingToken)
+                let! lease = Async.StartAsTask(queue.Dequeue stoppingToken, cancellationToken = stoppingToken)
+
+                match lease with
+                | Some claimed ->
+                    // Fire each job without awaiting — concurrency is
+                    // controlled by the semaphore inside processJob.
+                    Async.Start(processJob claimed, stoppingToken)
+                | None -> ()
             with
             | :? OperationCanceledException -> ()
             | ex ->
@@ -776,7 +847,7 @@ type IngestionBackgroundService
 /// document via batched embedding, not a single chunk — twice the legacy
 /// per-chunk default of 4 keeps inflight work modest per provider key.
 let create
-    queue
+    (queue: IIngestionQueue)
     pipeline
     embedder
     eventStore

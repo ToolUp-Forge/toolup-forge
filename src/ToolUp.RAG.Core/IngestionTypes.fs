@@ -2,6 +2,7 @@ module ToolUp.RAG.IngestionTypes
 
 open System
 open System.Collections.Concurrent
+open System.Threading
 open System.Threading.Channels
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -84,6 +85,205 @@ type IngestionOverflowPolicy =
     /// a screaming error over a quiet drop.
     | Refuse
 
+// ─── Phase 509 — durable ingestion-queue seam ─────────────────────
+
+/// One document job handed to a drainer under a lease. The lease is the
+/// unit of at-least-once delivery: the drainer `Ack`s it when the
+/// document's chunks have been reported, or `Abandon`s it so the job is
+/// redelivered. Identity is by value (portability rule 1) — `LeaseId` is
+/// a `string`, never a live handle, so a lease taken on one replica is
+/// nameable on any other.
+type IngestionLease = {
+    /// Opaque, store-issued identity for this delivery. Only meaningful
+    /// to the issuing store.
+    LeaseId: string
+    Job: DocumentIngestionJob
+    /// 1-based delivery attempt. `1` is the first delivery; `2+` means a
+    /// prior delivery was abandoned or its lease expired unacknowledged.
+    Attempt: int
+}
+
+/// Durable backing store for the ingestion queue — the primitive a
+/// companion implements (Redis today; any store with an atomic
+/// pop-and-claim can implement it).
+///
+/// This is deliberately the *narrow* half of the seam: `IIngestionQueue`
+/// carries the policy (capacity, overflow, telemetry counters) and this
+/// carries only the durable operations. Satisfies the six portability
+/// rules — identity by value, `Async` at every boundary, retry expressed
+/// as data (the store's own delivery-attempt cap), no state carried in
+/// the caller between calls, no cross-shard ordering promise beyond
+/// per-store FIFO, and no sub-second precision claim.
+type IIngestionQueueStore =
+    /// Stable name for logs / health output (e.g. `"redis"`).
+    abstract Name: string
+
+    /// Append a document job. Returns `false` when the store already
+    /// holds `capacity` jobs (pending + in-flight), so the caller's
+    /// backpressure contract is identical to the in-memory channel's.
+    abstract Enqueue: job: DocumentIngestionJob * capacity: int -> Async<bool>
+
+    /// Atomically remove the head job and hold it under a lease for
+    /// `leaseDuration`. `None` when the store is empty. **Atomicity is
+    /// the load-bearing property** — it is what lets N replicas drain one
+    /// queue without double-processing.
+    abstract Claim: leaseDuration: TimeSpan -> Async<IngestionLease option>
+
+    /// The job was processed. Removes it permanently.
+    abstract Complete: leaseId: string -> Async<unit>
+
+    /// The job was not processed. Returns it for redelivery, unless it
+    /// has already used its delivery-attempt budget — in which case the
+    /// store drops it and counts the drop (a job that crashes its
+    /// drainer must not redeliver forever).
+    abstract Release: leaseId: string -> Async<unit>
+
+    /// Return every lease that expired without an `Ack` (the replica
+    /// holding it died) for redelivery. Returns how many were reclaimed.
+    /// This is the restart-recovery primitive: a crash mid-ingestion
+    /// leaves an expired lease, and the next reclaim re-queues it.
+    abstract ReclaimExpired: unit -> Async<int>
+
+    /// Pending + in-flight jobs. A gauge, not a boundary.
+    abstract Depth: unit -> Async<int>
+
+/// The queue seam `IngestionBackgroundService` drains. The shipped
+/// in-memory `IngestionQueue` is the default implementation; composing an
+/// `IIngestionQueueStore` swaps the same type onto durable storage
+/// (GP 11 — a deployment that composes nothing keeps the prior
+/// behaviour byte for byte).
+type IIngestionQueue =
+    /// `true` when the queue is backed by a store that outlives this
+    /// process. Read by `RagIngestionInstanceValidator` — the
+    /// multi-replica refusal is lifted only for a durable queue.
+    abstract IsDurable: bool
+    abstract Capacity: int
+    abstract Policy: IngestionOverflowPolicy
+
+    /// Try to enqueue. `false` ⇒ at capacity (the caller surfaces the
+    /// rejection; see `IngestionOverflowPolicy`).
+    abstract EnqueueAsync: job: DocumentIngestionJob -> Async<bool>
+
+    /// Await queue space, then enqueue. Never returns `false`.
+    abstract EnqueueBlockingAsync: job: DocumentIngestionJob -> Async<unit>
+
+    /// Await the next job. `None` only when `ct` is cancelled.
+    abstract Dequeue: ct: CancellationToken -> Async<IngestionLease option>
+
+    /// Report the lease's job as handled — it is removed permanently.
+    abstract Ack: leaseId: string -> Async<unit>
+
+    /// Report the lease's job as NOT handled. On a durable queue the job
+    /// is redelivered (subject to the store's attempt cap); on the
+    /// in-memory default there is nothing to redeliver from, so this
+    /// records the reason and returns.
+    abstract Abandon: leaseId: string * reason: string -> Async<unit>
+
+    /// Reclaim leases stranded by a dead drainer. Returns how many were
+    /// re-queued. Always `0` on the in-memory default (a process-local
+    /// channel has no stranded state to recover — it died with the
+    /// process).
+    abstract RecoverStranded: unit -> Async<int>
+
+/// Process-local `IIngestionQueueStore`, shared by every queue instance
+/// constructed over it.
+///
+/// **Not durable across a process restart** — it is a dictionary. What it
+/// *is*, is a faithful implementation of the store contract: atomic
+/// claim, lease expiry, attempt-capped redelivery. That makes it (a) the
+/// reference the contract is pinned against, and (b) the substrate a
+/// single process can use to run several drainers over one queue. A
+/// deployment that needs the queue to survive the process composes a
+/// durable companion (`ToolUp.IngestionQueues.Redis`) instead.
+type InMemoryIngestionQueueStore(?maxDeliveryAttempts: int, ?name: string) =
+    let maxAttempts = max 1 (defaultArg maxDeliveryAttempts 3)
+    let storeName = defaultArg name "in-memory"
+    let gate = obj ()
+    let pending = System.Collections.Generic.Queue<DocumentIngestionJob * int>()
+
+    let inFlight =
+        System.Collections.Generic.Dictionary<string, DocumentIngestionJob * int * DateTimeOffset>()
+
+    let mutable dropped = 0
+
+    /// Requeue or drop, per the attempt budget. Caller holds `gate`.
+    let returnOrDrop (job: DocumentIngestionJob) (attempts: int) =
+        if attempts >= maxAttempts then
+            dropped <- dropped + 1
+        else
+            pending.Enqueue(job, attempts)
+
+    /// Jobs dropped after exhausting their delivery-attempt budget.
+    member _.Dropped = dropped
+
+    /// Configured delivery-attempt cap.
+    member _.MaxDeliveryAttempts = maxAttempts
+
+    interface IIngestionQueueStore with
+        member _.Name = storeName
+
+        member _.Enqueue(job, capacity) = async {
+            return
+                lock gate (fun () ->
+                    if pending.Count + inFlight.Count >= capacity then
+                        false
+                    else
+                        pending.Enqueue(job, 0)
+                        true)
+        }
+
+        member _.Claim(leaseDuration) = async {
+            return
+                lock gate (fun () ->
+                    if pending.Count = 0 then
+                        None
+                    else
+                        let job, attempts = pending.Dequeue()
+                        let leaseId = Guid.NewGuid().ToString("N")
+                        let attempt = attempts + 1
+                        inFlight[leaseId] <- (job, attempt, DateTimeOffset.UtcNow + leaseDuration)
+
+                        Some {
+                            LeaseId = leaseId
+                            Job = job
+                            Attempt = attempt
+                        })
+        }
+
+        member _.Complete(leaseId) = async { lock gate (fun () -> inFlight.Remove leaseId |> ignore) }
+
+        member _.Release(leaseId) = async {
+            lock gate (fun () ->
+                match inFlight.TryGetValue leaseId with
+                | true, (job, attempts, _) ->
+                    inFlight.Remove leaseId |> ignore
+                    returnOrDrop job attempts
+                | _ -> ())
+        }
+
+        member _.ReclaimExpired() = async {
+            return
+                lock gate (fun () ->
+                    let now = DateTimeOffset.UtcNow
+
+                    let expired =
+                        inFlight
+                        |> Seq.filter (fun kv ->
+                            let _, _, expiry = kv.Value
+                            expiry <= now)
+                        |> Seq.map _.Key
+                        |> Seq.toList
+
+                    for leaseId in expired do
+                        let job, attempts, _ = inFlight[leaseId]
+                        inFlight.Remove leaseId |> ignore
+                        returnOrDrop job attempts
+
+                    expired.Length)
+        }
+
+        member _.Depth() = async { return lock gate (fun () -> pending.Count + inFlight.Count) }
+
 /// Thread-safe queue used to hand off whole documents from upload handlers
 /// to the background ingestion service. Backed by a `System.Threading.Channels`
 /// bounded channel so a 10k-document spike is rejected at the door rather
@@ -101,9 +301,36 @@ type IngestionOverflowPolicy =
 /// rather than enqueue silently. A live-depth counter (`Count`) drives
 /// telemetry under `/health/rag` so admins can see when backpressure
 /// is active before users notice.
-type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
+///
+/// Phase 509 — an optional `store` swaps the process-local channel for a
+/// durable backing (`IIngestionQueueStore`) WITHOUT changing this type's
+/// surface, so every existing call site (`Enqueue` / `Count` / `Capacity`
+/// / the drop counters) keeps working and a deployment that composes no
+/// store is byte-for-byte unchanged (GP 11 / GP 13). The durable arm
+/// additionally supports lease-based at-least-once delivery — see
+/// `IIngestionQueue`.
+type IngestionQueue
+    (
+        ?capacity: int,
+        ?overflowPolicy: IngestionOverflowPolicy,
+        ?store: IIngestionQueueStore,
+        ?leaseDuration: TimeSpan,
+        ?claimPollInterval: TimeSpan
+    ) =
     let cap = defaultArg capacity 5000
     let policy = defaultArg overflowPolicy DropWrite
+
+    // Phase 509 — how long a claimed job may go unacknowledged before
+    // another drainer may reclaim it. Comfortably longer than a normal
+    // document (batched embed + N index calls); short enough that a
+    // crashed replica's work is picked up in a bounded window.
+    let leaseDuration = defaultArg leaseDuration (TimeSpan.FromMinutes 10.0)
+
+    // Poll interval for the durable claim loop. `Claim` is a
+    // pull primitive (the store contract stays implementable by any
+    // backend); a short poll keeps latency close to the channel's.
+    let claimPollInterval =
+        defaultArg claimPollInterval (TimeSpan.FromMilliseconds 100.0)
 
     // Phase 303 — drop observability. `RecordDrop` is called by the
     // enqueue-site (the post-save hook) each time a document is permanently
@@ -139,6 +366,46 @@ type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
 
     let mutable depth = 0
 
+    // Phase 509 — the enqueue paths, let-bound so the class members and
+    // the `IIngestionQueue` implementation below are the SAME code rather
+    // than two members that could drift.
+    let enqueueAsync (job: DocumentIngestionJob) : Async<bool> = async {
+        match store with
+        | Some s ->
+            let! accepted = s.Enqueue(job, cap)
+
+            if accepted then
+                Interlocked.Increment(&depth) |> ignore
+
+            return accepted
+        | None ->
+            if channel.Writer.TryWrite(job) then
+                Interlocked.Increment(&depth) |> ignore
+                return true
+            else
+                return false
+    }
+
+    let enqueueBlocking (job: DocumentIngestionJob) : Async<unit> = async {
+        match store with
+        | Some _ ->
+            // Durable arm: the store has no blocking append, so poll
+            // until it accepts. `Block` means never drop, so this loops
+            // rather than giving up. Runs only on the fire-and-forget
+            // post-save path, so the wait never delays a response.
+            let mutable accepted = false
+
+            while not accepted do
+                let! ok = enqueueAsync job
+                accepted <- ok
+
+                if not accepted then
+                    do! Async.Sleep claimPollInterval
+        | None ->
+            do! channel.Writer.WriteAsync(job).AsTask() |> Async.AwaitTask
+            Interlocked.Increment(&depth) |> ignore
+    }
+
     /// Snapshot of pending document jobs in the queue. Updated by `Enqueue`
     /// (incremented before write) and the reader path (decremented after
     /// `ReadAsync` returns) — see `IngestionBackgroundService` for the
@@ -155,13 +422,36 @@ type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
     /// surface the failure (KB marks the doc `Failed`); fire-and-forget hooks
     /// log a warning and move on.
     member _.Enqueue(job: DocumentIngestionJob) : bool =
-        if channel.Writer.TryWrite(job) then
-            System.Threading.Interlocked.Increment(&depth) |> ignore
-            true
-        else
-            false
+        match store with
+        | Some _ ->
+            // Durable arm. The synchronous shape is preserved for the
+            // existing call sites (KB's upload handlers); the round-trip
+            // is one store append. New call sites should prefer
+            // `EnqueueAsync`.
+            enqueueAsync job |> Async.RunSynchronously
+        | None ->
+            if channel.Writer.TryWrite(job) then
+                Interlocked.Increment(&depth) |> ignore
+                true
+            else
+                false
+
+    /// Async `Enqueue`. Identical semantics; the only correct shape on
+    /// the durable arm, where the append is I/O.
+    member _.EnqueueAsync(job: DocumentIngestionJob) : Async<bool> = enqueueAsync job
 
     member _.Reader = channel.Reader
+
+    /// `true` when a durable store backs this queue. Drives the
+    /// multi-replica validator lift (Phase 509.D).
+    member _.IsDurable = store.IsSome
+
+    /// The durable store's name, or `"in-memory-channel"` for the
+    /// default. Surfaced on `/health/rag`-shaped output.
+    member _.BackingName =
+        match store with
+        | Some s -> s.Name
+        | None -> "in-memory-channel"
 
     /// Configured overflow policy (Phase 303). Read by the post-save hook
     /// to decide between drop-with-observability (`DropWrite` / `Refuse`)
@@ -173,10 +463,7 @@ type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
     /// until the drainer frees a slot rather than returning `false`. Only
     /// called on the fire-and-forget post-save path, so the wait never
     /// delays an upload's HTTP response.
-    member _.EnqueueBlocking(job: DocumentIngestionJob) : Async<unit> = async {
-        do! channel.Writer.WriteAsync(job).AsTask() |> Async.AwaitTask
-        System.Threading.Interlocked.Increment(&depth) |> ignore
-    }
+    member _.EnqueueBlocking(job: DocumentIngestionJob) : Async<unit> = enqueueBlocking job
 
     /// Record one permanently-dropped document (Phase 303). Increments the
     /// cumulative total and stamps the rolling 60s window.
@@ -201,6 +488,74 @@ type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
     /// in spirit by being undocumented in the README.
     member _.RecordDequeue() =
         System.Threading.Interlocked.Decrement(&depth) |> ignore
+
+    // ─── Phase 509 — the drainer-facing seam ──────────────────────
+    //
+    // The in-memory arm reproduces the historical loop exactly: read one
+    // job off the channel, decrement the depth gauge, hand it to the
+    // caller. It issues a lease id so the drainer's code path is
+    // identical either way, but `Ack` / `Abandon` have nothing to act on
+    // — a process-local channel cannot redeliver, which is precisely the
+    // gap the durable arm closes and the reason
+    // `RagIngestionInstanceValidator` refuses multi-replica without it.
+    interface IIngestionQueue with
+        member _.IsDurable = store.IsSome
+        member _.Capacity = cap
+        member _.Policy = policy
+        member _.EnqueueAsync(job) = enqueueAsync job
+        member _.EnqueueBlockingAsync(job) = enqueueBlocking job
+
+        member _.Dequeue(ct: CancellationToken) = async {
+            match store with
+            | Some s ->
+                let mutable claimed = None
+
+                while claimed.IsNone && not ct.IsCancellationRequested do
+                    let! lease = s.Claim leaseDuration
+
+                    match lease with
+                    | Some _ -> claimed <- lease
+                    | None -> do! Async.Sleep claimPollInterval
+
+                return claimed
+            | None ->
+                let! job = channel.Reader.ReadAsync(ct).AsTask() |> Async.AwaitTask
+                System.Threading.Interlocked.Decrement(&depth) |> ignore
+
+                return
+                    Some {
+                        LeaseId = Guid.NewGuid().ToString("N")
+                        Job = job
+                        Attempt = 1
+                    }
+        }
+
+        member _.Ack(leaseId) = async {
+            match store with
+            | Some s ->
+                do! s.Complete leaseId
+                System.Threading.Interlocked.Decrement(&depth) |> ignore
+            | None ->
+                // The channel already removed the job at `Dequeue` and
+                // the depth gauge was decremented there.
+                ()
+        }
+
+        member _.Abandon(leaseId, _reason) = async {
+            match store with
+            | Some s ->
+                do! s.Release leaseId
+                // The job is back in the store's pending set, so the
+                // depth gauge is unchanged.
+                ()
+            | None -> ()
+        }
+
+        member _.RecoverStranded() = async {
+            match store with
+            | Some s -> return! s.ReclaimExpired()
+            | None -> return 0
+        }
 
 // ─── Ingestion status observer ────────────────────────────────────
 

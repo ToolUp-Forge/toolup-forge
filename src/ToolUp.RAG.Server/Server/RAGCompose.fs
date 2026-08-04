@@ -482,8 +482,14 @@ let private makeVectorisationHook
                     // running behind, so a short backoff usually clears space
                     // rather than dropping the document. Fire-and-forget path,
                     // so the sleeps don't delay the upload response.
+                    // Phase 509 — `EnqueueAsync`, not `Enqueue`: on a durable
+                    // queue the append is I/O, and this path is already
+                    // inside an async workflow, so there is no reason to
+                    // block a thread on it.
                     let rec tryEnqueue (delays: int list) = async {
-                        if queue.Enqueue(job) then
+                        let! accepted = queue.EnqueueAsync job
+
+                        if accepted then
                             return true
                         else
                             match delays with
@@ -831,6 +837,28 @@ type RAGServerApp = {
     /// registered `IEmbeddingProvider`; only chunk embeddings move to build
     /// time. Set via `RAGServerApp.withRetrievalPipeline`.
     RetrievalPipelineOverride: IRetrievalPipeline option
+    /// Phase 509 — durable backing for the ingestion queue. `None`
+    /// (default) keeps the process-local `System.Threading.Channels`
+    /// queue: correct for one replica and one process lifetime, and the
+    /// reason `RagIngestionInstanceValidator` refuses `ReplicaCount > 1`.
+    /// `Some store` moves the queue into that store, so documents survive
+    /// a restart (an unacknowledged lease is redelivered) and N replicas
+    /// drain one queue — which lifts the multi-replica refusal. The
+    /// shipped durable backing is the `ToolUp.IngestionQueues.Redis`
+    /// companion. Set via `RAGServerApp.withDurableIngestionQueue`.
+    IngestionQueueStore: IIngestionQueueStore option
+    /// Phase 509 — storage containers swept at startup for documents
+    /// left `Pending` by a process that died mid-ingestion. Empty
+    /// (default) ⇒ no sweep, so an existing deployment is unchanged
+    /// (GP 11). The sweep matters most on the IN-MEMORY queue, where a
+    /// restart genuinely loses the job and the per-file status would
+    /// otherwise read `Pending` forever with nothing ever to clear it;
+    /// on a durable queue the job is redelivered instead, so the sweep is
+    /// belt-and-braces. Containers are enumerated by the consumer (the
+    /// SDK has no scope-enumeration seam) — the same shape KB's
+    /// `recoverStuckDocumentsAtStartup` uses. Set via
+    /// `RAGServerApp.withIngestionRecoverySweep`.
+    IngestionRecoveryScopes: string list
 }
 
 // ─── composeRAG ───────────────────────────────────────────────────
@@ -897,7 +925,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let suppressIngestion =
         app.RetrievalPipelineOverride.IsSome && b.VectorisationHandlers.IsEmpty
 
-    let queue = IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
+    // Phase 509 — one queue type, two backings. No store composed ⇒ the
+    // historical process-local channel, byte for byte (GP 11 / GP 13);
+    // `Some store` ⇒ the same surface over durable storage, with
+    // lease-based at-least-once delivery and cross-replica draining.
+    let queue =
+        match app.IngestionQueueStore with
+        | Some store -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy, store)
+        | None -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
@@ -1440,6 +1475,65 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                         :> IHostedService)
                     .AddSingleton<IHostedService>(reembedSvc)
 
+        // Phase 509.C — startup recovery sweep for the per-file ingestion
+        // status. A restart mid-ingestion leaves the DURABLE status entry
+        // at `Pending` while the in-memory job it referred to is gone, so
+        // the Data Manager badge reads "still ingesting" forever with
+        // nothing left to clear it. This flips those entries to `Failed`
+        // with a restart-interrupted reason, making the loss visible.
+        // Only registered when the consumer named containers to sweep —
+        // an unconfigured deployment carries no hosted service (GP 13).
+        let s =
+            if app.IngestionRecoveryScopes.IsEmpty then
+                s
+            else
+                let scopes = app.IngestionRecoveryScopes
+                let statusStore = ingestionStatusStore
+
+                let reason =
+                    "Ingestion was interrupted by a process restart before the document finished indexing. Re-upload the file to re-index it."
+
+                s.AddSingleton<IHostedService>(
+                    { new IHostedService with
+                        member _.StartAsync(_ct) =
+                            async {
+                                let mutable total = 0
+
+                                for scope in scopes do
+                                    try
+                                        let! entries = statusStore.List scope
+
+                                        let stuck =
+                                            entries
+                                            |> List.filter (fun (_, status) -> status = FileIngestionStatus.Pending)
+
+                                        for (documentId, _) in stuck do
+                                            do! statusStore.Set(scope, documentId, FileIngestionStatus.Failed reason)
+                                            total <- total + 1
+                                    with ex ->
+                                        ragLogger.Error(
+                                            sprintf
+                                                "[RAGCompose] event=ingestion_recovery_scan_failed container=%s: skipping this container"
+                                                scope,
+                                            Some ex
+                                        )
+
+                                if total > 0 then
+                                    ragLogger.Warn(
+                                        sprintf
+                                            "[RAGCompose] event=ingestion_recovery_swept count=%d containers=%d: document(s) left Pending by a prior process were marked Failed. Affected uploaders see a Failed badge and can re-upload."
+                                            total
+                                            (List.length scopes)
+                                    )
+                            }
+                            |> Async.StartAsTask
+                            :> System.Threading.Tasks.Task
+
+                        member _.StopAsync(_ct) =
+                            System.Threading.Tasks.Task.CompletedTask
+                    }
+                )
+
         let s =
             match app.Reranker with
             | Some r -> s.AddSingleton<IReranker>(r)
@@ -1558,7 +1652,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(finalConfig, b.Storage.IsSome, app.VectorStore.IsSome)
         // Phase 9j follow-up — refuse the in-process ingestion queue under
         // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
-        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator finalConfig
+        // Phase 509 — the refusal is lifted when a DURABLE queue is
+        // composed: the premise it rests on (process-local, no
+        // redelivery) no longer holds.
+        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(finalConfig, queue.IsDurable)
         // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
         // under multi-instance Team mode (cache key has no tenant component).
         ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator finalConfig
@@ -1644,6 +1741,8 @@ module RAGServerApp =
             VacuumSchedule = None
             OverflowPolicy = DropWrite
             RetrievalPipelineOverride = None
+            IngestionQueueStore = None
+            IngestionRecoveryScopes = []
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -1687,6 +1786,8 @@ module RAGServerApp =
             VacuumSchedule = None
             OverflowPolicy = DropWrite
             RetrievalPipelineOverride = None
+            IngestionQueueStore = None
+            IngestionRecoveryScopes = []
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -2028,6 +2129,53 @@ module RAGServerApp =
     let withIngestionQueueOverflowPolicy (policy: IngestionOverflowPolicy) (app: RAGServerApp) : RAGServerApp = {
         app with
             OverflowPolicy = policy
+    }
+
+    /// Phase 509 — back the ingestion queue with a durable store, so
+    /// queued documents survive a process restart and N replicas drain
+    /// ONE queue.
+    ///
+    /// Without this the queue is a process-local `Channels` channel: a
+    /// restart mid-ingestion loses every queued document (the per-file
+    /// status survives in a non-terminal state, the job does not), and
+    /// `RagIngestionInstanceValidator` refuses `ReplicaCount > 1` because
+    /// only the replica that handled an upload can drain it. Composing a
+    /// store removes both — **and lifts that refusal**, because the
+    /// premise it rests on no longer holds.
+    ///
+    /// The shipped backing is `ToolUp.IngestionQueues.Redis`; any store
+    /// with an atomic pop-and-claim can implement `IIngestionQueueStore`.
+    /// Delivery is at-least-once (a drainer that dies leaves its lease to
+    /// expire, and the job is redelivered), which ingestion already
+    /// tolerates — re-indexing a chunk overwrites the same vector-store
+    /// id.
+    let withDurableIngestionQueue (store: IIngestionQueueStore) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            IngestionQueueStore = Some store
+    }
+
+    /// Phase 509 — sweep these storage containers at startup for
+    /// documents left `Pending` by a process that died mid-ingestion,
+    /// marking each `Failed` with a restart-interrupted reason.
+    ///
+    /// This closes the Data-Manager half of the no-recovery gap: the
+    /// per-file `IIngestionStatusStore` entry is durable, but on the
+    /// in-memory queue the JOB is not — so without a sweep the file's
+    /// badge reads `Pending` forever and nothing will ever clear it.
+    /// Marking `Failed` makes the loss visible with zero risk; the
+    /// operator (or user) re-uploads to re-index. This is deliberately
+    /// the same shape, and the same trade-off, as KB's
+    /// `recoverStuckDocumentsAtStartup` — auto re-enqueue would need the
+    /// per-handler extraction wiring lifted to a shared shape.
+    ///
+    /// Containers are enumerated by the consumer (typically
+    /// `ITeamStore.ListAll` plus the well-known `_platform` /
+    /// `_deployment` containers) because the SDK has no scope-enumeration
+    /// seam. Empty (default) ⇒ no sweep and no hosted service (GP 11 /
+    /// GP 13).
+    let withIngestionRecoverySweep (containers: string list) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            IngestionRecoveryScopes = containers
     }
 
     /// Phase 14t — set the retry / dead-letter policy for transient

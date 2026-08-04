@@ -226,6 +226,13 @@
         <!-- Phase 303 — ingestion-queue backpressure observability: queue drop
              counters + emitIngestionDrop audit/notification triple. -->
         <Compile Include="InProcess\IngestionBackpressureTests.fs" />
+        <!-- Phase 509 — durable ingestion queue: the IIngestionQueue seam
+             (in-memory default unchanged), the IIngestionQueueStore
+             contract (atomic claim under concurrent drainers, reclaim +
+             redelivery across a simulated restart, attempt-capped
+             redelivery), the validator lift, and an env-gated live arm
+             against the Redis companion. -->
+        <Compile Include="InProcess\DurableIngestionQueueTests.fs" />
         <Compile Include="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
         <Compile Include="InProcess\DerivedColumnEvalTests.fs" />
@@ -1669,6 +1676,10 @@
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
+        <!-- Phase 509 — durable ingestion-queue companion; the live arm of
+             DurableIngestionQueueTests binds its store to the shared
+             IIngestionQueueStore contract. -->
+        <ProjectReference Include="..\IngestionQueues\Redis\ToolUp.IngestionQueues.Redis.fsproj" />
         <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />
         <!-- Phase 501 — the sparse-index analyzer companions. -->
         <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />

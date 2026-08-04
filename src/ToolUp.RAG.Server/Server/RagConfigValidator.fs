@@ -245,10 +245,19 @@ type CitationDevEndpointValidator(serverConfig: ServerConfig, ?timeout: TimeSpan
 /// completion loses that job. In a multi-instance deployment that is
 /// silent corpus incompleteness. Single-instance deployments are
 /// unaffected; multi-instance deployments either accept best-effort
-/// per-instance ingestion via the explicit escape hatch (a distributed
-/// ingestion path is a roadmap item) or stay single-instance. Mirrors
-/// `JobSchedulerInstanceValidator` (Phase 6l.F).
-type RagIngestionInstanceValidator(serverConfig: ServerConfig, ?timeout: TimeSpan) =
+/// per-instance ingestion via the explicit escape hatch or stay
+/// single-instance. Mirrors `JobSchedulerInstanceValidator` (Phase 6l.F).
+///
+/// **Phase 509 — the lift.** `durableQueue` is `true` when the
+/// deployment composed an `IIngestionQueueStore`
+/// (`RAGServerApp.withDurableIngestionQueue`). The refusal exists
+/// entirely because the default queue is process-local with no
+/// redelivery; a durable queue removes that premise — the queue outlives
+/// the process, the claim is atomic, and an unacknowledged lease is
+/// redelivered — so the validator passes. The validator therefore reads
+/// "refuse multi-replica UNLESS a durable queue is composed", not
+/// "refuse multi-replica".
+type RagIngestionInstanceValidator(serverConfig: ServerConfig, durableQueue: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
     interface IConfigValidator with
@@ -259,11 +268,11 @@ type RagIngestionInstanceValidator(serverConfig: ServerConfig, ?timeout: TimeSpa
             let multiInstance = serverConfig.ReplicaCount > 1
             let escapeHatch = serverConfig.AcceptInProcessIngestionInMultiInstance
 
-            if multiInstance && not escapeHatch then
+            if multiInstance && not durableQueue && not escapeHatch then
                 return
                     Error(
                         sprintf
-                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Keep RAG single-instance, or set ServerConfig.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. A distributed ingestion path is a roadmap item. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Compose a durable ingestion queue (RAGServerApp.withDurableIngestionQueue — e.g. the ToolUp.IngestionQueues.Redis companion), keep RAG single-instance, or set ServerConfig.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
                             serverConfig.ReplicaCount
                     )
             else
