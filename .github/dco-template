@@ -1,0 +1,29 @@
+
+# ─────────────────────────────────────────────────────────────────────
+# Developer Certificate of Origin — this project requires a sign-off.
+#
+# Every commit in a pull request must carry a `Signed-off-by:` trailer
+# whose name and email match the commit author. CI checks this on every
+# PR commit and the build fails without it.
+#
+# This template only REMINDS you. To actually add the trailer:
+#
+#     git commit -s              # adds it to this commit
+#     git config format.signoff true   # adds it to every commit here
+#
+# Already committed without it? Re-sign the branch:
+#
+#     git rebase --signoff <base>
+#
+# Signing certifies that you wrote the patch, or otherwise have the
+# right to submit it under the project's licence, and that you accept
+# the DCO terms: https://developercertificate.org
+#
+# Anonymous or pseudonymous sign-offs are not accepted; the name and
+# email must match your `git config user.name` / `user.email`.
+#
+# Note: git ignores this template when you pass `-m`. Use `git commit`
+# with no `-m` to see it, or rely on `format.signoff` above.
+#
+# Lines beginning with `#` are stripped from the final message.
+# ─────────────────────────────────────────────────────────────────────
