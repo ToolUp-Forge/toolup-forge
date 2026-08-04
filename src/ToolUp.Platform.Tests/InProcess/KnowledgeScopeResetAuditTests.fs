@@ -68,6 +68,7 @@ let private mkDoc (docId: string) : KnowledgeDocument = {
     ChunkCount = 1
     Source = UploadedFile
     ContentHash = None
+    Version = 1
 }
 
 let private chunk content : TextChunk = {
@@ -109,6 +110,7 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
+        VersioningPolicy = KnowledgeVersioningPolicy.disabled
         // Phase 512 — these packs pin pre-512 paths; the unlimited /
         // retain-forever defaults keep them byte-identical.
         QuotaPolicy = KnowledgeQuotaPolicy.unlimited

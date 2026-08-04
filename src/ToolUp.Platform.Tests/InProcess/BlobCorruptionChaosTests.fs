@@ -95,6 +95,8 @@ let private knowledgeDoc (id: string) : KnowledgeDocument = {
     ChunkCount = 3
     Source = UploadedFile
     ContentHash = None
+    // Phase 510 — pre-versioning fixture: version 1 of its own lineage.
+    Version = 1
 }
 
 // ─── Share-token corrupt-claim cases (download-side faults) ──────────

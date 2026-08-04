@@ -73,6 +73,7 @@ let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (cont
     // own pack (`KnowledgeDedupTests`), and each 119 case uploads
     // distinct bytes anyway.
     DedupPolicy = KnowledgeDedupPolicy.enabled
+    VersioningPolicy = KnowledgeVersioningPolicy.disabled
     // Phase 512 — these packs pin pre-512 paths; the unlimited /
     // retain-forever defaults keep them byte-identical.
     QuotaPolicy = KnowledgeQuotaPolicy.unlimited

@@ -161,6 +161,16 @@ let ingestNarrative
                     // Phase 14x — narratives dedup by provenance
                     // (`DuplicateExists` + `Overwrite`), not content hash.
                     ContentHash = None
+                    // Phase 510 — narrative overwrite is an in-place
+                    // regeneration under an unchanged provenance key, not
+                    // a revision of an authored document, so it advances
+                    // no version lineage. (The orphan-tail cleanup this
+                    // path has run since Phase 115 is the same defect
+                    // Phase 510 closes for uploads — see the block below.)
+                    Version =
+                        match duplicate with
+                        | Some existingDoc -> existingDoc.Version
+                        | None -> 1
                 }
 
                 // Vector-chunk cleanup on overwrite. When the regenerated

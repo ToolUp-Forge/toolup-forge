@@ -62,11 +62,157 @@ let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async
                     | _ -> true))
 }
 
+// ─── Chunk-level content diff (Phase 510) ─────────────────────────
+
+/// Lowercase SHA-256 hex of one chunk's rendered text — the identity a
+/// re-ingest compares against the previous version's manifest.
+///
+/// Hashing `Content` (not the whole `TextChunk`) is deliberate:
+/// `Metadata` carries `_source.IndexedAt`, a fresh timestamp on every
+/// extraction, so a metadata-inclusive hash would differ for every chunk
+/// on every re-ingest and the diff would never find anything unchanged.
+/// `Content` is what gets embedded, so it is also exactly the right
+/// identity for "would this produce the same vector".
+let private chunkContentHash (chunk: ToolUp.Platform.VectorKnowledgeTypes.TextChunk) : string =
+    SHA256.HashData(System.Text.Encoding.UTF8.GetBytes chunk.Content)
+    |> Convert.ToHexStringLower
+
+/// Positions whose content changed between the previous version's
+/// manifest and the new chunk set — i.e. the chunks that genuinely need
+/// re-embedding and re-upserting.
+///
+/// **Comparison is position-aligned, and that is a real limit worth
+/// stating rather than hiding.** Chunk ids are positional
+/// (`{docId}:chunk:{i}`), so a chunk's identity in every retrieval index
+/// IS its index; an edit that inserts a paragraph near the top shifts
+/// every later position and the diff correctly reports them all as
+/// changed, because at those ids the stored content really did change.
+/// The cheap win this leaves on the table — recognising shifted-but-
+/// identical text — is already collected one layer down: the embedding
+/// cache is content-hash keyed, so a shifted chunk is a cache HIT and
+/// costs an upsert, not an embedding call. What this diff removes is the
+/// upsert itself for the far more common append/edit-in-place shape.
+///
+/// A shorter `previous` (or an absent manifest, `[]`) makes every new
+/// position changed, which is exactly the pre-510 behaviour.
+let private changedChunkIndices (previous: string list) (current: string list) : Set<int> =
+    let previousByIndex = previous |> List.toArray
+
+    current
+    |> List.mapi (fun i hash ->
+        if i < previousByIndex.Length && previousByIndex[i] = hash then
+            None
+        else
+            Some i)
+    |> List.choose id
+    |> Set.ofList
+
+/// Phase 510 — delete the chunk positions a SHORTER new version left
+/// behind. `[newCount .. oldCount - 1]` are ids the re-ingest's upserts
+/// never reach (they only cover `0 .. newCount - 1`), so without this
+/// they survive in the vector store AND the sparse index under the live
+/// document id and retrieval keeps serving the previous version's tail
+/// as if it were current content. This is the orphan-tail leak Phase 510
+/// names, and the reason versioning could not simply reuse the docId
+/// without it.
+///
+/// Routed through `IIndexLifecycle` rather than `IVectorStore` so the
+/// sparse leg sheds the tail too — the same seam, and the same reason,
+/// as the Phase 115 narrative-overwrite cleanup this mirrors. Failures
+/// are isolated per chunk and summarised in one Warn line; the caller is
+/// never failed for a partial tail delete, because the new version is
+/// already correct and retryable.
+let private deleteOrphanTail
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    (newChunkCount: int)
+    (priorChunkCount: int)
+    : Async<unit> =
+    async {
+        match deps.IndexLifecycle with
+        | Some lifecycle when priorChunkCount > newChunkCount ->
+            let mutable survivors: string list = []
+
+            for i in newChunkCount .. priorChunkCount - 1 do
+                let chunkId = sprintf "%s:chunk:%d" docId i
+                let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
+
+                if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                    survivors <- chunkId :: survivors
+
+            if not (List.isEmpty survivors) then
+                deps.Logger.Warn(
+                    sprintf
+                        "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after a shorter re-upload superseded version %d; RAG may surface stale trailing content until they are re-deleted. Surviving chunk ids: %s"
+                        survivors.Length
+                        docId
+                        priorChunkCount
+                        (survivors |> List.rev |> String.concat "; ")
+                )
+        | _ -> ()
+    }
+
+/// Phase 510 — archive the outgoing version before its live blob is
+/// overwritten: copy its original bytes aside, then record an immutable
+/// `KnowledgeDocumentVersion` for it.
+///
+/// Bytes are copied BEFORE the record is written, so a crash between the
+/// two leaves preserved bytes nobody references (recoverable, invisible)
+/// rather than a version record pointing at bytes that were never
+/// copied (a broken promise the API would then have to honour). Same
+/// ordering argument as the Phase 14x hash-ref write.
+let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeDocument) : Async<unit> = async {
+    let liveBlobName = sprintf "knowledge/%s/%s" prior.Id prior.FileName
+
+    let archivedBlobName =
+        versionedOriginalBlobName prior.Id prior.Version prior.FileName
+
+    match! deps.Storage.Download(deps.Scope.Container, liveBlobName) with
+    | Ok priorBytes ->
+        let! _ = deps.Storage.Upload(deps.Scope.Container, archivedBlobName, priorBytes)
+        ()
+    | Error err ->
+        // The prior original is already gone (an earlier partial delete,
+        // a legacy document whose blob was pruned). Losing bytes we never
+        // had is not a reason to refuse the new version — but the record
+        // below must not then claim they are retrievable, so say so
+        // loudly and carry on.
+        deps.Logger.Warn(
+            sprintf
+                "[KnowledgeBase] Superseding %s v%d but its original blob could not be read (%s); the version record is written without preserved bytes."
+                prior.Id
+                prior.Version
+                err
+        )
+
+    do!
+        appendVersion deps.Storage deps.Scope.Container {
+            DocumentId = prior.Id
+            Version = prior.Version
+            FileName = prior.FileName
+            FileType = prior.FileType
+            SizeBytes = prior.SizeBytes
+            ChunkCount = prior.ChunkCount
+            ContentHash = prior.ContentHash
+            UploadedAt = prior.UploadedAt
+            UploadedBy = prior.UploadedBy
+            OriginalBlobName = archivedBlobName
+            SupersededAt = Some DateTimeOffset.UtcNow
+        }
+}
+
 /// Persist + ingest path for a non-duplicate upload — the pre-14x body
 /// of `uploadDocument`, plus the `ContentHash` stamp and the hash-index
 /// registration. `contentHash` is `None` when the deployment opted out
 /// via `withDocumentDedup false`, keeping the opt-out path byte-for-byte
 /// identical to pre-14x behaviour (GP 11): no hash stored, no ref written.
+///
+/// Phase 510 — `predecessor` is `Some prior` exactly when this upload is
+/// superseding an existing document in its lineage (`withDocumentVersioning
+/// true` and a same-named live document found). It is `None` on every
+/// pre-510 path, and every `predecessor`-conditioned branch below is a
+/// no-op in that case, so an uncomposed deployment runs the identical
+/// code it ran before (GP 11).
 let private persistAndIngest
     (deps: KnowledgeApiDeps)
     (bytes: byte[])
@@ -74,8 +220,15 @@ let private persistAndIngest
     (safeName: string)
     (ext: string)
     (contentHash: string option)
+    (predecessor: KnowledgeDocument option)
     : Async<KnowledgeDocument> =
     async {
+        // Phase 510 — archive the outgoing version FIRST. Everything
+        // below overwrites the live blob and the live index entry, so
+        // the prior version has to be preserved before either happens.
+        match predecessor with
+        | Some prior -> do! archiveSupersededVersion deps prior
+        | None -> ()
         // Persist the raw blob synchronously so a refresh during extraction
         // still finds the source file. ChunkCount stays 0 until extraction
         // completes — the observer reads it from the index, so the chunk
@@ -92,6 +245,12 @@ let private persistAndIngest
             ChunkCount = 0
             Source = UploadedFile
             ContentHash = contentHash
+            // Phase 510 — the lineage advances only when this upload is
+            // superseding one; a fresh document is version 1.
+            Version =
+                match predecessor with
+                | Some prior -> prior.Version + 1
+                | None -> 1
         }
 
         let rawBlobName = sprintf "knowledge/%s/%s" docId safeName
@@ -102,6 +261,19 @@ let private persistAndIngest
         // the background extraction below, which re-acquires the same
         // container lock via `updateIndexStatus`.
         do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+
+        // Phase 510 — a superseded version's hash ref no longer describes
+        // anything live (the lineage now carries the NEW bytes' hash), so
+        // drop it. Left behind it would be a ref that `findDuplicate`
+        // resolves to a candidate id and then correctly rejects on the
+        // hash-verification step — harmless, but it accumulates one dead
+        // ref per version forever. `Remove` is idempotent.
+        match predecessor with
+        | Some prior ->
+            match prior.ContentHash with
+            | Some priorHash when Some priorHash <> contentHash -> do! (contentHashIndex deps).Remove priorHash prior.Id
+            | _ -> ()
+        | None -> ()
 
         // Phase 14x — register the content hash in the O(1) dedup index.
         // Written after the canonical index entry so a crash between the
@@ -165,8 +337,37 @@ let private persistAndIngest
 
                     do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
 
+                    // Phase 510 — incremental re-index. On a supersede,
+                    // compare each new chunk's content hash against the
+                    // previous version's manifest and enqueue only the
+                    // positions that actually changed. On a first ingest
+                    // there is no manifest, `changed` is every index, and
+                    // the enqueued set is byte-for-byte what pre-510
+                    // enqueued.
+                    let newHashes = chunks |> List.map (fst >> chunkContentHash)
+
+                    let! previousHashes =
+                        match predecessor with
+                        | Some prior -> loadChunkHashes deps.Storage deps.Scope.Container prior.Id
+                        | None -> async.Return []
+
+                    let changed = changedChunkIndices previousHashes newHashes
+
                     let chunkPairs =
-                        chunks |> List.mapi (fun i (chunk, _) -> sprintf "%s:chunk:%d" docId i, chunk)
+                        chunks
+                        |> List.mapi (fun i (chunk, _) -> i, (sprintf "%s:chunk:%d" docId i, chunk))
+                        |> List.filter (fun (i, _) -> changed.Contains i)
+                        |> List.map snd
+
+                    // Phase 510 — the shorter-re-upload orphan tail. Run
+                    // BEFORE the enqueue so the stale ids are gone from
+                    // every index even if the queue then refuses the job:
+                    // a refused ingestion leaves the document `Failed` and
+                    // retryable, whereas a surviving tail would keep being
+                    // served as live content with nothing to signal it.
+                    match predecessor with
+                    | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
+                    | None -> ()
 
                     let job: DocumentIngestionJob = {
                         DocumentId = docId
@@ -178,8 +379,53 @@ let private persistAndIngest
                         OriginatingUserId = Some deps.UserId
                     }
 
-                    let accepted = deps.Queue.Enqueue(job)
-                    deps.RecordEnqueue accepted
+                    // An unchanged re-upload can leave nothing to
+                    // enqueue at all. That is a legitimate terminal
+                    // outcome, not an empty job to push through the
+                    // queue: the document is already fully indexed at
+                    // this content.
+                    let accepted =
+                        if List.isEmpty chunkPairs then
+                            true
+                        else
+                            deps.Queue.Enqueue(job)
+
+                    if not (List.isEmpty chunkPairs) then
+                        deps.RecordEnqueue accepted
+
+                    // Written after the tail delete + enqueue decision so
+                    // the manifest never claims content the indexes do
+                    // not hold (see `saveChunkHashes`).
+                    if accepted then
+                        do! saveChunkHashes deps.Storage deps.Scope.Container docId newHashes
+
+                    if accepted && List.isEmpty chunkPairs then
+                        // Nothing changed — the observer will never fire,
+                        // so settle the terminal status here rather than
+                        // leaving the document stuck at `Embedding(0, n)`.
+                        let terminal = Complete chunks.Length
+                        statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
+                        do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+
+                        deps.Logger.Info(
+                            sprintf
+                                "[KnowledgeBase] Re-upload of '%s' (docId=%s v%d) changed no chunk content; %d chunk(s) reused, nothing re-embedded."
+                                safeName
+                                docId
+                                doc.Version
+                                chunks.Length
+                        )
+                    elif accepted && chunkPairs.Length < chunks.Length then
+                        deps.Logger.Info(
+                            sprintf
+                                "[KnowledgeBase] Incremental re-index of '%s' (docId=%s v%d): %d of %d chunk(s) changed and were re-embedded; %d reused."
+                                safeName
+                                docId
+                                doc.Version
+                                chunkPairs.Length
+                                chunks.Length
+                                (chunks.Length - chunkPairs.Length)
+                        )
 
                     if not accepted then
                         let reason =
@@ -239,6 +485,16 @@ let private persistAndIngest
 /// index. Returns `Some reason` when admitting one more document of
 /// `incomingBytes` would breach `deps.QuotaPolicy`.
 ///
+/// Phase 510 — `addsDocument` is `false` when the upload supersedes an
+/// existing document rather than adding one. The distinction is
+/// load-bearing: `KnowledgeQuotaPolicy.exceeds` refuses at
+/// `currentDocuments >= MaxDocuments`, so a scope sitting exactly ON its
+/// document cap would otherwise be unable to upload a NEW VERSION of a
+/// document it already holds — a corpus that cannot be corrected, only
+/// deleted from. The byte cap still applies in full (superseded versions
+/// keep their preserved bytes, so a lineage genuinely does grow), which
+/// is the lever that actually bounds storage.
+///
 /// Two properties are load-bearing:
 ///   * **An unlimited policy reads nothing.** `isUnlimited` short-circuits
 ///     before `loadIndex`, so an uncomposed deployment pays not even the
@@ -248,13 +504,20 @@ let private persistAndIngest
 ///   * **The tally is scope-local.** `deps.Scope.Container` comes from
 ///     the server-side resolver, so one team's corpus can never consume
 ///     another's headroom (GP 4).
-let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) : Async<string option> = async {
+let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) (addsDocument: bool) : Async<string option> = async {
     if KnowledgeQuotaPolicy.isUnlimited deps.QuotaPolicy then
         return None
     else
         let! index = loadIndex deps.Storage deps.Scope.Container
         let usage = KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy index
-        return KnowledgeQuotaPolicy.exceeds usage.DocumentCount usage.TotalBytes incomingBytes deps.QuotaPolicy
+
+        let effectiveCount =
+            if addsDocument then
+                usage.DocumentCount
+            else
+                max 0 (usage.DocumentCount - 1)
+
+        return KnowledgeQuotaPolicy.exceeds effectiveCount usage.TotalBytes incomingBytes deps.QuotaPolicy
 }
 
 let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
@@ -311,16 +574,67 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
             ChunkCount = 0
             Source = UploadedFile
             ContentHash = None
+            Version = 1
         }
+
+    // Phase 510 — the document this upload supersedes, if any. Identity
+    // is (file name, scope, `UploadedFile` source):
+    //   * the SCOPE is the container, which comes from the server-side
+    //     resolver — so a lineage can never span tenants (GP 4), for the
+    //     same structural reason the content-hash index cannot;
+    //   * `UploadedFile` only, because notes and narratives already own
+    //     their own in-place update paths (`UpdateNote`,
+    //     `IngestNarrative` + `Overwrite`) with their own identity rules
+    //     — folding them into filename identity would let a note and an
+    //     upload collide on a shared title;
+    //   * a `Failed` predecessor is skipped, matching dedup: re-uploading
+    //     after a failed ingestion is a RETRY of version N, not version
+    //     N+1 of a version that never indexed anything.
+    //
+    // Returns `None` unless the deployment composed
+    // `withDocumentVersioning true`, and reads nothing at all in that
+    // case (GP 13) — the pre-510 upload path takes no extra index read.
+    let findPredecessor () : Async<KnowledgeDocument option> = async {
+        if not deps.VersioningPolicy.VersionUploads then
+            return None
+        else
+            let! index = loadIndex deps.Storage deps.Scope.Container
+
+            return
+                index
+                |> List.tryFind (fun d ->
+                    d.FileName = safeName
+                    && (match d.Source with
+                        | UploadedFile -> true
+                        | FromNarrative _
+                        | Note _ -> false)
+                    && (match d.Status with
+                        | Failed _
+                        | UploadRejected _ -> false
+                        | _ -> true))
+    }
 
     // Phase 512 — the corpus quota is checked immediately before a
     // persist, never before dedup: a duplicate upload stores nothing new,
     // so refusing it for quota would reject a request that costs the
     // scope no additional storage at all.
+    //
+    // Phase 510 — the predecessor lookup runs INSIDE this, after dedup
+    // has already declined to short-circuit, so the ordering Phase 512
+    // established (dedup, then quota, then persist) is preserved with
+    // versioning slotted between quota and persist.
     let persistUnlessOverQuota (contentHash: string option) : Async<KnowledgeDocument> = async {
-        match! quotaRefusal deps (int64 bytes.Length) with
+        let! predecessor = findPredecessor ()
+
+        match! quotaRefusal deps (int64 bytes.Length) (Option.isNone predecessor) with
         | Some reason -> return refuse reason
-        | None -> return! persistAndIngest deps bytes docId safeName ext contentHash
+        | None ->
+            let targetDocId =
+                match predecessor with
+                | Some prior -> prior.Id
+                | None -> docId
+
+            return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
     }
 
     match rejectionReason with
@@ -404,6 +718,45 @@ let getScopeUsage (deps: KnowledgeApiDeps) : Async<KnowledgeScopeUsage> = async 
     return KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy docs
 }
 
+/// Phase 510 — the version history of one document lineage, newest
+/// first. The current version is SYNTHESISED from the live index entry
+/// rather than stored twice: the index is already authoritative for what
+/// is current, and a second copy of it in the sidecar could only ever
+/// drift from it.
+///
+/// Scope isolation is structural (GP 4) — the container comes from the
+/// server-side resolver, so an id in another tenant's scope is simply
+/// not found and returns `[]`, identical to an id that never existed
+/// (no existence oracle, same posture as `getOriginalDocument`'s
+/// `NotInScope`).
+let getDocumentVersions (deps: KnowledgeApiDeps) (docId: string) : Async<KnowledgeDocumentVersion list> = async {
+    let! index = loadIndex deps.Storage deps.Scope.Container
+
+    match index |> List.tryFind (fun d -> d.Id = docId) with
+    | None -> return []
+    | Some current ->
+        let! superseded = loadVersions deps.Storage deps.Scope.Container docId
+
+        let currentRecord: KnowledgeDocumentVersion = {
+            DocumentId = current.Id
+            Version = current.Version
+            FileName = current.FileName
+            FileType = current.FileType
+            SizeBytes = current.SizeBytes
+            ChunkCount = current.ChunkCount
+            ContentHash = current.ContentHash
+            UploadedAt = current.UploadedAt
+            UploadedBy = current.UploadedBy
+            OriginalBlobName = sprintf "knowledge/%s/%s" current.Id current.FileName
+            SupersededAt = None
+        }
+
+        return
+            currentRecord :: superseded
+            |> List.distinctBy _.Version
+            |> List.sortByDescending _.Version
+}
+
 let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit, string>> = async {
     // Fail closed if scope resolution collapsed onto the shared
     // `user-anonymous` container (item 2), then gate on owner/admin in
@@ -453,6 +806,26 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                 else
                     let rawBlobName = sprintf "knowledge/%s/%s" docId doc.FileName
                     let! _ = deps.Storage.Delete(deps.Scope.Container, rawBlobName)
+
+                    // Phase 510 — a deleted document takes its whole
+                    // lineage with it: every preserved prior-version
+                    // original, the version sidecar, and the chunk-hash
+                    // manifest. Enumerated by prefix rather than
+                    // reconstructed from the version records, so a
+                    // half-written archive (bytes copied, record not yet
+                    // appended) is still swept — the failure mode where a
+                    // "deleted" document's earlier revisions survive at
+                    // rest is exactly what a data-subject deletion cannot
+                    // afford. `Delete` is idempotent, so a document with
+                    // no history simply deletes nothing extra.
+                    let! versionBlobs = deps.Storage.List(deps.Scope.Container, sprintf "knowledge/%s/versions/" docId)
+
+                    for blob in versionBlobs do
+                        let! _ = deps.Storage.Delete(deps.Scope.Container, blob)
+                        ()
+
+                    let! _ = deps.Storage.Delete(deps.Scope.Container, versionsBlobName docId)
+                    let! _ = deps.Storage.Delete(deps.Scope.Container, chunkHashesBlobName docId)
 
                     let updated = existing |> List.filter (fun d -> d.Id <> docId)
                     do! saveIndex deps.Storage deps.Scope.Container updated

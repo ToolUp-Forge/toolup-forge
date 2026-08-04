@@ -102,6 +102,9 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = dedupPolicy
+        // Phase 510 — dedup is asserted independently of versioning, so
+        // this pack keeps the pre-510 upload path.
+        VersioningPolicy = KnowledgeVersioningPolicy.disabled
         // Phase 512 — these packs pin pre-512 paths; the unlimited /
         // retain-forever defaults keep them byte-identical.
         QuotaPolicy = KnowledgeQuotaPolicy.unlimited
@@ -259,6 +262,7 @@ let tests =
                 ChunkCount = 0
                 Source = UploadedFile
                 ContentHash = Some hash
+                Version = 1
             }
 
             do! upsertIndexEntry storage "team-dedup-e" failedDoc

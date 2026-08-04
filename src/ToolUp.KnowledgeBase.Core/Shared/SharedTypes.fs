@@ -142,6 +142,61 @@ type KnowledgeDocument = {
     /// the hash. Deserialising a pre-14x index record leaves this
     /// `None` (missing JSON properties absorb leniently).
     ContentHash: string option
+    /// Phase 510 — 1-based version of THIS document's lineage. The
+    /// `Id` is the stable lineage identity: a versioned re-upload
+    /// supersedes in place (same `Id`, same `{Id}:chunk:{n}` namespace)
+    /// and increments this, so the index always describes exactly one
+    /// live document per lineage and retrieval structurally targets the
+    /// current version — there is no stale-version chunk to filter out.
+    /// Prior versions survive as immutable `KnowledgeDocumentVersion`
+    /// records beside the document (GP 5) with their original bytes
+    /// preserved.
+    ///
+    /// Always `>= 1` when read through `loadIndex`: a pre-510 index
+    /// record carries no `Version` property at all, and a missing JSON
+    /// *number* absorbs to `0` rather than to a sentinel we could
+    /// detect later, so the store coerces `< 1` to `1` on load. Every
+    /// legacy document is therefore version 1 of its own lineage, which
+    /// is exactly what it is.
+    Version: int
+}
+
+/// Phase 510 — an immutable record of one superseded version of a
+/// document lineage. Written once, at the moment a new version takes
+/// over, and never mutated afterwards (GP 5): the current version is
+/// described by the live `KnowledgeDocument` in `knowledge/index.json`,
+/// and every version before it by one of these.
+///
+/// `DocumentId` is the lineage id — the same value as the live
+/// `KnowledgeDocument.Id` — so a citation's
+/// `RetrievedSource.OriginalRef.DocumentId` resolves to the lineage and
+/// then to whichever version is asked for, without the chunk ids ever
+/// having to encode a version.
+type KnowledgeDocumentVersion = {
+    /// The lineage id (= the live `KnowledgeDocument.Id`).
+    DocumentId: string
+    /// 1-based version number this record describes.
+    Version: int
+    FileName: string
+    FileType: string
+    SizeBytes: int64
+    /// Chunk count this version indexed, retained so a later repair
+    /// pass knows how much of the `{docId}:chunk:{n}` namespace this
+    /// version occupied.
+    ChunkCount: int
+    ContentHash: string option
+    UploadedAt: DateTimeOffset
+    UploadedBy: string
+    /// Blob name of this version's preserved original bytes. The live
+    /// version keeps the conventional `knowledge/{docId}/{fileName}`
+    /// path; a superseded one is copied aside to
+    /// `knowledge/{docId}/versions/{version}/{fileName}` before the live
+    /// path is overwritten, so no version's bytes are ever lost to a
+    /// re-upload.
+    OriginalBlobName: string
+    /// When this version stopped being current. `None` on the
+    /// synthesised record for the version that is current right now.
+    SupersededAt: DateTimeOffset option
 }
 
 // ─── Narrative ingestion ─────────────────────────────────────────
@@ -541,6 +596,49 @@ module KnowledgeDedupPolicy =
     /// lookup, every upload ingests.
     let disabled: KnowledgeDedupPolicy = { DedupUploads = false }
 
+// ─── Document versioning policy (Phase 510) ──────────────────────
+
+/// Compose-time lever for KB upload **versioning**. When
+/// `VersionUploads` is `true`, re-uploading an *edited* file under a
+/// name the caller's scope already holds supersedes that document in
+/// place — same `Id`, `Version + 1`, the prior version preserved as an
+/// immutable `KnowledgeDocumentVersion` — instead of landing a second,
+/// unrelated document beside the first.
+///
+/// **The default is `false`, and deliberately so.** Versioning is not a
+/// bug fix that can be switched on under a deployment: it changes what
+/// a re-upload MEANS. A corpus where every revision is its own record
+/// (a contracts archive, an evidence bundle) is a legitimate and common
+/// shape, and silently collapsing those records into one lineage would
+/// destroy the distinction the deployment was relying on. So an
+/// existing deployment keeps the pre-510 behaviour exactly — two
+/// documents, two chunk namespaces, nothing superseded, no version
+/// sidecar written, no extra blob read on the upload path (GP 11 /
+/// GP 13) — until it opts in with
+/// `KnowledgeBase.Server.withDocumentVersioning true`.
+///
+/// Versioning composes *after* content-hash dedup rather than
+/// replacing it: a byte-IDENTICAL re-upload still dedups onto the
+/// existing document (nothing changed, so there is no new version to
+/// mint), and only a byte-DIFFERENT upload under a name already held
+/// reaches the supersede path. The two levers answer different
+/// questions — "is this the same bytes?" and "is this a new revision of
+/// the same document?".
+type KnowledgeVersioningPolicy = {
+    /// `true` to supersede a same-named document in place on re-upload.
+    VersionUploads: bool
+}
+
+module KnowledgeVersioningPolicy =
+    /// The default a deployment gets without calling
+    /// `withDocumentVersioning`: no lineage, no version sidecar —
+    /// pre-510 upload behaviour byte-for-byte (GP 11).
+    let disabled: KnowledgeVersioningPolicy = { VersionUploads = false }
+
+    /// The opt-in: a re-upload under an existing name becomes the next
+    /// version of that document.
+    let enabled: KnowledgeVersioningPolicy = { VersionUploads = true }
+
 // ─── Per-scope quota + retention (Phase 512) ─────────────────────
 
 /// Compose-time per-scope Knowledge Base storage quota — the corpus-level
@@ -869,4 +967,18 @@ type KnowledgeApi = {
     /// how a UI tells "unlimited" from "full".
     [<AllowAnonymous>]
     GetScopeUsage: unit -> Async<KnowledgeScopeUsage>
+    /// Phase 510 — the version history of one document lineage, newest
+    /// first: the current version (synthesised from the live index
+    /// entry, `SupersededAt = None`) followed by every superseded
+    /// version still preserved beside it. Scope-gated exactly like
+    /// `GetOriginalDocument` — the lookup runs against the caller's
+    /// resolved scope's index only, so an out-of-scope or unknown id
+    /// returns `[]` rather than an existence signal (GP 4).
+    ///
+    /// A deployment that never composed `withDocumentVersioning`
+    /// returns a single-element list for every document — which is
+    /// honest rather than empty: an unversioned document genuinely IS
+    /// version 1 of its own lineage.
+    [<AllowAnonymous>]
+    GetDocumentVersions: string -> Async<KnowledgeDocumentVersion list>
 }

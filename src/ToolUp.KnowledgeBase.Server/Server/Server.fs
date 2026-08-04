@@ -44,6 +44,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         RefreshAIContext = fun () -> refreshAIContext deps
         GetOriginalDocument = getOriginalDocument deps
         GetScopeUsage = fun () -> getScopeUsage deps
+        GetDocumentVersions = getDocumentVersions deps
     }
 
 // ─── Public surface re-exports (helpers split into sibling modules) ─
@@ -123,6 +124,16 @@ let withUploadPolicy = KnowledgeBase.ServerUploadPolicy.withUploadPolicy
 /// `Server/UploadPolicy.fs`; re-exported here alongside the other
 /// compose-time hooks.
 let withDocumentDedup = KnowledgeBase.ServerUploadPolicy.withDocumentDedup
+
+/// Phase 510 — compose-time lever for KB upload **versioning** (OFF by
+/// default). With it, a re-upload of an edited file under a name the
+/// scope already holds supersedes that document in place: one document,
+/// a version chain, prior versions preserved, only changed chunks
+/// re-embedded, and no orphan chunk tail left behind by a shorter
+/// revision. Without it the pre-510 path is byte-for-byte intact.
+/// Defined in `Server/UploadPolicy.fs`; re-exported here alongside the
+/// other compose-time hooks.
+let withDocumentVersioning = KnowledgeBase.ServerUploadPolicy.withDocumentVersioning
 
 /// Phase 512 — compose a per-scope **corpus** quota (`MaxDocuments` /
 /// `MaxBytes`), enforced at the upload boundary before anything is

@@ -1009,6 +1009,13 @@
              the upload boundary + usage surfacing) and age-based retention
              sweep (selection, Phase 115 fan-out, purge audit, GP 11 inertia). -->
         <Compile Include="InProcess\KbQuotaRetentionTests.fs" />
+        <!-- Phase 510 — KB document versioning + incremental re-index:
+             supersede-in-place lineage, preserved prior-version originals,
+             the shorter-re-upload orphan-tail delete through the Phase 115
+             fan-out (asserted as an exact id set), the changed-chunks-only
+             enqueue, and the GP 11 pin that an uncomposed deployment still
+             lands two unrelated documents. -->
+        <Compile Include="InProcess\KbVersioningTests.fs" />
         <!-- Phase 5e — per-tenant branding: Branding.resolve fallback +
              hex validation, and PlatformSchema.mergeBrandingSchema. -->
         <Compile Include="InProcess\BrandingTests.fs" />

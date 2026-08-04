@@ -108,6 +108,13 @@ type KnowledgeApiDeps = {
     /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
     /// Consulted by `uploadDocument` before anything is persisted.
     DedupPolicy: KnowledgeDedupPolicy
+    /// Phase 510 — compose-time upload versioning, registered by
+    /// `withDocumentVersioning`; `KnowledgeVersioningPolicy.disabled`
+    /// when absent, which is what every deployment that has not opted in
+    /// gets. `uploadDocument` reads it before looking for a predecessor,
+    /// so a deployment without it takes no extra index read at all
+    /// (GP 11 / GP 13).
+    VersioningPolicy: KnowledgeVersioningPolicy
     /// Phase 512 — compose-time per-scope corpus quota, registered by
     /// `withKnowledgeQuota`; `KnowledgeQuotaPolicy.unlimited` when absent
     /// (no tally taken, no upload refusable — pre-512 behaviour, GP 11).
@@ -302,6 +309,13 @@ module KnowledgeApiDeps =
             | :? KnowledgeDedupPolicy as p -> p
             | _ -> KnowledgeDedupPolicy.enabled
 
+        // Phase 510 — versioning policy registered by
+        // `withDocumentVersioning`; OFF when absent (pre-510 behaviour).
+        let versioningPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeVersioningPolicy>) with
+            | :? KnowledgeVersioningPolicy as p -> p
+            | _ -> KnowledgeVersioningPolicy.disabled
+
         // Phase 512 — corpus quota + retention policies registered by
         // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
         // retain-forever defaults when absent.
@@ -405,6 +419,7 @@ module KnowledgeApiDeps =
             ScopeResolvedFromRequest = scopeResolvedFromRequest
             UploadPolicy = uploadPolicy
             DedupPolicy = dedupPolicy
+            VersioningPolicy = versioningPolicy
             QuotaPolicy = quotaPolicy
             RetentionPolicy = retentionPolicy
             DisclosureGate = disclosureGate

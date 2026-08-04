@@ -776,6 +776,8 @@ let allTests =
         KnowledgeDedupTests.tests
         // Phase 512 — per-scope KB corpus quota + age-based retention sweep.
         KbQuotaRetentionTests.tests
+        // Phase 510 — KB document versioning + incremental re-index.
+        KbVersioningTests.tests
         BrandingTests.tests
         BrandKitTests.tests
         // Phase 269 — brandkit → hosted-tree theme-token bridge: projection,

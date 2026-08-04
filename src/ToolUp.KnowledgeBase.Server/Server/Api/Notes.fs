@@ -56,6 +56,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 // note whose body happens to match an upload must not
                 // hijack it.
                 ContentHash = None
+                // Phase 510 — notes are not versioned by the upload
+                // lineage: `UpdateNote` already edits in place, so a note
+                // is permanently version 1 of itself.
+                Version = 1
             }
 
             // Persist raw body so the note round-trips even if the

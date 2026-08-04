@@ -572,6 +572,7 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     ScopeResolvedFromRequest = true
     UploadPolicy = KnowledgeUploadPolicy.permissive
     DedupPolicy = KnowledgeDedupPolicy.enabled
+    VersioningPolicy = KnowledgeVersioningPolicy.disabled
     QuotaPolicy = KnowledgeQuotaPolicy.unlimited
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     DisclosureGate = None

@@ -90,6 +90,8 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     ScopeResolvedFromRequest = true
     UploadPolicy = KnowledgeUploadPolicy.permissive
     DedupPolicy = KnowledgeDedupPolicy.enabled
+    // Phase 510 — quota/retention are asserted on the unversioned path.
+    VersioningPolicy = KnowledgeVersioningPolicy.disabled
     QuotaPolicy = quota
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     DisclosureGate = None
@@ -116,6 +118,7 @@ let private storedDoc (docId: string) (age: TimeSpan) (size: int64) : KnowledgeD
     ChunkCount = 1
     Source = UploadedFile
     ContentHash = None
+    Version = 1
 }
 
 let private withSource (source: KnowledgeSource) (doc: KnowledgeDocument) = { doc with Source = source }

@@ -101,6 +101,47 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
             }
     }
 
+/// Phase 510 — compose-time lever for KB upload **versioning**. OFF by
+/// default: call `withDocumentVersioning true` and a re-upload of an
+/// EDITED file under a name the caller's scope already holds becomes the
+/// next version of that document — same document id, `Version + 1`, the
+/// prior version preserved as an immutable `KnowledgeDocumentVersion`
+/// with its original bytes copied aside, only the chunks whose content
+/// actually changed re-embedded, and any trailing chunks a shorter new
+/// version left behind deleted from every retrieval index through
+/// `IIndexLifecycle`.
+///
+/// Without it the pre-510 behaviour is byte-for-byte intact (GP 11): the
+/// re-upload lands as a second, unrelated document, no predecessor
+/// lookup runs, and no version or chunk-hash sidecar is written. The
+/// default is OFF rather than ON precisely because versioning changes
+/// what a re-upload MEANS — see `KnowledgeVersioningPolicy` for why a
+/// corpus that wants every revision as its own record is a legitimate
+/// shape we must not silently collapse.
+///
+/// Composes with `withDocumentDedup` rather than replacing it: a
+/// byte-identical re-upload still dedups (nothing changed, so there is
+/// no version to mint) and only a byte-different one supersedes.
+/// Threads through the same `ComposeExtensions.ServiceConfig` seam as
+/// `withUploadPolicy`, so `AIServerApp` / `RAGServerApp` inherit it via
+/// their `Base`.
+let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
+    let policy: KnowledgeVersioningPolicy = { VersionUploads = enabled }
+
+    let register (s: IServiceCollection) =
+        s.AddSingleton<KnowledgeVersioningPolicy>(policy)
+
+    {
+        app with
+            Extensions = {
+                app.Extensions with
+                    ServiceConfig =
+                        match app.Extensions.ServiceConfig with
+                        | None -> Some register
+                        | Some baseFn -> Some(fun s -> register (baseFn s))
+            }
+    }
+
 // ─── Phase 512 — per-scope quota + retention compose hooks ───────────
 
 /// Append a service registration onto the shared `ComposeExtensions`

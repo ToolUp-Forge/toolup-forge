@@ -71,6 +71,7 @@ let private mkDoc (docId: string) (fileName: string) (fileType: string) (source:
     ChunkCount = 1
     Source = source
     ContentHash = None
+    Version = 1
 }
 
 let private mkDeps
@@ -108,6 +109,7 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
+        VersioningPolicy = KnowledgeVersioningPolicy.disabled
         // Phase 512 — these packs pin pre-512 paths; the unlimited /
         // retain-forever defaults keep them byte-identical.
         QuotaPolicy = KnowledgeQuotaPolicy.unlimited
