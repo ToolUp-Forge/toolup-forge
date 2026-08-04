@@ -220,6 +220,30 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
 
     let factSupersededBy = m.Metadata.TryFind ChunkMetadata.FactSupersededByKey
 
+    // Phase 505 — the chunk producer stamps the source character span it
+    // derived the chunk from. Three things can go wrong on the way here and
+    // all three land in the same place: the key is absent (a producer that
+    // does not know its offsets, or a pre-505 ingest), the JSON does not
+    // deserialise, or it deserialises into a span that is internally
+    // inconsistent (negative start, zero width, a `Text` whose length
+    // disagrees with the offsets — including the `null` `Text` a legacy
+    // record materialises). Each yields `None`, i.e. the pre-505
+    // chunk-granular citation. A malformed span is never passed through:
+    // downstream it would become a highlight over the wrong region, which is
+    // worse than no highlight at all.
+    //
+    // Note the *stronger* check — that the span still resolves to the same
+    // text in the live document — cannot happen here, because retrieval does
+    // not hold the original bytes. It belongs to whichever surface fetches
+    // the original, via `SourceSpan.resolvesIn`.
+    let span =
+        m.Metadata.TryFind ChunkMetadata.SpanKey
+        |> Option.bind tryDeserialise<SourceSpan>
+        // A literal `null` payload deserialises to a null record rather than
+        // throwing, so filter it before `sanitise` dereferences `Text`.
+        |> Option.filter (fun s -> not (isNull (box s)))
+        |> SourceSpan.sanitise
+
     {
         DocumentId = src |> Option.map _.DocumentId |> Option.defaultValue ""
         DocumentName =
@@ -247,6 +271,7 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
         FactRendering = factRendering
         FactFreshness = factFreshness
         FactSupersededBy = factSupersededBy
+        Span = span
     }
 
 // ─── Retrieval builder ────────────────────────────────────────────

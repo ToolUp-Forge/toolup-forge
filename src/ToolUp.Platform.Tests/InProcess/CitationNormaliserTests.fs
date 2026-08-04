@@ -34,6 +34,7 @@ let private threeSources: RetrievedSource list = [
         FactRendering = None
         FactFreshness = None
         FactSupersededBy = None
+        Span = None
     }
     {
         DocumentId = "doc-2"
@@ -49,6 +50,7 @@ let private threeSources: RetrievedSource list = [
         FactRendering = None
         FactFreshness = None
         FactSupersededBy = None
+        Span = None
     }
     {
         DocumentId = "doc-3"
@@ -64,6 +66,7 @@ let private threeSources: RetrievedSource list = [
         FactRendering = None
         FactFreshness = None
         FactSupersededBy = None
+        Span = None
     }
 ]
 

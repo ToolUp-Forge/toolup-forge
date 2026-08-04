@@ -2,6 +2,7 @@ module ToolUp.RAG.Chunking
 
 open System
 open System.Text.RegularExpressions
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Token counting ───────────────────────────────────────────────
 //
@@ -122,6 +123,88 @@ module ChunkingConfig =
         else
             Error(List.ofSeq errors)
 
+// ─── Phase 505 — character-offset spans ───────────────────────────
+//
+// A citation used to be chunk-granular: "this answer came from somewhere
+// inside chunk 7 of report.pdf". That is enough to *name* a source and not
+// enough to *open it at the spot* — the chunk is hundreds of characters and
+// the reader has to re-find the sentence the model actually used.
+//
+// The chunkers below therefore emit, alongside each chunk's text, the
+// `[start, end)` character range of the SOURCE TEXT that chunk was derived
+// from. The span is the primitive; carrying it through chunk metadata into
+// the citation contract is what lets a preview surface scroll to and
+// highlight the exact region.
+//
+// Two properties are deliberate:
+//
+//   * **The span slices the source, not the chunk.** A chunk's text is
+//     whitespace-normalised (sentences are re-joined with single spaces),
+//     so it is not necessarily byte-identical to the source region it came
+//     from. The span's `Text` is always the true source slice — that is
+//     what a highlight has to line up with.
+//   * **A span is optional, and its absence is the pre-505 behaviour
+//     exactly (GP 11).** A producer that does not know its offsets emits
+//     `Span = None`, the metadata key is never stamped, and the citation
+//     stays chunk-granular. Nothing is guessed to fill the gap (GP 9).
+//
+// The `*WithSpans` functions are the implementations; the original
+// `splitByTokens` / `chunkSpreadsheet` remain as text-only projections of
+// them, so every existing caller is untouched and cannot drift from the
+// span-aware path.
+
+/// One emitted chunk plus the source range it was derived from. `Span` is
+/// `None` when the producer had no source text to anchor into.
+type ChunkPiece = {
+    Text: string
+    Span: SourceSpan option
+}
+
+module ChunkPiece =
+    /// Project back to the text-only shape the pre-505 chunkers returned.
+    let text (piece: ChunkPiece) : string = piece.Text
+
+/// Tighten a `[s, e)` slice of `text` past leading / trailing whitespace,
+/// returning the narrowed bounds — the offset-preserving equivalent of
+/// `String.Trim()`. `None` when the slice is entirely whitespace.
+let private tightenBounds (text: string) (s: int) (e: int) : (int * int) option =
+    let mutable a = s
+    let mutable b = e
+
+    while a < b && Char.IsWhiteSpace text[a] do
+        a <- a + 1
+
+    while b > a && Char.IsWhiteSpace text[b - 1] do
+        b <- b - 1
+
+    if a < b then Some(a, b) else None
+
+/// Offset-preserving equivalent of
+/// `slice.Split(separators, StringSplitOptions.RemoveEmptyEntries)` over
+/// `text[fromIdx .. untilIdx)`. Returns `(token, start, end)` triples whose
+/// offsets are absolute in `text`.
+let private wordsWithOffsets
+    (separators: char array)
+    (text: string)
+    (fromIdx: int)
+    (untilIdx: int)
+    : (string * int * int) list =
+    let out = ResizeArray<string * int * int>()
+    let mutable i = fromIdx
+
+    while i < untilIdx do
+        if Array.contains text[i] separators then
+            i <- i + 1
+        else
+            let start = i
+
+            while i < untilIdx && not (Array.contains text[i] separators) do
+                i <- i + 1
+
+            out.Add(text.Substring(start, i - start), start, i)
+
+    List.ofSeq out
+
 // ─── Sentence segmentation ────────────────────────────────────────
 //
 // Regex-based, no NLP dependency. Splits on `.`, `!`, `?` followed by
@@ -133,17 +216,39 @@ module ChunkingConfig =
 let private sentenceSplitter =
     Regex(@"(?<=[.!?])\s+(?=[A-Z""'\(\[])", RegexOptions.Compiled)
 
+/// Sentence segmentation that keeps each sentence's absolute `[start, end)`
+/// offsets in `text` (Phase 505). Offsets are what the chunk spans are
+/// ultimately built from, so the split has to be done positionally rather
+/// than by `Regex.Split` (which discards where each piece came from).
+///
+/// The regex matches the *separator* between sentences, so the sentences
+/// are the gaps between successive matches; each gap is then tightened past
+/// its whitespace so `text.Substring(start, end - start)` is exactly the
+/// returned sentence.
+let splitBySentenceWithOffsets (text: string) : (string * int * int) list =
+    if String.IsNullOrWhiteSpace text then
+        []
+    else
+        let gaps = ResizeArray<int * int>()
+        let mutable cursor = 0
+
+        for m in sentenceSplitter.Matches text do
+            gaps.Add(cursor, m.Index)
+            cursor <- m.Index + m.Length
+
+        gaps.Add(cursor, text.Length)
+
+        gaps
+        |> Seq.choose (fun (s, e) -> tightenBounds text s e)
+        |> Seq.map (fun (s, e) -> text.Substring(s, e - s), s, e)
+        |> List.ofSeq
+
 /// Split text into sentences using a simple terminator-based heuristic.
 /// Each returned sentence retains its trailing punctuation. Empty inputs
 /// return an empty list. Multi-line input is treated as one paragraph;
 /// callers wanting paragraph-aware splitting should split on `\n\n` first.
 let splitBySentence (text: string) : string list =
-    if String.IsNullOrWhiteSpace text then
-        []
-    else
-        sentenceSplitter.Split(text.Trim())
-        |> Array.filter (fun s -> s.Trim().Length > 0)
-        |> Array.toList
+    splitBySentenceWithOffsets text |> List.map (fun (s, _, _) -> s)
 
 // ─── Token-aware splitting ────────────────────────────────────────
 
@@ -155,7 +260,14 @@ let splitBySentence (text: string) : string list =
 ///
 /// Returns an empty list when the input is shorter than `MinTokens` (the
 /// caller can decide whether to merge it with a sibling chunk or drop).
-let splitByTokens (config: ChunkingConfig) (text: string) : string list =
+///
+/// Phase 505: this is the span-aware implementation. Each emitted piece
+/// carries the `[start, end)` range of `text` its units were drawn from —
+/// the first unit's start to the last unit's end, so the span covers the
+/// contiguous source region including any inter-sentence whitespace the
+/// joined chunk text normalised away. `splitByTokens` is the text-only
+/// projection of this function, so the two can never disagree.
+let splitByTokensWithSpans (config: ChunkingConfig) (text: string) : ChunkPiece list =
     if String.IsNullOrWhiteSpace text then
         []
     else
@@ -165,42 +277,62 @@ let splitByTokens (config: ChunkingConfig) (text: string) : string list =
         if totalTokens < config.MinTokens then
             []
         elif totalTokens <= config.MaxTokens then
-            [ text.Trim() ]
+            match tightenBounds text 0 text.Length with
+            | None -> []
+            | Some(s, e) -> [
+                {
+                    Text = text.Substring(s, e - s)
+                    Span = SourceSpan.create text s e
+                }
+              ]
         else
-            let sentences = splitBySentence text
+            let sentences = splitBySentenceWithOffsets text
 
             // If sentence split returned nothing useful, fall back to a
             // word-boundary split — guarantees we make progress even on
             // input with no punctuation.
             let units =
                 if sentences.IsEmpty then
-                    text.Split([| ' '; '\t'; '\n' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.toList
+                    wordsWithOffsets [| ' '; '\t'; '\n' |] text 0 text.Length
                 else
                     sentences
 
-            let chunks = ResizeArray<string>()
-            let current = ResizeArray<string>()
+            let chunks = ResizeArray<ChunkPiece>()
+            let current = ResizeArray<string * int * int>()
             let mutable currentTokens = 0
+
+            // Build one chunk out of a run of offset-carrying units: the
+            // text is the units re-joined with single spaces (unchanged
+            // from the pre-505 behaviour), the span is the source range
+            // from the first unit's start to the last unit's end.
+            let pieceOf (units: (string * int * int) seq) : ChunkPiece =
+                let arr = Array.ofSeq units
+                let body = arr |> Array.map (fun (t, _, _) -> t) |> String.concat " "
+                let s = arr |> Array.map (fun (_, a, _) -> a) |> Array.min
+                let e = arr |> Array.map (fun (_, _, b) -> b) |> Array.max
+
+                {
+                    Text = body.Trim()
+                    Span = SourceSpan.create text s e
+                }
 
             // Flush the current accumulator into a chunk and seed the next
             // chunk with `OverlapTokens` worth of trailing units.
             let flush () =
                 if current.Count > 0 then
-                    let text = String.concat " " current
-                    chunks.Add(text.Trim())
+                    chunks.Add(pieceOf current)
 
                     // Build the overlap seed by walking backwards from the
                     // last unit until we have at least OverlapTokens.
                     if config.OverlapTokens > 0 then
-                        let seed = ResizeArray<string>()
+                        let seed = ResizeArray<string * int * int>()
                         let mutable seedTokens = 0
                         let mutable i = current.Count - 1
 
                         while i >= 0 && seedTokens < config.OverlapTokens do
-                            let u = current[i]
+                            let (unitText, _, _) as u = current[i]
                             seed.Insert(0, u)
-                            seedTokens <- seedTokens + counter.CountTokens u
+                            seedTokens <- seedTokens + counter.CountTokens unitText
                             i <- i - 1
 
                         current.Clear()
@@ -210,26 +342,24 @@ let splitByTokens (config: ChunkingConfig) (text: string) : string list =
                         current.Clear()
                         currentTokens <- 0
 
-            for unit in units do
-                let unitTokens = counter.CountTokens unit
+            for (unitText, unitStart, unitEnd) as unit in units do
+                let unitTokens = counter.CountTokens unitText
 
                 if unitTokens > config.MaxTokens then
                     // The unit itself is bigger than a whole chunk. Flush
                     // what we have, then split the unit at whitespace.
                     flush ()
 
-                    let words =
-                        unit.Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries)
-                        |> Array.toList
+                    let words = wordsWithOffsets [| ' '; '\t' |] text unitStart unitEnd
 
-                    let inner = ResizeArray<string>()
+                    let inner = ResizeArray<string * int * int>()
                     let mutable innerTokens = 0
 
-                    for w in words do
-                        let wt = counter.CountTokens w
+                    for (wordText, _, _) as w in words do
+                        let wt = counter.CountTokens wordText
 
                         if innerTokens + wt > config.MaxTokens && inner.Count > 0 then
-                            chunks.Add((String.concat " " inner).Trim())
+                            chunks.Add(pieceOf inner)
                             inner.Clear()
                             innerTokens <- 0
 
@@ -253,8 +383,13 @@ let splitByTokens (config: ChunkingConfig) (text: string) : string list =
             flush ()
 
             chunks
-            |> Seq.filter (fun c -> counter.CountTokens c >= config.MinTokens || chunks.Count = 1)
+            |> Seq.filter (fun c -> counter.CountTokens c.Text >= config.MinTokens || chunks.Count = 1)
             |> Seq.toList
+
+/// Text-only projection of `splitByTokensWithSpans` — the pre-505 shape,
+/// preserved verbatim for every existing caller.
+let splitByTokens (config: ChunkingConfig) (text: string) : string list =
+    splitByTokensWithSpans config text |> List.map ChunkPiece.text
 
 // ─── Spreadsheet chunking ─────────────────────────────────────────
 
@@ -283,6 +418,46 @@ let formatRow (headers: string array) (values: string array) =
         sprintf "%s: %s" h v)
     |> String.concat " | "
 
+/// Optional source-text context for spreadsheet span capture (Phase 505).
+///
+/// A row-group chunk's *text* is synthesised — `Sheet "…", rows N–M` plus a
+/// re-rendered `Col: val | …` body — so it has no offsets of its own. The
+/// offsets have to come from the producer that parsed the source, and only
+/// some producers have them: a CSV extractor holds the raw text it parsed
+/// and can say where each row started, whereas an XLSX extractor is handed
+/// a decoded cell grid with no character stream behind it at all.
+///
+/// So this is a capability the producer either has or does not, and the
+/// answer is honest either way: supply a context and the row-group chunks
+/// carry real spans into the real source; supply `None` and they carry no
+/// span, which is the pre-505 chunk-granular citation exactly (GP 11). No
+/// third option where the chunker invents offsets into its own rendering.
+type SpanContext = {
+    /// The raw source text the offsets index into.
+    SourceText: string
+    /// 1-based source row index → `[start, end)` offsets of that row in
+    /// `SourceText`. Rows absent from the map contribute no offsets; a
+    /// chunk whose rows are all absent gets no span.
+    RowOffsets: Map<int, int * int>
+}
+
+/// Span covering the rows in `indices`, from the earliest row start to the
+/// latest row end. `None` when no row in the group has a recorded offset —
+/// a partially-known group still anchors to the rows that are known, which
+/// is strictly better than nothing and never wider than the group itself.
+let private spanForRows (ctx: SpanContext option) (indices: int seq) : SourceSpan option =
+    match ctx with
+    | None -> None
+    | Some c ->
+        let known = indices |> Seq.choose c.RowOffsets.TryFind |> Array.ofSeq
+
+        if known.Length = 0 then
+            None
+        else
+            let s = known |> Array.map fst |> Array.min
+            let e = known |> Array.map snd |> Array.max
+            SourceSpan.create c.SourceText s e
+
 /// Chunk a `SheetData` into prose-form chunks of `<= MaxTokens` each.
 /// Each chunk has the shape:
 ///
@@ -297,7 +472,11 @@ let formatRow (headers: string array) (values: string array) =
 /// that would overflow the budget on its own (a very wide sheet) is still
 /// emitted — the embedder will truncate at its own max input, but the row
 /// is preserved as a citable unit.
-let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
+///
+/// Phase 505: each piece additionally carries the source span of its row
+/// range when `ctx` supplies row offsets; `ctx = None` (every shipped
+/// caller today) yields `Span = None` and byte-identical chunk text.
+let chunkSpreadsheetWithSpans (config: ChunkingConfig) (ctx: SpanContext option) (data: SheetData) : ChunkPiece list =
     if data.Rows.IsEmpty || data.Headers.Length = 0 then
         []
     else
@@ -305,7 +484,7 @@ let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
         let totalRows = data.Rows.Length
         let columnsLine = sprintf "Columns: %s" (String.concat ", " data.Headers)
 
-        let chunks = ResizeArray<string>()
+        let chunks = ResizeArray<ChunkPiece>()
         let buffer = ResizeArray<string * int>() // (formatted row text, source row index)
         let mutable bufferTokens = 0
 
@@ -320,7 +499,12 @@ let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
                 let headerLine = buildHeaderLine startRow endRow
                 let body = buffer |> Seq.map fst |> String.concat "\n"
                 let text = String.concat "\n" [ headerLine; columnsLine; body ]
-                chunks.Add(text)
+
+                chunks.Add {
+                    Text = text
+                    Span = spanForRows ctx (buffer |> Seq.map snd)
+                }
+
                 buffer.Clear()
                 bufferTokens <- 0
 
@@ -341,7 +525,11 @@ let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
                 let row = formatRow data.Headers values
                 let line = buildHeaderLine idx idx
                 let text = String.concat "\n" [ line; columnsLine; row ]
-                chunks.Add(text)
+
+                chunks.Add {
+                    Text = text
+                    Span = spanForRows ctx [ idx ]
+                }
         else
             for (idx, values) in data.Rows do
                 let row = formatRow data.Headers values
@@ -356,6 +544,11 @@ let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
             flush ()
 
         chunks |> Seq.toList
+
+/// Text-only projection of `chunkSpreadsheetWithSpans` — the pre-505 shape,
+/// preserved verbatim for every existing caller.
+let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
+    chunkSpreadsheetWithSpans config None data |> List.map ChunkPiece.text
 
 // ─── Optional contextual header ───────────────────────────────────
 

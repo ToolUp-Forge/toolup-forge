@@ -64,6 +64,7 @@ let private factSource (factId: string) (rendering: string) : RetrievedSource = 
     FactRendering = Some rendering
     FactFreshness = Some FactFresh
     FactSupersededBy = None
+    Span = None
 }
 
 let private docSource (snippet: string) : RetrievedSource = {
@@ -80,6 +81,7 @@ let private docSource (snippet: string) : RetrievedSource = {
     FactRendering = None
     FactFreshness = None
     FactSupersededBy = None
+    Span = None
 }
 
 /// Build a `ScopedFact` directly (metric id supplied so the registry path

@@ -978,6 +978,10 @@
              history-less requests spend nothing), timeout + failure
              degradation, and the trace decision fields. -->
         <Compile Include="RAG\QueryRewriteContract.fs" />
+        <!-- Phase 505 — citation character-offset spans: spans resolve against
+             the source through chunking and projection, absence degrades to
+             chunk-granular (GP 11), and the text-only chunkers are pinned. -->
+        <Compile Include="RAG\CitationSpanContract.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />

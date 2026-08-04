@@ -522,6 +522,16 @@ let private renderContentWithUnverifiedBadges (content: string) : ReactElement =
 // Knowledge Base, or a pre-103 chunk with `OriginalRef = None`) →
 // renders nothing, so the panel behaves exactly as before (GP 11).
 
+/// Phase 505 — render a citation's character span as a compact source
+/// range. `chars 1024–1340`, not a raw pair: the label has to say what the
+/// numbers are, or two bare integers beside a page hint read as a second
+/// page reference. Half-open in the data, inclusive-looking in the display
+/// (`EndOffset - 1`), because that is how a reader counts characters in a
+/// document — the DOM `data-span-*` attributes carry the exact half-open
+/// values a consumer actually anchors with.
+let internal formatSpanRange (span: SourceSpan) : string =
+    sprintf "chars %d–%d" span.StartOffset (span.EndOffset - 1)
+
 let private formatOriginalSize (bytes: int64) : string =
     if bytes < 1024L then
         sprintf "%d B" bytes
@@ -765,6 +775,34 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                                     Html.span [ prop.text "·" ]
                                                     Html.span [ prop.text hint ]
                                                 | _ -> Html.none
+                                                // Phase 505 — a citation whose
+                                                // producer recorded character
+                                                // offsets shows the exact source
+                                                // range, and carries the resolved
+                                                // text in `title` so the user can
+                                                // confirm the anchor without
+                                                // opening the document. A source
+                                                // with no span (`None`) renders
+                                                // exactly as it did pre-505 —
+                                                // this branch emits nothing at
+                                                // all (GP 11).
+                                                match src.Span with
+                                                | Some span ->
+                                                    Html.span [ prop.text "·" ]
+
+                                                    Html.span [
+                                                        // Generic `data-*` escape
+                                                        // hatch per `DataProp.fs`
+                                                        // — the anchor a preview
+                                                        // surface reads to
+                                                        // highlight the region.
+                                                        dataProp.custom "data-span-start" (string span.StartOffset)
+                                                        dataProp.custom "data-span-end" (string span.EndOffset)
+                                                        prop.className "tabular-nums"
+                                                        prop.title span.Text
+                                                        prop.text (formatSpanRange span)
+                                                    ]
+                                                | None -> Html.none
                                             ]
                                         ]
                                         if src.Snippet <> "" then

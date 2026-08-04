@@ -8620,6 +8620,7 @@ ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.LocationHintKey : System.Stri
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.OriginKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.OriginModuleKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.OriginalRefKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.SpanKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.AIContext : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.Conversation : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
@@ -8752,7 +8753,7 @@ ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.TopK : System.Int32 { get 
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequestModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequestModule.create(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy) : ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource (class)
-ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource..ctor(System.String, System.String, System.String, System.Double, ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource..ctor(System.String, System.String, System.String, System.Double, ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan])
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.ChunkId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.DocumentId : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.DocumentName : System.String { get }
@@ -8766,6 +8767,7 @@ ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.OriginalRef : Microsoft.FSh
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.Scope : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.Score : System.Double { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.Snippet : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.Span : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan] { get }
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator (class)
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator.IsPage : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator.IsRowGroup : System.Boolean { get }
@@ -8790,6 +8792,17 @@ ToolUp.Platform.VectorKnowledgeTypes+SourceLocator+Tags.RowGroup : System.Int32 
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator+Tags.Section : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator+Tags.Sheet : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+SourceLocator+Tags.Slide : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpan (class)
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpan..ctor(System.Int32, System.Int32, System.String)
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpan.EndOffset : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpan.StartOffset : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpan.Text : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule.create(System.String, System.Int32, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan]
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule.isWellFormed(ToolUp.Platform.VectorKnowledgeTypes+SourceSpan) : System.Boolean
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule.length(ToolUp.Platform.VectorKnowledgeTypes+SourceSpan) : System.Int32
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule.resolvesIn(System.String, ToolUp.Platform.VectorKnowledgeTypes+SourceSpan) : System.Boolean
+ToolUp.Platform.VectorKnowledgeTypes+SourceSpanModule.sanitise(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan]
 ToolUp.Platform.VectorKnowledgeTypes+TextChunk (class)
 ToolUp.Platform.VectorKnowledgeTypes+TextChunk..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.VectorKnowledgeTypes+TextChunk.Content : System.String { get }

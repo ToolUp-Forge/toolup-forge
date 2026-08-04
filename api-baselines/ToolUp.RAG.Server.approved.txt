@@ -9,11 +9,20 @@ ToolUp.RAG.CachingEmbeddingProvider+CachingEmbeddingProvider (class)
 ToolUp.RAG.CachingEmbeddingProvider+CachingEmbeddingProvider..ctor(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache)
 ToolUp.RAG.Chunking (class)
 ToolUp.RAG.Chunking.chunkSpreadsheet(ToolUp.RAG.Chunking+ChunkingConfig, ToolUp.RAG.Chunking+SheetData) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.Chunking.chunkSpreadsheetWithSpans(ToolUp.RAG.Chunking+ChunkingConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.Chunking+SpanContext], ToolUp.RAG.Chunking+SheetData) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.Chunking+ChunkPiece]
 ToolUp.RAG.Chunking.defaultTokenCounter : ToolUp.RAG.Chunking+ITokenCounter { get }
 ToolUp.RAG.Chunking.formatRow(System.String[], System.String[]) : System.String
 ToolUp.RAG.Chunking.splitBySentence(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.Chunking.splitBySentenceWithOffsets(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Int32, System.Int32]]
 ToolUp.RAG.Chunking.splitByTokens(ToolUp.RAG.Chunking+ChunkingConfig, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.Chunking.splitByTokensWithSpans(ToolUp.RAG.Chunking+ChunkingConfig, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.Chunking+ChunkPiece]
 ToolUp.RAG.Chunking.withContextualHeader(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITextSummariser+ITextSummariser], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.RAG.Chunking+ChunkPiece (class)
+ToolUp.RAG.Chunking+ChunkPiece..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan])
+ToolUp.RAG.Chunking+ChunkPiece.Span : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan] { get }
+ToolUp.RAG.Chunking+ChunkPiece.Text : System.String { get }
+ToolUp.RAG.Chunking+ChunkPieceModule (class)
+ToolUp.RAG.Chunking+ChunkPieceModule.text(ToolUp.RAG.Chunking+ChunkPiece) : System.String
 ToolUp.RAG.Chunking+ChunkingConfig (class)
 ToolUp.RAG.Chunking+ChunkingConfig..ctor(System.Int32, System.Int32, System.Int32, ToolUp.RAG.Chunking+ITokenCounter)
 ToolUp.RAG.Chunking+ChunkingConfig.Counter : ToolUp.RAG.Chunking+ITokenCounter { get }
@@ -33,6 +42,10 @@ ToolUp.RAG.Chunking+SheetData..ctor(System.String, System.String[], Microsoft.FS
 ToolUp.RAG.Chunking+SheetData.Headers : System.String[] { get }
 ToolUp.RAG.Chunking+SheetData.Rows : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String[]]] { get }
 ToolUp.RAG.Chunking+SheetData.SheetName : System.String { get }
+ToolUp.RAG.Chunking+SpanContext (class)
+ToolUp.RAG.Chunking+SpanContext..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.Tuple`2[System.Int32, System.Int32]])
+ToolUp.RAG.Chunking+SpanContext.RowOffsets : Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.Tuple`2[System.Int32, System.Int32]] { get }
+ToolUp.RAG.Chunking+SpanContext.SourceText : System.String { get }
 ToolUp.RAG.CitationNormaliser (class)
 ToolUp.RAG.CitationNormaliser.UnverifiedTag : System.String (literal)
 ToolUp.RAG.CitationNormaliser.canonicalMarker(System.Int32) : System.String

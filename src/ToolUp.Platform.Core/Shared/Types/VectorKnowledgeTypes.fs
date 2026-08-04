@@ -153,6 +153,16 @@ module ChunkMetadata =
     [<Literal>]
     let FactMetricKey = "_factMetric"
 
+    /// Character-offset span of the source text the chunk was derived from
+    /// (Phase 505) — a JSON-serialised `SourceSpan`, stamped by a chunk
+    /// producer that knows the offsets. Absent for producers that do not
+    /// (synthesised chunks, notes, narratives, every chunk ingested before
+    /// the producer stamped spans), and absence degrades the citation to
+    /// today's chunk granularity rather than fabricating an anchor
+    /// (GP 11 / GP 9).
+    [<Literal>]
+    let SpanKey = "_span"
+
 /// Coarse classification of where a chunk came from. Stamped onto chunk
 /// metadata at ingestion time under `ChunkMetadata.OriginKey`. RAG stays
 /// agnostic to the producer's domain types — KB / narrative / AI-context
@@ -240,6 +250,91 @@ type SourceLocator =
     | Section of heading: string
     /// Inclusive 1-based source-row range within tabular data (CSV).
     | RowGroup of startRow: int * endRow: int
+
+/// Character-offset span into the *source text* a chunk was derived from
+/// (Phase 505). Where `SourceLocator` answers "which page / sheet / row
+/// range", this answers "which characters" — the precision a
+/// deep-link-and-highlight consumer needs to scroll to and mark the exact
+/// quoted region rather than the whole chunk.
+///
+/// **Self-sufficient by construction.** The span carries both the offsets
+/// and the text they resolve to, so a consumer holding only the span (a
+/// persisted conversation payload, a wire message) can render, verify, and
+/// diff it without re-fetching the source document — and a consumer that
+/// *does* hold the source can prove the offsets still line up
+/// (`SourceSpan.resolvesIn`) before highlighting, so a re-ingested or
+/// edited document surfaces as a refused highlight rather than a
+/// confidently-wrong one.
+///
+/// Offsets are **document-relative** (into the extracted source text, not
+/// into the chunk) and measured in UTF-16 characters — the unit
+/// `String.Substring` uses on both the .NET and Fable hosts, so a span
+/// round-trips through the wire and resolves identically on either side.
+type SourceSpan = {
+    /// 0-based inclusive start offset into the source text.
+    StartOffset: int
+    /// Exclusive end offset. `EndOffset - StartOffset` is the length, so a
+    /// well-formed span always has `EndOffset > StartOffset` (a zero-width
+    /// span anchors nothing and is rejected).
+    EndOffset: int
+    /// The exact source substring `[StartOffset, EndOffset)` resolves to.
+    /// Redundant with the offsets *given the source document* and
+    /// deliberately so: it is what makes the span verifiable without one.
+    Text: string
+}
+
+module SourceSpan =
+    /// Character length of the span.
+    let length (span: SourceSpan) : int = span.EndOffset - span.StartOffset
+
+    /// Internal consistency — checkable without the source document.
+    /// Non-negative start, strictly-positive length, and a `Text` whose
+    /// length agrees with the offsets. This is the check a wire consumer
+    /// can always run; `resolvesIn` is the stronger one for a consumer
+    /// that also holds the source.
+    let isWellFormed (span: SourceSpan) : bool =
+        not (isNull span.Text)
+        && span.StartOffset >= 0
+        && span.EndOffset > span.StartOffset
+        && span.Text.Length = span.EndOffset - span.StartOffset
+
+    /// The full check, for a consumer holding the source text: the span is
+    /// well-formed, in bounds, and the source really does read as `Text` at
+    /// those offsets. A span that fails here is stale (the document was
+    /// re-ingested or edited under it) — the caller downgrades to
+    /// chunk-granular rather than highlighting the wrong region.
+    let resolvesIn (sourceText: string) (span: SourceSpan) : bool =
+        isWellFormed span
+        && not (isNull sourceText)
+        && span.EndOffset <= sourceText.Length
+        && sourceText.Substring(span.StartOffset, span.Text.Length) = span.Text
+
+    /// Cut a span out of `sourceText`. `None` when the requested range is
+    /// out of bounds or empty — a producer never fabricates an anchor it
+    /// cannot substantiate (GP 9).
+    let create (sourceText: string) (startOffset: int) (endOffset: int) : SourceSpan option =
+        if
+            isNull sourceText
+            || startOffset < 0
+            || endOffset <= startOffset
+            || endOffset > sourceText.Length
+        then
+            None
+        else
+            Some {
+                StartOffset = startOffset
+                EndOffset = endOffset
+                Text = sourceText.Substring(startOffset, endOffset - startOffset)
+            }
+
+    /// GP 11 downgrade gate. A malformed span — from a buggy producer, a
+    /// hand-edited payload, or a `null` `Text` materialised by a
+    /// deserialiser reading a legacy record — becomes `None`, i.e. exactly
+    /// the pre-505 chunk-granular citation. Never a dangling anchor.
+    let sanitise (span: SourceSpan option) : SourceSpan option =
+        match span with
+        | Some s when isWellFormed s -> Some s
+        | _ -> None
 
 /// Structured reference to the *original* ingested document behind a
 /// retrieved chunk (Phase 103). Value-typed and producer-neutral — no
@@ -556,6 +651,17 @@ type RetrievedSource = {
     /// lineage's current head). `None` for a fresh fact or a non-fact
     /// source.
     FactSupersededBy: string option
+    /// Phase 505 — character-offset span of the source text this chunk was
+    /// derived from, read from the `ChunkMetadata.SpanKey` metadata the
+    /// chunk producer stamped at ingestion and validated for
+    /// well-formedness on the way out (`SourceSpan.sanitise`). `Some` only
+    /// when the producer knew the offsets; `None` for synthesised chunks
+    /// (spreadsheet row groups without a row-offset index, notes,
+    /// narratives, AI-context), for chunks ingested before producers
+    /// stamped spans, and for any span that failed validation — in every
+    /// one of those cases the citation is exactly the pre-505
+    /// chunk-granular one (GP 11), never a dangling anchor.
+    Span: SourceSpan option
 }
 
 /// Controls how results from multiple scopes are combined.

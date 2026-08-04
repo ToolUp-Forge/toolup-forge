@@ -476,6 +476,7 @@ let private lineageTests =
                 FactRendering = None
                 FactFreshness = None
                 FactSupersededBy = None
+                Span = None
             }
 
             let json = JsonSerializer.Serialize(source, opts)

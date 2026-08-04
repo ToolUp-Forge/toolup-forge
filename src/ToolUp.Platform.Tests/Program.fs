@@ -744,6 +744,8 @@ let allTests =
         MetadataFilterContract.tests
         // Phase 506 — conversation-aware query rewrite (IQueryRewriter stage).
         QueryRewriteContract.tests
+        // Phase 505 — citation character-offset spans (chunk → citation).
+        CitationSpanContract.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests
