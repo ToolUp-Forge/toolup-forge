@@ -386,23 +386,28 @@ type DefaultDeployPipeline
                         SubmittedBy = byUserId
                     }
 
+                    // Recover the artefactRef the target deploy actually
+                    // ran from its persisted `DeployPushing` transition —
+                    // every succeeded deploy emitted one (the prebuilt-
+                    // image path included). For a build-sourced deploy
+                    // (no `manifest.Runtime.Image`) this is the ONLY
+                    // record of the pushed image; the synthetic
+                    // `local-build:` fallback below names an image no
+                    // registry serves and survives only for histories
+                    // whose `DeployPushing` event was lost.
+                    let! tenantSummaries = readTenantSummaries tenantId
+
+                    let pushedImageRef =
+                        tenantSummaries
+                        |> List.tryPick (fun s ->
+                            match s.State with
+                            | DeployPushing imageRef when s.DeployId = target.DeployId -> Some imageRef
+                            | _ -> None)
+
                     do! emitState rollbackSummary
 
-                    // Re-launch the rollback target's container. Best-
-                    // effort; failure here is logged but the rollback
-                    // record stands (the event chain reflects operator
-                    // intent regardless of whether the new container
-                    // launches).
-                    let imageRef =
-                        match target.State with
-                        | DeploySucceeded _ ->
-                            // Recover the artefactRef from the matching
-                            // DeployPushing transition for this deploy.
-                            None
-                        | _ -> None
-                    // Fall back: pull manifest.Runtime.Image when set.
                     let effectiveImage =
-                        match imageRef, target.Manifest.Runtime.Image with
+                        match pushedImageRef, target.Manifest.Runtime.Image with
                         | Some r, _ -> r
                         | None, Some img -> img
                         | None, None -> sprintf "local-build:%s:%s" target.Manifest.App.Slug target.BuildId
@@ -413,10 +418,35 @@ type DefaultDeployPipeline
                     match launched with
                     | Ok _ -> return Ok rollbackDeployId
                     | Error err ->
-                        logger.Warn
-                            $"[DeployPipeline] event=rollback_launch_failed deployId={rollbackDeployId}: %A{err}"
+                        // The rollback launched nothing — surface it.
+                        // The `DeployRolledBack` record above stands as
+                        // operator intent; the terminal `DeployFailed`
+                        // transition records that the relaunch did not
+                        // happen, and the caller gets the failure
+                        // rather than a rollback id that looks healthy.
+                        let failed = {
+                            rollbackSummary with
+                                State = DeployFailed("rollback-launch", sprintf "%A" err)
+                                StateChangedAt = DateTime.UtcNow
+                        }
 
-                        return Ok rollbackDeployId
+                        do! emitState failed
+
+                        logger.Error(
+                            $"[DeployPipeline] event=rollback_launch_failed deployId={rollbackDeployId}: %A{err}",
+                            None
+                        )
+
+                        return
+                            Error(
+                                DeployStorageFailure(
+                                    sprintf
+                                        "rollback %s launch failed: image %s: %A"
+                                        rollbackDeployId
+                                        effectiveImage
+                                        err
+                                )
+                            )
         }
 
         member _.GetDeployHistory(tenantId: TenantId, count: int) : Async<DeploySummary list> = async {

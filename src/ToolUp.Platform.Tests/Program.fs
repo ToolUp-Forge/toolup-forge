@@ -214,6 +214,9 @@ let allTests =
         // create-time guards, codecs); live arm Pending unless
         // TOOLUP_PGVECTOR_CONNECTION_STRING is set.
         PgvectorVectorStoreTests.tests
+        // Phase 513 — Redis IEmbeddingCache companion. Structural arm
+        // always on; live arm Pending unless TOOLUP_REDIS_CONNECTION is set.
+        RedisEmbeddingCacheTests.tests
         KnowledgeUserScopeIsolationTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests
@@ -739,9 +742,13 @@ let allTests =
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).
         MetadataFilterContract.tests
+        // Phase 506 — conversation-aware query rewrite (IQueryRewriter stage).
+        QueryRewriteContract.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests
+        // Phase 512 — per-scope KB corpus quota + age-based retention sweep.
+        KbQuotaRetentionTests.tests
         BrandingTests.tests
         BrandKitTests.tests
         // Phase 269 — brandkit → hosted-tree theme-token bridge: projection,
@@ -944,6 +951,11 @@ let allTests =
         DeployPlaneTests.deployPlanFallbackTests
         DeployPlaneTests.deployPlanMutationCheck
         DeployPlaneTests.deployPlanDiffTests
+        // DefaultDeployPipeline.Rollback regression: a build-sourced
+        // deploy's rollback relaunches the artefact ref recovered from
+        // the DeployPushing event history (never a synthetic
+        // local-build ref), and a failed relaunch surfaces as Error.
+        DeployPlaneTests.defaultPipelineRollbackTests
         // v0.5.0 — DOM-attr helper module sanity packs + audit ratchet.
         // The DataProp / AriaProp helper modules (sub-task A) ship
         // sanity tests that mirror SvgPropTests' shape; the audit
@@ -1356,6 +1368,20 @@ let allTests =
         // ordering that keeps a refused upload out of storage.
         UploadValidationTests.contractTests
         UploadValidationTests.tests
+        // Phase 478 — the isolated execution profile: ExecutionProfile as
+        // data on the portable ExternalWorkSpec (Standard by default, so
+        // the pre-478 path is unchanged), the three-clause isolation
+        // posture a backend declares, the refusal that happens BEFORE a
+        // submission reaches a non-declaring backend (measured by what the
+        // inner dispatcher SAW, each case paired with an unwrapped
+        // control), and the gated-output pipeline — the ungated payload
+        // unreachable by reflection sweep, and released only through the
+        // Phase 311 gate.
+        IsolatedExecutionProfileTests.profileTests
+        IsolatedExecutionProfileTests.postureTests
+        IsolatedExecutionProfileTests.gateTests
+        IsolatedExecutionProfileTests.structuralTests
+        IsolatedExecutionProfileTests.releaseTests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

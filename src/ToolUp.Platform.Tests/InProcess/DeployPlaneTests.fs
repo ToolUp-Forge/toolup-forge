@@ -18,12 +18,17 @@ open ToolUp.ContainerSchedulers.DockerLocal.Scheduler
 
 // ─── Phase 26 substrate — in-process bindings for the contract packs ─
 //
-// Binds the four `I*Contract` packs to single-node default impls + a
-// minimal in-memory mock surface. The TenantFleet pack binds to the
-// shipped `EntityStoreTenantFleet`; the other three bind to small
-// in-memory mocks until lane 1's `JobSchedulerBuildOrchestrator` and
-// `DefaultDeployPipeline` land — once they do, those bindings swap to
-// the real impls without touching the contract packs.
+// Binds the four `I*Contract` packs to the shipped single-node
+// defaults: TenantFleet to `EntityStoreTenantFleet`, the build-
+// orchestrator pack to `JobSchedulerBuildOrchestrator` (over the
+// deterministic `DeployPlaneJobScheduler` double below), and the
+// deploy-pipeline pack to `DefaultDeployPipeline` composed over the
+// same defaults. The in-memory mocks survive for the seams the packs
+// still need doubles for: `IContainerScheduler` (the Docker-backed
+// leg is env-gated), and `InMemoryDeployPipeline`, which the
+// Phase 185 fallback binding keeps deliberately — it is the
+// unchanged pre-Phase-185 implementer that proves the `PlanDeploy`
+// extension member's GP 11 claim.
 //
 // The IContainerScheduler pack runs against the in-memory mock
 // always. A second binding targets `DockerLocalContainerScheduler`
@@ -273,6 +278,87 @@ type InMemoryDeployPipeline() =
             | _ -> return []
         }
 
+// ─── Deterministic IJobScheduler double for the deploy-plane bindings ─
+
+let private nullLogger =
+    { new ILogger with
+        member _.Debug(_) = ()
+        member _.Info(_) = ()
+        member _.Warn(_) = ()
+        member _.Error(_, _) = ()
+    }
+
+/// Minimal `IJobScheduler` double for binding the shipped
+/// `JobSchedulerBuildOrchestrator`. Registers handlers, persists
+/// registrations, and — when `dispatchOnTrigger` — executes the job's
+/// handler synchronously inside `TriggerOnce`, so a build has
+/// terminated before `EnqueueBuild` returns and a test never races a
+/// background dispatch.
+///
+/// With `dispatchOnTrigger = false`, `TriggerOnce` acknowledges
+/// without executing — the "background dispatch has not run yet"
+/// state, held indefinitely. The IBuildOrchestrator contract pack
+/// binds this mode so its active-build / queue-depth / cancel cases
+/// observe builds exactly as enqueued (the real
+/// `InProcessJobScheduler` dispatches via `Async.Start`, which would
+/// make those observations a race).
+type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
+    let handlers = ConcurrentDictionary<string, IJobHandler>()
+    let jobs = ConcurrentDictionary<JobId, JobRegistration>()
+
+    interface IJobScheduler with
+        member _.RegisterHandler(name, handler) = handlers[name] <- handler
+
+        member _.RegisterHandlerAsync(name, handler) = async {
+            handlers[name] <- handler
+            return Ok()
+        }
+
+        member _.Schedule(registration) = async {
+            let id = Guid.NewGuid()
+            jobs[id] <- registration
+            return Ok id
+        }
+
+        member _.Cancel(_scopeId, jobId) = async { jobs.TryRemove jobId |> ignore }
+
+        member _.Disable(_, _) = async { return () }
+        member _.Enable(_, _) = async { return () }
+        member _.Get(_, _) = async { return None }
+        member _.ListJobs(_) = async { return [] }
+        member _.GetRecentRuns(_, _, _) = async { return [] }
+
+        member _.TriggerOnce(_scopeId, jobId, byUserId) = async {
+            match jobs.TryGetValue jobId with
+            | false, _ -> return Error(sprintf "job %O not scheduled" jobId)
+            | true, registration ->
+                if not dispatchOnTrigger then
+                    return Ok()
+                else
+                    match handlers.TryGetValue registration.Handler with
+                    | false, _ -> return Error(sprintf "handler %s not registered" registration.Handler)
+                    | true, handler ->
+                        let now = DateTime.UtcNow
+
+                        let ctx: JobContext = {
+                            JobId = jobId
+                            ScopeId = registration.ScopeId
+                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
+                            Attempt = 1
+                            Trigger = registration.Trigger
+                            TriggerSource = ScheduledManually byUserId
+                            ScheduledAt = now
+                            RunningAt = now
+                            Payload = registration.Payload
+                            DeadLetterDestination = registration.RetryPolicy.DeadLetterDestination
+                        }
+
+                        let! _ = handler.Execute ctx
+                        return Ok()
+        }
+
+        member _.NotifyEventWritten(_, _, _) = async { return () }
+
 // ─── ITenantFleet binding (real EntityStoreTenantFleet) ──────────────
 
 let tenantFleetTests =
@@ -310,21 +396,41 @@ let tenantFleetTests =
 
     ITenantFleetContract.tests "EntityStoreTenantFleet" factory
 
-// ─── IBuildOrchestrator binding (in-memory mock) ─────────────────────
+// ─── IBuildOrchestrator binding (shipped JobSchedulerBuildOrchestrator) ─
+//
+// Deferred-dispatch scheduler mode: builds stay observable in the
+// state they were enqueued in, which is what the pack's active-list /
+// queue-depth / cancel cases assert against.
 
 let buildOrchestratorTests =
     let factory () : IBuildOrchestrator =
-        InMemoryBuildOrchestrator() :> IBuildOrchestrator
+        let eventStore =
+            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-    IBuildOrchestratorContract.tests "InMemoryBuildOrchestrator" factory
+        ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler false) eventStore nullLogger
+        :> IBuildOrchestrator
 
-// ─── IDeployPipeline binding (in-memory mock) ────────────────────────
+    IBuildOrchestratorContract.tests "JobSchedulerBuildOrchestrator" factory
+
+// ─── IDeployPipeline binding (shipped DefaultDeployPipeline) ─────────
+//
+// The full single-node default composition: DefaultDeployPipeline
+// over JobSchedulerBuildOrchestrator (synchronous-dispatch scheduler
+// mode, so an enqueued build has terminated before BeginDeploy fires
+// the driver) + the in-memory container scheduler + event store.
 
 let deployPipelineTests =
     let factory () : IDeployPipeline =
-        InMemoryDeployPipeline() :> IDeployPipeline
+        let eventStore =
+            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-    IDeployPipelineContract.tests "InMemoryDeployPipeline" factory
+        let orchestrator =
+            ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler true) eventStore nullLogger
+
+        ToolUp.Platform.DefaultDeployPipeline.create orchestrator (InMemoryContainerScheduler()) eventStore nullLogger
+        :> IDeployPipeline
+
+    IDeployPipelineContract.tests "DefaultDeployPipeline" factory
 
 // ─── IContainerScheduler binding (in-memory mock) ────────────────────
 
@@ -495,14 +601,6 @@ let dockerWireDtoTests =
 //      below pins that it does, so the zero-mutation assertions in the
 //      two bindings above are known-falsifiable rather than merely
 //      passing.
-
-let private nullLogger =
-    { new ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
-    }
 
 /// A pipeline that mutates during `PlanDeploy` — the control. Stops
 /// the first container it observes, then returns the honest diff, so
@@ -754,4 +852,214 @@ let deployPlanDiffTests =
             Expect.equal plan.ObservedAt at "ObservedAt carried through"
             Expect.equal plan (DeployPlan.empty "t" at) "an empty diff equals the empty plan"
             Expect.isTrue (DeployPlan.isNoOp plan) "empty is a no-op"
+    ]
+
+// ─── DefaultDeployPipeline.Rollback — build-sourced image recovery ───
+//
+// Regression pack for the latent Phase 26 defect found during the
+// Phase 185 ship: `Rollback` never recovered the pushed artefact ref
+// from the target deploy's `DeployPushing` transition (both branches
+// of the recovery match returned `None`), so rolling back a deploy
+// whose image came from a build — `manifest.Runtime.Image = None` —
+// synthesised `local-build:<slug>:<buildId>`, an image no registry
+// serves, and the launch failure was logged at Warn and swallowed:
+// the caller saw a successful rollback that launched nothing.
+//
+// The manifests here deliberately carry NO `Runtime.Image` and the
+// build's artefact ref differs from the synthetic `local-build:`
+// shape, so a passing test can only mean the ref was recovered from
+// the event history.
+
+/// `IContainerScheduler` decorator whose `LaunchContainer` can be
+/// switched to fail — succeeds while the test seeds deploy history,
+/// then fails the rollback's relaunch.
+type private FlakyLaunchScheduler(inner: IContainerScheduler) =
+    member val FailLaunches = false with get, set
+
+    interface IContainerScheduler with
+        member this.LaunchContainer(tenantId, spec) = async {
+            if this.FailLaunches then
+                return Error(SchedulerUnavailable "registry offline")
+            else
+                return! inner.LaunchContainer(tenantId, spec)
+        }
+
+        member _.StopContainer(containerId) = inner.StopContainer containerId
+        member _.RestartContainer(containerId) = inner.RestartContainer containerId
+        member _.GetContainerStatus(containerId) = inner.GetContainerStatus containerId
+        member _.ListContainers(tenantId) = inner.ListContainers tenantId
+        member _.StreamLogs(containerId, fromTime) = inner.StreamLogs(containerId, fromTime)
+
+let defaultPipelineRollbackTests =
+    /// Manifest with NO `Runtime.Image` — the deploy's image comes
+    /// from the build outcome, so rollback has no manifest fallback.
+    let mkBuildManifest slug : DeployManifest = {
+        DeployManifest.empty with
+            App = {
+                Name = slug
+                Slug = slug
+                Region = "eu-west"
+            }
+            Runtime = {
+                DeployManifest.empty.Runtime with
+                    Framework = "dotnet:10"
+                    Image = None
+            }
+    }
+
+    /// Build whose artefact ref is `image` (a `PrebuiltImage` build
+    /// source succeeds with the ref verbatim under the substrate
+    /// default). Synchronous-dispatch scheduler mode means the build
+    /// has terminated when this returns.
+    let enqueueBuild (orchestrator: IBuildOrchestrator) (slug: string) (image: string) = async {
+        let request: BuildRequest = {
+            AppSlug = slug
+            Source = PrebuiltImage image
+            Manifest = mkBuildManifest slug
+            RetryPolicy = BuildRetryPolicy.noRetry
+            SubmittedBy = "alice"
+            Idempotency = None
+        }
+
+        match! orchestrator.EnqueueBuild request with
+        | Ok buildId -> return buildId
+        | Error e -> return failtestf "EnqueueBuild: %A" e
+    }
+
+    /// Poll `GetDeployState` until the deploy reaches a terminal
+    /// state (the pipeline driver runs on a background async).
+    let awaitTerminal (pipeline: IDeployPipeline) (deployId: DeployId) = async {
+        let deadline = DateTime.UtcNow.AddSeconds 30.0
+        let mutable terminal: DeploySummary option = None
+
+        while terminal.IsNone && DateTime.UtcNow < deadline do
+            match! pipeline.GetDeployState deployId with
+            | Ok summary ->
+                match summary.State with
+                | DeploySucceeded _
+                | DeployFailed _
+                | DeployRolledBack _ -> terminal <- Some summary
+                | _ -> do! Async.Sleep 25
+            | Error _ -> do! Async.Sleep 25
+
+        match terminal with
+        | Some summary -> return summary
+        | None -> return failtestf "deploy %s did not reach a terminal state" deployId
+    }
+
+    /// Two succeeded build-sourced deploys for `tenant` (images v1
+    /// then v2), so a rollback targets the v1 deploy.
+    let seedTwoDeploys
+        (pipeline: IDeployPipeline)
+        (orchestrator: IBuildOrchestrator)
+        (tenant: TenantId)
+        (slug: string)
+        =
+        async {
+            let! buildId1 = enqueueBuild orchestrator slug (sprintf "registry/%s:v1" slug)
+            let! begun1 = pipeline.BeginDeploy(tenant, buildId1, mkBuildManifest slug, "alice")
+
+            match begun1 with
+            | Error e -> return failtestf "BeginDeploy v1: %A" e
+            | Ok deployId1 ->
+                let! settled1 = awaitTerminal pipeline deployId1
+
+                match settled1.State with
+                | DeploySucceeded _ -> ()
+                | other -> failtestf "v1 deploy did not succeed: %A" other
+
+                // Distinct StartedAt so the rollback's newest-first scan
+                // is deterministic.
+                do! Async.Sleep 15
+
+                let! buildId2 = enqueueBuild orchestrator slug (sprintf "registry/%s:v2" slug)
+                let! begun2 = pipeline.BeginDeploy(tenant, buildId2, mkBuildManifest slug, "alice")
+
+                match begun2 with
+                | Error e -> return failtestf "BeginDeploy v2: %A" e
+                | Ok deployId2 ->
+                    let! settled2 = awaitTerminal pipeline deployId2
+
+                    match settled2.State with
+                    | DeploySucceeded _ -> return ()
+                    | other -> return failtestf "v2 deploy did not succeed: %A" other
+        }
+
+    let composed (containerScheduler: IContainerScheduler) =
+        let eventStore =
+            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+        let orchestrator =
+            ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler true) eventStore nullLogger
+            :> IBuildOrchestrator
+
+        let pipeline =
+            ToolUp.Platform.DefaultDeployPipeline.create orchestrator containerScheduler eventStore nullLogger
+            :> IDeployPipeline
+
+        orchestrator, pipeline
+
+    testList "DefaultDeployPipeline.Rollback — build-sourced deploys" [
+
+        testCaseAsync "rollback relaunches the artefact ref the target deploy pushed, not a synthetic local-build ref"
+        <| async {
+            let tenant = "tenant-rollback-recovery"
+            let slug = "rollapp"
+            let scheduler = InMemoryContainerScheduler() :> IContainerScheduler
+            let orchestrator, pipeline = composed scheduler
+
+            do! seedTwoDeploys pipeline orchestrator tenant slug
+
+            let! rolled = pipeline.Rollback(tenant, "operator-1")
+
+            match rolled with
+            | Error e -> failtestf "Rollback: expected Ok, got %A" e
+            | Ok rollbackDeployId -> Expect.isFalse (String.IsNullOrEmpty rollbackDeployId) "rollback DeployId assigned"
+
+            let! containers = scheduler.ListContainers(Some tenant)
+
+            let imagesOf ref =
+                containers |> List.filter (fun c -> c.ImageRef = ref) |> List.length
+
+            Expect.equal
+                (imagesOf (sprintf "registry/%s:v1" slug))
+                2
+                "the v1 image launched twice: the original deploy plus the rollback's recovered relaunch"
+
+            Expect.equal (imagesOf (sprintf "registry/%s:v2" slug)) 1 "the v2 head deploy's container is untouched"
+
+            Expect.isEmpty
+                (containers |> List.filter (fun c -> c.ImageRef.StartsWith "local-build:"))
+                "no synthetic local-build image was ever launched — the defect this pack regresses"
+        }
+
+        testCaseAsync "a rollback whose relaunch fails surfaces Error instead of a healthy-looking Ok"
+        <| async {
+            let tenant = "tenant-rollback-launchfail"
+            let slug = "failapp"
+            let flaky = FlakyLaunchScheduler(InMemoryContainerScheduler())
+            let orchestrator, pipeline = composed flaky
+
+            do! seedTwoDeploys pipeline orchestrator tenant slug
+
+            let! before = (flaky :> IContainerScheduler).ListContainers(Some tenant)
+
+            flaky.FailLaunches <- true
+            let! rolled = pipeline.Rollback(tenant, "operator-1")
+
+            match rolled with
+            | Ok id -> failtestf "expected the failed relaunch to surface as Error, got Ok %s" id
+            | Error(DeployStorageFailure msg) ->
+                Expect.stringContains msg "rollback" "the failure names the rollback step"
+
+                Expect.stringContains
+                    msg
+                    (sprintf "registry/%s:v1" slug)
+                    "the failure names the RECOVERED image — recovery ran even on the failure path"
+            | Error other -> failtestf "expected DeployStorageFailure, got %A" other
+
+            let! after = (flaky :> IContainerScheduler).ListContainers(Some tenant)
+
+            Expect.equal after.Length before.Length "the failed rollback launched nothing"
+        }
     ]
