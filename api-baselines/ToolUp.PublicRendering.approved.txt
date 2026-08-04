@@ -210,6 +210,7 @@ ToolUp.PublicRendering.IPublicContentApi.GetCollection(System.String) : Microsof
 ToolUp.PublicRendering.IPublicContentApi.GetPage(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.PublicPage]]
 ToolUp.PublicRendering.IPublicContentApi.GetPageInContext(System.String, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.PublicPage]]
 ToolUp.PublicRendering.IPublicContentApi.ListPages(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]]
+ToolUp.PublicRendering.IPublicContentApi.ListPagesPublic(System.DateTimeOffset, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]]
 ToolUp.PublicRendering.IRenderCache (interface)
 ToolUp.PublicRendering.IRenderCache.Invalidate(ToolUp.PublicRendering.RenderKey) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.PublicRendering.IRenderCache.Set(ToolUp.PublicRendering.RenderKey, ToolUp.PublicRendering.RenderedPage, ToolUp.PublicRendering.CachePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -527,6 +528,10 @@ ToolUp.PublicRendering.PageSlice`1.Page : System.Int32 { get }
 ToolUp.PublicRendering.PageSlice`1.PageCount : System.Int32 { get }
 ToolUp.PublicRendering.Pagination (class)
 ToolUp.PublicRendering.Pagination.paginate`1(System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[a]) : ToolUp.PublicRendering.PageSlice`1[a]
+ToolUp.PublicRendering.PublicContentApi (class)
+ToolUp.PublicRendering.PublicContentApi.defaultListPagesPublic(ToolUp.PublicRendering.IPublicContentApi, System.DateTimeOffset, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]]
+ToolUp.PublicRendering.PublicContentApi.gateAt(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]
+ToolUp.PublicRendering.PublicContentApi.listPagesPublicNow(ToolUp.PublicRendering.IPublicContentApi, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]]
 ToolUp.PublicRendering.PublicContentApiImpl (class)
 ToolUp.PublicRendering.PublicContentApiImpl..ctor(ToolUp.PublicRendering.MarkdownContentLoader, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEntityStore+IEntityStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.IContentSource])
 ToolUp.PublicRendering.PublicContentApiImplModule (class)

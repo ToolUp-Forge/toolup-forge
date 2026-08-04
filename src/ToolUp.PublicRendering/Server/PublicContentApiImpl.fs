@@ -1,5 +1,6 @@
 namespace ToolUp.PublicRendering
 
+open System
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.IEntityStore
@@ -158,6 +159,13 @@ type PublicContentApiImpl
         }
 
         member _.ListPages(prefix: string) : Async<PublicPage list> = async { return loader.ListPages prefix }
+
+        // Phase 632 — the gated enumeration. The file loader has no
+        // publish-status index to push the predicate into, so this is the
+        // shipped default body: enumerate, then gate.
+        member _.ListPagesPublic(now: DateTimeOffset, prefix: string) : Async<PublicPage list> = async {
+            return PublicContentApi.gateAt now (loader.ListPages prefix)
+        }
 
         member _.GetCollection(collectionId: string) : Async<PublicPage list> = async {
             return loader.GetCollection collectionId

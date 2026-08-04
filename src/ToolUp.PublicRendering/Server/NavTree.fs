@@ -154,6 +154,26 @@ module NavTree =
     /// docs-site "chapter list from the `docs` collection" shape. Each
     /// page becomes a public `NavSlug` leaf labelled by its `Title`,
     /// preserving the input order (the caller sorts the collection).
+    ///
+    /// **Caller-supplied-list contract (Phase 632).** This function is a
+    /// pure projection: every page it is handed becomes a rendered nav
+    /// leaf carrying that page's TITLE and SLUG, with no filtering of any
+    /// kind. **When the nav will be rendered on an anonymous public
+    /// surface, `pages` MUST already be gated** — obtain it from
+    /// `IPublicContentApi.ListPagesPublic` (or filter it through
+    /// `PublicContentApi.gateAt`), never from raw `ListPages` /
+    /// `GetCollection`, both of which return `Draft` / `Archived` /
+    /// future-`Scheduled` and non-`Public` pages.
+    ///
+    /// The gate is deliberately NOT applied here, unlike
+    /// `TaxonomyHandler.tagIndexSource`: a nav tree is also rendered on
+    /// authenticated and preview surfaces, where showing an unpublished
+    /// page to its own author is the point, and this function has no
+    /// `AccessContext` with which to tell the two apart. Every in-tree
+    /// caller passes a gated list; the requirement was previously
+    /// unstated, which is how the next caller gets it wrong. Same
+    /// contract applies to `ofCollectionPaged` and, transitively, to
+    /// `Pagination.paginate` over any page-derived list.
     let ofCollection (pages: PublicPage list) : NavNode list =
         pages
         |> List.map (fun p -> {
@@ -167,6 +187,13 @@ module NavTree =
     /// `pageSize` of the collection's nodes, plus the `PageSlice`
     /// pagination contract (so a layout can render a pager). `pageSize
     /// <= 0` = the whole collection as page 1 of 1 (unchanged).
+    ///
+    /// **Caller-supplied-list contract (Phase 632):** as `ofCollection` —
+    /// `pages` must already be gated when the result is rendered on an
+    /// anonymous public surface. Pagination makes an ungated list *worse*,
+    /// not better: an unpublished entry does not merely appear, it also
+    /// shifts every later entry across page boundaries, so the page count
+    /// itself becomes an oracle over the unpublished set.
     let ofCollectionPaged (pageSize: int) (page: int) (pages: PublicPage list) : PageSlice<NavNode> =
         Pagination.paginate pageSize page (ofCollection pages)
 

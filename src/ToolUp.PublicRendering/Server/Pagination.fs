@@ -27,6 +27,15 @@ module Pagination =
     /// Slice `items` into page `page` of size `pageSize`. `page` is
     /// clamped to `1 .. PageCount`; `pageSize <= 0` returns the whole
     /// list as a single page. An empty list is page 1 of 1 with no items.
+    ///
+    /// **Caller-supplied-list contract (Phase 632).** Generic and total —
+    /// it slices whatever it is handed and filters nothing. When `items`
+    /// derives from `PublicPage`s destined for an anonymous public
+    /// surface, **gate before paginating**, not after: filter through
+    /// `IPublicContentApi.ListPagesPublic` / `PublicContentApi.gateAt`
+    /// first. Gating a slice after the fact leaves the *page count* and
+    /// the boundary positions computed over the ungated set, which is
+    /// itself an oracle over how much unpublished content exists.
     let paginate (pageSize: int) (page: int) (items: 'a list) : PageSlice<'a> =
         let total = List.length items
 

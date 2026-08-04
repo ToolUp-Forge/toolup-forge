@@ -668,6 +668,8 @@ let allTests =
         PublicRenderingTests.tests
         // Phase 149/150/157 — sitemap conditional-GET + sharding + search index.
         SitemapSearchIndexTests.tests
+        // Phase 632 — structural public-content enumeration gate.
+        PublicEnumerationGateTests.tests
         // Phase 85 — NarrativeFromData analytics → Narrative projectors.
         NarrativeFromDataTests.tests
         // Phase 521 — fact-referencing narrative Metric spans.

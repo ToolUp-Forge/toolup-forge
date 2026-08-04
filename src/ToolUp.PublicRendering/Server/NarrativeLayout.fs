@@ -275,9 +275,10 @@ module NarrativeLayout =
                 }
 
         /// Wrap an `IPublicContentApi` so single-page resolutions carry a
-        /// self-referencing canonical. `ListPages` / `GetCollection` pass
-        /// through unchanged — sitemap / listing surfaces need no per-entry
-        /// canonical and must stay byte-for-byte (GP 11).
+        /// self-referencing canonical. `ListPages` / `ListPagesPublic` /
+        /// `GetCollection` pass through unchanged — sitemap / listing
+        /// surfaces need no per-entry canonical and must stay
+        /// byte-for-byte (GP 11).
         let wrap (baseUrl: string) (inner: IPublicContentApi) : IPublicContentApi =
             { new IPublicContentApi with
                 member _.GetPage slug = async {
@@ -286,6 +287,12 @@ module NarrativeLayout =
                 }
 
                 member _.ListPages prefix = inner.ListPages prefix
+
+                // Phase 632 — delegate rather than re-gate, so a decorated
+                // impl whose store pushes the predicate down keeps doing
+                // so.
+                member _.ListPagesPublic(now, prefix) = inner.ListPagesPublic(now, prefix)
+
                 member _.GetCollection collectionId = inner.GetCollection collectionId
 
                 member _.GetPageInContext(slug, ctx) = async {

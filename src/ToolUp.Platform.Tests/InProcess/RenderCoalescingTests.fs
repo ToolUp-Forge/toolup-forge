@@ -164,6 +164,10 @@ let private mkGatedApi (page: PublicPage) (resolveCount: int ref) (gate: Task) :
     { new IPublicContentApi with
         member _.GetPage slug = async { return Some page }
         member _.ListPages _ = async { return [ page ] }
+
+        member this.ListPagesPublic(now, prefix) =
+            PublicContentApi.defaultListPagesPublic this now prefix
+
         member _.GetCollection _ = async { return [] }
 
         member _.GetPageInContext(_slug, _ctx) = async {

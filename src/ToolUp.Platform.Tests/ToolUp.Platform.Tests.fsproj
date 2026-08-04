@@ -892,6 +892,10 @@
         <!-- Phase 149/150/157 — sitemap conditional-GET + index sharding +
              universal lastmod + static client-search index emitter. -->
         <Compile Include="InProcess\SitemapSearchIndexTests.fs" />
+        <!-- Phase 632 — structural public-content enumeration gate: the
+             RAG-ingestion audit, the source-sweep probe, and the sixth
+             (taxonomy) surface it found. -->
+        <Compile Include="InProcess\PublicEnumerationGateTests.fs" />
         <!-- Phase 85 — NarrativeFromData projector output-shape +
              determinism + graceful-degradation tests. -->
         <Compile Include="InProcess\NarrativeFromDataTests.fs" />

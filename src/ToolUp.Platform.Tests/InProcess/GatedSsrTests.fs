@@ -187,6 +187,10 @@ let private mkApi (pages: Map<string, PublicPage>) : IPublicContentApi =
     { new IPublicContentApi with
         member _.GetPage slug = async { return Map.tryFind slug pages }
         member _.ListPages _ = async { return pages |> Map.toList |> List.map snd }
+
+        member this.ListPagesPublic(now, prefix) =
+            PublicContentApi.defaultListPagesPublic this now prefix
+
         member _.GetCollection _ = async { return [] }
         member _.GetPageInContext(slug, _ctx) = async { return Map.tryFind slug pages }
     }

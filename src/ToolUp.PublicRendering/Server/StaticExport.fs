@@ -431,8 +431,6 @@ module StaticExport =
                     | Some explicit -> explicit
                     | None -> PublicContentApiImpl.create loader None contentSources
 
-                let! allPages = api.ListPages ""
-
                 // Phase 38 — one clock for the whole export pass, so a
                 // `Scheduled` page cannot land in the sitemap but miss the
                 // page write (or vice versa) because the wall clock crossed
@@ -444,8 +442,10 @@ module StaticExport =
                 // host-config below. Phase 38 — and only *published* ones:
                 // a static export is served by a dumb file host with no
                 // publish gate of its own, so a `Draft` written to disk is
-                // permanently, anonymously readable.
-                let pages = allPages |> List.filter (PublicPage.isPubliclyDiscoverable exportNow)
+                // permanently, anonymously readable. Phase 632 — the gate
+                // now rides the seam, so the ungated set never enters this
+                // scope at all and cannot be reached by a later edit.
+                let! pages = api.ListPagesPublic(exportNow, "")
 
                 let! dynamicSlugs = ContentSource.enumerateAll contentSources
 

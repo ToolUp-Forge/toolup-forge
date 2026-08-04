@@ -228,9 +228,13 @@ module SearchIndexEmitter =
 
                     return es, signature, ConditionalGet.deployStamp
                 | None ->
-                    let! pages = api.ListPages ""
+                    // Phase 632 — the gated enumeration. The index carries
+                    // page TITLES and DESCRIPTIONS, so an ungated read here
+                    // leaks more than a slug.
+                    let now = System.DateTimeOffset.UtcNow
+                    let! pages = api.ListPagesPublic(now, "")
                     let! dynamicSlugs = enumerate ()
-                    let universe = SitemapGenerator.entries pages dynamicSlugs
+                    let universe = SitemapGenerator.entriesAt now pages dynamicSlugs
 
                     return
                         entriesFromUniverse baseUrl pages universe,

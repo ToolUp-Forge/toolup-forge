@@ -87,6 +87,68 @@ let tests (name: string) (factory: unit -> IPublicContentApi) =
             Expect.equal pages.Length 2 "Fixture has two news pages"
         }
 
+        // ─── ListPagesPublic (Phase 632) ──────────────────────────
+        //
+        // The gated enumeration's conformance bar. Stated as properties
+        // over whatever the binding's fixture holds, so no binding has to
+        // arrange an unpublished page to be held to the contract — the
+        // subset + predicate laws bind either way.
+
+        testCaseAsync "ListPagesPublic is a subset of ListPages and admits nothing undiscoverable"
+        <| async {
+            let api = factory ()
+            let now = DateTimeOffset.UtcNow
+            let! raw = api.ListPages ""
+            let! gated = api.ListPagesPublic(now, "")
+
+            let rawSlugs = raw |> List.map (fun p -> Slug.value p.Slug) |> Set.ofList
+
+            let strays =
+                gated
+                |> List.map (fun p -> Slug.value p.Slug)
+                |> List.filter (rawSlugs.Contains >> not)
+
+            Expect.isEmpty strays "ListPagesPublic must not invent pages ListPages does not return"
+
+            let leaked =
+                gated
+                |> List.filter (PublicPage.isPubliclyDiscoverable now >> not)
+                |> List.map (fun p -> Slug.value p.Slug)
+
+            Expect.isEmpty leaked "every page from ListPagesPublic must satisfy isPubliclyDiscoverable"
+        }
+
+        testCaseAsync "ListPagesPublic honours the prefix filter"
+        <| async {
+            let api = factory ()
+            let! pages = api.ListPagesPublic(DateTimeOffset.UtcNow, "news/")
+
+            let allMatchPrefix =
+                pages |> List.forall (fun p -> (Slug.value p.Slug).StartsWith "news/")
+
+            Expect.isTrue allMatchPrefix "Every gated result must start with the prefix too"
+        }
+
+        testCaseAsync "ListPagesPublic equals ListPages when every fixture page is published (GP 11)"
+        <| async {
+            // The compat property: a deployment that never adopted the
+            // publish lifecycle sees the gated enumeration return exactly
+            // what the ungated one does. Skipped-by-construction for a
+            // binding whose fixture holds an unpublished page — the
+            // premise is checked, not assumed.
+            let api = factory ()
+            let now = DateTimeOffset.UtcNow
+            let! raw = api.ListPages ""
+
+            if raw |> List.forall (PublicPage.isPubliclyDiscoverable now) then
+                let! gated = api.ListPagesPublic(now, "")
+
+                let slugsOf (ps: PublicPage list) =
+                    ps |> List.map (fun p -> Slug.value p.Slug) |> List.sort
+
+                Expect.equal (slugsOf gated) (slugsOf raw) "an all-published fixture is byte-for-byte unchanged"
+        }
+
         // ─── GetCollection ────────────────────────────────────────
 
         testCaseAsync "GetCollection returns pages newest-first by PublishedAt"

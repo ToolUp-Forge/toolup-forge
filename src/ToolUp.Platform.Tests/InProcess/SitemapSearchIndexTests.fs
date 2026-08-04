@@ -36,6 +36,14 @@ let private fakeApi (pages: PublicPage list) : IPublicContentApi =
 
         member _.ListPages(_: string) = async { return pages }
 
+        // Phase 632 — the gated enumeration, via the shipped default body.
+        // Deliberately NOT hand-gated here: the Phase 38 surface cases
+        // below assert over what the handlers emit, so the fake must be
+        // the honest ungated store plus the real gate, not a store that
+        // has already had the drafts removed.
+        member this.ListPagesPublic(now, prefix) =
+            PublicContentApi.defaultListPagesPublic this now prefix
+
         member _.GetCollection(collectionId: string) = async {
             return pages |> List.filter (fun p -> p.Collection = Some collectionId)
         }

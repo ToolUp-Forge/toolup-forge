@@ -145,7 +145,13 @@ module NarrativeFeedHandler =
 
     let handler (config: NarrativeFeedConfig) (api: IPublicContentApi) : HttpHandler =
         fun _next (ctx: HttpContext) -> task {
-            let! filePages = api.ListPages ""
+            // Phase 632 — one clock for the whole response, and the GATED
+            // enumeration for the API tier. The entity-store tier below is
+            // a caller-assembled list with no seam of its own, so it stays
+            // gated by `selectEntriesAt` — at the SAME instant, so the two
+            // tiers cannot disagree about a `Scheduled` page.
+            let now = System.DateTimeOffset.UtcNow
+            let! filePages = api.ListPagesPublic(now, "")
 
             let entityStore =
                 ctx.RequestServices.GetService(typeof<IEntityStore>)
@@ -158,7 +164,7 @@ module NarrativeFeedHandler =
                 | None -> async { return [] }
 
             let allPages = filePages @ storePages
-            let narrativePages = selectEntries config allPages
+            let narrativePages = selectEntriesAt now config allPages
 
             let xml =
                 NarrativeAtom.renderFeed config.Title config.SelfUrl config.AlternateUrl narrativePages

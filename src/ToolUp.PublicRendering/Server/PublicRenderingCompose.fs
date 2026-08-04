@@ -1255,9 +1255,16 @@ module PublicRenderingServerApp =
                                     let universe () = async {
                                         let api = sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
 
-                                        let! pages = api.ListPages ""
+                                        // Phase 632 — gated enumeration.
+                                        // IndexNow does not merely expose
+                                        // the universe, it PUSHES it to
+                                        // search engines, so an ungated
+                                        // read here is the loudest leak of
+                                        // the set.
+                                        let now = System.DateTimeOffset.UtcNow
+                                        let! pages = api.ListPagesPublic(now, "")
                                         let! dyn = ContentSource.enumerateAll contentSources
-                                        return SitemapGenerator.entries pages dyn
+                                        return SitemapGenerator.entriesAt now pages dyn
                                     }
 
                                     IndexNowService(
@@ -1321,9 +1328,13 @@ module PublicRenderingServerApp =
                                             let postFn body =
                                                 IndexNow.postWith httpClient indexNowOptions.Endpoint body
 
+                                            // Phase 632 — gated enumeration
+                                            // per satellite site, same as
+                                            // the default site above.
                                             let universe () = async {
-                                                let! pages = site.Api.ListPages ""
-                                                return SitemapGenerator.entries pages []
+                                                let now = System.DateTimeOffset.UtcNow
+                                                let! pages = site.Api.ListPagesPublic(now, "")
+                                                return SitemapGenerator.entriesAt now pages []
                                             }
 
                                             let svc =

@@ -364,7 +364,14 @@ module SitemapGenerator =
         (enumerate: unit -> Async<Slug list>)
         : HttpHandler =
         fun next (ctx: HttpContext) -> task {
-            let! pages = api.ListPages ""
+            // Phase 632 — one clock for the whole response, and the GATED
+            // enumeration. `entriesAt` re-applies the same predicate (the
+            // gate is idempotent), so the body is byte-for-byte unchanged;
+            // what changes is that the ungated set never reaches this
+            // handler at all, so a future edit here cannot leak by
+            // forgetting a filter.
+            let now = DateTimeOffset.UtcNow
+            let! pages = api.ListPagesPublic(now, "")
             let! dynamicSlugs = enumerate ()
 
             // Phase 150 — apply the universal-lastmod fallback before the
@@ -372,7 +379,7 @@ module SitemapGenerator =
             // signature + Last-Modified are taken over the post-applied
             // universe.
             let universe =
-                applyDefaultLastmod options.Sharding.DefaultLastmod (entries pages dynamicSlugs)
+                applyDefaultLastmod options.Sharding.DefaultLastmod (entriesAt now pages dynamicSlugs)
 
             let signature = IndexNow.computeSignature universe
 
@@ -426,11 +433,14 @@ module SitemapGenerator =
         : HttpHandler =
         routef "/sitemap-%s.xml" (fun shardName ->
             fun next (ctx: HttpContext) -> task {
-                let! pages = api.ListPages ""
+                // Phase 632 — gated enumeration, one pinned clock (a shard
+                // and its parent index must agree about what exists).
+                let now = DateTimeOffset.UtcNow
+                let! pages = api.ListPagesPublic(now, "")
                 let! dynamicSlugs = enumerate ()
 
                 let universe =
-                    applyDefaultLastmod options.Sharding.DefaultLastmod (entries pages dynamicSlugs)
+                    applyDefaultLastmod options.Sharding.DefaultLastmod (entriesAt now pages dynamicSlugs)
 
                 if List.length universe <= options.Sharding.Threshold then
                     return! skipPipeline
