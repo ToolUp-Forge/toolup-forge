@@ -286,6 +286,13 @@ let allTests =
         // and the opt-in preflight gate keyed on the topology intent
         // ServerConfig already declares.
         ScaleReadinessTests.tests
+        // Phase 488 — appliance deployment profile: the declared-offline boot
+        // posture (external probes downgraded, security / structural guards
+        // still aborting), signed upgrade verification refusing a tampered
+        // artefact with the mismatch named, the closed-schema telemetry diode
+        // (no string anywhere in its transitive closure; off by default means
+        // zero outbound), and the data-class-aware support-bundle redaction.
+        ApplianceProfileTests.tests
         // Phase 438 — authorization-surface manifest: what each component
         // exposes and what each entry requires, derived from the live
         // registrations + the dispatcher's own Phase 69d classifier; the

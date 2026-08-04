@@ -143,6 +143,90 @@ ToolUp.Platform.AnonymousSessionMigrator (class)
 ToolUp.Platform.AnonymousSessionMigrator.compose(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IAnonymousSessionMigrator]) : ToolUp.Platform.IAnonymousSessionMigrator
 ToolUp.Platform.Api (class)
 ToolUp.Platform.Api.make`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RouteInfo`1[Microsoft.AspNetCore.Http.HttpContext], ToolUp.Remoting.Server.ErrorResult]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, T], ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, T]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ForgeAuthContext]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingTelemetry]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.ApplianceBootPosture (class)
+ToolUp.Platform.ApplianceBootPosture.ExternalEndpointRule : System.String (literal)
+ToolUp.Platform.ApplianceBootPosture.ValidatorName : System.String (literal)
+ToolUp.Platform.ApplianceBootPosture.classifiedRuleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ClassifiedCompositionRule] { get }
+ToolUp.Platform.ApplianceBootPosture.defects(ToolUp.Platform.ApplianceProfile, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements], ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
+ToolUp.Platform.ApplianceBootPosture.externalEndpointFindings(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements], ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ConfigRequirement]]
+ToolUp.Platform.ApplianceBootPosture.offlineTolerantRegistration(ToolUp.Platform.ApplianceProfile, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ApplianceBootPosture.ruleManifest : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor] { get }
+ToolUp.Platform.ApplianceBootPosture.serviceRegistration(ToolUp.Platform.ApplianceProfile, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements], ToolUp.Platform.CompositionManifest, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ApplianceBootPosture.toValidationResult(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.ApplianceBootPosture+ApplianceBootPostureValidator (class)
+ToolUp.Platform.ApplianceBootPosture+ApplianceBootPostureValidator..ctor(ToolUp.Platform.ApplianceProfile, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements], ToolUp.Platform.CompositionManifest)
+ToolUp.Platform.ApplianceBundleVocabulary (class)
+ToolUp.Platform.ApplianceBundleVocabulary..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ApplianceBundleVocabulary.ClassifiedNames : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ApplianceBundleVocabulary.SuffixFloor : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AppliancePosture (class)
+ToolUp.Platform.AppliancePosture.ConnectedAppliance : ToolUp.Platform.AppliancePosture { get }
+ToolUp.Platform.AppliancePosture.DeclaredOffline : ToolUp.Platform.AppliancePosture { get }
+ToolUp.Platform.AppliancePosture.IsConnectedAppliance : System.Boolean { get }
+ToolUp.Platform.AppliancePosture.IsDeclaredOffline : System.Boolean { get }
+ToolUp.Platform.AppliancePosture.Tag : System.Int32 { get }
+ToolUp.Platform.AppliancePosture+Tags (class)
+ToolUp.Platform.AppliancePosture+Tags.ConnectedAppliance : System.Int32 (literal)
+ToolUp.Platform.AppliancePosture+Tags.DeclaredOffline : System.Int32 (literal)
+ToolUp.Platform.ApplianceProfile (class)
+ToolUp.Platform.ApplianceProfile..ctor(ToolUp.Platform.AppliancePosture, System.TimeSpan)
+ToolUp.Platform.ApplianceProfile.ClockSkewTolerance : System.TimeSpan { get }
+ToolUp.Platform.ApplianceProfile.Posture : ToolUp.Platform.AppliancePosture { get }
+ToolUp.Platform.ApplianceProfileModule (class)
+ToolUp.Platform.ApplianceProfileModule.DefaultClockSkewTolerance : System.TimeSpan { get }
+ToolUp.Platform.ApplianceProfileModule.identity : ToolUp.Platform.ApplianceProfile { get }
+ToolUp.Platform.ApplianceProfileModule.isOffline(ToolUp.Platform.ApplianceProfile) : System.Boolean
+ToolUp.Platform.ApplianceProfileModule.offline : ToolUp.Platform.ApplianceProfile { get }
+ToolUp.Platform.ApplianceProfileModule.offlineWithSkew(System.TimeSpan) : ToolUp.Platform.ApplianceProfile
+ToolUp.Platform.ApplianceProfileModule.widenWindow(ToolUp.Platform.ApplianceProfile, System.TimeSpan) : System.TimeSpan
+ToolUp.Platform.ApplianceProfileModule.withinSkew(ToolUp.Platform.ApplianceProfile, System.DateTimeOffset, System.DateTimeOffset) : System.Boolean
+ToolUp.Platform.ApplianceSupportBundle (class)
+ToolUp.Platform.ApplianceSupportBundle.SuffixFloor : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ApplianceSupportBundle.floorOnly : ToolUp.Platform.ApplianceBundleVocabulary { get }
+ToolUp.Platform.ApplianceSupportBundle.isContentBearing(ToolUp.Platform.ClassificationLevel) : System.Boolean
+ToolUp.Platform.ApplianceSupportBundle.mask(ToolUp.Platform.ApplianceBundleVocabulary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ApplianceSupportBundle+BundleSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ApplianceSupportBundle+BundleSection]
+ToolUp.Platform.ApplianceSupportBundle.maskJson(ToolUp.Platform.ApplianceBundleVocabulary, System.String) : System.String
+ToolUp.Platform.ApplianceSupportBundle.maskJsonLines(ToolUp.Platform.ApplianceBundleVocabulary, System.String) : System.String
+ToolUp.Platform.ApplianceSupportBundle.maskSection(ToolUp.Platform.ApplianceBundleVocabulary, ToolUp.Platform.ApplianceSupportBundle+BundleSection) : ToolUp.Platform.ApplianceSupportBundle+BundleSection
+ToolUp.Platform.ApplianceSupportBundle.maskedValue(System.Int32) : System.String
+ToolUp.Platform.ApplianceSupportBundle.shouldMask(ToolUp.Platform.ApplianceBundleVocabulary, System.String) : System.Boolean
+ToolUp.Platform.ApplianceSupportBundle.survivingContentFields(ToolUp.Platform.ApplianceBundleVocabulary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ApplianceSupportBundle+BundleSection]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
+ToolUp.Platform.ApplianceSupportBundle.vocabularyOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldClassification]) : ToolUp.Platform.ApplianceBundleVocabulary
+ToolUp.Platform.ApplianceSupportBundle+BundleSection (class)
+ToolUp.Platform.ApplianceSupportBundle+BundleSection..ctor(System.String, ToolUp.Platform.ApplianceSupportBundle+SectionShape, System.String)
+ToolUp.Platform.ApplianceSupportBundle+BundleSection.Content : System.String { get }
+ToolUp.Platform.ApplianceSupportBundle+BundleSection.Name : System.String { get }
+ToolUp.Platform.ApplianceSupportBundle+BundleSection.Shape : ToolUp.Platform.ApplianceSupportBundle+SectionShape { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape (class)
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.IsJsonLinesSection : System.Boolean { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.IsJsonSection : System.Boolean { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.IsOpaque : System.Boolean { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.JsonLinesSection : ToolUp.Platform.ApplianceSupportBundle+SectionShape { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.JsonSection : ToolUp.Platform.ApplianceSupportBundle+SectionShape { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.Opaque : ToolUp.Platform.ApplianceSupportBundle+SectionShape { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape.Tag : System.Int32 { get }
+ToolUp.Platform.ApplianceSupportBundle+SectionShape+Tags (class)
+ToolUp.Platform.ApplianceSupportBundle+SectionShape+Tags.JsonLinesSection : System.Int32 (literal)
+ToolUp.Platform.ApplianceSupportBundle+SectionShape+Tags.JsonSection : System.Int32 (literal)
+ToolUp.Platform.ApplianceSupportBundle+SectionShape+Tags.Opaque : System.Int32 (literal)
+ToolUp.Platform.ApplianceUpgrade (class)
+ToolUp.Platform.ApplianceUpgrade.ValidatorName : System.String (literal)
+ToolUp.Platform.ApplianceUpgrade.describeRefusal(ToolUp.Platform.ArtefactProvenance, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceMismatch]) : System.String
+ToolUp.Platform.ApplianceUpgrade.describeStaging(ToolUp.Platform.UpgradeStagingReport) : System.String
+ToolUp.Platform.ApplianceUpgrade.migrationPreview(ToolUp.Platform.MigrationProbes, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationGap]
+ToolUp.Platform.ApplianceUpgrade.serviceRegistration(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Platform.ArtefactProvenance, System.Byte[], System.Byte[]], System.String]]], Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ApplianceUpgrade.sha256Hex(System.Byte[]) : System.String
+ToolUp.Platform.ApplianceUpgrade.stage(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.MigrationProbes, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ArtefactProvenance], ToolUp.Platform.UpgradeCandidate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.UpgradeStagingReport]
+ToolUp.Platform.ApplianceUpgrade.verifyArtefact(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.ArtefactProvenance, System.Byte[], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceMismatch]]]
+ToolUp.Platform.ApplianceUpgrade+ApplianceArtefactValidator (class)
+ToolUp.Platform.ApplianceUpgrade+ApplianceArtefactValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Platform.ArtefactProvenance, System.Byte[], System.Byte[]], System.String]]])
+ToolUp.Platform.ArtefactProvenance (class)
+ToolUp.Platform.ArtefactProvenance..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ArtefactProvenance.ArtefactId : System.String { get }
+ToolUp.Platform.ArtefactProvenance.ArtefactSha256 : System.String { get }
+ToolUp.Platform.ArtefactProvenance.DetachedJws : System.String { get }
+ToolUp.Platform.ArtefactProvenance.SbomSha256 : System.String { get }
+ToolUp.Platform.ArtefactProvenance.Version : System.String { get }
 ToolUp.Platform.ArtifactCanonical (class)
 ToolUp.Platform.ArtifactCanonical.encodeManifest(ToolUp.Platform.ArtifactManifest) : System.Byte[]
 ToolUp.Platform.ArtifactCanonical.messageToSign(ToolUp.Platform.ArtifactManifest, System.Byte[]) : System.Byte[]
@@ -1832,6 +1916,183 @@ ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Name : System.String { ge
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Status : System.String { get }
 ToolUp.Platform.DiagnosticBundleHandler (class)
 ToolUp.Platform.DiagnosticBundleHandler.route(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.DiodeConsent (class)
+ToolUp.Platform.DiodeConsent.DiodeWithheld : ToolUp.Platform.DiodeConsent { get }
+ToolUp.Platform.DiodeConsent.IsDiodeGranted : System.Boolean { get }
+ToolUp.Platform.DiodeConsent.IsDiodeWithheld : System.Boolean { get }
+ToolUp.Platform.DiodeConsent.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeConsent+DiodeGranted (class)
+ToolUp.Platform.DiodeConsent+DiodeGranted.Item : ToolUp.Platform.DiodeConsentGrant { get }
+ToolUp.Platform.DiodeConsent+Tags (class)
+ToolUp.Platform.DiodeConsent+Tags.DiodeGranted : System.Int32 (literal)
+ToolUp.Platform.DiodeConsent+Tags.DiodeWithheld : System.Int32 (literal)
+ToolUp.Platform.DiodeConsentGrant (class)
+ToolUp.Platform.DiodeConsentGrant..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeSection])
+ToolUp.Platform.DiodeConsentGrant.GrantedAtUnixSeconds : System.Int64 { get }
+ToolUp.Platform.DiodeConsentGrant.Sections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeSection] { get }
+ToolUp.Platform.DiodeCounter (class)
+ToolUp.Platform.DiodeCounter.IsJobsFailed : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsJobsRun : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsRequestsRefused : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsRequestsServed : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsSupportBundlesGenerated : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsUpgradeRefusals : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.IsUpgradeVerifications : System.Boolean { get }
+ToolUp.Platform.DiodeCounter.JobsFailed : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.JobsRun : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.RequestsRefused : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.RequestsServed : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.SupportBundlesGenerated : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeCounter.UpgradeRefusals : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter.UpgradeVerifications : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounter+Tags (class)
+ToolUp.Platform.DiodeCounter+Tags.JobsFailed : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.JobsRun : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.RequestsRefused : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.RequestsServed : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.SupportBundlesGenerated : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.UpgradeRefusals : System.Int32 (literal)
+ToolUp.Platform.DiodeCounter+Tags.UpgradeVerifications : System.Int32 (literal)
+ToolUp.Platform.DiodeCounterModule (class)
+ToolUp.Platform.DiodeCounterModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeCounter] { get }
+ToolUp.Platform.DiodeCounterModule.toWireString(ToolUp.Platform.DiodeCounter) : System.String
+ToolUp.Platform.DiodeCounterReading (class)
+ToolUp.Platform.DiodeCounterReading..ctor(ToolUp.Platform.DiodeCounter, System.Int64)
+ToolUp.Platform.DiodeCounterReading.Counter : ToolUp.Platform.DiodeCounter { get }
+ToolUp.Platform.DiodeCounterReading.Value : System.Int64 { get }
+ToolUp.Platform.DiodeHealthReading (class)
+ToolUp.Platform.DiodeHealthReading..ctor(ToolUp.Platform.DiodeSubsystem, ToolUp.Platform.DiodeHealthState)
+ToolUp.Platform.DiodeHealthReading.State : ToolUp.Platform.DiodeHealthState { get }
+ToolUp.Platform.DiodeHealthReading.Subsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeHealthState (class)
+ToolUp.Platform.DiodeHealthState.DiodeDegraded : ToolUp.Platform.DiodeHealthState { get }
+ToolUp.Platform.DiodeHealthState.DiodeHealthy : ToolUp.Platform.DiodeHealthState { get }
+ToolUp.Platform.DiodeHealthState.DiodeUnhealthy : ToolUp.Platform.DiodeHealthState { get }
+ToolUp.Platform.DiodeHealthState.IsDiodeDegraded : System.Boolean { get }
+ToolUp.Platform.DiodeHealthState.IsDiodeHealthy : System.Boolean { get }
+ToolUp.Platform.DiodeHealthState.IsDiodeUnhealthy : System.Boolean { get }
+ToolUp.Platform.DiodeHealthState.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeHealthState+Tags (class)
+ToolUp.Platform.DiodeHealthState+Tags.DiodeDegraded : System.Int32 (literal)
+ToolUp.Platform.DiodeHealthState+Tags.DiodeHealthy : System.Int32 (literal)
+ToolUp.Platform.DiodeHealthState+Tags.DiodeUnhealthy : System.Int32 (literal)
+ToolUp.Platform.DiodeHealthStateModule (class)
+ToolUp.Platform.DiodeHealthStateModule.toWireString(ToolUp.Platform.DiodeHealthState) : System.String
+ToolUp.Platform.DiodePreflightOutcome (class)
+ToolUp.Platform.DiodePreflightOutcome.DiodePreflightError : ToolUp.Platform.DiodePreflightOutcome { get }
+ToolUp.Platform.DiodePreflightOutcome.DiodePreflightOk : ToolUp.Platform.DiodePreflightOutcome { get }
+ToolUp.Platform.DiodePreflightOutcome.DiodePreflightWarning : ToolUp.Platform.DiodePreflightOutcome { get }
+ToolUp.Platform.DiodePreflightOutcome.IsDiodePreflightError : System.Boolean { get }
+ToolUp.Platform.DiodePreflightOutcome.IsDiodePreflightOk : System.Boolean { get }
+ToolUp.Platform.DiodePreflightOutcome.IsDiodePreflightWarning : System.Boolean { get }
+ToolUp.Platform.DiodePreflightOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.DiodePreflightOutcome+Tags (class)
+ToolUp.Platform.DiodePreflightOutcome+Tags.DiodePreflightError : System.Int32 (literal)
+ToolUp.Platform.DiodePreflightOutcome+Tags.DiodePreflightOk : System.Int32 (literal)
+ToolUp.Platform.DiodePreflightOutcome+Tags.DiodePreflightWarning : System.Int32 (literal)
+ToolUp.Platform.DiodePreflightOutcomeModule (class)
+ToolUp.Platform.DiodePreflightOutcomeModule.toWireString(ToolUp.Platform.DiodePreflightOutcome) : System.String
+ToolUp.Platform.DiodePreflightReading (class)
+ToolUp.Platform.DiodePreflightReading..ctor(ToolUp.Platform.DiodeValidatorClass, ToolUp.Platform.DiodePreflightOutcome, System.Int32)
+ToolUp.Platform.DiodePreflightReading.Class : ToolUp.Platform.DiodeValidatorClass { get }
+ToolUp.Platform.DiodePreflightReading.Outcome : ToolUp.Platform.DiodePreflightOutcome { get }
+ToolUp.Platform.DiodePreflightReading.Validators : System.Int32 { get }
+ToolUp.Platform.DiodeSection (class)
+ToolUp.Platform.DiodeSection.CounterSection : ToolUp.Platform.DiodeSection { get }
+ToolUp.Platform.DiodeSection.HealthSection : ToolUp.Platform.DiodeSection { get }
+ToolUp.Platform.DiodeSection.IsCounterSection : System.Boolean { get }
+ToolUp.Platform.DiodeSection.IsHealthSection : System.Boolean { get }
+ToolUp.Platform.DiodeSection.IsPreflightSection : System.Boolean { get }
+ToolUp.Platform.DiodeSection.PreflightSection : ToolUp.Platform.DiodeSection { get }
+ToolUp.Platform.DiodeSection.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeSection+Tags (class)
+ToolUp.Platform.DiodeSection+Tags.CounterSection : System.Int32 (literal)
+ToolUp.Platform.DiodeSection+Tags.HealthSection : System.Int32 (literal)
+ToolUp.Platform.DiodeSection+Tags.PreflightSection : System.Int32 (literal)
+ToolUp.Platform.DiodeSectionModule (class)
+ToolUp.Platform.DiodeSectionModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeSection] { get }
+ToolUp.Platform.DiodeSectionModule.toWireString(ToolUp.Platform.DiodeSection) : System.String
+ToolUp.Platform.DiodeSubsystem (class)
+ToolUp.Platform.DiodeSubsystem.AuthSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.EventStoreSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.InferenceSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.IsAuthSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsEventStoreSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsInferenceSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsNotificationSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsPlatformSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsSchedulerSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsSearchSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.IsStorageSubsystem : System.Boolean { get }
+ToolUp.Platform.DiodeSubsystem.NotificationSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.PlatformSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.SchedulerSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.SearchSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.StorageSubsystem : ToolUp.Platform.DiodeSubsystem { get }
+ToolUp.Platform.DiodeSubsystem.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeSubsystem+Tags (class)
+ToolUp.Platform.DiodeSubsystem+Tags.AuthSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.EventStoreSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.InferenceSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.NotificationSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.PlatformSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.SchedulerSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.SearchSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystem+Tags.StorageSubsystem : System.Int32 (literal)
+ToolUp.Platform.DiodeSubsystemModule (class)
+ToolUp.Platform.DiodeSubsystemModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeSubsystem] { get }
+ToolUp.Platform.DiodeSubsystemModule.toWireString(ToolUp.Platform.DiodeSubsystem) : System.String
+ToolUp.Platform.DiodeTransmissionJournal (class)
+ToolUp.Platform.DiodeTransmissionJournal..ctor()
+ToolUp.Platform.DiodeTransmissionJournal..ctor(System.Int32)
+ToolUp.Platform.DiodeTransmissionJournal.Capacity : System.Int32 { get }
+ToolUp.Platform.DiodeTransmissionOutcome (class)
+ToolUp.Platform.DiodeTransmissionOutcome.DiodeSuppressed : ToolUp.Platform.DiodeTransmissionOutcome { get }
+ToolUp.Platform.DiodeTransmissionOutcome.IsDiodeFailed : System.Boolean { get }
+ToolUp.Platform.DiodeTransmissionOutcome.IsDiodeSent : System.Boolean { get }
+ToolUp.Platform.DiodeTransmissionOutcome.IsDiodeSuppressed : System.Boolean { get }
+ToolUp.Platform.DiodeTransmissionOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeTransmissionOutcome+DiodeFailed (class)
+ToolUp.Platform.DiodeTransmissionOutcome+DiodeFailed.reason : System.String { get }
+ToolUp.Platform.DiodeTransmissionOutcome+DiodeSent (class)
+ToolUp.Platform.DiodeTransmissionOutcome+DiodeSent.payloadBytes : System.Int32 { get }
+ToolUp.Platform.DiodeTransmissionOutcome+Tags (class)
+ToolUp.Platform.DiodeTransmissionOutcome+Tags.DiodeFailed : System.Int32 (literal)
+ToolUp.Platform.DiodeTransmissionOutcome+Tags.DiodeSent : System.Int32 (literal)
+ToolUp.Platform.DiodeTransmissionOutcome+Tags.DiodeSuppressed : System.Int32 (literal)
+ToolUp.Platform.DiodeTransmissionOutcomeModule (class)
+ToolUp.Platform.DiodeTransmissionOutcomeModule.describe(ToolUp.Platform.DiodeTransmissionOutcome) : System.String
+ToolUp.Platform.DiodeTransmissionRecord (class)
+ToolUp.Platform.DiodeTransmissionRecord..ctor(System.Int64, ToolUp.Platform.OperationalTelemetryFrame, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DiodeTransmissionOutcome)
+ToolUp.Platform.DiodeTransmissionRecord.AtUnixSeconds : System.Int64 { get }
+ToolUp.Platform.DiodeTransmissionRecord.Frame : ToolUp.Platform.OperationalTelemetryFrame { get }
+ToolUp.Platform.DiodeTransmissionRecord.Outcome : ToolUp.Platform.DiodeTransmissionOutcome { get }
+ToolUp.Platform.DiodeTransmissionRecord.Payload : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DiodeValidatorClass (class)
+ToolUp.Platform.DiodeValidatorClass.DiodeExternalProbeClass : ToolUp.Platform.DiodeValidatorClass { get }
+ToolUp.Platform.DiodeValidatorClass.DiodeSecurityClass : ToolUp.Platform.DiodeValidatorClass { get }
+ToolUp.Platform.DiodeValidatorClass.DiodeStructuralClass : ToolUp.Platform.DiodeValidatorClass { get }
+ToolUp.Platform.DiodeValidatorClass.IsDiodeExternalProbeClass : System.Boolean { get }
+ToolUp.Platform.DiodeValidatorClass.IsDiodeSecurityClass : System.Boolean { get }
+ToolUp.Platform.DiodeValidatorClass.IsDiodeStructuralClass : System.Boolean { get }
+ToolUp.Platform.DiodeValidatorClass.Tag : System.Int32 { get }
+ToolUp.Platform.DiodeValidatorClass+Tags (class)
+ToolUp.Platform.DiodeValidatorClass+Tags.DiodeExternalProbeClass : System.Int32 (literal)
+ToolUp.Platform.DiodeValidatorClass+Tags.DiodeSecurityClass : System.Int32 (literal)
+ToolUp.Platform.DiodeValidatorClass+Tags.DiodeStructuralClass : System.Int32 (literal)
+ToolUp.Platform.DiodeValidatorClassModule (class)
+ToolUp.Platform.DiodeValidatorClassModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeValidatorClass] { get }
+ToolUp.Platform.DiodeValidatorClassModule.toWireString(ToolUp.Platform.DiodeValidatorClass) : System.String
+ToolUp.Platform.DiodeVersion (class)
+ToolUp.Platform.DiodeVersion..ctor(System.Int32, System.Int32, System.Int32)
+ToolUp.Platform.DiodeVersion.Major : System.Int32 { get }
+ToolUp.Platform.DiodeVersion.Minor : System.Int32 { get }
+ToolUp.Platform.DiodeVersion.Patch : System.Int32 { get }
+ToolUp.Platform.DiodeVersionModule (class)
+ToolUp.Platform.DiodeVersionModule.create(System.Int32, System.Int32, System.Int32) : ToolUp.Platform.DiodeVersion
+ToolUp.Platform.DiodeVersionModule.parse(System.String) : ToolUp.Platform.DiodeVersion
+ToolUp.Platform.DiodeVersionModule.zero : ToolUp.Platform.DiodeVersion { get }
 ToolUp.Platform.DistributedLock (class)
 ToolUp.Platform.DistributedLock.acquireBlocking(ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
 ToolUp.Platform.DistributedLock.acquireBlockingEvery(System.TimeSpan, ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
@@ -2696,6 +2957,9 @@ ToolUp.Platform.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp
 ToolUp.Platform.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
 ToolUp.Platform.IDeployPipeline.GetDeployState(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploySummary, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPipeline.Rollback(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.IDiodeTransmissionLog (interface)
+ToolUp.Platform.IDiodeTransmissionLog.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeTransmissionRecord] { get }
+ToolUp.Platform.IDiodeTransmissionLog.Record(ToolUp.Platform.DiodeTransmissionRecord) : System.Void
 ToolUp.Platform.IDistributedLock (interface)
 ToolUp.Platform.IDistributedLock.Release(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IDistributedLock.Renew(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
@@ -3713,6 +3977,17 @@ ToolUp.Platform.Middleware+SubjectRequestExtractor (class)
 ToolUp.Platform.Middleware+SubjectRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SubjectResolutionRequest]
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge (class)
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge.toScopeError(ToolUp.Platform.SubjectResolutionError) : ToolUp.Platform.ScopeResolutionError
+ToolUp.Platform.MigrationGap (class)
+ToolUp.Platform.MigrationGap..ctor(ToolUp.Platform.ComponentId, System.String, System.String)
+ToolUp.Platform.MigrationGap.Component : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.MigrationGap.Purpose : System.String { get }
+ToolUp.Platform.MigrationGap.Requirement : System.String { get }
+ToolUp.Platform.MigrationProbes (class)
+ToolUp.Platform.MigrationProbes..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean])
+ToolUp.Platform.MigrationProbes.ConfigBound : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean] { get }
+ToolUp.Platform.MigrationProbes.SecretPresent : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]] { get }
+ToolUp.Platform.MigrationProbesModule (class)
+ToolUp.Platform.MigrationProbesModule.noneProvisioned : ToolUp.Platform.MigrationProbes { get }
 ToolUp.Platform.ModelArtifact (class)
 ToolUp.Platform.ModelArtifact..ctor(ToolUp.Platform.FitCompositeKey, System.String, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, System.DateTimeOffset, System.Int32)
 ToolUp.Platform.ModelArtifact.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
@@ -4248,6 +4523,10 @@ ToolUp.Platform.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidato
 ToolUp.Platform.ObservingEventStore (class)
 ToolUp.Platform.ObservingEventStore..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.EventTopologyObserver)
 ToolUp.Platform.ObservingEventStore..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.EventTopologyObserver, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.ComponentId])
+ToolUp.Platform.OfflineTolerantValidator (class)
+ToolUp.Platform.OfflineTolerantValidator..ctor(ToolUp.Platform.ConfigValidation+IConfigValidator)
+ToolUp.Platform.OfflineTolerantValidator.Inner : ToolUp.Platform.ConfigValidation+IConfigValidator { get }
+ToolUp.Platform.OfflineTolerantValidator.InnerBudget : System.TimeSpan { get }
 ToolUp.Platform.OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -4257,6 +4536,25 @@ ToolUp.Platform.OidcConfigCompletenessValidator+OidcConfigCompletenessValidator.
 ToolUp.Platform.OidcIssuerCspContributor (class)
 ToolUp.Platform.OidcIssuerCspContributor..ctor()
 ToolUp.Platform.OidcIssuerCspContributor.EnvVar : System.String { get }
+ToolUp.Platform.OperationalTelemetryDiode (class)
+ToolUp.Platform.OperationalTelemetryDiode.Schema : System.Int32 (literal)
+ToolUp.Platform.OperationalTelemetryDiode.bytesTransmitted(ToolUp.Platform.IDiodeTransmissionLog) : System.Int64
+ToolUp.Platform.OperationalTelemetryDiode.header(ToolUp.Platform.DiodeVersion, System.Int64, System.Int64) : ToolUp.Platform.OperationalTelemetryFrame
+ToolUp.Platform.OperationalTelemetryDiode.project(ToolUp.Platform.DiodeConsentGrant, ToolUp.Platform.OperationalTelemetryFrame) : ToolUp.Platform.OperationalTelemetryFrame
+ToolUp.Platform.OperationalTelemetryDiode.render(ToolUp.Platform.OperationalTelemetryFrame) : System.String
+ToolUp.Platform.OperationalTelemetryDiode.transmit(ToolUp.Platform.DiodeConsent, ToolUp.Platform.IDiodeTransmissionLog, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int64], ToolUp.Platform.OperationalTelemetryFrame) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DiodeTransmissionOutcome]
+ToolUp.Platform.OperationalTelemetryDiode.withCounters(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeCounterReading], ToolUp.Platform.OperationalTelemetryFrame) : ToolUp.Platform.OperationalTelemetryFrame
+ToolUp.Platform.OperationalTelemetryDiode.withHealth(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeHealthReading], ToolUp.Platform.OperationalTelemetryFrame) : ToolUp.Platform.OperationalTelemetryFrame
+ToolUp.Platform.OperationalTelemetryDiode.withPreflight(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodePreflightReading], ToolUp.Platform.OperationalTelemetryFrame) : ToolUp.Platform.OperationalTelemetryFrame
+ToolUp.Platform.OperationalTelemetryFrame (class)
+ToolUp.Platform.OperationalTelemetryFrame..ctor(System.Int32, ToolUp.Platform.DiodeVersion, System.Int64, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeHealthReading], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodePreflightReading], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeCounterReading])
+ToolUp.Platform.OperationalTelemetryFrame.AtUnixSeconds : System.Int64 { get }
+ToolUp.Platform.OperationalTelemetryFrame.Counters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeCounterReading] { get }
+ToolUp.Platform.OperationalTelemetryFrame.Health : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeHealthReading] { get }
+ToolUp.Platform.OperationalTelemetryFrame.Preflight : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodePreflightReading] { get }
+ToolUp.Platform.OperationalTelemetryFrame.Schema : System.Int32 { get }
+ToolUp.Platform.OperationalTelemetryFrame.UptimeSeconds : System.Int64 { get }
+ToolUp.Platform.OperationalTelemetryFrame.Version : ToolUp.Platform.DiodeVersion { get }
 ToolUp.Platform.OrphanSubscription (class)
 ToolUp.Platform.OrphanSubscription..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.OrphanSubscription.Kind : ToolUp.Platform.EventKind { get }
@@ -4565,6 +4863,29 @@ ToolUp.Platform.ProvenanceEdgeKind+Tags.Supersedes : System.Int32 (literal)
 ToolUp.Platform.ProvenanceGraph (class)
 ToolUp.Platform.ProvenanceGraph.create(ToolUp.Platform.ILineageStore) : ToolUp.Platform.IProvenanceGraph
 ToolUp.Platform.ProvenanceGraph.createWithFacts(ToolUp.Platform.ILineageStore, ToolUp.Platform.IFactEvidenceSource) : ToolUp.Platform.IProvenanceGraph
+ToolUp.Platform.ProvenanceMismatch (class)
+ToolUp.Platform.ProvenanceMismatch.IsArtefactDigestMismatch : System.Boolean { get }
+ToolUp.Platform.ProvenanceMismatch.IsProvenanceIncomplete : System.Boolean { get }
+ToolUp.Platform.ProvenanceMismatch.IsSbomDigestMismatch : System.Boolean { get }
+ToolUp.Platform.ProvenanceMismatch.IsSignatureRejected : System.Boolean { get }
+ToolUp.Platform.ProvenanceMismatch.Tag : System.Int32 { get }
+ToolUp.Platform.ProvenanceMismatch+ArtefactDigestMismatch (class)
+ToolUp.Platform.ProvenanceMismatch+ArtefactDigestMismatch.actual : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+ArtefactDigestMismatch.expected : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+ProvenanceIncomplete (class)
+ToolUp.Platform.ProvenanceMismatch+ProvenanceIncomplete.field : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+SbomDigestMismatch (class)
+ToolUp.Platform.ProvenanceMismatch+SbomDigestMismatch.actual : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+SbomDigestMismatch.expected : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+SignatureRejected (class)
+ToolUp.Platform.ProvenanceMismatch+SignatureRejected.reason : System.String { get }
+ToolUp.Platform.ProvenanceMismatch+Tags (class)
+ToolUp.Platform.ProvenanceMismatch+Tags.ArtefactDigestMismatch : System.Int32 (literal)
+ToolUp.Platform.ProvenanceMismatch+Tags.ProvenanceIncomplete : System.Int32 (literal)
+ToolUp.Platform.ProvenanceMismatch+Tags.SbomDigestMismatch : System.Int32 (literal)
+ToolUp.Platform.ProvenanceMismatch+Tags.SignatureRejected : System.Int32 (literal)
+ToolUp.Platform.ProvenanceMismatchModule (class)
+ToolUp.Platform.ProvenanceMismatchModule.describe(ToolUp.Platform.ProvenanceMismatch) : System.String
 ToolUp.Platform.ProvenanceNode (class)
 ToolUp.Platform.ProvenanceNode..ctor(System.String, ToolUp.Platform.ProvenanceNodeKind, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Platform.ProvenanceNode.Disclosure : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -5781,6 +6102,12 @@ ToolUp.Platform.TreePatchReceipt+Tags.Duplicate : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceipt+Tags.Gap : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceiver (class)
 ToolUp.Platform.TreePatchReceiver.classify(System.Int64, ToolUp.Platform.TreePatchEnvelope) : ToolUp.Platform.TreePatchReceipt
+ToolUp.Platform.UpgradeCandidate (class)
+ToolUp.Platform.UpgradeCandidate..ctor(ToolUp.Platform.ArtefactProvenance, System.Byte[], System.Byte[], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements])
+ToolUp.Platform.UpgradeCandidate.ArtefactBytes : System.Byte[] { get }
+ToolUp.Platform.UpgradeCandidate.Provenance : ToolUp.Platform.ArtefactProvenance { get }
+ToolUp.Platform.UpgradeCandidate.Requirements : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements] { get }
+ToolUp.Platform.UpgradeCandidate.SbomBytes : System.Byte[] { get }
 ToolUp.Platform.UpgradePlanInput (class)
 ToolUp.Platform.UpgradePlanInput..ctor(ToolUp.Platform.CompositionManifest, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentProvenance], ToolUp.Platform.ComposableSurfaceSnapshot, ToolUp.Platform.ComposableSurfaceSnapshot, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, System.String])
 ToolUp.Platform.UpgradePlanInput.PlanAvailableMigrationDocs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -5845,6 +6172,28 @@ ToolUp.Platform.UpgradePlanVerdict+Tags (class)
 ToolUp.Platform.UpgradePlanVerdict+Tags.UpgradeBlocked : System.Int32 (literal)
 ToolUp.Platform.UpgradePlanVerdict+Tags.UpgradeClean : System.Int32 (literal)
 ToolUp.Platform.UpgradePlanVerdict+Tags.UpgradeReviewable : System.Int32 (literal)
+ToolUp.Platform.UpgradeStage (class)
+ToolUp.Platform.UpgradeStage.IsMigrationBlocked : System.Boolean { get }
+ToolUp.Platform.UpgradeStage.IsProvenanceRefused : System.Boolean { get }
+ToolUp.Platform.UpgradeStage.IsReadyToFlip : System.Boolean { get }
+ToolUp.Platform.UpgradeStage.MigrationBlocked : ToolUp.Platform.UpgradeStage { get }
+ToolUp.Platform.UpgradeStage.ProvenanceRefused : ToolUp.Platform.UpgradeStage { get }
+ToolUp.Platform.UpgradeStage.ReadyToFlip : ToolUp.Platform.UpgradeStage { get }
+ToolUp.Platform.UpgradeStage.Tag : System.Int32 { get }
+ToolUp.Platform.UpgradeStage+Tags (class)
+ToolUp.Platform.UpgradeStage+Tags.MigrationBlocked : System.Int32 (literal)
+ToolUp.Platform.UpgradeStage+Tags.ProvenanceRefused : System.Int32 (literal)
+ToolUp.Platform.UpgradeStage+Tags.ReadyToFlip : System.Int32 (literal)
+ToolUp.Platform.UpgradeStageModule (class)
+ToolUp.Platform.UpgradeStageModule.mayFlip(ToolUp.Platform.UpgradeStage) : System.Boolean
+ToolUp.Platform.UpgradeStageModule.toWireString(ToolUp.Platform.UpgradeStage) : System.String
+ToolUp.Platform.UpgradeStagingReport (class)
+ToolUp.Platform.UpgradeStagingReport..ctor(ToolUp.Platform.ArtefactProvenance, ToolUp.Platform.UpgradeStage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceMismatch], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationGap], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ArtefactProvenance])
+ToolUp.Platform.UpgradeStagingReport.Candidate : ToolUp.Platform.ArtefactProvenance { get }
+ToolUp.Platform.UpgradeStagingReport.Gaps : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationGap] { get }
+ToolUp.Platform.UpgradeStagingReport.Mismatches : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceMismatch] { get }
+ToolUp.Platform.UpgradeStagingReport.RollbackTo : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ArtefactProvenance] { get }
+ToolUp.Platform.UpgradeStagingReport.Stage : ToolUp.Platform.UpgradeStage { get }
 ToolUp.Platform.UpgradeStepSeverity (class)
 ToolUp.Platform.UpgradeStepSeverity.IsUpgradeAttention : System.Boolean { get }
 ToolUp.Platform.UpgradeStepSeverity.IsUpgradeBlocking : System.Boolean { get }

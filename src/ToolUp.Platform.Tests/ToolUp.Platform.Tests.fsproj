@@ -459,6 +459,17 @@
              ServerConfig.ReplicaCount / ServerlessHost declares a topology
              that needs it. -->
         <Compile Include="InProcess\ScaleReadinessTests.fs" />
+        <!-- Phase 488 — appliance deployment profile: offline boot (the real
+             Phase 9m aggregator run over a rewritten IServiceCollection, with
+             a connected-posture control proving the probes genuinely fail, and
+             security / structural validators still aborting), tampered-artefact
+             refusal with the provenance mismatch NAMED, the verify →
+             migrate-preview → flip staging check, diode schema closure by
+             reflection (falsified against an open control type in the same
+             list) plus consent-off-means-zero-outbound, and redaction coverage
+             against the Phase 41/188 classification vocabulary (likewise
+             falsified against an unmasked bundle). -->
+        <Compile Include="InProcess\ApplianceProfileTests.fs" />
         <!-- Phase 438 — authorization-surface manifest: the per-ComponentId
              exposed surface derived from route prefixes / exact route
              overrides / AI tools / OnEvent job triggers, plus a remoting API

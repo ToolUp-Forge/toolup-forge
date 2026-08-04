@@ -956,6 +956,30 @@
              rule-descriptor types); beside EventTopology / DataFootprint, the
              sibling derived lenses. -->
         <Compile Include="Server\ScaleReadiness.fs" />
+        <!-- Phase 488.C — the operational-telemetry diode: a consent-gated
+             (default off) outbound channel whose wire schema is CLOSED — no
+             string field anywhere in OperationalTelemetryFrame's transitive
+             closure, so it structurally cannot carry row data — plus the
+             per-section consent projection, canonical rendering, and the local
+             transmission journal every frame is recorded in. Standalone: no
+             ServerApp, no manifest, no transport (the outbound side is the
+             structural DiodeTransmit function seam, GP 1), so it sits before
+             ApplianceProfile and depends on nothing above it. -->
+        <Compile Include="Server\OperationalTelemetryDiode.fs" />
+        <!-- Phase 488.A/B/D — the appliance deployment profile: the declared
+             offline boot posture (external-probe-class validators downgraded to
+             Warning via a decorator, so the Phase 9m aggregator's "any Error
+             aborts" contract is untouched and the Phase 585 security /
+             structural markers still abort), signed upgrade verification
+             against Phase 182 provenance (both digests + the detached JWS,
+             through the structural VerifyDetachedJws seam) with the pre-flip
+             verify → migrate-preview → flip staging check over the Phase 432
+             requirements, and the data-class-aware Phase 9n bundle variant
+             masking against the Phase 41/188 classification vocabulary. After
+             ConfigValidatorAggregator (reads its Phase 585 classify),
+             ComponentRequirements (the 432 join), CompositionManifest and
+             CompositionValidator (reuses its defect / rule-descriptor types). -->
+        <Compile Include="Server\ApplianceProfile.fs" />
         <!-- Phase 597 — the prover's own lifecycle: a manifest version +
              per-rule semver over every rule family that exports in the Phase
              294 CompositionRuleDescriptor vocabulary, preflight-result
