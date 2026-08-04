@@ -543,6 +543,11 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     ContentScanner = None
     ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = gate
+    // Phase 511 — bulk import is not exercised here: archive guards at
+    // their shipped defaults, URL ingestion inert, no transport.
+    ArchiveImportPolicy = ArchiveImportPolicy.defaults
+    UrlIngestionPolicy = UrlIngestionPolicy.disabled
+    UrlFetcher = None
 }
 
 let private narrativeRequest (factRef: string option) : IngestNarrativeRequest = {

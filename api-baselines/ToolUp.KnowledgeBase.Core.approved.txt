@@ -11,6 +11,7 @@ PlatformKnowledgeApi+IPlatformKnowledgeApi.ListPlatformDocuments : Microsoft.FSh
 PlatformKnowledgeApi+IPlatformKnowledgeApi.PromoteTeamDocumentToPlatform : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]] { get }
 PlatformKnowledgeApi+IPlatformKnowledgeApi.UploadPlatformDocument : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]]] { get }
 SharedTypes (class)
+SharedTypes.BulkImportNotificationKey : System.String (literal)
 SharedTypes.IngestionStatusNotificationKey : System.String (literal)
 SharedTypes.InventoryUpdatedNotificationKey : System.String (literal)
 SharedTypes+AIContextEntry (class)
@@ -22,6 +23,71 @@ SharedTypes+AddNoteRequest (class)
 SharedTypes+AddNoteRequest..ctor(System.String, System.String)
 SharedTypes+AddNoteRequest.Body : System.String { get }
 SharedTypes+AddNoteRequest.Title : System.String { get }
+SharedTypes+ArchiveImportPolicy (class)
+SharedTypes+ArchiveImportPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Double])
+SharedTypes+ArchiveImportPolicy.MaxCompressionRatio : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+SharedTypes+ArchiveImportPolicy.MaxEntries : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+SharedTypes+ArchiveImportPolicy.MaxEntryBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+SharedTypes+ArchiveImportPolicy.MaxTotalUncompressedBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+SharedTypes+ArchiveImportPolicyModule (class)
+SharedTypes+ArchiveImportPolicyModule.defaults : SharedTypes+ArchiveImportPolicy { get }
+SharedTypes+ArchiveImportPolicyModule.unbounded : SharedTypes+ArchiveImportPolicy { get }
+SharedTypes+BulkImportItemReport (class)
+SharedTypes+BulkImportItemReport..ctor(System.String, System.String, SharedTypes+BulkItemOutcome)
+SharedTypes+BulkImportItemReport.FileName : System.String { get }
+SharedTypes+BulkImportItemReport.Outcome : SharedTypes+BulkItemOutcome { get }
+SharedTypes+BulkImportItemReport.Source : System.String { get }
+SharedTypes+BulkImportReport (class)
+SharedTypes+BulkImportReport..ctor(System.String, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportItemReport], System.Int32, System.Int32)
+SharedTypes+BulkImportReport.BatchId : System.String { get }
+SharedTypes+BulkImportReport.CompletedAt : System.DateTimeOffset { get }
+SharedTypes+BulkImportReport.Imported : System.Int32 { get }
+SharedTypes+BulkImportReport.Items : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportItemReport] { get }
+SharedTypes+BulkImportReport.Refused : System.Int32 { get }
+SharedTypes+BulkImportReport.StartedAt : System.DateTimeOffset { get }
+SharedTypes+BulkImportReportModule (class)
+SharedTypes+BulkImportReportModule.ofItems(System.String, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportItemReport]) : SharedTypes+BulkImportReport
+SharedTypes+BulkImportRequest (class)
+SharedTypes+BulkImportRequest..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportSource])
+SharedTypes+BulkImportRequest.Sources : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportSource] { get }
+SharedTypes+BulkImportSource (class)
+SharedTypes+BulkImportSource.IsArchive : System.Boolean { get }
+SharedTypes+BulkImportSource.IsFile : System.Boolean { get }
+SharedTypes+BulkImportSource.IsUrl : System.Boolean { get }
+SharedTypes+BulkImportSource.Tag : System.Int32 { get }
+SharedTypes+BulkImportSource+Archive (class)
+SharedTypes+BulkImportSource+Archive.content : System.Byte[] { get }
+SharedTypes+BulkImportSource+Archive.fileName : System.String { get }
+SharedTypes+BulkImportSource+File (class)
+SharedTypes+BulkImportSource+File.content : System.Byte[] { get }
+SharedTypes+BulkImportSource+File.fileName : System.String { get }
+SharedTypes+BulkImportSource+Tags (class)
+SharedTypes+BulkImportSource+Tags.Archive : System.Int32 (literal)
+SharedTypes+BulkImportSource+Tags.File : System.Int32 (literal)
+SharedTypes+BulkImportSource+Tags.Url : System.Int32 (literal)
+SharedTypes+BulkImportSource+Url (class)
+SharedTypes+BulkImportSource+Url.url : System.String { get }
+SharedTypes+BulkImportSummary (class)
+SharedTypes+BulkImportSummary..ctor(System.String, System.Int32, System.Int32, System.Int32, System.DateTimeOffset, System.String)
+SharedTypes+BulkImportSummary.BatchId : System.String { get }
+SharedTypes+BulkImportSummary.CompletedAt : System.DateTimeOffset { get }
+SharedTypes+BulkImportSummary.Imported : System.Int32 { get }
+SharedTypes+BulkImportSummary.Refused : System.Int32 { get }
+SharedTypes+BulkImportSummary.RequestedBy : System.String { get }
+SharedTypes+BulkImportSummary.TotalItems : System.Int32 { get }
+SharedTypes+BulkItemOutcome (class)
+SharedTypes+BulkItemOutcome.IsAdmitted : System.Boolean { get }
+SharedTypes+BulkItemOutcome.IsRefused : System.Boolean { get }
+SharedTypes+BulkItemOutcome.Tag : System.Int32 { get }
+SharedTypes+BulkItemOutcome+Admitted (class)
+SharedTypes+BulkItemOutcome+Admitted.document : SharedTypes+KnowledgeDocument { get }
+SharedTypes+BulkItemOutcome+Refused (class)
+SharedTypes+BulkItemOutcome+Refused.reason : System.String { get }
+SharedTypes+BulkItemOutcome+Tags (class)
+SharedTypes+BulkItemOutcome+Tags.Admitted : System.Int32 (literal)
+SharedTypes+BulkItemOutcome+Tags.Refused : System.Int32 (literal)
+SharedTypes+BulkItemOutcomeModule (class)
+SharedTypes+BulkItemOutcomeModule.isImported(SharedTypes+BulkItemOutcome) : System.Boolean
 SharedTypes+IngestNarrativeError (class)
 SharedTypes+IngestNarrativeError.IsDuplicateExists : System.Boolean { get }
 SharedTypes+IngestNarrativeError.IsIngestFailed : System.Boolean { get }
@@ -90,7 +156,7 @@ SharedTypes+InventorySummary.LastUpdated : System.DateTime { get }
 SharedTypes+InventorySummary.NoteCount : System.Int32 { get }
 SharedTypes+InventorySummary.SuggestedQuestions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 SharedTypes+KnowledgeApi (class)
-SharedTypes+KnowledgeApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestNarrativeRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, SharedTypes+IngestNarrativeError]]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+AddNoteRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+UpdateNoteRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+AIContextEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+OriginalDocument, SharedTypes+KnowledgeBaseError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewContent, SharedTypes+KnowledgeBaseError]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]])
+SharedTypes+KnowledgeApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestNarrativeRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, SharedTypes+IngestNarrativeError]]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+AddNoteRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+UpdateNoteRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+AIContextEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+OriginalDocument, SharedTypes+KnowledgeBaseError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewContent, SharedTypes+KnowledgeBaseError]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+BulkImportRequest, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+BulkImportReport]])
 SharedTypes+KnowledgeApi.AddNote : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+AddNoteRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]] { get }
 SharedTypes+KnowledgeApi.DeleteDocument : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 SharedTypes+KnowledgeApi.GetAIContext : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]]] { get }
@@ -101,6 +167,7 @@ SharedTypes+KnowledgeApi.GetOriginalDocument : Microsoft.FSharp.Core.FSharpFunc`
 SharedTypes+KnowledgeApi.GetScopeUsage : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]] { get }
 SharedTypes+KnowledgeApi.GetStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]] { get }
 SharedTypes+KnowledgeApi.GetSuggestedQuestions : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+SharedTypes+KnowledgeApi.ImportBatch : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+BulkImportRequest, Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+BulkImportReport]] { get }
 SharedTypes+KnowledgeApi.IngestNarrative : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestNarrativeRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, SharedTypes+IngestNarrativeError]]] { get }
 SharedTypes+KnowledgeApi.RefreshAIContext : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 SharedTypes+KnowledgeApi.ResetIndex : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
@@ -340,3 +407,14 @@ SharedTypes+UpdateNoteRequest..ctor(System.String, System.String, System.String)
 SharedTypes+UpdateNoteRequest.Body : System.String { get }
 SharedTypes+UpdateNoteRequest.DocId : System.String { get }
 SharedTypes+UpdateNoteRequest.Title : System.String { get }
+SharedTypes+UrlIngestionPolicy (class)
+SharedTypes+UrlIngestionPolicy..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, System.Int64, System.Int32)
+SharedTypes+UrlIngestionPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+SharedTypes+UrlIngestionPolicy.MaxRedirects : System.Int32 { get }
+SharedTypes+UrlIngestionPolicy.MaxResponseBytes : System.Int64 { get }
+SharedTypes+UrlIngestionPolicy.TimeoutSeconds : System.Int32 { get }
+SharedTypes+UrlIngestionPolicyModule (class)
+SharedTypes+UrlIngestionPolicyModule.allowingHosts(System.Collections.Generic.IEnumerable`1[System.String]) : SharedTypes+UrlIngestionPolicy
+SharedTypes+UrlIngestionPolicyModule.allowsHost(System.String, SharedTypes+UrlIngestionPolicy) : System.Boolean
+SharedTypes+UrlIngestionPolicyModule.disabled : SharedTypes+UrlIngestionPolicy { get }
+SharedTypes+UrlIngestionPolicyModule.isInert(SharedTypes+UrlIngestionPolicy) : System.Boolean

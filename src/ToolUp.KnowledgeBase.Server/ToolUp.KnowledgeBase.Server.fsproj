@@ -62,6 +62,11 @@
              UploadPolicy.fs, which composes its job handler. -->
         <Compile Include="Server\RetentionSweep.fs" />
         <Compile Include="Server\UploadPolicy.fs" />
+        <!-- Phase 511 — bulk-import source expansion (archive bomb /
+             traversal guards, the URL-ingestion gate + transport seam).
+             Before Api/Deps.fs, which resolves its policies and fetcher;
+             it persists nothing itself, so it sits below the API. -->
+        <Compile Include="Server\BulkImport.fs" />
         <Compile Include="Server\Api\Deps.fs" />
         <Compile Include="Server\Api\Documents.fs" />
         <Compile Include="Server\Api\Narrative.fs" />

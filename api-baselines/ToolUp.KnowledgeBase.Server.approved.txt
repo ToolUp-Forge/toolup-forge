@@ -24,6 +24,7 @@ KnowledgeBase.Server.platformKnowledgeApi : Microsoft.FSharp.Core.FSharpFunc`2[M
 KnowledgeBase.Server.recoverStuckDocumentsAtStartup : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ILogger, Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]]]] { get }
 KnowledgeBase.Server.standingContextBuilder : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]] { get }
 KnowledgeBase.Server.sweepExpiredDocuments : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IIndexLifecycle+IIndexLifecycle], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[System.DateTimeOffset, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[KnowledgeBase.ServerRetentionSweep+RetentionSweepReport]]]]]]]] { get }
+KnowledgeBase.Server.withArchiveImportPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+ArchiveImportPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withDocumentDedup : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withDocumentVersioning : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withKnowledgeQuota : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeQuotaPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
@@ -34,6 +35,8 @@ KnowledgeBase.Server.withOriginalPreviewSeam : Microsoft.FSharp.Core.FSharpFunc`
 KnowledgeBase.Server.withOriginalSourceResolver : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withSignedOriginalUrls : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withUploadPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeUploadPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+KnowledgeBase.Server.withUrlContentFetcher : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerBulkImport+IUrlContentFetcher, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+KnowledgeBase.Server.withUrlIngestion : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+UrlIngestionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.ServerAIContext (class)
 KnowledgeBase.ServerAIContext.loadAIContext(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]]
 KnowledgeBase.ServerAIContext.saveAIContext(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+AIContextEntry) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -44,8 +47,9 @@ KnowledgeBase.ServerApiAIContext.refreshAIContext(KnowledgeBase.ServerApiDeps+Kn
 KnowledgeBase.ServerApiAIContext.setAIContext(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+AIContextEntry, System.String]]
 KnowledgeBase.ServerApiDeps (class)
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps (class)
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.IOcrProvider+IOcrProvider, ToolUp.Platform.ITableExtractor+ITableExtractor, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IIndexLifecycle+IIndexLifecycle], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INarrativeStore], ToolUp.Platform.AccessContext, KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], System.Boolean, SharedTypes+KnowledgeUploadPolicy, SharedTypes+KnowledgeDedupPolicy, SharedTypes+KnowledgeVersioningPolicy, SharedTypes+KnowledgeQuotaPolicy, SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner], ToolUp.Platform.ContentScanPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate])
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.IOcrProvider+IOcrProvider, ToolUp.Platform.ITableExtractor+ITableExtractor, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IIndexLifecycle+IIndexLifecycle], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INarrativeStore], ToolUp.Platform.AccessContext, KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], System.Boolean, SharedTypes+KnowledgeUploadPolicy, SharedTypes+KnowledgeDedupPolicy, SharedTypes+KnowledgeVersioningPolicy, SharedTypes+KnowledgeQuotaPolicy, SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner], ToolUp.Platform.ContentScanPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], SharedTypes+ArchiveImportPolicy, SharedTypes+UrlIngestionPolicy, Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerBulkImport+IUrlContentFetcher])
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.AccessContext : ToolUp.Platform.AccessContext { get }
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ArchiveImportPolicy : SharedTypes+ArchiveImportPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ContentScanner : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.DedupPolicy : SharedTypes+KnowledgeDedupPolicy { get }
@@ -70,6 +74,8 @@ KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ScopeResolvedFromRequest : System.B
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Storage : ToolUp.Platform.BlobStorage+IBlobStorage { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.TableExtractor : ToolUp.Platform.ITableExtractor+ITableExtractor { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UploadPolicy : SharedTypes+KnowledgeUploadPolicy { get }
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UrlFetcher : Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerBulkImport+IUrlContentFetcher] { get }
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UrlIngestionPolicy : SharedTypes+UrlIngestionPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UserId : System.String { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VectorScope : ToolUp.Platform.VectorKnowledgeTypes+VectorScope { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VectorStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore] { get }
@@ -86,13 +92,59 @@ KnowledgeBase.ServerApiDocuments.getOriginalDocument(KnowledgeBase.ServerApiDeps
 KnowledgeBase.ServerApiDocuments.getScopeUsage(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]
 KnowledgeBase.ServerApiDocuments.getStatus(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]
 KnowledgeBase.ServerApiDocuments.getSuggestedQuestions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+KnowledgeBase.ServerApiDocuments.importBatch(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+BulkImportRequest) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+BulkImportReport]
 KnowledgeBase.ServerApiDocuments.uploadDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]
+KnowledgeBase.ServerApiDocuments.uploadDocumentCore(System.Boolean, KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]
 KnowledgeBase.ServerApiNarrative (class)
 KnowledgeBase.ServerApiNarrative.ingestNarrative(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+IngestNarrativeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, SharedTypes+IngestNarrativeError]]
 KnowledgeBase.ServerApiNarrative.resetIndex(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 KnowledgeBase.ServerApiNotes (class)
 KnowledgeBase.ServerApiNotes.addNote(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+AddNoteRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]
 KnowledgeBase.ServerApiNotes.updateNote(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+UpdateNoteRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]
+KnowledgeBase.ServerBulkImport (class)
+KnowledgeBase.ServerBulkImport.classifyUrl(SharedTypes+UrlIngestionPolicy, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Uri, System.String]
+KnowledgeBase.ServerBulkImport.entryLeafName(System.String) : System.String
+KnowledgeBase.ServerBulkImport.expandArchive(SharedTypes+ArchiveImportPolicy, System.String, System.Byte[]) : Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerBulkImport+ExpansionOutcome]
+KnowledgeBase.ServerBulkImport.fetchUrl(KnowledgeBase.ServerBulkImport+IUrlContentFetcher, SharedTypes+UrlIngestionPolicy, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[KnowledgeBase.ServerBulkImport+ExpandedItem, System.String]]
+KnowledgeBase.ServerBulkImport.fileNameOfUrl(System.Uri) : System.String
+KnowledgeBase.ServerBulkImport.isTraversalEntryName(System.String) : System.Boolean
+KnowledgeBase.ServerBulkImport.withArchiveImportPolicy(SharedTypes+ArchiveImportPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerBulkImport.withUrlContentFetcher(KnowledgeBase.ServerBulkImport+IUrlContentFetcher, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerBulkImport.withUrlIngestion(SharedTypes+UrlIngestionPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerBulkImport+ExpandedItem (class)
+KnowledgeBase.ServerBulkImport+ExpandedItem..ctor(System.String, System.String, System.Byte[])
+KnowledgeBase.ServerBulkImport+ExpandedItem.Content : System.Byte[] { get }
+KnowledgeBase.ServerBulkImport+ExpandedItem.FileName : System.String { get }
+KnowledgeBase.ServerBulkImport+ExpandedItem.Source : System.String { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome (class)
+KnowledgeBase.ServerBulkImport+ExpansionOutcome.IsExpanded : System.Boolean { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome.IsRejected : System.Boolean { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome.Tag : System.Int32 { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Expanded (class)
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Expanded.Item : KnowledgeBase.ServerBulkImport+ExpandedItem { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Rejected (class)
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Rejected.fileName : System.String { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Rejected.reason : System.String { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Rejected.source : System.String { get }
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Tags (class)
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Tags.Expanded : System.Int32 (literal)
+KnowledgeBase.ServerBulkImport+ExpansionOutcome+Tags.Rejected : System.Int32 (literal)
+KnowledgeBase.ServerBulkImport+HttpUrlContentFetcher (class)
+KnowledgeBase.ServerBulkImport+HttpUrlContentFetcher..ctor()
+KnowledgeBase.ServerBulkImport+HttpUrlContentFetcher..ctor(System.Net.Http.HttpClient)
+KnowledgeBase.ServerBulkImport+IUrlContentFetcher (interface)
+KnowledgeBase.ServerBulkImport+IUrlContentFetcher.Fetch(System.Uri, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[KnowledgeBase.ServerBulkImport+UrlFetchResponse, System.String]]
+KnowledgeBase.ServerBulkImport+UrlFetchResponse (class)
+KnowledgeBase.ServerBulkImport+UrlFetchResponse.IsBody : System.Boolean { get }
+KnowledgeBase.ServerBulkImport+UrlFetchResponse.IsRedirect : System.Boolean { get }
+KnowledgeBase.ServerBulkImport+UrlFetchResponse.Tag : System.Int32 { get }
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Body (class)
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Body.content : System.Byte[] { get }
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Redirect (class)
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Redirect.location : System.String { get }
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Tags (class)
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Tags.Body : System.Int32 (literal)
+KnowledgeBase.ServerBulkImport+UrlFetchResponse+Tags.Redirect : System.Int32 (literal)
 KnowledgeBase.ServerExtractionErrors (class)
 KnowledgeBase.ServerExtractionErrors.classify(System.String, System.Exception) : System.String
 KnowledgeBase.ServerIndexStorage (class)

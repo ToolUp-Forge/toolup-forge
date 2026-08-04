@@ -10,6 +10,8 @@ open SharedTypes
 open KnowledgeBase.ServerExtractors
 open KnowledgeBase.ServerExtractionErrors
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerJsonHelpers
+open KnowledgeBase.ServerBulkImport
 open KnowledgeBase.ServerApiDeps
 
 // ─── Content-hash dedup (Phase 14x) ───────────────────────────────
@@ -520,256 +522,438 @@ let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) (addsDo
         return KnowledgeQuotaPolicy.exceeds effectiveCount usage.TotalBytes incomingBytes deps.QuotaPolicy
 }
 
-let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
-    let docId = Guid.NewGuid().ToString()
+/// The single-item upload path. **Every admission the Knowledge Base
+/// makes goes through this function** — the interactive upload, and
+/// every item of a Phase 511 bulk import alike — so the Phase 119 policy
+/// checks, the Phase 515 content scan, the Phase 14x dedup, the Phase
+/// 512 corpus quota and the Phase 510 versioning decision are applied
+/// once, in one order, with no second implementation that could drift
+/// out of step with them.
+///
+/// Phase 511 — `announceToUser` is the ONLY thing the bulk caller
+/// changes, and it changes nothing about admission: it suppresses the
+/// per-file "already exists, using the existing copy" `SystemMessage`
+/// that the interactive path shows on a dedup hit. A 500-document
+/// migration that emitted 200 of those toasts would be indistinguishable
+/// from an outage from the user's seat; the batch publishes one
+/// completion summary instead (`BulkImportNotificationKey`). The
+/// interactive path passes `true` and is byte-for-byte its pre-511 self
+/// (GP 11). The dedup AUDIT row is emitted either way — a trail that
+/// thinned out under bulk import would be worse than useless.
+let uploadDocumentCore
+    (announceToUser: bool)
+    (deps: KnowledgeApiDeps)
+    (bytes: byte[])
+    (fileName: string)
+    : Async<KnowledgeDocument> =
+    async {
+        let docId = Guid.NewGuid().ToString()
 
-    // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
-    // any directory component the caller smuggled in (`../../index.json` →
-    // `index.json`); the docId GUID prefix + a separator-free name then
-    // means the blob key can never escape `knowledge/{docId}/` or reach the
-    // container-root `knowledge/index.json`. `FileNameSanitiser.validate`
-    // rejects whatever survives stripping (control chars, over-length).
-    let safeName = Path.GetFileName fileName
-    let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
-    let policy = deps.UploadPolicy
+        // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
+        // any directory component the caller smuggled in (`../../index.json` →
+        // `index.json`); the docId GUID prefix + a separator-free name then
+        // means the blob key can never escape `knowledge/{docId}/` or reach the
+        // container-root `knowledge/index.json`. `FileNameSanitiser.validate`
+        // rejects whatever survives stripping (control chars, over-length).
+        let safeName = Path.GetFileName fileName
+        let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
+        let policy = deps.UploadPolicy
 
-    // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
-    // and is loud). Filename sanitisation runs regardless of policy; the
-    // size cap / allowlist / unsupported-Reject levers fire only when the
-    // deployment composed them via `withUploadPolicy`.
-    let rejectionReason: string option =
-        match FileNameSanitiser.validate safeName with
-        | Error reason -> Some(sprintf "unsafe filename — %s" reason)
-        | Ok() ->
-            match KnowledgeUploadPolicy.exceedsSizeCap (int64 bytes.Length) policy with
-            | Some reason -> Some reason
-            | None ->
-                if not (KnowledgeUploadPolicy.allowsExtension ext policy) then
-                    Some(sprintf "file type '.%s' is not in this deployment's upload allowlist" ext)
-                elif not (isSupportedExtension ext) && policy.OnUnsupportedType = Reject then
-                    Some(
-                        sprintf
-                            "file type '.%s' has no extractor and this deployment's upload policy rejects unsupported types"
-                            ext
-                    )
-                else
-                    None
+        // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
+        // and is loud). Filename sanitisation runs regardless of policy; the
+        // size cap / allowlist / unsupported-Reject levers fire only when the
+        // deployment composed them via `withUploadPolicy`.
+        let rejectionReason: string option =
+            match FileNameSanitiser.validate safeName with
+            | Error reason -> Some(sprintf "unsafe filename — %s" reason)
+            | Ok() ->
+                match KnowledgeUploadPolicy.exceedsSizeCap (int64 bytes.Length) policy with
+                | Some reason -> Some reason
+                | None ->
+                    if not (KnowledgeUploadPolicy.allowsExtension ext policy) then
+                        Some(sprintf "file type '.%s' is not in this deployment's upload allowlist" ext)
+                    elif not (isSupportedExtension ext) && policy.OnUnsupportedType = Reject then
+                        Some(
+                            sprintf
+                                "file type '.%s' has no extractor and this deployment's upload policy rejects unsupported types"
+                                ext
+                        )
+                    else
+                        None
 
-    // Nothing is persisted for a refusal; the returned document carries
-    // the typed rejection so the client can surface the reason. Logged at
-    // Warn. Shared by the Phase 119 policy refusals above and the Phase
-    // 512 quota refusal below — a quota breach IS a pre-persist policy
-    // refusal, so it needs no new `IngestionStatus` case.
-    let refuse (reason: string) : KnowledgeDocument =
-        deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
+        // Nothing is persisted for a refusal; the returned document carries
+        // the typed rejection so the client can surface the reason. Logged at
+        // Warn. Shared by the Phase 119 policy refusals above and the Phase
+        // 512 quota refusal below — a quota breach IS a pre-persist policy
+        // refusal, so it needs no new `IngestionStatus` case.
+        let refuse (reason: string) : KnowledgeDocument =
+            deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
 
-        {
-            Id = docId
-            FileName = safeName
-            FileType = ext
-            UploadedAt = DateTimeOffset.UtcNow
-            UploadedBy = deps.UserId
-            Status = UploadRejected reason
-            SizeBytes = int64 bytes.Length
-            ChunkCount = 0
-            Source = UploadedFile
-            ContentHash = None
-            Version = 1
+            {
+                Id = docId
+                FileName = safeName
+                FileType = ext
+                UploadedAt = DateTimeOffset.UtcNow
+                UploadedBy = deps.UserId
+                Status = UploadRejected reason
+                SizeBytes = int64 bytes.Length
+                ChunkCount = 0
+                Source = UploadedFile
+                ContentHash = None
+                Version = 1
+            }
+
+        // Phase 510 — the document this upload supersedes, if any. Identity
+        // is (file name, scope, `UploadedFile` source):
+        //   * the SCOPE is the container, which comes from the server-side
+        //     resolver — so a lineage can never span tenants (GP 4), for the
+        //     same structural reason the content-hash index cannot;
+        //   * `UploadedFile` only, because notes and narratives already own
+        //     their own in-place update paths (`UpdateNote`,
+        //     `IngestNarrative` + `Overwrite`) with their own identity rules
+        //     — folding them into filename identity would let a note and an
+        //     upload collide on a shared title;
+        //   * a `Failed` predecessor is skipped, matching dedup: re-uploading
+        //     after a failed ingestion is a RETRY of version N, not version
+        //     N+1 of a version that never indexed anything.
+        //
+        // Returns `None` unless the deployment composed
+        // `withDocumentVersioning true`, and reads nothing at all in that
+        // case (GP 13) — the pre-510 upload path takes no extra index read.
+        let findPredecessor () : Async<KnowledgeDocument option> = async {
+            if not deps.VersioningPolicy.VersionUploads then
+                return None
+            else
+                let! index = loadIndex deps.Storage deps.Scope.Container
+
+                return
+                    index
+                    |> List.tryFind (fun d ->
+                        d.FileName = safeName
+                        && (match d.Source with
+                            | UploadedFile -> true
+                            | FromNarrative _
+                            | Note _ -> false)
+                        && (match d.Status with
+                            | Failed _
+                            | UploadRejected _ -> false
+                            | _ -> true))
         }
 
-    // Phase 510 — the document this upload supersedes, if any. Identity
-    // is (file name, scope, `UploadedFile` source):
-    //   * the SCOPE is the container, which comes from the server-side
-    //     resolver — so a lineage can never span tenants (GP 4), for the
-    //     same structural reason the content-hash index cannot;
-    //   * `UploadedFile` only, because notes and narratives already own
-    //     their own in-place update paths (`UpdateNote`,
-    //     `IngestNarrative` + `Overwrite`) with their own identity rules
-    //     — folding them into filename identity would let a note and an
-    //     upload collide on a shared title;
-    //   * a `Failed` predecessor is skipped, matching dedup: re-uploading
-    //     after a failed ingestion is a RETRY of version N, not version
-    //     N+1 of a version that never indexed anything.
-    //
-    // Returns `None` unless the deployment composed
-    // `withDocumentVersioning true`, and reads nothing at all in that
-    // case (GP 13) — the pre-510 upload path takes no extra index read.
-    let findPredecessor () : Async<KnowledgeDocument option> = async {
-        if not deps.VersioningPolicy.VersionUploads then
-            return None
-        else
-            let! index = loadIndex deps.Storage deps.Scope.Container
+        // Phase 512 — the corpus quota is checked immediately before a
+        // persist, never before dedup: a duplicate upload stores nothing new,
+        // so refusing it for quota would reject a request that costs the
+        // scope no additional storage at all.
+        //
+        // Phase 510 — the predecessor lookup runs INSIDE this, after dedup
+        // has already declined to short-circuit, so the ordering Phase 512
+        // established (dedup, then quota, then persist) is preserved with
+        // versioning slotted between quota and persist.
+        let persistUnlessOverQuota (contentHash: string option) : Async<KnowledgeDocument> = async {
+            let! predecessor = findPredecessor ()
 
-            return
-                index
-                |> List.tryFind (fun d ->
-                    d.FileName = safeName
-                    && (match d.Source with
-                        | UploadedFile -> true
-                        | FromNarrative _
-                        | Note _ -> false)
-                    && (match d.Status with
-                        | Failed _
-                        | UploadRejected _ -> false
-                        | _ -> true))
-    }
+            match! quotaRefusal deps (int64 bytes.Length) (Option.isNone predecessor) with
+            | Some reason -> return refuse reason
+            | None ->
+                let targetDocId =
+                    match predecessor with
+                    | Some prior -> prior.Id
+                    | None -> docId
 
-    // Phase 512 — the corpus quota is checked immediately before a
-    // persist, never before dedup: a duplicate upload stores nothing new,
-    // so refusing it for quota would reject a request that costs the
-    // scope no additional storage at all.
-    //
-    // Phase 510 — the predecessor lookup runs INSIDE this, after dedup
-    // has already declined to short-circuit, so the ordering Phase 512
-    // established (dedup, then quota, then persist) is preserved with
-    // versioning slotted between quota and persist.
-    let persistUnlessOverQuota (contentHash: string option) : Async<KnowledgeDocument> = async {
-        let! predecessor = findPredecessor ()
+                return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
+        }
 
-        match! quotaRefusal deps (int64 bytes.Length) (Option.isNone predecessor) with
-        | Some reason -> return refuse reason
-        | None ->
-            let targetDocId =
-                match predecessor with
-                | Some prior -> prior.Id
-                | None -> docId
+        // Phase 515 — run the composed content scanner and audit its verdict.
+        //
+        // Placement is load-bearing and is the whole point of the phase:
+        //   * AFTER the pure `rejectionReason` checks — there is nothing to
+        //     learn from streaming an oversized or disallowed-extension
+        //     payload to a scanner when the upload is already refused, and
+        //     the scan is the one expensive step on this path;
+        //   * BEFORE dedup, the corpus quota, versioning and persistence —
+        //     so a rejected payload never reaches the blob container and
+        //     never consumes a byte of the scope's quota. Scanning before
+        //     dedup in particular is deliberate: a byte-identical re-upload
+        //     must not be admitted on the strength of a scan performed when
+        //     the signature database was older.
+        //
+        // Returns `None` immediately when no scanner is composed (GP 13 — no
+        // digest computed, no audit row, no branch taken).
+        let contentScanRefusal () : Async<string option> = async {
+            match deps.ContentScanner with
+            | None -> return None
+            | Some scanner ->
+                let! verdict, refusal = ContentScan.evaluate scanner deps.ScanPolicy bytes safeName
 
-            return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
-    }
-
-    // Phase 515 — run the composed content scanner and audit its verdict.
-    //
-    // Placement is load-bearing and is the whole point of the phase:
-    //   * AFTER the pure `rejectionReason` checks — there is nothing to
-    //     learn from streaming an oversized or disallowed-extension
-    //     payload to a scanner when the upload is already refused, and
-    //     the scan is the one expensive step on this path;
-    //   * BEFORE dedup, the corpus quota, versioning and persistence —
-    //     so a rejected payload never reaches the blob container and
-    //     never consumes a byte of the scope's quota. Scanning before
-    //     dedup in particular is deliberate: a byte-identical re-upload
-    //     must not be admitted on the strength of a scan performed when
-    //     the signature database was older.
-    //
-    // Returns `None` immediately when no scanner is composed (GP 13 — no
-    // digest computed, no audit row, no branch taken).
-    let contentScanRefusal () : Async<string option> = async {
-        match deps.ContentScanner with
-        | None -> return None
-        | Some scanner ->
-            let! verdict, refusal = ContentScan.evaluate scanner deps.ScanPolicy bytes safeName
-
-            match verdict with
-            | ScanClean -> ()
-            | _ ->
-                deps.Logger.Warn(
-                    sprintf
-                        "[KnowledgeBase] Content scan (%s) returned '%s' for '%s': %s"
-                        scanner.Name
-                        (ScanVerdict.label verdict)
-                        safeName
-                        (ScanVerdict.reason verdict |> Option.defaultValue "no reason given")
-                )
-
-            match deps.AuditLog with
-            | Some audit ->
-                // Best-effort by contract (`IAuditLog.Record` swallows its
-                // own failures), awaited on the request path (GP 7) — an
-                // audit gap never fails the upload. Emitted for EVERY
-                // verdict, clean included: a trail that records only
-                // rejections cannot distinguish a payload the scanner
-                // passed from one it was never shown.
-                do!
-                    audit.Record(
-                        deps.Scope.ScopeId,
-                        ContentScanned {
-                            UserId = deps.UserId
-                            ScopeId = deps.Scope.ScopeId
-                            ScannerName = scanner.Name
-                            FileName = safeName
-                            ContentHash = contentHashOf bytes
-                            SizeBytes = int64 bytes.Length
-                            Verdict = ScanVerdict.label verdict
-                            Reason = ScanVerdict.reason verdict
-                            Refused = Option.isSome refusal
-                            OccurredAt = DateTimeOffset.UtcNow
-                        }
+                match verdict with
+                | ScanClean -> ()
+                | _ ->
+                    deps.Logger.Warn(
+                        sprintf
+                            "[KnowledgeBase] Content scan (%s) returned '%s' for '%s': %s"
+                            scanner.Name
+                            (ScanVerdict.label verdict)
+                            safeName
+                            (ScanVerdict.reason verdict |> Option.defaultValue "no reason given")
                     )
-            | None -> ()
-
-            return refusal
-    }
-
-    let! scanRejection =
-        match rejectionReason with
-        | Some _ -> async { return None }
-        | None -> contentScanRefusal ()
-
-    match Option.orElse scanRejection rejectionReason with
-    | Some reason -> return refuse reason
-    | None ->
-
-        if not deps.DedupPolicy.DedupUploads then
-            // `withDocumentDedup false` — pre-14x path byte-for-byte
-            // (GP 11): no hash computed, no lookup, no ref written.
-            return! persistUnlessOverQuota None
-        else
-            // Phase 14x — scope-local content-hash dedup, checked before
-            // anything is persisted. A duplicate upload stores nothing:
-            // the existing document is returned verbatim (same docId),
-            // ingestion is skipped, the decision is audited, and the
-            // user sees an Info toast.
-            let contentHash = contentHashOf bytes
-            let! duplicate = findDuplicate deps contentHash
-
-            match duplicate with
-            | None -> return! persistUnlessOverQuota (Some contentHash)
-            | Some existing ->
-                deps.Logger.Info(
-                    sprintf
-                        "[KnowledgeBase] Upload of '%s' deduplicated onto existing document %s (content hash %s)"
-                        safeName
-                        existing.Id
-                        contentHash
-                )
 
                 match deps.AuditLog with
                 | Some audit ->
-                    // Best-effort by contract (`IAuditLog.Record` swallows
-                    // its own failures), awaited on the request path (GP 7)
-                    // — an audit gap never fails the upload.
+                    // Best-effort by contract (`IAuditLog.Record` swallows its
+                    // own failures), awaited on the request path (GP 7) — an
+                    // audit gap never fails the upload. Emitted for EVERY
+                    // verdict, clean included: a trail that records only
+                    // rejections cannot distinguish a payload the scanner
+                    // passed from one it was never shown.
                     do!
                         audit.Record(
                             deps.Scope.ScopeId,
-                            KnowledgeDocumentDeduplicated {
+                            ContentScanned {
                                 UserId = deps.UserId
                                 ScopeId = deps.Scope.ScopeId
-                                ExistingDocumentId = existing.Id
+                                ScannerName = scanner.Name
                                 FileName = safeName
-                                ContentHash = contentHash
+                                ContentHash = contentHashOf bytes
+                                SizeBytes = int64 bytes.Length
+                                Verdict = ScanVerdict.label verdict
+                                Reason = ScanVerdict.reason verdict
+                                Refused = Option.isSome refusal
+                                OccurredAt = DateTimeOffset.UtcNow
                             }
                         )
                 | None -> ()
 
-                if not (isNull (box deps.Notifications)) then
-                    try
+                return refusal
+        }
+
+        let! scanRejection =
+            match rejectionReason with
+            | Some _ -> async { return None }
+            | None -> contentScanRefusal ()
+
+        match Option.orElse scanRejection rejectionReason with
+        | Some reason -> return refuse reason
+        | None ->
+
+            if not deps.DedupPolicy.DedupUploads then
+                // `withDocumentDedup false` — pre-14x path byte-for-byte
+                // (GP 11): no hash computed, no lookup, no ref written.
+                return! persistUnlessOverQuota None
+            else
+                // Phase 14x — scope-local content-hash dedup, checked before
+                // anything is persisted. A duplicate upload stores nothing:
+                // the existing document is returned verbatim (same docId),
+                // ingestion is skipped, the decision is audited, and the
+                // user sees an Info toast.
+                let contentHash = contentHashOf bytes
+                let! duplicate = findDuplicate deps contentHash
+
+                match duplicate with
+                | None -> return! persistUnlessOverQuota (Some contentHash)
+                | Some existing ->
+                    deps.Logger.Info(
+                        sprintf
+                            "[KnowledgeBase] Upload of '%s' deduplicated onto existing document %s (content hash %s)"
+                            safeName
+                            existing.Id
+                            contentHash
+                    )
+
+                    match deps.AuditLog with
+                    | Some audit ->
+                        // Best-effort by contract (`IAuditLog.Record` swallows
+                        // its own failures), awaited on the request path (GP 7)
+                        // — an audit gap never fails the upload.
                         do!
-                            deps.Notifications.Publish(
-                                deps.UserId,
-                                SystemMessage(
-                                    SystemMessageLevel.Info,
-                                    sprintf
-                                        "\"%s\" already exists in the knowledge base — using the existing copy."
-                                        safeName
-                                )
+                            audit.Record(
+                                deps.Scope.ScopeId,
+                                KnowledgeDocumentDeduplicated {
+                                    UserId = deps.UserId
+                                    ScopeId = deps.Scope.ScopeId
+                                    ExistingDocumentId = existing.Id
+                                    FileName = safeName
+                                    ContentHash = contentHash
+                                }
                             )
+                    | None -> ()
+
+                    // Phase 511 — suppressed under bulk import; the batch's
+                    // one completion summary replaces N per-file toasts.
+                    if announceToUser && not (isNull (box deps.Notifications)) then
+                        try
+                            do!
+                                deps.Notifications.Publish(
+                                    deps.UserId,
+                                    SystemMessage(
+                                        SystemMessageLevel.Info,
+                                        sprintf
+                                            "\"%s\" already exists in the knowledge base — using the existing copy."
+                                            safeName
+                                    )
+                                )
+                        with ex ->
+                            deps.Logger.Error(
+                                sprintf "[KnowledgeBase] Failed to publish dedup notification for %s" safeName,
+                                Some ex
+                            )
+
+                    return existing
+    }
+
+/// The interactive single-file upload — `uploadDocumentCore` with user
+/// announcements on. Kept as its own name so `KnowledgeApi.UploadDocument`
+/// binds to exactly what it always bound to (GP 11).
+let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> =
+    uploadDocumentCore true deps bytes fileName
+
+// ─── Bulk / programmatic import (Phase 511) ───────────────────────
+
+/// Turn one submitted source into zero or more items. Archives expand
+/// under the composed resource guards; a URL is fetched only when the
+/// deployment allowlisted its host; a plain `File` is already an item.
+///
+/// Nothing here persists. That separation is what makes the whole
+/// surface safe to add: expansion decides only *what to hand to the
+/// upload boundary*, and the upload boundary decides — unchanged, and
+/// exactly once — whether to admit it.
+let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : Async<ExpansionOutcome list> = async {
+    match source with
+    | BulkImportSource.File(fileName, content) ->
+        return [
+            Expanded {
+                Source = fileName
+                FileName = fileName
+                Content = content
+            }
+        ]
+    | BulkImportSource.Archive(fileName, content) -> return expandArchive deps.ArchiveImportPolicy fileName content
+    | BulkImportSource.Url url ->
+        // The gate runs FIRST and independently of whether a transport
+        // exists, so an uncomposed deployment's refusal reads identically
+        // to an out-of-allowlist one and neither leaks whether URL
+        // ingestion is wired at all.
+        match classifyUrl deps.UrlIngestionPolicy url with
+        | Error reason -> return [ Rejected(url, url, reason) ]
+        | Ok _ ->
+            match deps.UrlFetcher with
+            | None ->
+                return [
+                    Rejected(
+                        url,
+                        url,
+                        "URL ingestion allowlists this host but no URL transport is composed; register one with KnowledgeBase.Server.withUrlIngestion or withUrlContentFetcher."
+                    )
+                ]
+            | Some fetcher ->
+                match! fetchUrl fetcher deps.UrlIngestionPolicy url with
+                | Ok item -> return [ Expanded item ]
+                | Error reason -> return [ Rejected(url, url, reason) ]
+}
+
+/// Phase 511 — corpus-scale import. Expands every source, routes each
+/// surviving item through the single-item upload path, and returns one
+/// report plus one completion notification.
+///
+/// **Items are admitted SEQUENTIALLY, and that is a correctness
+/// requirement rather than a simplification.** The corpus quota is a
+/// read-then-persist decision (`quotaRefusal` tallies the live index,
+/// then `persistAndIngest` writes), so N concurrent items would each
+/// observe the same pre-batch headroom and a batch could overshoot its
+/// own quota by N-1 documents. The same argument applies to the Phase
+/// 510 predecessor lookup — two items for the same file name racing
+/// would both find no predecessor and both mint version 1. Sequential
+/// admission makes each item's gates see the effect of every item before
+/// it, which is what "each passing the existing per-item checks" has to
+/// mean for a batch to be meaningful. Extraction and embedding still run
+/// off the request path exactly as they do for a single upload, so this
+/// is not the slow part.
+///
+/// **One bad item never fails the batch** (511.A): a refusal — whether
+/// classified during expansion, returned as an `UploadRejected` status by
+/// the upload boundary, or thrown by storage — becomes one line in the
+/// report and the walk continues.
+let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<BulkImportReport> = async {
+    let batchId = Guid.NewGuid().ToString()
+    let startedAt = DateTimeOffset.UtcNow
+    let collected = ResizeArray<BulkImportItemReport>()
+
+    for source in request.Sources do
+        let! outcomes = expandSource deps source
+
+        for outcome in outcomes do
+            match outcome with
+            | Rejected(sourceLabel, fileName, reason) ->
+                deps.Logger.Warn(sprintf "[KnowledgeBase] Bulk import %s refused '%s': %s" batchId sourceLabel reason)
+
+                collected.Add {
+                    Source = sourceLabel
+                    FileName = fileName
+                    Outcome = BulkItemOutcome.Refused reason
+                }
+            | Expanded item ->
+                // `announceToUser = false` — the per-file dedup toast is
+                // replaced by this batch's single completion summary.
+                let! itemReport = async {
+                    try
+                        let! doc = uploadDocumentCore false deps item.Content item.FileName
+
+                        return {
+                            Source = item.Source
+                            FileName = doc.FileName
+                            Outcome = BulkItemOutcome.Admitted doc
+                        }
                     with ex ->
+                        // A storage failure on one item is that item's
+                        // failure. Reported, not propagated — the
+                        // alternative loses every outcome already
+                        // computed, including the successful ones.
                         deps.Logger.Error(
-                            sprintf "[KnowledgeBase] Failed to publish dedup notification for %s" safeName,
+                            sprintf "[KnowledgeBase] Bulk import %s failed on '%s'" batchId item.Source,
                             Some ex
                         )
 
-                return existing
+                        return {
+                            Source = item.Source
+                            FileName = item.FileName
+                            Outcome = BulkItemOutcome.Refused(sprintf "import failed: %s" ex.Message)
+                        }
+                }
+
+                collected.Add itemReport
+
+    let report =
+        BulkImportReport.ofItems batchId startedAt DateTimeOffset.UtcNow (List.ofSeq collected)
+
+    deps.Logger.Info(
+        sprintf
+            "[KnowledgeBase] Bulk import %s completed: %d item(s) from %d source(s) — %d imported, %d refused."
+            batchId
+            (List.length report.Items)
+            (List.length request.Sources)
+            report.Imported
+            report.Refused
+    )
+
+    // Phase 511.D — ONE completion signal for the whole batch. Published
+    // best-effort on the request path: a notification failure must not
+    // turn a completed import into a failed call, and the report the
+    // caller already holds is the authoritative record either way.
+    if not (isNull (box deps.Notifications)) then
+        try
+            let summary: BulkImportSummary = {
+                BatchId = batchId
+                TotalItems = List.length report.Items
+                Imported = report.Imported
+                Refused = report.Refused
+                CompletedAt = report.CompletedAt
+                RequestedBy = deps.UserId
+            }
+
+            do! deps.Notifications.Publish(deps.UserId, CustomNotification(BulkImportNotificationKey, toJson summary))
+        with ex ->
+            deps.Logger.Error(sprintf "[KnowledgeBase] Failed to publish bulk-import summary for %s" batchId, Some ex)
+
+    return report
 }
 
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =

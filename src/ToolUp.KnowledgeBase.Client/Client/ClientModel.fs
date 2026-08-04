@@ -67,6 +67,18 @@ type Model = {
     PlatformDocsLoaded: bool
     PlatformDocsLoading: bool
     PlatformDocsLoadError: string option
+
+    // ── Bulk import (Phase 511) ──
+    /// True while an `ImportBatch` round-trip is in flight. Separate from
+    /// `Uploading` so the single-file path's spinner semantics are
+    /// untouched (GP 11).
+    BulkImporting: bool
+    /// The last batch's per-item report, kept until dismissed. This is
+    /// the batch's roll-up view: N documents, one summary, one place to
+    /// read what was refused and why — instead of N transient toasts a
+    /// user cannot scroll back through.
+    BulkReport: BulkImportReport option
+    BulkImportError: string option
 }
 
 type Msg =
@@ -105,6 +117,17 @@ type Msg =
     // ── Platform Library ──
     | LoadPlatformDocuments of ApiCall<unit, KnowledgeDocument list>
     | PlatformDocumentsLoadFailed of string
+
+    // ── Bulk import (Phase 511) ──
+    /// Submit many sources — plain files, archives to expand, or URLs —
+    /// as ONE `ImportBatch` call. The view reads the local files itself
+    /// (a `FileReader` round-trip is ephemeral view work, exactly as the
+    /// single-file path already treats it) and dispatches the assembled
+    /// sources.
+    | BulkImportRequested of BulkImportSource list
+    | BulkImportCompleted of BulkImportReport
+    | BulkImportFailed of string
+    | DismissBulkReport
 
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: Fable.Remoting's default JSON transport encodes byte
@@ -146,6 +169,10 @@ let init () =
         PlatformDocsLoaded = false
         PlatformDocsLoading = false
         PlatformDocsLoadError = None
+
+        BulkImporting = false
+        BulkReport = None
+        BulkImportError = None
     },
     Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
 
@@ -229,6 +256,68 @@ let update (msg: Msg) (model: Model) =
             model with
                 Uploading = false
                 UploadError = Some "Upload failed"
+        },
+        Cmd.none
+
+    // ── Bulk import (Phase 511) ──
+
+    | BulkImportRequested sources ->
+        {
+            model with
+                BulkImporting = true
+                BulkImportError = None
+                BulkReport = None
+        },
+        Cmd.OfAsync.either
+            (fun (req: BulkImportRequest) -> knowledgeApi.ImportBatch req)
+            { Sources = sources }
+            BulkImportCompleted
+            (fun ex -> BulkImportFailed ex.Message)
+
+    | BulkImportCompleted report ->
+        // Merge every admitted document into the list, replacing any
+        // existing entry with the same id — a dedup hit and a versioned
+        // supersede both return an id already present, and appending
+        // blindly would show it twice.
+        let admitted =
+            report.Items
+            |> List.choose (fun item ->
+                match item.Outcome with
+                | BulkItemOutcome.Admitted doc ->
+                    match doc.Status with
+                    | IngestionStatus.UploadRejected _ -> None
+                    | _ -> Some doc
+                | BulkItemOutcome.Refused _ -> None)
+
+        let admittedIds = admitted |> List.map _.Id |> Set.ofList
+
+        let docs =
+            (model.Documents |> List.filter (fun d -> not (admittedIds.Contains d.Id)))
+            @ admitted
+
+        {
+            model with
+                Documents = docs
+                BulkImporting = false
+                BulkReport = Some report
+        },
+        // Freshly-admitted documents start non-terminal; restart the poll
+        // loop in case it had stopped because everything was terminal.
+        (if List.isEmpty admitted then Cmd.none else schedulePoll ())
+
+    | BulkImportFailed reason ->
+        {
+            model with
+                BulkImporting = false
+                BulkImportError = Some reason
+        },
+        Cmd.none
+
+    | DismissBulkReport ->
+        {
+            model with
+                BulkReport = None
+                BulkImportError = None
         },
         Cmd.none
 

@@ -16,6 +16,27 @@ open SharedTypes
 
 // ─── Upload zone ──────────────────────────────────────────────────
 
+/// Read one local file's bytes. Ephemeral view work — the same
+/// `FileReader` round-trip the single-file path has always done, lifted
+/// out so the bulk path can wait for several at once.
+let private readFileBytes (file: Browser.Types.File) : Async<byte[]> =
+    Async.FromContinuations(fun (resolve, reject, _) ->
+        let reader = Browser.Dom.FileReader.Create()
+
+        reader.onload <-
+            fun _ ->
+                let buf = reader.result :?> Fable.Core.JS.ArrayBuffer
+                let uint8 = Fable.Core.JS.Constructors.Uint8Array.Create(buf)
+                resolve (Array.init (int uint8.length) (fun i -> byte uint8[i]))
+
+        reader.onerror <- fun _ -> reject (exn (sprintf "Could not read '%s'" file.name))
+
+        reader.readAsArrayBuffer file)
+
+/// `true` when a selected file should be expanded server-side rather
+/// than stored as itself.
+let private isArchiveName (name: string) : bool = name.ToLower().EndsWith ".zip"
+
 [<ReactComponent>]
 let private UploadZone (model: Model) (dispatch: Msg -> unit) =
     // `dragActive` is ephemeral UI state — belongs in React, not the
@@ -36,10 +57,44 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
 
         reader.readAsArrayBuffer file
 
+    /// Phase 511 — route a selection to the right surface.
+    ///
+    /// **A single non-archive file still takes the pre-511 path,
+    /// unchanged** (GP 11): same `UploadDocument` call, same
+    /// multipart-optimised wire, same spinner. The batch surface is
+    /// entered only when the selection genuinely IS a batch — several
+    /// files, or an archive to expand — which is exactly when N separate
+    /// round-trips and N toasts were the problem.
+    let processSelection (files: Browser.Types.File list) =
+        match files with
+        | [] -> ()
+        | [ single ] when not (isArchiveName single.name) -> processFile single
+        | files ->
+            async {
+                try
+                    let! sources =
+                        files
+                        |> List.map (fun file -> async {
+                            let! bytes = readFileBytes file
+
+                            return
+                                if isArchiveName file.name then
+                                    BulkImportSource.Archive(file.name, bytes)
+                                else
+                                    BulkImportSource.File(file.name, bytes)
+                        })
+                        |> Async.Sequential
+
+                    dispatch (BulkImportRequested(List.ofArray sources))
+                with ex ->
+                    dispatch (BulkImportFailed ex.Message)
+            }
+            |> Async.StartImmediate
+
     Html.div [
         prop.className [
             "border-2 border-dashed rounded-lg p-8 text-center transition-colors"
-            if dragActive && not model.Uploading then
+            if dragActive && not (model.Uploading || model.BulkImporting) then
                 "border-blue-500 bg-blue-50"
             else
                 "border-gray-300 hover:border-blue-400"
@@ -50,7 +105,7 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
         prop.onDragEnter (fun ev ->
             ev.preventDefault ()
 
-            if not model.Uploading then
+            if not (model.Uploading || model.BulkImporting) then
                 setDragActive true)
         prop.onDragOver (_.preventDefault())
         prop.onDragLeave (fun _ -> setDragActive false)
@@ -58,16 +113,14 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
             ev.preventDefault ()
             setDragActive false
 
-            if not model.Uploading then
+            if not (model.Uploading || model.BulkImporting) then
                 let files = ev.dataTransfer.files
-
-                for i in 0 .. (int files.length) - 1 do
-                    processFile files[i])
+                processSelection [ for i in 0 .. (int files.length) - 1 -> files[i] ])
         prop.children [
             Html.p [
                 prop.className "text-sm font-medium text-gray-700 mb-1"
                 prop.text (
-                    if dragActive && not model.Uploading then
+                    if dragActive && not (model.Uploading || model.BulkImporting) then
                         "Drop files to upload"
                     else
                         "Upload documents to your knowledge base"
@@ -75,25 +128,29 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
             ]
             Html.p [
                 prop.className "text-xs text-gray-500 mb-4"
-                prop.text "PDF, PPTX, DOCX, XLSX, CSV, TXT  ·  drop files here or click to choose"
+                prop.text "PDF, PPTX, DOCX, XLSX, CSV, TXT — or a .zip to expand  ·  drop files here or click to choose"
             ]
             Html.label [
                 prop.className
                     "inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 cursor-pointer"
                 prop.children [
-                    Html.span [ prop.text (if model.Uploading then "Uploading…" else "Choose files") ]
+                    Html.span [
+                        prop.text (
+                            if model.BulkImporting then "Importing…"
+                            elif model.Uploading then "Uploading…"
+                            else "Choose files"
+                        )
+                    ]
                     Html.input [
                         prop.type' "file"
                         prop.className "hidden"
-                        prop.accept ".pdf,.pptx,.docx,.xlsx,.csv,.txt"
+                        prop.accept ".pdf,.pptx,.docx,.xlsx,.csv,.txt,.zip"
                         prop.multiple true
-                        prop.disabled model.Uploading
+                        prop.disabled (model.Uploading || model.BulkImporting)
                         prop.onClick (fun ev ->
                             let input = ev.target :?> Browser.Types.HTMLInputElement
                             input.value <- "")
-                        prop.onChange (fun (files: Browser.Types.File list) ->
-                            for file in files do
-                                processFile file)
+                        prop.onChange processSelection
                     ]
                 ]
             ]
@@ -115,6 +172,96 @@ let private errorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     prop.text "×"
                     prop.onClick (fun _ -> dispatch DismissError)
                 ]
+            ]
+        ]
+
+// ─── Batch import roll-up (Phase 511.D) ───────────────────────────
+//
+// The batch's single completion surface. One panel summarising N items
+// replaces N transient toasts: a migration that refused 12 of 500 files
+// needs the operator to be able to READ which 12 and why, which a toast
+// stream structurally cannot provide.
+//
+// Per-item ingestion progress is deliberately NOT duplicated here — an
+// admitted document joins the ordinary document list below and reports
+// its extraction / embedding lifecycle there, through the same status
+// badges every other upload uses.
+
+let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    match model.BulkImportError, model.BulkReport with
+    | Some err, _ ->
+        Html.div [
+            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
+            prop.children [
+                Html.p [
+                    prop.className "text-sm text-red-700 flex-1"
+                    prop.text (sprintf "Batch import failed: %s" err)
+                ]
+                Html.button [
+                    prop.className "text-red-400 hover:text-red-600 text-lg"
+                    prop.text "×"
+                    prop.onClick (fun _ -> dispatch DismissBulkReport)
+                ]
+            ]
+        ]
+    | None, None -> Html.none
+    | None, Some report ->
+        let refusals =
+            report.Items
+            |> List.choose (fun item ->
+                match item.Outcome with
+                | BulkItemOutcome.Refused reason -> Some(item.Source, reason)
+                // A per-item POLICY refusal arrives as an admitted
+                // document whose status is `UploadRejected` — same
+                // outcome for the reader, so it is listed alongside.
+                | BulkItemOutcome.Admitted doc ->
+                    match doc.Status with
+                    | IngestionStatus.UploadRejected reason -> Some(item.Source, reason)
+                    | _ -> None)
+
+        Html.div [
+            prop.className [
+                "border rounded-md px-4 py-3"
+                if List.isEmpty refusals then
+                    "bg-green-50 border-green-200"
+                else
+                    "bg-amber-50 border-amber-200"
+            ]
+            prop.children [
+                Html.div [
+                    prop.className "flex items-start gap-3"
+                    prop.children [
+                        Html.p [
+                            prop.className "text-sm font-medium text-gray-800 flex-1"
+                            prop.text (
+                                sprintf
+                                    "Batch import complete — %d of %d item(s) imported, %d refused."
+                                    report.Imported
+                                    (List.length report.Items)
+                                    report.Refused
+                            )
+                        ]
+                        Html.button [
+                            prop.className "text-gray-400 hover:text-gray-600 text-lg"
+                            prop.text "×"
+                            prop.onClick (fun _ -> dispatch DismissBulkReport)
+                        ]
+                    ]
+                ]
+                if not (List.isEmpty refusals) then
+                    Html.ul [
+                        prop.className "mt-2 space-y-1"
+                        prop.children [
+                            for source, reason in refusals ->
+                                Html.li [
+                                    prop.className "text-xs text-gray-700"
+                                    prop.children [
+                                        Html.span [ prop.className "font-medium"; prop.text source ]
+                                        Html.span [ prop.text (sprintf " — %s" reason) ]
+                                    ]
+                                ]
+                        ]
+                    ]
             ]
         ]
 
@@ -245,6 +392,7 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             errorBanner model dispatch
+            bulkImportPanel model dispatch
             UploadZone model dispatch
             documentList model dispatch
         ]

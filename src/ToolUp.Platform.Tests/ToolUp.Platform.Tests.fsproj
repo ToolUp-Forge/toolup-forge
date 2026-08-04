@@ -1021,6 +1021,14 @@
              enqueue, and the GP 11 pin that an uncomposed deployment still
              lands two unrelated documents. -->
         <Compile Include="InProcess\KbVersioningTests.fs" />
+        <!-- Phase 511 — bulk / programmatic KB import: archive expansion
+             under decompression-bomb guards, zip-slip entry names refused
+             by classification rather than silently flattened, the URL
+             ingestion gate (inert by default, literal-IP and foreign
+             schemes refused, redirects re-gated per hop), and the per-item
+             claim — scan / dedup / quota all still apply to every item
+             because the batch routes through the single-item path. -->
+        <Compile Include="InProcess\KbBulkImportTests.fs" />
         <!-- Phase 5e — per-tenant branding: Branding.resolve fallback +
              hex validation, and PlatformSchema.mergeBrandingSchema. -->
         <Compile Include="InProcess\BrandingTests.fs" />

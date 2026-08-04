@@ -145,6 +145,25 @@ type KnowledgeApiDeps = {
     /// surface. `None` (no fact store composed) ⇒ the commit path is
     /// byte-identical (GP 13).
     DisclosureGate: IFactDisclosureGate option
+    /// Phase 511 — archive-expansion resource guards for `importBatch`,
+    /// registered by `withArchiveImportPolicy`. `ArchiveImportPolicy.defaults`
+    /// when absent — the one KB policy whose uncomposed default is NOT
+    /// permissive, because an unguarded archive expander is not a
+    /// defensible default for a new surface. Read only by `importBatch`;
+    /// the single-file upload path never sees it (GP 11).
+    ArchiveImportPolicy: ArchiveImportPolicy
+    /// Phase 511 — the URL-ingestion host allowlist, registered by
+    /// `withUrlIngestion`. `UrlIngestionPolicy.disabled` when absent,
+    /// whose allowlist is empty, so no URL is fetchable at all: URL
+    /// ingestion is inert unless a deployment names a host.
+    UrlIngestionPolicy: UrlIngestionPolicy
+    /// Phase 511 — the transport behind an allowlisted URL fetch,
+    /// registered alongside the policy by `withUrlIngestion` (or replaced
+    /// by `withUrlContentFetcher`). `None` when URL ingestion was never
+    /// composed — which is redundant with the empty allowlist above, and
+    /// deliberately so: the gate refuses before a transport is consulted,
+    /// and no transport exists to consult (GP 13).
+    UrlFetcher: KnowledgeBase.ServerBulkImport.IUrlContentFetcher option
 }
 
 module KnowledgeApiDeps =
@@ -362,6 +381,26 @@ module KnowledgeApiDeps =
             | :? IFactDisclosureGate as g -> Some g
             | _ -> None
 
+        // Phase 511 — bulk-import policies. The archive guards default to
+        // `ArchiveImportPolicy.defaults` (real caps, not permissive — see
+        // the type); URL ingestion defaults to an EMPTY allowlist, so an
+        // uncomposed deployment cannot fetch anything and no transport is
+        // resolved for it either.
+        let archiveImportPolicy =
+            match ctx.RequestServices.GetService(typeof<ArchiveImportPolicy>) with
+            | :? ArchiveImportPolicy as p -> p
+            | _ -> ArchiveImportPolicy.defaults
+
+        let urlIngestionPolicy =
+            match ctx.RequestServices.GetService(typeof<UrlIngestionPolicy>) with
+            | :? UrlIngestionPolicy as p -> p
+            | _ -> UrlIngestionPolicy.disabled
+
+        let urlFetcher =
+            match ctx.RequestServices.GetService(typeof<KnowledgeBase.ServerBulkImport.IUrlContentFetcher>) with
+            | :? KnowledgeBase.ServerBulkImport.IUrlContentFetcher as f -> Some f
+            | _ -> None
+
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
@@ -451,6 +490,9 @@ module KnowledgeApiDeps =
             ContentScanner = contentScanner
             ScanPolicy = scanPolicy
             DisclosureGate = disclosureGate
+            ArchiveImportPolicy = archiveImportPolicy
+            UrlIngestionPolicy = urlIngestionPolicy
+            UrlFetcher = urlFetcher
         }
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`

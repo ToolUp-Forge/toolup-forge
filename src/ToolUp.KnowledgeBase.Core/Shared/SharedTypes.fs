@@ -819,6 +819,270 @@ module KnowledgeScopeUsage =
     /// An empty scope under an unlimited quota — the zero value.
     let empty: KnowledgeScopeUsage = ofDocuments KnowledgeQuotaPolicy.unlimited []
 
+// ─── Bulk / programmatic import (Phase 511) ──────────────────────
+//
+// Corpus-scale ingestion: a zip of 500 documents, a programmatic batch,
+// or a fetch-by-URL — instead of one browser interaction per file.
+//
+// **The single-item path is the only path.** Every item this surface
+// admits is routed through `uploadDocument`, so the Phase 515 content
+// scan, the Phase 14x dedup, the Phase 512 corpus quota, the Phase 510
+// versioning decision and the Phase 119 policy checks all apply per
+// item, in their established order, with no second copy of any of them.
+// A bulk path that re-implemented persistence would be a bulk path that
+// could silently skip a gate — which is precisely what four phases of
+// upload-boundary work exists to prevent.
+//
+// What is genuinely new here is only what a batch adds: expanding an
+// archive into items safely, deciding whether a URL may be fetched at
+// all, and reporting per-item outcomes plus one completion signal.
+
+/// Compose-time archive-expansion limits (Phase 511.B). Every lever is
+/// a resource guard: a zip is attacker-controlled input whose declared
+/// sizes are also attacker-controlled, so expansion is bounded on the
+/// entry count, on each entry, on the total, AND on the compression
+/// ratio — a 42 KB archive that declares 4.5 GB of content passes an
+/// entry-count check and a per-entry check and is still a bomb.
+///
+/// **Unlike every other KB policy in this file, the defaults here are
+/// NOT permissive.** GP 11 asks that an existing deployment be
+/// byte-for-byte unchanged when it upgrades, and it is: the pre-511
+/// single-file upload path takes none of these levers, and a deployment
+/// that never calls `ImportBatch` never reaches them. But bulk import is
+/// a NEW surface, and shipping a new archive-expansion surface whose
+/// out-of-the-box posture is "no bomb guards" would be a defect dressed
+/// as a default. A deployment that genuinely wants larger archives raises
+/// the caps deliberately.
+type ArchiveImportPolicy = {
+    /// Maximum entries an archive may declare. `None` = unbounded.
+    MaxEntries: int option
+    /// Maximum uncompressed bytes for any single entry. `None` =
+    /// unbounded.
+    MaxEntryBytes: int64 option
+    /// Maximum uncompressed bytes summed across every entry. `None` =
+    /// unbounded.
+    MaxTotalUncompressedBytes: int64 option
+    /// Maximum ratio of total uncompressed bytes to the archive's own
+    /// byte length. `None` = unbounded. This is the lever that catches a
+    /// bomb whose individual entries are each modest.
+    MaxCompressionRatio: float option
+}
+
+module ArchiveImportPolicy =
+    /// The default a deployment gets without calling
+    /// `withArchiveImportPolicy`: 1,000 entries, 100 MB per entry, 1 GB
+    /// total, 100:1 ratio. Chosen to be uncontroversial for a real
+    /// migration batch and hostile to a bomb.
+    let defaults: ArchiveImportPolicy = {
+        MaxEntries = Some 1_000
+        MaxEntryBytes = Some 104_857_600L
+        MaxTotalUncompressedBytes = Some 1_073_741_824L
+        MaxCompressionRatio = Some 100.0
+    }
+
+    /// Every guard off. Exists so a deployment can state that choice
+    /// explicitly (and so the falsification step has something to flip);
+    /// it is never what an uncomposed deployment resolves.
+    let unbounded: ArchiveImportPolicy = {
+        MaxEntries = None
+        MaxEntryBytes = None
+        MaxTotalUncompressedBytes = None
+        MaxCompressionRatio = None
+    }
+
+/// Compose-time URL-ingestion allowlist (Phase 511.C). **Inert by
+/// default and inert by construction**: `AllowedHosts` is a `Set`, the
+/// empty set admits nothing, and there is no wildcard case — so a
+/// deployment that never composes `withUrlIngestion` cannot fetch any
+/// URL, and one that composes an empty allowlist cannot either. Server-
+/// side request forgery is a class you close by having no reachable
+/// fetch, not by filtering one.
+///
+/// Matching is **exact host equality, lower-cased** — deliberately not
+/// suffix matching. `endsWith "example.com"` admits
+/// `notexample.com` and `example.com.evil.test`, which is how allowlists
+/// are usually defeated; a deployment wanting a subdomain lists it.
+type UrlIngestionPolicy = {
+    /// Exact hostnames a fetch may target. Empty = URL ingestion is
+    /// inert.
+    AllowedHosts: Set<string>
+    /// Maximum redirect hops followed. Each hop is re-gated against this
+    /// same policy, so a redirect can never leave the allowlist.
+    MaxRedirects: int
+    /// Hard ceiling on a fetched body, independent of the per-file
+    /// `KnowledgeUploadPolicy.MaxUploadBytes` that applies afterwards.
+    MaxResponseBytes: int64
+    /// Per-request timeout in seconds.
+    TimeoutSeconds: int
+}
+
+module UrlIngestionPolicy =
+    /// The default: no host allowed, so no fetch is possible. What a
+    /// deployment that never calls `withUrlIngestion` resolves.
+    let disabled: UrlIngestionPolicy = {
+        AllowedHosts = Set.empty
+        MaxRedirects = 3
+        MaxResponseBytes = 104_857_600L
+        TimeoutSeconds = 30
+    }
+
+    /// Allow exactly these hosts (case-insensitive; stored lower-cased).
+    let allowingHosts (hosts: string seq) : UrlIngestionPolicy = {
+        disabled with
+            AllowedHosts = hosts |> Seq.map (fun h -> h.Trim().ToLowerInvariant()) |> Set.ofSeq
+    }
+
+    /// `true` when no host is allowed — the fetch path is unreachable and
+    /// nothing about it needs evaluating (GP 13).
+    let isInert (policy: UrlIngestionPolicy) : bool = Set.isEmpty policy.AllowedHosts
+
+    /// `true` when `host` is admitted. Exact, lower-cased equality — see
+    /// the type's remarks on why this is not a suffix test.
+    let allowsHost (host: string) (policy: UrlIngestionPolicy) : bool =
+        not (isNull host)
+        && policy.AllowedHosts.Contains(host.Trim().ToLowerInvariant())
+
+/// One thing to import. `Archive` expands into many items server-side;
+/// `Url` is fetched only when the deployment allowlisted its host.
+///
+/// **Wire cost, stated because it is not obvious.** The multipart
+/// optimisation the KB client composes only applies to *top-level*
+/// `byte[]` ARGUMENTS (that is what `UploadDocument: byte[] -> string`
+/// gets); a `byte[]` nested inside this DU travels the JSON path, where
+/// a Fable client encodes it as an array of numbers — roughly 4× the
+/// raw size. The server absorbs that form (`ByteArrayConverter` accepts
+/// both a numeric array and base64), so it is correct, not merely
+/// tolerated; but a browser submitting a 200 MB archive should expect to
+/// send appreciably more than 200 MB. The programmatic caller — a
+/// migration script talking to the API directly — pays base64's 33%
+/// instead. Deployments moving very large corpora upload the archive
+/// with `UploadDocument`'s optimised path or split the batch.
+[<RequireQualifiedAccess>]
+type BulkImportSource =
+    /// Raw bytes under a caller-supplied name — the programmatic
+    /// equivalent of one `UploadDocument` call.
+    | File of fileName: string * content: byte[]
+    /// A zip archive to expand. Each surviving entry becomes its own
+    /// item and takes the full single-item path.
+    | Archive of fileName: string * content: byte[]
+    /// A URL to fetch. Refused unless the deployment allowlisted the
+    /// host.
+    | Url of url: string
+
+/// A batch submission. One list, so ordering across kinds is the
+/// caller's and the report can be read against the request positionally.
+type BulkImportRequest = { Sources: BulkImportSource list }
+
+/// What became of one item.
+///
+/// **`Admitted` carries whatever the single-item path returned, verbatim
+/// — including a document whose `Status` is `UploadRejected`.** That is
+/// deliberate rather than lossy: a per-item policy refusal already has a
+/// precise typed vocabulary in `IngestionStatus`, and mirroring it into
+/// a second bulk-specific enum would create two descriptions of one
+/// decision that could disagree. `Refused` is reserved for the genuinely
+/// new failures — an archive that never expanded, an entry whose name
+/// was hostile, a URL the deployment does not allow — which have no
+/// `IngestionStatus` because nothing ever reached the upload boundary.
+[<RequireQualifiedAccess>]
+type BulkItemOutcome =
+    /// Routed through `UploadDocument`. Read `document.Status` for the
+    /// per-item verdict.
+    | Admitted of document: KnowledgeDocument
+    /// Never reached the upload path. `reason` is classified and
+    /// user-legible (GP 9).
+    | Refused of reason: string
+
+module BulkItemOutcome =
+    /// `true` when the item reached the upload path AND was not refused
+    /// there. The one place the two refusal vocabularies are folded
+    /// together, so callers do not each fold them differently.
+    let isImported (outcome: BulkItemOutcome) : bool =
+        match outcome with
+        | BulkItemOutcome.Refused _ -> false
+        | BulkItemOutcome.Admitted doc ->
+            match doc.Status with
+            | UploadRejected _ -> false
+            | _ -> true
+
+/// Per-item line of the batch report.
+type BulkImportItemReport = {
+    /// Where the item came from, for a human reading the report:
+    /// the submitted file name, `"corpus.zip → docs/a.pdf"` for an
+    /// archive entry, or the URL.
+    Source: string
+    /// The name the item was imported under — already the server-side
+    /// safe name, so an archive entry's directory component is gone.
+    FileName: string
+    Outcome: BulkItemOutcome
+}
+
+/// The result of one batch: every item's outcome plus the counts a UI
+/// renders without folding the list itself.
+type BulkImportReport = {
+    /// Correlates this report with the `BulkImportSummary` notification
+    /// published on completion.
+    BatchId: string
+    StartedAt: DateTimeOffset
+    CompletedAt: DateTimeOffset
+    Items: BulkImportItemReport list
+    /// Items that reached the upload path and were not refused there.
+    Imported: int
+    /// Items refused, at either boundary.
+    Refused: int
+}
+
+module BulkImportReport =
+    /// Assemble a report from its items, deriving the counts so they can
+    /// never disagree with the list they summarise.
+    let ofItems
+        (batchId: string)
+        (startedAt: DateTimeOffset)
+        (completedAt: DateTimeOffset)
+        (items: BulkImportItemReport list)
+        : BulkImportReport =
+        let imported =
+            items
+            |> List.filter (fun i -> BulkItemOutcome.isImported i.Outcome)
+            |> List.length
+
+        {
+            BatchId = batchId
+            StartedAt = startedAt
+            CompletedAt = completedAt
+            Items = items
+            Imported = imported
+            Refused = List.length items - imported
+        }
+
+/// Wire-format key for the **single** `CustomNotification` a batch
+/// publishes when it completes (Phase 511.D). One signal per batch, not
+/// one per file: a 500-document migration that emitted 500 toasts would
+/// be indistinguishable from an outage from the user's seat.
+///
+/// The per-document ingestion lifecycle is unaffected — extraction and
+/// embedding still report through `IngestionStatusNotificationKey` as
+/// they always have, because those describe work that continues long
+/// after the batch call returns.
+[<Literal>]
+let BulkImportNotificationKey = "KnowledgeBase.BulkImport"
+
+/// Payload of `CustomNotification(BulkImportNotificationKey, _)`.
+/// Intentionally flat (no embedded DU), for the same reason
+/// `IngestionStatusUpdate` is: subscribers in other companion packages
+/// parse it without mirroring this module's types.
+type BulkImportSummary = {
+    BatchId: string
+    /// Items submitted after archive expansion — i.e. the number of
+    /// lines in the report, not the number of `Sources`.
+    TotalItems: int
+    Imported: int
+    Refused: int
+    CompletedAt: DateTimeOffset
+    /// Who ran the batch.
+    RequestedBy: string
+}
+
 // ─── Note authoring ──────────────────────────────────────────────
 
 /// Parameters for creating a free-form note.
@@ -1000,4 +1264,27 @@ type KnowledgeApi = {
     /// version 1 of its own lineage.
     [<AllowAnonymous>]
     GetDocumentVersions: string -> Async<KnowledgeDocumentVersion list>
+    /// Phase 511 — corpus-scale import: many documents, expanded
+    /// archives, and (only where allowlisted) fetched URLs, in one call,
+    /// with a per-item outcome report and one batch completion signal.
+    ///
+    /// **Every admitted item takes the ordinary single-item upload
+    /// path.** Content scanning, dedup, the corpus quota, versioning and
+    /// the Phase 119 policy checks all apply per item exactly as they do
+    /// for `UploadDocument`, because this handler calls the same
+    /// function rather than re-implementing persistence. A bad item does
+    /// not fail the batch — it becomes one refused line in the report.
+    ///
+    /// Archive expansion is bounded by the composed
+    /// `ArchiveImportPolicy` (entry count, per-entry size, total size,
+    /// compression ratio) and entries whose names would escape their
+    /// root are refused by name rather than silently flattened. URL
+    /// ingestion is **inert unless the deployment composed
+    /// `withUrlIngestion` with a non-empty host allowlist**.
+    ///
+    /// Rate-limited more tightly than `UploadDocument`: one call can
+    /// carry a whole corpus.
+    [<AllowAnonymous>]
+    [<RateLimit(4, RateLimitSeconds.perMinute)>]
+    ImportBatch: BulkImportRequest -> Async<BulkImportReport>
 }

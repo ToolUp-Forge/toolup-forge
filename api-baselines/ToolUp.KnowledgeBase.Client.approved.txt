@@ -9,11 +9,14 @@ ClientModel.narrativeCommitHandler : ToolUp.Platform.NarrativeCommitHandler { ge
 ClientModel.originalDocumentOpener(ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ClientModel.update(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ClientModel+Model (class)
-ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ClientModel+Model.AIContext : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]] { get }
 ClientModel+Model.AIContextEditorOpen : System.Boolean { get }
 ClientModel+Model.AIContextLoadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ClientModel+Model.AIContextSaveError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ClientModel+Model.BulkImportError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ClientModel+Model.BulkImporting : System.Boolean { get }
+ClientModel+Model.BulkReport : Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport] { get }
 ClientModel+Model.Documents : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument] { get }
 ClientModel+Model.LoadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ClientModel+Model.NoteEditor : Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget] { get }
@@ -31,12 +34,17 @@ ClientModel+Model.Uploading : System.Boolean { get }
 ClientModel+Msg (class)
 ClientModel+Msg.CloseAIContextEditor : ClientModel+Msg { get }
 ClientModel+Msg.CloseNoteEditor : ClientModel+Msg { get }
+ClientModel+Msg.DismissBulkReport : ClientModel+Msg { get }
 ClientModel+Msg.DismissError : ClientModel+Msg { get }
 ClientModel+Msg.IsAIContextSaved : System.Boolean { get }
+ClientModel+Msg.IsBulkImportCompleted : System.Boolean { get }
+ClientModel+Msg.IsBulkImportFailed : System.Boolean { get }
+ClientModel+Msg.IsBulkImportRequested : System.Boolean { get }
 ClientModel+Msg.IsCloseAIContextEditor : System.Boolean { get }
 ClientModel+Msg.IsCloseNoteEditor : System.Boolean { get }
 ClientModel+Msg.IsDeleteFailed : System.Boolean { get }
 ClientModel+Msg.IsDeleteRequested : System.Boolean { get }
+ClientModel+Msg.IsDismissBulkReport : System.Boolean { get }
 ClientModel+Msg.IsDismissError : System.Boolean { get }
 ClientModel+Msg.IsDocumentDeleted : System.Boolean { get }
 ClientModel+Msg.IsLoadAIContext : System.Boolean { get }
@@ -65,6 +73,12 @@ ClientModel+Msg.ResetIndexRequested : ClientModel+Msg { get }
 ClientModel+Msg.Tag : System.Int32 { get }
 ClientModel+Msg+AIContextSaved (class)
 ClientModel+Msg+AIContextSaved.Item : Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+AIContextEntry, System.String] { get }
+ClientModel+Msg+BulkImportCompleted (class)
+ClientModel+Msg+BulkImportCompleted.Item : SharedTypes+BulkImportReport { get }
+ClientModel+Msg+BulkImportFailed (class)
+ClientModel+Msg+BulkImportFailed.Item : System.String { get }
+ClientModel+Msg+BulkImportRequested (class)
+ClientModel+Msg+BulkImportRequested.Item : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportSource] { get }
 ClientModel+Msg+DeleteFailed (class)
 ClientModel+Msg+DeleteFailed.Item : System.String { get }
 ClientModel+Msg+DeleteRequested (class)
@@ -96,10 +110,14 @@ ClientModel+Msg+StatusPolled.Item1 : System.String { get }
 ClientModel+Msg+StatusPolled.Item2 : SharedTypes+IngestionStatus { get }
 ClientModel+Msg+Tags (class)
 ClientModel+Msg+Tags.AIContextSaved : System.Int32 (literal)
+ClientModel+Msg+Tags.BulkImportCompleted : System.Int32 (literal)
+ClientModel+Msg+Tags.BulkImportFailed : System.Int32 (literal)
+ClientModel+Msg+Tags.BulkImportRequested : System.Int32 (literal)
 ClientModel+Msg+Tags.CloseAIContextEditor : System.Int32 (literal)
 ClientModel+Msg+Tags.CloseNoteEditor : System.Int32 (literal)
 ClientModel+Msg+Tags.DeleteFailed : System.Int32 (literal)
 ClientModel+Msg+Tags.DeleteRequested : System.Int32 (literal)
+ClientModel+Msg+Tags.DismissBulkReport : System.Int32 (literal)
 ClientModel+Msg+Tags.DismissError : System.Int32 (literal)
 ClientModel+Msg+Tags.DocumentDeleted : System.Int32 (literal)
 ClientModel+Msg+Tags.LoadAIContext : System.Int32 (literal)

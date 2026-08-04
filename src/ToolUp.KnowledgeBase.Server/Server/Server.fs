@@ -56,6 +56,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         GetOriginalDelivery = getOriginalDelivery previewSeam deps
         GetScopeUsage = fun () -> getScopeUsage deps
         GetDocumentVersions = getDocumentVersions deps
+        ImportBatch = importBatch deps
     }
 
 // ─── Public surface re-exports (helpers split into sibling modules) ─
@@ -194,6 +195,35 @@ let withKnowledgeRetention = KnowledgeBase.ServerUploadPolicy.withKnowledgeReten
 /// supplied by the caller so the selection is deterministic. Defined in
 /// `Server/RetentionSweep.fs`.
 let sweepExpiredDocuments = KnowledgeBase.ServerRetentionSweep.sweepScope
+
+/// Phase 511 — override the bulk-import archive-expansion guards
+/// (entry count, per-entry bytes, total uncompressed bytes, compression
+/// ratio). Apps that never call this get `ArchiveImportPolicy.defaults`,
+/// which already carries real caps — the one KB policy whose uncomposed
+/// default is not permissive, because a new archive-expansion surface
+/// with no bomb guards would be a defect dressed as a default. The
+/// single-file upload path never reads it (GP 11). Defined in
+/// `Server/BulkImport.fs`.
+let withArchiveImportPolicy = KnowledgeBase.ServerBulkImport.withArchiveImportPolicy
+
+/// Phase 511 — enable fetch-by-URL ingestion for an explicit host
+/// allowlist, and register the BCL `HttpClient` transport that performs
+/// it. **Not calling this leaves URL ingestion inert**: with no policy
+/// registered the handler resolves `UrlIngestionPolicy.disabled`, whose
+/// allowlist is empty, and the gate refuses before it even parses a URL.
+/// There is no wildcard and no enable-flag separate from the allowlist,
+/// so the only way to reach the network is to name a host; composing an
+/// empty allowlist is therefore also inert, which is how a deployment
+/// that wires this from configuration fails closed. Redirects are
+/// re-gated per hop, literal IP hosts are refused outright, and only
+/// http/https are fetchable. Defined in `Server/BulkImport.fs`.
+let withUrlIngestion = KnowledgeBase.ServerBulkImport.withUrlIngestion
+
+/// Phase 511 — substitute the URL transport (an egress proxy, a
+/// signed-fetch service) without changing allowlist semantics: the gate
+/// stays in `classifyUrl`, only the bytes arrive differently. Defined in
+/// `Server/BulkImport.fs`.
+let withUrlContentFetcher = KnowledgeBase.ServerBulkImport.withUrlContentFetcher
 
 /// Wave 1 Gap #2 — explicit operator-callable recovery hook for the KB
 /// ingestion pipeline. The in-process `IngestionQueue` (in
