@@ -1,0 +1,128 @@
+{
+  "name": "morphology-lift",
+  "description": "Phase 501 — a deliberately morphology-heavy fixture for comparing sparse analyzers. Every query uses a DIFFERENT surface form of the term the answering chunk uses (plural vs singular, gerund vs infinitive, nominalisation vs verb), and every chunk has a lexically-similar distractor, so the lexical leg only lands the right passage when index-time and query-time terms are reduced to a common stem. Run it twice and compare Recall@K:\n  dotnet run --project src/ToolUp.RAG.Evaluation -- <this file>\n  dotnet run --project src/ToolUp.RAG.Evaluation -- --analyzer snowball-en <this file>\nThe default (identity) arm is the shipped tokenisation; the snowball-en arm composes ToolUp.SparseIndices.Snowball. Note the harness scores the HYBRID pipeline, so the dense leg recovers some of the identity arm's misses — the reported delta is the end-to-end effect a deployment actually sees, not the isolated BM25 delta.",
+  "corpus": [
+    {
+      "chunkId": "renewals-cancelling",
+      "scope": "platform",
+      "content": "Cancelling a subscription stops all future renewals immediately. The customer retains access until the end of the paid period, after which the account moves to the free tier and scheduled renewals are removed from the billing queue.",
+      "metadata": { "topic": "billing" }
+    },
+    {
+      "chunkId": "renewals-distractor",
+      "scope": "platform",
+      "content": "A renewal notice is an email. Notices are sent seven days before the charge date and again on the morning of the charge, and they are not themselves a billing event.",
+      "metadata": { "topic": "billing" }
+    },
+    {
+      "chunkId": "indexing-documents",
+      "scope": "platform",
+      "content": "Documents are indexed asynchronously after upload. The ingestion service chunks each document, embeds the chunks in batches, and writes them to both the vector store and the lexical index before marking the document ready.",
+      "metadata": { "topic": "ingestion" }
+    },
+    {
+      "chunkId": "indexing-distractor",
+      "scope": "platform",
+      "content": "An index page is a navigational artefact. Pages of this kind list the sections of a site and are regenerated whenever the navigation tree changes.",
+      "metadata": { "topic": "site" }
+    },
+    {
+      "chunkId": "permissions-granting",
+      "scope": "platform",
+      "content": "Granting a permission adds it to the member's effective set for the active team only. Grants never cross a team boundary, and a member who belongs to two teams carries two independent permission sets.",
+      "metadata": { "topic": "permissions" }
+    },
+    {
+      "chunkId": "permissions-distractor",
+      "scope": "platform",
+      "content": "A grant application is a funding request. Applications are reviewed quarterly by the committee and have nothing to do with access control.",
+      "metadata": { "topic": "misc" }
+    },
+    {
+      "chunkId": "notifications-delivering",
+      "scope": "platform",
+      "content": "Delivering a notification is retried with exponential backoff. A delivery that fails five consecutive times is dead-lettered, and the failure is recorded against the channel rather than the recipient.",
+      "metadata": { "topic": "notifications" }
+    },
+    {
+      "chunkId": "notifications-distractor",
+      "scope": "platform",
+      "content": "The delivery address on an invoice is the registered company address. Addresses are validated at save time and are unrelated to message transport.",
+      "metadata": { "topic": "billing" }
+    },
+    {
+      "chunkId": "scheduling-recurring",
+      "scope": "platform",
+      "content": "A recurring booking repeats on a rule until its end date. Recurrences are expanded lazily at read time, so changing the rule updates every future occurrence without rewriting stored rows.",
+      "metadata": { "topic": "scheduling" }
+    },
+    {
+      "chunkId": "scheduling-distractor",
+      "scope": "platform",
+      "content": "A booking conflict occurs when two reservations overlap on one resource. The conflict detector holds a per-resource lock while it checks, and rejects the later request.",
+      "metadata": { "topic": "scheduling" }
+    },
+    {
+      "chunkId": "encryption-rotating",
+      "scope": "platform",
+      "content": "Rotating an encryption key re-wraps every data key without rewriting the ciphertext. Rotations are recorded in the audit log, and a blob written before a rotation stays readable because its wrapping key id travels with it.",
+      "metadata": { "topic": "security" }
+    },
+    {
+      "chunkId": "encryption-distractor",
+      "scope": "platform",
+      "content": "Key management is delegated to the configured secret store. Stores differ in how they expose versions, which is why the platform records an identifier rather than the material.",
+      "metadata": { "topic": "security" }
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-cancel",
+      "query": "how do I cancel a renewal",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["renewals-cancelling"]
+    },
+    {
+      "id": "q-index",
+      "query": "when does a document get indexed",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["indexing-documents"]
+    },
+    {
+      "id": "q-grant",
+      "query": "grant permissions to a member",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["permissions-granting"]
+    },
+    {
+      "id": "q-deliver",
+      "query": "notification deliveries that fail",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["notifications-delivering"]
+    },
+    {
+      "id": "q-recur",
+      "query": "bookings that recur",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["scheduling-recurring"]
+    },
+    {
+      "id": "q-rotate",
+      "query": "rotation of encryption keys",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["encryption-rotating"]
+    },
+    {
+      "id": "q-renew",
+      "query": "subscription renewal stopped",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["renewals-cancelling"]
+    },
+    {
+      "id": "q-chunking",
+      "query": "chunk and embed an uploaded file",
+      "scopes": ["platform"],
+      "relevantChunkIds": ["indexing-documents"]
+    }
+  ]
+}

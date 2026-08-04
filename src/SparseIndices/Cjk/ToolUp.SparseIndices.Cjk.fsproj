@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.SparseIndices.Cjk</PackageId>
+    <AssemblyName>ToolUp.SparseIndices.Cjk</AssemblyName>
+    <Description>Character n-gram ISparseAnalyzer for non-space-delimited scripts (Chinese, Japanese, Korean), so the ToolUp.RAG sparse (BM25) leg works on CJK corpora without a dictionary or native segmenter.</Description>
+    <PackageTags>fsharp;sdk;rag;bm25;sparse-index;analyzer;cjk;segmentation;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="CjkAnalyzer.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The analyzer seam (ISparseAnalyzer) lives in ToolUp.RAG.Core, the
+         shared-types floor. FSharp.Core is implicit via the .NET SDK. -->
+    <ProjectReference Include="..\..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Deliberately no vendor PackageReference: n-gram segmentation is
+         dictionary-free by construction. A dictionary or model-based
+         segmenter (MeCab / Kuromoji / jieba) would carry a data file or a
+         native binary and belongs in its own companion with its own
+         supply-chain posture — see README.md. -->
+  </ItemGroup>
+</Project>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.SparseIndices.Snowball</PackageId>
+    <AssemblyName>ToolUp.SparseIndices.Snowball</AssemblyName>
+    <Description>Language-aware ISparseAnalyzer for the ToolUp.RAG sparse (BM25) index: Snowball/Porter2 English stemming, stop-word removal and diacritic folding for seven European languages.</Description>
+    <PackageTags>fsharp;sdk;rag;bm25;sparse-index;analyzer;stemming;snowball;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Porter2.fs" />
+    <Compile Include="StopWords.fs" />
+    <Compile Include="SnowballAnalyzer.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The analyzer seam (ISparseAnalyzer) lives in ToolUp.RAG.Core, the
+         shared-types floor — so this companion carries no server-tier or
+         ASP.NET Core dependency. FSharp.Core is implicit via the .NET SDK. -->
+    <ProjectReference Include="..\..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Deliberately no vendor PackageReference. The English Snowball
+         algorithm is implemented in-package (Porter2.fs): it is a closed,
+         fully-specified string transformation with no data file, no native
+         binary and no protocol, so a third-party package would add a
+         supply-chain edge to an Apache-2.0 SDK and buy nothing that the
+         pinned test vectors do not already guarantee. -->
+  </ItemGroup>
+</Project>

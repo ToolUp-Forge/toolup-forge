@@ -85,3 +85,15 @@ ToolUp.RAG.IngestionTypes+IngestionRetryPolicyModule (class)
 ToolUp.RAG.IngestionTypes+IngestionRetryPolicyModule.baseDelayFor(ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.RAG.IngestionTypes+IngestionRetryPolicyModule.defaults : ToolUp.RAG.IngestionTypes+IngestionRetryPolicy { get }
 ToolUp.RAG.IngestionTypes+IngestionRetryPolicyModule.jitterComponentFor(ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, System.Int32, System.Double) : System.TimeSpan
+ToolUp.RAG.SparseAnalysis (class)
+ToolUp.RAG.SparseAnalysis.IdentityAnalyzerId : System.String (literal)
+ToolUp.RAG.SparseAnalysis.analyse(ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, System.String) : ToolUp.RAG.SparseAnalysis+AnalysedText
+ToolUp.RAG.SparseAnalysis.create(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.RAG.SparseAnalysis+ISparseAnalyzer
+ToolUp.RAG.SparseAnalysis.identity : ToolUp.RAG.SparseAnalysis+ISparseAnalyzer { get }
+ToolUp.RAG.SparseAnalysis.tokeniseWords(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.SparseAnalysis+AnalysedText (class)
+ToolUp.RAG.SparseAnalysis+AnalysedText.AnalyzerId : System.String { get }
+ToolUp.RAG.SparseAnalysis+AnalysedText.Terms : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.RAG.SparseAnalysis+ISparseAnalyzer (interface)
+ToolUp.RAG.SparseAnalysis+ISparseAnalyzer.Analyse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.SparseAnalysis+ISparseAnalyzer.Id : System.String { get }

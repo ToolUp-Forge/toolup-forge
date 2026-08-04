@@ -3,7 +3,6 @@ module ToolUp.RAG.InMemoryBM25Index
 open System
 open System.Collections.Concurrent
 open System.Collections.Generic
-open System.Text.RegularExpressions
 open System.Threading
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -11,24 +10,16 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.ISparseIndex
+open ToolUp.RAG.SparseAnalysis
 
 // ─── Tokenisation ─────────────────────────────────────────────────
-
-let private tokenPattern = Regex(@"[\p{L}\p{N}]+", RegexOptions.Compiled)
-
-/// Lower-case and split into Unicode-letter / digit runs. Punctuation,
-/// whitespace, and symbols are dropped. Sufficient for English-language
-/// business documents and code-like identifiers (`SKU-1234` becomes
-/// `["sku"; "1234"]`); language-aware tokenisers belong in companion
-/// implementations under `src/SparseIndices/`.
-let private tokenise (text: string) : string list =
-    if String.IsNullOrEmpty text then
-        []
-    else
-        [
-            for m in tokenPattern.Matches(text) do
-                m.Value.ToLowerInvariant()
-        ]
+//
+// Phase 501 — tokenisation moved behind `ISparseAnalyzer`
+// (`ToolUp.RAG.SparseAnalysis`). The pre-501 rule (Unicode letter/digit runs,
+// lower-cased) is now `SparseAnalysis.identity` and remains the default, so an
+// index constructed without an analyzer behaves byte-for-byte as before
+// (GP 11). Language-aware analyzers ship as companions under
+// `src/SparseIndices/`.
 
 // ─── BM25 parameters ──────────────────────────────────────────────
 
@@ -49,8 +40,23 @@ type private DocEntry = {
     Metadata: Map<string, string>
 }
 
+/// Phase 501 — `AnalyzerId` records which analyzer produced the persisted
+/// `DocEntry.Tokens`. A snapshot written by a different analyzer than the one
+/// now composed is re-analysed from `DocEntry.Content` on load rather than
+/// trusted: index-time terms that disagree with query-time terms do not fail,
+/// they just stop matching, and a deployment that turns stemming on would
+/// otherwise search a stemmed vocabulary against unstemmed postings until
+/// every document happened to be re-ingested.
+///
+/// A pre-501 snapshot has no such field, so `AnalyzerId` deserialises `null`;
+/// that is read as `SparseAnalysis.IdentityAnalyzerId`, because the identity
+/// analyzer IS what wrote it. With the default analyzer composed, such a
+/// snapshot therefore loads its tokens unchanged (GP 11).
 [<CLIMutable>]
-type private ScopeSnapshot = { Docs: DocEntry array }
+type private ScopeSnapshot = {
+    Docs: DocEntry array
+    AnalyzerId: string
+}
 
 let private scopeToKey (scope: VectorScope) =
     match scope with
@@ -75,8 +81,27 @@ let private fromJson<'T> (s: string) =
 /// queries fan out and union without ever sharing posting lists. Mutated
 /// only under `lockObj`; read paths take the lock briefly to snapshot
 /// what they need.
-type private ScopeIndex() =
+///
+/// Phase 501 — both term-bearing entry points (`Upsert`, `Score`) take an
+/// `AnalysedText`, never a `string list`. `AnalysedText` has a private
+/// constructor in `ToolUp.RAG.SparseAnalysis`, so the only way to reach either
+/// is through an `ISparseAnalyzer`; `analyzerId` is the id this scope's
+/// postings were built with, and terms from any other analyzer are refused
+/// rather than scored against them.
+type private ScopeIndex(analyzerId: string) =
     let lockObj = obj ()
+
+    let expect (label: string) (analysed: AnalysedText) =
+        if analysed.AnalyzerId <> analyzerId then
+            // Unreachable through the public surface — the owning index binds
+            // exactly one analyzer and analyses both sides with it. Kept as a
+            // fail-loud floor because the alternative failure mode (scoring
+            // one analyzer's query terms against another's postings) is
+            // silent, and reads as "retrieval got worse" months later.
+            invalidOp
+                $"[InMemoryBM25Index] %s{label} received terms from analyzer '%s{analysed.AnalyzerId}' but this index was built by '%s{analyzerId}'. Index-time and query-time analysis must use the same analyzer."
+
+        analysed.Terms
 
     // chunkId → (tokens, length, content, metadata)
     let docs = Dictionary<string, string array * int * string * Map<string, string>>()
@@ -99,11 +124,11 @@ type private ScopeIndex() =
 
             length
 
-    member _.Upsert(chunkId: string, content: string, metadata: Map<string, string>) =
+    member _.Upsert(chunkId: string, analysed: AnalysedText, content: string, metadata: Map<string, string>) =
         lock lockObj (fun () ->
             let removedLength = removeFromPostings chunkId
 
-            let tokens = tokenise content |> List.toArray
+            let tokens = expect "Upsert" analysed |> List.toArray
             let length = tokens.Length
 
             // Per-document term frequencies — counted once for the entire
@@ -142,7 +167,9 @@ type private ScopeIndex() =
 
     /// Score every document containing at least one query term using BM25.
     /// Returns `(chunkId, score, content, metadata)` tuples.
-    member _.Score(queryTerms: string list) : (string * float * string * Map<string, string>) list =
+    member _.Score(analysedQuery: AnalysedText) : (string * float * string * Map<string, string>) list =
+        let queryTerms = expect "Score" analysedQuery
+
         lock lockObj (fun () ->
             let n = docs.Count
 
@@ -196,16 +223,46 @@ type private ScopeIndex() =
                 }
         |])
 
-    member _.LoadSnapshot(snapshot: ScopeSnapshot) =
+    /// Rehydrate from a persisted snapshot. `reanalyse` is the owning index's
+    /// single analysis path; it is invoked per entry only when the snapshot's
+    /// recorded analyzer differs from this index's, in which case the stored
+    /// tokens are stale by construction and the entry's retained `Content` is
+    /// re-analysed instead. Returns the number of entries re-analysed so the
+    /// caller can say so once, rather than per chunk.
+    member _.LoadSnapshot(snapshot: ScopeSnapshot, reanalyse: string -> AnalysedText) : int =
         lock lockObj (fun () ->
             docs.Clear()
             postings.Clear()
             totalLength <- 0L
 
+            let mutable reanalysed = 0
+
+            // A pre-Phase-501 snapshot has no AnalyzerId field, so STJ leaves
+            // it null — and the identity analyzer is exactly what wrote it.
+            let snapshotAnalyzerId =
+                if isNull (box snapshot) || String.IsNullOrEmpty snapshot.AnalyzerId then
+                    IdentityAnalyzerId
+                else
+                    snapshot.AnalyzerId
+
+            let tokensMatch = snapshotAnalyzerId = analyzerId
+
             if not (isNull (box snapshot)) && not (isNull snapshot.Docs) then
                 for entry in snapshot.Docs do
-                    let tokens = if isNull entry.Tokens then [||] else entry.Tokens
-                    let length = if entry.Length > 0 then entry.Length else tokens.Length
+                    let stored = if isNull entry.Tokens then [||] else entry.Tokens
+
+                    let tokens =
+                        if tokensMatch then
+                            stored
+                        else
+                            reanalysed <- reanalysed + 1
+                            expect "LoadSnapshot" (reanalyse entry.Content) |> List.toArray
+
+                    let length =
+                        if tokensMatch && entry.Length > 0 then
+                            entry.Length
+                        else
+                            tokens.Length
 
                     let tfPerTerm = Dictionary<string, int>()
 
@@ -232,7 +289,9 @@ type private ScopeIndex() =
                             entry.Metadata
 
                     docs[entry.ChunkId] <- (tokens, length, entry.Content, metadata)
-                    totalLength <- totalLength + int64 length)
+                    totalLength <- totalLength + int64 length
+
+            reanalysed)
 
 // ─── In-memory sparse index ───────────────────────────────────────
 
@@ -246,23 +305,39 @@ type private ScopeIndex() =
 /// `InMemoryVectorStore`'s amortisation strategy so a 10,000-chunk bulk
 /// load triggers O(scopes) persistence passes, not O(chunks).
 ///
-/// Tokenisation is intentionally simple (Unicode word runs, lowercased).
-/// Stemming, stop-word removal, and language-specific analysers belong in
-/// companion implementations under `src/SparseIndices/` — the
-/// `ISparseIndex` interface is Phase 9c-clean and accepts richer backends
-/// (Tantivy, Lucene.NET, Meilisearch) without changing call sites.
+/// Tokenisation is pluggable as of Phase 501. The default analyzer
+/// (`SparseAnalysis.identity`) is the pre-501 rule — Unicode word runs,
+/// lower-cased — so an index constructed without one behaves exactly as
+/// before (GP 11). Stemming, stop-word removal and CJK segmentation arrive by
+/// composing an `ISparseAnalyzer` from a companion under `src/SparseIndices/`
+/// (`ToolUp.SparseIndices.Snowball`, `ToolUp.SparseIndices.Cjk`); the
+/// `ISparseIndex` interface itself is Phase 9c-clean and accepts richer
+/// backends (Tantivy, Lucene.NET, Meilisearch) without changing call sites.
+///
+/// The analyzer is applied on BOTH sides by construction: this type binds one
+/// analyzer, exposes a single `analyse` path, and the per-scope index accepts
+/// only the `AnalysedText` that path produces. The persisted snapshot records
+/// the analyzer id and is re-analysed on load when it disagrees, so composing
+/// an analyzer over an existing corpus does not leave the postings in one
+/// vocabulary and the queries in another.
 ///
 /// Suitable for deployments with up to ~50,000 chunks; for larger corpora
 /// switch to a companion. The store implements `IDisposable`; ASP.NET
 /// Core's DI container disposes it during shutdown, which performs one
 /// final synchronous flush so no acknowledged writes are lost.
-type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: int) =
+type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: int, ?analyzer: ISparseAnalyzer) =
 
     let log =
         logger
         |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
     let flushMs = defaultArg flushIntervalMs 2000
+
+    /// The one analyzer this index owns. Every term it stores and every term
+    /// it searches for comes from `analyse` below — there is no second path.
+    let analyzer = defaultArg analyzer SparseAnalysis.identity
+
+    let analyse (text: string) = SparseAnalysis.analyse analyzer text
 
     let scopes = ConcurrentDictionary<string, ScopeIndex>()
 
@@ -271,7 +346,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     let cts = new CancellationTokenSource()
 
     let getOrCreateScopeIndex (scope: VectorScope) =
-        scopes.GetOrAdd(scopeToKey scope, fun _ -> ScopeIndex())
+        scopes.GetOrAdd(scopeToKey scope, fun _ -> ScopeIndex(analyzer.Id))
 
     let markDirty (scope: VectorScope) = dirty[scopeToKey scope] <- scope
 
@@ -298,7 +373,11 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
                 markDirty scope
         | true, idx ->
-            let snapshot = { Docs = idx.Snapshot() }
+            let snapshot = {
+                Docs = idx.Snapshot()
+                AnalyzerId = analyzer.Id
+            }
+
             let bytes = toJson snapshot |> System.Text.Encoding.UTF8.GetBytes
             let! result = storage.Upload("_rag", blobName scope, bytes)
 
@@ -332,7 +411,19 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                 let json = System.Text.Encoding.UTF8.GetString bytes
                 let snapshot = fromJson<ScopeSnapshot> json
                 let idx = getOrCreateScopeIndex scope
-                idx.LoadSnapshot snapshot
+                let reanalysed = idx.LoadSnapshot(snapshot, analyse)
+
+                if reanalysed > 0 then
+                    // Said once per scope, at Info: this is the expected
+                    // (and correct) response to composing a new analyzer over
+                    // an existing corpus, not a fault.
+                    log.Info
+                        $"[InMemoryBM25Index] Scope {scopeToKey scope}: re-analysed {reanalysed} chunk(s) — the persisted snapshot was written by a different analyzer than the composed '{analyzer.Id}'."
+
+                    // The re-analysed postings only exist in memory until the
+                    // next flush; mark dirty so the snapshot on disk catches
+                    // up rather than re-triggering this on every restart.
+                    markDirty scope
             with ex ->
                 log.Warn $"[InMemoryBM25Index] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
         | Error _ -> ()
@@ -356,11 +447,17 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
     do Async.Start(flushLoop, cts.Token)
 
+    /// Id of the composed analyzer — `SparseAnalysis.IdentityAnalyzerId` when
+    /// none was supplied. Surfaced so an operator (or a test) can confirm from
+    /// the outside which vocabulary the postings are in; it is the same value
+    /// stamped into every persisted snapshot.
+    member _.AnalyzerId = analyzer.Id
+
     interface ISparseIndex with
 
         member _.Upsert scope chunkId chunk = async {
             let idx = getOrCreateScopeIndex scope
-            idx.Upsert(chunkId, chunk.Content, chunk.Metadata)
+            idx.Upsert(chunkId, analyse chunk.Content, chunk.Content, chunk.Metadata)
             markDirty scope
         }
 
@@ -377,9 +474,11 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                         do! loadScope scope
                 | _ -> ()
 
-            let queryTerms = tokenise query
+            // The SAME `analyse` the index-time path uses — one binding, one
+            // analyzer, no way to reach the postings with anything else.
+            let analysedQuery = analyse query
 
-            if queryTerms.IsEmpty then
+            if analysedQuery.Terms.IsEmpty then
                 return []
             else
                 let results =
@@ -388,7 +487,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                         match scopes.TryGetValue(scopeToKey scope) with
                         | false, _ -> []
                         | true, idx ->
-                            idx.Score queryTerms
+                            idx.Score analysedQuery
                             |> List.map (fun (chunkId, score, content, metadata) -> {
                                 ChunkId = chunkId
                                 Content = content

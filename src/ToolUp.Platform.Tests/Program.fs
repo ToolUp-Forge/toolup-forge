@@ -746,6 +746,9 @@ let allTests =
         QueryRewriteContract.tests
         // Phase 505 — citation character-offset spans (chunk → citation).
         CitationSpanContract.tests
+        // Phase 501 — the sparse-index analyzer seam + the Snowball / CJK
+        // companions (identity default, index/query symmetry, measured lift).
+        SparseAnalyzerContract.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests

@@ -982,6 +982,12 @@
              the source through chunking and projection, absence degrades to
              chunk-granular (GP 11), and the text-only chunkers are pinned. -->
         <Compile Include="RAG\CitationSpanContract.fs" />
+        <!-- Phase 501 — the sparse-index analyzer seam: the identity default
+             is byte-for-byte the pre-501 index (GP 11), index-time and
+             query-time analysis cannot diverge (including across a persisted
+             snapshot written by another analyzer), and the Snowball / CJK
+             companions are pinned by vectors plus a measured Recall@K lift. -->
+        <Compile Include="RAG\SparseAnalyzerContract.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />
@@ -1653,6 +1659,9 @@
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
+        <!-- Phase 501 — the sparse-index analyzer companions. -->
+        <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
+        <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />
         <!-- Phase 46.B — Sample client-resident-tool reference companion.
              Tests project consumes Core + Server tiers; Client tier is
              Fable and never reached by the .NET runner. -->

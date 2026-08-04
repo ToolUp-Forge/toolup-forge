@@ -19,6 +19,11 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="IngestionTypes.fs" />
+        <!-- Phase 501 — the sparse-index analyzer seam (ISparseAnalyzer +
+             AnalysedText + the shipped identity analyzer). Lives in Core, not
+             Server, so a language companion under src/SparseIndices/ depends
+             on the shared-types floor rather than on the server tier. -->
+        <Compile Include="SparseAnalysis.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

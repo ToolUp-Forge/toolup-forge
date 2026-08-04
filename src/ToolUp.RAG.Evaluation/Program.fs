@@ -10,14 +10,40 @@ open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.RetrievalTracers
+open ToolUp.RAG.SparseAnalysis
+open ToolUp.SparseIndices.Snowball
+open ToolUp.SparseIndices.Cjk
 open ToolUp.RAG.Evaluation.EvalTypes
 
 // ─── Wiring helpers ───────────────────────────────────────────────
 
+// ─── Phase 501 — sparse-analyzer selection ────────────────────────
+//
+// `--analyzer <id>` picks the `ISparseAnalyzer` the BM25 leg runs with, so
+// the harness can MEASURE the retrieval-quality claim a language analyzer
+// makes rather than assert it. Run the same fixture twice and compare:
+//
+//   dotnet run --project src/ToolUp.RAG.Evaluation -- \
+//       src/ToolUp.RAG.Evaluation/fixtures/eval-morphology.json
+//   dotnet run --project src/ToolUp.RAG.Evaluation -- --analyzer snowball-en \
+//       src/ToolUp.RAG.Evaluation/fixtures/eval-morphology.json
+//
+// Default is `identity` — the shipped tokenisation — so every pre-existing
+// invocation of this harness measures exactly what it measured before.
+
+let private analyzerNames = [ "identity"; "snowball-en"; "cjk" ]
+
+let private resolveAnalyzer (name: string) : Result<ISparseAnalyzer, string> =
+    match name.Trim().ToLowerInvariant() with
+    | "identity" -> Ok ToolUp.RAG.SparseAnalysis.identity
+    | "snowball-en" -> Ok(SnowballAnalyzer.english ())
+    | "cjk" -> Ok(CjkAnalyzer.bigrams ())
+    | other -> Error(sprintf "Unknown analyzer '%s'. Known: %s" other (String.Join(", ", analyzerNames)))
+
 /// Build a fresh in-memory pipeline rooted at `tempDir`. Each invocation
 /// gets its own `LocalFileStorage` directory so eval runs are independent
 /// — the BM25/vector indices don't leak across fixtures.
-let private buildPipeline (tempDir: string) : IRetrievalPipeline =
+let private buildPipeline (tempDir: string) (analyzer: ISparseAnalyzer) : IRetrievalPipeline =
     Directory.CreateDirectory tempDir |> ignore
 
     let storage = LocalFileStorage.LocalFileStorage(tempDir) :> BlobStorage.IBlobStorage
@@ -29,7 +55,8 @@ let private buildPipeline (tempDir: string) : IRetrievalPipeline =
     // to the next Retrieve without waiting on a 2-second timer.
     let vectorStore = new InMemoryVectorStore(storage, logger, flushIntervalMs = 50)
 
-    let sparseIndex = new InMemoryBM25Index(storage, logger, flushIntervalMs = 50)
+    let sparseIndex =
+        new InMemoryBM25Index(storage, logger, flushIntervalMs = 50, analyzer = analyzer)
 
     let tracer = createNoOp ()
 
@@ -109,10 +136,11 @@ let main argv =
     | "ablation" :: rest -> runAblation rest
     | _ ->
 
-        let fixturesArg, baselineArg, outArg =
+        let fixturesArg, baselineArg, outArg, analyzerArg =
             let mutable fixtures = []
             let mutable baseline: string option = None
             let mutable out: string option = None
+            let mutable analyzer = "identity"
             let mutable i = 0
 
             while i < argv.Length do
@@ -123,11 +151,14 @@ let main argv =
                 | "--out" when i + 1 < argv.Length ->
                     out <- Some argv[i + 1]
                     i <- i + 2
+                | "--analyzer" when i + 1 < argv.Length ->
+                    analyzer <- argv[i + 1]
+                    i <- i + 2
                 | f ->
                     fixtures <- fixtures @ [ f ]
                     i <- i + 1
 
-            fixtures, baseline, out
+            fixtures, baseline, out, analyzer
 
         let fixtures =
             if List.isEmpty fixturesArg then
@@ -137,7 +168,20 @@ let main argv =
 
         let mutable regressionFound = false
 
-        for fixturePath in fixtures do
+        // Resolve before any fixture runs — an unknown analyzer must be an
+        // error, never a silent fall-back to the default, which would report
+        // "no lift" for a configuration that never ran.
+        let analyzer =
+            match resolveAnalyzer analyzerArg with
+            | Ok a ->
+                printfn "Sparse analyzer: %s" a.Id
+                Some a
+            | Error message ->
+                eprintfn "%s" message
+                regressionFound <- true
+                None
+
+        for fixturePath in (if analyzer.IsNone then [] else fixtures) do
             if not (File.Exists fixturePath) then
                 eprintfn "Fixture not found: %s" fixturePath
                 regressionFound <- true
@@ -148,7 +192,7 @@ let main argv =
                     Path.Combine(Path.GetTempPath(), "rag-eval-" + Guid.NewGuid().ToString("N"))
 
                 try
-                    let pipeline = buildPipeline tempDir
+                    let pipeline = buildPipeline tempDir analyzer.Value
                     let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
                     printReport report
 

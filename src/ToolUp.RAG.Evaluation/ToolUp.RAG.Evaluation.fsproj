@@ -20,6 +20,8 @@
   </ItemGroup>
   <ItemGroup>
 <None Include="fixtures\platform-readme.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Phase 501 — the morphology fixture for the analyzer comparison. -->
+    <None Include="fixtures\eval-morphology.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- SDK server infrastructure (interfaces + storage + logger) — wired via
        <ProjectReference> below. AI + LocalEmbeddingProvider companion sources
@@ -35,6 +37,10 @@
     <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
     <!-- Phase 122 — the ablation gate's HNSW-vs-flat configuration. -->
     <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
+    <!-- Phase 501 — the analyzer-selection arms, so the harness can MEASURE a
+         language analyzer's retrieval-quality claim rather than assert it. -->
+    <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
+    <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />

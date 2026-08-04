@@ -153,7 +153,7 @@ and MergeStrategy =
 1. **Scope-access validation** — `authorisedScopes` filters `RequestedScopes` against `AccessContext.TeamId`. A mismatched `Team teamId` is dropped (not errored). `Platform` and `Deployment` scopes survive when enabled.
 2. **Embedding generation** — `IEmbeddingProvider.GenerateEmbedding` produces the query vector. Goes through `CachingEmbeddingProvider` decorator (LRU, keyed by SHA256 of text — raw query never lands in cache key).
 3. **Dense search** — `IVectorStore.Search` against the authorised scopes, top-K with `MinScore` floor.
-4. **Sparse search** (if `MergeStrategy` includes it) — BM25 against the same scopes, top-K.
+4. **Sparse search** (if `MergeStrategy` includes it) — BM25 against the same scopes, top-K. Tokenisation is pluggable via `ISparseAnalyzer` — the shipped default is Unicode word runs, lower-cased, and a language companion adds stemming / stop-word removal / CJK segmentation. See [Sparse analyzers](../companions/sparse-analyzers.md).
 5. **Merge** — weighted combination per strategy. Hybrid default: 70% dense + 30% sparse.
 6. **Rerank** (if `IReranker` registered + strategy uses it) — cross-encoder rescore on the merged candidate pool, top-K from reranked.
 7. **Origin filter** — drop chunks whose `Origin` isn't in `OriginFilter`.

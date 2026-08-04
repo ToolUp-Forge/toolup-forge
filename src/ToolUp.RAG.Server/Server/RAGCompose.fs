@@ -37,6 +37,7 @@ open ToolUp.AI.AICompose
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.RAG.IngestionTypes
+open ToolUp.RAG.SparseAnalysis
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryEmbeddingCache
@@ -672,6 +673,17 @@ type RAGServerApp = {
     /// supply alternatives — wire one in via `withVectorStore` for larger
     /// corpora or specific latency / scale targets.
     VectorStore: IVectorStore option
+    /// Phase 501 — optional language-aware analyzer for the sparse (BM25)
+    /// index. When `None`, the index uses `SparseAnalysis.identity` — the
+    /// pre-501 tokenisation — so an existing deployment is byte-for-byte
+    /// unchanged (GP 11). Companion packages under `src/SparseIndices/<Name>/`
+    /// supply alternatives: `ToolUp.SparseIndices.Snowball` (stemming +
+    /// stop words for European languages), `ToolUp.SparseIndices.Cjk`
+    /// (n-gram segmentation for non-space-delimited scripts). Wire one in via
+    /// `withSparseAnalyzer`. Composing one over an existing corpus re-analyses
+    /// the persisted snapshot at startup rather than leaving the postings in
+    /// the old vocabulary.
+    SparseAnalyzer: ISparseAnalyzer option
     /// Framing preamble injected into the system prompt ahead of the retrieved
     /// context block. Tells the model that retrieval has already run for the
     /// current turn, that KB content is authoritative for the team's data, and
@@ -1091,7 +1103,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 makeNullBlobStorage ()
 
         let sparseIndex: ISparseIndex =
-            new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
+            match app.SparseAnalyzer with
+            | None -> new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
+            | Some analyzer ->
+                new InMemoryBM25Index(blobStorageForRag, logger = ragLogger, analyzer = analyzer) :> ISparseIndex
 
         // Wrap the supplied embedder so repeated query / chunk text hits an
         // in-memory LRU cache rather than the underlying provider. Cache key
@@ -1610,6 +1625,7 @@ module RAGServerApp =
             EnableMmr = false
             MmrLambda = 0.5
             VectorStore = None
+            SparseAnalyzer = None
             RetrievalFraming = defaultRetrievalFraming
             IngestionConcurrency = 8
             IngestionQueueCapacity = 5000
@@ -1652,6 +1668,7 @@ module RAGServerApp =
             EnableMmr = false
             MmrLambda = 0.5
             VectorStore = None
+            SparseAnalyzer = None
             RetrievalFraming = defaultRetrievalFraming
             IngestionConcurrency = 8
             IngestionQueueCapacity = 5000
@@ -1938,6 +1955,29 @@ module RAGServerApp =
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
     let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
+
+    /// Phase 501 — compose a language-aware analyzer for the sparse (BM25)
+    /// index. Companion packages under `src/SparseIndices/<Name>/` provide
+    /// implementations: `ToolUp.SparseIndices.Snowball` for stemming and
+    /// stop-word removal in European languages,
+    /// `ToolUp.SparseIndices.Cjk` for n-gram segmentation of
+    /// non-space-delimited scripts. Without one, the index keeps the shipped
+    /// tokenisation (Unicode word runs, lower-cased) and behaves exactly as
+    /// before (GP 11).
+    ///
+    /// The analyzer is applied at index time AND query time — it cannot be
+    /// applied to only one side, because the index owns a single analyzer and
+    /// its term paths accept nothing but that analyzer's output. Composing one
+    /// over a corpus indexed by a different analyzer re-analyses the persisted
+    /// snapshot on load (logged once per scope), so retrieval is never served
+    /// from a stale vocabulary.
+    ///
+    /// Ignored when `withRetrievalPipeline` replaces the whole pipeline — that
+    /// pipeline owns its own sparse index, if it has one.
+    let withSparseAnalyzer (analyzer: ISparseAnalyzer) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            SparseAnalyzer = Some analyzer
+    }
 
     /// Phase 63.A — substitute the entire retrieval pipeline. `p` is
     /// registered as the `IRetrievalPipeline` verbatim; the default
