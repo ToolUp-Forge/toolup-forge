@@ -379,3 +379,129 @@ type ContainerSchedulerError =
     /// `ContainerSpec` failed validation (missing required field,
     /// invalid port, etc.).
     | InvalidContainerSpec of reason: string
+
+// ─── Deploy plan / diff (Phase 185) ──────────────────────────────────
+//
+// The `plan`-shape preview over the apply-side deploy plane. Phase 26
+// shipped `IDeployPipeline.BeginDeploy` (apply) with no machine-
+// checkable "what will change" step: an operator could not see which
+// containers a deploy would launch, stop or restart before committing
+// to it. These records are that diff, expressed as data.
+//
+// **Identity by value (rule 1), same as every other type here.** A
+// plan carries `ContainerId` / `TenantId` string aliases, the
+// requested `ContainerSpec`, and the observed `ContainerStatus` — no
+// scheduler handle, no live container reference, nothing that would
+// stop a second `IContainerScheduler` implementation producing a
+// comparable plan. So two plans computed from the same observed state
+// are structurally equal, and a plan survives a wire round-trip
+// unchanged.
+//
+// **Fable-compatible**, like the rest of this file — an admin UI can
+// render a pending diff without a DTO layer.
+
+/// What applying a deploy would do to one container. A pure
+/// classification — the affected container, its requested spec, and
+/// its observed status ride on `PlannedChange` rather than in the
+/// case payloads, so a renderer can group by kind without unpacking.
+///
+/// `RequireQualifiedAccess` is deliberate: `Launch` / `Stop` /
+/// `Restart` / `NoChange` are words a large shared namespace should
+/// not claim unqualified. Call sites read
+/// `PlannedChangeKind.Launch`.
+[<RequireQualifiedAccess>]
+type PlannedChangeKind =
+    /// The manifest requests a container the scheduler is not
+    /// running. Apply would launch it.
+    | Launch
+    /// The scheduler is running a container the manifest no longer
+    /// requests. Apply would stop it.
+    | Stop
+    /// A requested container exists but is not serving (exited,
+    /// crashed, or the scheduler has lost it). Apply would restart
+    /// it.
+    | Restart
+    /// A requested container is already running, or is transitional
+    /// and converging on its own. Apply would do nothing.
+    | NoChange
+
+/// One line of a `DeployPlan` — the change apply would make to a
+/// single container, with the evidence the diff was computed from.
+type PlannedChange = {
+    /// The container this change acts on. `None` for a
+    /// `PlannedChangeKind.Launch` — no container exists yet, so the
+    /// scheduler assigns the id at apply time.
+    ContainerId: ContainerId option
+    /// The tenant the change belongs to. Every change in one plan
+    /// shares the plan's `TenantId`; carried per-change so a change
+    /// stays interpretable when lifted out of its plan.
+    TenantId: TenantId
+    /// What apply would do.
+    Kind: PlannedChangeKind
+    /// The requested spec this change would apply. `None` for a
+    /// `PlannedChangeKind.Stop` — nothing is being requested; the
+    /// running container is surplus to the manifest.
+    Target: ContainerSpec option
+    /// The image the change concerns: the requested image for
+    /// `Launch` / `Restart` / `NoChange`, the observed image for
+    /// `Stop`.
+    ImageRef: string
+    /// The status the scheduler reported at plan time.
+    /// `ContainerNotFound` for a `Launch` (there is nothing to
+    /// observe yet).
+    Observed: ContainerStatus
+    /// Why the planner classified the change this way. Operator-
+    /// facing prose; not a stable machine key — match on `Kind`.
+    Reason: string
+}
+
+/// The typed apply diff for one tenant: what a deploy of a given
+/// `ContainerSpec` set would change against the scheduler's observed
+/// state. Read-only to produce — computing a plan mutates nothing.
+type DeployPlan = {
+    /// The tenant the plan was computed for.
+    TenantId: TenantId
+    /// Every change apply would make, including `NoChange` lines, in
+    /// a deterministic order (`Launch`, `Restart`, `Stop`,
+    /// `NoChange`; then by `ImageRef`, then by `ContainerId`) so two
+    /// plans over the same state compare equal.
+    Changes: PlannedChange list
+    /// When the observed state behind this plan was read. A plan is a
+    /// snapshot — state can move between plan and apply, exactly as
+    /// with any `plan`/`apply` split.
+    ObservedAt: DateTime
+}
+
+module DeployPlan =
+    /// A plan with no changes at all — the shape returned for a
+    /// tenant whose manifest requests nothing and which is running
+    /// nothing.
+    let empty (tenantId: TenantId) (observedAt: DateTime) : DeployPlan = {
+        TenantId = tenantId
+        Changes = []
+        ObservedAt = observedAt
+    }
+
+    /// The changes that would actually mutate the scheduler — every
+    /// line except `NoChange`.
+    let mutating (plan: DeployPlan) : PlannedChange list =
+        plan.Changes |> List.filter (fun c -> c.Kind <> PlannedChangeKind.NoChange)
+
+    /// `true` when applying this plan would change nothing. The
+    /// converged case an operator wants to see before deciding not to
+    /// deploy.
+    let isNoOp (plan: DeployPlan) : bool = mutating plan |> List.isEmpty
+
+    /// How many changes of one kind the plan carries.
+    let countOf (kind: PlannedChangeKind) (plan: DeployPlan) : int =
+        plan.Changes |> List.filter (fun c -> c.Kind = kind) |> List.length
+
+    /// One-line operator summary — `"2 to launch, 1 to restart, 0 to
+    /// stop, 3 unchanged"`. Rendering only; parse `Changes`, not this.
+    let summarise (plan: DeployPlan) : string =
+        sprintf
+            "%d to launch, %d to restart, %d to stop, %d unchanged"
+            (countOf PlannedChangeKind.Launch plan)
+            (countOf PlannedChangeKind.Restart plan)
+            (countOf PlannedChangeKind.Stop plan)
+            (countOf PlannedChangeKind.NoChange plan)

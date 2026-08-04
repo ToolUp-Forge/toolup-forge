@@ -424,6 +424,30 @@ type DefaultDeployPipeline
             return perDeploy |> List.truncate (max 0 count)
         }
 
+    // ─── Phase 185 — the dry-run (read-only) ─────────────────────
+    //
+    // Declaring `IDeployPlanner` makes the `PlanDeploy` extension
+    // member route here rather than to its generic fallback: the
+    // pipeline already holds the `IContainerScheduler` it deploys
+    // against, so an operator planning through the pipeline need not
+    // supply one. The diff itself is `DeployPlanner.plan` — the same
+    // read-only computation every other pipeline gets — so there is
+    // one diff implementation in the substrate, not two that can
+    // drift.
+    //
+    // Nothing here mutates: no scheduler launch/stop/restart, no
+    // `emitState`, no `DeployState` transition. A plan leaves the
+    // event stream and the container set exactly as it found them,
+    // and `BeginDeploy` above is untouched — a deployment that never
+    // plans is byte-for-byte what it was (GP 11 / GP 13).
+
+    interface IDeployPlanner with
+
+        member _.PlanDeploy
+            (tenantId: TenantId, target: ContainerSpec list)
+            : Async<Result<DeployPlan, DeployPipelineError>> =
+            DeployPlanner.plan containerScheduler tenantId target
+
 // ─── Convenience constructor ─────────────────────────────────────
 
 let create

@@ -1793,9 +1793,14 @@ ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Clear(System.Str
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.IsEmpty : System.Boolean { get }
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Register(ToolUp.Platform.DegradedCapability) : System.Void
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability]
+ToolUp.Platform.DeployPipelinePlanning (class)
+ToolUp.Platform.DeployPipelinePlanning.IDeployPipeline.PlanDeploy(ToolUp.Platform.IDeployPipeline, ToolUp.Platform.IContainerScheduler, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.DeployPlaneDepsValidator (class)
 ToolUp.Platform.DeployPlaneDepsValidator+DeployPlaneDepsValidator (class)
 ToolUp.Platform.DeployPlaneDepsValidator+DeployPlaneDepsValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.DeployPlanner (class)
+ToolUp.Platform.DeployPlanner.diff(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerInfo], System.DateTime) : ToolUp.Platform.DeployPlan
+ToolUp.Platform.DeployPlanner.plan(ToolUp.Platform.IContainerScheduler, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.DeploymentReadinessReport (class)
 ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport]
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi
@@ -3119,6 +3124,8 @@ ToolUp.Platform.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp
 ToolUp.Platform.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
 ToolUp.Platform.IDeployPipeline.GetDeployState(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploySummary, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPipeline.Rollback(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.IDeployPlanner (interface)
+ToolUp.Platform.IDeployPlanner.PlanDeploy(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDiodeTransmissionLog (interface)
 ToolUp.Platform.IDiodeTransmissionLog.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeTransmissionRecord] { get }
 ToolUp.Platform.IDiodeTransmissionLog.Record(ToolUp.Platform.DiodeTransmissionRecord) : System.Void

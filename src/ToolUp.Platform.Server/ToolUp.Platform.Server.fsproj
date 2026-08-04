@@ -210,6 +210,12 @@
         <Compile Include="Server\ITenantFleet.fs" />
         <Compile Include="Server\IDeployPipeline.fs" />
         <Compile Include="Server\IContainerScheduler.fs" />
+        <!-- Phase 185 — the deploy-plane dry-run: the default read-only
+             plan/diff helper plus the `PlanDeploy` extension member every
+             IDeployPipeline gets for free. Must follow IContainerScheduler
+             (it reads observed state through it) and IDeployPipeline (it
+             extends it). -->
+        <Compile Include="Server\DeployPlanner.fs" />
         <!-- Phase 318 — external-compute broker seam + its no-op default.
              Distinct from IContainerScheduler (which launches and owns a
              container's lifecycle): this hands work to a backend that owns

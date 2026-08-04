@@ -935,6 +935,15 @@ let allTests =
         // contract leg above needs a Docker socket; this one pins the
         // STJ serialisability of the Docker API DTOs everywhere.
         DeployPlaneTests.dockerWireDtoTests
+        // Phase 185 — the deploy-plane dry-run. Both dispatch routes of
+        // the PlanDeploy extension member (native IDeployPlanner and the
+        // unchanged-implementer fallback), the pure diff classification,
+        // and the mutation check that keeps the read-only assertion
+        // falsifiable.
+        DeployPlaneTests.deployPlanDefaultPipelineTests
+        DeployPlaneTests.deployPlanFallbackTests
+        DeployPlaneTests.deployPlanMutationCheck
+        DeployPlaneTests.deployPlanDiffTests
         // v0.5.0 — DOM-attr helper module sanity packs + audit ratchet.
         // The DataProp / AriaProp helper modules (sub-task A) ship
         // sanity tests that mirror SvgPropTests' shape; the audit

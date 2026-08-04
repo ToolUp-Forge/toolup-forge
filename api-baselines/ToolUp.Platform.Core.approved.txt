@@ -2973,6 +2973,17 @@ ToolUp.Platform.DeployPipelineError+Tags.NothingToRollbackTo : System.Int32 (lit
 ToolUp.Platform.DeployPipelineError+Tags.UnknownDeploy : System.Int32 (literal)
 ToolUp.Platform.DeployPipelineError+UnknownDeploy (class)
 ToolUp.Platform.DeployPipelineError+UnknownDeploy.Item : System.String { get }
+ToolUp.Platform.DeployPlan (class)
+ToolUp.Platform.DeployPlan..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlannedChange], System.DateTime)
+ToolUp.Platform.DeployPlan.Changes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlannedChange] { get }
+ToolUp.Platform.DeployPlan.ObservedAt : System.DateTime { get }
+ToolUp.Platform.DeployPlan.TenantId : System.String { get }
+ToolUp.Platform.DeployPlanModule (class)
+ToolUp.Platform.DeployPlanModule.countOf(ToolUp.Platform.PlannedChangeKind, ToolUp.Platform.DeployPlan) : System.Int32
+ToolUp.Platform.DeployPlanModule.empty(System.String, System.DateTime) : ToolUp.Platform.DeployPlan
+ToolUp.Platform.DeployPlanModule.isNoOp(ToolUp.Platform.DeployPlan) : System.Boolean
+ToolUp.Platform.DeployPlanModule.mutating(ToolUp.Platform.DeployPlan) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlannedChange]
+ToolUp.Platform.DeployPlanModule.summarise(ToolUp.Platform.DeployPlan) : System.String
 ToolUp.Platform.DeployPlaneMode (class)
 ToolUp.Platform.DeployPlaneMode.IsNoDeployPlane : System.Boolean { get }
 ToolUp.Platform.DeployPlaneMode.IsSingleNodeDeployPlane : System.Boolean { get }
@@ -6498,6 +6509,30 @@ ToolUp.Platform.PinRequest (class)
 ToolUp.Platform.PinRequest..ctor(System.String, System.Boolean)
 ToolUp.Platform.PinRequest.ModuleId : System.String { get }
 ToolUp.Platform.PinRequest.Pinned : System.Boolean { get }
+ToolUp.Platform.PlannedChange (class)
+ToolUp.Platform.PlannedChange..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.PlannedChangeKind, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ContainerSpec], System.String, ToolUp.Platform.ContainerStatus, System.String)
+ToolUp.Platform.PlannedChange.ContainerId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PlannedChange.ImageRef : System.String { get }
+ToolUp.Platform.PlannedChange.Kind : ToolUp.Platform.PlannedChangeKind { get }
+ToolUp.Platform.PlannedChange.Observed : ToolUp.Platform.ContainerStatus { get }
+ToolUp.Platform.PlannedChange.Reason : System.String { get }
+ToolUp.Platform.PlannedChange.Target : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ContainerSpec] { get }
+ToolUp.Platform.PlannedChange.TenantId : System.String { get }
+ToolUp.Platform.PlannedChangeKind (class)
+ToolUp.Platform.PlannedChangeKind.IsLaunch : System.Boolean { get }
+ToolUp.Platform.PlannedChangeKind.IsNoChange : System.Boolean { get }
+ToolUp.Platform.PlannedChangeKind.IsRestart : System.Boolean { get }
+ToolUp.Platform.PlannedChangeKind.IsStop : System.Boolean { get }
+ToolUp.Platform.PlannedChangeKind.Launch : ToolUp.Platform.PlannedChangeKind { get }
+ToolUp.Platform.PlannedChangeKind.NoChange : ToolUp.Platform.PlannedChangeKind { get }
+ToolUp.Platform.PlannedChangeKind.Restart : ToolUp.Platform.PlannedChangeKind { get }
+ToolUp.Platform.PlannedChangeKind.Stop : ToolUp.Platform.PlannedChangeKind { get }
+ToolUp.Platform.PlannedChangeKind.Tag : System.Int32 { get }
+ToolUp.Platform.PlannedChangeKind+Tags (class)
+ToolUp.Platform.PlannedChangeKind+Tags.Launch : System.Int32 (literal)
+ToolUp.Platform.PlannedChangeKind+Tags.NoChange : System.Int32 (literal)
+ToolUp.Platform.PlannedChangeKind+Tags.Restart : System.Int32 (literal)
+ToolUp.Platform.PlannedChangeKind+Tags.Stop : System.Int32 (literal)
 ToolUp.Platform.PlatformAdminApi (class)
 ToolUp.Platform.PlatformAdminApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PlatformKnowledgeBaseMode]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.PlatformAdminApi.AssignPlatformAdmin : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }

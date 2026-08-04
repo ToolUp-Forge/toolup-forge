@@ -98,3 +98,59 @@ type IDeployPipeline =
     /// `DeployFailed`, `DeployRolledBack`). Powers the admin UI's
     /// per-tenant deploy history panel.
     abstract GetDeployHistory: tenantId: TenantId * count: int -> Async<DeploySummary list>
+
+// ─── IDeployPlanner (Phase 185 — the dry-run seam) ───────────────────
+//
+// `PlanDeploy` — the `plan`-shape preview `BeginDeploy` shipped
+// without — is reachable on EVERY `IDeployPipeline` as
+// `pipeline.PlanDeploy(scheduler, tenantId, target)`, an extension
+// member declared in `DeployPlanner.fs` alongside the default
+// implementation it falls back to. This interface is the opt-in
+// override: a pipeline that can compute a better plan than the
+// generic one — because it knows its scheduler's native diff, or
+// tracks desired state of its own — implements `IDeployPlanner` and
+// the extension routes to it instead.
+//
+// **Why an optional seam and not a fifth `abstract` on
+// `IDeployPipeline` (GP 11).** F# 10 cannot author a default
+// implementation for an interface member: adding
+// `abstract PlanDeploy` to `IDeployPipeline` would break the compile
+// of every existing implementer, in-tree and downstream, which is
+// precisely what GP 11 forbids. Splitting the member into an opt-in
+// interface plus an extension member on the base interface keeps the
+// intended call site (`pipeline.PlanDeploy …` works on any pipeline)
+// while leaving every implementer byte-for-byte unchanged. A
+// deployment that never plans pays nothing (GP 13) — no member is
+// invoked and no scheduler call is made.
+//
+// **Read-only, by contract.** An `IDeployPlanner` implementation MUST
+// NOT mutate: no `LaunchContainer` / `StopContainer` /
+// `RestartContainer`, no event write, no state transition. The
+// contract pack asserts zero scheduler mutation calls fire during a
+// plan, so an implementation that applies while planning fails the
+// conformance bar.
+//
+// **Six-rule portability audit (GP 12):** rule 1 — `DeployPlan` /
+// `PlannedChange` are records of string aliases, specs and statuses,
+// no live handles; rule 2 — the member returns `Async<_>`; rule 3 —
+// failure is `DeployPipelineError` data, never a callback; rule 4 —
+// the plan is computed wholly from parameters plus a fresh read of
+// observed state, so nothing survives between calls.
+
+/// Opt-in companion seam to `IDeployPipeline`: a native dry-run
+/// implementation. Implement it on a pipeline that can plan better
+/// than `DeployPlanner.plan`; leave it unimplemented and the
+/// `PlanDeploy` extension member falls back to the generic
+/// scheduler-observed diff.
+type IDeployPlanner =
+    /// Compute what deploying `target` to `tenantId` would change,
+    /// without changing anything. `target` is the full requested
+    /// container set for the tenant — a spec absent from it is a
+    /// container the plan proposes to stop.
+    ///
+    /// Returns `DeployStorageFailure` when observed state could not
+    /// be read; a plan computed from partial state is worse than no
+    /// plan, so the planner fails closed rather than under-reporting
+    /// changes.
+    abstract PlanDeploy:
+        tenantId: TenantId * target: ContainerSpec list -> Async<Result<DeployPlan, DeployPipelineError>>

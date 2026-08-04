@@ -477,3 +477,281 @@ let dockerWireDtoTests =
             Expect.equal parsed[0].State "running" "State read"
             Expect.equal parsed[0].Labels["tenantId"] "t1" "Labels read"
     ]
+// ─── Phase 185 — PlanDeploy (dry-run) bindings ───────────────────────
+//
+// Three bindings of the `planTests` pack, deliberately covering both
+// dispatch routes of the `PlanDeploy` extension member plus a
+// falsifying control:
+//
+//   1. `DefaultDeployPipeline` — declares `IDeployPlanner`, so the
+//      extension routes to its native implementation.
+//   2. `InMemoryDeployPipeline` — declares NOTHING new. It is the
+//      GP 11 evidence: an implementer written before Phase 185, left
+//      byte-for-byte untouched by it, that still answers `PlanDeploy`
+//      correctly through the fallback. If adding the plan surface had
+//      broken existing implementers, this file would not compile.
+//   3. `MutatingDeployPipeline` — applies while planning. The
+//      read-only assertion MUST go red for it; `deployPlanMutationCheck`
+//      below pins that it does, so the zero-mutation assertions in the
+//      two bindings above are known-falsifiable rather than merely
+//      passing.
+
+let private nullLogger =
+    { new ILogger with
+        member _.Debug(_) = ()
+        member _.Info(_) = ()
+        member _.Warn(_) = ()
+        member _.Error(_, _) = ()
+    }
+
+/// A pipeline that mutates during `PlanDeploy` — the control. Stops
+/// the first container it observes, then returns the honest diff, so
+/// the ONLY thing distinguishing it from a conformant planner is the
+/// mutation the probe is supposed to catch.
+type MutatingDeployPipeline(scheduler: IContainerScheduler) =
+    let inner = InMemoryDeployPipeline() :> IDeployPipeline
+
+    interface IDeployPipeline with
+        member _.BeginDeploy(tenantId, buildId, manifest, byUserId) =
+            inner.BeginDeploy(tenantId, buildId, manifest, byUserId)
+
+        member _.GetDeployState(deployId) = inner.GetDeployState deployId
+        member _.Rollback(tenantId, byUserId) = inner.Rollback(tenantId, byUserId)
+        member _.GetDeployHistory(tenantId, count) = inner.GetDeployHistory(tenantId, count)
+
+    interface IDeployPlanner with
+        member _.PlanDeploy(tenantId, target) = async {
+            let! observed = scheduler.ListContainers(Some tenantId)
+
+            match observed with
+            | first :: _ ->
+                // The defect the contract pack exists to catch: an
+                // "apply" smuggled into the dry-run.
+                let! _ = scheduler.StopContainer first.ContainerId
+                ()
+            | [] -> ()
+
+            return! DeployPlanner.plan scheduler tenantId target
+        }
+
+let deployPlanDefaultPipelineTests =
+    let binding: IDeployPipelineContract.DeployPlanBinding = {
+        Scheduler = fun () -> InMemoryContainerScheduler() :> IContainerScheduler
+        Pipeline =
+            fun scheduler ->
+                let eventStore =
+                    ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+                ToolUp.Platform.DefaultDeployPipeline.create
+                    (InMemoryBuildOrchestrator())
+                    scheduler
+                    eventStore
+                    nullLogger
+                :> IDeployPipeline
+    }
+
+    IDeployPipelineContract.planTests "DefaultDeployPipeline (native IDeployPlanner)" binding
+
+let deployPlanFallbackTests =
+    let binding: IDeployPipelineContract.DeployPlanBinding = {
+        Scheduler = fun () -> InMemoryContainerScheduler() :> IContainerScheduler
+        // Ignores the scheduler entirely — exactly what a pre-Phase-185
+        // implementer does. The extension member supplies the plan.
+        Pipeline = fun _ -> InMemoryDeployPipeline() :> IDeployPipeline
+    }
+
+    IDeployPipelineContract.planTests "InMemoryDeployPipeline (unchanged implementer, fallback route)" binding
+
+/// Mutation check for the read-only assertion. A test that only ever
+/// sees conformant planners cannot tell "no mutation happened" from
+/// "nothing was observed at all"; this drives the same probe with a
+/// planner that DOES mutate and asserts the probe reports it.
+let deployPlanMutationCheck =
+    testList "PlanDeploy read-only assertion — mutation check" [
+        testCaseAsync "the recording probe DOES catch a planner that applies while planning"
+        <| async {
+            let tenant = "tenant-plan-control"
+
+            let recorder =
+                IDeployPipelineContract.RecordingContainerScheduler(InMemoryContainerScheduler())
+
+            let scheduler = recorder :> IContainerScheduler
+
+            let spec: ContainerSpec = {
+                Image = "img/a:1"
+                EnvVars = Map.empty
+                ExposedPort = Some 8080
+                HealthcheckPath = Some "/health"
+                Labels = Map.empty
+            }
+
+            let! launched = scheduler.LaunchContainer(tenant, spec)
+            Expect.isOk launched "seeding LaunchContainer"
+            recorder.Reset()
+
+            let pipeline = MutatingDeployPipeline(scheduler) :> IDeployPipeline
+            let! result = pipeline.PlanDeploy(scheduler, tenant, [ spec ])
+
+            // The plan still comes back — the point is that the probe
+            // sees the mutation the plan should not have made.
+            Expect.isOk result "the control planner still returns a plan"
+
+            Expect.contains
+                recorder.MutationCalls
+                "StopContainer"
+                "the probe reports the smuggled mutation — so the zero-mutation assertion can fail"
+
+            // And a conformant planner over the very same probe leaves
+            // it empty, which is the contrast that makes the assertion
+            // meaningful.
+            recorder.Reset()
+            let! _ = DeployPlanner.plan scheduler tenant [ spec ]
+            Expect.isEmpty recorder.MutationCalls "the conformant planner leaves the same probe clean"
+        }
+    ]
+
+/// Unit tests over `DeployPlanner.diff` — the pure classification,
+/// exercised without any `IContainerScheduler` at all. Pins the
+/// status-to-kind mapping (including the transitional cases a
+/// scheduler-backed test cannot easily stage) and the deterministic
+/// change ordering.
+let deployPlanDiffTests =
+    let spec image : ContainerSpec = {
+        Image = image
+        EnvVars = Map.empty
+        ExposedPort = None
+        HealthcheckPath = None
+        Labels = Map.empty
+    }
+
+    let info id image status : ContainerInfo = {
+        ContainerId = id
+        TenantId = "t"
+        ImageRef = image
+        Status = status
+        Labels = Map.empty
+    }
+
+    let at = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+
+    let kindFor (status: ContainerStatus) =
+        let plan = DeployPlanner.diff "t" [ spec "img:1" ] [ info "c-1" "img:1" status ] at
+
+        Expect.equal plan.Changes.Length 1 "one line"
+        (List.head plan.Changes).Kind
+
+    testList "DeployPlanner.diff — pure classification" [
+        testCase "a running container is NoChange"
+        <| fun _ -> Expect.equal (kindFor (ContainerRunning at)) PlannedChangeKind.NoChange "running -> NoChange"
+
+        testCase "transitional statuses are NoChange — they converge without intervention"
+        <| fun _ ->
+            Expect.equal (kindFor ContainerCreated) PlannedChangeKind.NoChange "created -> NoChange"
+
+            Expect.equal (kindFor ContainerRestarting) PlannedChangeKind.NoChange "restarting -> NoChange"
+
+        testCase "not-serving statuses are Restart"
+        <| fun _ ->
+            Expect.equal (kindFor (ContainerExited(0, at))) PlannedChangeKind.Restart "exited -> Restart"
+
+            Expect.equal (kindFor (ContainerCrashed("oom", at))) PlannedChangeKind.Restart "crashed -> Restart"
+
+            Expect.equal (kindFor ContainerNotFound) PlannedChangeKind.Restart "lost by the scheduler -> Restart"
+
+        testCase "changes are ordered Launch, Restart, Stop, NoChange"
+        <| fun _ ->
+            let plan =
+                DeployPlanner.diff
+                    "t"
+                    [ spec "img/new:1"; spec "img/dead:1"; spec "img/live:1" ]
+                    [
+                        info "c-live" "img/live:1" (ContainerRunning at)
+                        info "c-dead" "img/dead:1" (ContainerExited(1, at))
+                        info "c-surplus" "img/surplus:1" (ContainerRunning at)
+                    ]
+                    at
+
+            Expect.equal
+                (plan.Changes |> List.map _.Kind)
+                [
+                    PlannedChangeKind.Launch
+                    PlannedChangeKind.Restart
+                    PlannedChangeKind.Stop
+                    PlannedChangeKind.NoChange
+                ]
+                "mutations first, most-consequential first, unchanged last"
+
+            Expect.equal
+                (DeployPlan.summarise plan)
+                "1 to launch, 1 to restart, 1 to stop, 1 unchanged"
+                "the operator summary counts each kind"
+
+        testCase "duplicate requested images pair against duplicate observed containers"
+        <| fun _ ->
+            // Two requested, one running: one NoChange + one Launch.
+            let plan =
+                DeployPlanner.diff "t" [ spec "img:1"; spec "img:1" ] [ info "c-1" "img:1" (ContainerRunning at) ] at
+
+            Expect.equal (DeployPlan.countOf PlannedChangeKind.NoChange plan) 1 "the running one pairs off"
+
+            Expect.equal (DeployPlan.countOf PlannedChangeKind.Launch plan) 1 "the unpaired request launches"
+
+            // One requested, two running: one NoChange + one Stop.
+            let plan2 =
+                DeployPlanner.diff
+                    "t"
+                    [ spec "img:1" ]
+                    [
+                        info "c-1" "img:1" (ContainerRunning at)
+                        info "c-2" "img:1" (ContainerRunning at)
+                    ]
+                    at
+
+            Expect.equal (DeployPlan.countOf PlannedChangeKind.NoChange plan2) 1 "one pairs off"
+            Expect.equal (DeployPlan.countOf PlannedChangeKind.Stop plan2) 1 "the surplus container stops"
+
+        testCase "the diff is independent of the order the scheduler enumerated containers in"
+        <| fun _ ->
+            // `ListContainers` promises only "scheduler-defined"
+            // ordering and shipped backends enumerate hash maps, so the
+            // same state can arrive in any order. With duplicates on one
+            // image, that order must not decide WHICH container is
+            // paired and which is surplus — otherwise two plans over
+            // identical state disagree about what to stop.
+            let observed = [
+                info "c-3" "img:1" (ContainerRunning at)
+                info "c-1" "img:1" (ContainerRunning at)
+                info "c-2" "img:1" (ContainerExited(0, at))
+            ]
+
+            let expected = DeployPlanner.diff "t" [ spec "img:1"; spec "img:1" ] observed at
+
+            for permutation in
+                [
+                    [ observed[2]; observed[0]; observed[1] ]
+                    [ observed[1]; observed[2]; observed[0] ]
+                    [ observed[2]; observed[1]; observed[0] ]
+                ] do
+                Expect.equal
+                    (DeployPlanner.diff "t" [ spec "img:1"; spec "img:1" ] permutation at)
+                    expected
+                    "a permuted enumeration yields the identical plan"
+
+            // And the pairing is the id-sorted one: c-1 + c-2 pair off
+            // (c-2 exited, so Restart), c-3 is the surplus that stops.
+            let stop = expected.Changes |> List.find (fun c -> c.Kind = PlannedChangeKind.Stop)
+
+            Expect.equal stop.ContainerId (Some "c-3") "the highest id is the surplus, not whichever came last"
+
+            Expect.equal
+                (DeployPlan.countOf PlannedChangeKind.Restart expected)
+                1
+                "the exited paired container restarts"
+
+        testCase "ObservedAt is carried verbatim and DeployPlan.empty is a no-op"
+        <| fun _ ->
+            let plan = DeployPlanner.diff "t" [] [] at
+            Expect.equal plan.ObservedAt at "ObservedAt carried through"
+            Expect.equal plan (DeployPlan.empty "t" at) "an empty diff equals the empty plan"
+            Expect.isTrue (DeployPlan.isNoOp plan) "empty is a no-op"
+    ]
