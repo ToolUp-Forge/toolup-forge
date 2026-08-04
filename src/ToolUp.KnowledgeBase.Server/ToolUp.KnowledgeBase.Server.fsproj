@@ -58,6 +58,12 @@
              Phase 104 resolver. After OriginalSourceResolver.fs, which it
              composes; before Api/, which it deliberately does not touch. -->
         <Compile Include="Server\IOriginalPreviewSeam.fs" />
+        <!-- Phase 201 — opt-in classification-driven redaction of an
+             original's classified spans. After IOriginalPreviewSeam.fs,
+             whose scope-gated entry point it wraps for the preview
+             delivery route; before Api/, which invokes it between the
+             scope gate and the response. -->
+        <Compile Include="Server\IOriginalRedactor.fs" />
         <!-- Phase 512 — per-scope age-based retention sweep. Before
              UploadPolicy.fs, which composes its job handler. -->
         <Compile Include="Server\RetentionSweep.fs" />

@@ -33,6 +33,7 @@ KnowledgeBase.Server.withKnowledgeRetention : Microsoft.FSharp.Core.FSharpFunc`2
 KnowledgeBase.Server.withKnowledgeUsageEndpoint : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp] { get }
 KnowledgeBase.Server.withObjectStoreRetention : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withOriginalPreviewSeam : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+KnowledgeBase.Server.withOriginalRedactor : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withOriginalSourceResolver : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withSignedOriginalUrls : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withUploadPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeUploadPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
@@ -90,7 +91,9 @@ KnowledgeBase.ServerApiDocuments.deleteDocument(KnowledgeBase.ServerApiDeps+Know
 KnowledgeBase.ServerApiDocuments.getDocumentVersions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
 KnowledgeBase.ServerApiDocuments.getDocuments(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
 KnowledgeBase.ServerApiDocuments.getOriginalDelivery(Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam], KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewContent, SharedTypes+KnowledgeBaseError]]
+KnowledgeBase.ServerApiDocuments.getOriginalDeliveryRedacted(Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor], Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam], KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewContent, SharedTypes+KnowledgeBaseError]]
 KnowledgeBase.ServerApiDocuments.getOriginalDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+OriginalDocument, SharedTypes+KnowledgeBaseError]]
+KnowledgeBase.ServerApiDocuments.getRedactedOriginalDocument(Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor], KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+OriginalDocument, SharedTypes+KnowledgeBaseError]]
 KnowledgeBase.ServerApiDocuments.getScopeUsage(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeScopeUsage]
 KnowledgeBase.ServerApiDocuments.getStatus(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]
 KnowledgeBase.ServerApiDocuments.getSuggestedQuestions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
@@ -205,6 +208,57 @@ KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptionsModule (class)
 KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptionsModule.defaults : KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions { get }
 KnowledgeBase.ServerOriginalPreviewSeam+SignedUrlOriginalPreviewSeam (class)
 KnowledgeBase.ServerOriginalPreviewSeam+SignedUrlOriginalPreviewSeam..ctor(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions)
+KnowledgeBase.ServerOriginalRedactor (class)
+KnowledgeBase.ServerOriginalRedactor.KnowledgeOriginalEntityName : System.String (literal)
+KnowledgeBase.ServerOriginalRedactor.create(KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions) : KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor
+KnowledgeBase.ServerOriginalRedactor.createDefault(Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan]]]]) : KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor
+KnowledgeBase.ServerOriginalRedactor.redactedPreviewOriginal(Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor], ToolUp.Platform.AccessContext, KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewTarget, SharedTypes+KnowledgeBaseError]]
+KnowledgeBase.ServerOriginalRedactor.redactionAuditEvents(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]
+KnowledgeBase.ServerOriginalRedactor.withOriginalRedactor(KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerOriginalRedactor+ClassificationOriginalRedactor (class)
+KnowledgeBase.ServerOriginalRedactor+ClassificationOriginalRedactor..ctor(KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions)
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan (class)
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan..ctor(System.String, ToolUp.Platform.ClassificationLevel)
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan.Level : ToolUp.Platform.ClassificationLevel { get }
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan.Text : System.String { get }
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpanModule (class)
+KnowledgeBase.ServerOriginalRedactor+ClassifiedSpanModule.create(ToolUp.Platform.ClassificationLevel, System.String) : KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan
+KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor (interface)
+KnowledgeBase.ServerOriginalRedactor+IOriginalRedactor.Redact(SharedTypes+OriginalDocument, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[KnowledgeBase.ServerOriginalRedactor+OriginalRedaction]
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction.IsDeliver : System.Boolean { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction.IsWithhold : System.Boolean { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction.Tag : System.Int32 { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Deliver (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Deliver.document : SharedTypes+OriginalDocument { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Deliver.redactedLevels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Tags (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Tags.Deliver : System.Int32 (literal)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Tags.Withhold : System.Int32 (literal)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Withhold (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedaction+Withhold.reason : System.String { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.ClassificationDecision]], Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan]]]], KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, System.Boolean])
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions.IsTextExtractable : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, System.Boolean] { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions.LocateSpans : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan]]]] { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions.Policy : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.ClassificationDecision]] { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions.Unmaskable : KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition { get }
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule (class)
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.create(Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan]]]]) : KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.defaultIsTextExtractable(SharedTypes+OriginalDocument) : System.Boolean
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.ofSpans(Microsoft.FSharp.Collections.FSharpList`1[KnowledgeBase.ServerOriginalRedactor+ClassifiedSpan]) : KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.withPolicy(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.ClassificationDecision]], KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions) : KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.withTextExtractableTest(Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+OriginalDocument, System.Boolean], KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions) : KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions
+KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptionsModule.withUnmaskableDisposition(KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition, KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions) : KnowledgeBase.ServerOriginalRedactor+OriginalRedactorOptions
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition (class)
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition.IsServeAsIs : System.Boolean { get }
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition.IsWithhold : System.Boolean { get }
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition.ServeAsIs : KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition { get }
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition.Tag : System.Int32 { get }
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition.Withhold : KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition { get }
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition+Tags (class)
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition+Tags.ServeAsIs : System.Int32 (literal)
+KnowledgeBase.ServerOriginalRedactor+UnmaskableOriginalDisposition+Tags.Withhold : System.Int32 (literal)
 KnowledgeBase.ServerOriginalSourceResolver (class)
 KnowledgeBase.ServerOriginalSourceResolver.contentTypeFor(System.String) : System.String
 KnowledgeBase.ServerOriginalSourceResolver.createDefault() : KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver

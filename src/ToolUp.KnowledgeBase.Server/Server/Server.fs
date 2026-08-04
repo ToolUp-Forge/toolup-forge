@@ -39,6 +39,16 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         | :? KnowledgeBase.ServerOriginalPreviewSeam.IOriginalPreviewSeam as s -> Some s
         | _ -> None
 
+    // Phase 201 — the original-document redactor, resolved on the same
+    // terms and for the same reason: two handlers consume it, there is
+    // no default, and an absent registration IS the opt-out. `None`
+    // makes both original-retrieval handlers below the pre-201
+    // functions byte-for-byte (GP 11 / GP 13).
+    let originalRedactor =
+        match ctx.RequestServices.GetService(typeof<KnowledgeBase.ServerOriginalRedactor.IOriginalRedactor>) with
+        | :? KnowledgeBase.ServerOriginalRedactor.IOriginalRedactor as r -> Some r
+        | _ -> None
+
     {
         UploadDocument = uploadDocument deps
         GetDocuments = fun () -> getDocuments deps
@@ -52,8 +62,8 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         SetAIContext = setAIContext deps
         GetSuggestedQuestions = getSuggestedQuestions deps
         RefreshAIContext = fun () -> refreshAIContext deps
-        GetOriginalDocument = getOriginalDocument deps
-        GetOriginalDelivery = getOriginalDelivery previewSeam deps
+        GetOriginalDocument = getRedactedOriginalDocument originalRedactor deps
+        GetOriginalDelivery = getOriginalDeliveryRedacted originalRedactor previewSeam deps
         GetScopeUsage = fun () -> getScopeUsage deps
         GetDocumentVersions = getDocumentVersions deps
         ImportBatch = importBatch deps
@@ -130,6 +140,24 @@ let withOriginalPreviewSeam =
 /// Phase 102 proxy path byte-for-byte (GP 11 / GP 13).
 let withSignedOriginalUrls =
     KnowledgeBase.ServerOriginalPreviewSeam.withSignedOriginalUrls
+
+/// Phase 201 — register an `IOriginalRedactor` so the Phase 41
+/// data-classification policy reaches the original-document retrieval
+/// path: classified spans a caller may not read are masked to
+/// `ClassificationGate.RedactedPlaceholder` before the bytes leave the
+/// server, and an original the redactor cannot vouch for is withheld
+/// with the same `NoOriginalAvailable` absence gets (GP 4). Defined in
+/// `Server/IOriginalRedactor.fs`; re-exported here so the public name
+/// `KnowledgeBase.Server.withOriginalRedactor` sits alongside the other
+/// compose-time hooks.
+///
+/// Apps that never call this keep the Phase 102 / 108 retrieval paths
+/// byte-for-byte (GP 11 / GP 13). Apps that DO call it get inline
+/// delivery for originals even when `withSignedOriginalUrls` is also
+/// composed — a signed URL serves raw stored bytes the redactor never
+/// saw, so the two are mutually exclusive per fetch, logged, never
+/// silent.
+let withOriginalRedactor = KnowledgeBase.ServerOriginalRedactor.withOriginalRedactor
 
 /// Phase 119 — compose a Knowledge Base upload policy: a `MaxUploadBytes`
 /// size cap, an `AllowedExtensions` type allowlist, and how to treat an

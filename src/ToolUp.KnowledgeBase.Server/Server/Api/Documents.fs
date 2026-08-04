@@ -1547,7 +1547,9 @@ let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEven
     | Some a -> a.Record(deps.Scope.ScopeId, event)
     | None -> async.Return()
 
-/// Fetch the *original* ingested document for a `docId` (Phase 102).
+/// Fetch the *original* ingested document for a `docId` (Phase 102),
+/// optionally through a Phase 201 classification redactor.
+///
 /// The lookup runs against the caller's resolved scope's index only —
 /// scope isolation is structural (GP 4): the container comes from the
 /// server-side scope resolver, never from the caller, so a document in
@@ -1557,51 +1559,127 @@ let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEven
 /// `None` becomes the typed `NoOriginalAvailable` rather than a
 /// 404-shaped guess. Successful fetches and refusals both emit the
 /// Phase 107 audit events.
-let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<OriginalDocument, KnowledgeBaseError>> = async {
-    let denied (reason: string) =
-        recordOriginalAccessAudit
-            deps
-            (KnowledgeOriginalRetrievalDenied {
-                UserId = deps.UserId
-                DocumentId = docId
-                ScopeId = deps.Scope.ScopeId
-                Reason = reason
-            })
+///
+/// **`redactor = None` is the pre-201 path, and not merely equivalent
+/// to it** — the redaction step below is a match with a pass-through
+/// arm, so no decode, no allocation, and no extra audit row exists on a
+/// deployment that composed nothing (GP 11 / GP 13).
+let private getOriginalDocumentCore
+    (redactor: KnowledgeBase.ServerOriginalRedactor.IOriginalRedactor option)
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    : Async<Result<OriginalDocument, KnowledgeBaseError>> =
+    async {
+        let denied (reason: string) =
+            recordOriginalAccessAudit
+                deps
+                (KnowledgeOriginalRetrievalDenied {
+                    UserId = deps.UserId
+                    DocumentId = docId
+                    ScopeId = deps.Scope.ScopeId
+                    Reason = reason
+                })
 
-    try
-        let! index = loadIndex deps.Storage deps.Scope.Container
+        try
+            let! index = loadIndex deps.Storage deps.Scope.Container
 
-        match index |> List.tryFind (fun d -> d.Id = docId) with
-        | None ->
-            do! denied "NotInScope"
-            return Error NotInScope
-        | Some doc ->
-            // Phase 105 — store-first for uploaded files when retention
-            // is composed; the Phase 104 resolver otherwise, and for
-            // every other source kind.
-            let! resolved = resolveOriginal deps doc
-
-            match resolved with
-            | Some original ->
-                do!
-                    recordOriginalAccessAudit
-                        deps
-                        (KnowledgeOriginalRetrieved {
-                            UserId = deps.UserId
-                            DocumentId = doc.Id
-                            ScopeId = deps.Scope.ScopeId
-                            SourceKind = sourceKindName doc.Source
-                            FileName = doc.FileName
-                        })
-
-                return Ok original
+            match index |> List.tryFind (fun d -> d.Id = docId) with
             | None ->
-                do! denied "NoOriginalAvailable"
-                return Error NoOriginalAvailable
-    with ex ->
-        deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDocument failed for %s" docId, Some ex)
-        return Error(OriginalRetrievalFailed ex.Message)
-}
+                do! denied "NotInScope"
+                return Error NotInScope
+            | Some doc ->
+                // Phase 105 — store-first for uploaded files when retention
+                // is composed; the Phase 104 resolver otherwise, and for
+                // every other source kind.
+                let! resolved = resolveOriginal deps doc
+
+                match resolved with
+                | Some original ->
+                    // Phase 201 — the classification gate, between the
+                    // scope gate above and the bytes below. A composed
+                    // redactor masks the spans this caller may not read;
+                    // one that cannot vouch for the content withholds,
+                    // and the caller cannot tell that apart from absence
+                    // (GP 4) — only the audit trail can.
+                    let! verdict =
+                        match redactor with
+                        | None -> async.Return(Some(original, []))
+                        | Some r -> async {
+                            let! outcome = r.Redact(original, deps.AccessContext)
+
+                            match outcome with
+                            | KnowledgeBase.ServerOriginalRedactor.OriginalRedaction.Deliver(document, levels) ->
+                                return Some(document, levels)
+                            | KnowledgeBase.ServerOriginalRedactor.OriginalRedaction.Withhold reason ->
+                                deps.Logger.Info(
+                                    sprintf
+                                        "[KnowledgeBase] docId=%s withheld by the composed original redactor: %s"
+                                        doc.Id
+                                        reason
+                                )
+
+                                return None
+                          }
+
+                    match verdict with
+                    | None ->
+                        // Distinct audit reason, identical wire answer.
+                        do! denied "RedactionWithheld"
+                        return Error NoOriginalAvailable
+                    | Some(delivered, redactedLevels) ->
+                        do!
+                            recordOriginalAccessAudit
+                                deps
+                                (KnowledgeOriginalRetrieved {
+                                    UserId = deps.UserId
+                                    DocumentId = doc.Id
+                                    ScopeId = deps.Scope.ScopeId
+                                    SourceKind = sourceKindName doc.Source
+                                    FileName = doc.FileName
+                                })
+
+                        // One value-free classification row per masked
+                        // level, on this delivery only — a caller the
+                        // policy allowed everything for produces none.
+                        for event in
+                            KnowledgeBase.ServerOriginalRedactor.redactionAuditEvents deps.UserId doc.Id redactedLevels do
+                            do! recordOriginalAccessAudit deps event
+
+                        return Ok delivered
+                | None ->
+                    do! denied "NoOriginalAvailable"
+                    return Error NoOriginalAvailable
+        with ex ->
+            deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDocument failed for %s" docId, Some ex)
+            return Error(OriginalRetrievalFailed ex.Message)
+    }
+
+/// Fetch the *original* ingested document for a `docId` (Phase 102).
+/// Scope-gated, source-kind-aware, audited — see
+/// `getOriginalDocumentCore`.
+///
+/// **No redaction.** This is the Phase 102 entry point and is left
+/// exactly as it shipped, so a caller that had it keeps it. The
+/// composed API record routes through `getRedactedOriginalDocument`
+/// instead, which is this function when no redactor is composed.
+let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<OriginalDocument, KnowledgeBaseError>> =
+    getOriginalDocumentCore None deps docId
+
+/// Phase 201 — the same fetch, with the deployment's composed
+/// `IOriginalRedactor` applied between the scope gate and the response.
+/// `None` short-circuits to the byte-for-byte Phase 102 path.
+///
+/// The redactor arrives as an explicit parameter rather than on
+/// `KnowledgeApiDeps` for the same reason the Phase 108 preview seam
+/// does: two handlers want it, and `KnowledgeApiDeps` is constructed by
+/// a dozen test harnesses that would all have to be edited to add a
+/// field none of them use.
+let getRedactedOriginalDocument
+    (redactor: KnowledgeBase.ServerOriginalRedactor.IOriginalRedactor option)
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    : Async<Result<OriginalDocument, KnowledgeBaseError>> =
+    getOriginalDocumentCore redactor deps docId
 
 // ─── Delivery-mode-aware original retrieval (Phase 108) ──────────
 
@@ -1720,6 +1798,54 @@ let getOriginalDelivery
             with ex ->
                 deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDelivery failed for %s" docId, Some ex)
                 return Error(OriginalRetrievalFailed ex.Message)
+    }
+
+/// Phase 201 — delivery-mode-aware retrieval with the composed
+/// redactor applied. `None` short-circuits to the byte-for-byte Phase
+/// 108 path.
+///
+/// **A composed redactor forces INLINE delivery**, and this is the one
+/// interaction between the two phases worth stating outright. A signed
+/// URL is a link to the raw stored bytes: the redactor never ran over
+/// what object storage will serve, and no ordering at this tier changes
+/// that — so handing one out for a corpus a deployment considered
+/// sensitive enough to redact would defeat the redactor entirely,
+/// silently, and only for the deployments that took the most care.
+///
+/// The degradation is per fetch and never silent (the same shape Phase
+/// 105 uses where object-store retention and signed delivery collide):
+/// byte-efficiency is lost, correctness is not, and the log names the
+/// interaction so an operator sees why their signed URLs stopped.
+///
+/// Deliberately NOT per document: whether a redactor *would* have acted
+/// on a given original is only knowable by reading its bytes and
+/// decoding them, which is precisely the work signed delivery exists to
+/// avoid. A metadata-only guess ("it's a PDF, sign it") would be wrong
+/// for exactly the text-layer PDFs a redactor is composed for, so the
+/// conservative answer is the correct one here.
+let getOriginalDeliveryRedacted
+    (redactor: KnowledgeBase.ServerOriginalRedactor.IOriginalRedactor option)
+    (seam: KnowledgeBase.ServerOriginalPreviewSeam.IOriginalPreviewSeam option)
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    : Async<Result<PreviewContent, KnowledgeBaseError>> =
+    async {
+        match redactor with
+        | None -> return! getOriginalDelivery seam deps docId
+        | Some _ ->
+            if Option.isSome seam then
+                deps.Logger.Info(
+                    sprintf
+                        "[KnowledgeBase] docId=%s: an IOriginalRedactor is composed, so delivery is inline — a signed URL would serve the raw stored bytes the redactor never saw."
+                        docId
+                )
+
+            // Delegates to the redaction-aware Phase 102 handler rather
+            // than re-resolving here, so the scope gate, the resolver
+            // branch and the audit emission stay in exactly one place on
+            // this arm too.
+            let! inlineResult = getRedactedOriginalDocument redactor deps docId
+            return inlineResult |> Result.map PreviewContent.Inline
     }
 
 let getStatus (deps: KnowledgeApiDeps) (docId: string) : Async<IngestionStatus> = async {

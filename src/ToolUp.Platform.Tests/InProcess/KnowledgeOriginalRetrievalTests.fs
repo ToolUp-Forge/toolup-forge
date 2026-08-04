@@ -984,14 +984,568 @@ module private PreviewCompose =
             }
         ]
 
-let tests =
-    testList "KnowledgeOriginalRetrieval (Wave 15 — Phases 102/103/104/106/107; Phase 200 preview seam)" [
-        resolverTests
-        handlerTests
-        lineageTests
-        previewAnchorTests
-        previewSeamTests
-        previewSignedUrlTests
-        previewScopeTests
-        PreviewCompose.tests
+// ─── Phase 201 — redaction-aware original retrieval ──────────────────
+//
+// The cross-wave leak this closes: Phase 41 redacts classified FIELDS on
+// the structured read path, Phase 102/104 return an original's bytes
+// once the caller passes the SCOPE check, and until Phase 201 nothing
+// joined them — so a caller in-scope for a document but lacking the
+// per-level reader capability could read verbatim what the field gate
+// masked. These cases pin the join (mask for a non-reader, intact for a
+// reader / PlatformAdmin), the fail-closed decline of an original the
+// redactor cannot inspect, the audit annotation, the GP 13 pin that no
+// composed redactor is byte-for-byte the pre-201 path, and the
+// signed-URL interaction (a composed redactor forces inline delivery,
+// because a signed URL serves bytes the redactor never saw).
+
+module Redactor = KnowledgeBase.ServerOriginalRedactor
+
+let private piiSpan = Redactor.ClassifiedSpan.create Pii "Ada Lovelace"
+let private financialSpan = Redactor.ClassifiedSpan.create Financial "£4,120,000"
+
+/// A caller with no reader capability at all — the empty permission map
+/// is UNRESTRICTED for `canAccessModule` but fails closed in the
+/// classification gate, which is exactly the asymmetry Phase 41 chose.
+let private nonReader = AccessContext.unrestricted (AuthenticatedUser "user-1")
+
+let private readerOf (level: ClassificationLevel) = {
+    nonReader with
+        ModulePermissions = Map [ ClassificationGate.readerModule level, [ ModulePermission.Read ] ]
+}
+
+let private platformAdmin = {
+    nonReader with
+        PlatformRole = Some PlatformRole.PlatformAdmin
+}
+
+let private textOriginal (body: string) : OriginalDocument =
+    let bytes = Encoding.UTF8.GetBytes body
+
+    {
+        FileName = "brief.md"
+        ContentType = "text/markdown"
+        SizeBytes = int64 bytes.Length
+        Content = bytes
+    }
+
+let private deliveredText (outcome: Redactor.OriginalRedaction) =
+    match outcome with
+    | Redactor.OriginalRedaction.Deliver(doc, levels) -> Encoding.UTF8.GetString doc.Content, levels
+    | Redactor.OriginalRedaction.Withhold reason -> failtest $"expected Deliver, got Withhold '{reason}'"
+
+let private redactorTests =
+    testList "Phase 201 — IOriginalRedactor classification contract" [
+        testCaseAsync "a Pii span is masked for a caller with no reader capability"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+            let original = textOriginal "Prepared by Ada Lovelace for the board."
+
+            let! outcome = redactor.Redact(original, nonReader)
+            let text, levels = deliveredText outcome
+
+            Expect.equal text "Prepared by [redacted] for the board." "the span is the gate's placeholder"
+            Expect.equal levels [ "Pii" ] "the masked level is reported for the audit annotation"
+        }
+
+        testCaseAsync "the same span is intact for a per-level reader, and for a PlatformAdmin"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+            let body = "Prepared by Ada Lovelace for the board."
+            let original = textOriginal body
+
+            let! asReader = redactor.Redact(original, readerOf Pii)
+            let! asAdmin = redactor.Redact(original, platformAdmin)
+
+            let readerText, readerLevels = deliveredText asReader
+            let adminText, adminLevels = deliveredText asAdmin
+
+            Expect.equal readerText body "a PiiReader reads the original"
+            Expect.equal adminText body "PlatformAdmin reads the original"
+
+            Expect.isEmpty readerLevels "nothing masked ⇒ nothing to annotate"
+            Expect.isEmpty adminLevels "nothing masked ⇒ nothing to annotate"
+        }
+
+        testCaseAsync "a reader capability is per level — Pii reader still loses Financial spans"
+        <| async {
+            let redactor =
+                Redactor.createDefault (fun _ _ -> async.Return [ piiSpan; financialSpan ])
+
+            let original = textOriginal "Ada Lovelace signed off £4,120,000."
+
+            let! outcome = redactor.Redact(original, readerOf Pii)
+            let text, levels = deliveredText outcome
+
+            Expect.equal text "Ada Lovelace signed off [redacted]." "only the level the caller cannot read is masked"
+            Expect.equal levels [ "Financial" ] "and only that level is annotated"
+        }
+
+        testCaseAsync "a document with no classified spans is delivered byte-for-byte"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [])
+            let original = textOriginal "Nothing classified here."
+
+            let! outcome = redactor.Redact(original, nonReader)
+
+            match outcome with
+            | Redactor.OriginalRedaction.Deliver(doc, levels) ->
+                Expect.equal doc original "the input record, unchanged"
+                Expect.isEmpty levels "no audit annotation for a document nothing applied to"
+            | Redactor.OriginalRedaction.Withhold reason -> failtest $"expected Deliver, got Withhold '{reason}'"
+        }
+
+        testCaseAsync "SizeBytes tracks the masked body, not the original"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+            let original = textOriginal "Ada Lovelace"
+
+            let! outcome = redactor.Redact(original, nonReader)
+
+            match outcome with
+            | Redactor.OriginalRedaction.Deliver(doc, _) ->
+                Expect.equal doc.SizeBytes (int64 doc.Content.Length) "metadata and body cannot drift"
+                Expect.notEqual doc.SizeBytes original.SizeBytes "and the masked body is a different length"
+            | Redactor.OriginalRedaction.Withhold reason -> failtest $"expected Deliver, got Withhold '{reason}'"
+        }
+
+        testCaseAsync "a binary original is WITHHELD by default — never silently served unmasked"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let pdf: OriginalDocument = {
+                FileName = "report.pdf"
+                ContentType = "application/pdf"
+                SizeBytes = 4L
+                Content = [| 0uy; 1uy; 2uy; 3uy |]
+            }
+
+            let! outcome = redactor.Redact(pdf, nonReader)
+
+            match outcome with
+            | Redactor.OriginalRedaction.Withhold reason ->
+                Expect.stringContains reason "text" "the refusal names the MVP boundary honestly"
+            | Redactor.OriginalRedaction.Deliver _ ->
+                failtest "an original the redactor cannot inspect must not be delivered under the default disposition"
+        }
+
+        testCaseAsync "ServeAsIs is the explicit opt-out for unmaskable originals"
+        <| async {
+            let redactor =
+                Redactor.OriginalRedactorOptions.ofSpans [ piiSpan ]
+                |> Redactor.OriginalRedactorOptions.withUnmaskableDisposition
+                    Redactor.UnmaskableOriginalDisposition.ServeAsIs
+                |> Redactor.create
+
+            let pdf: OriginalDocument = {
+                FileName = "report.pdf"
+                ContentType = "application/pdf"
+                SizeBytes = 4L
+                Content = [| 0uy; 1uy; 2uy; 3uy |]
+            }
+
+            let! outcome = redactor.Redact(pdf, nonReader)
+
+            match outcome with
+            | Redactor.OriginalRedaction.Deliver(doc, levels) ->
+                Expect.equal doc pdf "unchanged bytes"
+                Expect.isEmpty levels "nothing was masked, so nothing is claimed to have been"
+            | Redactor.OriginalRedaction.Withhold reason -> failtest $"expected Deliver, got Withhold '{reason}'"
+        }
+
+        testCaseAsync "bytes that claim to be text but are not valid UTF-8 reach the same decline"
+        <| async {
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let bogus: OriginalDocument = {
+                FileName = "claims-to-be.txt"
+                ContentType = "text/plain"
+                SizeBytes = 3L
+                // 0xFF is not a legal UTF-8 lead byte.
+                Content = [| 0xFFuy; 0xFEuy; 0xFDuy |]
+            }
+
+            let! outcome = redactor.Redact(bogus, nonReader)
+
+            match outcome with
+            | Redactor.OriginalRedaction.Withhold _ -> ()
+            | Redactor.OriginalRedaction.Deliver _ ->
+                failtest "a strict decode failure is a decline, not a pass-through"
+        }
+
+        testCase "the default text test accepts text/* and rejects the binary formats"
+        <| fun _ ->
+            let ofType (contentType: string) : OriginalDocument = {
+                FileName = "x"
+                ContentType = contentType
+                SizeBytes = 0L
+                Content = [||]
+            }
+
+            let isText = Redactor.OriginalRedactorOptions.defaultIsTextExtractable
+
+            Expect.isTrue (isText (ofType "text/markdown")) "markdown"
+            Expect.isTrue (isText (ofType "text/plain; charset=utf-8")) "a charset suffix does not disqualify"
+            Expect.isTrue (isText (ofType "text/csv")) "csv"
+            Expect.isFalse (isText (ofType "application/pdf")) "pdf"
+            Expect.isFalse (isText (ofType "application/octet-stream")) "the resolver's unknown-type default"
+            Expect.isFalse (isText (ofType "")) "an empty content type is not a licence to decode"
     ]
+
+let private redactedHandlerTests =
+    testList "Phase 201 — getRedactedOriginalDocument (scope gate + audit)" [
+        testCaseAsync "a composed redactor masks the delivered bytes and annotates the audit trail"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let body = "Prepared by Ada Lovelace for the board."
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes body)
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+            let audit = CapturingAuditLog()
+
+            let deps = {
+                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                    AccessContext = nonReader
+            }
+
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let! result = getRedactedOriginalDocument (Some redactor) deps "doc-1"
+
+            match result with
+            | Ok original ->
+                Expect.equal
+                    (Encoding.UTF8.GetString original.Content)
+                    "Prepared by [redacted] for the board."
+                    "the bytes that leave the server are masked"
+            | Error e -> failtest $"expected Ok, got {e}"
+
+            let retrievals =
+                audit.Events
+                |> List.choose (fun (_, e) ->
+                    match e with
+                    | KnowledgeOriginalRetrieved p -> Some p
+                    | _ -> None)
+
+            let redactions =
+                audit.Events
+                |> List.choose (fun (_, e) ->
+                    match e with
+                    | ClassifiedFieldRead p -> Some p
+                    | _ -> None)
+
+            Expect.equal retrievals.Length 1 "the Phase 107 access row still fires exactly once"
+
+            Expect.equal redactions.Length 1 "one classification row per masked level, once per delivery"
+
+            let row = List.head redactions
+            Expect.equal row.Level "Pii" "the level is named"
+            Expect.isTrue row.Redacted "and it is recorded as a redaction, not an allowed read"
+            Expect.equal row.FieldPath "doc-1" "keyed by document id"
+            Expect.equal row.EntityName Redactor.KnowledgeOriginalEntityName "under the KB original entity"
+            Expect.equal row.UserId "user-1" "attributed to the caller"
+        }
+
+        testCaseAsync "a reader gets the original intact and NO redaction row"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let body = "Prepared by Ada Lovelace for the board."
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes body)
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+            let audit = CapturingAuditLog()
+
+            let deps = {
+                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                    AccessContext = readerOf Pii
+            }
+
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let! result = getRedactedOriginalDocument (Some redactor) deps "doc-1"
+
+            match result with
+            | Ok original -> Expect.equal (Encoding.UTF8.GetString original.Content) body "unmasked for a PiiReader"
+            | Error e -> failtest $"expected Ok, got {e}"
+
+            let redactions =
+                audit.Events
+                |> List.filter (fun (_, e) ->
+                    match e with
+                    | ClassifiedFieldRead _ -> true
+                    | _ -> false)
+
+            Expect.isEmpty redactions "an allowed read is not a redaction and must not be logged as one"
+        }
+
+        testCaseAsync "a withheld original refuses exactly like an absent one, and says why only in the audit"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", [| 0uy; 1uy; 2uy |])
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "report.pdf" "pdf" UploadedFile ]
+            let audit = CapturingAuditLog()
+
+            let deps = {
+                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                    AccessContext = nonReader
+            }
+
+            // Default disposition: a binary original cannot be masked, so
+            // it is withheld.
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let! withheld = getRedactedOriginalDocument (Some redactor) deps "doc-1"
+            let! absent = getRedactedOriginalDocument (Some redactor) deps "doc-nope"
+
+            Expect.equal withheld (Error NoOriginalAvailable) "the caller learns nothing beyond 'no original'"
+            Expect.notEqual absent (Ok Unchecked.defaultof<OriginalDocument>) "sanity — the absent id also refuses"
+
+            let reasons =
+                audit.Events
+                |> List.choose (fun (_, e) ->
+                    match e with
+                    | KnowledgeOriginalRetrievalDenied p -> Some p.Reason
+                    | _ -> None)
+
+            Expect.contains reasons "RedactionWithheld" "the operator-side trail distinguishes the two"
+
+            let retrievals =
+                audit.Events
+                |> List.filter (fun (_, e) ->
+                    match e with
+                    | KnowledgeOriginalRetrieved _ -> true
+                    | _ -> false)
+
+            Expect.isEmpty retrievals "nothing was delivered, so nothing is recorded as retrieved"
+        }
+
+        testCaseAsync "the scope gate still runs first — another team's document refuses NotInScope"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-b", "knowledge/doc-9/brief.md", Encoding.UTF8.GetBytes "Ada Lovelace")
+            do! saveIndex storage "team-b" [ mkDoc "doc-9" "brief.md" "md" UploadedFile ]
+            do! saveIndex storage "team-a" []
+
+            let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            let! foreign = getRedactedOriginalDocument (Some redactor) deps "doc-9"
+            let! unknown = getRedactedOriginalDocument (Some redactor) deps "doc-nope"
+
+            Expect.equal foreign (Error NotInScope) "the redactor is downstream of the scope gate, never a substitute"
+            Expect.equal unknown foreign "and the two refusals stay indistinguishable (GP 4)"
+        }
+
+        testCaseAsync "no redactor composed ⇒ byte-for-byte the Phase 102 path (GP 13)"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let body = "Prepared by Ada Lovelace for the board."
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes body)
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+
+            let unredactedAudit = CapturingAuditLog()
+
+            let deps = {
+                mkDeps storage (Some(unredactedAudit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                    AccessContext = nonReader
+            }
+
+            let! viaPhase102 = getOriginalDocument deps "doc-1"
+            let! viaPhase201 = getRedactedOriginalDocument None deps "doc-1"
+
+            Expect.equal viaPhase201 viaPhase102 "identical result"
+
+            match viaPhase201 with
+            | Ok original ->
+                Expect.equal (Encoding.UTF8.GetString original.Content) body "and the bytes are the unmasked original"
+            | Error e -> failtest $"expected Ok, got {e}"
+
+            let redactions =
+                unredactedAudit.Events
+                |> List.filter (fun (_, e) ->
+                    match e with
+                    | ClassifiedFieldRead _ -> true
+                    | _ -> false)
+
+            Expect.isEmpty redactions "and no classification row exists on a deployment that composed nothing"
+        }
+    ]
+
+let private redactedDeliveryTests =
+    testList "Phase 201 — redaction × signed-URL delivery" [
+        testCaseAsync "a composed redactor forces INLINE delivery even with a signing seam composed"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let body = "Prepared by Ada Lovelace for the board."
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes body)
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+
+            let deps = {
+                mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a" with
+                    AccessContext = nonReader
+            }
+
+            let signer = CapturingSigner(Ok "https://example.test/signed")
+
+            let seam =
+                PreviewSeam.createSignedUrl
+                    (createDefault ())
+                    (signer :> PreviewSeam.IPreviewUrlSigner)
+                    PreviewSeam.PreviewSignedUrlOptions.defaults
+
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+
+            // The control: with no redactor, this exact composition mints
+            // a URL. So the assertion below is about the redactor, not
+            // about a seam that could not sign anyway.
+            let! control = getOriginalDeliveryRedacted None (Some seam) deps "doc-1"
+
+            match control with
+            | Ok(PreviewContent.SignedUrl _) -> ()
+            | other -> failtest $"control must sign, else this case proves nothing — got {other}"
+
+            let! result = getOriginalDeliveryRedacted (Some redactor) (Some seam) deps "doc-1"
+
+            match result with
+            | Ok(PreviewContent.Inline original) ->
+                Expect.equal
+                    (Encoding.UTF8.GetString original.Content)
+                    "Prepared by [redacted] for the board."
+                    "delivery falls back to inline AND the bytes are masked"
+            | Ok(PreviewContent.SignedUrl(url, _)) ->
+                failtest $"a signed URL serves raw stored bytes the redactor never saw: {url}"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+
+        testCaseAsync "no redactor composed ⇒ getOriginalDelivery, unchanged (GP 13)"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes "plain")
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+
+            let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+
+            let! viaPhase108 = getOriginalDelivery None deps "doc-1"
+            let! viaPhase201 = getOriginalDeliveryRedacted None None deps "doc-1"
+
+            Expect.equal viaPhase201 viaPhase108 "identical result on the uncomposed path"
+        }
+
+        testCaseAsync "the preview route is closed too — a signed target refuses, an inline one is masked"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let body = "Prepared by Ada Lovelace for the board."
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes body)
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
+
+            let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
+            let inlineSeam = PreviewSeam.createDefault (createDefault ())
+
+            let signingSeam =
+                PreviewSeam.createSignedUrl
+                    (createDefault ())
+                    (CapturingSigner(Ok "https://example.test/signed") :> PreviewSeam.IPreviewUrlSigner)
+                    PreviewSeam.PreviewSignedUrlOptions.defaults
+
+            let! masked =
+                Redactor.redactedPreviewOriginal (Some redactor) nonReader inlineSeam storage "team-a" "doc-1" None
+
+            match masked with
+            | Ok target ->
+                match target.Content with
+                | PreviewContent.Inline original ->
+                    Expect.equal
+                        (Encoding.UTF8.GetString original.Content)
+                        "Prepared by [redacted] for the board."
+                        "the preview's inline bytes go through the redactor"
+
+                    Expect.equal target.SizeBytes original.SizeBytes "top-level metadata tracks the masked body"
+                | PreviewContent.SignedUrl _ -> failtest "the inline seam must not produce a URL"
+            | Error e -> failtest $"expected Ok, got {e}"
+
+            let! signed =
+                Redactor.redactedPreviewOriginal (Some redactor) nonReader signingSeam storage "team-a" "doc-1" None
+
+            Expect.equal signed (Error NoOriginalAvailable) "a URL to bytes the redactor never saw is refused"
+
+            let! uncomposed = Redactor.redactedPreviewOriginal None nonReader signingSeam storage "team-a" "doc-1" None
+
+            match uncomposed with
+            | Ok target ->
+                match target.Content with
+                | PreviewContent.SignedUrl _ -> ()
+                | PreviewContent.Inline _ -> failtest "with no redactor this IS previewOriginal — the URL survives"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+    ]
+
+module private RedactorCompose =
+    open Microsoft.Extensions.DependencyInjection
+
+    let tests =
+        testList "Phase 201 — opt-in compose (GP 11 / GP 13)" [
+            test "an app that never composes a redactor registers nothing" {
+                let services = ServiceCollection()
+                let sp = services.BuildServiceProvider()
+
+                Expect.isTrue
+                    (isNull (box (sp.GetService<Redactor.IOriginalRedactor>())))
+                    "there is no default redactor in DI — the SDK ships no PII detector a deployment did not ask for"
+            }
+
+            test "withOriginalRedactor registers exactly one singleton, and chains an existing ServiceConfig" {
+                let marker =
+                    { new ILogger with
+                        member _.Debug _ = ()
+                        member _.Info _ = ()
+                        member _.Warn _ = ()
+                        member _.Error(_, _) = ()
+                    }
+
+                let redactor = Redactor.createDefault (fun _ _ -> async.Return [])
+
+                let app =
+                    {
+                        ServerApp.empty with
+                            Extensions = {
+                                ServerApp.empty.Extensions with
+                                    ServiceConfig = Some(fun s -> s.AddSingleton<ILogger>(marker))
+                            }
+                    }
+                    |> Redactor.withOriginalRedactor redactor
+
+                let services = ServiceCollection()
+                let before = services.Count
+
+                match app.Extensions.ServiceConfig with
+                | Some cfg -> cfg services |> ignore
+                | None -> failtest "composing the redactor must populate ServiceConfig"
+
+                Expect.equal (services.Count - before) 2 "the prior registration plus exactly one more"
+
+                let sp = services.BuildServiceProvider()
+
+                Expect.isTrue
+                    (obj.ReferenceEquals(sp.GetService<ILogger>(), marker))
+                    "a previously-composed registration is preserved"
+
+                Expect.isTrue
+                    (obj.ReferenceEquals(sp.GetService<Redactor.IOriginalRedactor>(), redactor))
+                    "and the composed instance is what resolves"
+            }
+        ]
+
+let tests =
+    testList
+        "KnowledgeOriginalRetrieval (Wave 15 — Phases 102/103/104/106/107; Phase 200 preview seam; Phase 201 redaction)"
+        [
+            resolverTests
+            handlerTests
+            lineageTests
+            previewAnchorTests
+            previewSeamTests
+            previewSignedUrlTests
+            previewScopeTests
+            PreviewCompose.tests
+            redactorTests
+            redactedHandlerTests
+            redactedDeliveryTests
+            RedactorCompose.tests
+        ]
