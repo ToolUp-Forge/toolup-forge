@@ -979,6 +979,10 @@
         <!-- Phase 14x — KB upload content-hash dedup (idempotent re-upload,
              hash ref index, opt-out, Failed-retry path, legacy-index pin). -->
         <Compile Include="InProcess\KnowledgeDedupTests.fs" />
+        <!-- Phase 512 — per-scope KB corpus quota (MaxDocuments / MaxBytes at
+             the upload boundary + usage surfacing) and age-based retention
+             sweep (selection, Phase 115 fan-out, purge audit, GP 11 inertia). -->
+        <Compile Include="InProcess\KbQuotaRetentionTests.fs" />
         <!-- Phase 5e — per-tenant branding: Branding.resolve fallback +
              hex validation, and PlatformSchema.mergeBrandingSchema. -->
         <Compile Include="InProcess\BrandingTests.fs" />

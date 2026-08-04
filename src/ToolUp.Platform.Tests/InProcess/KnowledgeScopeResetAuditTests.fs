@@ -109,6 +109,10 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
+        // Phase 512 — these packs pin pre-512 paths; the unlimited /
+        // retain-forever defaults keep them byte-identical.
+        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
+        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         DisclosureGate = None
     }
 

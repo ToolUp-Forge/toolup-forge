@@ -3,10 +3,15 @@
 
 module KnowledgeBase.ServerUploadPolicy
 
+open System
+open Giraffe
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open SharedTypes
+open KnowledgeBase.ServerIndexStorage
 
 // ─── Phase 119 — KB upload-policy preflight ────────────────────────
 //
@@ -95,3 +100,205 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
                         | Some baseFn -> Some(fun s -> register (baseFn s))
             }
     }
+
+// ─── Phase 512 — per-scope quota + retention compose hooks ───────────
+
+/// Append a service registration onto the shared `ComposeExtensions`
+/// seam — the same threading `withUploadPolicy` / `withDocumentDedup`
+/// use, factored out now that four hooks share it.
+let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
+    app with
+        Extensions = {
+            app.Extensions with
+                ServiceConfig =
+                    match app.Extensions.ServiceConfig with
+                    | None -> Some register
+                    | Some baseFn -> Some(fun s -> register (baseFn s))
+        }
+}
+
+// ─── Quota preflight ─────────────────────────────────────────────────
+
+type private QuotaPolicyValidator(serverConfig: ServerConfig, policy: KnowledgeQuotaPolicy) =
+    interface IConfigValidator with
+        member _.Name = "knowledge-base:quota-policy"
+        member _.Timeout = IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            let teamScoped = DeploymentConfig.hasTeamScope serverConfig
+
+            if teamScoped && KnowledgeQuotaPolicy.isUnlimited policy then
+                return
+                    ValidationResult.Warning(
+                        "Knowledge Base quota policy sets neither MaxDocuments nor MaxBytes in Team / MultiTeam mode. "
+                        + "A single team can then grow its document corpus and vector index without bound, and the only "
+                        + "backstop is the per-file MaxUploadBytes cap. Set a corpus cap via "
+                        + "KnowledgeBase.Server.withKnowledgeQuota { MaxDocuments = Some <n>; MaxBytes = Some <bytes> }."
+                    )
+            else
+                return ValidationResult.Ok
+        }
+
+/// Phase 512 — compose-time per-scope Knowledge Base **corpus** quota:
+/// a document-count ceiling and a total-bytes ceiling, enforced at the
+/// upload boundary before anything is persisted and surfaced through
+/// `KnowledgeApi.GetScopeUsage` (plus the `/dev/knowledge-base/usage`
+/// endpoint below when `ServerConfig.EnableDevEndpoints` is on).
+/// Complements `withUploadPolicy`, which caps ONE upload; this caps the
+/// accumulated corpus.
+///
+/// Registers the policy as a DI singleton (read per request by
+/// `KnowledgeApiDeps.resolve`) plus a preflight validator that warns on
+/// an uncapped Team / MultiTeam deployment — the same `Warning`-never-
+/// `Error` posture the upload-policy validator takes, so it can never
+/// abort startup (GP 11).
+///
+/// Apps that never call this get `KnowledgeQuotaPolicy.unlimited`: no
+/// usage tally is taken on the upload path and no upload can be refused
+/// for quota — pre-512 behaviour byte-for-byte (GP 11 / GP 13).
+let withKnowledgeQuota (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
+    let withSingleton =
+        app |> withServiceConfig (fun s -> s.AddSingleton<KnowledgeQuotaPolicy>(policy))
+
+    ServerApp.withConfigValidator (QuotaPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
+
+// ─── Dev usage endpoint (`/dev/knowledge-base/usage`) ────────────────
+
+let private usageJsonOptions =
+    let o = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    o.WriteIndented <- true
+    o
+
+/// Resolve the caller's KB container the same way `KnowledgeApiDeps`
+/// does — a middleware-resolved `ToolUp.StorageScope` first, then a
+/// per-user fallback (GP 4: the container comes from the resolver, never
+/// from the caller, so this endpoint cannot report another tenant's
+/// usage no matter what is asked for).
+let private devUsageContainer (ctx: HttpContext) : string =
+    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+    | true, (:? StorageScope as s) -> s.Container
+    | _ ->
+        match ctx.Items.TryGetValue "ToolUp.UserId" with
+        | true, (:? string as id) -> sprintf "user-%s" id
+        | _ -> "user-anonymous"
+
+let private devUsageHandler: HttpHandler =
+    fun next (ctx: HttpContext) -> task {
+        let storage =
+            match ctx.RequestServices.GetService typeof<IBlobStorage> with
+            | :? IBlobStorage as s -> Some s
+            | _ -> None
+
+        let policy =
+            match ctx.RequestServices.GetService typeof<KnowledgeQuotaPolicy> with
+            | :? KnowledgeQuotaPolicy as p -> p
+            | _ -> KnowledgeQuotaPolicy.unlimited
+
+        let container = devUsageContainer ctx
+
+        let! usage =
+            match storage with
+            | Some s ->
+                async {
+                    let! docs = loadIndex s container
+                    return KnowledgeScopeUsage.ofDocuments policy docs
+                }
+                |> Async.StartAsTask
+            | None -> System.Threading.Tasks.Task.FromResult KnowledgeScopeUsage.empty
+
+        ctx.Response.ContentType <- "application/json; charset=utf-8"
+        ctx.Response.Headers["Cache-Control"] <- "no-store"
+
+        do!
+            ctx.Response.WriteAsync(
+                System.Text.Json.JsonSerializer.Serialize(
+                    {|
+                        container = container
+                        usage = usage
+                    |},
+                    usageJsonOptions
+                )
+            )
+
+        return! next ctx
+    }
+
+/// Phase 512 — mount the read-only `/dev/knowledge-base/usage`
+/// diagnostics endpoint reporting the caller's scope usage against the
+/// composed quota. Gated on `ServerConfig.EnableDevEndpoints` (default
+/// `false`) exactly like `/dev/inspect` — a deployment that has not
+/// opted into dev endpoints registers no handler at all and gets the
+/// ordinary 404 (GP 13). Composed automatically by
+/// `withKnowledgeQuotaAndUsageEndpoint`; exposed separately for
+/// deployments that want the endpoint without a quota (usage reporting
+/// against an unlimited policy is still useful).
+let withKnowledgeUsageEndpoint (app: ServerApp) : ServerApp =
+    if app.Config.EnableDevEndpoints then
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        Handlers =
+                            app.Extensions.Handlers
+                            @ [ Giraffe.Routing.route "/dev/knowledge-base/usage" >=> devUsageHandler ]
+                }
+        }
+    else
+        app
+
+/// Phase 512 — the common pairing: compose the quota AND mount its dev
+/// usage endpoint (the latter still gated on `EnableDevEndpoints`).
+let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
+    app |> withKnowledgeQuota policy |> withKnowledgeUsageEndpoint
+
+// ─── Retention sweep ─────────────────────────────────────────────────
+
+/// Phase 512 — compose-time per-scope age-based retention. Registers the
+/// policy as a DI singleton and, when it can actually expire something,
+/// schedules the `knowledge-base.retention-sweep` job on the composed
+/// `IJobScheduler` for each scope in `scopes`.
+///
+/// **`scopes` is explicit, and deliberately so.** `IBlobStorage` has no
+/// cross-container enumeration and the SDK does not enumerate tenants
+/// automatically (see `ScheduledJobDeclaration.Scopes`), so the sweep
+/// cannot discover the containers it should visit. Pass the same list
+/// `recoverStuckDocumentsAtStartup` takes — typically `ITeamStore`
+/// results plus any `_platform` / `_deployment` containers the
+/// deployment uses. An empty list schedules nothing, which is honest:
+/// silently defaulting to `_platform` would look composed while sweeping
+/// a container that holds no documents.
+///
+/// **`retainForever` registers nothing.** An inert policy (`MaxAge =
+/// None`) short-circuits before any hosted service or scheduler entry is
+/// created, so a deployment that never calls this — or calls it with the
+/// default — is byte-for-byte its pre-512 self (GP 11 / GP 13).
+///
+/// Registration is deferred to `IHostedService.StartAsync` via
+/// `DeferredScheduledJobDeclaration` (Phase 623): the handler resolves
+/// `IBlobStorage` / `IIndexLifecycle` / `IAuditLog` from the built
+/// provider on every run, so nothing is captured at compose time and the
+/// handler stays stateless between invocations (GP 12 rule 4).
+let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
+    let register (s: IServiceCollection) =
+        let withPolicy = s.AddSingleton<KnowledgeRetentionPolicy>(policy)
+
+        if KnowledgeRetentionPolicy.isInert policy || List.isEmpty scopes then
+            withPolicy
+        else
+            withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    DeferredScheduledJobDeclaration.hostedService
+                        "Knowledge Base retention sweep"
+                        [
+                            DeferredScheduledJobDeclaration.create (fun provider ->
+                                ScheduledJobDeclaration.create
+                                    KnowledgeBase.ServerRetentionSweep.SweepHandlerName
+                                    (KnowledgeBase.ServerRetentionSweep.RetentionSweepJobHandler(provider, policy)
+                                    :> IJobHandler)
+                                    (Trigger.CronTrigger policy.SweepSchedule)
+                                |> ScheduledJobDeclaration.withScopes scopes)
+                        ]
+                        sp)
+            )
+
+    app |> withServiceConfig register

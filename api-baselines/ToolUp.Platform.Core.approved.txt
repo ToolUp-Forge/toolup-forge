@@ -732,6 +732,7 @@ ToolUp.Platform.AuditEvent.IsFormSubmitted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsHealthStateChanged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsHostActionDispatched : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeDocumentDeduplicated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsKnowledgeDocumentsPurged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeIndexLoadFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeIngestionDropped : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeOriginalRetrievalDenied : System.Boolean { get }
@@ -931,6 +932,8 @@ ToolUp.Platform.AuditEvent+HostActionDispatched (class)
 ToolUp.Platform.AuditEvent+HostActionDispatched.Item : ToolUp.Platform.HostActionDispatchedPayload { get }
 ToolUp.Platform.AuditEvent+KnowledgeDocumentDeduplicated (class)
 ToolUp.Platform.AuditEvent+KnowledgeDocumentDeduplicated.Item : ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload { get }
+ToolUp.Platform.AuditEvent+KnowledgeDocumentsPurged (class)
+ToolUp.Platform.AuditEvent+KnowledgeDocumentsPurged.Item : ToolUp.Platform.KnowledgeDocumentsPurgedPayload { get }
 ToolUp.Platform.AuditEvent+KnowledgeIndexLoadFailed (class)
 ToolUp.Platform.AuditEvent+KnowledgeIndexLoadFailed.Item : ToolUp.Platform.KnowledgeIndexLoadFailedPayload { get }
 ToolUp.Platform.AuditEvent+KnowledgeIngestionDropped (class)
@@ -1110,6 +1113,7 @@ ToolUp.Platform.AuditEvent+Tags.FormSubmitted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.HealthStateChanged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.HostActionDispatched : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeDocumentDeduplicated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.KnowledgeDocumentsPurged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeIndexLoadFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeIngestionDropped : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeOriginalRetrievalDenied : System.Int32 (literal)
@@ -4786,6 +4790,14 @@ ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.ExistingDocumentId : System
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.FileName : System.String { get }
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.ScopeId : System.String { get }
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.UserId : System.String { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload (class)
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int64, System.Int64, System.Int32)
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.DocumentIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.MaxAgeSeconds : System.Int64 { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.OrphanChunkCount : System.Int32 { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.PurgedCount : System.Int32 { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.ReclaimedBytes : System.Int64 { get }
+ToolUp.Platform.KnowledgeDocumentsPurgedPayload.ScopeId : System.String { get }
 ToolUp.Platform.KnowledgeIndexLoadFailedPayload (class)
 ToolUp.Platform.KnowledgeIndexLoadFailedPayload..ctor(System.String, System.String, System.Int32, System.String)
 ToolUp.Platform.KnowledgeIndexLoadFailedPayload.BlobLocation : System.String { get }

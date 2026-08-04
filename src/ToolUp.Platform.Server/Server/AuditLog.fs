@@ -1211,6 +1211,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeDocumentDeduplicated(fromAuditJson<KnowledgeDocumentDeduplicatedPayload> j)
     }
+    // Phase 512 — KB retention-sweep purge audit row (append-only registration).
+    {
+        EventType = "KnowledgeDocumentsPurged"
+        TryEncode =
+            (function
+            | KnowledgeDocumentsPurged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeDocumentsPurged(fromAuditJson<KnowledgeDocumentsPurgedPayload> j)
+    }
     {
         EventType = "PasskeyCredentialRegistered"
         TryEncode =

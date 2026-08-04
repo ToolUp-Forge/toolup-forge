@@ -219,6 +219,28 @@ let private persistAndIngest
         return doc
     }
 
+/// Phase 512 — the scope's corpus quota, evaluated against the live
+/// index. Returns `Some reason` when admitting one more document of
+/// `incomingBytes` would breach `deps.QuotaPolicy`.
+///
+/// Two properties are load-bearing:
+///   * **An unlimited policy reads nothing.** `isUnlimited` short-circuits
+///     before `loadIndex`, so an uncomposed deployment pays not even the
+///     index read the tally would need (GP 13). This is also why the
+///     "no policy ⇒ nothing capped" guarantee is structural rather than
+///     emergent — there is no path from here to a refusal.
+///   * **The tally is scope-local.** `deps.Scope.Container` comes from
+///     the server-side resolver, so one team's corpus can never consume
+///     another's headroom (GP 4).
+let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) : Async<string option> = async {
+    if KnowledgeQuotaPolicy.isUnlimited deps.QuotaPolicy then
+        return None
+    else
+        let! index = loadIndex deps.Storage deps.Scope.Container
+        let usage = KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy index
+        return KnowledgeQuotaPolicy.exceeds usage.DocumentCount usage.TotalBytes incomingBytes deps.QuotaPolicy
+}
+
 let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
     let docId = Guid.NewGuid().ToString()
 
@@ -254,13 +276,15 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
                 else
                     None
 
-    match rejectionReason with
-    | Some reason ->
-        // Nothing is persisted; the returned document carries the typed
-        // rejection so the client can surface the reason. Logged at Warn.
+    // Nothing is persisted for a refusal; the returned document carries
+    // the typed rejection so the client can surface the reason. Logged at
+    // Warn. Shared by the Phase 119 policy refusals above and the Phase
+    // 512 quota refusal below — a quota breach IS a pre-persist policy
+    // refusal, so it needs no new `IngestionStatus` case.
+    let refuse (reason: string) : KnowledgeDocument =
         deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
 
-        return {
+        {
             Id = docId
             FileName = safeName
             FileType = ext
@@ -272,12 +296,25 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
             Source = UploadedFile
             ContentHash = None
         }
+
+    // Phase 512 — the corpus quota is checked immediately before a
+    // persist, never before dedup: a duplicate upload stores nothing new,
+    // so refusing it for quota would reject a request that costs the
+    // scope no additional storage at all.
+    let persistUnlessOverQuota (contentHash: string option) : Async<KnowledgeDocument> = async {
+        match! quotaRefusal deps (int64 bytes.Length) with
+        | Some reason -> return refuse reason
+        | None -> return! persistAndIngest deps bytes docId safeName ext contentHash
+    }
+
+    match rejectionReason with
+    | Some reason -> return refuse reason
     | None ->
 
         if not deps.DedupPolicy.DedupUploads then
             // `withDocumentDedup false` — pre-14x path byte-for-byte
             // (GP 11): no hash computed, no lookup, no ref written.
-            return! persistAndIngest deps bytes docId safeName ext None
+            return! persistUnlessOverQuota None
         else
             // Phase 14x — scope-local content-hash dedup, checked before
             // anything is persisted. A duplicate upload stores nothing:
@@ -288,7 +325,7 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
             let! duplicate = findDuplicate deps contentHash
 
             match duplicate with
-            | None -> return! persistAndIngest deps bytes docId safeName ext (Some contentHash)
+            | None -> return! persistUnlessOverQuota (Some contentHash)
             | Some existing ->
                 deps.Logger.Info(
                     sprintf
@@ -339,6 +376,17 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
 
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
     loadIndex deps.Storage deps.Scope.Container
+
+/// Phase 512 — the caller's scope usage against the composed quota.
+/// Purely derived from the scope's own document index, so it cannot
+/// drift from the corpus it describes and carries no cross-tenant
+/// signal (GP 4). An uncomposed deployment gets honest counts with
+/// `None` caps — which is how a UI distinguishes "unlimited" from
+/// "full".
+let getScopeUsage (deps: KnowledgeApiDeps) : Async<KnowledgeScopeUsage> = async {
+    let! docs = loadIndex deps.Storage deps.Scope.Container
+    return KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy docs
+}
 
 let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit, string>> = async {
     // Fail closed if scope resolution collapsed onto the shared

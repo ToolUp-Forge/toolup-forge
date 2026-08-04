@@ -108,6 +108,17 @@ type KnowledgeApiDeps = {
     /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
     /// Consulted by `uploadDocument` before anything is persisted.
     DedupPolicy: KnowledgeDedupPolicy
+    /// Phase 512 — compose-time per-scope corpus quota, registered by
+    /// `withKnowledgeQuota`; `KnowledgeQuotaPolicy.unlimited` when absent
+    /// (no tally taken, no upload refusable — pre-512 behaviour, GP 11).
+    /// Enforced by `uploadDocument` and projected by `getScopeUsage`.
+    QuotaPolicy: KnowledgeQuotaPolicy
+    /// Phase 512 — compose-time age-based retention, registered by
+    /// `withKnowledgeRetention`; `KnowledgeRetentionPolicy.retainForever`
+    /// when absent. Carried on `deps` for read paths that want to report
+    /// the policy; the sweep itself runs off the request path in
+    /// `Server/RetentionSweep.fs` on the composed `IJobScheduler`.
+    RetentionPolicy: KnowledgeRetentionPolicy
     /// Phase 525.D — the fact-disclosure egress gate, registered in DI by
     /// the fact companion's compose whenever the fact store is enabled.
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
@@ -291,6 +302,19 @@ module KnowledgeApiDeps =
             | :? KnowledgeDedupPolicy as p -> p
             | _ -> KnowledgeDedupPolicy.enabled
 
+        // Phase 512 — corpus quota + retention policies registered by
+        // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
+        // retain-forever defaults when absent.
+        let quotaPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeQuotaPolicy>) with
+            | :? KnowledgeQuotaPolicy as p -> p
+            | _ -> KnowledgeQuotaPolicy.unlimited
+
+        let retentionPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeRetentionPolicy>) with
+            | :? KnowledgeRetentionPolicy as p -> p
+            | _ -> KnowledgeRetentionPolicy.retainForever
+
         // Phase 525.D — the fact-disclosure egress gate, present exactly
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
@@ -381,6 +405,8 @@ module KnowledgeApiDeps =
             ScopeResolvedFromRequest = scopeResolvedFromRequest
             UploadPolicy = uploadPolicy
             DedupPolicy = dedupPolicy
+            QuotaPolicy = quotaPolicy
+            RetentionPolicy = retentionPolicy
             DisclosureGate = disclosureGate
         }
 

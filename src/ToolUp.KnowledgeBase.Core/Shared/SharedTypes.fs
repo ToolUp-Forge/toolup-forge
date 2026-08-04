@@ -364,6 +364,186 @@ module KnowledgeDedupPolicy =
     /// lookup, every upload ingests.
     let disabled: KnowledgeDedupPolicy = { DedupUploads = false }
 
+// ─── Per-scope quota + retention (Phase 512) ─────────────────────
+
+/// Compose-time per-scope Knowledge Base storage quota — the corpus-level
+/// sibling of `KnowledgeUploadPolicy`, which caps ONE upload. Both levers
+/// are `None` by default (`KnowledgeQuotaPolicy.unlimited`, what a
+/// deployment that never calls `withKnowledgeQuota` gets), so an
+/// uncomposed deployment is byte-for-byte its pre-512 self: no count is
+/// taken, no refusal is possible (GP 11 / GP 13). Value-typed (GP 12).
+///
+/// The quota is always evaluated against the caller's **resolved scope**
+/// — the container the server-side scope resolver produced, never a
+/// caller-supplied id — so one team's corpus can never consume another
+/// team's headroom (GP 4).
+type KnowledgeQuotaPolicy = {
+    /// Maximum number of `KnowledgeDocument`s a scope may hold. `None` =
+    /// unlimited. Counted across every `KnowledgeSource` kind — uploads,
+    /// notes, and committed narratives all occupy the same index, so the
+    /// cap describes the corpus a scope actually carries.
+    MaxDocuments: int option
+    /// Maximum total `SizeBytes` across a scope's documents. `None` =
+    /// unlimited. Distinct from `KnowledgeUploadPolicy.MaxUploadBytes`,
+    /// which is a per-file in-memory-DoS guard; this bounds accumulated
+    /// storage growth.
+    MaxBytes: int64 option
+}
+
+module KnowledgeQuotaPolicy =
+    /// The default: no document-count cap, no byte cap. Resolved when a
+    /// deployment never composes `withKnowledgeQuota` — pre-512 behaviour
+    /// exactly (GP 11).
+    let unlimited: KnowledgeQuotaPolicy = { MaxDocuments = None; MaxBytes = None }
+
+    /// `true` when neither lever is set — the upload path can then skip
+    /// the usage tally entirely (GP 13: an uncomposed deployment pays
+    /// nothing, not even a `List.sumBy`).
+    let isUnlimited (policy: KnowledgeQuotaPolicy) : bool =
+        policy.MaxDocuments.IsNone && policy.MaxBytes.IsNone
+
+    /// `Some reason` when admitting one more document of `incomingBytes`
+    /// would breach the scope's quota, `None` otherwise. The reason is
+    /// user-legible on purpose — it is surfaced verbatim through the
+    /// existing `IngestionStatus.UploadRejected` (a quota breach IS a
+    /// pre-persist policy refusal, so it needs no new status case) and
+    /// has to tell the uploader what to delete, not merely that they
+    /// were refused (GP 9).
+    ///
+    /// The document cap is evaluated as "does the scope already hold
+    /// `MaxDocuments`" and the byte cap as "would current + incoming
+    /// exceed `MaxBytes`" — so a policy of `MaxDocuments = Some 0` or
+    /// `MaxBytes = Some 0` refuses every upload rather than admitting a
+    /// first freebie.
+    let exceeds
+        (currentDocuments: int)
+        (currentBytes: int64)
+        (incomingBytes: int64)
+        (policy: KnowledgeQuotaPolicy)
+        : string option =
+        match policy.MaxDocuments with
+        | Some maxDocs when currentDocuments >= maxDocs ->
+            Some(
+                sprintf
+                    "knowledge-base document quota reached — this scope holds %d of %d permitted documents. Delete an existing document before uploading another."
+                    currentDocuments
+                    maxDocs
+            )
+        | _ ->
+            match policy.MaxBytes with
+            | Some maxBytes when currentBytes + incomingBytes > maxBytes ->
+                Some(
+                    sprintf
+                        "knowledge-base storage quota reached — this scope uses %d of %d permitted bytes and the upload adds %d. Delete an existing document before uploading another."
+                        currentBytes
+                        maxBytes
+                        incomingBytes
+                )
+            | _ -> None
+
+/// Compose-time per-scope age-based retention. `MaxAge = None`
+/// (`KnowledgeRetentionPolicy.retainForever`, what a deployment that
+/// never calls `withKnowledgeRetention` gets) retains everything
+/// forever — pre-512 behaviour, and the reason an uncomposed deployment
+/// registers no sweep job at all (GP 11 / GP 13).
+///
+/// Expiry is deliberately **per source kind**. An uploaded file ageing
+/// out of a corpus is routine; a hand-authored note or a committed
+/// narrative disappearing on a timer is a data-loss surprise, so both
+/// are opt-in on top of `MaxAge` rather than swept by default.
+type KnowledgeRetentionPolicy = {
+    /// Documents whose `UploadedAt` is older than this are purged on the
+    /// next sweep. `None` = retain forever (no sweep is scheduled).
+    MaxAge: TimeSpan option
+    /// Expire `Note` documents too. `false` by default.
+    ExpireNotes: bool
+    /// Expire `FromNarrative` documents too. `false` by default.
+    ExpireNarratives: bool
+    /// Five-field cron expression for the sweep, in the subset
+    /// `IJobScheduler` validates (`*`, integers, comma lists, `*/N`).
+    /// Defaults to 03:00 daily — off the ingestion peak, and `Minute`
+    /// precision so the in-process scheduler accepts it (GP 12 rule 6).
+    SweepSchedule: string
+}
+
+module KnowledgeRetentionPolicy =
+    /// The default: nothing ever expires, uploads-only if a `MaxAge` is
+    /// later set, daily 03:00 sweep cadence.
+    let retainForever: KnowledgeRetentionPolicy = {
+        MaxAge = None
+        ExpireNotes = false
+        ExpireNarratives = false
+        SweepSchedule = "0 3 * * *"
+    }
+
+    /// `true` when the policy can never expire anything — no `MaxAge`.
+    /// The compose helper reads this to decide whether to register the
+    /// sweep job at all.
+    let isInert (policy: KnowledgeRetentionPolicy) : bool = policy.MaxAge.IsNone
+
+    /// `true` when `source`'s kind is in scope for expiry under `policy`.
+    let appliesTo (source: KnowledgeSource) (policy: KnowledgeRetentionPolicy) : bool =
+        match source with
+        | UploadedFile -> true
+        | Note _ -> policy.ExpireNotes
+        | FromNarrative _ -> policy.ExpireNarratives
+
+    /// `true` when `doc` is past `MaxAge` *and* its source kind is in
+    /// scope. Pure — the sweep's whole selection decision, testable
+    /// without storage, a scheduler, or a clock.
+    let isExpired (now: DateTimeOffset) (policy: KnowledgeRetentionPolicy) (doc: KnowledgeDocument) : bool =
+        match policy.MaxAge with
+        | None -> false
+        | Some maxAge -> appliesTo doc.Source policy && now - doc.UploadedAt > maxAge
+
+    /// The expired subset of `docs`, in index order. `retainForever`
+    /// returns `[]` for any input — the GP 11 guarantee stated as code.
+    let selectExpired
+        (now: DateTimeOffset)
+        (policy: KnowledgeRetentionPolicy)
+        (docs: KnowledgeDocument list)
+        : KnowledgeDocument list =
+        docs |> List.filter (isExpired now policy)
+
+/// Per-scope Knowledge Base usage against the composed quota — what the
+/// UI renders as a headroom bar and what the dev endpoint reports.
+/// Wholly *derived* from the scope's document index plus the composed
+/// `KnowledgeQuotaPolicy`; nothing new is persisted for it, so it can
+/// never drift from the corpus it describes.
+type KnowledgeScopeUsage = {
+    /// Documents the scope currently holds, all source kinds.
+    DocumentCount: int
+    /// Sum of `SizeBytes` across those documents.
+    TotalBytes: int64
+    /// The composed caps, echoed so a client can render "12 / 50"
+    /// without a second round-trip. `None` = that lever is unlimited.
+    MaxDocuments: int option
+    MaxBytes: int64 option
+    /// Headroom, floored at zero. `None` exactly when the corresponding
+    /// cap is `None` — an unlimited quota has no "remaining" to render,
+    /// which is a different statement from "zero remaining".
+    DocumentsRemaining: int option
+    BytesRemaining: int64 option
+}
+
+module KnowledgeScopeUsage =
+    /// Project a scope's document index onto its usage against `policy`.
+    let ofDocuments (policy: KnowledgeQuotaPolicy) (docs: KnowledgeDocument list) : KnowledgeScopeUsage =
+        let count = List.length docs
+        let bytes = docs |> List.sumBy _.SizeBytes
+
+        {
+            DocumentCount = count
+            TotalBytes = bytes
+            MaxDocuments = policy.MaxDocuments
+            MaxBytes = policy.MaxBytes
+            DocumentsRemaining = policy.MaxDocuments |> Option.map (fun m -> max 0 (m - count))
+            BytesRemaining = policy.MaxBytes |> Option.map (fun m -> max 0L (m - bytes))
+        }
+
+    /// An empty scope under an unlimited quota — the zero value.
+    let empty: KnowledgeScopeUsage = ofDocuments KnowledgeQuotaPolicy.unlimited []
+
 // ─── Note authoring ──────────────────────────────────────────────
 
 /// Parameters for creating a free-form note.
@@ -502,4 +682,14 @@ type KnowledgeApi = {
     /// attribute here would double-row the trail.
     [<AllowAnonymous>]
     GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
+    /// Phase 512 — the caller's scope usage against the composed
+    /// `KnowledgeQuotaPolicy` (document count / total bytes, the caps,
+    /// and the remaining headroom). Read-only and derived from the
+    /// scope's own document index, so it carries no cross-tenant signal
+    /// (GP 4) and needs no owner/admin gate — a member reading their own
+    /// scope's headroom is the point. A deployment that composed no
+    /// quota gets counts with `None` caps and `None` remaining, which is
+    /// how a UI tells "unlimited" from "full".
+    [<AllowAnonymous>]
+    GetScopeUsage: unit -> Async<KnowledgeScopeUsage>
 }

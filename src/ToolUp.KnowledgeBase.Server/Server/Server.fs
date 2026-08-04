@@ -43,6 +43,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         GetSuggestedQuestions = getSuggestedQuestions deps
         RefreshAIContext = fun () -> refreshAIContext deps
         GetOriginalDocument = getOriginalDocument deps
+        GetScopeUsage = fun () -> getScopeUsage deps
     }
 
 // ─── Public surface re-exports (helpers split into sibling modules) ─
@@ -108,6 +109,43 @@ let withUploadPolicy = KnowledgeBase.ServerUploadPolicy.withUploadPolicy
 /// `Server/UploadPolicy.fs`; re-exported here alongside the other
 /// compose-time hooks.
 let withDocumentDedup = KnowledgeBase.ServerUploadPolicy.withDocumentDedup
+
+/// Phase 512 — compose a per-scope **corpus** quota (`MaxDocuments` /
+/// `MaxBytes`), enforced at the upload boundary before anything is
+/// persisted. Complements `withUploadPolicy`, which caps one upload;
+/// this caps the accumulated corpus. Apps that never call this get
+/// `KnowledgeQuotaPolicy.unlimited` — no tally, no refusal, pre-512
+/// behaviour byte-for-byte. Defined in `Server/UploadPolicy.fs`.
+let withKnowledgeQuota = KnowledgeBase.ServerUploadPolicy.withKnowledgeQuota
+
+/// Phase 512 — mount the `EnableDevEndpoints`-gated
+/// `/dev/knowledge-base/usage` diagnostics endpoint reporting the
+/// caller's scope usage against the composed quota. Defined in
+/// `Server/UploadPolicy.fs`.
+let withKnowledgeUsageEndpoint =
+    KnowledgeBase.ServerUploadPolicy.withKnowledgeUsageEndpoint
+
+/// Phase 512 — the common pairing: `withKnowledgeQuota` +
+/// `withKnowledgeUsageEndpoint`. Defined in `Server/UploadPolicy.fs`.
+let withKnowledgeQuotaAndUsageEndpoint =
+    KnowledgeBase.ServerUploadPolicy.withKnowledgeQuotaAndUsageEndpoint
+
+/// Phase 512 — compose per-scope age-based retention and schedule the
+/// purge sweep on the composed `IJobScheduler` for the given scopes.
+/// `KnowledgeRetentionPolicy.retainForever` (or an empty scope list)
+/// registers no job at all, so an uncomposed deployment purges nothing
+/// and pays nothing. The scope list is explicit for the same reason
+/// `recoverStuckDocumentsAtStartup` takes one — `IBlobStorage` has no
+/// cross-container enumeration. Defined in `Server/UploadPolicy.fs`;
+/// the sweep itself is `Server/RetentionSweep.fs`.
+let withKnowledgeRetention = KnowledgeBase.ServerUploadPolicy.withKnowledgeRetention
+
+/// Phase 512 — sweep ONE scope's expired documents immediately, outside
+/// the scheduler. The operator-callable form of the retention job (and
+/// what the contract tests drive): same fan-out, same audit row, `now`
+/// supplied by the caller so the selection is deterministic. Defined in
+/// `Server/RetentionSweep.fs`.
+let sweepExpiredDocuments = KnowledgeBase.ServerRetentionSweep.sweepScope
 
 /// Wave 1 Gap #2 — explicit operator-callable recovery hook for the KB
 /// ingestion pipeline. The in-process `IngestionQueue` (in

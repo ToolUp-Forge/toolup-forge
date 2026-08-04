@@ -1149,6 +1149,38 @@ type KnowledgeDocumentDeduplicatedPayload = {
     ContentHash: string
 }
 
+/// Phase 512 — one or more `KnowledgeDocument`s were purged from a scope
+/// by the age-based retention sweep. Emitted once per sweep run that
+/// removed anything (a run that expired nothing writes no row — a purge
+/// trail must record deletions, not the absence of them), under the
+/// swept scope, so an operator can answer "what did retention take, and
+/// when" from the trail alone (GP 6). Identifiers + cardinality only; no
+/// document content travels through the audit trail.
+type KnowledgeDocumentsPurgedPayload = {
+    /// Scope whose corpus was swept — the container's scope id (GP 4:
+    /// the sweep only ever reaches one scope per run).
+    ScopeId: string
+    /// Document ids removed by this run, in index order. The list is the
+    /// trail's evidence — a count alone cannot be reconciled against the
+    /// corpus afterwards.
+    DocumentIds: string list
+    /// Number of documents removed (`DocumentIds.Length`, denormalised so
+    /// a sink can aggregate without parsing the list).
+    PurgedCount: int
+    /// Total `SizeBytes` reclaimed across the purged documents.
+    ReclaimedBytes: int64
+    /// Retention age in whole seconds that selected them, so the row
+    /// carries the policy that produced it rather than requiring the
+    /// reader to correlate against a config snapshot.
+    MaxAgeSeconds: int64
+    /// Chunks that survived the index fan-out across the retrieval
+    /// indexes — `0` on a clean purge. Non-zero means RAG may keep
+    /// surfacing purged documents, so the trail carries the same loud
+    /// signal the operator log does (GP 9), exactly as
+    /// `KnowledgeScopeErased` does for a scope reset.
+    OrphanChunkCount: int
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -3463,6 +3495,10 @@ type AuditEvent =
     /// (idempotent upload; ingestion skipped). Recorded under the
     /// caller's scope.
     | KnowledgeDocumentDeduplicated of KnowledgeDocumentDeduplicatedPayload
+    /// Phase 512 — the age-based KB retention sweep purged one or more
+    /// documents from a scope. Recorded under the swept scope; emitted
+    /// only by runs that actually removed something.
+    | KnowledgeDocumentsPurged of KnowledgeDocumentsPurgedPayload
     /// Phase 443 — a WebAuthn passkey credential was enrolled via the
     /// passkey auth companion's registration ceremony. Recorded under
     /// `_platform` scope; source-module `_platform.auth.passkey`.
@@ -3654,6 +3690,7 @@ module AuditEvent =
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
         | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
+        | KnowledgeDocumentsPurged _ -> "KnowledgeDocumentsPurged"
         | PasskeyCredentialRegistered _ -> "PasskeyCredentialRegistered"
         | PasskeyCredentialRemoved _ -> "PasskeyCredentialRemoved"
         | ModelFitStarted _ -> "ModelFitStarted"

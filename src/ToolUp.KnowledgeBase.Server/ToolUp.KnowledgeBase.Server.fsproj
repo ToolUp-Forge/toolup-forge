@@ -48,6 +48,9 @@
         <Compile Include="Server\AIContext.fs" />
         <Compile Include="Server\Inventory.fs" />
         <Compile Include="Server\OriginalSourceResolver.fs" />
+        <!-- Phase 512 — per-scope age-based retention sweep. Before
+             UploadPolicy.fs, which composes its job handler. -->
+        <Compile Include="Server\RetentionSweep.fs" />
         <Compile Include="Server\UploadPolicy.fs" />
         <Compile Include="Server\Api\Deps.fs" />
         <Compile Include="Server\Api\Documents.fs" />
