@@ -47,3 +47,42 @@ type ISecretStore =
     /// that scope. Callers MUST NOT infer "scope is empty"
     /// operationally from this method; it is advisory.
     abstract ListKeys: scopeId: string -> Async<string list>
+
+/// Phase 464 — the optional cache-invalidation seam a **caching**
+/// `ISecretStore` implements.
+///
+/// Deliberately a SEPARATE interface rather than a fifth member on
+/// `ISecretStore`. Two reasons, and the second is the load-bearing one:
+///
+///  * Additive by construction (GP 11). Every shipped store, every
+///    companion store, and every consumer's own implementation keeps
+///    compiling — adding a member to `ISecretStore` would break all of
+///    them at once for a concern most of them do not have.
+///  * It is only meaningful for an implementation that memoises. A
+///    cloud store that round-trips the vault per call, or an env-var
+///    store, has nothing to invalidate; making them all implement a
+///    no-op would erase exactly the distinction a caller needs to
+///    make. A type test for this interface is therefore a truthful
+///    question — "does this store hold a copy that could go stale?" —
+///    and `false` is a real answer, not an unimplemented one.
+///
+/// `ISecretStore.SetSecret` / `DeleteSecret` already invalidate their
+/// own cache on the writing instance; this interface exists for the
+/// case where the write happened SOMEWHERE ELSE and arrived as a
+/// notification (the Phase 464 webhook signing-secret rotation
+/// broadcast is the first caller).
+type ISecretCacheInvalidation =
+    /// Drop any memoised secret material for `scopeId` so the next read
+    /// goes to the durable store.
+    ///
+    /// **Idempotent and order-insensitive** — invalidating a scope that
+    /// holds nothing is a no-op, and two invalidations converge on the
+    /// same state (portability rule 5: no cross-shard ordering promise
+    /// is needed to use this correctly).
+    ///
+    /// Synchronous by design: it is an in-memory eviction, and callers
+    /// are notification handlers that must evict BEFORE returning so no
+    /// concurrent read on the same instance can still hit the stale
+    /// entry. This is the same documented exemption to portability
+    /// rule 2 that `INotificationChannel.Subscribe`'s handler carries.
+    abstract InvalidateScope: scopeId: string -> unit

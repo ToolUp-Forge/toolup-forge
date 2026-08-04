@@ -314,3 +314,87 @@ module WebhookEventTypes =
 
     [<Literal>]
     let SubscriptionAutoDisabled = "WebhookSubscriptionAutoDisabled"
+
+// ─── Phase 464 — cross-instance signing-secret rotation fanout ────
+//
+// `IWebhookRegistry.RotateSecret` moves the signing-secret VALUES in
+// `ISecretStore` and rewrites the subscription's reference bookkeeping.
+// Neither reaches a sibling instance. The dispatcher itself holds no
+// subscription cache — it re-lists the scope per event and re-reads the
+// secret per delivery — so the stale read is one layer down, in a
+// CACHING `ISecretStore`: `FileSecretStore` memoises a scope's whole
+// secret map on first read and evicts only on its OWN write. A rotation
+// performed on instance A therefore leaves instance B signing (and any
+// same-deployment receiver verifying) with the superseded secret for as
+// long as B's process lives — there is no periodic refresh to wait for.
+//
+// Phase 464 closes that by publishing this envelope through
+// `INotificationChannel` on `NotificationKind.PlatformReservedScope`
+// after a successful `RotateSecret`. Every wired instance drops its
+// cached secret material for the affected scope on receipt, so the next
+// resolve reads the rotated value from the durable store.
+//
+// The propagation window is the active channel companion's fanout
+// latency, NOT zero — minute-grain per the `INotificationChannel`
+// precision contract. The in-process default channel reaches only the
+// publishing process, which is exactly right for a single instance and
+// is why the fanout is a harmless no-op there (GP 11 / GP 13).
+//
+// **Portability rule 5 (no cross-shard ordering) is satisfied** — cache
+// invalidation is idempotent and order-insensitive. Two envelopes for
+// the same scope, or envelopes for different scopes arriving in any
+// order, converge on the same state: every instance has dropped its
+// memoised copy and will re-read. No instance needs to observe a total
+// order, so a distributed companion may fan out per-shard with no
+// cross-shard sequencing promise.
+
+/// Phase 464 — the cross-instance webhook signing-secret rotation
+/// envelope. Published on `NotificationKind.PlatformReservedScope` under
+/// `WebhookSecretRotatedNotification.NotificationKey` as a
+/// `CustomNotification` whose payload is this record's JSON.
+///
+/// **Identity-by-value (portability rule 1).** Every field is a string,
+/// a `Guid`, or an instant — no live handles and no secret VALUES, so an
+/// instance can be a separate process, container, grain, or actor
+/// without a signature change, and the envelope stays safe to log.
+type WebhookSecretRotatedEnvelope = {
+    /// Scope owning the rotated subscription. The receiving instance
+    /// drops its cached secret material for exactly this scope.
+    ScopeId: string
+    /// Subscription whose signing secret was rotated.
+    SubscriptionId: Guid
+    /// `ISecretStore` key now holding the current signing secret. A
+    /// reference, never the secret value.
+    CurrentSecretRef: string
+    /// `ISecretStore` key holding the grace-window previous secret, so a
+    /// receiving instance can tell a rotation apart from a first-time
+    /// secret assignment without re-reading the subscription blob.
+    PreviousSecretRef: string
+    /// When the grace window closes and the previous secret stops
+    /// verifying. Carried so an instance can reason about the
+    /// dual-signing window without a store round-trip.
+    GraceExpiresAt: DateTime
+    /// When the rotation was performed on the originating instance.
+    /// Subtracting this from the observation time is the measured
+    /// fanout window the timing contract promises at minute grain.
+    RotatedAt: DateTimeOffset
+    /// Instance the rotation originated on. Load-bearing: an instance
+    /// that receives its OWN publish (which the in-process channel
+    /// always does) must not act on it — the rotating instance already
+    /// invalidated locally, and treating the echo as a sibling signal
+    /// would make a single-instance deployment read as a working fanout.
+    OriginReplicaId: string
+}
+
+/// Phase 464 — wire constants for the cross-instance signing-secret
+/// rotation broadcast. Public so a distributed `INotificationChannel`
+/// companion, or a deployment auditing its own fanout, can recognise the
+/// topic without re-deriving the string.
+module WebhookSecretRotatedNotification =
+    /// `CustomNotification` key the rotation envelope travels under.
+    /// Published on the cross-scope reserved bus
+    /// (`NotificationKind.PlatformReservedScope`), the same convention
+    /// `MembershipChanged` and the Phase 22b key-destruction broadcast
+    /// use.
+    [<Literal>]
+    let NotificationKey = "_platform.webhooks.secret-rotated"

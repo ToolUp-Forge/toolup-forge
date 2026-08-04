@@ -56,7 +56,15 @@ let buildWebhookSubsystem
     match config.Webhooks with
     | NoWebhooks -> None
     | EnabledWebhooks ->
-        let registry = WebhookRegistry.createRegistry resolvedBlobStorage
+        // Phase 464 — the CONCRETE registry, so the post-channel wiring
+        // step below (`wireWebhookRegistryToNotificationChannel`) can
+        // reach `WireToChannel` by type test. The returned tuple still
+        // carries it as `IWebhookRegistry`, so nothing downstream sees a
+        // signature change. The logger carries the unwired-rotation
+        // warning.
+        let registry =
+            WebhookRegistry.createRegistryInstance resolvedBlobStorage resolvedLogger :> IWebhookRegistry
+
         let deliveryLog = WebhookRegistry.createDeliveryLog resolvedBlobStorage
         let httpClient = new System.Net.Http.HttpClient()
 
@@ -101,6 +109,73 @@ let buildWebhookSubsystem
             HookedEventStore.HookedEventStore(effectiveInnerEventStore, dispatcher :> IWebhookDispatcher) :> _
 
         Some(registry, deliveryLog, dispatcher, hookedStore)
+
+/// Stable id for the webhook signing-secret rotation fanout capability
+/// in the degraded-capability registry (Phase 118 family). Referenced by
+/// both the `Register` (failure) and `Clear` (success) paths below.
+[<Literal>]
+let WebhookSecretRotationFanoutCapability = "webhook-secret-rotation-fanout"
+
+/// Phase 464 — wire the webhook registry to the cross-process
+/// notification channel so a signing-secret rotation invalidates sibling
+/// instances' cached secret material instead of leaving them signing with
+/// the superseded value until they restart.
+///
+/// Runs AFTER the `INotificationChannel` is resolved, which is later in
+/// compose than `buildWebhookSubsystem` — hence a separate step rather
+/// than a constructor argument, mirroring
+/// `ComposeEncryption.wirePerScopeResolverToNotificationChannel`. The
+/// registry arrives as `IWebhookRegistry`; the type test recovers the
+/// concrete instance the same way the resolver wiring does, so no
+/// upstream signature changes.
+///
+/// Best-effort: a network glitch on subscribe must not crash compose —
+/// the registry still functions, single-instance. But the failure is not
+/// silent: it logs `Error` and registers a degraded-capability entry
+/// naming the consequence, so an operator alerting on a non-empty
+/// `/health` degraded set sees it. A successful wire clears any stale
+/// entry (idempotent no-op on a clean boot).
+let wireWebhookRegistryToNotificationChannel
+    (webhookSubsystem:
+        (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option)
+    (secretStore: Secrets.ISecretStore)
+    (resolvedNotificationChannel: INotificationChannel)
+    (degradedCapabilities: DegradedCapabilities.DegradedCapabilityRegistry)
+    (logger: ILogger)
+    : unit =
+    match webhookSubsystem with
+    | Some(:? WebhookRegistry.BlobWebhookRegistry as blobRegistry, _, _, _) ->
+        try
+            blobRegistry.WireToChannel(resolvedNotificationChannel, secretStore)
+            |> Async.RunSynchronously
+
+            degradedCapabilities.Clear WebhookSecretRotationFanoutCapability
+        with ex ->
+            logger.Error(
+                "[ComposeJobs] event=webhook_secret_rotation_subscribe_failed "
+                + "impact=rotated-signing-secret-not-picked-up-by-other-instances-until-restart",
+                Some ex
+            )
+
+            degradedCapabilities.Register {
+                Capability = WebhookSecretRotationFanoutCapability
+                DegradedSince = System.DateTimeOffset.UtcNow
+                Reason =
+                    sprintf
+                        "The webhook registry failed to subscribe to the notification channel at compose: %s"
+                        ex.Message
+                Impact =
+                    "A webhook signing secret rotated on any instance is not picked up by the OTHER instances "
+                    + "until their processes restart — a caching ISecretStore has no TTL, so the stale read never "
+                    + "expires on its own. Those instances keep signing deliveries with the superseded secret, and "
+                    + "a receiver updated to the new secret rejects them as INAUTHENTIC rather than as stale. "
+                    + "Single-instance deployments are unaffected."
+                Remediation =
+                    "Check the distributed notification channel (e.g. Redis) connectivity/auth, then restart this "
+                    + "instance to re-subscribe. Verify with a secret rotation on one instance and a delivery from "
+                    + "another. Single-instance deployments can ignore this entry."
+            }
+    | _ -> ()
 
 /// Apply the post-webhook decorator chain to land on the final
 /// `IEventStore` registered in DI. Decorator order:

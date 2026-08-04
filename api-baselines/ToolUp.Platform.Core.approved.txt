@@ -7263,6 +7263,8 @@ ToolUp.Platform.SecretRequirementModule.isRequired(ToolUp.Platform.SecretRequire
 ToolUp.Platform.SecretRequirementModule.optional(System.String, System.String, ToolUp.Platform.SecretClass, System.String) : ToolUp.Platform.SecretRequirement
 ToolUp.Platform.SecretRequirementModule.required(System.String, System.String, ToolUp.Platform.SecretClass, System.String) : ToolUp.Platform.SecretRequirement
 ToolUp.Platform.Secrets (class)
+ToolUp.Platform.Secrets+ISecretCacheInvalidation (interface)
+ToolUp.Platform.Secrets+ISecretCacheInvalidation.InvalidateScope(System.String) : System.Void
 ToolUp.Platform.Secrets+ISecretStore (interface)
 ToolUp.Platform.Secrets+ISecretStore.DeleteSecret(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Secrets+ISecretStore.GetSecret(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
@@ -8883,6 +8885,17 @@ ToolUp.Platform.WebhookSecretRef.Scope : System.String (literal)
 ToolUp.Platform.WebhookSecretRef.current(System.Guid) : System.String
 ToolUp.Platform.WebhookSecretRef.keyOf(System.String) : System.String
 ToolUp.Platform.WebhookSecretRef.previous(System.Guid) : System.String
+ToolUp.Platform.WebhookSecretRotatedEnvelope (class)
+ToolUp.Platform.WebhookSecretRotatedEnvelope..ctor(System.String, System.Guid, System.String, System.String, System.DateTime, System.DateTimeOffset, System.String)
+ToolUp.Platform.WebhookSecretRotatedEnvelope.CurrentSecretRef : System.String { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.GraceExpiresAt : System.DateTime { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.OriginReplicaId : System.String { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.PreviousSecretRef : System.String { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.RotatedAt : System.DateTimeOffset { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.ScopeId : System.String { get }
+ToolUp.Platform.WebhookSecretRotatedEnvelope.SubscriptionId : System.Guid { get }
+ToolUp.Platform.WebhookSecretRotatedNotification (class)
+ToolUp.Platform.WebhookSecretRotatedNotification.NotificationKey : System.String (literal)
 ToolUp.Platform.WebhookStatus (class)
 ToolUp.Platform.WebhookStatus.Active : ToolUp.Platform.WebhookStatus { get }
 ToolUp.Platform.WebhookStatus.Disabled : ToolUp.Platform.WebhookStatus { get }

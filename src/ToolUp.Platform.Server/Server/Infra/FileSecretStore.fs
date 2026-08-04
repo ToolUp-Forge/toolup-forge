@@ -319,3 +319,19 @@ type FileSecretStore(?baseDir: string, ?path: string) =
             let secrets = loadForScope scopeId
             return secrets |> Map.toList |> List.map fst
         }
+
+    // Phase 464 — this store memoises a scope's whole secret map on
+    // first read and, until now, evicted it only on its OWN
+    // `SetSecret` / `DeleteSecret`. That is correct for one process and
+    // wrong for several: a secret rotated on instance A stays cached on
+    // instance B for the life of B's process — there is no TTL and no
+    // periodic refresh, so the stale read never expires on its own.
+    // Implementing `ISecretCacheInvalidation` lets a cross-instance
+    // rotation broadcast reach this cache (first caller: the Phase 464
+    // webhook signing-secret rotation fanout).
+    interface ISecretCacheInvalidation with
+        member _.InvalidateScope(scopeId) =
+            // Same monitor `SetSecret` / `DeleteSecret` take, so an
+            // eviction can neither interleave with a read-modify-write
+            // nor be lost to a concurrent load's double-check.
+            lock cacheLock (fun () -> cache <- cache |> Map.remove scopeId)

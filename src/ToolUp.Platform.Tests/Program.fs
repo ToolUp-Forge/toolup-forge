@@ -390,6 +390,9 @@ let allTests =
         PerScopeKeyResolverWiringTests.unwiredDestroyTests
         PerScopeKeyResolverWiringTests.wiringValidatorTests
         PerScopeKeyResolverWiringTests.wiringDiagnosticsTests
+        // Phase 464 — the same fanout shape for webhook signing-secret
+        // rotation: two instances over one channel, unwired control.
+        WebhookSecretRotationBroadcastTests.tests
         TenantLifecycleAggregatorTests.tests
         LifecycleSummaryStoreTests.tests
         OffboardConfirmationTests.tests

@@ -593,6 +593,19 @@ let compose
         degradedCapabilities
         resolvedLogger
 
+    // Phase 464 — wire the webhook registry to the same channel so a
+    // signing-secret rotation invalidates sibling instances' cached
+    // secret material within the notification round-trip, instead of
+    // leaving them signing with the superseded secret until restart.
+    // No-op when webhooks are off (extracted to
+    // `ComposeJobs.wireWebhookRegistryToNotificationChannel`).
+    wireWebhookRegistryToNotificationChannel
+        webhookSubsystem
+        secretStore
+        resolvedNotificationChannel
+        degradedCapabilities
+        resolvedLogger
+
     // Phase 19 — entity-store registration (extracted to
     // `ComposeStores.registerEntityStore`). Phase 26 — when
     // `DeployPlane = SingleNodeDeployPlane`, the Tenant entity

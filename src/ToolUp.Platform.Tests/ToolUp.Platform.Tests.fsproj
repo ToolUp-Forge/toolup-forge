@@ -261,6 +261,10 @@
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <!-- Phase 235 — outbound webhook signing-secret rotation. -->
         <Compile Include="InProcess\WebhookSecretRotationTests.fs" />
+        <!-- Phase 464 — that rotation across INSTANCES: the broadcast that
+             invalidates a sibling's cached secret, with the unwired case
+             asserted as a control. -->
+        <Compile Include="InProcess\WebhookSecretRotationBroadcastTests.fs" />
         <Compile Include="InProcess\WebhookSecretMigrationTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />

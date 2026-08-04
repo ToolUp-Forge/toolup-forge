@@ -158,6 +158,8 @@ URL validation (`WebhookUrlValidator`) rejects:
 
 This prevents the most common SSRF-via-webhook pattern.
 
+Signing secrets live in `ISecretStore` and are resolved per delivery, so a rotation needs no redeploy. Across **several instances** it is eventually consistent rather than instant: a caching secret store would otherwise keep the superseded value on every instance that did not perform the rotation, so a successful rotation publishes a reference-only invalidation notification on the reserved platform topic and each instance drops its cached secret material for that scope. Convergence is bounded by the configured `INotificationChannel` companion's fanout latency — which means more than one instance needs a **distributed** channel, since the in-process default never leaves the publishing process. Full contract, including the unwired-rotation accounting: technical guide chapter 10, "Signing-secret rotation across instances".
+
 ## Reading the audit trail
 
 Admin-UI access:

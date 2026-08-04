@@ -16,6 +16,32 @@ open System.Text
 ///
 /// `verify` consumes `DateTimeOffset.UtcNow` internally; tests use
 /// `verifyWith` to inject a fixed clock.
+///
+/// ## Secret rotation (Phase 464)
+///
+/// Two shapes, and the choice decides whether a rotation needs a restart:
+///
+///  * **`verify` / `verifyWith` take the secret by value.** A caller that
+///    resolves the secret once at compose and closes over it — which is
+///    what `StripeConfig.WebhookSecret` is — keeps verifying against that
+///    value for the life of the process. **Rotating the signing secret in
+///    the Stripe dashboard therefore requires a restart**, and until it
+///    happens every genuine inbound event signed with the new secret is
+///    rejected as `SignatureMismatch`: an authenticity failure, not a
+///    configuration warning, so the alert names the wrong cause.
+///  * **`verifyWithFetcher` / `verifyWithFetcherAt` resolve per call.**
+///    Pass a thunk over `ISecretStore.GetSecret` and the next request
+///    after the store is updated verifies against the rotated secret. No
+///    restart, no redeploy. This is the shape the platform's own
+///    credential-rotation rule expects of a secret-bearing component.
+///
+/// This module holds **no cache** in either shape — deliberately. A cache
+/// here would reintroduce the staleness the fetcher exists to remove, in
+/// a place no caller could reach to invalidate; a caller fronting a remote
+/// vault composes its own short-TTL cache behind the thunk, where it owns
+/// the invalidation. (The platform-side counterpart is the webhook
+/// registry's cross-instance rotation broadcast, which invalidates a
+/// caching `ISecretStore` on every instance rather than caching here.)
 module WebhookSigner =
     /// Stripe's freshness window — 5 minutes.
     [<Literal>]
@@ -135,5 +161,69 @@ module WebhookSigner =
 
     /// Verify a Stripe webhook signature using
     /// `DateTimeOffset.UtcNow` as the freshness reference.
+    ///
+    /// Takes the secret **by value**, so the value a caller passes is the
+    /// value used. A composition root that reads the secret once and
+    /// closes over it — which is what `StripeConfig.WebhookSecret` is —
+    /// therefore needs a process restart to pick up a rotated secret.
+    /// That is the correct shape when the secret genuinely is fixed for
+    /// the process lifetime; `verifyWithFetcher` is the shape for a
+    /// secret held in `ISecretStore` and rotated without a redeploy.
     let verify (secret: string) (body: string) (header: string) : Result<VerifiedEvent, WebhookError> =
         verifyWith DateTimeOffset.UtcNow secret body header
+
+    /// Phase 464 — verify with the signing secret resolved **per call**
+    /// through `fetchSecret`, rather than captured by value at compose.
+    ///
+    /// ## Why this overload exists
+    ///
+    /// `verify` bakes the secret into whatever closure calls it. A
+    /// deployment that rotates its Stripe webhook signing secret — in the
+    /// Stripe dashboard, then in its own secret store — keeps verifying
+    /// against the superseded value until the process restarts, and every
+    /// inbound event signed with the NEW secret fails as
+    /// `SignatureMismatch`. That surfaces as forged-webhook alerts, not as
+    /// a stale-configuration warning, so the cause is not visible from the
+    /// symptom. Resolving per call closes the window: the next request
+    /// after the store is updated verifies against the new secret.
+    ///
+    /// `fetchSecret` is typically a thunk over `ISecretStore.GetSecret`.
+    /// It runs on the request path, so a caller whose store is a remote
+    /// vault should compose its own short-TTL cache behind the thunk —
+    /// this module deliberately holds no cache of its own, because a cache
+    /// here would reintroduce exactly the staleness the overload exists to
+    /// remove, in a place no caller can reach to invalidate.
+    ///
+    /// A fetcher that returns a blank or weak secret is rejected as
+    /// `SecretMissing` by the same fail-closed strength gate `verify`
+    /// applies — a store that has lost the key must never degrade into
+    /// verifying with an empty HMAC key, which is publicly computable. A
+    /// fetcher that THROWS is not caught here: an unavailable secret store
+    /// is the caller's failure to classify (a 503 is usually right, and
+    /// swallowing it into `SecretMissing` would report a transport outage
+    /// as a signature problem).
+    ///
+    /// Zero new dependencies — `Async` is FSharp.Core, so
+    /// `ToolUp.Stripe.Webhook` stays pure F# with no ASP.NET Core
+    /// reference.
+    let verifyWithFetcherAt
+        (now: DateTimeOffset)
+        (fetchSecret: unit -> Async<string>)
+        (body: string)
+        (header: string)
+        : Async<Result<VerifiedEvent, WebhookError>> =
+        async {
+            let! secret = fetchSecret ()
+            return verifyWith now secret body header
+        }
+
+    /// Phase 464 — `verifyWithFetcherAt` using `DateTimeOffset.UtcNow` as
+    /// the freshness reference. The per-call-fetch counterpart to
+    /// `verify`; see `verifyWithFetcherAt` for why it exists and what the
+    /// fetcher contract is.
+    let verifyWithFetcher
+        (fetchSecret: unit -> Async<string>)
+        (body: string)
+        (header: string)
+        : Async<Result<VerifiedEvent, WebhookError>> =
+        verifyWithFetcherAt DateTimeOffset.UtcNow fetchSecret body header

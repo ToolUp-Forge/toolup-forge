@@ -801,6 +801,10 @@ section eliminates structurally.
 > `src/ToolUp.Platform.Tests/Contracts/ISecretStoreContract.fs` ·
 > `src/Secrets/AwsSecretsManager/` · `src/Secrets/AzureKeyVault/` ·
 > `src/Secrets/GcpSecretManager/` · `src/Secrets/HashiCorpVault/` ·
+> `src/ToolUp.Stripe.Webhook/WebhookSigner.fs` (`verifyWithFetcher` — the
+> per-call-resolution seam for the Stripe webhook signing secret; the by-value
+> `verify` is retained for callers whose secret genuinely is fixed for the
+> process lifetime, and its header states that those need a restart) ·
 > `docs/operations/credential-rotation.md` (the per-call provider seam, the
 > change-detection cache shape, and the checklist for a new secret-bearing
 > companion)
@@ -819,15 +823,42 @@ section eliminates structurally.
 > `docs/migrations/138-oauth-credential-at-rest.md` (Phase 138)
 
 > **EN-7 — Webhook signing secrets are held in the secret store, not in the
-> subscription record.**
+> subscription record, and a rotation propagates across instances without a
+> restart.**
 > *Enablement:* Always on for newly-created subscriptions; backward compatible
-> on read.
+> on read. The cross-instance rotation broadcast is on once the registry is
+> wired to a notification channel, which `compose` does automatically.
 > Earlier versions persisted the signing secret in cleartext alongside the
 > subscription. It now lives in `ISecretStore`, i.e. encrypted at rest wherever
 > the composed store encrypts. A validator checks the webhook secret and URL
 > configuration at startup.
+> Rotation is resolved per delivery rather than cached by the dispatcher, but a
+> **caching** secret store (the file-backed store memoises per scope with no
+> expiry) would otherwise keep a rotated secret stale on every instance that did
+> not perform the rotation — for the life of its process. A successful
+> `RotateSecret` therefore publishes a reference-only invalidation envelope on
+> the reserved platform notification topic, and every other instance drops its
+> cached secret material for that scope. Convergence is bounded by the
+> configured channel's fanout latency (minute-grain per that interface's
+> precision contract), not unbounded. On more than one instance the broadcast
+> needs a distributed channel companion to leave the publishing process; a
+> rotation performed with no channel wired is counted and the first is logged at
+> security class, because the symptom otherwise presents as a receiver rejecting
+> genuine deliveries as forged rather than as stale configuration.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/WebhookSecretValidator.fs` ·
 > `src/ToolUp.Platform.Server/Server/WebhookUrlValidator.fs` ·
+> `src/ToolUp.Platform.Server/Server/WebhookRegistry.fs` (the rotation
+> broadcast, the unwired-rotation accounting, and the eventual-consistency
+> contract stated in the type's header) ·
+> `src/ToolUp.Platform.Core/Shared/WebhookTypes.fs`
+> (`WebhookSecretRotatedEnvelope` + the reserved notification key) ·
+> `src/ToolUp.Platform.Core/Shared/Interfaces/ISecretStore.fs`
+> (`ISecretCacheInvalidation`, the opt-in seam a caching store implements) ·
+> `src/ToolUp.Platform.Server/Server/Compose/ComposeJobs.fs`
+> (`wireWebhookRegistryToNotificationChannel`, incl. the degraded-capability
+> entry on a subscribe failure) ·
+> `src/ToolUp.Platform.Tests/InProcess/WebhookSecretRotationBroadcastTests.fs`
+> (two instances over one channel, with the unwired case asserted as a control) ·
 > `docs/migrations/6d-A-webhook-secret-at-rest.md` (Phase 6d.A)
 
 > **EN-8 — Local on-disk secret material has its file permissions validated, and
