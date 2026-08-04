@@ -1623,6 +1623,13 @@
              validator's four arms and the GP 13 keystone asserted on the
              service collection. -->
         <Compile Include="InProcess\DataObjectOrphanSweepTests.fs" />
+        <!-- Phase 515 — upload-boundary content scanning. Structural arm
+             (always on) covers the seam, the KB upload-path ordering, the
+             audit row on every verdict, the GP 11/13 no-scanner path and
+             the fail-open/closed split; the ClamAV reply grammar + frame
+             encoding are pure and pinned alongside. Live arm is gated on
+             TOOLUP_CLAMAV_HOST — no daemon, no Docker in VerifyAll. -->
+        <Compile Include="InProcess\ContentScannerTests.fs" />
         <!-- Phase 9m.B — RAG-specific config validators (extension).
              Each of the four gap-audit validators is pinned by a red
              case asserting on the REMEDY its message names, a green case
@@ -1747,6 +1754,10 @@
         <!-- Phase 501 — the sparse-index analyzer companions. -->
         <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
         <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />
+        <!-- Phase 515 — the ClamAV content-scanning companion, for its
+             pure reply grammar / frame encoding and the env-gated live
+             arm. Zero third-party dependencies. -->
+        <ProjectReference Include="..\ContentScanners\ClamAv\ToolUp.ContentScanners.ClamAv.fsproj" />
         <!-- Phase 46.B — Sample client-resident-tool reference companion.
              Tests project consumes Core + Server tiers; Client tier is
              Fable and never reached by the .NET runner. -->

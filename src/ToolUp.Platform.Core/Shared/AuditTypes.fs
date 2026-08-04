@@ -1181,6 +1181,52 @@ type KnowledgeDocumentsPurgedPayload = {
     OrphanChunkCount: int
 }
 
+/// Phase 515 — an upload was inspected by the composed `IContentScanner`
+/// at the upload boundary. Emitted on **every** verdict, not only a
+/// refusal (GP 6): "this file was scanned and came back clean at 14:02"
+/// is precisely the fact an incident reconstruction needs when the same
+/// file is implicated a week later, and a trail that records only
+/// rejections cannot distinguish a scanner that passed the payload from
+/// one that was never consulted. A deployment that composed no scanner
+/// emits nothing at all (GP 13) — there is no row for the no-op default.
+///
+/// Identifiers, the verdict label and the scanner's own reason string
+/// only. The payload itself never travels through the audit trail; the
+/// digest is the correlation handle, exactly as in
+/// `KnowledgeDocumentDeduplicated`.
+type ContentScannedPayload = {
+    /// Subject whose upload was scanned.
+    UserId: string
+    /// Scope the upload was made under — the caller's resolved scope
+    /// (GP 4: it comes from the resolver, never from the caller).
+    ScopeId: string
+    /// `IContentScanner.Name` of the scanner that produced the verdict,
+    /// so a trail spanning a scanner swap stays attributable.
+    ScannerName: string
+    /// Sanitised file name of the upload, post `Path.GetFileName`.
+    FileName: string
+    /// Lowercase SHA-256 hex of the scanned bytes — a correlation
+    /// identifier, not content. Always present: the digest is computed
+    /// for the audit row even where the upload path would not otherwise
+    /// hash (e.g. `withDocumentDedup false`), because a scan verdict
+    /// with no handle on WHAT was scanned is not investigable.
+    ContentHash: string
+    /// Size in bytes of the scanned payload.
+    SizeBytes: int64
+    /// `ScanVerdict.label` — `"clean"` / `"rejected"` / `"unavailable"`.
+    Verdict: string
+    /// The scanner's reason for a non-clean verdict; `None` when clean.
+    Reason: string option
+    /// `true` when the platform refused the upload on the strength of
+    /// this verdict. Distinct from `Verdict` because the two come apart
+    /// exactly where it matters: an `"unavailable"` verdict under
+    /// `FailOpenOnScanError` is recorded and ADMITTED, and an operator
+    /// auditing a fail-open deployment needs to find those rows without
+    /// re-deriving the policy that was in force at the time.
+    Refused: bool
+    OccurredAt: DateTimeOffset
+}
+
 // ─── Data-object orphan-blob sweep payloads (Phase 7c) ────────────────
 
 /// Phase 7c — one orphaned content blob was reclaimed from a scope's
@@ -3629,6 +3675,11 @@ type AuditEvent =
     /// documents from a scope. Recorded under the swept scope; emitted
     /// only by runs that actually removed something.
     | KnowledgeDocumentsPurged of KnowledgeDocumentsPurgedPayload
+    /// Phase 515 — the composed `IContentScanner` returned a verdict for
+    /// an upload at the upload boundary. Emitted for every verdict
+    /// (clean included), under the uploader's scope; absent entirely on a
+    /// deployment that composed no scanner.
+    | ContentScanned of ContentScannedPayload
     /// Phase 7c — the data-object orphan sweep reclaimed one unreferenced
     /// content blob from a scope's dedup pool. One row per blob, under the
     /// swept scope.
@@ -3835,6 +3886,7 @@ module AuditEvent =
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
         | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
         | KnowledgeDocumentsPurged _ -> "KnowledgeDocumentsPurged"
+        | ContentScanned _ -> "ContentScanned"
         | OrphanedContentBlobReclaimed _ -> "OrphanedContentBlobReclaimed"
         | OrphanSweepCompleted _ -> "OrphanSweepCompleted"
         | PasskeyCredentialRegistered _ -> "PasskeyCredentialRegistered"

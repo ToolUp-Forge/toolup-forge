@@ -637,7 +637,75 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
             return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
     }
 
-    match rejectionReason with
+    // Phase 515 — run the composed content scanner and audit its verdict.
+    //
+    // Placement is load-bearing and is the whole point of the phase:
+    //   * AFTER the pure `rejectionReason` checks — there is nothing to
+    //     learn from streaming an oversized or disallowed-extension
+    //     payload to a scanner when the upload is already refused, and
+    //     the scan is the one expensive step on this path;
+    //   * BEFORE dedup, the corpus quota, versioning and persistence —
+    //     so a rejected payload never reaches the blob container and
+    //     never consumes a byte of the scope's quota. Scanning before
+    //     dedup in particular is deliberate: a byte-identical re-upload
+    //     must not be admitted on the strength of a scan performed when
+    //     the signature database was older.
+    //
+    // Returns `None` immediately when no scanner is composed (GP 13 — no
+    // digest computed, no audit row, no branch taken).
+    let contentScanRefusal () : Async<string option> = async {
+        match deps.ContentScanner with
+        | None -> return None
+        | Some scanner ->
+            let! verdict, refusal = ContentScan.evaluate scanner deps.ScanPolicy bytes safeName
+
+            match verdict with
+            | ScanClean -> ()
+            | _ ->
+                deps.Logger.Warn(
+                    sprintf
+                        "[KnowledgeBase] Content scan (%s) returned '%s' for '%s': %s"
+                        scanner.Name
+                        (ScanVerdict.label verdict)
+                        safeName
+                        (ScanVerdict.reason verdict |> Option.defaultValue "no reason given")
+                )
+
+            match deps.AuditLog with
+            | Some audit ->
+                // Best-effort by contract (`IAuditLog.Record` swallows its
+                // own failures), awaited on the request path (GP 7) — an
+                // audit gap never fails the upload. Emitted for EVERY
+                // verdict, clean included: a trail that records only
+                // rejections cannot distinguish a payload the scanner
+                // passed from one it was never shown.
+                do!
+                    audit.Record(
+                        deps.Scope.ScopeId,
+                        ContentScanned {
+                            UserId = deps.UserId
+                            ScopeId = deps.Scope.ScopeId
+                            ScannerName = scanner.Name
+                            FileName = safeName
+                            ContentHash = contentHashOf bytes
+                            SizeBytes = int64 bytes.Length
+                            Verdict = ScanVerdict.label verdict
+                            Reason = ScanVerdict.reason verdict
+                            Refused = Option.isSome refusal
+                            OccurredAt = DateTimeOffset.UtcNow
+                        }
+                    )
+            | None -> ()
+
+            return refusal
+    }
+
+    let! scanRejection =
+        match rejectionReason with
+        | Some _ -> async { return None }
+        | None -> contentScanRefusal ()
+
+    match Option.orElse scanRejection rejectionReason with
     | Some reason -> return refuse reason
     | None ->
 

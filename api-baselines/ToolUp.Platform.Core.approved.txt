@@ -565,6 +565,8 @@ ToolUp.Platform.AlertSource+Metric.tags : Microsoft.FSharp.Collections.FSharpMap
 ToolUp.Platform.AlertSource+Tags (class)
 ToolUp.Platform.AlertSource+Tags.HealthProbe : System.Int32 (literal)
 ToolUp.Platform.AlertSource+Tags.Metric : System.Int32 (literal)
+ToolUp.Platform.AllowAllContentScanner (class)
+ToolUp.Platform.AllowAllContentScanner..ctor()
 ToolUp.Platform.AllowAnonymousAttribute (class)
 ToolUp.Platform.AllowAnonymousAttribute..ctor()
 ToolUp.Platform.AnalysisRunPayload (class)
@@ -700,6 +702,7 @@ ToolUp.Platform.AuditEvent.IsClassifiedFieldRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldWritten : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConfigDrift : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConsentRecorded : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContentScanned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationErased : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationExported : System.Boolean { get }
@@ -871,6 +874,8 @@ ToolUp.Platform.AuditEvent+ConfigDrift (class)
 ToolUp.Platform.AuditEvent+ConfigDrift.Item : ToolUp.Platform.ConfigDriftPayload { get }
 ToolUp.Platform.AuditEvent+ConsentRecorded (class)
 ToolUp.Platform.AuditEvent+ConsentRecorded.Item : ToolUp.Platform.ConsentEvent { get }
+ToolUp.Platform.AuditEvent+ContentScanned (class)
+ToolUp.Platform.AuditEvent+ContentScanned.Item : ToolUp.Platform.ContentScannedPayload { get }
 ToolUp.Platform.AuditEvent+ConversationCompleted (class)
 ToolUp.Platform.AuditEvent+ConversationCompleted.Item : ToolUp.Platform.ConversationCompletedPayload { get }
 ToolUp.Platform.AuditEvent+ConversationErased (class)
@@ -1093,6 +1098,7 @@ ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldWritten : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConfigDrift : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConsentRecorded : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContentScanned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationErased : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationExported : System.Int32 (literal)
@@ -2197,6 +2203,27 @@ ToolUp.Platform.ContentRoot.Tag : System.Int32 { get }
 ToolUp.Platform.ContentRoot.absolutePath : System.String { get }
 ToolUp.Platform.ContentRootModule (class)
 ToolUp.Platform.ContentRootModule.value(ToolUp.Platform.ContentRoot) : System.String
+ToolUp.Platform.ContentScan (class)
+ToolUp.Platform.ContentScan.evaluate(ToolUp.Platform.IContentScanner, ToolUp.Platform.ContentScanPolicy, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ToolUp.Platform.ScanVerdict, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]
+ToolUp.Platform.ContentScanPolicy (class)
+ToolUp.Platform.ContentScanPolicy..ctor(ToolUp.Platform.ScanErrorPolicy)
+ToolUp.Platform.ContentScanPolicy.OnScanError : ToolUp.Platform.ScanErrorPolicy { get }
+ToolUp.Platform.ContentScanPolicyModule (class)
+ToolUp.Platform.ContentScanPolicyModule.defaults : ToolUp.Platform.ContentScanPolicy { get }
+ToolUp.Platform.ContentScanPolicyModule.failClosed : ToolUp.Platform.ContentScanPolicy { get }
+ToolUp.Platform.ContentScanPolicyModule.failOpen : ToolUp.Platform.ContentScanPolicy { get }
+ToolUp.Platform.ContentScannedPayload (class)
+ToolUp.Platform.ContentScannedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.DateTimeOffset)
+ToolUp.Platform.ContentScannedPayload.ContentHash : System.String { get }
+ToolUp.Platform.ContentScannedPayload.FileName : System.String { get }
+ToolUp.Platform.ContentScannedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.ContentScannedPayload.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ContentScannedPayload.Refused : System.Boolean { get }
+ToolUp.Platform.ContentScannedPayload.ScannerName : System.String { get }
+ToolUp.Platform.ContentScannedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContentScannedPayload.SizeBytes : System.Int64 { get }
+ToolUp.Platform.ContentScannedPayload.UserId : System.String { get }
+ToolUp.Platform.ContentScannedPayload.Verdict : System.String { get }
 ToolUp.Platform.Conversation (class)
 ToolUp.Platform.Conversation..ctor(System.String, System.Int32, System.DateTime, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.Conversation.ConversationId : System.String { get }
@@ -4374,6 +4401,9 @@ ToolUp.Platform.IConfigApi.GetAllModuleConfigs : Microsoft.FSharp.Core.FSharpFun
 ToolUp.Platform.IConfigApi.GetModuleConfig : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleConfigView, System.String]]] { get }
 ToolUp.Platform.IConfigApi.ListModules : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]]] { get }
 ToolUp.Platform.IConfigApi.SaveModuleConfig : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IContentScanner (interface)
+ToolUp.Platform.IContentScanner.Name : System.String { get }
+ToolUp.Platform.IContentScanner.Scan(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ScanVerdict]
 ToolUp.Platform.IDataIngestionApi (class)
 ToolUp.Platform.IDataIngestionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceConfig, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IngestionRun]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CredentialStatus]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TokenStatus]]])
 ToolUp.Platform.IDataIngestionApi.BeginOAuth : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]] { get }
@@ -7263,6 +7293,32 @@ ToolUp.Platform.SanitizedContent (class)
 ToolUp.Platform.SanitizedContent..ctor(System.String, System.Boolean)
 ToolUp.Platform.SanitizedContent.Html : System.String { get }
 ToolUp.Platform.SanitizedContent.Modified : System.Boolean { get }
+ToolUp.Platform.ScanErrorPolicy (class)
+ToolUp.Platform.ScanErrorPolicy.FailClosedOnScanError : ToolUp.Platform.ScanErrorPolicy { get }
+ToolUp.Platform.ScanErrorPolicy.FailOpenOnScanError : ToolUp.Platform.ScanErrorPolicy { get }
+ToolUp.Platform.ScanErrorPolicy.IsFailClosedOnScanError : System.Boolean { get }
+ToolUp.Platform.ScanErrorPolicy.IsFailOpenOnScanError : System.Boolean { get }
+ToolUp.Platform.ScanErrorPolicy.Tag : System.Int32 { get }
+ToolUp.Platform.ScanErrorPolicy+Tags (class)
+ToolUp.Platform.ScanErrorPolicy+Tags.FailClosedOnScanError : System.Int32 (literal)
+ToolUp.Platform.ScanErrorPolicy+Tags.FailOpenOnScanError : System.Int32 (literal)
+ToolUp.Platform.ScanVerdict (class)
+ToolUp.Platform.ScanVerdict.IsScanClean : System.Boolean { get }
+ToolUp.Platform.ScanVerdict.IsScanRejected : System.Boolean { get }
+ToolUp.Platform.ScanVerdict.IsScanUnavailable : System.Boolean { get }
+ToolUp.Platform.ScanVerdict.ScanClean : ToolUp.Platform.ScanVerdict { get }
+ToolUp.Platform.ScanVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.ScanVerdict+ScanRejected (class)
+ToolUp.Platform.ScanVerdict+ScanRejected.reason : System.String { get }
+ToolUp.Platform.ScanVerdict+ScanUnavailable (class)
+ToolUp.Platform.ScanVerdict+ScanUnavailable.reason : System.String { get }
+ToolUp.Platform.ScanVerdict+Tags (class)
+ToolUp.Platform.ScanVerdict+Tags.ScanClean : System.Int32 (literal)
+ToolUp.Platform.ScanVerdict+Tags.ScanRejected : System.Int32 (literal)
+ToolUp.Platform.ScanVerdict+Tags.ScanUnavailable : System.Int32 (literal)
+ToolUp.Platform.ScanVerdictModule (class)
+ToolUp.Platform.ScanVerdictModule.label(ToolUp.Platform.ScanVerdict) : System.String
+ToolUp.Platform.ScanVerdictModule.reason(ToolUp.Platform.ScanVerdict) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ScheduleError (class)
 ToolUp.Platform.ScheduleError.IsHandlerNotRegistered : System.Boolean { get }
 ToolUp.Platform.ScheduleError.IsInvalidCron : System.Boolean { get }

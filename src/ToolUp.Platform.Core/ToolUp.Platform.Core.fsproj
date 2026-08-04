@@ -412,6 +412,12 @@
         <Compile Include="Shared\PseudoLocale.fs" />
         <Compile Include="Shared\I18nCoverage.fs" />
         <Compile Include="Shared\Api.fs" />
+        <!-- Phase 515 — upload-boundary content-scanning seam. FSharp.Core
+             only (byte[] / string / Async), so it sits anywhere in the
+             order; placed here rather than beside the other Interfaces\
+             entries to keep the insertion off the contended mid-file
+             region. Ships under fable/ with the rest of Core. -->
+        <Compile Include="Shared\Interfaces\IContentScanner.fs" />
         <!-- 0.4.4 — MsgPack binary format folded in from
              ToolUp.Remoting.MsgPack. Used by Platform.Server's remoting
              dispatcher (Server/Remoting/Proxy.fs) and Platform.Client's

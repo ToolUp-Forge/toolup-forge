@@ -94,6 +94,9 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     VersioningPolicy = KnowledgeVersioningPolicy.disabled
     QuotaPolicy = quota
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
+    // Phase 515 — no scanner composed: the pre-515 upload path.
+    ContentScanner = None
+    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
 }
 

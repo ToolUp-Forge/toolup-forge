@@ -539,6 +539,9 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     // retain-forever defaults keep them byte-identical.
     QuotaPolicy = KnowledgeQuotaPolicy.unlimited
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
+    // Phase 515 — no scanner composed: the pre-515 upload path.
+    ContentScanner = None
+    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = gate
 }
 

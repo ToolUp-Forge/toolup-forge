@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ContentScanners.ClamAv</PackageId>
+    <AssemblyName>ToolUp.ContentScanners.ClamAv</AssemblyName>
+    <Description>ClamAV IContentScanner for ToolUp — scans uploaded bytes at the upload boundary against a clamd endpoint over its INSTREAM protocol, with the verdict landing in the platform audit trail. Zero third-party dependencies (BCL sockets only). Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;security;antivirus;malware;clamav;upload;scanner;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 515 — upload content-scanning companion. GP 1 — the clamd
+       protocol is isolated to this companion and never reaches
+       ToolUp.Platform.*; there is no vendor SDK at all, because the
+       INSTREAM wire format is small enough to speak directly over
+       TcpClient. GP 2 — ClamAV is OSS, so there is no paid default.
+       GP 13 — a deployment that does not compose it keeps the pre-515
+       upload path byte-for-byte. -->
+  <ItemGroup>
+    <Compile Include="ClamAvContentScanner.fs" />
+    <Compile Include="ClamAvContentScannerHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Platform.Core only. IContentScanner and IHealthCheck both live in
+         the shared floor, so this companion needs no server tier. -->
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. System.Net.Sockets is BCL.
+       There is deliberately no PackageReference here. -->
+</Project>

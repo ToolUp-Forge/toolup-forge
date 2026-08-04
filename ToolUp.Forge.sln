@@ -465,6 +465,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IngestionQueues", "Ingestio
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.IngestionQueues.Redis", "src\IngestionQueues\Redis\ToolUp.IngestionQueues.Redis.fsproj", "{B7C41D28-63A9-4F0E-8D52-1E9F3A6C0B74}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ContentScanners", "ContentScanners", "{3F8B21C6-9D47-4A5E-8B12-6C0E4D7A9F35}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.ContentScanners.ClamAv", "src\ContentScanners\ClamAv\ToolUp.ContentScanners.ClamAv.fsproj", "{6A2D95E8-1C74-4B0F-9E63-7D5A8C1B0E42}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

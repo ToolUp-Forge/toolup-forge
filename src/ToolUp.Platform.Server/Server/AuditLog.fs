@@ -1220,6 +1220,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeDocumentsPurged(fromAuditJson<KnowledgeDocumentsPurgedPayload> j)
     }
+    // Phase 515 — upload content-scan verdict row (append-only registration).
+    {
+        EventType = "ContentScanned"
+        TryEncode =
+            (function
+            | ContentScanned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContentScanned(fromAuditJson<ContentScannedPayload> j)
+    }
     // Phase 7c — data-object orphan-blob sweep rows (append-only registration).
     {
         EventType = "OrphanedContentBlobReclaimed"

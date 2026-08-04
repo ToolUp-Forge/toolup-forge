@@ -343,3 +343,45 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
             )
 
     app |> withServiceConfig register
+
+// ─── Phase 515 — content scanning at the upload boundary ─────────────
+
+type private ContentScanValidator(scanner: IContentScanner, policy: ContentScanPolicy) =
+    interface IConfigValidator with
+        member _.Name = "knowledge-base:content-scanning"
+        member _.Timeout = IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            match policy.OnScanError with
+            | FailClosedOnScanError -> return ValidationResult.Ok
+            | FailOpenOnScanError ->
+                return
+                    ValidationResult.Warning(
+                        sprintf
+                            "Knowledge Base content scanning is composed with '%s' but set to FAIL OPEN. When the scanner is unreachable or errors, uploads are admitted UNSCANNED and the audit row records Refused = false. That is a legitimate posture for defence-in-depth behind another control; if it is not deliberate, compose ContentScanPolicy.failClosed instead."
+                            scanner.Name
+                    )
+        }
+
+/// Phase 515 — compose-time content scanning at the KB upload boundary.
+/// Registers the scanner and its error policy as DI singletons (read per
+/// request by `KnowledgeApiDeps.resolve`), plus a preflight validator
+/// that warns when the deployment has chosen to fail open.
+///
+/// The scan runs after the cheap pure policy checks (size cap,
+/// allowlist, filename sanitisation — no point streaming a payload to a
+/// scanner that will be refused anyway) and **before** dedup, the corpus
+/// quota, versioning and persistence. That ordering is the point of the
+/// phase: a rejected payload never reaches the blob container, never
+/// consumes a byte of the scope's quota, and can never be admitted on
+/// the strength of an earlier scan by an older signature set.
+///
+/// Apps that never call this resolve `ContentScanner = None`: no scan,
+/// no hash computed for a scan audit row, no network call, no policy
+/// read — the pre-515 upload path byte-for-byte (GP 11 / GP 13).
+let withContentScanning (scanner: IContentScanner) (policy: ContentScanPolicy) (app: ServerApp) : ServerApp =
+    let withSingletons =
+        app
+        |> withServiceConfig (fun s -> s.AddSingleton<IContentScanner>(scanner).AddSingleton<ContentScanPolicy>(policy))
+
+    ServerApp.withConfigValidator (ContentScanValidator(scanner, policy) :> IConfigValidator) withSingletons

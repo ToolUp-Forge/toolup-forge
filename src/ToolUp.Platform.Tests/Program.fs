@@ -237,6 +237,10 @@ let allTests =
         // "OCR unavailable" ingestion signal. Structural arm always on;
         // native arm Pending unless TOOLUP_TESSDATA is set.
         OcrProviderTests.tests
+        // Phase 515 — upload-boundary content scanning. Structural arm
+        // always on; live ClamAV arm Pending unless TOOLUP_CLAMAV_HOST is
+        // set.
+        ContentScannerTests.tests
         KnowledgeUserScopeIsolationTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests

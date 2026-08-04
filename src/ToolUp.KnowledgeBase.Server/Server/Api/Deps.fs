@@ -126,6 +126,18 @@ type KnowledgeApiDeps = {
     /// the policy; the sweep itself runs off the request path in
     /// `Server/RetentionSweep.fs` on the composed `IJobScheduler`.
     RetentionPolicy: KnowledgeRetentionPolicy
+    /// Phase 515 — the composed content scanner, registered by
+    /// `withContentScanning`. `None` when the deployment composed none,
+    /// which is a stronger guarantee than substituting
+    /// `AllowAllContentScanner`: the upload path skips the scan branch
+    /// entirely, so no digest is computed and no audit row is written —
+    /// the pre-515 path byte-for-byte (GP 11 / GP 13).
+    ContentScanner: IContentScanner option
+    /// Phase 515 — what the upload boundary does with a
+    /// `ScanUnavailable` verdict. `ContentScanPolicy.defaults`
+    /// (fail-closed) when absent; unreachable on a deployment with no
+    /// scanner, because a deployment with none never scans at all.
+    ScanPolicy: ContentScanPolicy
     /// Phase 525.D — the fact-disclosure egress gate, registered in DI by
     /// the fact companion's compose whenever the fact store is enabled.
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
@@ -329,6 +341,20 @@ module KnowledgeApiDeps =
             | :? KnowledgeRetentionPolicy as p -> p
             | _ -> KnowledgeRetentionPolicy.retainForever
 
+        // Phase 515 — the composed content scanner + its error policy.
+        // `None` rather than a substituted no-op: a deployment that never
+        // called `withContentScanning` has no scanner singleton at all,
+        // and the upload path skips the whole branch (GP 13).
+        let contentScanner =
+            match ctx.RequestServices.GetService(typeof<IContentScanner>) with
+            | :? IContentScanner as s -> Some s
+            | _ -> None
+
+        let scanPolicy =
+            match ctx.RequestServices.GetService(typeof<ContentScanPolicy>) with
+            | :? ContentScanPolicy as p -> p
+            | _ -> ContentScanPolicy.defaults
+
         // Phase 525.D — the fact-disclosure egress gate, present exactly
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
@@ -422,6 +448,8 @@ module KnowledgeApiDeps =
             VersioningPolicy = versioningPolicy
             QuotaPolicy = quotaPolicy
             RetentionPolicy = retentionPolicy
+            ContentScanner = contentScanner
+            ScanPolicy = scanPolicy
             DisclosureGate = disclosureGate
         }
 
