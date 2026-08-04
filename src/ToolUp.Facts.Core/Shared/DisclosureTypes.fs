@@ -94,10 +94,18 @@ type FactDisclosureDeniedEvent = {
     /// Registered metric id of the denied fact; empty when the id was
     /// unresolvable in scope.
     Metric: string
-    /// Why: `"Internal"`, the `Restricted` policy ref, or `"unknown-fact"`.
+    /// Why: `"Internal"`, the `Restricted` policy ref, `"unknown-fact"`
+    /// for an id the scope cannot see, or a Phase 592 `purpose-*` ref for
+    /// a claim outside the surface's allowed purpose set.
     PolicyRef: string
     /// The principal whose egress was refused.
     Principal: string
+    /// Phase 592 — the purpose the request claimed; empty when no
+    /// taxonomy is declared (facet absent) or the request claimed none.
+    Purpose: string
+    /// Phase 592 — the taxonomy version the claim was judged against;
+    /// empty when the facet is absent.
+    TaxonomyVersion: string
 }
 
 // ─── Taint-propagating disclosure vocabulary (Phase 562) ─────────────
@@ -239,4 +247,85 @@ type FactDisclosureDeclassifiedEvent = {
     Rationale: string
     /// The principal whose egress the declassification permitted.
     Principal: string
+    /// Phase 592 — the purpose the request claimed (grants stamp the
+    /// declared why too); empty when the facet is absent.
+    Purpose: string
+    /// Phase 592 — the taxonomy version the claim was judged against;
+    /// empty when the facet is absent.
+    TaxonomyVersion: string
 }
+
+// ─── Purpose-bound disclosure — the declared-why facet (Phase 592) ───
+//
+// The disclosure model above gates *who* may receive *what*; mature
+// governance regimes also demand the **declared why** — access justified
+// by a stated purpose, with the purpose recorded. Purpose is a typed
+// facet of the disclosure vocabulary: a composition declares its purpose
+// taxonomy (a closed, versioned set of purpose ids + descriptions —
+// plain declared data, not a policy engine), each egress surface carries
+// the purposes it is *allowed* to serve, a request carries the purpose
+// it *claims* (the ambient `FactPurposeContext` in the server companion),
+// and the Phase 525 gate refuses a claim outside the surface's allowed
+// set — an auditable refusal, like every other disclosure denial. Grants
+// and denials both stamp the claimed purpose into the audit events above,
+// so "who did what, why" is answerable from the trail. Because the
+// taxonomy, the per-surface allowed sets, and the gate are all
+// composition-declared data checked by readable code, purpose governance
+// is part of the inspectable disclosure envelope — not runtime
+// configuration a reviewer must trust blind. Opt-in (GP 13): no taxonomy
+// declared ⇒ the facet is absent and behaviour is byte-for-byte today's
+// (GP 11).
+
+/// One declared purpose in the taxonomy: a stable id + a human-readable
+/// description of what the purpose covers (for reviewers / admin UIs).
+type DisclosurePurpose = {
+    PurposeId: string
+    Description: string
+}
+
+/// The closed, versioned purpose taxonomy a composition declares (Phase
+/// 592.A). Plain declared data; the version is stamped into every
+/// purpose-bearing audit event so the trail records *which* vocabulary a
+/// claim was judged against.
+type PurposeTaxonomy = {
+    /// Taxonomy version, advanced by the composition when the id set
+    /// changes — recorded verbatim in audit events.
+    Version: string
+    /// The closed purpose id set. A claim outside this set can never be
+    /// in any surface's allowed set.
+    Purposes: DisclosurePurpose list
+}
+
+/// The purpose configuration a deployment registers at compose time
+/// (Phase 592.A): the taxonomy + the per-surface allowed sets — "this
+/// disclosure route may serve these purposes". A surface absent from the
+/// map serves NO purpose (default-deny-by-shape, the same posture as
+/// `DisclosurePolicy.PermitSurfaces`).
+type DisclosurePurposeConfig = {
+    Taxonomy: PurposeTaxonomy
+    /// Purpose ids each egress surface is allowed to serve.
+    AllowedBySurface: Map<FactEgressSurface, string list>
+}
+
+module DisclosurePurposeConfig =
+
+    /// The declared purpose ids (the closed vocabulary).
+    let purposeIds (config: DisclosurePurposeConfig) : Set<string> =
+        config.Taxonomy.Purposes |> List.map _.PurposeId |> Set.ofList
+
+    /// The purposes a surface is allowed to serve; a surface absent from
+    /// the map serves none (default-deny-by-shape).
+    let allowedFor (config: DisclosurePurposeConfig) (surface: FactEgressSurface) : string list =
+        config.AllowedBySurface.TryFind surface |> Option.defaultValue []
+
+    /// Build a config from the taxonomy + per-surface allowed sets (the
+    /// compose-time registration shape). Later entries win on a duplicate
+    /// surface.
+    let ofLists
+        (taxonomy: PurposeTaxonomy)
+        (allowed: (FactEgressSurface * string list) list)
+        : DisclosurePurposeConfig =
+        {
+            Taxonomy = taxonomy
+            AllowedBySurface = Map.ofList allowed
+        }

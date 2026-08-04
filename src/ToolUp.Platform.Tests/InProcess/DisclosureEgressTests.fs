@@ -626,6 +626,174 @@ let narrativeCommitTests =
         }
     ]
 
+// ── Purpose-bound disclosure — the declared-why facet (Phase 592) ─────
+
+let private purposeConfig: DisclosurePurposeConfig = {
+    Taxonomy = {
+        Version = "v1"
+        Purposes = [
+            {
+                PurposeId = "analytics"
+                Description = "Internal analytical reporting"
+            }
+            {
+                PurposeId = "billing"
+                Description = "Invoice preparation"
+            }
+        ]
+    }
+    AllowedBySurface = Map.ofList [ FactRetrieval, [ "analytics" ]; FactToolResult, [ "analytics"; "billing" ] ]
+}
+
+let private newPurposeGateHarness () =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+    let gate =
+        FactDisclosureGate.createConfigured None (Some purposeConfig) store events
+
+    store, events, gate
+
+/// Run `body` with the ambient purpose claim set (cleared afterwards, so
+/// no claim leaks across tests sharing the async context).
+let private withClaim (purpose: string option) (body: Async<unit>) : Async<unit> = async {
+    match purpose with
+    | Some p -> FactPurposeContext.claim p
+    | None -> FactPurposeContext.clear ()
+
+    try
+        do! body
+    finally
+        FactPurposeContext.clear ()
+}
+
+let purposeTests =
+    testList "Phase 592 purpose-bound disclosure" [
+
+        testCaseAsync "no taxonomy declared ⇒ the facet is absent — no claim needed, behaviour byte-for-byte 525"
+        <| async {
+            // The plain harness (no purpose config): a Surfaceable fact
+            // discloses with no claim set, exactly the pre-592 gate.
+            let store, _, gate = newGateHarness ()
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let fact = assertFact store scope (draftWith "revenue" Surfaceable)
+
+            do!
+                withClaim
+                    None
+                    (async {
+                        let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+                        Expect.equal (verdicts.TryFind fact.FactId) (Some FactDisclosable) "inert without a taxonomy"
+                    })
+        }
+
+        testCaseAsync "an in-set claim passes and a co-checked deny stamps the purpose + taxonomy version (GP 6)"
+        <| async {
+            let store, events, gate = newPurposeGateHarness ()
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let surfaceable = assertFact store scope (draftWith "revenue" Surfaceable)
+            let internal' = assertFact store scope (draftWith "margin" Internal)
+
+            do!
+                withClaim
+                    (Some "analytics")
+                    (async {
+                        let! verdicts =
+                            gate.Check(scope, "user-1", FactRetrieval, [ surfaceable.FactId; internal'.FactId ])
+
+                        Expect.equal
+                            (verdicts.TryFind surfaceable.FactId)
+                            (Some FactDisclosable)
+                            "an in-set claim leaves the 525 verdict in charge"
+
+                        Expect.equal
+                            (verdicts.TryFind internal'.FactId)
+                            (Some(FactNotDisclosable "Internal"))
+                            "the classification deny stands on its own policy ref"
+
+                        let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+                        let denies =
+                            rows |> List.filter (fun e -> e.EventType = DisclosureEvents.DeniedType)
+
+                        Expect.equal denies.Length 1 "one deny row (the Internal fact)"
+                        let payload = denies |> List.map _.Payload |> String.concat "\n"
+                        Expect.stringContains payload "analytics" "the claimed purpose is stamped into the deny"
+                        Expect.stringContains payload "\"v1\"" "the taxonomy version is stamped"
+                    })
+        }
+
+        testCaseAsync "an out-of-set claim refuses every fact, enumerating the allowed set"
+        <| async {
+            let store, events, gate = newPurposeGateHarness ()
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let fact = assertFact store scope (draftWith "revenue" Surfaceable)
+
+            // `billing` is allowed at ToolResult but NOT at Retrieval.
+            do!
+                withClaim
+                    (Some "billing")
+                    (async {
+                        let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+
+                        match verdicts.TryFind fact.FactId with
+                        | Some(FactNotDisclosable policyRef) ->
+                            Expect.stringContains policyRef "purpose-denied:billing" "the refusal names the claim"
+                            Expect.stringContains policyRef "analytics" "the refusal enumerates the allowed set"
+                        | other -> failtestf "expected a purpose refusal, got %A" other
+
+                        // The same claim IS in ToolResult's allowed set — per-route.
+                        let! atToolResult = gate.Check(scope, "user-1", FactToolResult, [ fact.FactId ])
+
+                        Expect.equal
+                            (atToolResult.TryFind fact.FactId)
+                            (Some FactDisclosable)
+                            "the allowed sets are per-surface (per-route)"
+
+                        let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+                        let denies =
+                            rows |> List.filter (fun e -> e.EventType = DisclosureEvents.DeniedType)
+
+                        let payload = denies |> List.map _.Payload |> String.concat "\n"
+                        Expect.stringContains payload "billing" "the refused claim is stamped into the audit row"
+                    })
+        }
+
+        testCaseAsync "a missing claim refuses (default-deny-by-shape), and a surface absent from the map serves none"
+        <| async {
+            let store, _, gate = newPurposeGateHarness ()
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let fact = assertFact store scope (draftWith "revenue" Surfaceable)
+
+            do!
+                withClaim
+                    None
+                    (async {
+                        let! unclaimed = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+
+                        match unclaimed.TryFind fact.FactId with
+                        | Some(FactNotDisclosable policyRef) ->
+                            Expect.stringContains policyRef "purpose-unclaimed" "a missing claim never passes"
+                        | other -> failtestf "expected a purpose refusal, got %A" other
+                    })
+
+            // NarrativePublication is absent from `AllowedBySurface` — it
+            // serves no purpose, so even a declared purpose refuses.
+            do!
+                withClaim
+                    (Some "analytics")
+                    (async {
+                        let! sealed' = gate.Check(scope, "user-1", FactNarrativePublication, [ fact.FactId ])
+
+                        match sealed'.TryFind fact.FactId with
+                        | Some(FactNotDisclosable policyRef) ->
+                            Expect.stringContains policyRef "allowed: none" "an undeclared surface is fully sealed"
+                        | other -> failtestf "expected a purpose refusal, got %A" other
+                    })
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -633,4 +801,5 @@ let tests =
         retrievalTests
         redactionTests
         narrativeCommitTests
+        purposeTests
     ]

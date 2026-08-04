@@ -631,6 +631,12 @@ type ServerApp = {
     /// Phase 519 — accumulated grounding **subject** registrations, the
     /// hierarchy twin of `RegisteredMetrics`.
     RegisteredSubjects: Grounding.SubjectRegistration list
+    /// Phase 592 — the composition-declared disclosure purposes (the
+    /// "declared why" facet), accumulated by the facts companion's
+    /// purpose compose and projected into the manifest beside the 526
+    /// grounding entries. Empty (the default) — a purpose-free
+    /// composition is byte-for-byte unchanged (GP 13).
+    RegisteredPurposes: RegisteredPurpose list
     /// Phase 9l — optional distributed-tracing sink. `None` (default)
     /// registers `NoOpActivitySink` so every instrumented seam in the
     /// pipeline (`ScopeResolutionMiddleware`, `JobScheduler.dispatchOne`,
@@ -864,6 +870,7 @@ module ServerApp =
         MetricRegistrations = []
         RegisteredMetrics = []
         RegisteredSubjects = []
+        RegisteredPurposes = []
         ActivitySink = None
         RateLimitDescriptors = []
         SmokeTests = []
@@ -1139,6 +1146,16 @@ module ServerApp =
     let withMetricRegistrations (regs: Metrics.MetricRegistration list) (app: ServerApp) : ServerApp = {
         app with
             MetricRegistrations = app.MetricRegistrations @ regs
+    }
+
+    /// Phase 592 — accumulate composition-declared disclosure purposes
+    /// for the manifest projection. Called by the facts companion's
+    /// purpose compose (which owns the typed taxonomy + the gate
+    /// enforcement); the platform carries only the generic, readable
+    /// declaration (GP 1). Append-only across calls.
+    let withRegisteredPurposes (purposes: RegisteredPurpose list) (app: ServerApp) : ServerApp = {
+        app with
+            RegisteredPurposes = app.RegisteredPurposes @ purposes
     }
 
     /// Phase 9l — register a distributed-tracing sink (peer to
@@ -1997,8 +2014,29 @@ module ServerApp =
             |> List.map (fun r -> CompositionManifest.subjectEntry r.Definition.Id)
             |> List.distinct
 
-        CompositionManifest.build modules companionSlots dataTypes tools configKnobs
+        // Phase 592 — composition-declared disclosure purposes beside the
+        // grounding entries, plus the per-surface allowed sets as
+        // `DisclosurePurposes.<Surface>` knobs — the whole purpose regime
+        // is readable from the manifest before any data flows. Empty when
+        // no taxonomy is declared (purpose-free composition unchanged).
+        let purposeEntries =
+            app.RegisteredPurposes
+            |> List.map CompositionManifest.purposeEntry
+            |> List.distinct
+
+        let purposeKnobs =
+            app.RegisteredPurposes
+            |> List.collect (fun p -> p.AllowedSurfaces |> List.map (fun s -> s, p.PurposeId))
+            |> List.groupBy fst
+            |> List.sortBy fst
+            |> List.map (fun (surfaceName, pairs) ->
+                CompositionManifest.knob
+                    (sprintf "DisclosurePurposes.%s" surfaceName)
+                    (pairs |> List.map snd |> List.distinct |> String.concat ", "))
+
+        CompositionManifest.build modules companionSlots dataTypes tools (configKnobs @ purposeKnobs)
         |> CompositionManifest.withGrounding metricEntries subjectEntries
+        |> CompositionManifest.withPurposes purposeEntries
 
     /// Phase 583 — project the live registry into the reference edges the
     /// composition rules read but the `CompositionManifest` cannot carry.

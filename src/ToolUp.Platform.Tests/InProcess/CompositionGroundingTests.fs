@@ -119,4 +119,61 @@ let tests =
 
             Expect.equal idA idB "the metric id is independent of the declaring module's display name"
         }
+
+        // Phase 592 — the manifest carries the declared purpose regime:
+        // purpose entries beside the grounding entries, per-surface
+        // allowed sets as `DisclosurePurposes.<Surface>` knobs.
+        test "declared disclosure purposes surface in the manifest (entries + per-surface knobs)" {
+            let purposes: RegisteredPurpose list = [
+                {
+                    PurposeId = "analytics"
+                    Description = "Internal analytical reporting"
+                    TaxonomyVersion = "v1"
+                    AllowedSurfaces = [ "Retrieval"; "ToolResult" ]
+                }
+                {
+                    PurposeId = "billing"
+                    Description = "Invoice preparation"
+                    TaxonomyVersion = "v1"
+                    AllowedSurfaces = [ "ToolResult" ]
+                }
+            ]
+
+            let m =
+                ServerApp.compositionManifest (ServerApp.empty |> ServerApp.withRegisteredPurposes purposes)
+
+            Expect.equal (m.Purposes |> List.map _.Label |> List.sort) [ "analytics"; "billing" ] "purposes reported"
+
+            Expect.equal
+                (m.Purposes |> List.map _.Id)
+                (m.Purposes |> List.map (fun e -> ComponentId.forPurpose e.Label))
+                "purpose entries keyed by ComponentId.forPurpose"
+
+            Expect.equal
+                (m.Purposes |> List.map _.Impl |> List.distinct)
+                [ Some "v1" ]
+                "the taxonomy version rides each entry"
+
+            let knob name =
+                m.ConfigKnobs |> List.tryFind (fun k -> k.Name = name) |> Option.map _.Value
+
+            Expect.equal
+                (knob "DisclosurePurposes.Retrieval")
+                (Some "analytics")
+                "the per-surface allowed set is a readable knob"
+
+            Expect.equal
+                (knob "DisclosurePurposes.ToolResult")
+                (Some "analytics, billing")
+                "a surface's full allowed set is enumerated"
+        }
+
+        test "a purpose-free composition reports no purpose entries and no purpose knobs" {
+            let m = ServerApp.compositionManifest ServerApp.empty
+            Expect.isEmpty m.Purposes "no purposes composed"
+
+            Expect.isEmpty
+                (m.ConfigKnobs |> List.filter (fun k -> k.Name.StartsWith "DisclosurePurposes."))
+                "no purpose knobs on a purpose-free composition"
+        }
     ]

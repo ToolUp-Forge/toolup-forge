@@ -353,6 +353,8 @@ module CompositionValidator =
         // unit with the same word its `ComponentId` is namespaced under.
         | MetricComponent -> "metric"
         | SubjectComponent -> "subject"
+        // Phase 592 — same rule: the label mirrors `PurposeSlot`.
+        | PurposeComponent -> "purpose"
 
     // ── Rule evaluators (pure) ──────────────────────────────────────────
 

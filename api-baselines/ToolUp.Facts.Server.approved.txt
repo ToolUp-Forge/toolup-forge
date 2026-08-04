@@ -149,9 +149,10 @@ ToolUp.Facts.FactDerivationGraph..ctor(Microsoft.FSharp.Collections.FSharpMap`2[
 ToolUp.Facts.FactDerivationGraph.Facts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact] { get }
 ToolUp.Facts.FactDerivationGraph.UpstreamOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Facts.FactDisclosureGate (class)
-ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig])
+ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig])
 ToolUp.Facts.FactDisclosureGateModule (class)
 ToolUp.Facts.FactDisclosureGateModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
+ToolUp.Facts.FactDisclosureGateModule.createConfigured(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createWithPolicyResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createWithTaint(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDraft (class)
@@ -175,6 +176,10 @@ ToolUp.Facts.FactInvalidation.invalidationSet(ToolUp.Platform.ILineageStore, Sys
 ToolUp.Facts.FactInvalidation.isInvalidated(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Facts.Fact) : System.Boolean
 ToolUp.Facts.FactInvalidation.policyFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.Fact) : ToolUp.Platform.Grounding.RecomputePolicy
 ToolUp.Facts.FactInvalidation.recomputeNow(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact], System.String]]
+ToolUp.Facts.FactPurposeContext (class)
+ToolUp.Facts.FactPurposeContext.claim(System.String) : System.Void
+ToolUp.Facts.FactPurposeContext.clear() : System.Void
+ToolUp.Facts.FactPurposeContext.current() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.FactQuery (class)
 ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)
 ToolUp.Facts.FactQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
@@ -217,6 +222,7 @@ ToolUp.Facts.FactWithCompetition.Fact : ToolUp.Facts.Fact { get }
 ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.GroundingCertificate (class)
 ToolUp.Facts.GroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.ArtefactSignature)

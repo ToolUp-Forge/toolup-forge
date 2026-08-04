@@ -40,6 +40,9 @@ type ComponentKind =
     | MetricComponent
     /// Phase 526 — a registered grounding subject hierarchy (Phase 519).
     | SubjectComponent
+    /// Phase 592 — a composition-declared disclosure purpose (the
+    /// "declared why" facet of the disclosure vocabulary).
+    | PurposeComponent
 
 /// One composed unit enumerated in a `CompositionManifest`: its stable
 /// `ComponentId`, what kind of unit it is, a human-readable label, and —
@@ -65,6 +68,26 @@ type ComponentEntry = {
 /// full `ServerConfig` is not duplicated here.
 type ConfigKnob = { Name: string; Value: string }
 
+/// Phase 592 — a composition-declared disclosure purpose (the "declared
+/// why" facet), as the generic strings the manifest projects (GP 1: the
+/// typed taxonomy + enforcement live in the facts companion; the
+/// platform carries only the introspectable declaration). Accumulated on
+/// `ServerApp.RegisteredPurposes` by the facts companion's purpose
+/// compose and projected into the manifest beside the Phase 526
+/// grounding entries — so the whole purpose regime is readable before
+/// any data flows.
+type RegisteredPurpose = {
+    /// The stable purpose id from the declared taxonomy.
+    PurposeId: string
+    /// Human-readable description of what the purpose covers.
+    Description: string
+    /// The taxonomy version the purpose was declared under.
+    TaxonomyVersion: string
+    /// Canonical egress-surface names this purpose is allowed to serve
+    /// (the per-route allowed sets, inverted per purpose).
+    AllowedSurfaces: string list
+}
+
 /// A read-only, machine-readable description of what an application
 /// composed: every module, companion slot, datatype, and tool by stable
 /// `ComponentId`, plus the config knobs that shaped composition. Produced
@@ -82,6 +105,12 @@ type CompositionManifest = {
     Metrics: ComponentEntry list
     /// Phase 526 — registered grounding subject hierarchies.
     Subjects: ComponentEntry list
+    /// Phase 592 — composition-declared disclosure purposes, keyed by
+    /// `ComponentId.forPurpose`; empty when no taxonomy is declared (a
+    /// purpose-free composition, byte-identical to pre-592). The
+    /// per-surface allowed sets ride `ConfigKnobs` as
+    /// `DisclosurePurposes.<Surface>` entries.
+    Purposes: ComponentEntry list
     ConfigKnobs: ConfigKnob list
 }
 
@@ -153,6 +182,16 @@ module CompositionManifest =
         Impl = None
     }
 
+    /// Phase 592 — a composition-declared disclosure purpose, keyed by
+    /// `ComponentId.forPurpose`. `Impl` carries the taxonomy version so
+    /// the manifest records which vocabulary the purpose belongs to.
+    let purposeEntry (p: RegisteredPurpose) : ComponentEntry = {
+        Id = ComponentId.forPurpose p.PurposeId
+        Kind = PurposeComponent
+        Label = p.PurposeId
+        Impl = Some p.TaxonomyVersion
+    }
+
     let knob (name: string) (value: string) : ConfigKnob = { Name = name; Value = value }
 
     /// Assemble a manifest from the enumerated entries. Pure projection —
@@ -172,6 +211,7 @@ module CompositionManifest =
             Tools = tools
             Metrics = []
             Subjects = []
+            Purposes = []
             ConfigKnobs = configKnobs
         }
 
@@ -191,6 +231,15 @@ module CompositionManifest =
                 Subjects = subjects
         }
 
+    /// Phase 592 — attach composition-declared disclosure-purpose entries
+    /// to a built manifest, same additive shape as `withGrounding`: every
+    /// existing `build` call stays source-stable, and a purpose-free
+    /// composition never calls this (byte-identical to pre-592).
+    let withPurposes (purposes: ComponentEntry list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            Purposes = purposes
+    }
+
     /// The empty manifest — what a pipeline that composed nothing (or was
     /// never introspected) projects to.
     let empty: CompositionManifest = build [] [] [] [] []
@@ -199,4 +248,10 @@ module CompositionManifest =
     /// convenient for a uniqueness sweep or a flat dump. (`ConfigKnob`s
     /// are not `ComponentEntry`s and are excluded.)
     let allComponents (m: CompositionManifest) : ComponentEntry list =
-        m.Modules @ m.CompanionSlots @ m.DataTypes @ m.Tools @ m.Metrics @ m.Subjects
+        m.Modules
+        @ m.CompanionSlots
+        @ m.DataTypes
+        @ m.Tools
+        @ m.Metrics
+        @ m.Subjects
+        @ m.Purposes

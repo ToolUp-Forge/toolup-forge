@@ -1831,6 +1831,7 @@ ToolUp.Platform.ComponentIdModule.forCompanionImpl(System.String, System.String)
 ToolUp.Platform.ComponentIdModule.forCompanionSlot(System.String) : ToolUp.Platform.ComponentId
 ToolUp.Platform.ComponentIdModule.forDataType(System.String) : ToolUp.Platform.ComponentId
 ToolUp.Platform.ComponentIdModule.forMetric(System.String) : ToolUp.Platform.ComponentId
+ToolUp.Platform.ComponentIdModule.forPurpose(System.String) : ToolUp.Platform.ComponentId
 ToolUp.Platform.ComponentIdModule.forSubject(System.String) : ToolUp.Platform.ComponentId
 ToolUp.Platform.ComponentIdModule.forTool(System.String) : ToolUp.Platform.ComponentId
 ToolUp.Platform.ComponentIdModule.ofModule(System.String) : ToolUp.Platform.ComponentId

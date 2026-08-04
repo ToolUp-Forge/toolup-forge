@@ -65,14 +65,26 @@ module FactsCompose =
             // registers a `DisclosureTaintConfig` in DI (the optional-
             // registry pattern below); unregistered ⇒ the plain gate,
             // byte-identical to the pre-562 composition (GP 11 / GP 13).
+            // Phase 592 — purpose binding arms the same way, off an
+            // optional `DisclosurePurposeConfig` registration (the
+            // `withDisclosurePurposes` compose below); unregistered ⇒ the
+            // facet is absent.
             .AddSingleton<IFactDisclosureGate>(
                 Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
                     let store = sp.GetRequiredService<IFactStore>()
                     let events = sp.GetRequiredService<IEventStore>()
 
-                    match sp.GetService(typeof<DisclosureTaintConfig>) with
-                    | :? DisclosureTaintConfig as taint -> FactDisclosureGate.createWithTaint taint store events
-                    | _ -> FactDisclosureGate.create store events)
+                    let taint =
+                        match sp.GetService(typeof<DisclosureTaintConfig>) with
+                        | :? DisclosureTaintConfig as t -> Some t
+                        | _ -> None
+
+                    let purpose =
+                        match sp.GetService(typeof<DisclosurePurposeConfig>) with
+                        | :? DisclosurePurposeConfig as p -> Some p
+                        | _ -> None
+
+                    FactDisclosureGate.createConfigured taint purpose store events)
             )
             // Phase 558 — the concrete fact resolver closes the Phase 522
             // seam, registered with the store + gate so the fact tier is
@@ -312,6 +324,75 @@ module FactsCompose =
                     // never registered, no route, no runtime cost.
                     AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
             }
+
+    // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────
+    //
+    // The "declared why" facet: a composition declares its purpose
+    // taxonomy + per-surface allowed sets, and the Phase 525 gate then
+    // requires every check's ambient `FactPurposeContext` claim to be in
+    // the surface's allowed set — out-of-set or missing claims refuse
+    // with the allowed set enumerated, and grants and denials both stamp
+    // the claimed purpose + taxonomy version into the audit trail. A
+    // separate, explicit opt-in on top of the fact store (the Phase 563
+    // shape): a deployment that only wants the store is byte-for-byte
+    // unchanged (GP 11 / GP 13).
+
+    /// The per-purpose manifest projection: the generic, readable
+    /// declaration the platform manifest carries (GP 1 — the typed
+    /// config stays here in the facts companion).
+    let private registeredPurposes (config: DisclosurePurposeConfig) : RegisteredPurpose list =
+        config.Taxonomy.Purposes
+        |> List.map (fun p -> {
+            PurposeId = p.PurposeId
+            Description = p.Description
+            TaxonomyVersion = config.Taxonomy.Version
+            AllowedSurfaces =
+                config.AllowedBySurface
+                |> Map.toList
+                |> List.filter (fun (_, ids) -> List.contains p.PurposeId ids)
+                |> List.map (fst >> FactEgressSurface.toString)
+        })
+
+    /// Compose purpose-bound disclosure (Phase 592): register the
+    /// declared `DisclosurePurposeConfig` so the gate factory above arms
+    /// the purpose facet, and project the taxonomy + per-surface allowed
+    /// sets into the composition manifest beside the Phase 526 grounding
+    /// declarations — the whole purpose regime is readable before any
+    /// data flows. A `NoFactStore` deployment (or one that never calls
+    /// this) is byte-for-byte unchanged (GP 11 / GP 13). Insert after
+    /// `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withDisclosurePurposes purposeConfig
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// Request handlers state the claim with `FactPurposeContext.claim`;
+    /// with a declared taxonomy an unclaimed check refuses at every
+    /// purpose-bound surface (default-deny-by-shape).
+    let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.AddSingleton<DisclosurePurposeConfig>(config)
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+            |> ServerApp.withRegisteredPurposes (registeredPurposes config)
 
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //

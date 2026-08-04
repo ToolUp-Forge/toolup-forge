@@ -70,6 +70,13 @@ module ComponentId =
     [<Literal>]
     let private SubjectSlot = "subject"
 
+    // Phase 592 — the disclosure-purpose slot. A composition-declared
+    // purpose id is `ComponentId`-class like the 526 grounding entries,
+    // namespaced so a purpose `billing` never collides with a module or
+    // metric `billing`.
+    [<Literal>]
+    let private PurposeSlot = "purpose"
+
     let private normalise (raw: string) : string =
         if System.String.IsNullOrWhiteSpace raw then
             ""
@@ -146,6 +153,10 @@ module ComponentId =
     /// Derive a grounding subject-hierarchy's id from its declared registry
     /// id (`Grounding.SubjectDefinition.Id`).
     let forSubject (subjectId: string) : ComponentId = scoped SubjectSlot subjectId
+
+    /// Phase 592 — derive a composition-declared disclosure purpose's id
+    /// from its taxonomy purpose id. Rename-stable, slot-namespaced.
+    let forPurpose (purposeId: string) : ComponentId = scoped PurposeSlot purposeId
 
     /// The ids that appear more than once in `ids`, each reported once in
     /// first-seen order. Empty when every id is unique.
