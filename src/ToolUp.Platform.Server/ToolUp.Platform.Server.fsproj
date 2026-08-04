@@ -226,6 +226,16 @@
              its own execution and returns an opaque handle to poll. Value
              types live in Core's Shared/ExternalCompute.fs. -->
         <Compile Include="Server\IExternalComputeDispatcher.fs" />
+        <!-- Phase 484 — multi-backend compute fleet. The registry declares
+             what each backend serves (profiles DERIVED from the Phase 478
+             posture, never separately claimed) and the routing decision is
+             a pure function over it; the dispatcher applies it and feeds
+             per-backend health / metrics / a /dev/inspect row. Entirely
+             opt-in via ComputeFleetCompose.register — registerExternalCompute
+             is untouched, so a single-dispatcher deployment is unchanged
+             (GP 13). -->
+        <Compile Include="Server\IComputeBackendRegistry.fs" />
+        <Compile Include="Server\RoutingComputeDispatcher.fs" />
         <!-- Phase 26 — single-node default impl of ITenantFleet over
              IEntityStore + IContainerScheduler + IDeployPipeline.
              Per-tenant SemaphoreSlim for serialised state mutations;

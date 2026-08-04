@@ -1406,6 +1406,22 @@ let allTests =
         IsolatedExecutionProfileTests.gateTests
         IsolatedExecutionProfileTests.structuralTests
         IsolatedExecutionProfileTests.releaseTests
+        // Phase 484 — the compute-backend registry + routing dispatcher.
+        // Precedence is asserted on what each backend WAS HANDED (a
+        // returned registration is equally consistent with a router that
+        // chose correctly and submitted elsewhere), and every step's case
+        // is paired with a control differing in exactly that step's input
+        // and landing on a DIFFERENT backend — so deleting the profile
+        // filter or the resource step turns the case red while the control
+        // stays green. Plus the restamp's explicit mutation check, and the
+        // GP 13 keystone asserted structurally on the service collection.
+        ComputeBackendRegistryTests.registryTests
+        ComputeBackendRegistryTests.routingTests
+        ComputeBackendRegistryTests.refusalTests
+        ComputeBackendRegistryTests.handleRoundTripTests
+        ComputeBackendRegistryTests.observabilityTests
+        ComputeBackendRegistryTests.gp13Tests
+        ComputeBackendRegistryTests.structuralTests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

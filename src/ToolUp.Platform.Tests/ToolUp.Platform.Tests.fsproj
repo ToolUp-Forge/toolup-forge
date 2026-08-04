@@ -1564,6 +1564,15 @@
              each paired with an unwrapped control), and the gated-output
              pipeline's structural unreachability. -->
         <Compile Include="InProcess\IsolatedExecutionProfileTests.fs" />
+        <!-- Phase 484 — the compute-backend registry + routing dispatcher:
+             precedence (profile > hard resource classes > advisory hints >
+             declared default) asserted on what each backend WAS HANDED
+             with a control landing on a different backend per step, the
+             infeasible-spec refusal naming required vs available, the
+             handle round-trip including the restamp's mutation check, and
+             the GP 13 keystone — NoExternalCompute composes no registry,
+             no telemetry, no probe, no panel. -->
+        <Compile Include="InProcess\ComputeBackendRegistryTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

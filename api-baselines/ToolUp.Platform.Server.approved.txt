@@ -1265,6 +1265,64 @@ ToolUp.Platform.CompositionValidator+CompositionRule.Evaluate : Microsoft.FSharp
 ToolUp.Platform.CompositionValidator+CompositionRule.Severity : ToolUp.Platform.CompositionDefectSeverity { get }
 ToolUp.Platform.CompositionValidator+CompositionWellFormednessValidator (class)
 ToolUp.Platform.CompositionValidator+CompositionWellFormednessValidator..ctor(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences)
+ToolUp.Platform.ComputeBackendHealthCheck (class)
+ToolUp.Platform.ComputeBackendHealthCheck..ctor(System.String, ToolUp.Platform.ComputeFleetTelemetry)
+ToolUp.Platform.ComputeBackendHealthCheck.NameFor(System.String) : System.String
+ToolUp.Platform.ComputeBackendRegistration (class)
+ToolUp.Platform.ComputeBackendRegistration..ctor(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Boolean, ToolUp.Platform.IExternalComputeDispatcher)
+ToolUp.Platform.ComputeBackendRegistration.Dispatcher : ToolUp.Platform.IExternalComputeDispatcher { get }
+ToolUp.Platform.ComputeBackendRegistration.EnvelopeVersions : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ComputeBackendRegistration.IsDefault : System.Boolean { get }
+ToolUp.Platform.ComputeBackendRegistration.Kind : System.String { get }
+ToolUp.Platform.ComputeBackendRegistration.ResourceClasses : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ComputeBackendRegistrationModule (class)
+ToolUp.Platform.ComputeBackendRegistrationModule.asDefault(ToolUp.Platform.ComputeBackendRegistration) : ToolUp.Platform.ComputeBackendRegistration
+ToolUp.Platform.ComputeBackendRegistrationModule.create(System.String, ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.ComputeBackendRegistration
+ToolUp.Platform.ComputeBackendRegistrationModule.describe(ToolUp.Platform.ComputeBackendRegistration) : System.String
+ToolUp.Platform.ComputeBackendRegistrationModule.honours(ToolUp.Platform.ExecutionProfile, ToolUp.Platform.ComputeBackendRegistration) : System.Boolean
+ToolUp.Platform.ComputeBackendRegistrationModule.posture(ToolUp.Platform.ComputeBackendRegistration) : ToolUp.Platform.IsolationPosture
+ToolUp.Platform.ComputeBackendRegistrationModule.supportedProfiles(ToolUp.Platform.ComputeBackendRegistration) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExecutionProfile]
+ToolUp.Platform.ComputeBackendRegistrationModule.withEnvelopeVersions(System.Collections.Generic.IEnumerable`1[System.String], ToolUp.Platform.ComputeBackendRegistration) : ToolUp.Platform.ComputeBackendRegistration
+ToolUp.Platform.ComputeBackendRegistrationModule.withResourceClasses(System.Collections.Generic.IEnumerable`1[System.String], ToolUp.Platform.ComputeBackendRegistration) : ToolUp.Platform.ComputeBackendRegistration
+ToolUp.Platform.ComputeBackendRegistry (class)
+ToolUp.Platform.ComputeBackendRegistry..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComputeBackendRegistration])
+ToolUp.Platform.ComputeBackendRegistry.Default : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBackendRegistration] { get }
+ToolUp.Platform.ComputeBackendRegistry.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ComputeBackendRegistry.Registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComputeBackendRegistration] { get }
+ToolUp.Platform.ComputeBackendRegistry.TryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBackendRegistration]
+ToolUp.Platform.ComputeBackendRouting (class)
+ToolUp.Platform.ComputeBackendRouting.ResourceClassHint : System.String { get }
+ToolUp.Platform.ComputeBackendRouting.requiredResourceClasses(ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Platform.ComputeBackendRouting.select(ToolUp.Platform.ComputeBackendRegistry, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBackendRegistration, ToolUp.Platform.ExternalComputeError]
+ToolUp.Platform.ComputeBackendRouting.selectForHandle(ToolUp.Platform.ComputeBackendRegistry, ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBackendRegistration, ToolUp.Platform.ExternalComputeError]
+ToolUp.Platform.ComputeBackendStats (class)
+ToolUp.Platform.ComputeBackendStats..ctor(System.String, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.ComputeBackendStats.Cancelled : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.ConsecutiveBackendFailures : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.Failed : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.InFlight : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.Kind : System.String { get }
+ToolUp.Platform.ComputeBackendStats.LastActivityAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.ComputeBackendStats.LastRefusal : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ComputeBackendStats.Refused : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.Submitted : System.Int64 { get }
+ToolUp.Platform.ComputeBackendStats.Succeeded : System.Int64 { get }
+ToolUp.Platform.ComputeFleetCompose (class)
+ToolUp.Platform.ComputeFleetCompose.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComputeBackendRegistration], ToolUp.Platform.Metrics.IMetricsSink) : ToolUp.Platform.RoutingComputeDispatcher
+ToolUp.Platform.ComputeFleetDiagnosticsContributor (class)
+ToolUp.Platform.ComputeFleetDiagnosticsContributor..ctor(ToolUp.Platform.ComputeBackendRegistry, ToolUp.Platform.ComputeFleetTelemetry)
+ToolUp.Platform.ComputeFleetMetrics (class)
+ToolUp.Platform.ComputeFleetMetrics.InFlight : System.String { get }
+ToolUp.Platform.ComputeFleetMetrics.RoutingRefusalsTotal : System.String { get }
+ToolUp.Platform.ComputeFleetMetrics.SubmissionsTotal : System.String { get }
+ToolUp.Platform.ComputeFleetMetrics.TerminalOutcomesTotal : System.String { get }
+ToolUp.Platform.ComputeFleetTelemetry (class)
+ToolUp.Platform.ComputeFleetTelemetry..ctor()
+ToolUp.Platform.ComputeFleetTelemetry.RecordAccepted(System.String) : System.Void
+ToolUp.Platform.ComputeFleetTelemetry.RecordOutcome(System.String, ToolUp.Platform.ExternalOutcome) : System.Void
+ToolUp.Platform.ComputeFleetTelemetry.RecordRefused(System.String, ToolUp.Platform.ExternalComputeError) : System.Void
+ToolUp.Platform.ComputeFleetTelemetry.Snapshot() : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBackendStats]
+ToolUp.Platform.ComputeFleetTelemetry.StatsFor(System.String) : ToolUp.Platform.ComputeBackendStats
 ToolUp.Platform.ConfigDriftDetector (class)
 ToolUp.Platform.ConfigDriftDetector.run(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ConfigHandler (class)
@@ -5310,6 +5368,11 @@ ToolUp.Platform.RevocationSet (class)
 ToolUp.Platform.RevocationSet..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.RevocationSet.RevokedAnchors : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.RevocationSet.RevokedStamps : Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.RoutingComputeDispatcher (class)
+ToolUp.Platform.RoutingComputeDispatcher..ctor(ToolUp.Platform.ComputeBackendRegistry, ToolUp.Platform.ComputeFleetTelemetry, ToolUp.Platform.Metrics.IMetricsSink)
+ToolUp.Platform.RoutingComputeDispatcher.BackendName : System.String { get }
+ToolUp.Platform.RoutingComputeDispatcher.Registry : ToolUp.Platform.ComputeBackendRegistry { get }
+ToolUp.Platform.RoutingComputeDispatcher.Telemetry : ToolUp.Platform.ComputeFleetTelemetry { get }
 ToolUp.Platform.RuleErrata (class)
 ToolUp.Platform.RuleErrata.FileName : System.String (literal)
 ToolUp.Platform.RuleErrata.affectsStamped(ToolUp.Platform.RuleErratum, ToolUp.Platform.StampedRuleVersion) : System.Boolean
