@@ -1435,6 +1435,25 @@ let allTests =
         ComputeBackendRegistryTests.observabilityTests
         ComputeBackendRegistryTests.gp13Tests
         ComputeBackendRegistryTests.structuralTests
+        // Phase 485 — compute-result memoization. The two windows are
+        // separate packs because they are separate mechanisms: a cache
+        // cannot serve a concurrent duplicate (only Succeeded caches, and a
+        // running job has succeeded at nothing), so coalescing is asserted
+        // against a deliberately slow backend with the same-fixture
+        // distinct-key control. Scope isolation carries the mutation check
+        // that makes the envelope's key cross-check load-bearing — a
+        // foreign envelope planted at this scope's own path is refused —
+        // and the zero-budget claim is measured through a counting
+        // pass-through composed exactly where Phase 451's decorator will
+        // sit.
+        MemoizedComputeDispatcherTests.memoizationTests
+        MemoizedComputeDispatcherTests.coalescingTests
+        MemoizedComputeDispatcherTests.scopeIsolationTests
+        MemoizedComputeDispatcherTests.ttlTests
+        MemoizedComputeDispatcherTests.optInTests
+        MemoizedComputeDispatcherTests.budgetCompositionTests
+        MemoizedComputeDispatcherTests.durabilityTests
+        MemoizedComputeDispatcherTests.evictionTests
         // Phase 7c — data-object orphan-blob sweep. The orphan is produced
         // through the real Save path (metadata write refused, content
         // write already landed), so the sweep is exercised against the

@@ -1323,6 +1323,50 @@ ToolUp.Platform.ComputeFleetTelemetry.RecordOutcome(System.String, ToolUp.Platfo
 ToolUp.Platform.ComputeFleetTelemetry.RecordRefused(System.String, ToolUp.Platform.ExternalComputeError) : System.Void
 ToolUp.Platform.ComputeFleetTelemetry.Snapshot() : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBackendStats]
 ToolUp.Platform.ComputeFleetTelemetry.StatsFor(System.String) : ToolUp.Platform.ComputeBackendStats
+ToolUp.Platform.ComputeMemoEntry (class)
+ToolUp.Platform.ComputeMemoEntry..ctor(ToolUp.Platform.ExternalHandle, System.String, System.DateTime, System.DateTime)
+ToolUp.Platform.ComputeMemoEntry.CachedAt : System.DateTime { get }
+ToolUp.Platform.ComputeMemoEntry.ExpiresAt : System.DateTime { get }
+ToolUp.Platform.ComputeMemoEntry.Handle : ToolUp.Platform.ExternalHandle { get }
+ToolUp.Platform.ComputeMemoEntry.ResultRef : System.String { get }
+ToolUp.Platform.ComputeMemoKey (class)
+ToolUp.Platform.ComputeMemoKey..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ComputeMemoKey.IdempotencyKey : System.String { get }
+ToolUp.Platform.ComputeMemoKey.Kind : System.String { get }
+ToolUp.Platform.ComputeMemoKey.PayloadHash : System.String { get }
+ToolUp.Platform.ComputeMemoKey.Profile : System.String { get }
+ToolUp.Platform.ComputeMemoKey.ScopeId : System.String { get }
+ToolUp.Platform.ComputeMemoKeyModule (class)
+ToolUp.Platform.ComputeMemoKeyModule.composite(ToolUp.Platform.ComputeMemoKey) : System.String
+ToolUp.Platform.ComputeMemoKeyModule.digest(ToolUp.Platform.ComputeMemoKey) : System.String
+ToolUp.Platform.ComputeMemoKeyModule.forSpec(System.String, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeMemoKey]
+ToolUp.Platform.ComputeMemoKeyModule.hashPayload(System.String) : System.String
+ToolUp.Platform.ComputeMemoLayout (class)
+ToolUp.Platform.ComputeMemoLayout.BlobPrefix : System.String (literal)
+ToolUp.Platform.ComputeMemoLayout.DefaultContainer : System.String (literal)
+ToolUp.Platform.ComputeMemoLayout.entryBlob(System.String, System.String) : System.String
+ToolUp.Platform.ComputeMemoLayout.scopePrefix(System.String) : System.String
+ToolUp.Platform.ComputeMemoMetrics (class)
+ToolUp.Platform.ComputeMemoMetrics.CoalescedTotal : System.String { get }
+ToolUp.Platform.ComputeMemoMetrics.Entries : System.String { get }
+ToolUp.Platform.ComputeMemoMetrics.EvictionsTotal : System.String { get }
+ToolUp.Platform.ComputeMemoMetrics.HitsTotal : System.String { get }
+ToolUp.Platform.ComputeMemoMetrics.MissesTotal : System.String { get }
+ToolUp.Platform.ComputeMemoStats (class)
+ToolUp.Platform.ComputeMemoStats..ctor(System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int64, System.Int32, System.Int32)
+ToolUp.Platform.ComputeMemoStats.Coalesced : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.Entries : System.Int32 { get }
+ToolUp.Platform.ComputeMemoStats.Evicted : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.Expired : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.Hits : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.MaxEntries : System.Int32 { get }
+ToolUp.Platform.ComputeMemoStats.Misses : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.OverCapRecoveries : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.PollShortCircuits : System.Int64 { get }
+ToolUp.Platform.ComputeMemoStats.Stored : System.Int64 { get }
+ToolUp.Platform.ComputeMemoization (class)
+ToolUp.Platform.ComputeMemoization.defaultMaxEntries : System.Int32 { get }
+ToolUp.Platform.ComputeMemoization.defaultTtl : System.TimeSpan { get }
 ToolUp.Platform.ConfigDriftDetector (class)
 ToolUp.Platform.ConfigDriftDetector.run(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ConfigHandler (class)
@@ -4260,6 +4304,9 @@ ToolUp.Platform.MembershipDoctor+MembershipWrites..ctor(Microsoft.FSharp.Core.FS
 ToolUp.Platform.MembershipDoctor+MembershipWrites.ClearActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
 ToolUp.Platform.MembershipDoctor+MembershipWrites.EmitMemberRemoved : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
 ToolUp.Platform.MembershipDoctor+MembershipWrites.SaveMemberships : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamManagement+StoredMembership], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.MemoizedComputeDispatcher (class)
+ToolUp.Platform.MemoizedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.MemoizedComputeDispatcher.Stats : ToolUp.Platform.ComputeMemoStats { get }
 ToolUp.Platform.MetricDirection (class)
 ToolUp.Platform.MetricDirection.HigherIsBetter : ToolUp.Platform.MetricDirection { get }
 ToolUp.Platform.MetricDirection.IsHigherIsBetter : System.Boolean { get }

@@ -342,6 +342,58 @@ Two operational notes. Reconciliation is batched per scope (`AwaitingExternalRun
 - **Round-trip `JobRun.ExternalHandle`.** Every field — a converter that reconstructs the record with defaults passes an `isSome` check and fails a real one.
 - **Answer from the awaiting set, and take runs OUT of it as they go terminal.** The removal half is the one that fails silently: a store that only ever adds looks correct until the scheduler is re-polling handles for work that finished days ago. Do not satisfy the query by scanning run history — run rows are unbounded, and this is on the tick path. Index the status transition, as the blob-backed default does with its `_awaiting-external` secondary index.
 
+## Memoizing a repeated submission
+
+`MemoizedComputeDispatcher` is an opt-in decorator over any
+`IExternalComputeDispatcher`: an identical idempotent submission returns the
+cached terminal outcome instead of re-running the work. Where
+`ExternalWorkSpec.Idempotency` is a *backend* promise about a window the
+backend chooses, this is the platform-side one — and it is what makes a
+re-submission cost nothing rather than merely produce one handle.
+
+```fsharp skip=fragment
+// Outermost. A hit returns before anything below it is consulted.
+let dispatcher = MemoizedComputeDispatcher(backend, blobs = blobStorage) :> IExternalComputeDispatcher
+services.AddSingleton<IExternalComputeDispatcher>(dispatcher)
+```
+
+Four things worth knowing before composing it:
+
+- **Only a spec carrying an `Idempotency` key is memoizable.** Its presence
+  is the caller's explicit assertion that re-submitting *this* work is the
+  same request rather than a second one, so work without it is passed
+  straight through and never cached. Forge cannot tell "render that scene
+  again" from "charge that card again", and a cache that guessed would
+  silently deduplicate side effects.
+- **Only `Succeeded` caches.** A `Failed` outcome is frequently transient —
+  `ExternalComputeError.Retriable` says so as data — and caching it would
+  turn a blip into a TTL-long outage for that spec. A `Cancelled` outcome
+  is a decision about one submission, not a fact about the work.
+- **Two windows, two mechanisms.** The cache covers a duplicate arriving
+  *after* the first submission finished. A duplicate arriving *while* it is
+  still running cannot be served from the cache at all (nothing has
+  succeeded yet), so it is instead joined to the first caller's in-flight
+  `Submit` and handed the same handle: N concurrent duplicates produce one
+  dispatch and one execution.
+- **Compose it outermost.** Above a budget or quota decorator, a hit spends
+  nothing because the decorator below never sees a submission. Below one,
+  every hit is charged — which is the feature not working.
+
+Entries are keyed on `(scopeId, Kind, SHA-256(payload), Idempotency)` plus
+the execution profile, and are scope-partitioned in both tiers: the
+in-memory key carries the scope and the blob path is
+`_platform/compute-memo/{scopeId}/{digest}.json`, so a lookup for one scope
+never constructs a path under another (GP 4). The stored envelope repeats
+the whole key and a read whose envelope does not match is treated as a
+miss, so a mis-derived path degrades to a re-dispatch rather than to one
+tenant reading another's result. Supplying `blobs` makes hits survive a
+restart; omitting it keeps the memo in-process. The in-memory indexes are
+capped and drain FIFO in bounded batches, reporting cap pressure through
+`Stats.OverCapRecoveries` rather than clearing themselves — the same
+discipline the in-process idempotency store follows, and for the same
+reason: a silent mass wipe under pressure turns every discarded entry back
+into work already paid for.
+
 ## Portability-rule conformance
 
 `IExternalComputeDispatcher` satisfies all six [portability rules](portability-rules.md). The audit is executable — `IExternalComputeDispatcherContract.portabilityAudit` in the platform test pack asserts each rule against the shipped default, because a prose audit in a file header cannot fail.

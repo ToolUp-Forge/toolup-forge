@@ -1585,6 +1585,15 @@
              the GP 13 keystone — NoExternalCompute composes no registry,
              no telemetry, no probe, no panel. -->
         <Compile Include="InProcess\ComputeBackendRegistryTests.fs" />
+        <!-- Phase 485 — compute-result memoization. Two windows, asserted
+             separately: the terminal-outcome cache (a later duplicate) and
+             the in-flight coalescer (a concurrent one, which no cache can
+             serve because only Succeeded caches). Every claim is counted on
+             the backend rather than read off the return value, scope
+             isolation is asserted structurally AND behaviourally, and the
+             zero-budget claim is measured through a counting pass-through
+             standing in for Phase 451. -->
+        <Compile Include="InProcess\MemoizedComputeDispatcherTests.fs" />
         <!-- Phase 7c — data-object orphan-blob sweep: a real Save severed
              between its content and metadata writes produces the orphan,
              then the grace window (deferred vs reclaimed, one stamp
