@@ -115,6 +115,19 @@ type KnowledgeApiDeps = {
     /// so a deployment without it takes no extra index read at all
     /// (GP 11 / GP 13).
     VersioningPolicy: KnowledgeVersioningPolicy
+    /// Phase 105 — the versioned object store KB originals are retained
+    /// in, present **only** when the deployment composed
+    /// `withObjectStoreRetention true`.
+    ///
+    /// `None` is not "no store is registered" — one always is, for every
+    /// composed deployment (`ComposeRuntimeServices`). It means the
+    /// deployment did not opt in, and every original-bytes path then
+    /// takes the pre-105 `knowledge/{docId}/{fileName}` convention
+    /// branch with no store call at all (GP 11 / GP 13). Resolving the
+    /// singleton behind the policy rather than probing for it is what
+    /// makes that guarantee structural: there is no path from an
+    /// un-opted-in deployment to a store write.
+    DataObjectStore: IDataObjectStore option
     /// Phase 512 — compose-time per-scope corpus quota, registered by
     /// `withKnowledgeQuota`; `KnowledgeQuotaPolicy.unlimited` when absent
     /// (no tally taken, no upload refusable — pre-512 behaviour, GP 11).
@@ -347,6 +360,29 @@ module KnowledgeApiDeps =
             | :? KnowledgeVersioningPolicy as p -> p
             | _ -> KnowledgeVersioningPolicy.disabled
 
+        // Phase 105 — original retention in the versioned object store.
+        // The POLICY is the gate, not the presence of a store: one is
+        // registered for every composed deployment, so probing DI would
+        // silently move every existing deployment's originals on
+        // upgrade. Un-opted-in ⇒ `None` ⇒ no store call on any path.
+        let objectRetentionPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeObjectRetentionPolicy>) with
+            | :? KnowledgeObjectRetentionPolicy as p -> p
+            | _ -> KnowledgeObjectRetentionPolicy.disabled
+
+        let dataObjectStore =
+            if not objectRetentionPolicy.RetainOriginalsInObjectStore then
+                None
+            else
+                match ctx.RequestServices.GetService(typeof<IDataObjectStore>) with
+                | :? IDataObjectStore as s -> Some s
+                | _ ->
+                    logger.Warn(
+                        "[KnowledgeBase] withObjectStoreRetention is composed but no IDataObjectStore is registered; originals fall back to the knowledge/{docId}/{fileName} blob convention."
+                    )
+
+                    None
+
         // Phase 512 — corpus quota + retention policies registered by
         // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
         // retain-forever defaults when absent.
@@ -485,6 +521,7 @@ module KnowledgeApiDeps =
             UploadPolicy = uploadPolicy
             DedupPolicy = dedupPolicy
             VersioningPolicy = versioningPolicy
+            DataObjectStore = dataObjectStore
             QuotaPolicy = quotaPolicy
             RetentionPolicy = retentionPolicy
             ContentScanner = contentScanner

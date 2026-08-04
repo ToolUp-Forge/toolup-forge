@@ -219,6 +219,13 @@ SharedTypes+KnowledgeDocumentVersion.SupersededAt : Microsoft.FSharp.Core.FSharp
 SharedTypes+KnowledgeDocumentVersion.UploadedAt : System.DateTimeOffset { get }
 SharedTypes+KnowledgeDocumentVersion.UploadedBy : System.String { get }
 SharedTypes+KnowledgeDocumentVersion.Version : System.Int32 { get }
+SharedTypes+KnowledgeObjectRetentionPolicy (class)
+SharedTypes+KnowledgeObjectRetentionPolicy..ctor(System.Boolean)
+SharedTypes+KnowledgeObjectRetentionPolicy.RetainOriginalsInObjectStore : System.Boolean { get }
+SharedTypes+KnowledgeObjectRetentionPolicyModule (class)
+SharedTypes+KnowledgeObjectRetentionPolicyModule.ObjectDataType : System.String (literal)
+SharedTypes+KnowledgeObjectRetentionPolicyModule.disabled : SharedTypes+KnowledgeObjectRetentionPolicy { get }
+SharedTypes+KnowledgeObjectRetentionPolicyModule.enabled : SharedTypes+KnowledgeObjectRetentionPolicy { get }
 SharedTypes+KnowledgeQuotaPolicy (class)
 SharedTypes+KnowledgeQuotaPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int64])
 SharedTypes+KnowledgeQuotaPolicy.MaxBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }

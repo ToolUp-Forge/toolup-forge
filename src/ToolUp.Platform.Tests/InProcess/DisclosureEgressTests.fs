@@ -535,6 +535,8 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     DedupPolicy = KnowledgeDedupPolicy.enabled
     // Phase 510 — this pack pins the pre-510 upload path; versioning off.
     VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    // Phase 105 — retention not composed: the pre-105 convention-blob path.
+    DataObjectStore = None
     // Phase 512 — these packs pin pre-512 paths; the unlimited /
     // retain-forever defaults keep them byte-identical.
     QuotaPolicy = KnowledgeQuotaPolicy.unlimited

@@ -170,6 +170,8 @@ let private mkDeps
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
         VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        // Phase 105 — retention not composed: the pre-105 convention-blob path.
+        DataObjectStore = None
         QuotaPolicy = KnowledgeQuotaPolicy.unlimited
         RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = scanner

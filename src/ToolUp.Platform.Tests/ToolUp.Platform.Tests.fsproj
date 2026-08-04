@@ -1031,6 +1031,14 @@
              enqueue, and the GP 11 pin that an uncomposed deployment still
              lands two unrelated documents. -->
         <Compile Include="InProcess\KbVersioningTests.fs" />
+        <!-- Phase 105 — KB original retention on IDataObjectStore: the
+             store-backed save / read / delete, the 14x reconciliation
+             (documents deliberately NOT deduped still share one content
+             blob), the convention-path read fallback that IS the
+             migration, the erasure-coverage delta asserted against an
+             un-retained control, and the GP 11 pin that a deployment
+             which never opts in makes no store call at all. -->
+        <Compile Include="InProcess\KbObjectRetentionTests.fs" />
         <!-- Phase 511 — bulk / programmatic KB import: archive expansion
              under decompression-bomb guards, zip-slip entry names refused
              by classification rather than silently flattened, the URL

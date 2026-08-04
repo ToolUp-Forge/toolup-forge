@@ -159,6 +159,17 @@ let withDocumentDedup = KnowledgeBase.ServerUploadPolicy.withDocumentDedup
 /// other compose-time hooks.
 let withDocumentVersioning = KnowledgeBase.ServerUploadPolicy.withDocumentVersioning
 
+/// Phase 105 — compose-time lever for retaining KB **originals** in
+/// `IDataObjectStore` instead of at the raw `knowledge/{docId}/{name}`
+/// blob convention (OFF by default). With it, originals gain
+/// content-addressable dedup at rest, a metadata envelope, the store's
+/// version chain, and — because `Save` records `createdBy` — coverage
+/// by the Phase 9h data-subject `Erase` surface, which a raw blob never
+/// had. Reads fall back to the convention path, so pre-opt-in documents
+/// stay retrievable with no backfill. Defined in `Server/UploadPolicy.fs`.
+let withObjectStoreRetention =
+    KnowledgeBase.ServerUploadPolicy.withObjectStoreRetention
+
 /// Phase 512 — compose a per-scope **corpus** quota (`MaxDocuments` /
 /// `MaxBytes`), enforced at the upload boundary before anything is
 /// persisted. Complements `withUploadPolicy`, which caps one upload;

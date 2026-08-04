@@ -64,6 +64,189 @@ let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async
                     | _ -> true))
 }
 
+// ─── Original retention (Phase 105) ───────────────────────────────
+//
+// One place decides WHERE an original's bytes live, and three
+// operations — save, read, delete — are expressed against it. Before
+// this the convention path `knowledge/{docId}/{fileName}` was rebuilt
+// by hand at five call sites across three files; the point of routing
+// through `IDataObjectStore` is defeated if any one of them keeps
+// guessing.
+//
+// **`deps.DataObjectStore = None` is the pre-105 path byte-for-byte**
+// (GP 11 / GP 13): the convention blob, no store call, no metadata
+// envelope. See `KnowledgeObjectRetentionPolicy` for why that is an
+// explicit opt-in rather than a DI probe.
+
+/// The conventional blob key for a document's live original. Still the
+/// storage location when retention is not composed, and always the
+/// fallback READ location — a document uploaded before the opt-in lives
+/// here forever, which is why there is no backfill step.
+let private conventionOriginalBlobName (docId: string) (fileName: string) =
+    sprintf "knowledge/%s/%s" docId fileName
+
+/// Persist a document's original bytes.
+///
+/// The store branch uses `objectId = docId` (see
+/// `KnowledgeObjectRetentionPolicy` for why the identity is derived
+/// rather than stored) and the **`Versioned`** policy — never
+/// `StrictlyVersioned`, whose `Delete` returns `DeleteForbidden` and
+/// would break the delete cascade below. The envelope carries what a
+/// later reader needs to describe the original without consulting the
+/// KB index, plus `createdBy`, which is what makes the object visible
+/// to the Phase 9h `Erase` subject match.
+///
+/// A store failure falls back to the convention blob rather than
+/// failing the upload: the document is already admitted by this point,
+/// and an original that landed at the legacy path is fully retrievable
+/// (the read helper below tries both) where a refused upload is not.
+let private saveOriginal
+    (deps: KnowledgeApiDeps)
+    (docId: string)
+    (safeName: string)
+    (ext: string)
+    (contentHash: string option)
+    (bytes: byte[])
+    : Async<unit> =
+    async {
+        match deps.DataObjectStore with
+        | None ->
+            let! _ = deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes)
+            ()
+        | Some store ->
+            let metadata =
+                Map [
+                    "kb.fileName", safeName
+                    "kb.fileType", ext
+                    "kb.sourceKind", "UploadedFile"
+                    "kb.uploadedBy", deps.UserId
+                    match contentHash with
+                    | Some h -> "kb.contentHash", h
+                    | None -> ()
+                ]
+
+            let! saved =
+                store.Save(
+                    deps.Scope.ScopeId,
+                    docId,
+                    bytes,
+                    KnowledgeObjectRetentionPolicy.ObjectDataType,
+                    deps.UserId,
+                    metadata,
+                    Versioned
+                )
+
+            match saved with
+            | Ok _ -> ()
+            | Error err ->
+                deps.Logger.Warn(
+                    sprintf
+                        "[KnowledgeBase] IDataObjectStore.Save failed for docId=%s (%A); falling back to the knowledge/{docId}/{fileName} blob convention for this original."
+                        docId
+                        err
+                )
+
+                let! _ = deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes)
+                ()
+    }
+
+/// Read a document's live original bytes, store first.
+///
+/// **The fallback IS the migration.** A document uploaded before
+/// `withObjectStoreRetention` has no object, so `Get` returns
+/// `NotFound` and the convention blob answers — forever, with no
+/// backfill pass and no one-way cutover for existing content. It also
+/// covers the reverse direction: an upload whose store `Save` failed
+/// above landed at the convention path and still reads back.
+let private readOriginalBytes (deps: KnowledgeApiDeps) (docId: string) (fileName: string) : Async<byte[] option> = async {
+    let fromConvention () = async {
+        match! deps.Storage.Download(deps.Scope.Container, conventionOriginalBlobName docId fileName) with
+        | Ok bytes -> return Some bytes
+        | Error _ -> return None
+    }
+
+    match deps.DataObjectStore with
+    | None -> return! fromConvention ()
+    | Some store ->
+        match! store.Get(deps.Scope.ScopeId, docId) with
+        | Ok(_, bytes) -> return Some bytes
+        | Error _ -> return! fromConvention ()
+}
+
+/// Remove a document's live original from wherever it lives.
+///
+/// BOTH locations are swept, unconditionally, and that is deliberate:
+/// a scope that ran for a while without retention composed and was then
+/// opted in holds documents at either location, and a delete that only
+/// cleared the composed one would leave the other's bytes at rest after
+/// the document was reported deleted. `Delete` is idempotent on both
+/// sides, so sweeping the location that holds nothing costs a no-op.
+let private deleteOriginal (deps: KnowledgeApiDeps) (docId: string) (fileName: string) : Async<unit> = async {
+    match deps.DataObjectStore with
+    | None -> ()
+    | Some store ->
+        match! store.Delete(deps.Scope.ScopeId, docId) with
+        | Ok() -> ()
+        | Error err ->
+            deps.Logger.Warn(
+                sprintf
+                    "[KnowledgeBase] IDataObjectStore.Delete failed for docId=%s (%A); the index entry is still removed."
+                    docId
+                    err
+            )
+
+    let! _ = deps.Storage.Delete(deps.Scope.Container, conventionOriginalBlobName docId fileName)
+    ()
+}
+
+/// `true` when the object store is composed AND actually holds an
+/// object for this document. `ListVersions` reads metadata only — no
+/// content transfer — so this is the cheap "which era is this document
+/// from" question, which is not the same as "is retention composed":
+/// a scope opted in yesterday still holds every document uploaded
+/// before that at the convention path.
+let private storeHoldsOriginal (deps: KnowledgeApiDeps) (docId: string) : Async<bool> = async {
+    match deps.DataObjectStore with
+    | None -> return false
+    | Some store ->
+        let! versions = store.ListVersions(deps.Scope.ScopeId, docId)
+        return not (List.isEmpty versions)
+}
+
+/// Resolve a document's original, store first.
+///
+/// Only the `UploadedFile` branch is store-backed — a `Note`'s
+/// canonical form is its markdown and a narrative has no binary
+/// original at all, so both stay entirely with the Phase 104
+/// `IOriginalSourceResolver`, which is also what keeps a deployment's
+/// CUSTOM resolver authoritative for the kinds it was registered to
+/// serve. That is why retention did not need `IOriginalSourceResolver`
+/// widened: the interface takes `(storage, container, doc)` and has no
+/// `scopeId`, so a store-aware branch could not have been expressed
+/// there without a breaking change to a public seam with external
+/// implementations.
+let private resolveOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : Async<OriginalDocument option> = async {
+    let fromResolver () =
+        deps.OriginalResolver.Resolve(deps.Storage, deps.Scope.Container, doc)
+
+    match deps.DataObjectStore, doc.Source with
+    | Some store, UploadedFile ->
+        match! store.Get(deps.Scope.ScopeId, doc.Id) with
+        | Ok(_, bytes) ->
+            return
+                Some {
+                    FileName = doc.FileName
+                    ContentType = KnowledgeBase.ServerOriginalSourceResolver.contentTypeFor doc.FileType
+                    SizeBytes = int64 bytes.Length
+                    Content = bytes
+                }
+        // Not in the store ⇒ a pre-opt-in document. The resolver's
+        // convention-path branch is the fallback, and it is the
+        // migration.
+        | Error _ -> return! fromResolver ()
+    | _ -> return! fromResolver ()
+}
+
 // ─── Chunk-level content diff (Phase 510) ─────────────────────────
 
 /// Lowercase SHA-256 hex of one chunk's rendered text — the identity a
@@ -163,17 +346,29 @@ let private deleteOrphanTail
 /// rather than a version record pointing at bytes that were never
 /// copied (a broken promise the API would then have to honour). Same
 /// ordering argument as the Phase 14x hash-ref write.
+///
+/// Phase 105 — the outgoing bytes are read through `readOriginalBytes`,
+/// so this keeps working when the live original lives in the object
+/// store rather than at the convention path. It still WRITES the
+/// archive copy to `knowledge/{docId}/versions/{n}/{fileName}`:
+/// `KnowledgeDocumentVersion.OriginalBlobName` is a wire-visible blob
+/// handle that consumers (and the delete cascade's prefix sweep) already
+/// resolve against `IBlobStorage`, and an object-store version is not
+/// addressable by blob name — so re-pointing it would be a second,
+/// breaking change riding along in an additive phase. The cost is that a
+/// deployment composing BOTH retention and versioning holds a superseded
+/// version's bytes twice; retiring the copy needs a locator field on
+/// `KnowledgeDocumentVersion` and is recorded as follow-up work in
+/// `docs/migrations/105-kb-original-retention-idataobjectstore.md`.
 let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeDocument) : Async<unit> = async {
-    let liveBlobName = sprintf "knowledge/%s/%s" prior.Id prior.FileName
-
     let archivedBlobName =
         versionedOriginalBlobName prior.Id prior.Version prior.FileName
 
-    match! deps.Storage.Download(deps.Scope.Container, liveBlobName) with
-    | Ok priorBytes ->
+    match! readOriginalBytes deps prior.Id prior.FileName with
+    | Some priorBytes ->
         let! _ = deps.Storage.Upload(deps.Scope.Container, archivedBlobName, priorBytes)
         ()
-    | Error err ->
+    | None ->
         // The prior original is already gone (an earlier partial delete,
         // a legacy document whose blob was pruned). Losing bytes we never
         // had is not a reason to refuse the new version — but the record
@@ -181,10 +376,9 @@ let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeD
         // loudly and carry on.
         deps.Logger.Warn(
             sprintf
-                "[KnowledgeBase] Superseding %s v%d but its original blob could not be read (%s); the version record is written without preserved bytes."
+                "[KnowledgeBase] Superseding %s v%d but its original could not be read from the object store or the convention blob; the version record is written without preserved bytes."
                 prior.Id
                 prior.Version
-                err
         )
 
     do!
@@ -255,8 +449,10 @@ let private persistAndIngest
                 | None -> 1
         }
 
-        let rawBlobName = sprintf "knowledge/%s/%s" docId safeName
-        let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, bytes)
+        // Phase 105 — through `IDataObjectStore` when the deployment
+        // composed `withObjectStoreRetention`, else the pre-105
+        // convention blob.
+        do! saveOriginal deps docId safeName ext contentHash bytes
 
         // Phase 116 — atomic index RMW so a concurrent upload to the same
         // container can't clobber this entry (or vice versa). Released before
@@ -1056,8 +1252,10 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                             sprintf "Some of the document's index entries could not be deleted (%s). Try again." summary
                         )
                 else
-                    let rawBlobName = sprintf "knowledge/%s/%s" docId doc.FileName
-                    let! _ = deps.Storage.Delete(deps.Scope.Container, rawBlobName)
+                    // Phase 105 — removes the object-store object AND the
+                    // convention blob, so a scope holding documents from
+                    // both eras is fully swept.
+                    do! deleteOriginal deps docId doc.FileName
 
                     // Phase 510 — a deleted document takes its whole
                     // lineage with it: every preserved prior-version
@@ -1153,7 +1351,10 @@ let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<
             do! denied "NotInScope"
             return Error NotInScope
         | Some doc ->
-            let! resolved = deps.OriginalResolver.Resolve(deps.Storage, deps.Scope.Container, doc)
+            // Phase 105 — store-first for uploaded files when retention
+            // is composed; the Phase 104 resolver otherwise, and for
+            // every other source kind.
+            let! resolved = resolveOriginal deps doc
 
             match resolved with
             | Some original ->
@@ -1237,26 +1438,60 @@ let getOriginalDelivery
                     do! denied "NotInScope"
                     return Error NotInScope
                 | Some doc ->
-                    let! previewed = seam.Preview(deps.Storage, deps.Scope.Container, doc, None)
+                    // Phase 105 — a document whose original lives in the
+                    // object store has no single signable blob name: the
+                    // bytes sit in the store's content-addressed pool
+                    // under a hash, and the seam signs an `IBlobStorage`
+                    // key. Left to run, `ResolveMetadata` would describe
+                    // the convention path, `GetMetadata` would miss, and
+                    // the caller would get `NoOriginalAvailable` for a
+                    // document that is perfectly retrievable.
+                    //
+                    // So retention wins over signed delivery for exactly
+                    // those documents, and serves the Phase 102 inline
+                    // result — degraded in byte-efficiency, never in
+                    // correctness, and never silently: the log names the
+                    // interaction. Documents predating the opt-in still
+                    // sign normally, which is why this is decided per
+                    // document rather than per deployment. Reuniting the
+                    // two needs an object-store signing surface and is
+                    // recorded as follow-up work in
+                    // `docs/migrations/105-kb-original-retention-idataobjectstore.md`.
+                    let! heldInStore = storeHoldsOriginal deps doc.Id
 
-                    match previewed with
-                    | Ok target ->
-                        do!
-                            recordOriginalAccessAudit
-                                deps
-                                (KnowledgeOriginalRetrieved {
-                                    UserId = deps.UserId
-                                    DocumentId = doc.Id
-                                    ScopeId = deps.Scope.ScopeId
-                                    SourceKind = sourceKindName doc.Source
-                                    FileName = doc.FileName
-                                })
+                    if heldInStore then
+                        deps.Logger.Info(
+                            sprintf
+                                "[KnowledgeBase] docId=%s is retained in IDataObjectStore, which has no signable blob name; serving the original inline instead of a signed URL."
+                                doc.Id
+                        )
 
-                        return Ok target.Content
-                    | Error NoOriginalAvailable ->
-                        do! denied "NoOriginalAvailable"
-                        return Error NoOriginalAvailable
-                    | Error other -> return Error other
+                        // Delegates to the Phase 102 handler rather than
+                        // re-resolving here, so the audit emission stays
+                        // in exactly one place on this arm too.
+                        let! inlineResult = getOriginalDocument deps docId
+                        return inlineResult |> Result.map PreviewContent.Inline
+                    else
+                        let! previewed = seam.Preview(deps.Storage, deps.Scope.Container, doc, None)
+
+                        match previewed with
+                        | Ok target ->
+                            do!
+                                recordOriginalAccessAudit
+                                    deps
+                                    (KnowledgeOriginalRetrieved {
+                                        UserId = deps.UserId
+                                        DocumentId = doc.Id
+                                        ScopeId = deps.Scope.ScopeId
+                                        SourceKind = sourceKindName doc.Source
+                                        FileName = doc.FileName
+                                    })
+
+                            return Ok target.Content
+                        | Error NoOriginalAvailable ->
+                            do! denied "NoOriginalAvailable"
+                            return Error NoOriginalAvailable
+                        | Error other -> return Error other
             with ex ->
                 deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDelivery failed for %s" docId, Some ex)
                 return Error(OriginalRetrievalFailed ex.Message)

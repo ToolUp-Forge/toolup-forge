@@ -795,6 +795,10 @@ let allTests =
         KbQuotaRetentionTests.tests
         // Phase 510 — KB document versioning + incremental re-index.
         KbVersioningTests.tests
+        // Phase 105 — KB original retention on IDataObjectStore: dedup at
+        // rest, the convention-path read fallback, and data-subject
+        // erasure coverage a raw blob never had.
+        KbObjectRetentionTests.tests
         // Phase 511 — bulk / programmatic KB import: archive bomb +
         // zip-slip guards, the inert-by-default URL gate, and the
         // per-item scan / dedup / quota claim through the batch surface.

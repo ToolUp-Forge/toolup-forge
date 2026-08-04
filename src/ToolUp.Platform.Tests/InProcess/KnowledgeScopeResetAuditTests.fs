@@ -111,6 +111,8 @@ let private mkDeps
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
         VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        // Phase 105 — retention not composed: the pre-105 convention-blob path.
+        DataObjectStore = None
         // Phase 512 — these packs pin pre-512 paths; the unlimited /
         // retain-forever defaults keep them byte-identical.
         QuotaPolicy = KnowledgeQuotaPolicy.unlimited

@@ -92,6 +92,8 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     DedupPolicy = KnowledgeDedupPolicy.enabled
     // Phase 510 — quota/retention are asserted on the unversioned path.
     VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    // Phase 105 — retention not composed: the pre-105 convention-blob path.
+    DataObjectStore = None
     QuotaPolicy = quota
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.

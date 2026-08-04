@@ -573,6 +573,8 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     UploadPolicy = KnowledgeUploadPolicy.permissive
     DedupPolicy = KnowledgeDedupPolicy.enabled
     VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    // Phase 105 — retention not composed: the pre-105 convention-blob path.
+    DataObjectStore = None
     QuotaPolicy = KnowledgeQuotaPolicy.unlimited
     RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.

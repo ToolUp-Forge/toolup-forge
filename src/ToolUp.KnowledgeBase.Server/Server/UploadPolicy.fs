@@ -142,6 +142,51 @@ let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
             }
     }
 
+/// Phase 105 — compose-time lever for routing KB **original documents**
+/// through `IDataObjectStore` rather than writing them as raw blobs at
+/// the `knowledge/{docId}/{fileName}` convention path. OFF by default.
+///
+/// With it, `UploadDocument` saves the original through
+/// `IDataObjectStore.Save(scopeId, docId, …, Versioned)` — content is
+/// deduplicated by SHA-256 at rest within the scope, the envelope
+/// carries file name / type / uploader / content hash, and the object
+/// is matched by the Phase 9h `Erase` surface because `Save` records
+/// `createdBy`. Original retrieval reads the store first and falls back
+/// to the convention blob, so documents uploaded before the opt-in stay
+/// retrievable with no backfill step; deletion removes both.
+///
+/// **`Versioned`, never `StrictlyVersioned`.** The store's policy is
+/// sticky for the object's lifetime and `StrictlyVersioned` makes
+/// `Delete` return `DeleteForbidden` — which would break the KB delete
+/// cascade outright. Retention that must survive deletion is a
+/// deployment-level policy, not a KB default.
+///
+/// **Why this is opt-in when the other substrate hooks are probes.**
+/// `IDataObjectStore` is registered for every composed deployment by
+/// `ComposeRuntimeServices`, so an "is one registered?" probe would
+/// flip every existing deployment onto the new retention path on
+/// upgrade rather than leaving it byte-for-byte (GP 11). Without this
+/// call the upload / read / delete paths take no store call at all
+/// (GP 13).
+let withObjectStoreRetention (enabled: bool) (app: ServerApp) : ServerApp =
+    let policy: KnowledgeObjectRetentionPolicy = {
+        RetainOriginalsInObjectStore = enabled
+    }
+
+    let register (s: IServiceCollection) =
+        s.AddSingleton<KnowledgeObjectRetentionPolicy>(policy)
+
+    {
+        app with
+            Extensions = {
+                app.Extensions with
+                    ServiceConfig =
+                        match app.Extensions.ServiceConfig with
+                        | None -> Some register
+                        | Some baseFn -> Some(fun s -> register (baseFn s))
+            }
+    }
+
 // ─── Phase 512 — per-scope quota + retention compose hooks ───────────
 
 /// Append a service registration onto the shared `ComposeExtensions`

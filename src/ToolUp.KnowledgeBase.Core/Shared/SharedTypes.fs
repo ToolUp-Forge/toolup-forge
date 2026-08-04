@@ -639,6 +639,67 @@ module KnowledgeVersioningPolicy =
     /// version of that document.
     let enabled: KnowledgeVersioningPolicy = { VersionUploads = true }
 
+// ─── Original-document retention policy (Phase 105) ──────────────
+
+/// Compose-time lever for routing KB **original documents** through
+/// `IDataObjectStore` instead of writing them as a raw `IBlobStorage`
+/// blob at the `knowledge/{docId}/{fileName}` convention path. The
+/// object store already provides content-addressable dedup at rest, a
+/// metadata envelope carrying scope / lineage, a version chain, and the
+/// Phase 9h `Erase` surface — so an original saved through it costs one
+/// copy of the bytes per distinct content within a scope, and is
+/// matched by a data-subject erasure demand rather than being invisible
+/// to it.
+///
+/// **The objectId IS the `KnowledgeDocument.Id`, and this record
+/// carries no field to change that.** `(scopeId, objectId)` is the
+/// store's identity and `docId` is already unique within the scope,
+/// already stamped into chunk metadata (Phase 103), and already the key
+/// `GetOriginalDocument` receives — so retrieval becomes a direct
+/// `Get(scopeId, docId)` with no wire change and no persisted-record
+/// widening. It also makes the two version axes AGREE rather than
+/// compete: Phase 510 supersedes a lineage **in place** under the same
+/// `Id`, and the object store's own chain is keyed by `objectId`, so
+/// deriving `objectId = docId` means version N of the lineage is
+/// version N of the object. Minting a separate objectId would force a
+/// choice between breaking the lineage (a new objectId per version) and
+/// reproducing the docId with extra indirection.
+///
+/// **The default is OFF, and it has to be.** Unlike every other KB
+/// substrate dependency, `IDataObjectStore` is registered by
+/// `ComposeRuntimeServices` for **every** composed deployment, so
+/// "is one registered?" cannot be the opt-in signal — probing DI would
+/// silently move every existing deployment's originals to a new
+/// location on upgrade, and their previously-uploaded documents would
+/// then be served only by the compatibility fallback. An explicit
+/// policy makes the migration a deployment decision (GP 11 / GP 13).
+type KnowledgeObjectRetentionPolicy = {
+    /// `true` to save new originals through `IDataObjectStore` and to
+    /// read originals store-first. Reads always fall back to the
+    /// convention blob, so documents uploaded before the opt-in stay
+    /// retrievable forever — that fallback IS the migration, and there
+    /// is no backfill step.
+    RetainOriginalsInObjectStore: bool
+}
+
+module KnowledgeObjectRetentionPolicy =
+    /// The default a deployment gets without calling
+    /// `withObjectStoreRetention`: originals are written to, read from
+    /// and deleted at the `knowledge/{docId}/{fileName}` convention
+    /// path exactly as they were before Phase 105 — no store call on
+    /// any path (GP 11 / GP 13).
+    let disabled: KnowledgeObjectRetentionPolicy = { RetainOriginalsInObjectStore = false }
+
+    /// The opt-in: new originals are saved through `IDataObjectStore`
+    /// under `objectId = docId` with the `Versioned` policy.
+    let enabled: KnowledgeObjectRetentionPolicy = { RetainOriginalsInObjectStore = true }
+
+    /// `DataType` stamped on every KB original saved through the store,
+    /// so `ListObjects` / `IDataCatalog` can select exactly the KB's
+    /// originals out of a scope that also holds other object kinds.
+    [<Literal>]
+    let ObjectDataType = "knowledge-document"
+
 // ─── Per-scope quota + retention (Phase 512) ─────────────────────
 
 /// Compose-time per-scope Knowledge Base storage quota — the corpus-level
