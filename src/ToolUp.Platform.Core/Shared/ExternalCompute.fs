@@ -81,6 +81,180 @@ module ExternalComputeError =
         else
             sprintf "%s (terminal)" error.Message
 
+// ─── Phase 478 — the isolated execution profile ──────────────────────────
+//
+// Computing *on* clean-room-gated data (split learning, private cohort
+// modelling) needs a worker the substrate can trust not to leak. Phase 318
+// gave the substrate a portable way to say WHERE work runs; it had no way
+// to say anything at all about what that somewhere is allowed to do while
+// it runs. `ExecutionProfile` is that missing axis, and it rides the spec
+// as data (GP 12) precisely so it survives serialisation, a restart, and a
+// hand-off to a backend forge has never heard of.
+//
+// **The default is `Standard`, and `Standard` is exactly Phase 318.** A
+// spec built by `ExternalWorkSpec.create` carries `Standard`; every
+// dispatcher answers it exactly as it did before this phase; no gate, no
+// posture check, no branch beyond the one match that finds `Standard`
+// (GP 11 / GP 13). Nothing about a non-federating deployment changes.
+
+/// Phase 478 — how much the platform constrains the environment a unit of
+/// external work runs in.
+///
+/// `[<RequireQualifiedAccess>]` for the reason `ExternalOutcome` carries
+/// it: `Standard` is about as collision-prone as a case name gets in a
+/// namespace this size, and an unqualified one is how a call site silently
+/// binds the union you did not mean.
+[<RequireQualifiedAccess>]
+type ExecutionProfile =
+    /// Phase 318's behaviour, unchanged. The backend runs the work however
+    /// it normally does; the platform makes no isolation claim and checks
+    /// none. Every spec is this unless it says otherwise.
+    | Standard
+    /// The work runs in a **clean-room-grade** environment: no egress
+    /// beyond the completion callback, inputs limited to the refs the spec
+    /// declares, and an ephemeral workspace destroyed with the worker.
+    ///
+    /// This is a *requirement on the backend*, not a request: a backend
+    /// that does not declare the posture is refused the submission rather
+    /// than handed it in the hope it behaves (see `IsolationPosture`).
+    | Isolated
+
+[<RequireQualifiedAccess>]
+module ExecutionProfile =
+    /// Stable lowercase label for logs / audit payloads / dev panels.
+    let label =
+        function
+        | ExecutionProfile.Standard -> "standard"
+        | ExecutionProfile.Isolated -> "isolated"
+
+/// Phase 478 — what a backend guarantees about the environment it runs
+/// `Isolated` work in. **The isolation posture contract, as data.**
+///
+/// Three clauses, deliberately no more. Each is a property an operator can
+/// point at a concrete mechanism for, and together they are what makes
+/// "the worker cannot leak the gated data it computed over" a claim rather
+/// than a hope:
+///
+///   1. **No egress** beyond the completion callback. The worker reaches
+///      no network destination of its own choosing — not a package index,
+///      not a metrics endpoint, not an object store it was not handed.
+///      Without this clause the other two buy nothing: a worker that can
+///      open a socket does not need a durable workspace to exfiltrate.
+///   2. **Inputs limited to the spec's declared refs.** The worker sees
+///      the payload it was given and nothing else — no ambient credential,
+///      no mounted host path, no sibling job's scratch space.
+///   3. **Ephemeral workspace.** Storage is created with the worker and
+///      destroyed with it, so an output that was withheld does not survive
+///      the refusal on a disk somebody can later read.
+///
+/// `Enforcement` names the concrete mechanism — free text, because the
+/// mechanism is the backend's business and a typed shape here would encode
+/// one scheduler's vocabulary and stop being portable (the same argument
+/// `ResourceHints` makes). It is recorded and echoed, never parsed.
+///
+/// **A backend declaring `true` is making an assertion the substrate
+/// cannot verify from here, and that is the honest boundary.** What the
+/// substrate CAN do — and does — is refuse to submit `Isolated` work to a
+/// backend that has not made the assertion at all, and route the output
+/// through the clean-room gate regardless of it. The posture narrows who
+/// may be asked; the gate is what decides what may be seen.
+type IsolationPosture = {
+    /// Clause 1 — no network egress beyond the completion callback.
+    NoEgress: bool
+    /// Clause 2 — the worker's inputs are limited to the refs the
+    /// `ExternalWorkSpec` declares.
+    InputsRestrictedToDeclaredRefs: bool
+    /// Clause 3 — the workspace is created with the worker and destroyed
+    /// with it.
+    EphemeralWorkspace: bool
+    /// The concrete mechanism the backend enforces the clauses with (e.g.
+    /// a network policy, a sandbox profile, a VM boundary). Opaque to the
+    /// platform: recorded for audit and operator diagnosis, never parsed.
+    Enforcement: string
+}
+
+[<RequireQualifiedAccess>]
+module IsolationPosture =
+    /// The posture an **undeclared** backend contributes: no clause
+    /// asserted, so `Standard` work only.
+    ///
+    /// This is the identity value in the same sense
+    /// `CompanionCapability.identity` is — a backend that says nothing is
+    /// read as claiming nothing, never as claiming everything. A posture
+    /// defaulting the other way would make forgetting to declare
+    /// indistinguishable from declaring, which is the failure mode this
+    /// whole phase exists to close.
+    let standardOnly: IsolationPosture = {
+        NoEgress = false
+        InputsRestrictedToDeclaredRefs = false
+        EphemeralWorkspace = false
+        Enforcement = ""
+    }
+
+    /// A backend asserting all three clauses, enforced by the named
+    /// mechanism. The only shape that honours `Isolated`.
+    let clauses (enforcement: string) : IsolationPosture = {
+        NoEgress = true
+        InputsRestrictedToDeclaredRefs = true
+        EphemeralWorkspace = true
+        Enforcement = enforcement
+    }
+
+    /// The clauses this posture does NOT assert, named. Empty exactly when
+    /// the posture honours `Isolated`.
+    ///
+    /// Returned as data rather than folded into a boolean so a refusal can
+    /// tell an operator *which* guarantee is missing — "this backend
+    /// declares no egress control" is actionable; "unsuitable" is not.
+    let shortfall (posture: IsolationPosture) : string list = [
+        if not posture.NoEgress then
+            "no-egress (the worker may reach destinations beyond the completion callback)"
+        if not posture.InputsRestrictedToDeclaredRefs then
+            "declared-refs-only (the worker may read inputs the spec did not declare)"
+        if not posture.EphemeralWorkspace then
+            "ephemeral-workspace (the worker's storage may outlive it)"
+    ]
+
+    /// `true` when this posture can honour `profile`.
+    ///
+    /// `Standard` is honoured by everything, including the undeclared
+    /// posture — that is what keeps Phase 318's path untouched. `Isolated`
+    /// requires all three clauses: a partial posture is refused, because
+    /// two of three is not a weaker clean room, it is a leak with a longer
+    /// description.
+    let honours (profile: ExecutionProfile) (posture: IsolationPosture) : bool =
+        match profile with
+        | ExecutionProfile.Standard -> true
+        | ExecutionProfile.Isolated -> List.isEmpty (shortfall posture)
+
+    /// One-line description for logs / audit payloads / operator panels.
+    let describe (posture: IsolationPosture) : string =
+        match shortfall posture with
+        | [] ->
+            let mechanism =
+                if System.String.IsNullOrWhiteSpace posture.Enforcement then
+                    "an undeclared mechanism"
+                else
+                    posture.Enforcement
+
+            sprintf "isolated (no-egress + declared-refs-only + ephemeral-workspace, enforced by %s)" mechanism
+        | missing -> sprintf "standard-only (missing: %s)" (String.concat "; " missing)
+
+    /// The refusal a backend that has not declared the isolation posture
+    /// returns when handed an `Isolated` spec.
+    ///
+    /// **Terminal, always.** Retrying an identical submission cannot make
+    /// a backend isolating — that is a composition change, not a transient
+    /// condition — and a `Retriable = true` here would have a caller
+    /// re-offering gated work to a leaky worker on a timer.
+    let refusal (backend: string) (posture: IsolationPosture) : ExternalComputeError =
+        ExternalComputeError.terminal (
+            sprintf
+                "backend '%s' does not honour ExecutionProfile.Isolated: %s. Submit this work to a backend that declares the isolation posture, or drop the spec to ExecutionProfile.Standard if the payload is not clean-room data."
+                backend
+                (describe posture)
+        )
+
 /// An opaque handle to one unit of work accepted by an external compute
 /// backend. Identity by value (GP 12 rule 1) — every field is a primitive,
 /// so the same handle resolves from any node, survives a restart, and can
@@ -136,17 +310,35 @@ type ExternalWorkSpec = {
     /// handle rather than starting the work twice. `None` means every
     /// `Submit` is a fresh submission.
     Idempotency: string option
+    /// Phase 478 — how much the platform constrains the environment this
+    /// work runs in. `Standard` (the default `create` sets) is Phase 318
+    /// exactly; `Isolated` is a *requirement* the backend must declare it
+    /// honours, not a hint it may ignore.
+    ///
+    /// It is a field on the spec and not a dispatcher argument for the
+    /// portability reason the rest of this file is built on (GP 12 rule
+    /// 3): the requirement travels with the work, so it survives being
+    /// persisted, re-read after a restart, and handed to a backend by a
+    /// process that is not the one that authored it. A profile passed
+    /// beside the spec would be a promise only the submitting call frame
+    /// could keep.
+    Profile: ExecutionProfile
 }
 
 module ExternalWorkSpec =
     /// A spec with no resource hints, no timeout, and no idempotency key —
     /// the minimum shape.
+    ///
+    /// Phase 478 — `Profile` defaults to `ExecutionProfile.Standard`, so
+    /// every pre-478 call site builds the identical spec it always did and
+    /// every dispatcher answers it identically (GP 11).
     let create (kind: string) (payload: string) : ExternalWorkSpec = {
         Kind = kind
         Payload = payload
         ResourceHints = Map.empty
         Timeout = None
         Idempotency = None
+        Profile = ExecutionProfile.Standard
     }
 
     /// Add (or overwrite) one advisory resource hint.
@@ -164,6 +356,18 @@ module ExternalWorkSpec =
     /// Declare a caller-minted idempotency key, so a re-`Submit` of the
     /// identical spec returns the existing handle.
     let withIdempotency (key: string) (spec: ExternalWorkSpec) : ExternalWorkSpec = { spec with Idempotency = Some key }
+
+    /// Phase 478 — declare the execution profile this work requires.
+    let withProfile (profile: ExecutionProfile) (spec: ExternalWorkSpec) : ExternalWorkSpec = {
+        spec with
+            Profile = profile
+    }
+
+    /// Phase 478 — require a clean-room-grade worker: the submission is
+    /// **refused** by any backend that has not declared the isolation
+    /// posture, rather than run on one that might leak.
+    let isolated (spec: ExternalWorkSpec) : ExternalWorkSpec =
+        withProfile ExecutionProfile.Isolated spec
 
 /// The state of one submitted unit of work, as read by `Poll`.
 /// `[<RequireQualifiedAccess>]` for namespace hygiene — `Pending` /

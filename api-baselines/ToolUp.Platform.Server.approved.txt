@@ -2570,6 +2570,10 @@ ToolUp.Platform.EvidencePackGenerator.register(Microsoft.Extensions.DependencyIn
 ToolUp.Platform.EvidencePackHandler (class)
 ToolUp.Platform.EvidencePackHandler.Route : System.String (literal)
 ToolUp.Platform.EvidencePackHandler.routes : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Platform.ExecutionProfileGate (class)
+ToolUp.Platform.ExecutionProfileGate.check(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ExternalComputeError]
+ToolUp.Platform.ExecutionProfileGate.enforce(ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.IExternalComputeDispatcher
+ToolUp.Platform.ExecutionProfileGate.postureOf(ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.IsolationPosture
 ToolUp.Platform.ExposedSurface (class)
 ToolUp.Platform.ExposedSurface..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.ExposedSurfaceKind, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.AccessClassification)
 ToolUp.Platform.ExposedSurface.Access : ToolUp.Platform.AccessClassification { get }
@@ -3294,6 +3298,8 @@ ToolUp.Platform.IIngestionStatusStore.GetTotal(System.String, System.String) : M
 ToolUp.Platform.IIngestionStatusStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DataManagementTypes+FileIngestionStatus]]]
 ToolUp.Platform.IIngestionStatusStore.Set(System.String, System.String, DataManagementTypes+FileIngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IIngestionStatusStore.SetPending(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IIsolatedComputeBackend (interface)
+ToolUp.Platform.IIsolatedComputeBackend.IsolationPosture : ToolUp.Platform.IsolationPosture { get }
 ToolUp.Platform.IJobHandler (interface)
 ToolUp.Platform.IJobHandler.Execute(ToolUp.Platform.JobContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobResult]
 ToolUp.Platform.IJobScheduler (interface)

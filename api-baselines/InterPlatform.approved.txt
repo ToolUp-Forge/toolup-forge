@@ -323,6 +323,25 @@ ToolUp.InterPlatform.CommutativeCipherError+Tags.InvalidKey : System.Int32 (lite
 ToolUp.InterPlatform.CommutativeCipherError+Tags.InvalidPoint : System.Int32 (literal)
 ToolUp.InterPlatform.CommutativeCipherError+Tags.LengthMismatch : System.Int32 (literal)
 ToolUp.InterPlatform.CommutativeCipherError+Tags.NotOnCurve : System.Int32 (literal)
+ToolUp.InterPlatform.ComputeReleaseRefusal (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal.IsComputeOutputNotIsolated : System.Boolean { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal.IsComputeOutputUnavailable : System.Boolean { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal.IsComputeOutputUntrustedBackend : System.Boolean { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal.IsComputeOutputWithheld : System.Boolean { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputNotIsolated (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputNotIsolated.reason : System.String { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputUnavailable (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputUnavailable.reason : System.String { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputUntrustedBackend (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputUntrustedBackend.Item : ToolUp.Platform.ExternalComputeError { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputWithheld (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal+ComputeOutputWithheld.templateId : System.String { get }
+ToolUp.InterPlatform.ComputeReleaseRefusal+Tags (class)
+ToolUp.InterPlatform.ComputeReleaseRefusal+Tags.ComputeOutputNotIsolated : System.Int32 (literal)
+ToolUp.InterPlatform.ComputeReleaseRefusal+Tags.ComputeOutputUnavailable : System.Int32 (literal)
+ToolUp.InterPlatform.ComputeReleaseRefusal+Tags.ComputeOutputUntrustedBackend : System.Int32 (literal)
+ToolUp.InterPlatform.ComputeReleaseRefusal+Tags.ComputeOutputWithheld : System.Int32 (literal)
 ToolUp.InterPlatform.ConsumedContract (class)
 ToolUp.InterPlatform.ConsumedContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], System.String)
 ToolUp.InterPlatform.ConsumedContract.ContractId : System.String { get }
@@ -591,6 +610,30 @@ ToolUp.InterPlatform.GateDecision+Tags.Released : System.Int32 (literal)
 ToolUp.InterPlatform.GateDecision+Tags.Withheld : System.Int32 (literal)
 ToolUp.InterPlatform.GateDecision+Withheld (class)
 ToolUp.InterPlatform.GateDecision+Withheld.reason : System.String { get }
+ToolUp.InterPlatform.GatedComputeDeps (class)
+ToolUp.InterPlatform.GatedComputeDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.InterPlatform.GatedComputeDeps.Approval : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]] { get }
+ToolUp.InterPlatform.GatedComputeDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
+ToolUp.InterPlatform.GatedComputeDeps.Budget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PrivacyBudgetMeter] { get }
+ToolUp.InterPlatform.GatedComputeDeps.Noise : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
+ToolUp.InterPlatform.GatedComputeDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.GatedComputeDeps.Template : ToolUp.InterPlatform.CleanRoomTemplate { get }
+ToolUp.InterPlatform.GatedComputeDepsModule (class)
+ToolUp.InterPlatform.GatedComputeDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeDepsModule.withApproval(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeDepsModule.withBudget(ToolUp.InterPlatform.PrivacyBudgetMeter, ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeDepsModule.withNoise(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeOutput (class)
+ToolUp.InterPlatform.GatedComputeOutput.Descriptor : System.String { get }
+ToolUp.InterPlatform.GatedComputeOutput.Handle : ToolUp.Platform.ExternalHandle { get }
+ToolUp.InterPlatform.GatedComputeOutput.Kind : System.String { get }
+ToolUp.InterPlatform.GatedComputeOutput.ToString() : System.String
+ToolUp.InterPlatform.GatedComputeOutputModule (class)
+ToolUp.InterPlatform.GatedComputeOutputModule.contextFor(ToolUp.Platform.ExternalHandle) : ToolUp.InterPlatform.PeerCallContext
+ToolUp.InterPlatform.GatedComputeOutputModule.hold(ToolUp.Platform.IsolationPosture, ToolUp.Platform.ExternalWorkSpec, ToolUp.Platform.ExternalHandle, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.GatedComputeOutput, ToolUp.InterPlatform.ComputeReleaseRefusal]
+ToolUp.InterPlatform.GatedComputeOutputModule.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.GatedComputeOutputModule.release(ToolUp.InterPlatform.GatedComputeDeps, ToolUp.InterPlatform.GatedComputeOutput) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.CohortResult, ToolUp.InterPlatform.ComputeReleaseRefusal]]
 ToolUp.InterPlatform.GatedContractRegistration (class)
 ToolUp.InterPlatform.GatedContractRegistration.Registration : ToolUp.InterPlatform.PeerContractRegistration { get }
 ToolUp.InterPlatform.HmacActivationTokenMinter (class)

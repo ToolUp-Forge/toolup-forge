@@ -125,3 +125,110 @@ type NoExternalComputeDispatcher() =
         }
 
         member _.Cancel(_handle: ExternalHandle) = async { return () }
+
+// ─── Phase 478 — declaring, and enforcing, the isolation posture ─────────
+//
+// `ExecutionProfile` (Core) is the requirement a spec carries. This is the
+// other half: how a backend DECLARES what it can honour, and where a
+// mismatch is refused.
+//
+// **Why a second interface rather than a member on
+// `IExternalComputeDispatcher`.** F# cannot author a default interface
+// member, so adding `abstract IsolationPosture` to the dispatcher seam
+// would break every implementation that exists — including any a consumer
+// has already shipped — for a property the overwhelming majority answer
+// `standardOnly` to. A separate interface a backend *also* implements
+// keeps the seam additive (GP 11) and keeps the declaration where it
+// belongs: on the backends that actually make the guarantee.
+//
+// It also gives the right default for free. An implementation that does
+// not implement `IIsolatedComputeBackend` is read as
+// `IsolationPosture.standardOnly` — claiming nothing — so forgetting to
+// declare is never mistaken for declaring.
+//
+// **Where the refusal sits, and why it is BEFORE `Submit`.** `Isolated`
+// exists so gated data is computed over by a worker that cannot leak it.
+// A check performed after the backend accepted the work is a check on
+// something that has already left: the payload is on the backend, and no
+// subsequent refusal recalls it. `ExecutionProfileGate.enforce` is
+// therefore a decorator whose `Submit` decides on the SPEC and never
+// touches the inner dispatcher when the answer is no.
+
+/// Phase 478 — a dispatcher whose backend declares what it guarantees
+/// about the environment `Isolated` work runs in.
+///
+/// A companion implements it **alongside** `IExternalComputeDispatcher`;
+/// one that does not is read as `IsolationPosture.standardOnly` and is
+/// refused `Isolated` submissions.
+type IIsolatedComputeBackend =
+    /// The posture this backend enforces. Constant for the life of the
+    /// composed dispatcher — it describes how the backend was configured,
+    /// not the state of any one job (GP 12 rule 4).
+    abstract IsolationPosture: IsolationPosture
+
+/// Phase 478 — the profile↔posture match, and the decorator that enforces
+/// it before a submission reaches a backend.
+[<RequireQualifiedAccess>]
+module ExecutionProfileGate =
+
+    /// The posture `dispatcher` declares. An implementation that does not
+    /// implement `IIsolatedComputeBackend` declares nothing, which reads
+    /// as `standardOnly` — see the header for why that direction and not
+    /// the other.
+    let postureOf (dispatcher: IExternalComputeDispatcher) : IsolationPosture =
+        match box dispatcher with
+        | :? IIsolatedComputeBackend as declared -> declared.IsolationPosture
+        | _ -> IsolationPosture.standardOnly
+
+    /// May `dispatcher` be handed `spec`?
+    ///
+    /// `Ok ()` for every `Standard` spec, whatever the backend — that arm
+    /// is Phase 318 exactly. `Error` names the missing clauses, and is
+    /// terminal: a backend does not become isolating by being asked twice.
+    let check (dispatcher: IExternalComputeDispatcher) (spec: ExternalWorkSpec) : Result<unit, ExternalComputeError> =
+        let posture = postureOf dispatcher
+
+        if IsolationPosture.honours spec.Profile posture then
+            Ok()
+        else
+            Error(IsolationPosture.refusal dispatcher.Backend posture)
+
+    /// Wrap `inner` so an `Isolated` spec it cannot honour is refused
+    /// **before** it is submitted.
+    ///
+    /// `Poll` and `Cancel` pass straight through: they operate on a handle
+    /// the backend already minted, so there is nothing left to refuse, and
+    /// intercepting them would only add a branch to the path a `Standard`
+    /// deployment takes (GP 13). `Backend` is the inner backend's own
+    /// label — the decorator is not a backend and must not present as one,
+    /// or a handle would poll against a name no dispatcher answers to.
+    ///
+    /// The decorator re-declares the inner posture through
+    /// `IIsolatedComputeBackend`, so stacking it (or resolving it through
+    /// another decorator) does not silently downgrade a genuinely
+    /// isolating backend to `standardOnly`. A wrapper that swallowed the
+    /// declaration would turn composing this gate into a reason `Isolated`
+    /// stops working, which is the shape of "security control nobody
+    /// leaves switched on".
+    let enforce (inner: IExternalComputeDispatcher) : IExternalComputeDispatcher =
+        let posture = postureOf inner
+
+        { new IExternalComputeDispatcher with
+            member _.Backend = inner.Backend
+
+            member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {
+                if IsolationPosture.honours spec.Profile posture then
+                    return! inner.Submit(scopeId, spec)
+                else
+                    // The inner dispatcher is not consulted at all. The
+                    // payload never leaves this process.
+                    return Error(IsolationPosture.refusal inner.Backend posture)
+            }
+
+            member _.Poll(handle: ExternalHandle) = inner.Poll handle
+
+            member _.Cancel(handle: ExternalHandle) = inner.Cancel handle
+
+          interface IIsolatedComputeBackend with
+              member _.IsolationPosture = posture
+        }

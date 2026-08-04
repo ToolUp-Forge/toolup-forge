@@ -3686,6 +3686,17 @@ ToolUp.Platform.EvidencePackResult.Manifest : ToolUp.Platform.EvidencePackManife
 ToolUp.Platform.EvidencePackResult.ManifestBytes : System.Byte[] { get }
 ToolUp.Platform.EvidencePackResult.Segments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment] { get }
 ToolUp.Platform.EvidencePackResult.Signature : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExportSignature] { get }
+ToolUp.Platform.ExecutionProfile (class)
+ToolUp.Platform.ExecutionProfile.IsIsolated : System.Boolean { get }
+ToolUp.Platform.ExecutionProfile.IsStandard : System.Boolean { get }
+ToolUp.Platform.ExecutionProfile.Isolated : ToolUp.Platform.ExecutionProfile { get }
+ToolUp.Platform.ExecutionProfile.Standard : ToolUp.Platform.ExecutionProfile { get }
+ToolUp.Platform.ExecutionProfile.Tag : System.Int32 { get }
+ToolUp.Platform.ExecutionProfile+Tags (class)
+ToolUp.Platform.ExecutionProfile+Tags.Isolated : System.Int32 (literal)
+ToolUp.Platform.ExecutionProfile+Tags.Standard : System.Int32 (literal)
+ToolUp.Platform.ExecutionProfileModule (class)
+ToolUp.Platform.ExecutionProfileModule.label(ToolUp.Platform.ExecutionProfile) : System.String
 ToolUp.Platform.ExportSegment (class)
 ToolUp.Platform.ExportSegment..ctor(System.String, System.String, System.Byte[])
 ToolUp.Platform.ExportSegment.Body : System.Byte[] { get }
@@ -3775,16 +3786,19 @@ ToolUp.Platform.ExternalOutcomeModule (class)
 ToolUp.Platform.ExternalOutcomeModule.isTerminal(ToolUp.Platform.ExternalOutcome) : System.Boolean
 ToolUp.Platform.ExternalOutcomeModule.label(ToolUp.Platform.ExternalOutcome) : System.String
 ToolUp.Platform.ExternalWorkSpec (class)
-ToolUp.Platform.ExternalWorkSpec..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ExternalWorkSpec..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ExecutionProfile)
 ToolUp.Platform.ExternalWorkSpec.Idempotency : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ExternalWorkSpec.Kind : System.String { get }
 ToolUp.Platform.ExternalWorkSpec.Payload : System.String { get }
+ToolUp.Platform.ExternalWorkSpec.Profile : ToolUp.Platform.ExecutionProfile { get }
 ToolUp.Platform.ExternalWorkSpec.ResourceHints : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ExternalWorkSpec.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.Platform.ExternalWorkSpecModule (class)
 ToolUp.Platform.ExternalWorkSpecModule.create(System.String, System.String) : ToolUp.Platform.ExternalWorkSpec
+ToolUp.Platform.ExternalWorkSpecModule.isolated(ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withHint(System.String, System.String, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withIdempotency(System.String, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
+ToolUp.Platform.ExternalWorkSpecModule.withProfile(ToolUp.Platform.ExecutionProfile, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withTimeout(System.TimeSpan, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.FactStoreMode (class)
 ToolUp.Platform.FactStoreMode.EnabledFactStore : ToolUp.Platform.FactStoreMode { get }
@@ -4555,6 +4569,19 @@ ToolUp.Platform.InvitationNotification.InviterName : Microsoft.FSharp.Core.FShar
 ToolUp.Platform.InvitationNotification.RedirectUrl : System.String { get }
 ToolUp.Platform.InvitationNotification.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.InvitationNotification.TeamName : System.String { get }
+ToolUp.Platform.IsolationPosture (class)
+ToolUp.Platform.IsolationPosture..ctor(System.Boolean, System.Boolean, System.Boolean, System.String)
+ToolUp.Platform.IsolationPosture.Enforcement : System.String { get }
+ToolUp.Platform.IsolationPosture.EphemeralWorkspace : System.Boolean { get }
+ToolUp.Platform.IsolationPosture.InputsRestrictedToDeclaredRefs : System.Boolean { get }
+ToolUp.Platform.IsolationPosture.NoEgress : System.Boolean { get }
+ToolUp.Platform.IsolationPostureModule (class)
+ToolUp.Platform.IsolationPostureModule.clauses(System.String) : ToolUp.Platform.IsolationPosture
+ToolUp.Platform.IsolationPostureModule.describe(ToolUp.Platform.IsolationPosture) : System.String
+ToolUp.Platform.IsolationPostureModule.honours(ToolUp.Platform.ExecutionProfile, ToolUp.Platform.IsolationPosture) : System.Boolean
+ToolUp.Platform.IsolationPostureModule.refusal(System.String, ToolUp.Platform.IsolationPosture) : ToolUp.Platform.ExternalComputeError
+ToolUp.Platform.IsolationPostureModule.shortfall(ToolUp.Platform.IsolationPosture) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.IsolationPostureModule.standardOnly : ToolUp.Platform.IsolationPosture { get }
 ToolUp.Platform.JobApi (class)
 ToolUp.Platform.JobApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobDefinition]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.JobRegistration, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.JobApi.Cancel : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }

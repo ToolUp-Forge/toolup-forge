@@ -213,6 +213,17 @@
          composed by `PeerServerApp.run` and starts no timer of its own
          (GP 13). -->
     <Compile Include="Server\OutboundSignalFeed.fs" />
+    <!-- Phase 478 — the gated-output pipeline: an `Isolated`
+         external-compute result held ungated, released only through the
+         clean-room gate. Last, and appended rather than placed: its
+         dependencies are all above it (`CleanRoomGate.fs`, which it
+         dispatches THROUGH exactly once per release, plus
+         `CleanRoomBroker.fs` / `PrivacyBudgetLedger.fs` /
+         `NoiseMechanism.fs` for the optional invariants it forwards) and
+         nothing downstream depends on it — it is not composed by
+         `PeerServerApp.run` and a deployment that never calls `hold`
+         constructs none of it (GP 13). -->
+    <Compile Include="Server\GatedComputeOutput.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

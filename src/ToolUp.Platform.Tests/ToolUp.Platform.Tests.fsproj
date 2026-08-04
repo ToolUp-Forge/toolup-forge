@@ -1524,6 +1524,12 @@
              coverage. Compiled as a pair, contract first. -->
         <Compile Include="Contracts\IUploadValidatorContract.fs" />
         <Compile Include="InProcess\UploadValidationTests.fs" />
+        <!-- Phase 478 — the isolated execution profile: the profile as
+             data on the portable spec, the posture a backend declares,
+             the pre-submit refusal (measured by what the backend SAW,
+             each paired with an unwrapped control), and the gated-output
+             pipeline's structural unreachability. -->
+        <Compile Include="InProcess\IsolatedExecutionProfileTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
