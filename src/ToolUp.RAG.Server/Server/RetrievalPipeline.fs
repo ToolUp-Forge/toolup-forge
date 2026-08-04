@@ -8,6 +8,7 @@ open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.ISparseIndex
 open ToolUp.Platform.IReranker
+open ToolUp.Platform.IQueryRewriter
 open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRetrievalTracer
 open ToolUp.Platform.IRagTelemetry
@@ -324,6 +325,14 @@ type RetrievalPipelineOptions = {
     /// is larger than `SummaryBoost`. Set to `0.0` to disable, or when no
     /// fact clause / resolver is present it simply never fires.
     FactNarrativeJoinBoost: float
+    /// Wall-clock bound, in milliseconds, on a single `IQueryRewriter`
+    /// call (Phase 506). The rewrite sits in front of retrieval, which
+    /// sits in front of the answering call, so a wedged rewriter would
+    /// stall the whole turn; on overrun the pipeline abandons the rewrite
+    /// and searches the raw query, recording `Failed` on the trace. Bounds
+    /// the seam generically — an implementation may of course impose its
+    /// own tighter budget as well. Ignored when no rewriter is wired.
+    QueryRewriteTimeoutMs: int
 }
 
 module RetrievalPipelineOptions =
@@ -334,6 +343,7 @@ module RetrievalPipelineOptions =
         ActiveModuleBoost = 0.05
         SummaryBoost = 0.10
         FactNarrativeJoinBoost = 0.15
+        QueryRewriteTimeoutMs = 2_000
     }
 
 // ─── Pipeline implementation ──────────────────────────────────────
@@ -472,7 +482,18 @@ type RetrievalPipeline
         // gate in DI alongside the store, so the pairing is structural.
         // `None` ⇒ pass-through (GP 11; a resolver-less or fact-less
         // deployment is byte-identical either way).
-        ?disclosureGate: IFactDisclosureGate
+        ?disclosureGate: IFactDisclosureGate,
+        // Phase 506 — conversation-aware query rewrite. When supplied AND
+        // the request carries non-empty `History`, a follow-up query
+        // ("what about it?", "and the second one?") is resolved against the
+        // recent turns before anything embeds it. `None` (or a
+        // history-less request) ⇒ the stage never runs and the pipeline is
+        // byte-for-byte its pre-506 self: same pool, same stage list, same
+        // results (GP 11 / GP 13). The call is bounded by
+        // `RetrievalPipelineOptions.QueryRewriteTimeoutMs` and degrades to
+        // the raw query on any failure — retrieval never fails because a
+        // rewrite did.
+        ?queryRewriter: IQueryRewriter
     ) =
 
     let sparse = sparseIndex
@@ -614,6 +635,14 @@ type RetrievalPipeline
                 |> List.choose (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey)
                 |> Set.ofList
 
+            // Phase 506 — what the query-rewrite stage decided, read by
+            // `emitTrace` after retrieval finishes. Ref cells rather than
+            // `let mutable` because the trace emitter is a closure and F#
+            // cannot capture a mutable local; `None` on both is the "no
+            // rewrite stage ran" state every pre-506 deployment stays in.
+            let rewriteDecision: string option ref = ref None
+            let rewrittenQueryHash: string option ref = ref None
+
             let emitTrace (results: VectorMatch list) (poolSize: int) (sparseRan: bool) (rerankerName: string option) = async {
                 match tracer with
                 | None -> ()
@@ -639,6 +668,8 @@ type RetrievalPipeline
                         Stages = stages |> List.ofSeq
                         ResultCount = results.Length
                         StageTimings = timings |> List.ofSeq
+                        RewriteDecision = rewriteDecision.Value
+                        RewrittenQueryHash = rewrittenQueryHash.Value
                     }
 
                     do! t.Trace trace ctx
@@ -652,6 +683,89 @@ type RetrievalPipeline
                 do! emitTrace factMatches 0 false None
                 return factMatches
             else
+                // Phase 506 — conversation-aware query rewrite.
+                //
+                // Retrieval embeds the query text, so a follow-up whose
+                // subject lives only in the previous turn ("what about
+                // it?") embeds to nothing useful and multi-turn recall
+                // collapses even when the corpus holds the answer.
+                // `RetrievalRequest.History` was documented as feeding
+                // exactly this stage but no stage existed, so the field was
+                // inert. This is the stage.
+                //
+                // Three properties, and each is load-bearing:
+                //
+                // - **Nothing wired ⇒ nothing changes.** No rewriter, or a
+                //   request with no history, and the match below returns the
+                //   raw query with no stage recorded and no timing entry —
+                //   the pipeline is byte-for-byte its pre-506 self (GP 11).
+                // - **Bounded.** The call runs under
+                //   `QueryRewriteTimeoutMs`; the rewrite sits in front of
+                //   retrieval which sits in front of the answering call, so
+                //   an unbounded rewriter would stall the user's whole turn.
+                // - **Degrades, never fails.** Any exception (including the
+                //   timeout) falls back to the raw query and records
+                //   `Failed`. A rewrite is an enhancement over a path that
+                //   already works; it must never be able to break it.
+                //
+                // Placed inside the authorised branch deliberately: a
+                // caller with no readable scope is going to retrieve nothing
+                // regardless, and must not spend a provider call finding
+                // that out.
+                let! effectiveQuery =
+                    match queryRewriter, request.History with
+                    | Some rewriter, Some(_ :: _ as history) when not (System.String.IsNullOrWhiteSpace request.Query) -> async {
+                        stages.Add "QueryRewrite"
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+
+                        // `StartChild` + its millisecond timeout is the
+                        // bound: the child raises `TimeoutException` when
+                        // awaited past it, which `Async.Catch` turns into
+                        // the same degradation path as any other failure.
+                        // The overrunning child is ABANDONED, not cancelled
+                        // — it finishes on its own and its result is
+                        // discarded. That is the right trade here: the
+                        // guarantee this bound owes the user is that the
+                        // turn proceeds, and a rewriter's in-flight HTTP
+                        // call is the implementation's to bound (the
+                        // shipped one passes the same budget to its
+                        // provider as a `RetryPolicy.Timeout`).
+                        let bounded = async {
+                            let! child =
+                                Async.StartChild(
+                                    rewriter.Rewrite request.Query history,
+                                    max 1 opts.QueryRewriteTimeoutMs
+                                )
+
+                            return! child
+                        }
+
+                        let! outcome = Async.Catch bounded
+                        sw.Stop()
+                        timings.Add("QueryRewrite", sw.Elapsed.TotalMilliseconds)
+
+                        match outcome with
+                        | Choice1Of2 QuerySelfContained ->
+                            rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
+                            return request.Query
+                        | Choice1Of2(QueryRewritten rewritten) when not (System.String.IsNullOrWhiteSpace rewritten) ->
+                            rewriteDecision.Value <- Some QueryRewriteDecision.Rewritten
+
+                            rewrittenQueryHash.Value <- Some(ToolUp.RAG.RetrievalTracers.hashQuery rewritten)
+
+                            return rewritten
+                        | Choice1Of2 _ ->
+                            // A blank rewrite is not a rewrite. Searching
+                            // it would replace a usable query with an
+                            // empty embedding — worse than doing nothing.
+                            rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
+                            return request.Query
+                        | Choice2Of2 _ ->
+                            rewriteDecision.Value <- Some QueryRewriteDecision.Failed
+                            return request.Query
+                      }
+                    | _ -> async.Return request.Query
+
                 // Phase 502 — the request's metadata-equality filter, if it
                 // carries a live one. Resolved once here: it drives both the
                 // candidate-pool size below and the post-search filter stage.
@@ -681,7 +795,7 @@ type RetrievalPipeline
                         // reranker is wired, this is byte-equivalent to the
                         // pre-Phase-14e pipeline.
                         let denseSw = System.Diagnostics.Stopwatch.StartNew()
-                        let! queryVector = embedder.GenerateEmbedding request.Query
+                        let! queryVector = embedder.GenerateEmbedding effectiveQuery
                         let! results = store.Search permitted queryVector pool
                         denseSw.Stop()
                         timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
@@ -696,7 +810,7 @@ type RetrievalPipeline
                         // keep `timings` single-threaded.
                         let denseAsync = async {
                             let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! queryVector = embedder.GenerateEmbedding request.Query
+                            let! queryVector = embedder.GenerateEmbedding effectiveQuery
                             let! results = store.Search permitted queryVector pool
                             sw.Stop()
                             return results, sw.Elapsed.TotalMilliseconds
@@ -704,7 +818,7 @@ type RetrievalPipeline
 
                         let sparseAsync = async {
                             let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! results = sparseIdx.Search permitted request.Query pool
+                            let! results = sparseIdx.Search permitted effectiveQuery pool
                             sw.Stop()
                             return results, sw.Elapsed.TotalMilliseconds
                         }
@@ -858,7 +972,7 @@ type RetrievalPipeline
 
                         async {
                             let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! reorderedHead = r.Rerank request.Query head
+                            let! reorderedHead = r.Rerank effectiveQuery head
                             sw.Stop()
                             timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
                             // Keep any tail beyond MaxBatchSize at the end —

@@ -67,6 +67,15 @@ type KnowledgeRetrievedPayload = {
     /// Per-stage `(stageName, elapsedMs)` timings (Phase 122). Additive:
     /// pre-122 events lack the property and old readers ignore it.
     StageTimings: (string * float) list
+    /// Query-rewrite decision (Phase 506) — one of the
+    /// `QueryRewriteDecision` literals, or absent when no rewrite stage
+    /// ran. Additive on the same terms as `StageTimings`: pre-506 events
+    /// lack the property and old readers ignore it.
+    RewriteDecision: string option
+    /// SHA256 of the substituted query when the decision was `Rewritten`;
+    /// absent otherwise. Same privacy contract as `QueryHash` — an
+    /// operator sees that a rewrite happened, never what it said.
+    RewrittenQueryHash: string option
 }
 
 /// `KnowledgeRetrievalMiss` payload — fired when post-filter retrieval
@@ -117,6 +126,8 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     Stages = trace.Stages
                     ResultCount = trace.ResultCount
                     StageTimings = trace.StageTimings
+                    RewriteDecision = trace.RewriteDecision
+                    RewrittenQueryHash = trace.RewrittenQueryHash
                 }
 
                 // Persist to the caller's resolved scope when there is one;

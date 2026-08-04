@@ -19,6 +19,7 @@ open ToolUp.Platform.IEmbeddingCache
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.ISparseIndex
 open ToolUp.Platform.IReranker
+open ToolUp.Platform.IQueryRewriter
 open ToolUp.Platform.IOcrProvider
 open ToolUp.Platform.ITableExtractor
 open ToolUp.Platform.IRetrievalPipeline
@@ -1109,6 +1110,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
             SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
             FactNarrativeJoinBoost = RetrievalPipelineOptions.defaults.FactNarrativeJoinBoost
+            QueryRewriteTimeoutMs = RetrievalPipelineOptions.defaults.QueryRewriteTimeoutMs
         }
 
         // Build the probe provider ONCE and resolve every pre-pipeline
@@ -1239,6 +1241,20 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     | :? IFactDisclosureGate as g -> Some g
                     | _ -> None
 
+                // Phase 506 — conversation-aware query rewrite, resolved the
+                // same way the fact tier is: a deployment registers an
+                // `IQueryRewriter` in DI (the shipped provider-backed one is
+                // `ProviderQueryRewriter.create`) before `withRAG` runs, and
+                // the pipeline picks it up. No registration ⇒ the argument is
+                // omitted and retrieval is byte-identical (GP 11 / GP 13),
+                // which is why this is a probe rather than a `RAGServerApp`
+                // field: the opt-in already has a home, and the compose
+                // surface does not grow a knob for it.
+                let queryRewriterOpt =
+                    match probe.GetService(typeof<IQueryRewriter>) with
+                    | :? IQueryRewriter as r -> Some r
+                    | _ -> None
+
                 RetrievalPipeline(
                     vectorStore,
                     cachedEmbedder,
@@ -1255,7 +1271,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     // Phase 558 — the fact stage + its retrieval egress door,
                     // present exactly when the fact tier is composed.
                     ?factResolver = factResolverOpt,
-                    ?disclosureGate = disclosureGateOpt
+                    ?disclosureGate = disclosureGateOpt,
+                    // Phase 506 — present exactly when a deployment registered
+                    // an IQueryRewriter; absent otherwise.
+                    ?queryRewriter = queryRewriterOpt
                 )
                 :> IRetrievalPipeline
 

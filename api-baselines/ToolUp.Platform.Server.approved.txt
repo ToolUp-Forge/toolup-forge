@@ -3462,6 +3462,28 @@ ToolUp.Platform.IPublisherKeyStore.AddTrustedKey(ToolUp.Platform.PublisherKeyId,
 ToolUp.Platform.IPublisherKeyStore.ListTrustedKeyIds() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublisherKeyId]]
 ToolUp.Platform.IPublisherKeyStore.RemoveTrustedKey(ToolUp.Platform.PublisherKeyId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPublisherKeyStore.TryGetPublicKey(ToolUp.Platform.PublisherKeyId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]]]
+ToolUp.Platform.IQueryRewriter (class)
+ToolUp.Platform.IQueryRewriter+IQueryRewriter (interface)
+ToolUp.Platform.IQueryRewriter+IQueryRewriter.Name : System.String { get }
+ToolUp.Platform.IQueryRewriter+IQueryRewriter.Rewrite(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IQueryRewriter+QueryRewrite]
+ToolUp.Platform.IQueryRewriter+QueryDependence (class)
+ToolUp.Platform.IQueryRewriter+QueryDependence.ShortQueryWordCount : System.Int32 (literal)
+ToolUp.Platform.IQueryRewriter+QueryDependence.isFollowUp(System.String) : System.Boolean
+ToolUp.Platform.IQueryRewriter+QueryDependence.isSelfContained(System.String) : System.Boolean
+ToolUp.Platform.IQueryRewriter+QueryRewrite (class)
+ToolUp.Platform.IQueryRewriter+QueryRewrite.IsQueryRewritten : System.Boolean { get }
+ToolUp.Platform.IQueryRewriter+QueryRewrite.IsQuerySelfContained : System.Boolean { get }
+ToolUp.Platform.IQueryRewriter+QueryRewrite.QuerySelfContained : ToolUp.Platform.IQueryRewriter+QueryRewrite { get }
+ToolUp.Platform.IQueryRewriter+QueryRewrite.Tag : System.Int32 { get }
+ToolUp.Platform.IQueryRewriter+QueryRewrite+QueryRewritten (class)
+ToolUp.Platform.IQueryRewriter+QueryRewrite+QueryRewritten.rewritten : System.String { get }
+ToolUp.Platform.IQueryRewriter+QueryRewrite+Tags (class)
+ToolUp.Platform.IQueryRewriter+QueryRewrite+Tags.QueryRewritten : System.Int32 (literal)
+ToolUp.Platform.IQueryRewriter+QueryRewrite+Tags.QuerySelfContained : System.Int32 (literal)
+ToolUp.Platform.IQueryRewriter+QueryRewriteDecision (class)
+ToolUp.Platform.IQueryRewriter+QueryRewriteDecision.Failed : System.String (literal)
+ToolUp.Platform.IQueryRewriter+QueryRewriteDecision.Rewritten : System.String (literal)
+ToolUp.Platform.IQueryRewriter+QueryRewriteDecision.SelfContained : System.String (literal)
 ToolUp.Platform.IRagTelemetry (class)
 ToolUp.Platform.IRagTelemetry+IRagTelemetry (interface)
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordEmbedding(System.Int32, System.Int64) : System.Void
@@ -3532,7 +3554,7 @@ ToolUp.Platform.IRetrievalTracer+RetrievalMiss.QueryLength : System.Int32 { get 
 ToolUp.Platform.IRetrievalTracer+RetrievalMiss.Scopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalMiss.TopScore : System.Double { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace (class)
-ToolUp.Platform.IRetrievalTracer+RetrievalTrace..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, System.Boolean, System.Int32, System.Double, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]])
+ToolUp.Platform.IRetrievalTracer+RetrievalTrace..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, System.Boolean, System.Int32, System.Double, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.AdaptiveK : System.Boolean { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.CandidatePoolSize : System.Int32 { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.DenseUsed : System.Boolean { get }
@@ -3543,6 +3565,8 @@ ToolUp.Platform.IRetrievalTracer+RetrievalTrace.QueryLength : System.Int32 { get
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.RequestedScopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.RerankerName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.ResultCount : System.Int32 { get }
+ToolUp.Platform.IRetrievalTracer+RetrievalTrace.RewriteDecision : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.IRetrievalTracer+RetrievalTrace.RewrittenQueryHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.SparseUsed : System.Boolean { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.StageTimings : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

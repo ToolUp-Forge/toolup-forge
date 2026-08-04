@@ -324,6 +324,22 @@ let withRetrievalToolAware
                 RetrievalRequest.create query scopes defaults.TopK defaults.Merge with
                     OriginFilter = defaults.OriginFilter
                     ActiveModule = ctx.ActiveModule
+                    // Phase 506 — the prior turns, forwarded so a composed
+                    // `IQueryRewriter` can resolve a follow-up query against
+                    // them. This is the wiring that makes `History` a live
+                    // field rather than a documented one: before 506 nothing
+                    // populated it and no stage read it, so a multi-turn
+                    // conversation retrieved as a sequence of unrelated
+                    // first turns. `None` on an empty list keeps a
+                    // first-turn (or conversation-store-less) request
+                    // byte-identical to its pre-506 shape — the pipeline's
+                    // rewrite stage matches on `Some (_ :: _)`, so an empty
+                    // `Some []` would read the same, but sending `None`
+                    // keeps the request value itself unchanged too.
+                    History =
+                        match ctx.ConversationHistory with
+                        | [] -> None
+                        | turns -> Some turns
             }
 
             let! rawMatches = pipeline.Retrieve request ctx.Access

@@ -86,6 +86,10 @@
              one index and miss another. -->
         <Compile Include="Server\IIndexLifecycle.fs" />
         <Compile Include="Server\IReranker.fs" />
+        <!-- Phase 506 - conversation-aware query-rewrite seam. Beside the
+             other retrieval-stage seams; no dependency on them, so its
+             position here is by family, not by ordering constraint. -->
+        <Compile Include="Server\IQueryRewriter.fs" />
         <Compile Include="Server\ITextSummariser.fs" />
         <Compile Include="Server\IOcrProvider.fs" />
         <Compile Include="Server\ITableExtractor.fs" />

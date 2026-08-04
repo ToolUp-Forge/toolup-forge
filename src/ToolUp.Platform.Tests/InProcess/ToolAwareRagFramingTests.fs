@@ -48,6 +48,7 @@ let private mkContext () : PromptContext = {
     ActivePageNarrative = None
     ModuleContexts = Map.empty
     CurrentMessage = Some "what filters do I currently have applied?"
+    ConversationHistory = []
     RetrievedSources = ref []
     ShortCircuit = ref None
 }

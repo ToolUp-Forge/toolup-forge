@@ -606,8 +606,19 @@ type RetrievalRequest = {
     /// static-corpus pipeline are held to the same behaviour by the
     /// `MetadataFilterContract` parity pack (Phase 502).
     Filters: Map<string, string> option
-    /// Prior conversation turns, oldest-first. Used by query-rewrite stages
-    /// to disambiguate pronouns / follow-up references. `None` = first turn.
+    /// Prior conversation turns, oldest-first. Consumed by the Phase 506
+    /// query-rewrite stage to resolve a follow-up query ("what about it?",
+    /// "and the second one?") into a standalone one before anything embeds
+    /// it — retrieval scores query *text*, so an unresolved anaphor embeds
+    /// to nothing useful and multi-turn recall collapses even when the
+    /// corpus holds the answer.
+    ///
+    /// `None` (and an empty list) = first turn / no history, and the stage
+    /// does not run: no rewriter is called, no trace decision is recorded,
+    /// and retrieval is byte-identical to a history-unaware pipeline
+    /// (GP 11). The field also has no effect unless an `IQueryRewriter` is
+    /// composed (GP 13) — populating it costs nothing on a deployment that
+    /// has not opted in.
     History: string list option
     /// Adaptive top-K hint. `None` = pipeline uses fixed `TopK` exactly.
     AdaptiveK: AdaptiveKHint option

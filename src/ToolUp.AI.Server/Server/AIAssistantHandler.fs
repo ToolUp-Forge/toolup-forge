@@ -504,6 +504,50 @@ let aiAssistantApi
                 return ()
     }
 
+    /// Phase 506 — prior turns handed to `PromptContext.ConversationHistory`
+    /// so the RAG query-rewrite stage can resolve a follow-up against what
+    /// was said before. Bounded to the trailing window: an anaphor's referent
+    /// is within a turn or two, and the rewriter's own prompt budget is
+    /// small, so replaying a long conversation buys nothing and costs a
+    /// larger read plus a larger rewrite prompt.
+    let promptHistoryTurns = 6
+
+    /// Read the trailing conversation turns for this request as plain text,
+    /// oldest first.
+    ///
+    /// Gated on the Phase 53 `IConversationStore` being composed: with no
+    /// store this returns `[]` without any I/O, so a deployment that never
+    /// opted into conversation persistence pays nothing and its prompt
+    /// context is byte-identical to the pre-506 shape (GP 11 / GP 13).
+    ///
+    /// Best-effort by construction — a store error, a not-yet-existing
+    /// conversation (the first turn of every conversation) and an empty
+    /// history are all the same `[]`. History is an enhancement to
+    /// retrieval; failing the user's turn because we could not read it
+    /// would be a far worse outcome than retrieving on the raw query.
+    let loadPromptHistory (scopeIdLocal: string) (conversationId: Guid) : Async<string list> = async {
+        match conversationStore with
+        | None -> return []
+        | Some store ->
+            try
+                let reader = store :> IConversationReader
+                let! result = reader.GetConversation(scopeIdLocal, convId conversationId)
+
+                match result with
+                | Error _ -> return []
+                | Ok(_, turns, _) ->
+                    let texts =
+                        turns
+                        |> List.map (fun t -> t.Content.Content)
+                        |> List.filter (String.IsNullOrWhiteSpace >> not)
+
+                    let drop = max 0 (List.length texts - promptHistoryTurns)
+                    return texts |> List.skip drop
+            with ex ->
+                logger.Warn $"Conversation history read for prompt context failed: {ex.Message}"
+                return []
+    }
+
     // Scope and user are pre-resolved asynchronously by
     // `ScopeResolutionMiddleware`. If the middleware did not run or scope
     // resolution failed (Error case), fall back to an anonymous user-scoped
@@ -609,6 +653,15 @@ let aiAssistantApi
                 // a provider call; checked after the builder resolves.
                 let shortCircuitCell: string option ref = ref None
 
+                // Phase 506 — prior turns for the query-rewrite stage. Read
+                // only when a prompt builder is actually going to run, and
+                // only when the conversation substrate is composed; `[]`
+                // otherwise, with no I/O on the request path.
+                let! promptHistory =
+                    match promptBuilder with
+                    | Some _ -> loadPromptHistory scope.ScopeId conversationId
+                    | None -> async { return [] }
+
                 let! systemPromptText =
                     match promptBuilder with
                     | Some builder ->
@@ -619,6 +672,7 @@ let aiAssistantApi
                             ActivePageNarrative = request.ActivePageNarrative
                             ModuleContexts = moduleContexts
                             CurrentMessage = Some request.Content
+                            ConversationHistory = promptHistory
                             RetrievedSources = retrievedSourcesCell
                             ShortCircuit = shortCircuitCell
                         }

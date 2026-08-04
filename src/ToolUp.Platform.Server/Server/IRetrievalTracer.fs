@@ -57,8 +57,8 @@ type RetrievalTrace = {
     ResultCount: int
     /// Per-stage wall-clock timings as `(stageName, elapsedMs)` pairs in
     /// execution order. Stage names align with `Stages` entries, but only
-    /// the substantive stages are timed (`Dense`, `Sparse`, `RRF`,
-    /// `Rerank`, `MMR`, `Merge`) — bookkeeping stages (scope
+    /// the substantive stages are timed (`QueryRewrite`, `Dense`,
+    /// `Sparse`, `RRF`, `Rerank`, `MMR`, `Merge`) — bookkeeping stages (scope
     /// authorisation, filters, boosts) appear in `Stages` without a
     /// timing entry. `Dense` and `Sparse` run concurrently under hybrid
     /// retrieval, so their entries can sum to more than `LatencyMs`;
@@ -66,6 +66,29 @@ type RetrievalTrace = {
     /// Additive (Phase 122, GP 11): absent in pre-122 traces; old
     /// consumers deserialise unchanged.
     StageTimings: (string * float) list
+    /// What the conversation-aware query-rewrite stage decided this call
+    /// (Phase 506). `None` when no rewrite stage ran at all — no
+    /// `IQueryRewriter` wired, or the request carried no `History` — which
+    /// is every pre-506 deployment, so an existing trace consumer sees
+    /// exactly what it saw before (GP 11). Otherwise one of the
+    /// `QueryRewriteDecision` literals: `"SelfContained"` (the rewriter
+    /// judged the query standalone), `"Rewritten"` (a standalone query was
+    /// substituted), `"Failed"` (the rewriter raised or timed out and
+    /// retrieval degraded to the raw query).
+    ///
+    /// This is the field that answers "why did this turn retrieve
+    /// nothing?" for a multi-turn conversation — without it, a rewrite
+    /// that silently failed and one that never fired are indistinguishable
+    /// from the outside.
+    RewriteDecision: string option
+    /// SHA256 hex digest of the *rewritten* query, when one was
+    /// substituted. `None` for every other decision. Same privacy contract
+    /// as `QueryHash`: the rewritten text is model-derived but built from
+    /// the user's own turns, so it is hashed on exactly the same terms and
+    /// never persisted in plaintext. Present alongside `QueryHash` so an
+    /// operator can see that a rewrite happened, and join repeat rewrites
+    /// of the same follow-up, without reading either string.
+    RewrittenQueryHash: string option
 }
 
 /// Diagnostic payload for the "retrieval was thin" event. Fired when the

@@ -315,6 +315,7 @@ let tests =
                 ActivePageNarrative = None
                 ModuleContexts = Map.empty
                 CurrentMessage = Some "what was revenue?"
+                ConversationHistory = []
                 RetrievedSources = sources
                 ShortCircuit = ref None
             }
@@ -376,6 +377,7 @@ let tests =
                 ActivePageNarrative = None
                 ModuleContexts = Map.empty
                 CurrentMessage = Some "what was revenue?"
+                ConversationHistory = []
                 RetrievedSources = sources
                 ShortCircuit = ref None
             }

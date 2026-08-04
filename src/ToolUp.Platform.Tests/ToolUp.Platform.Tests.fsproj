@@ -973,6 +973,11 @@
         <!-- Phase 502 — RetrievalRequest.Filters parity pack: one set of
              metadata-filter behaviours bound to BOTH shipped pipelines. -->
         <Compile Include="RAG\MetadataFilterContract.fs" />
+        <!-- Phase 506 - conversation-aware query rewrite: the follow-up
+             miss-raw/hit-rewritten pair, the cost envelope (self-contained and
+             history-less requests spend nothing), timeout + failure
+             degradation, and the trace decision fields. -->
+        <Compile Include="RAG\QueryRewriteContract.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />

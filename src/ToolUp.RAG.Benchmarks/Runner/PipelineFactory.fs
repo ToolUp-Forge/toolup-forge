@@ -121,6 +121,10 @@ let build (tempDir: string) (opts: BuildOptions) : IRetrievalPipeline =
         ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
         SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
         FactNarrativeJoinBoost = RetrievalPipelineOptions.defaults.FactNarrativeJoinBoost
+        // Phase 506 — the benchmark wires no IQueryRewriter, so this bound
+        // is never consulted; carried at the default so the record matches
+        // the production shape it is meant to score.
+        QueryRewriteTimeoutMs = RetrievalPipelineOptions.defaults.QueryRewriteTimeoutMs
     }
 
     let tracer: IRetrievalTracer = createNoOp ()

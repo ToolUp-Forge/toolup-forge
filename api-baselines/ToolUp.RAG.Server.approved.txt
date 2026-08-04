@@ -141,6 +141,17 @@ ToolUp.RAG.NoOpDocUnderstanding+NoOpOcrProvider (class)
 ToolUp.RAG.NoOpDocUnderstanding+NoOpOcrProvider..ctor()
 ToolUp.RAG.NoOpDocUnderstanding+NoOpTableExtractor (class)
 ToolUp.RAG.NoOpDocUnderstanding+NoOpTableExtractor..ctor()
+ToolUp.RAG.ProviderQueryRewriter (class)
+ToolUp.RAG.ProviderQueryRewriter.DefaultHistoryTurns : System.Int32 (literal)
+ToolUp.RAG.ProviderQueryRewriter.DefaultTimeoutMs : System.Int32 (literal)
+ToolUp.RAG.ProviderQueryRewriter.MaxHistoryTurnChars : System.Int32 (literal)
+ToolUp.RAG.ProviderQueryRewriter.MaxRewrittenChars : System.Int32 (literal)
+ToolUp.RAG.ProviderQueryRewriter.buildPrompt(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.RAG.ProviderQueryRewriter.create(ToolUp.Platform.AI.IAIProvider) : ToolUp.Platform.IQueryRewriter+IQueryRewriter
+ToolUp.RAG.ProviderQueryRewriter.createWith(ToolUp.Platform.AI.IAIProvider, System.Int32, System.Int32, ToolUp.Platform.ILogger) : ToolUp.Platform.IQueryRewriter+IQueryRewriter
+ToolUp.RAG.ProviderQueryRewriter.rewriteSystemPrompt : System.String { get }
+ToolUp.RAG.ProviderQueryRewriter+ProviderQueryRewriter (class)
+ToolUp.RAG.ProviderQueryRewriter+ProviderQueryRewriter..ctor(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.RAG.RAGCitationDevEndpoint (class)
 ToolUp.RAG.RAGCitationDevEndpoint.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.RAG.RAGCompose (class)
@@ -326,13 +337,14 @@ ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException..ctor(System.Int32,
 ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException.MaxQueryChars : System.Int32 { get }
 ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException.QueryChars : System.Int32 { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipeline (class)
-ToolUp.RAG.RetrievalPipeline+RetrievalPipeline..ctor(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ISparseIndex+ISparseIndex], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PlatformKnowledgeBaseMode]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactResolver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate])
+ToolUp.RAG.RetrievalPipeline+RetrievalPipeline..ctor(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ISparseIndex+ISparseIndex], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PlatformKnowledgeBaseMode]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactResolver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IQueryRewriter+IQueryRewriter])
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions (class)
-ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, System.Double, System.Double, System.Double)
+ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, System.Double, System.Double, System.Double, System.Int32)
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.ActiveModuleBoost : System.Double { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.EnableMmr : System.Boolean { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.FactNarrativeJoinBoost : System.Double { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.MmrLambda : System.Double { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.QueryRewriteTimeoutMs : System.Int32 { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.Reranker : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker] { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.SummaryBoost : System.Double { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptionsModule (class)
@@ -352,7 +364,7 @@ ToolUp.RAG.RetrievalTracers+KnowledgeRetrievalMissPayload.QueryLength : System.I
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievalMissPayload.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievalMissPayload.TopScore : System.Double { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload (class)
-ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Boolean, System.Int32, System.Double, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]])
+ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Boolean, System.Int32, System.Double, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.AdaptiveK : System.Boolean { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.CandidatePoolSize : System.Int32 { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.DenseUsed : System.Boolean { get }
@@ -363,6 +375,8 @@ ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.QueryLength : System.Int32
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.RequestedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.RerankerName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.ResultCount : System.Int32 { get }
+ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.RewriteDecision : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.RewrittenQueryHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.SparseUsed : System.Boolean { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.StageTimings : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]] { get }
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

@@ -34,6 +34,17 @@ type PromptContext = {
     /// system-level prompt construction at startup). Builders that do not
     /// need the message text can ignore this field.
     CurrentMessage: string option
+    /// Prior conversation turns for this request, oldest first, rendered as
+    /// plain text and already bounded by the handler. Empty on the first
+    /// turn, and empty for every deployment that has not composed an
+    /// `IConversationStore` (Phase 53) — the substrate this is read from.
+    ///
+    /// Threaded onto `RetrievalRequest.History` by `RAGPromptBuilder`, where
+    /// the Phase 506 query-rewrite stage consumes it to resolve follow-up
+    /// queries ("what about it?") against what was said before. Builders
+    /// that do not perform retrieval ignore it; an empty list leaves every
+    /// downstream stage byte-identical to its pre-506 behaviour (GP 11).
+    ConversationHistory: string list
     /// Mutable cell collecting `RetrievedSource`s populated by RAG-style
     /// builders (`RAGPromptBuilder.withRetrieval`) so the assistant
     /// handler can attach them to the outbound `ConversationMessage`
