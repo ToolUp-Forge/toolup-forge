@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 193 — emulator-backed multi-cloud parity conformance matrix.
+         CI-only substrate: this pack ships no runtime surface and is
+         byte-for-byte zero-cost to any deployed app (GP 13).
+
+         Runs the SHARED IBlobStorage / ISecretStore / IAuditSink contract
+         packs against each cloud's local emulator (Azurite / LocalStack /
+         fake-gcs-server) so cross-cloud divergence is caught by a recurring
+         CI gate rather than discovered by deploying to a second cloud
+         (GP 12).
+
+         WHY THE CONTRACT PACKS ARE SOURCE-LINKED, NOT COPIED. The whole
+         point of a parity matrix is that every cloud is measured by the
+         SAME assertions, so a forked copy would defeat it the first time
+         the original gained a case. `ToolUp.Platform.Tests` is an Exe whose
+         dependency closure includes the AspNetCore framework reference and
+         every companion it exercises; referencing it to reach three files
+         would drag all of that in. Linking the three contract files (plus
+         the in-memory double the divergence fixture perturbs) keeps ONE
+         copy on disk — edit the original and this pack recompiles it — on a
+         Core-only dependency surface. Adding a case there adds it to all
+         three clouds here, automatically. -->
+    <ItemGroup>
+        <Compile
+            Include="..\ToolUp.Platform.Tests\Contracts\IBlobStorageContract.fs"
+            Link="Contracts\IBlobStorageContract.fs" />
+        <Compile
+            Include="..\ToolUp.Platform.Tests\Contracts\ISecretStoreContract.fs"
+            Link="Contracts\ISecretStoreContract.fs" />
+        <Compile
+            Include="..\ToolUp.Platform.Tests\Contracts\IAuditSinkContract.fs"
+            Link="Contracts\IAuditSinkContract.fs" />
+        <Compile
+            Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs"
+            Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="EmulatorLegs.fs" />
+        <Compile Include="DivergentBlobStorage.fs" />
+        <Compile Include="BlobStorageParityTests.fs" />
+        <Compile Include="AuditSinkParityTests.fs" />
+        <Compile Include="SecretStoreParityTests.fs" />
+        <Compile Include="EmulatorSeamCoverageTests.fs" />
+        <Compile Include="DivergenceFixtureTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <!-- The three cloud IBlobStorage companions under parity test. -->
+        <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
+        <ProjectReference Include="..\Storage\AwsS3Storage\AwsS3Storage.fsproj" />
+        <ProjectReference Include="..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" />
+        <!-- The three cloud ISecretStore companions. -->
+        <ProjectReference Include="..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" />
+        <ProjectReference Include="..\Secrets\AwsSecretsManager\AwsSecretsManager.fsproj" />
+        <ProjectReference Include="..\Secrets\GcpSecretManager\ToolUp.Secrets.GcpSecretManager.fsproj" />
+        <!-- The three cloud IAuditSink archive companions. Each composes
+             over an IBlobStorage, so each binds over its own cloud's
+             emulator-backed storage — which is what makes the audit row of
+             the matrix reachable at all. -->
+        <ProjectReference Include="..\AuditSinks\AzureBlobArchive\ToolUp.AuditSinks.AzureBlobArchive.fsproj" />
+        <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
+        <ProjectReference Include="..\AuditSinks\GcsArchive\ToolUp.AuditSinks.GcsArchive.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

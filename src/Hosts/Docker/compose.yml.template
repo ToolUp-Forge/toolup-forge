@@ -65,5 +65,113 @@ services:
   #     timeout: 5s
   #     retries: 3
 
+  # ── Multi-cloud parity emulator matrix (Phase 193) ─────────────────
+  #
+  # Boots each cloud's local emulator so the SAME IBlobStorage /
+  # ISecretStore / IAuditSink contract packs can run against all three,
+  # proving cross-cloud parity without deploying to a second cloud.
+  #
+  # EVERY SERVICE BELOW IS BEHIND THE `parity` PROFILE, so a plain
+  # `docker compose up` ignores them entirely — this block is zero-cost to
+  # ordinary local dev and to any deployment using this template (GP 13).
+  # Bring the matrix up explicitly:
+  #
+  #     docker compose --profile parity up -d
+  #
+  # then export the harness variables and run the pack:
+  #
+  #     $env:TOOLUP_PARITY_AZURITE = "UseDevelopmentStorage=true"
+  #     $env:TOOLUP_PARITY_LOCALSTACK = "http://localhost:4566"
+  #     $env:TOOLUP_PARITY_FAKEGCS = "http://localhost:4443"
+  #     dotnet run --project src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj
+  #
+  # TOOL-AVAILABILITY SKIP. The harness gates every leg on its variable
+  # above and reports a `pending` case naming the reason when it is unset,
+  # so an absent emulator (or an absent Docker daemon, or an image that
+  # cannot be pulled) skips cleanly instead of failing. Set a variable ONLY
+  # when that emulator is actually up: an armed leg pointed at nothing is
+  # correctly red, not skipped.
+  #
+  # CI note: pre-pull these images in the job rather than relying on
+  # pull-on-demand — the same lesson as the IContainerScheduler leg, where
+  # the Docker HTTP API does not pull the way `docker run` does.
+
+  azurite:
+    profiles: ["parity"]
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    restart: unless-stopped
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"
+    healthcheck:
+      # Azurite ships no shell utilities beyond node, so probe the blob
+      # endpoint with node itself. A 400 from the unauthenticated root is
+      # still proof the listener is up — any HTTP response means ready.
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get('http://127.0.0.1:10000/devstoreaccount1',
+          r => process.exit(0)).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  localstack:
+    profiles: ["parity"]
+    image: localstack/localstack:latest
+    restart: unless-stopped
+    ports:
+      - "4566:4566"
+    environment:
+      # Only the two services the parity matrix exercises — a narrower
+      # start-up is faster and makes a missing service an explicit change.
+      SERVICES: s3,secretsmanager
+      DEBUG: "0"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # One-shot bucket creation. LOAD-BEARING, not convenience: the
+  # AwsS3Storage companion deliberately does NOT create its bucket
+  # (provisioning and ACLs are the deployment's business), so without this
+  # every S3 leg assertion fails on NoSuchBucket. Must match
+  # TOOLUP_PARITY_LOCALSTACK_BUCKET (default `toolup-parity`).
+  localstack-init:
+    profiles: ["parity"]
+    image: amazon/aws-cli:latest
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      # Single `$` on purpose — compose interpolates from the HOST
+      # environment at `up` time, so overriding
+      # TOOLUP_PARITY_LOCALSTACK_BUCKET for the harness also moves the
+      # bucket this creates. A `$$` here would defer to the container's own
+      # (empty) environment and silently always use the default.
+      - >-
+        aws --endpoint-url=http://localstack:4566 s3api create-bucket
+        --bucket ${TOOLUP_PARITY_LOCALSTACK_BUCKET:-toolup-parity}
+    depends_on:
+      localstack:
+        condition: service_healthy
+    restart: "no"
+
+  # fake-gcs-server. Included so the GCS leg starts working the moment the
+  # companion gains an endpoint seam — today the leg reports a
+  # `NoCompanionSeam` skip because GoogleCloudStorageConfig has no way to
+  # be pointed here (see src/ToolUp.Cloud.Parity.Tests/EmulatorLegs.fs).
+  # `-scheme http` keeps it TLS-free for local use.
+  fake-gcs:
+    profiles: ["parity"]
+    image: fsouza/fake-gcs-server:latest
+    restart: unless-stopped
+    ports:
+      - "4443:4443"
+    command: ["-scheme", "http", "-port", "4443", "-backend", "memory"]
+
 # volumes:
 #   redis-data:
