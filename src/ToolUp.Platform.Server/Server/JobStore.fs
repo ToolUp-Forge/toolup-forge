@@ -49,6 +49,17 @@ let private idempotencyPrefix (scopeId: string) = $"jobs/{scopeId}/_idempotency"
 
 let private nextRunPrefix (scopeId: string) = $"jobs/{scopeId}/_next-run"
 
+/// Phase 319 — index of runs sitting in `JobRunStatus.AwaitingExternal`.
+/// One flat bucket (`awaiting`) rather than a time bucket: the awaiting
+/// set is small by nature (it is bounded by concurrently-outstanding
+/// external work, not by history) and the reconciliation query wants the
+/// whole set, never a slice of it — so a bucket dimension would only add
+/// a listing per tick with nothing to select on.
+let private awaitingExternalPrefix (scopeId: string) = $"jobs/{scopeId}/_awaiting-external"
+
+[<Literal>]
+let private AwaitingExternalBucket = "awaiting"
+
 let private bucketFromTime (t: DateTime) =
     t.ToUniversalTime().ToString("yyyyMMddHHmm")
 
@@ -94,6 +105,28 @@ module private Json =
 /// the synthesised public constructor — a `private` F# record
 /// hides it and the converter cannot round-trip.
 type IdempotencyEntry = { JobId: JobId; CreatedAt: DateTime }
+
+/// Phase 319 — payload stored inside an `_awaiting-external` index
+/// `.ref` blob. Carries exactly the coordinates needed to rebuild the
+/// canonical run blob's name (`jobs/{scope}/runs/{jobId}/{ts}-{runId}`)
+/// so the reconciliation query can resolve the authoritative `JobRun`
+/// without listing run history.
+///
+/// Denormalised, never authoritative — the same posture as
+/// `IdempotencyEntry`. The canonical run blob is the truth; if this
+/// payload and the run disagree, the run wins and the index entry is
+/// drift to be corrected on the next `RecordRun`. Storing the whole
+/// `JobRun` here instead would double the write and create a second
+/// place for the status to be stale.
+///
+/// Public for the same reason `IdempotencyEntry` is: the STJ
+/// `FableConverters` record converter reads the synthesised public
+/// constructor, and a `private` F# record hides it.
+type AwaitingExternalEntry = {
+    JobId: JobId
+    RunId: Guid
+    StartedAt: DateTime
+}
 
 // ─── Concurrency helper ──────────────────────────────────────────
 
@@ -149,6 +182,58 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
                 match Guid.TryParseExact(s, "N") with
                 | true, g -> Some g
                 | false, _ -> None)
+
+    /// Phase 319 — the awaiting-external index for a scope. Keyed by the
+    /// single `AwaitingExternalBucket`; values are `RunId`s.
+    let awaitingExternalIndexFor (scopeId: string) : BlobIndex<string, Guid> =
+        BlobIndex.create
+            storage
+            platformContainer
+            (awaitingExternalPrefix scopeId)
+            id
+            (fun (g: Guid) -> g.ToString "N")
+            (fun s ->
+                match Guid.TryParseExact(s, "N") with
+                | true, g -> Some g
+                | false, _ -> None)
+
+    /// Phase 319 — keep the awaiting-external index in step with a run
+    /// row's status. Called on every `RecordRun`, so the index tracks
+    /// entry into AND exit from the state with no separate sweep.
+    ///
+    /// **`Remove` on every non-awaiting run is deliberate, not
+    /// wasteful.** `RecordRun` overwrites a run's blob in place (the
+    /// path is derived from `RunId` + `StartedAt`, both stable across
+    /// the attempt), so the terminal row that reconciliation writes
+    /// arrives through this same call — and the removal is the ONLY
+    /// thing that takes the run out of the reconciliation batch. Making
+    /// it conditional on "was it previously awaiting?" would need a
+    /// pre-read on the hot path to answer a question `Remove` already
+    /// answers idempotently for free.
+    ///
+    /// Best-effort, like the other two index syncs: canonical is
+    /// authoritative and the query re-verifies each resolved run's
+    /// status, so a failed `Add` costs a delayed reconciliation (picked
+    /// up by nothing — see the drift note on `AwaitingExternalRuns`) and
+    /// a failed `Remove` costs one wasted poll of a terminal handle,
+    /// which `Poll` is contractually required to answer idempotently.
+    let syncAwaitingExternalEntry (run: JobRun) = async {
+        let index = awaitingExternalIndexFor run.ScopeId
+
+        try
+            match run.Status with
+            | AwaitingExternal ->
+                let entry = {
+                    JobId = run.JobId
+                    RunId = run.RunId
+                    StartedAt = run.StartedAt
+                }
+
+                do! index.Add AwaitingExternalBucket run.RunId (Some(Json.serialize entry))
+            | _ -> do! index.Remove AwaitingExternalBucket run.RunId
+        with _ ->
+            ()
+    }
 
     let nextRunIndexFor (scopeId: string) : BlobIndex<string, JobId> =
         BlobIndex.create
@@ -430,7 +515,13 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
             let! result = storage.Upload(platformContainer, runBlob run, bytes)
 
             match result with
-            | Ok _ -> return ()
+            | Ok _ ->
+                // Phase 319 — index maintenance AFTER the canonical
+                // write succeeds, matching `saveDefinition`. Indexing
+                // first would publish a run into the reconciliation
+                // batch that no canonical blob backs.
+                do! syncAwaitingExternalEntry run
+                return ()
             | Error e -> return failwith $"JobStore: failed to persist run {run.RunId}: {e}"
         }
 
@@ -500,6 +591,73 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
                     && (match d.NextRunAt with
                         | Some t -> t <= now
                         | None -> false))
+        }
+
+        member _.AwaitingExternalRuns(scopeId, limit) = async {
+            if limit <= 0 then
+                return []
+            else
+                let index = awaitingExternalIndexFor scopeId
+                let! entries = index.Lookup AwaitingExternalBucket
+
+                if entries.IsEmpty then
+                    // The overwhelmingly common case — no external
+                    // backend composed, or nothing outstanding. One
+                    // prefix listing that found nothing, then out
+                    // (GP 13).
+                    return []
+                else
+                    // Resolve each indexed run from its canonical blob.
+                    // The `.ref` payload supplies the coordinates; a
+                    // payload-less entry (hand-written, or written by an
+                    // older shape) is unresolvable here and is skipped —
+                    // it becomes visible as index drift rather than a
+                    // hard failure of the whole tick.
+                    let! resolved =
+                        entries
+                        |> List.map (fun (runId, payloadOpt) -> async {
+                            match payloadOpt |> Option.bind Json.tryDeserialize<AwaitingExternalEntry> with
+                            | None -> return None
+                            | Some entry ->
+                                let name =
+                                    runBlob {
+                                        RunId = entry.RunId
+                                        JobId = entry.JobId
+                                        ScopeId = scopeId
+                                        Attempt = 0
+                                        StartedAt = entry.StartedAt
+                                        CompletedAt = None
+                                        Status = AwaitingExternal
+                                        Error = None
+                                        DurationMs = None
+                                        ExternalHandle = None
+                                    }
+
+                                let! blob = storage.Download(platformContainer, name)
+
+                                return
+                                    match blob with
+                                    | Ok bytes ->
+                                        Json.tryDeserialize<JobRun> bytes
+                                        // Defensive: the index is
+                                        // best-effort, so a stale entry
+                                        // can point at a run that has
+                                        // since gone terminal. Re-verify
+                                        // against canonical rather than
+                                        // trusting the index, exactly as
+                                        // `DueJobs` re-verifies status +
+                                        // NextRunAt.
+                                        |> Option.filter (fun r -> r.Status = AwaitingExternal && r.RunId = runId)
+                                    | Error _ -> None
+                        })
+                        |> Async.Parallel
+
+                    return
+                        resolved
+                        |> Array.choose id
+                        |> Array.toList
+                        |> List.sortByDescending _.StartedAt
+                        |> List.truncate limit
         }
 
         member _.ListScopesWithJobs() = async {

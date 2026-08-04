@@ -165,6 +165,10 @@ let tests =
                     member _.RecordRun(_) = async { return () }
                     member _.GetRecentRuns(_, _, _) = async { return [] }
                     member _.DueJobs(_, _) = async { return [] }
+                    // Phase 319 — this stub exercises the job-queue
+                    // status board, which reads definitions only; no run
+                    // is ever awaiting external compute here.
+                    member _.AwaitingExternalRuns(_, _) = async { return [] }
                     member _.ListScopesWithJobs() = async { return [ "team-alpha" ] }
                 }
 

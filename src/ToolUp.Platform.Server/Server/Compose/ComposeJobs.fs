@@ -268,6 +268,59 @@ let registerWebhookSubsystem
 /// can read it. `jobSchedulerCell` is populated so subsequent writes
 /// through the notify-wrapper see the scheduler and dispatch `OnEvent`
 /// triggers.
+/// Phase 319 — find the deployment's own `IExternalComputeDispatcher` in
+/// the service collection, so the job scheduler can reconcile
+/// `JobResult.HandedOff` runs against it.
+///
+/// `None` for `NoExternalCompute` (the default) is the load-bearing case:
+/// it leaves the reconciliation pass switched off entirely for every
+/// deployment that composes no backend, rather than switched on against a
+/// `NoExternalComputeDispatcher` that could only ever report the empty set
+/// — one index listing per scope per minute, forever, to learn nothing
+/// (GP 13).
+///
+/// **A factory-registered dispatcher is not introspectable, and is
+/// therefore not found.** `ImplementationFactory` cannot be invoked here
+/// (the provider is not built yet, and invoking it would construct a
+/// second instance), so the same best-effort shape
+/// `IdempotencyStoreInstanceValidator` uses applies: instance
+/// registrations are seen, factory registrations are not. That would
+/// otherwise fail *silently* — the deployment sets
+/// `CustomExternalCompute`, hands off successfully, and no reconciliation
+/// ever runs, so every external run waits forever with nothing reporting
+/// why. So the miss is warned about explicitly, naming both remedies.
+let private tryResolveExternalDispatcher
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (logger: ILogger)
+    : IExternalComputeDispatcher option =
+    match config.ExternalCompute with
+    | NoExternalCompute -> None
+    | CustomExternalCompute ->
+        let found =
+            services
+            |> Seq.tryPick (fun d ->
+                if
+                    not (isNull d.ServiceType)
+                    && d.ServiceType = typeof<IExternalComputeDispatcher>
+                    // Reading ImplementationInstance on a keyed descriptor
+                    // throws; forge composes none for this seam.
+                    && not d.IsKeyedService
+                then
+                    match d.ImplementationInstance with
+                    | :? IExternalComputeDispatcher as instance -> Some instance
+                    | _ -> None
+                else
+                    None)
+
+        match found with
+        | Some _ -> found
+        | None ->
+            logger.Warn
+                "[ComposeJobs] event=external_dispatcher_not_introspectable ServerConfig.ExternalCompute = CustomExternalCompute but no instance-registered IExternalComputeDispatcher was found in the service collection, so the job scheduler's external hand-off reconciliation is DISABLED — a handler returning JobResult.HandedOff would leave its run AwaitingExternal forever. Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)) rather than a factory, or construct the scheduler yourself with JobScheduler.createWithExternalCompute."
+
+            None
+
 let registerJobScheduler
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -287,12 +340,29 @@ let registerJobScheduler
         blobJobStoreInstance.Value <- Some blobJobStore
         let jobStore = blobJobStore :> IJobStore
 
+        // Phase 319 — the deployment's external-compute backend, when it
+        // composed one. `None` keeps the reconciliation pass off.
+        let externalDispatcher = tryResolveExternalDispatcher services config resolvedLogger
+
         let scheduler =
             // Phase 598 — hand the scheduler the shared trigger
             // watermark when the deployment opted into catch-up;
             // `JobNotifyEventStore` holds the same instance.
-            match jobTriggerWatermark with
-            | Some watermark ->
+            match externalDispatcher, jobTriggerWatermark with
+            | Some dispatcher, watermark ->
+                // Phase 319 — one arity covers both catch-up shapes, so
+                // the two features compose rather than excluding each
+                // other.
+                JobScheduler.createWithExternalCompute
+                    jobStore
+                    eventStore
+                    resolvedNotificationChannel
+                    config
+                    resolvedLogger
+                    resolvedActivitySink
+                    watermark
+                    dispatcher
+            | None, Some watermark ->
                 JobScheduler.createWithCatchUp
                     jobStore
                     eventStore
@@ -301,7 +371,7 @@ let registerJobScheduler
                     resolvedLogger
                     resolvedActivitySink
                     watermark
-            | None ->
+            | None, None ->
                 JobScheduler.create
                     jobStore
                     eventStore

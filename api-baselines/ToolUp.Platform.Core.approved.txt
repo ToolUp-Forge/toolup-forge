@@ -4650,14 +4650,18 @@ ToolUp.Platform.JobRegistration.ShardKey : Microsoft.FSharp.Core.FSharpOption`1[
 ToolUp.Platform.JobRegistration.Tags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.JobRegistration.Trigger : ToolUp.Platform.Trigger { get }
 ToolUp.Platform.JobResult (class)
+ToolUp.Platform.JobResult.IsHandedOff : System.Boolean { get }
 ToolUp.Platform.JobResult.IsPermanentFailure : System.Boolean { get }
 ToolUp.Platform.JobResult.IsSuccess : System.Boolean { get }
 ToolUp.Platform.JobResult.IsTransientFailure : System.Boolean { get }
 ToolUp.Platform.JobResult.Success : ToolUp.Platform.JobResult { get }
 ToolUp.Platform.JobResult.Tag : System.Int32 { get }
+ToolUp.Platform.JobResult+HandedOff (class)
+ToolUp.Platform.JobResult+HandedOff.handle : ToolUp.Platform.ExternalHandle { get }
 ToolUp.Platform.JobResult+PermanentFailure (class)
 ToolUp.Platform.JobResult+PermanentFailure.error : System.String { get }
 ToolUp.Platform.JobResult+Tags (class)
+ToolUp.Platform.JobResult+Tags.HandedOff : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.PermanentFailure : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.Success : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.TransientFailure : System.Int32 (literal)
@@ -4673,20 +4677,25 @@ ToolUp.Platform.JobRetryPolicyModule (class)
 ToolUp.Platform.JobRetryPolicyModule.defaults : ToolUp.Platform.JobRetryPolicy { get }
 ToolUp.Platform.JobRetryPolicyModule.delayFor(ToolUp.Platform.JobRetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.JobRun (class)
-ToolUp.Platform.JobRun..ctor(System.Guid, System.Guid, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobRunStatus, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64])
+ToolUp.Platform.JobRun..ctor(System.Guid, System.Guid, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobRunStatus, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandle])
 ToolUp.Platform.JobRun.Attempt : System.Int32 { get }
 ToolUp.Platform.JobRun.CompletedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.JobRun.DurationMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Platform.JobRun.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.JobRun.ExternalHandle : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandle] { get }
 ToolUp.Platform.JobRun.JobId : System.Guid { get }
 ToolUp.Platform.JobRun.RunId : System.Guid { get }
 ToolUp.Platform.JobRun.ScopeId : System.String { get }
 ToolUp.Platform.JobRun.StartedAt : System.DateTime { get }
 ToolUp.Platform.JobRun.Status : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus (class)
+ToolUp.Platform.JobRunStatus.AwaitingExternal : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus.DeadLettered : ToolUp.Platform.JobRunStatus { get }
+ToolUp.Platform.JobRunStatus.ExternallyCancelled : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus.Failed : ToolUp.Platform.JobRunStatus { get }
+ToolUp.Platform.JobRunStatus.IsAwaitingExternal : System.Boolean { get }
 ToolUp.Platform.JobRunStatus.IsDeadLettered : System.Boolean { get }
+ToolUp.Platform.JobRunStatus.IsExternallyCancelled : System.Boolean { get }
 ToolUp.Platform.JobRunStatus.IsFailed : System.Boolean { get }
 ToolUp.Platform.JobRunStatus.IsPending : System.Boolean { get }
 ToolUp.Platform.JobRunStatus.IsRunning : System.Boolean { get }
@@ -4696,7 +4705,9 @@ ToolUp.Platform.JobRunStatus.Running : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus.Succeeded : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus.Tag : System.Int32 { get }
 ToolUp.Platform.JobRunStatus+Tags (class)
+ToolUp.Platform.JobRunStatus+Tags.AwaitingExternal : System.Int32 (literal)
 ToolUp.Platform.JobRunStatus+Tags.DeadLettered : System.Int32 (literal)
+ToolUp.Platform.JobRunStatus+Tags.ExternallyCancelled : System.Int32 (literal)
 ToolUp.Platform.JobRunStatus+Tags.Failed : System.Int32 (literal)
 ToolUp.Platform.JobRunStatus+Tags.Pending : System.Int32 (literal)
 ToolUp.Platform.JobRunStatus+Tags.Running : System.Int32 (literal)

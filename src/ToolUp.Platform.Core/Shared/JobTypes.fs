@@ -169,6 +169,44 @@ type JobRunStatus =
     /// and a `SystemMessage` notification at `Warning` severity.
     | DeadLettered
 
+    // ─── Phase 319 — external hand-off states ────────────────────
+    //
+    // **New cases are APPENDED, deliberately.** `JobRunStatus` is a
+    // persisted DU (`JobRun.Status`, `JobDefinition.LastRunStatus`)
+    // written through `FableConverters`. Inserting a case mid-union
+    // shifts every later case's `Tag`, so a representation that keys
+    // on tag ordinal rather than case name would silently re-read
+    // every historical `Failed` row as `DeadLettered`. Appending is
+    // correct under BOTH representations, which is the only property
+    // worth having here (GP 11).
+
+    /// Phase 319 — the handler returned `JobResult.HandedOff` and the
+    /// work is now running on an external compute backend. **Not
+    /// terminal, and not occupying a scheduler execution slot**: the
+    /// dispatch lease was released the moment the handler returned, so
+    /// this run costs nothing while it waits. The scheduler's
+    /// reconciliation pass polls the persisted
+    /// `JobRun.ExternalHandle` on each tick and drives the run to a
+    /// terminal state (`Succeeded` / `Failed` / `DeadLettered` /
+    /// `Cancelled`).
+    | AwaitingExternal
+
+    /// Phase 319 — terminal cancellation of an externally-run attempt:
+    /// the backend reported `ExternalOutcome.Cancelled` (an operator
+    /// action, a pre-emption, a backend-side timeout). Distinct from
+    /// `DeadLettered` because a cancellation is not a failure — it
+    /// emits no dead-letter notification and does NOT bump
+    /// `ConsecutiveFailures`.
+    ///
+    /// **Named `ExternallyCancelled`, not `Cancelled`, on purpose.**
+    /// `JobStatus.Cancelled` already exists in this namespace and is
+    /// declared *after* this union, so a bare `Cancelled` here would be
+    /// shadowed at every unqualified call site — silently binding the
+    /// job-definition status where an attempt status was meant. The
+    /// name also carries the distinction that matters: `JobStatus`
+    /// cancels the *definition*, this cancels one *attempt*.
+    | ExternallyCancelled
+
 /// Top-level job state. `Active` is the steady state; `Disabled`
 /// stops dispatch without deleting (admin can re-enable);
 /// `Cancelled` is a terminal "do not run" marker that the cleanup
@@ -254,6 +292,29 @@ type JobRun = {
     Status: JobRunStatus
     Error: string option
     DurationMs: int64 option
+    /// Phase 319 — the external-compute handle this attempt handed off
+    /// to, `Some` only while `Status = AwaitingExternal` and on the
+    /// terminal row that reconciliation wrote for it. `None` for every
+    /// ordinary in-process attempt.
+    ///
+    /// **The handle is persisted here, and that is the whole point of
+    /// the field.** Restart durability is not a nice-to-have for this
+    /// state: the run is waiting on work that outlives the process, so
+    /// a handle held only in memory would strand the external job on
+    /// the first deploy — the scheduler would have no way to ask the
+    /// backend what became of it, and no way to complete or fail the
+    /// run. Reconciliation reads exactly this field.
+    ///
+    /// **Additive-field back-compat (GP 11).** A `JobRun` blob written
+    /// before Phase 319 carries no `ExternalHandle` property at all.
+    /// F# `None` is represented as `null`, and the converter yields
+    /// `null` for an absent reference-typed field, so a legacy row
+    /// deserialises to `None` — the correct value, not a broken one.
+    /// That coincidence is load-bearing enough to be pinned by a test
+    /// rather than trusted (`FableConverters` has bitten this estate
+    /// both ways: a missing list field arrives as `null` where `[]` was
+    /// assumed, and `Fable.SimpleJson` throws outright on the client).
+    ExternalHandle: ExternalHandle option
 }
 
 /// What caused this run. The handler reads this to distinguish a
@@ -309,10 +370,34 @@ type JobContext = {
 /// per `RetryPolicy`. `PermanentFailure` skips remaining retries and
 /// goes straight to `DeadLettered` — reserve for shapes the handler
 /// knows can never succeed (malformed payload, missing prerequisite).
+///
+/// Phase 319 adds `HandedOff`, the fourth outcome: "I did not do the
+/// work, I arranged for it to be done elsewhere, here is the receipt."
 type JobResult =
     | Success
     | TransientFailure of error: string
     | PermanentFailure of error: string
+
+    /// Phase 319 — the handler submitted the work to an external compute
+    /// backend and is returning the `ExternalHandle` **instead of a
+    /// result**. The attempt is neither a success nor a failure yet: the
+    /// scheduler records the run as `AwaitingExternal`, persists the
+    /// handle, releases the dispatch lease, and reconciles the handle to
+    /// a terminal outcome on later ticks.
+    ///
+    /// This is the case that makes the hand-off *non-blocking*. Without
+    /// it a handler wanting external compute had to `Submit` and then
+    /// poll in its own body, holding a dispatch lease for the entire
+    /// remote duration — hours, for a training run — and losing the
+    /// whole submission to a restart because nothing durable recorded
+    /// that the remote work existed.
+    ///
+    /// **Additive (GP 11).** A handler that never returns this case is
+    /// byte-unaffected: it is a new case at the END of the union (see
+    /// `JobRunStatus` for why the position matters), and every existing
+    /// `Success` / `TransientFailure` / `PermanentFailure` path in the
+    /// scheduler is untouched.
+    | HandedOff of handle: ExternalHandle
 
 /// Caller-supplied scheduling request. Differs from `JobDefinition`
 /// only in fields the scheduler computes itself — `JobId`,

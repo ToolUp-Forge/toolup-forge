@@ -101,6 +101,42 @@ type IJobStore =
     /// satisfies it.
     abstract DueJobs: scopeId: string * now: System.DateTime -> Async<JobDefinition list>
 
+    /// Phase 319 — every run in `scopeId` currently sitting in
+    /// `JobRunStatus.AwaitingExternal`, newest first, capped at `limit`.
+    /// The scheduler's reconciliation pass calls this once per scope per
+    /// tick, polls each returned run's `ExternalHandle`, and drives it to
+    /// a terminal state. Returns the empty list when nothing is awaiting
+    /// — which is the case for every deployment that composes no
+    /// external-compute backend, so the query must be *cheap when empty*
+    /// (GP 13), not merely correct.
+    ///
+    /// **`limit` bounds the batch, and the cap is a fairness device, not
+    /// a correctness one.** A scope with more awaiting runs than `limit`
+    /// gets the rest on the next tick; no run is dropped, because the
+    /// state lives in the store and the query is re-issued every tick.
+    /// The alternative — an unbounded return — lets one saturated scope
+    /// monopolise a tick and starve every other scope's reconciliation,
+    /// which is the failure the scheduler's per-scope loop already
+    /// avoids for due jobs.
+    ///
+    /// **Implementations MUST NOT satisfy this by scanning run
+    /// history.** Run rows are per-attempt and unbounded in the general
+    /// case, so a scan is O(all-runs-ever) to find an O(few) answer —
+    /// on the tick path, every tick, forever. Index on the status
+    /// transition instead: the blob-backed default maintains an
+    /// `_awaiting-external` secondary index that `RecordRun` adds to
+    /// and removes from as a run enters and leaves the state, so the
+    /// query is a prefix list of exactly the awaiting set. This is the
+    /// same contract `DueJobs` states for `(Status, NextRunAt)`, and
+    /// for the same reason.
+    ///
+    /// A run whose `Status` is `AwaitingExternal` but whose
+    /// `ExternalHandle` is `None` is malformed and MUST still be
+    /// returned — the scheduler needs to see it to fail it, and
+    /// silently filtering it here would leave the run awaiting forever
+    /// with nothing anywhere reporting why.
+    abstract AwaitingExternalRuns: scopeId: string * limit: int -> Async<JobRun list>
+
     /// Enumerate every scope that currently holds at least one job.
     /// The in-process scheduler calls this on each tick to know
     /// which `DueJobs(scope, now)` queries to run — without it the

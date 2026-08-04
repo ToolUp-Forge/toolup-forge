@@ -50,6 +50,28 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         Status = status
         Error = None
         DurationMs = Some 100L
+        ExternalHandle = None
+    }
+
+    /// Phase 319 — an `ExternalHandle` with every field distinct, so a
+    /// round-trip test can tell a genuinely-preserved handle from one
+    /// the converter reconstructed with defaults or field-swapped.
+    let mkHandle (scopeId: string) (nativeRef: string) : ExternalHandle = {
+        HandleId = Guid.NewGuid()
+        Backend = "contract-backend"
+        ScopeId = scopeId
+        NativeRef = nativeRef
+        SubmittedAt = DateTime(2026, 8, 4, 11, 22, 33, DateTimeKind.Utc)
+    }
+
+    /// Phase 319 — a run parked in `AwaitingExternal`: open (no
+    /// `CompletedAt`, no `DurationMs`) and carrying its handle, exactly
+    /// the shape `JobResult.HandedOff` produces.
+    let mkAwaitingRun (job: JobDefinition) attempt (handle: ExternalHandle) : JobRun = {
+        mkRun job attempt AwaitingExternal with
+            CompletedAt = None
+            DurationMs = None
+            ExternalHandle = Some handle
     }
 
     testList $"{name} — IJobStore contract" [
@@ -286,5 +308,202 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             let asSet = Set.ofList scopes
             Expect.isTrue (asSet.Contains scopeA) "scope A listed"
             Expect.isTrue (asSet.Contains scopeB) "scope B listed"
+        }
+
+        // ─── Phase 319 — external hand-off persistence ───────────
+        //
+        // Two obligations an implementation takes on: round-trip the
+        // `ExternalHandle` on a `JobRun`, and answer
+        // `AwaitingExternalRuns` from the awaiting set only — including
+        // taking runs OUT of it as they go terminal, which is the half
+        // that fails silently (a store that only ever adds looks
+        // perfectly correct until the scheduler re-polls handles for
+        // work that finished days ago).
+
+        testCaseAsync "Phase 319 — ExternalHandle round-trips through RecordRun + GetRecentRuns"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+
+            let handle = mkHandle scopeA "backend-token-42"
+            do! store.RecordRun(mkAwaitingRun job 1 handle)
+
+            let! recent = store.GetRecentRuns(scopeA, job.JobId, 10)
+            Expect.equal recent.Length 1 "the awaiting run persisted"
+            let run = recent.Head
+
+            Expect.equal run.Status AwaitingExternal "status round-trip"
+
+            match run.ExternalHandle with
+            | None -> failtest "the ExternalHandle was lost on the round-trip"
+            | Some h ->
+                // Every field asserted individually: a converter that
+                // reconstructs the record with defaults, or swaps two
+                // same-typed fields, passes an `isSome` check.
+                Expect.equal h.HandleId handle.HandleId "HandleId round-trip"
+                Expect.equal h.Backend handle.Backend "Backend round-trip"
+                Expect.equal h.ScopeId handle.ScopeId "ScopeId round-trip"
+                Expect.equal h.NativeRef handle.NativeRef "NativeRef (the backend's opaque token) round-trip"
+                Expect.equal h.SubmittedAt handle.SubmittedAt "SubmittedAt round-trip"
+
+            // The control: an ordinary in-process run must round-trip
+            // `None`, not an empty-ish handle. Without this the test
+            // above passes against an implementation that fabricates a
+            // handle for every run.
+            let plain = mkRun job 2 Succeeded
+            do! store.RecordRun plain
+            let! recent2 = store.GetRecentRuns(scopeA, job.JobId, 10)
+
+            let plainRead = recent2 |> List.find (fun r -> r.RunId = plain.RunId)
+
+            Expect.isNone plainRead.ExternalHandle "an in-process run carries no handle"
+        }
+
+        testCaseAsync "Phase 319 — AwaitingExternalRuns returns empty when nothing is awaiting"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "no-handoff"
+            do! store.Save job
+
+            // Populate ordinary run history, so "empty" is a real answer
+            // about the awaiting set rather than an answer about an
+            // empty store.
+            do! store.RecordRun(mkRun job 1 Succeeded)
+            do! store.RecordRun(mkRun job 2 Failed)
+            do! store.RecordRun(mkRun job 3 DeadLettered)
+
+            let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.isEmpty awaiting "no awaiting runs → empty, despite three runs in history"
+        }
+
+        testCaseAsync "Phase 319 — AwaitingExternalRuns returns awaiting runs with handles"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+
+            let h1 = mkHandle scopeA "ref-1"
+            let h2 = mkHandle scopeA "ref-2"
+            let a1 = mkAwaitingRun job 1 h1
+            let a2 = mkAwaitingRun job 2 h2
+
+            // A terminal run of the same job must not appear.
+            do! store.RecordRun(mkRun job 3 Succeeded)
+            do! store.RecordRun a1
+            do! store.RecordRun a2
+
+            let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
+
+            let ids = awaiting |> List.map _.RunId |> Set.ofList
+            Expect.equal ids (Set.ofList [ a1.RunId; a2.RunId ]) "exactly the two awaiting runs"
+
+            Expect.isTrue
+                (awaiting |> List.forall (fun r -> r.Status = AwaitingExternal))
+                "every returned run is AwaitingExternal"
+
+            let refs =
+                awaiting
+                |> List.choose (fun r -> r.ExternalHandle |> Option.map _.NativeRef)
+                |> Set.ofList
+
+            Expect.equal refs (Set.ofList [ "ref-1"; "ref-2" ]) "each returned run carries its own handle"
+        }
+
+        testCaseAsync "Phase 319 — a run that leaves AwaitingExternal leaves the awaiting set"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+
+            let handle = mkHandle scopeA "ref-terminal"
+            let awaitingRun = mkAwaitingRun job 1 handle
+            do! store.RecordRun awaitingRun
+
+            let! before = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.equal (before |> List.map _.RunId) [ awaitingRun.RunId ] "awaiting before reconciliation"
+
+            // Reconciliation's write: the SAME run (same RunId, same
+            // StartedAt) going terminal. This is the assertion that
+            // catches an implementation which only ever adds to its
+            // index — the scheduler would otherwise re-poll a finished
+            // handle on every tick for the life of the deployment.
+            do!
+                store.RecordRun {
+                    awaitingRun with
+                        Status = Succeeded
+                        CompletedAt = Some DateTime.UtcNow
+                }
+
+            let! after = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.isEmpty after "the reconciled run is no longer awaiting"
+
+            // ...and it is still readable as a run, with its handle
+            // intact. Leaving the awaiting set must not mean losing the
+            // record of which backend ran it.
+            let! recent = store.GetRecentRuns(scopeA, job.JobId, 10)
+            let reconciled = recent |> List.find (fun r -> r.RunId = awaitingRun.RunId)
+            Expect.equal reconciled.Status Succeeded "the terminal status persisted"
+
+            Expect.equal
+                (reconciled.ExternalHandle |> Option.map _.NativeRef)
+                (Some "ref-terminal")
+                "the handle survives reconciliation"
+        }
+
+        testCaseAsync "Phase 319 — AwaitingExternalRuns honours the scope boundary"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+            do! store.RecordRun(mkAwaitingRun job 1 (mkHandle scopeA "ref-a"))
+
+            let! bAwaiting = store.AwaitingExternalRuns(scopeB, 100)
+            Expect.isEmpty bAwaiting "scope B sees none of scope A's awaiting runs (GP 4)"
+
+            let! aAwaiting = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.equal aAwaiting.Length 1 "scope A still sees its own"
+        }
+
+        testCaseAsync "Phase 319 — AwaitingExternalRuns caps the batch at limit"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+
+            for i in 1..5 do
+                do! store.RecordRun(mkAwaitingRun job i (mkHandle scopeA $"ref-{i}"))
+
+            let! capped = store.AwaitingExternalRuns(scopeA, 2)
+            Expect.equal capped.Length 2 "limit respected"
+
+            let! all = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.equal all.Length 5 "the cap bounds the batch, it does not drop runs"
+
+            let! none = store.AwaitingExternalRuns(scopeA, 0)
+            Expect.isEmpty none "a non-positive limit yields nothing rather than everything"
+        }
+
+        testCaseAsync "Phase 319 — a handle-less awaiting run is still returned, not filtered"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let job = mkRegistration scopeA "handoff"
+            do! store.Save job
+
+            // Malformed: AwaitingExternal with no handle. Unreachable via
+            // `JobResult.HandedOff`, but the store must surface it so the
+            // scheduler can fail it — filtering it here would leave the
+            // run awaiting forever with nothing anywhere reporting why.
+            let malformed = {
+                mkRun job 1 AwaitingExternal with
+                    CompletedAt = None
+                    ExternalHandle = None
+            }
+
+            do! store.RecordRun malformed
+
+            let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
+            Expect.equal (awaiting |> List.map _.RunId) [ malformed.RunId ] "the malformed run is visible"
+            Expect.isNone awaiting.Head.ExternalHandle "and it is honestly reported as handle-less"
         }
     ]

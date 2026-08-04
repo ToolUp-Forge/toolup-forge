@@ -216,7 +216,9 @@ A backend companion honouring `Isolated` implements the three clauses with whate
 
 Orthogonal, and designed to compose. The job scheduler owns **when** something runs on this deployment; the dispatcher owns **where** the heavy part runs.
 
-The composition looks like this:
+Since Phase 319 the composition is a **first-class job outcome**: a handler submits and returns `JobResult.HandedOff handle`, and the scheduler owns everything after that — the waiting, the polling, the retry decision, the restart recovery. See [the hand-off state machine](#the-hand-off-state-machine) below; it is the shape to reach for.
+
+A handler that owns its own polling is still expressible, and is the right shape when the waiting belongs to a domain record rather than to the job:
 
 1. A scheduled or event-triggered job handler builds an `ExternalWorkSpec` and calls `Submit`.
 2. It persists the returned `ExternalHandle` (a `Guid` + strings — any store will hold it) and **returns**. It does not loop on `Poll`, and it does not hold its scheduler slot for the duration of the external work.
@@ -238,11 +240,107 @@ let classify (outcome: ExternalOutcome) : string =
     | ExternalOutcome.Cancelled -> "cancelled"
 ```
 
-Step 2 is the part worth being deliberate about. A handler that submits and then polls in a loop has moved the blocking from the compute to the scheduler slot, which is the problem this seam exists to remove. A follow-on phase makes that hand-off non-blocking as a first-class job outcome, so a handler expresses "I have brokered this, wake me when it lands" rather than hand-rolling the second job. Until then, two handlers and a persisted handle is the correct shape.
+Step 2 is the part worth being deliberate about. A handler that submits and then polls in a loop has moved the blocking from the compute to the scheduler slot, which is the problem this seam exists to remove.
 
 Distinct from **`IContainerScheduler`** (the Layer 3 deploy plane), which launches a container and owns its lifecycle — you asked for a process and you get one. The dispatcher hands work to a backend that owns its own execution and gives you a reference. A container backend is a perfectly reasonable *implementation* of a dispatcher; it is not the same abstraction.
 
 Distinct from **`IModelFitProvider`**, which executes a fit in-process through a provider companion and returns a `FitOutcome` synchronously-shaped (`Async<FitOutcome>`, one call). Where the fit is too heavy for the serving process, a provider can be written over a dispatcher — that is the intended layering, not a conflict.
+
+## The hand-off state machine
+
+A handler may return **`JobResult.HandedOff handle`** instead of a result: "I did not do the work, I arranged for it to be done elsewhere, here is the receipt." The scheduler records the run as `AwaitingExternal` with the handle persisted, **releases its dispatch slot immediately**, and reconciles the handle on subsequent ticks until the backend reports a terminal outcome.
+
+```fsharp skip=fragment
+// The whole handler. It submits and returns — no loop, no sleep, no slot held.
+let trainHandler (dispatcher: IExternalComputeDispatcher) =
+    { new IJobHandler with
+        member _.Execute ctx = async {
+            let spec =
+                ExternalWorkSpec.create "train-forecast" ctx.Payload
+                |> ExternalWorkSpec.withHint "gpu" "1"
+                // The key the backend dedups on — see "Submission idempotency".
+                |> ExternalWorkSpec.withIdempotency $"fit-{ctx.JobId}-{ctx.Attempt}"
+
+            match! dispatcher.Submit(ctx.ScopeId, spec) with
+            | Ok handle -> return HandedOff handle
+            | Error e when e.Retriable -> return TransientFailure e.Message
+            | Error e -> return PermanentFailure e.Message
+        }
+    }
+```
+
+Note what the handler does **not** do: it does not persist the handle itself, poll it, or arrange a second job. Submitting failed? That is an ordinary `TransientFailure` / `PermanentFailure` and the existing `RetryPolicy` covers it. Submitting succeeded? Hand back the handle and stop.
+
+### The states
+
+```
+                  handler returns HandedOff
+   Running ─────────────────────────────────► AwaitingExternal
+                                                    │
+                                        Poll on each scheduler tick
+                                                    │
+        ┌──────────────┬──────────────┬─────────────┴──────────────┐
+        │              │              │                            │
+  Pending/Running   Succeeded    Failed (retriable)         Failed (terminal)
+        │              │              │                            │
+   stay awaiting    Succeeded    attempts left?              DeadLettered
+   (no write)      JobCompleted   ├─ yes → Failed, then                  Cancelled
+                                  │        re-dispatch at attempt+1          │
+                                  └─ no  → DeadLettered            ExternallyCancelled
+```
+
+| `ExternalOutcome` | Run status | Lifecycle event | Notification |
+|---|---|---|---|
+| `Pending` / `Running _` | stays `AwaitingExternal` | none | none |
+| `Succeeded resultRef` | `Succeeded` | `JobCompleted` + `JobExternalReconciled` | none |
+| `Failed` retriable, attempts left | `Failed`, then a fresh attempt | `JobFailed` + `JobExternalReconciled` | none |
+| `Failed` retriable, budget spent | `DeadLettered` | `JobDeadLettered` + `JobExternalReconciled` | `SystemMessage` at `Warning` |
+| `Failed` terminal | `DeadLettered` (remaining attempts **skipped**) | `JobDeadLettered` + `JobExternalReconciled` | `SystemMessage` at `Warning` |
+| `Cancelled` | `ExternallyCancelled` | `JobExternalReconciled` | none |
+
+**The terminal events are the ordinary ones.** A run that completed on a GPU box emits exactly the `JobCompleted` payload an in-process run emits — same fields, same shape — so nothing downstream needs to learn a second vocabulary to count a completion or alert on a dead-letter. The external-only detail (backend, handle, `NativeRef`, the result reference, how long the run waited) rides on an additional `JobExternalReconciled` event emitted alongside it. `JobExternalHandedOff` marks entry into the awaiting state.
+
+`ExternallyCancelled` is deliberately **not** a failure: no notification, and no `ConsecutiveFailures` bump. A pre-empted or operator-cancelled attempt says nothing about the job's health and must not push it toward an auto-disable threshold. It is also distinct from `JobStatus.Cancelled`, which cancels the *job definition* rather than one *attempt*.
+
+### The slot is genuinely freed
+
+The scheduler's occupancy for a job is its **per-`JobId` dispatch lease**, held across the whole retry loop. A handler that submitted and then polled in its own body held that lease for the entire remote duration — eight hours, for an eight-hour training run. `HandedOff` exits the loop, so the lease is released while the run is still `AwaitingExternal`, and other work for that job can proceed. The platform test pack asserts exactly this: it acquires the dispatch lock while a run is awaiting, which fails if anything is still holding it.
+
+### Restart durability
+
+The handle is persisted on the `JobRun` (`JobRun.ExternalHandle`), not held in memory. This is not a refinement — it is the difference between a feature and a leak. External work outlives the process by design, so a handle kept only in memory would strand the remote job on the first deploy: nothing left to ask the backend what became of it, and a run stuck awaiting forever.
+
+After a restart the reconciliation pass finds the awaiting run through `IJobStore.AwaitingExternalRuns` and polls its handle, with **no re-submission** — the recovery path is "ask what happened", never "run it again", so a restart cannot launch a second GPU job. The handler need not even be registered on the new instance for the run to complete.
+
+### Submission idempotency
+
+Two independent defences, because neither covers the other's case:
+
+1. **The scheduler will not re-enter a handler whose hand-off is outstanding.** Before dispatching, it checks for a run of that job in `AwaitingExternal` and skips if it finds one. This is what covers a cron job whose external work outlives its own interval, an admin re-trigger, and a restart's recovery re-queue — including for a handler that submits with no idempotency key at all.
+2. **`ExternalWorkSpec.Idempotency`, honoured by the backend.** A dispatcher that has already accepted a key for a scope returns the *existing* handle rather than starting the work twice. This covers what the scheduler cannot see: a handler that submits more than once itself, and a handler re-entered after its run row was lost.
+
+Set the key. The guard is not a substitute for it — the scheduler cannot see inside a handler, and the backend cannot see the scheduler's run rows.
+
+### Enabling it
+
+Reconciliation runs only when the deployment composed an actual backend — `ServerConfig.ExternalCompute = CustomExternalCompute` plus an `IExternalComputeDispatcher` singleton in DI. A deployment on the `NoExternalCompute` default pays nothing: the pass short-circuits before touching the store, so the tick gains no queries at all (GP 13), and no existing handler's behaviour changes (GP 11).
+
+One wiring caveat worth knowing, because it fails quietly otherwise: compose finds the dispatcher by inspecting the service collection, so an **instance** registration is seen and a **factory** registration is not (a factory cannot be invoked before the provider is built without constructing a second instance). Register the instance:
+
+```fsharp skip=fragment
+services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)
+```
+
+If compose cannot find it, it logs a warning naming both remedies rather than silently leaving reconciliation off — the alternative being a deployment that hands off successfully and then waits forever. The other remedy is to construct the scheduler directly with `JobScheduler.createWithExternalCompute`.
+
+Two operational notes. Reconciliation is batched per scope (`AwaitingExternalRuns`' `limit`) so one saturated scope cannot starve another's reconciliation; a scope with more outstanding hand-offs than the batch size gets the remainder on the next tick, and nothing is dropped. And each run is reconciled under its job's dispatch lease, so a deployment that composed a store-backed [`IDistributedLock`](../platform/jobs.md) gets multi-instance double-poll protection for free.
+
+### What a store implementation owes
+
+`IJobStore` gained `AwaitingExternalRuns`, and the contract pack tests it. Two obligations:
+
+- **Round-trip `JobRun.ExternalHandle`.** Every field — a converter that reconstructs the record with defaults passes an `isSome` check and fails a real one.
+- **Answer from the awaiting set, and take runs OUT of it as they go terminal.** The removal half is the one that fails silently: a store that only ever adds looks correct until the scheduler is re-polling handles for work that finished days ago. Do not satisfy the query by scanning run history — run rows are unbounded, and this is on the tick path. Index the status transition, as the blob-backed default does with its `_awaiting-external` secondary index.
 
 ## Portability-rule conformance
 
