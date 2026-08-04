@@ -767,6 +767,8 @@ ToolUp.Platform.AuditEvent.IsOAuthRefreshFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthRefreshTokenInvalidated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthTokenRefreshFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthTokenRefreshed : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsOrphanSweepCompleted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsOrphanedContentBlobReclaimed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRegistered : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPeerCallCompleted : System.Boolean { get }
@@ -1002,6 +1004,10 @@ ToolUp.Platform.AuditEvent+OAuthTokenRefreshFailed (class)
 ToolUp.Platform.AuditEvent+OAuthTokenRefreshFailed.Item : ToolUp.Platform.OAuthTokenRefreshFailedPayload { get }
 ToolUp.Platform.AuditEvent+OAuthTokenRefreshed (class)
 ToolUp.Platform.AuditEvent+OAuthTokenRefreshed.Item : ToolUp.Platform.OAuthTokenRefreshedPayload { get }
+ToolUp.Platform.AuditEvent+OrphanSweepCompleted (class)
+ToolUp.Platform.AuditEvent+OrphanSweepCompleted.Item : ToolUp.Platform.OrphanSweepCompletedPayload { get }
+ToolUp.Platform.AuditEvent+OrphanedContentBlobReclaimed (class)
+ToolUp.Platform.AuditEvent+OrphanedContentBlobReclaimed.Item : ToolUp.Platform.OrphanedContentBlobReclaimedPayload { get }
 ToolUp.Platform.AuditEvent+PasskeyCredentialRegistered (class)
 ToolUp.Platform.AuditEvent+PasskeyCredentialRegistered.Item : ToolUp.Platform.PasskeyCredentialRegisteredPayload { get }
 ToolUp.Platform.AuditEvent+PasskeyCredentialRemoved (class)
@@ -1148,6 +1154,8 @@ ToolUp.Platform.AuditEvent+Tags.OAuthRefreshFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthRefreshTokenInvalidated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthTokenRefreshFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthTokenRefreshed : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.OrphanSweepCompleted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.OrphanedContentBlobReclaimed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRegistered : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PeerCallCompleted : System.Int32 (literal)
@@ -6396,6 +6404,21 @@ ToolUp.Platform.OffboardConfirmationMode+Tags.TokenConfirmation : System.Int32 (
 ToolUp.Platform.OffboardConfirmationMode+Tags.TwoPersonRule : System.Int32 (literal)
 ToolUp.Platform.OffboardConfirmationModeModule (class)
 ToolUp.Platform.OffboardConfirmationModeModule.requiresToken(ToolUp.Platform.OffboardConfirmationMode) : System.Boolean
+ToolUp.Platform.OrphanSweepCompletedPayload (class)
+ToolUp.Platform.OrphanSweepCompletedPayload..ctor(System.String, System.Int32, System.Int32, System.Int64, System.Int32, System.Int64, System.Int32)
+ToolUp.Platform.OrphanSweepCompletedPayload.DeferredCount : System.Int32 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.FailureCount : System.Int32 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.GracePeriodHours : System.Int64 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.OrphansFound : System.Int32 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.ReclaimedBytes : System.Int64 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.ReclaimedCount : System.Int32 { get }
+ToolUp.Platform.OrphanSweepCompletedPayload.ScopeId : System.String { get }
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload (class)
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload..ctor(System.String, System.String, System.Int64, System.Int64)
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload.AgeHours : System.Int64 { get }
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload.Bytes : System.Int64 { get }
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload.ContentHash : System.String { get }
+ToolUp.Platform.OrphanedContentBlobReclaimedPayload.ScopeId : System.String { get }
 ToolUp.Platform.OverallStatus (class)
 ToolUp.Platform.OverallStatus.AllOk : ToolUp.Platform.OverallStatus { get }
 ToolUp.Platform.OverallStatus.IsAllOk : System.Boolean { get }

@@ -1220,6 +1220,23 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeDocumentsPurged(fromAuditJson<KnowledgeDocumentsPurgedPayload> j)
     }
+    // Phase 7c — data-object orphan-blob sweep rows (append-only registration).
+    {
+        EventType = "OrphanedContentBlobReclaimed"
+        TryEncode =
+            (function
+            | OrphanedContentBlobReclaimed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OrphanedContentBlobReclaimed(fromAuditJson<OrphanedContentBlobReclaimedPayload> j)
+    }
+    {
+        EventType = "OrphanSweepCompleted"
+        TryEncode =
+            (function
+            | OrphanSweepCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OrphanSweepCompleted(fromAuditJson<OrphanSweepCompletedPayload> j)
+    }
     {
         EventType = "PasskeyCredentialRegistered"
         TryEncode =

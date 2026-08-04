@@ -452,6 +452,14 @@
         <Compile Include="Server\DSRErasureJobHandler.fs" />
         <Compile Include="Server\EventStoreErasureHandler.fs" />
         <Compile Include="Server\DataObjectStoreErasureHandler.fs" />
+        <!-- Phase 7c — scheduled reclaim of content blobs stranded by a
+             Save that died between its content write and its metadata
+             write. Sits here because it needs DataObjectStore (the shared
+             orphan listing), IJobScheduler + the Phase 623 deferred
+             declaration, IAuditLog, and IConfigValidator — and must be
+             before Compose/ComposeConfigValidators.fs, which registers its
+             preflight validator into the first-party set. -->
+        <Compile Include="Server\DataObjectOrphanSweepJobHandler.fs" />
         <Compile Include="Server\LineageStoreErasureHandler.fs" />
         <Compile Include="Server\IConversationStore.fs" />
         <Compile Include="Server\ConversationStore.fs" />

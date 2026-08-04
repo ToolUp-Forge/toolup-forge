@@ -1581,6 +1581,15 @@
              the GP 13 keystone — NoExternalCompute composes no registry,
              no telemetry, no probe, no panel. -->
         <Compile Include="InProcess\ComputeBackendRegistryTests.fs" />
+        <!-- Phase 7c — data-object orphan-blob sweep: a real Save severed
+             between its content and metadata writes produces the orphan,
+             then the grace window (deferred vs reclaimed, one stamp
+             apart) and the reverse reference (live content back-dated 400
+             days and still untouched) are each pinned by a case that goes
+             red alone if that half is dropped. Plus the preflight
+             validator's four arms and the GP 13 keystone asserted on the
+             service collection. -->
+        <Compile Include="InProcess\DataObjectOrphanSweepTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

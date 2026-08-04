@@ -1720,6 +1720,81 @@ module ServerApp =
             }
     }
 
+    /// Phase 7c — compose the data-object orphan-blob sweep. Registers the
+    /// policy as a DI singleton and, when it can actually reclaim
+    /// something, schedules the `platform.data-object-orphan-sweep` job on
+    /// the composed `IJobScheduler` for each scope in `policy.Scopes`.
+    ///
+    /// **Why an orphan sweep exists at all.** `IDataObjectStore.Save`
+    /// writes the content blob first and the metadata blob second — it
+    /// must, because the metadata names a hash that has to already exist.
+    /// A process killed between the two writes leaves
+    /// `objects/_content/{hash}.data` with nothing referencing it, and
+    /// nothing ever reclaims it: the in-band orphan GC only runs on
+    /// `Delete` / `Evict` / `Erase`, and the object whose save died was
+    /// never created. Storage cost accrues, and — because subject erasure
+    /// walks *metadata* — that content is invisible to an erasure pass.
+    ///
+    /// **`policy.Scopes` is explicit, and deliberately so.**
+    /// `IBlobStorage` has no cross-container enumeration and the SDK does
+    /// not enumerate tenants (see `ScheduledJobDeclaration.Scopes`), so
+    /// the sweep cannot discover the containers it should visit. Pass the
+    /// deployment's own scope list — typically `ITeamStore` results plus
+    /// any `_platform` container in use. An empty list schedules nothing,
+    /// which is honest: silently defaulting to `_platform` would look
+    /// composed while sweeping a container that holds no data objects.
+    ///
+    /// **`DataObjectOrphanSweepPolicy.disabled` registers nothing but the
+    /// acknowledgement.** An inert policy short-circuits before any hosted
+    /// service or scheduler entry is created, so a deployment that never
+    /// calls this — or calls it with `disabled` — is byte-for-byte its
+    /// pre-7c self (GP 11 / GP 13). The registration still silences the
+    /// `data-object-orphan-sweep` preflight warning, which is exactly what
+    /// composing `disabled` means.
+    ///
+    /// Registration is deferred to `IHostedService.StartAsync` via
+    /// `DeferredScheduledJobDeclaration` (Phase 623): the handler resolves
+    /// `IBlobStorage` / `IAuditLog` / `ILogger` from the built provider on
+    /// every run, so nothing is captured at compose time and the handler
+    /// stays stateless between invocations (GP 12 rule 4).
+    let withDataObjectOrphanSweep
+        (policy: DataObjectOrphanSweep.DataObjectOrphanSweepPolicy)
+        (app: ServerApp)
+        : ServerApp =
+        let register (s: IServiceCollection) =
+            let withPolicy =
+                s.AddSingleton<DataObjectOrphanSweep.DataObjectOrphanSweepPolicy>(policy)
+
+            if DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.isInert policy then
+                withPolicy
+            else
+                withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                        DeferredScheduledJobDeclaration.hostedService
+                            "Data-object orphan sweep"
+                            [
+                                DeferredScheduledJobDeclaration.create (fun provider ->
+                                    ScheduledJobDeclaration.create
+                                        DataObjectOrphanSweep.SweepHandlerName
+                                        (DataObjectOrphanSweep.DataObjectOrphanSweepJobHandler(provider, policy)
+                                        :> IJobHandler)
+                                        (Trigger.CronTrigger policy.Schedule)
+                                    |> ScheduledJobDeclaration.withScopes policy.Scopes)
+                            ]
+                            sp)
+                )
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig =
+                            match app.Extensions.ServiceConfig with
+                            | None -> Some register
+                            | Some baseFn -> Some(fun s -> register (baseFn s))
+                }
+        }
+
     /// Fan a `ServerModule`'s contributions into the app's accumulating lists.
     /// Honours `app.Config.ModuleFilter` — modules whose name doesn't match
     /// are skipped silently, so `withConfig` should run before `addModules`

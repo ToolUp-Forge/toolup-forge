@@ -1433,6 +1433,15 @@ let allTests =
         ComputeBackendRegistryTests.observabilityTests
         ComputeBackendRegistryTests.gp13Tests
         ComputeBackendRegistryTests.structuralTests
+        // Phase 7c — data-object orphan-blob sweep. The orphan is produced
+        // through the real Save path (metadata write refused, content
+        // write already landed), so the sweep is exercised against the
+        // residue the crash actually leaves rather than a hand-placed
+        // blob. The grace-window pair and the live-content control are
+        // each the sole red case for one half of the reclaim predicate.
+        DataObjectOrphanSweepTests.tests
+        DataObjectOrphanSweepTests.validatorTests
+        DataObjectOrphanSweepTests.composeTests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

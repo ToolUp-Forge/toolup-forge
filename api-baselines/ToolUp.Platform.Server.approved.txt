@@ -1681,9 +1681,51 @@ ToolUp.Platform.DataIngestor.DataIngestionSourceModule : System.String (literal)
 ToolUp.Platform.DataIngestor.create(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.IDataIngestor
 ToolUp.Platform.DataIngestor+DataIngestor (class)
 ToolUp.Platform.DataIngestor+DataIngestor..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.DataObjectOrphanSweep (class)
+ToolUp.Platform.DataObjectOrphanSweep.SweepHandlerName : System.String (literal)
+ToolUp.Platform.DataObjectOrphanSweep.sweepScope(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, System.DateTime, ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport]
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepConfiguredValidator (class)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepConfiguredValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepJobHandler (class)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepJobHandler..ctor(System.IServiceProvider, ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy (class)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy..ctor(System.String, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy.GracePeriod : System.TimeSpan { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy.Schedule : System.String { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule (class)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.DefaultGracePeriod : System.TimeSpan { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.DefaultSchedule : System.String (literal)
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.MinimumGracePeriod : System.TimeSpan { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.disabled : ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy { get }
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.forScopes(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.isInert(ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy) : System.Boolean
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.withOrphanSweepGracePeriod(System.TimeSpan, ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy) : ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy
+ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicyModule.withOrphanSweepSchedule(System.String, ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy) : ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport (class)
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int64, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.Container : System.String { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.DeferredByGrace : System.Int32 { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.Failures : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.OrphansFound : System.Int32 { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.Reclaimed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.ReclaimedBytes : System.Int64 { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport.ScopeId : System.String { get }
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReportModule (class)
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReportModule.isClean(ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport) : System.Boolean
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReportModule.noOp(System.String, System.String, System.Int32, System.Int32) : ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport
+ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReportModule.summarise(ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport) : System.String
 ToolUp.Platform.DataObjectStore (class)
+ToolUp.Platform.DataObjectStore.containerFor(System.String) : System.String
+ToolUp.Platform.DataObjectStore.listOrphanedContent(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataObjectStore+OrphanedContentBlob]]
 ToolUp.Platform.DataObjectStore+DataObjectStore (class)
 ToolUp.Platform.DataObjectStore+DataObjectStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob (class)
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob..ctor(System.String, System.String, System.Int64, System.DateTime)
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob.BlobName : System.String { get }
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob.ContentHash : System.String { get }
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob.LastModified : System.DateTime { get }
+ToolUp.Platform.DataObjectStore+OrphanedContentBlob.SizeBytes : System.Int64 { get }
 ToolUp.Platform.DataObjectStoreErasureHandler (class)
 ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler(ToolUp.Platform.IDataObjectStore) : ToolUp.Platform.IDataExporter+IErasureHandler
 ToolUp.Platform.DataObjectStoreErasureHandler.exporter(ToolUp.Platform.IDataObjectStore) : ToolUp.Platform.IDataExporter+IDataExporter
@@ -5777,6 +5819,7 @@ ToolUp.Platform.ServerAppModule.withConsentStateStore(ToolUp.Platform.ConsentSta
 ToolUp.Platform.ServerAppModule.withCspContributor(ToolUp.Platform.ICspContributor, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withCspSourceMode(ToolUp.Platform.SecurityHardening+CspSourceMode, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDataExporter(ToolUp.Platform.IDataExporter+IDataExporter, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityGraphProjection(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

@@ -145,6 +145,21 @@ Default `DataObjectStore` writes to `{container}/objects/{objectId}/v{N}.json` a
 
 `SessionFileStore` (the file-management API) persists exclusively through `IDataObjectStore` with `Unversioned` policy. Modules that want history use `Versioned` directly.
 
+### Orphaned content blobs + the sweep
+
+`Save` writes the content blob **first** and the metadata blob second — it has to, because the metadata names a hash that must already exist. A process killed between the two writes leaves `{container}/objects/_content/{hash}.data` behind with nothing referencing it, and nothing reclaims it on its own: the in-band orphan GC runs only on `Delete` / `Evict` / `Erase`, and the object whose save died was never created, so it is never deleted. The residue costs storage indefinitely, and — because subject erasure walks *metadata* — it is invisible to an erasure pass.
+
+`ServerApp.withDataObjectOrphanSweep` schedules `platform.data-object-orphan-sweep` (daily 02:00 UTC by default) against the composed `IJobScheduler`. One run reaches exactly one scope's container, lists every unreferenced content blob, and deletes those whose last write is older than the grace window (24h by default, clamped to a 5-minute floor). The grace window is what separates crash residue from an in-flight `Save`; without it the sweep would delete live content out from under a concurrent writer.
+
+```fsharp skip=fragment
+ServerApp.withDataObjectOrphanSweep (
+    DataObjectOrphanSweepPolicy.forScopes scopeIds
+    |> DataObjectOrphanSweepPolicy.withOrphanSweepSchedule "0 2 * * *"
+    |> DataObjectOrphanSweepPolicy.withOrphanSweepGracePeriod (TimeSpan.FromHours 24.0))
+```
+
+`scopeIds` is explicit because `IBlobStorage` has no cross-container enumeration and the SDK does not enumerate tenants. Reclaims emit one `OrphanedContentBlobReclaimed` audit row per blob plus one `OrphanSweepCompleted` summary per run that removed something. `DataObjectOrphanSweepPolicy.disabled` composes the acknowledgement without scheduling anything. Operator guidance, including the interaction with the RAG tombstone vacuum, is in [`DEPLOYMENT.md`](../../DEPLOYMENT.md#steady-state-storage-cost).
+
 ## Data catalog
 
 `IDataCatalog` exposes the registered data types across modules:
@@ -190,5 +205,6 @@ Each is wired automatically by the companion's `Server.props` extension contract
 - **`LocalFileStorageEncryptionAtRestValidator`** emits a `Warning` when local storage is configured without the encryption-at-rest decorator. The disk itself isn't encrypted by the SDK; that's an OS-level concern.
 - **Cloud companions are not transactional.** `Save` is at-least-once; consumers handle idempotency. `IDataObjectStore` adds content-addressable dedup which masks duplicates for read-after-write within the same scope, but cross-object multi-step operations need application-level coordination.
 - **Object size**: cloud companions stream uploads / downloads. `LocalFileStorage` reads the full byte array into memory.
+- **Content orphaned by a crashed `Save` is reclaimed only by a scheduled sweep.** `ServerApp.withDataObjectOrphanSweep` + `ServerConfig.JobScheduler` — see above. The `data-object-orphan-sweep` config validator emits a `Warning` when a deployment with persistent authenticated storage composes neither, and when a composed sweep has no scheduler that could ever fire it.
 
 For larger objects or streaming use cases (video, large dataset exports), the right shape is direct multipart upload to the cloud storage with the SDK getting only the resulting object ID. That's a future companion-extension story; the current API operates on full byte arrays.

@@ -108,6 +108,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (DataProtectionBackendValidator.DataProtectionBackendValidator(resolvedBlobStorage)) // Phase 329 — refuse a misconfigured/unreachable DataProtection key-ring backend (silent ephemeral-key boot → cross-replica CSRF seal failure); security-class
 
+    addConfigValidator (DataObjectOrphanSweep.DataObjectOrphanSweepConfiguredValidator(config, services)) // Phase 7c — warn when a persistent deployment composes no data-object orphan sweep (Save writes content before metadata, so a crash between them strands objects/_content/{hash}.data forever — invisible to subject erasure), or composes one that JobScheduler = NoJobScheduler can never fire
+
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered
     // after the first-party set so their preflight messages follow.

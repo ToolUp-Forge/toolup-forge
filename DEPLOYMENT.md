@@ -53,3 +53,82 @@ Notes:
   see `RAGRateLimitConfiguredValidator` and `RateLimitModeValidator`. Rate
   limiting is a per-query cost control for retrieval, not just a connection
   guard; configure `ServerConfig.RateLimit` or accept the exposure explicitly.
+
+## Steady-state storage cost
+
+Two SDK subsystems produce residue that is **reclaimed only by a scheduled
+job**. Neither is a leak in the "grows with traffic" sense — both grow with
+*deletion* and *failure* — but both are unbounded over a deployment's lifetime,
+and neither reclaims anything at all unless `ServerConfig.JobScheduler` is set
+to `InProcessJobScheduler` (or a distributed scheduler companion). A deployment
+that composes the schedule and leaves the scheduler off has declared a job that
+can never fire; startup warns, and nothing else tells you.
+
+| Residue | What produces it | Reclaimed by | Composed with | Default cadence |
+|---|---|---|---|---|
+| **Orphaned content blobs** — `{container}/objects/_content/{hash}.data` with no metadata referencing them | A `IDataObjectStore.Save` that wrote its content blob and then died (crash, pod kill, storage error) before writing its metadata blob | `platform.data-object-orphan-sweep` | `ServerApp.withDataObjectOrphanSweep` | Daily 02:00 UTC, 24h grace |
+| **Vector-index tombstones** — soft-deleted chunks carrying `_deletedAt` | `IVectorStore.DeleteChunk`, i.e. every document deletion and re-ingestion | `IVectorStore.Vacuum` on a schedule | `RAGServerApp.withVacuumSchedule` | Daily 03:00 UTC, 7-day retention |
+
+The two cadences are deliberately an hour apart so the reclaim passes do not
+contend for the same backing store in the same minute.
+
+### Orphaned content blobs
+
+`IDataObjectStore.Save` writes the content blob **first** and the metadata blob
+second — it must, because the metadata names a content hash that has to already
+exist. If the process dies between the two writes, the content blob survives
+with nothing referencing it. Nothing reclaims it on its own: the in-band orphan
+GC runs only on `Delete` / `Evict` / `Erase`, and the object whose save died was
+never created, so it is never deleted.
+
+Two consequences, and the second is the one to weigh:
+
+- **Storage cost.** Accrues at the rate of crash-during-save. Small per event,
+  unbounded over time.
+- **Erasure completeness.** A subject-erasure pass (`IDataObjectStore.Erase`,
+  the DSR pipeline) walks *metadata* to decide what to remove or redact.
+  Content whose metadata write never landed is invisible to it, so a subject's
+  bytes can outlive the erasure that was meant to remove them.
+
+```fsharp
+ServerApp.empty
+|> ServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
+|> ServerApp.withDataObjectOrphanSweep (
+    DataObjectOrphanSweepPolicy.forScopes scopeIds
+    |> DataObjectOrphanSweepPolicy.withOrphanSweepSchedule "0 2 * * *"
+    |> DataObjectOrphanSweepPolicy.withOrphanSweepGracePeriod (TimeSpan.FromHours 24.0))
+```
+
+- **`scopeIds` is explicit, and has to be.** `IBlobStorage` has no
+  cross-container enumeration and the SDK does not enumerate tenants, so the
+  sweep cannot discover the containers it should visit. Pass the deployment's
+  own scope list. An empty list schedules nothing — which is honest, where
+  silently defaulting to `_platform` would look composed while sweeping a
+  container that holds no data objects.
+- **The grace window is not tuning, it is correctness.** A content blob with no
+  metadata is indistinguishable from an in-flight `Save` that has not reached
+  its metadata write yet. Reclaiming eagerly deletes live content out from
+  under a concurrent writer. `withOrphanSweepGracePeriod` therefore clamps
+  upward to a 5-minute floor; shorten it only if you know your `Save` latency
+  bound, and never to zero.
+- **Each run reaches exactly one scope's container.** Reclaims emit one
+  `OrphanedContentBlobReclaimed` audit row per blob (content hash, bytes, age)
+  plus one `OrphanSweepCompleted` summary per run that removed something, so
+  "what did the sweep take, and when" is answerable from the audit trail alone.
+  A run that reclaimed nothing writes no rows.
+- **A blob the store refused to delete stays listed** and the next run retries
+  it; the job reports that run as a transient failure rather than a success.
+
+If you accept the residue — a short-lived deployment, an ephemeral store, a
+backing bucket with its own lifecycle rules — compose
+`ServerApp.withDataObjectOrphanSweep DataObjectOrphanSweepPolicy.disabled`. It
+schedules nothing and registers nothing but the acknowledgement, and it silences
+the `data-object-orphan-sweep` preflight warning. Leaving the warning in place is
+also a legitimate choice; it never blocks startup.
+
+### Vector-index tombstones
+
+`IVectorStore.DeleteChunk` soft-deletes. Without a scheduled vacuum, tombstones
+are reclaimed only when an operator calls `IVectorStore.Vacuum` by hand, so a
+long-running replica's memory grows without bound. See the `rag-tombstone-vacuum-schedule`
+validator and `docs/rag/concepts.md` (Background services) for the full contract.

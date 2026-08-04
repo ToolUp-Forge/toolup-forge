@@ -194,6 +194,118 @@ let private downloadMetadata
         | Error _ -> return None
     }
 
+// ─── Orphaned content (Phase 7c) ─────────────────────────────────
+//
+// A content blob is *orphaned* when no surviving `v{N}.json` metadata
+// blob in the same container names its hash. Two ways that happens:
+//
+//   1. A `Delete` / `Evict` / `Erase` removed the last metadata blob
+//      referencing it — the in-band case `collectOrphanedContent`
+//      already reclaims inline, on the same call.
+//   2. **A `Save` wrote its content blob and then died before writing
+//      its metadata blob.** `Save` is content-first by design (the
+//      metadata blob names a hash that must already exist), so a crash,
+//      a pod kill, or a storage error between the two writes leaves a
+//      content blob nothing will ever reference again. Nothing reclaims
+//      it: only `Delete` ran orphan GC, and this object was never
+//      created, so nothing is ever deleted. That residue is what the
+//      Phase 7c scheduled sweep exists for.
+//
+// The listing is factored out here so the sweep and the in-band GC read
+// orphanhood from ONE definition. A second, parallel definition is
+// exactly how a sweep and a store drift into disagreeing about what is
+// reclaimable — and this pool is content-addressable, so disagreement is
+// not a cosmetic bug: reclaiming a live hash silently breaks every
+// version that points at it.
+
+/// Phase 7c — an unreferenced content blob in a scope's dedup pool,
+/// with the store-reported facts the sweep needs to decide whether it is
+/// past its grace window and to record what it reclaimed.
+type OrphanedContentBlob = {
+    /// Lowercase SHA-256 hex the blob is keyed by (parsed from its
+    /// `_content/{hash}.data` name).
+    ContentHash: string
+    /// Container-relative blob name, `/`-normalised.
+    BlobName: string
+    /// Size in bytes, as `IBlobStorage.GetMetadata` reported it.
+    SizeBytes: int64
+    /// Last write time in UTC. The grace window is measured against
+    /// this, so an in-flight `Save` whose metadata write is merely slow
+    /// is never mistaken for a crash residue.
+    LastModified: DateTime
+}
+
+/// Container-relative names of every `_content/{hash}.data` blob no
+/// surviving metadata blob in `container` references. Shared by the
+/// in-band GC (`collectOrphanedContent`) and the Phase 7c sweep.
+let private orphanedContentNames (blobStorage: IBlobStorage) (container: string) : Async<string list> = async {
+    let! allNames = blobStorage.List(container, objectsRoot)
+    let normalised = allNames |> List.map normalize
+
+    // Set of hashes still in use, derived from every surviving
+    // metadata blob. A blob whose name doesn't parse as
+    // v{N}.json under some objectId is skipped.
+    let metadataNames =
+        normalised
+        |> List.filter (fun n -> not (n.StartsWith(contentPrefix)) && n.EndsWith(".json"))
+
+    let! metadatas =
+        metadataNames
+        |> List.map (downloadMetadata blobStorage container)
+        |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
+
+    let referenced =
+        metadatas |> Array.choose id |> Array.map _.ContentHash |> Set.ofArray
+
+    return
+        normalised
+        |> List.filter (fun n ->
+            if n.StartsWith(contentPrefix) && n.EndsWith(".data") then
+                let hash =
+                    n.Substring(contentPrefix.Length, n.Length - contentPrefix.Length - ".data".Length)
+
+                not (referenced.Contains hash)
+            else
+                false)
+}
+
+/// Phase 7c — orphaned content blobs in `container`, each stamped with
+/// its size and last-write time. `container` is the scope's own
+/// container and nothing else is enumerated, so the reach of one call is
+/// exactly one scope (GP 4) — `IBlobStorage` has no cross-container
+/// enumeration and this deliberately does not invent one.
+///
+/// A blob that vanishes between the list and the stat (a concurrent
+/// `Delete`'s in-band GC got there first) is dropped rather than
+/// reported: it is already reclaimed, which is the outcome the caller
+/// wanted.
+let listOrphanedContent (blobStorage: IBlobStorage) (container: string) : Async<OrphanedContentBlob list> = async {
+    let! names = orphanedContentNames blobStorage container
+
+    let! stamped =
+        names
+        |> List.map (fun name -> async {
+            let! meta = blobStorage.GetMetadata(container, name)
+
+            let hash =
+                name.Substring(contentPrefix.Length, name.Length - contentPrefix.Length - ".data".Length)
+
+            match meta with
+            | Ok m ->
+                return
+                    Some {
+                        ContentHash = hash
+                        BlobName = name
+                        SizeBytes = m.Size
+                        LastModified = m.LastModified
+                    }
+            | Error _ -> return None
+        })
+        |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
+
+    return stamped |> Array.choose id |> Array.toList
+}
+
 // ─── Store ───────────────────────────────────────────────────────
 //
 // Stateless implementation: every method derives its result from
@@ -209,7 +321,13 @@ let private downloadMetadata
 /// (line 24-34 docstring) requires container names match a known
 /// prefix — non-conforming scopeIds will be flagged by the
 /// implementation's audit path.
-let private containerFor (scopeId: string) = scopeId
+///
+/// Public since Phase 7c so the orphan sweep resolves a scope's
+/// container through the same mapping the store writes through, rather
+/// than re-deriving it — a sweep pointed at a different container than
+/// the store writes to would either reclaim nothing or reclaim
+/// another scope's blobs, and both failures are silent.
+let containerFor (scopeId: string) = scopeId
 
 type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
 
@@ -249,39 +367,20 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                 return result |> liftStorage |> Result.map (fun _ -> ())
         }
 
-    /// Garbage-collect orphaned content blobs after a delete. Lists
-    /// every remaining `v*.json` in the container, collects the set
-    /// of referenced `ContentHash` values, and deletes any
-    /// `_content/{hash}.data` whose hash is not referenced.
+    /// Garbage-collect orphaned content blobs after a delete. Delegates
+    /// the "which blobs are orphaned" question to `orphanedContentNames`
+    /// (Phase 7c) so this in-band pass and the scheduled sweep share one
+    /// definition of orphanhood, then deletes what it names.
+    ///
+    /// **No grace window here, deliberately.** This runs on the tail of a
+    /// caller's own `Delete` / `Evict` / `Erase` in the same scope: the
+    /// caller has just removed the metadata, so the orphan is a
+    /// consequence of the operation in progress rather than a suspected
+    /// crash residue. The grace window belongs to the scheduled sweep,
+    /// which cannot tell "abandoned by a dead process" from "written a
+    /// millisecond ago by a live one" any other way.
     let collectOrphanedContent (container: string) : Async<int> = async {
-        let! allNames = blobStorage.List(container, objectsRoot)
-        let normalised = allNames |> List.map normalize
-
-        // Set of hashes still in use, derived from every surviving
-        // metadata blob. A blob whose name doesn't parse as
-        // v{N}.json under some objectId is skipped.
-        let metadataNames =
-            normalised
-            |> List.filter (fun n -> not (n.StartsWith(contentPrefix)) && n.EndsWith(".json"))
-
-        let! metadatas =
-            metadataNames
-            |> List.map (downloadMetadata blobStorage container)
-            |> Async.Parallel
-
-        let referenced =
-            metadatas |> Array.choose id |> Array.map _.ContentHash |> Set.ofArray
-
-        let toDelete =
-            normalised
-            |> List.filter (fun n ->
-                if n.StartsWith(contentPrefix) && n.EndsWith(".data") then
-                    let hash =
-                        n.Substring(contentPrefix.Length, n.Length - contentPrefix.Length - ".data".Length)
-
-                    not (referenced.Contains hash)
-                else
-                    false)
+        let! toDelete = orphanedContentNames blobStorage container
 
         let! _ =
             toDelete
