@@ -6,6 +6,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── TF-IDF embedding provider ────────────────────────────────────
 //
@@ -56,6 +57,47 @@ open ToolUp.Platform.IEmbeddingProvider
 // a single process now also stretches across restarts; for dev
 // volumes this is benign. A future maintenance call could rebuild
 // `df` from the current `IVectorStore` contents to drop dead terms.
+//
+// ─── Phase 14z — scope-keyed IDF state ────────────────────────────
+//
+// The single global IDF dictionary above is shared by every team
+// embedding in the same process, so Team A's term frequencies shape
+// Team B's query vectors. The chunks themselves stay scope-isolated
+// (that is `IVectorStore` + `IRetrievalPipeline`'s job) — what leaks is
+// *embedding-quality variance*, a metadata channel rather than content.
+//
+// `ScopedLocalEmbeddingProviders` closes it structurally: one
+// `TfIdfState` per `VectorScope`, keyed by a canonical, injectively
+// escaped scope key, each persisting to its own blob under
+// `_platform/embeddings/{scopeKey}/_local-tfidf-state.json`. Two scopes
+// share no `df`, no `docCount`, and no vocabulary, so no term a team
+// ever embeds is observable — even statistically — from another team's
+// vectors. The Platform-scope vocabulary is likewise its own dictionary,
+// so Platform Admin uploads do not shape team query embeddings.
+//
+// **Scope-aware providers report `ModelId = "local-tfidf-v2"`** because
+// the embedding function genuinely differs: vector geometry is a
+// function of the vocabulary, and a per-scope vocabulary is a different
+// vocabulary. `ReembeddingService` keys on `EmbeddingVersion` mismatch,
+// so a deployment swapping to the scoped factory re-embeds its corpus
+// once rather than silently mixing two sparse spaces.
+//
+// **GP 11 — the unscoped factories are untouched.** `create ()` and
+// `createPersistent blob` keep their signatures, their single global
+// state, their legacy blob path, and `ModelId = "local-tfidf-v1"`, so an
+// existing deployment that does not opt in is byte-for-byte unchanged
+// and pays no reembed.
+//
+// **Known limitation (why the RAG pipeline is not yet wired to this).**
+// `IRetrievalPipeline` embeds one query vector and searches every
+// authorised scope with it (`store.Search permitted queryVector pool`).
+// Under per-scope vocabularies dimension `i` denotes a different term in
+// each scope, so a single query vector cannot be compared across scopes
+// — a cross-scope search would need one embed per scope plus a merge.
+// Threading scope through the pipeline is therefore blocked on that
+// design decision (and on the `IEmbeddingProvider` interface change),
+// not merely on plumbing. Until then the scoped factory is an explicit,
+// opt-in composition for deployments whose retrieval is single-scope.
 
 /// Tokenise a string into lower-cased words, stripping punctuation.
 let private tokenise (text: string) =
@@ -206,42 +248,124 @@ let private platformContainer = "_platform"
 [<Literal>]
 let private stateBlobName = "embeddings/_local-tfidf-state.json"
 
-/// Wire-format DTO for the persisted IDF state. No F# DUs — plain
-/// settable properties and a `Dictionary<string,int>` so the JSON
-/// shape is `{"docCount": N, "df": {"term": count, ...}}`. STJ handles
-/// this shape directly (case-insensitive matching enabled by the
-/// FableConverters options preserves the prior wire format which used
-/// camelCase property names).
-type private TfIdfStateDto() =
-    member val DocCount: int = 0 with get, set
+/// Model id reported by the unscoped (global-vocabulary) providers.
+[<Literal>]
+let GlobalModelId = "local-tfidf-v1"
 
-    member val Df: System.Collections.Generic.Dictionary<string, int> =
-        System.Collections.Generic.Dictionary() with get, set
+/// Model id reported by every scope-keyed provider. Distinct from
+/// `GlobalModelId` because a per-scope vocabulary is a different
+/// embedding function — `ReembeddingService` re-embeds once on the swap
+/// rather than mixing two sparse spaces in one index.
+[<Literal>]
+let ScopedModelId = "local-tfidf-v2"
 
-let private localTfIdfJsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+/// Canonical, blob-path-safe key for a `VectorScope`.
+module ScopeKey =
+
+    /// Escape a scope's variable segment so no two distinct scopes can
+    /// render to one key and no key can escape its blob prefix. `%` is
+    /// escaped first, which makes the mapping injective; `/` and `\`
+    /// would otherwise let a team id introduce a path separator, and
+    /// `.` is escaped so `..` can never appear in a blob name.
+    let escapeSegment (segment: string) =
+        (if isNull segment then "" else segment)
+            .Replace("%", "%25")
+            .Replace("/", "%2F")
+            .Replace("\\", "%5C")
+            .Replace(".", "%2E")
+
+    /// `platform` | `deployment` | `team-{id}` | `user-{id}`. The
+    /// case prefixes are disjoint from one another and from any escaped
+    /// id, so a team named `"admins"` and a user named `"admins"` are
+    /// distinct keys.
+    let ofScope (scope: VectorScope) : string =
+        match scope with
+        | VectorScope.Platform -> "platform"
+        | VectorScope.Deployment -> "deployment"
+        | VectorScope.Team teamId -> "team-" + escapeSegment teamId
+        | VectorScope.User userId -> "user-" + escapeSegment userId
+
+/// `embeddings/{scopeKey}/_local-tfidf-state.json` — the per-scope
+/// persistence path under the `_platform` container.
+let private scopedStateBlobName (scopeKey: string) =
+    sprintf "embeddings/%s/_local-tfidf-state.json" scopeKey
+
+// ─── Persisted wire format ───────────────────────────────────────
+//
+// `{"docCount": N, "df": {"term": count, ...}}`, written and read by
+// hand with `Utf8JsonWriter` / `JsonDocument`.
+//
+// **Why hand-rolled and not a DTO + reflection (Phase 14z).** This used
+// to be a `type private TfIdfStateDto()` serialised with
+// `JsonSerializer.Serialize`. `System.Text.Json`'s reflection resolver
+// finds no serialisable members on a NON-PUBLIC type and emits `{}` —
+// silently, with no exception — so every persisted state blob written
+// since the feature shipped was the two bytes `{}`, and every restart
+// re-hydrated an empty IDF dictionary. Nothing failed: `deserializeState`
+// swallows errors by design and an empty state is indistinguishable from
+// a first run, so `createPersistent` behaved exactly like `create ()`
+// while its doc comment promised the opposite. Making the DTO public
+// would fix it and put an implementation-detail type on the package's
+// public API; writing the two dozen lines here fixes it without either
+// the reflection dependency or the surface growth, and the format
+// becomes what the doc comment always claimed.
+//
+// Reads are case-insensitive on the two property names so a blob
+// written by any earlier shape is still accepted.
 
 let private serializeState (docCount: int) (df: ConcurrentDictionary<string, int>) : byte[] =
-    let dto = TfIdfStateDto(DocCount = docCount)
+    use stream = new System.IO.MemoryStream()
+    let writer = new System.Text.Json.Utf8JsonWriter(stream)
+    writer.WriteStartObject()
+    writer.WriteNumber("docCount", docCount)
+    writer.WritePropertyName "df"
+    writer.WriteStartObject()
 
-    for kv in df do
-        dto.Df[kv.Key] <- kv.Value
+    // Ordered so re-serialising an unchanged state is byte-identical —
+    // a blob that churns on every flush is indistinguishable from one
+    // recording a real change when a reader diffs storage. `ToArray()`
+    // is the atomic-snapshot read (see the vocab-rebuild note below for
+    // why iterating the dictionary directly is not).
+    for kv in df.ToArray() |> Array.sortBy _.Key do
+        writer.WriteNumber(kv.Key, kv.Value)
 
-    let json = System.Text.Json.JsonSerializer.Serialize(dto, localTfIdfJsonOptions)
-    Encoding.UTF8.GetBytes json
+    writer.WriteEndObject()
+    writer.WriteEndObject()
+    writer.Flush()
+    writer.Dispose()
+    stream.ToArray()
 
 let private deserializeState (bytes: byte[]) : (int * Map<string, int>) option =
     try
-        let json = Encoding.UTF8.GetString bytes
+        use doc = System.Text.Json.JsonDocument.Parse(Encoding.UTF8.GetString bytes)
+        let root = doc.RootElement
 
-        let dto =
-            System.Text.Json.JsonSerializer.Deserialize<TfIdfStateDto>(json, localTfIdfJsonOptions)
-
-        if isNull (box dto) then
+        if root.ValueKind <> System.Text.Json.JsonValueKind.Object then
             None
         else
-            let m = dto.Df |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-            Some(dto.DocCount, m)
+            let property (name: string) =
+                root.EnumerateObject()
+                |> Seq.tryFind (fun p -> String.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+                |> Option.map _.Value
+
+            let docCount =
+                match property "docCount" with
+                | Some v when v.ValueKind = System.Text.Json.JsonValueKind.Number -> v.GetInt32()
+                | _ -> 0
+
+            let df =
+                match property "df" with
+                | Some v when v.ValueKind = System.Text.Json.JsonValueKind.Object ->
+                    v.EnumerateObject()
+                    |> Seq.choose (fun p ->
+                        if p.Value.ValueKind = System.Text.Json.JsonValueKind.Number then
+                            Some(p.Name, p.Value.GetInt32())
+                        else
+                            None)
+                    |> Map.ofSeq
+                | _ -> Map.empty
+
+            Some(docCount, df)
     with _ ->
         None
 
@@ -250,7 +374,8 @@ let private deserializeState (bytes: byte[]) : (int * Map<string, int>) option =
 type private LocalEmbeddingProviderImpl
     (
         persister: ((int * ConcurrentDictionary<string, int>) -> Async<unit>) option,
-        initial: (int * Map<string, int>) option
+        initial: (int * Map<string, int>) option,
+        modelId: string
     ) =
     // term → document frequency count
     let df = ConcurrentDictionary<string, int>()
@@ -391,7 +516,13 @@ type private LocalEmbeddingProviderImpl
         // tax. Bump the version literal here on a real algorithm change
         // (different normalisation, different vocab cap, different
         // tokeniser) so existing chunks get re-indexed once.
-        member _.ModelId = "local-tfidf-v1"
+        //
+        // Phase 14z: supplied by the factory rather than hard-coded —
+        // `GlobalModelId` for the unscoped providers, `ScopedModelId`
+        // for a scope-keyed one, because a per-scope vocabulary IS a
+        // different embedding function. Constant for the instance's
+        // lifetime either way, as the interface requires.
+        member _.ModelId = modelId
         member _.GenerateEmbedding(text: string) = async { return embed text }
 
         // Local provider has no network round-trip, so batching is just a
@@ -408,7 +539,7 @@ type private LocalEmbeddingProviderImpl
 /// for tests, CI, and ephemeral deployments where every restart is a
 /// clean slate.
 let create () : IEmbeddingProvider =
-    LocalEmbeddingProviderImpl(None, None) :> IEmbeddingProvider
+    LocalEmbeddingProviderImpl(None, None, GlobalModelId) :> IEmbeddingProvider
 
 /// Create a local TF-IDF `IEmbeddingProvider` whose IDF state persists
 /// to the supplied `IBlobStorage` at `_platform/embeddings/_local-tfidf-state.json`.
@@ -441,4 +572,107 @@ let createPersistent (blobStorage: IBlobStorage) : IEmbeddingProvider =
         return ()
     }
 
-    LocalEmbeddingProviderImpl(Some persister, initial) :> IEmbeddingProvider
+    LocalEmbeddingProviderImpl(Some persister, initial, GlobalModelId) :> IEmbeddingProvider
+
+// ─── Phase 14z — scope-keyed factory ─────────────────────────────
+
+/// A family of TF-IDF providers, one per `VectorScope`, sharing nothing
+/// but the tokeniser and the stop-word list. This is the shape that
+/// closes the cross-team IDF leak: `For (Team "a")` and `For (Team "b")`
+/// each own a private `df` / `docCount` / vocabulary triple, so neither
+/// team's term frequencies can shape the other's vectors, and the
+/// `Platform` scope's vocabulary is separate from every team's.
+///
+/// Providers are created on first request per scope and cached, so
+/// repeated `For` calls for one scope return the same instance and the
+/// same accumulating state. Creation is `Lazy`-guarded: a
+/// `ConcurrentDictionary` factory may run more than once under
+/// contention, and two states for one scope would silently drop one
+/// side's document counts.
+///
+/// **Persistence is optional.** Constructed with `Some blobStorage`,
+/// each scope's state is hydrated at first use from
+/// `_platform/embeddings/{scopeKey}/_local-tfidf-state.json` and written
+/// back on every document; with `None` the family is memory-only (tests,
+/// CI, ephemeral deployments).
+///
+/// **Dev-only, single-process** — the same Phase 9c rule-4 exception the
+/// unscoped provider carries. State lives in this object; a second
+/// process has its own.
+type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
+
+    let providers = ConcurrentDictionary<string, Lazy<IEmbeddingProvider>>()
+
+    let createFor (scopeKey: string) =
+        match blobStorage with
+        | None -> LocalEmbeddingProviderImpl(None, None, ScopedModelId) :> IEmbeddingProvider
+        | Some storage ->
+            let blobName = scopedStateBlobName scopeKey
+
+            let initial =
+                async {
+                    let! result = storage.Download(platformContainer, blobName)
+
+                    return
+                        match result with
+                        | Ok bytes -> deserializeState bytes
+                        | Error _ -> None
+                }
+                |> Async.RunSynchronously
+
+            let persister (count: int, dict: ConcurrentDictionary<string, int>) = async {
+                let bytes = serializeState count dict
+                let! _ = storage.Upload(platformContainer, blobName, bytes)
+                return ()
+            }
+
+            LocalEmbeddingProviderImpl(Some persister, initial, ScopedModelId) :> IEmbeddingProvider
+
+    /// The provider for `scope`. Same instance (and same accumulated IDF
+    /// state) on every call for the same scope.
+    member _.For(scope: VectorScope) : IEmbeddingProvider =
+        let key = ScopeKey.ofScope scope
+
+        providers.GetOrAdd(key, fun k -> Lazy<IEmbeddingProvider>((fun () -> createFor k), true)).Value
+
+    /// Scope keys with live state in this process, in the canonical
+    /// `ScopeKey.ofScope` form. Diagnostic surface — a caller checking
+    /// that a reset actually dropped a scope should read this rather
+    /// than infer it from embedding output.
+    member _.KnownScopes() : string list =
+        providers.Keys |> Seq.toList |> List.sort
+
+    /// Drop `scope`'s IDF state — in memory and, when persistence is
+    /// wired, on disk. The natural companion to `KnowledgeApi.ResetIndex`:
+    /// wiping a team's chunks should wipe the vocabulary those chunks
+    /// built, and because the state is scope-keyed this is now a
+    /// structurally safe operation — no other scope is touched.
+    /// Idempotent (`IBlobStorage.Delete` is), so resetting a scope that
+    /// never embedded anything succeeds.
+    ///
+    /// A `For` call racing a `ResetScope` may re-create the scope's
+    /// state before the blob delete lands; callers serialise reset
+    /// against ingestion for that scope, exactly as they must for the
+    /// chunk deletion itself.
+    member _.ResetScope(scope: VectorScope) : Async<unit> = async {
+        let key = ScopeKey.ofScope scope
+        providers.TryRemove key |> ignore
+
+        match blobStorage with
+        | None -> ()
+        | Some storage ->
+            let! _ = storage.Delete(platformContainer, scopedStateBlobName key)
+            return ()
+    }
+
+/// Create a memory-only scope-keyed provider family. Every scope starts
+/// empty and is wiped on restart — the shape tests and CI want.
+let createScoped () : ScopedLocalEmbeddingProviders = ScopedLocalEmbeddingProviders(None)
+
+/// Create a scope-keyed provider family whose per-scope IDF state
+/// persists to `blobStorage` under
+/// `_platform/embeddings/{scopeKey}/_local-tfidf-state.json`. Per-scope
+/// hydration happens on that scope's first `For` call, so a deployment
+/// with fifty teams does not read fifty blobs at boot.
+let createScopedPersistent (blobStorage: IBlobStorage) : ScopedLocalEmbeddingProviders =
+    ScopedLocalEmbeddingProviders(Some blobStorage)

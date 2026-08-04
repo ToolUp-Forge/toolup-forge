@@ -1531,6 +1531,14 @@
              arm env-gated on TOOLUP_REDIS_CONNECTION, the same server the
              Redis notification-channel and distributed-lock packs use. -->
         <Compile Include="InProcess\RedisEmbeddingCacheTests.fs" />
+        <!-- Phase 14z — scope-keyed LocalEmbeddingProvider. The isolation
+             claim is asserted differentially (a contaminated family vs a
+             pristine one fed only the scope's own history), so sharing
+             state across scopes turns the pack red; a deliberate control
+             case proves the comparison can fail at all. Plus per-scope
+             reset / persistence paths and the GP 11 pin that the
+             unscoped factories still carry one global vocabulary. -->
+        <Compile Include="InProcess\LocalEmbeddingScopeTests.fs" />
         <Compile Include="InProcess\OcrProviderTests.fs" />
         <!-- Phase 317 — peer-auth posture advisory. The six-rung ladder a
              composition is classified against (from "no peer surface" up
@@ -1698,6 +1706,9 @@
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
+        <!-- Phase 14z — the local TF-IDF embedder, for its scope-keyed
+             factory. Dev-only companion; no external dependency. -->
+        <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
         <!-- Phase 509 — durable ingestion-queue companion; the live arm of
              DurableIngestionQueueTests binds its store to the shared
              IIngestionQueueStore contract. -->

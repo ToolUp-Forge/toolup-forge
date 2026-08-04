@@ -224,6 +224,15 @@ let allTests =
         // Phase 513 — Redis IEmbeddingCache companion. Structural arm
         // always on; live arm Pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisEmbeddingCacheTests.tests
+        // Phase 14z — scope-keyed LocalEmbeddingProvider. Isolation is
+        // asserted differentially against a pristine family, so a shared
+        // vocabulary makes the pack red; the "guard is load-bearing"
+        // case is the control that stops the comparison being vacuous.
+        LocalEmbeddingScopeTests.scopeKeyTests
+        LocalEmbeddingScopeTests.isolationTests
+        LocalEmbeddingScopeTests.resetTests
+        LocalEmbeddingScopeTests.persistenceTests
+        LocalEmbeddingScopeTests.backwardCompatibilityTests
         // Phase 500 — the Tesseract IOcrProvider companion and the
         // "OCR unavailable" ingestion signal. Structural arm always on;
         // native arm Pending unless TOOLUP_TESSDATA is set.
