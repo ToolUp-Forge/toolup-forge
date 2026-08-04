@@ -73,7 +73,7 @@ Audit events come from the SDK's own bookkeeping, not from module code. Shipped 
 - **Team operations**: `TeamCreated`, `TeamMemberAdded`, `TeamMemberRemoved`, `TeamMemberRoleChanged`, `ActiveTeamSet`
 - **Permission changes**: `RoleAssigned`, `RoleRevoked`, `ModulePermissionChanged`
 - **File operations**: `FileUploaded`, `FileDeleted`, `FileRecovered`
-- **Encryption**: `EncryptionKeyCreated`, `EncryptionKeyRotated` (reserved), `EncryptionKeyDestroyed`
+- **Encryption**: `EncryptionKeyCreated`, `EncryptionKeyRotated` (reserved), `EncryptionKeyDestroyed`, `EncryptionKeyDestroyAcknowledged` (one per other replica, on cross-replica shred fanout)
 - **Jobs**: `JobRegistered`, `JobTriggered`, `JobSucceeded`, `JobFailed`, `JobDeadLettered`
 - **Data ingestion**: `IngestionRunStarted`, `IngestionRunCompleted`, `IngestionRunFailed`
 - **Entities**: `EntityCreated`, `EntityUpdated`, `EntityDeleted`

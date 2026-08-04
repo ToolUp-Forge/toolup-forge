@@ -233,7 +233,7 @@ The `EncryptedBlobStorage` decorator wraps any `IBlobStorage` and applies AES-GC
 
 Two shipped key resolvers:
 - `SingleKeyResolver` — one platform-wide key.
-- `PerScopeKeyResolver` — per-tenant; `IMemoryCache` with 5-min sliding TTL; `DestroyKey` for crypto-shred (instant tenant offboarding for GDPR / contract termination).
+- `PerScopeKeyResolver` — per-tenant; `IMemoryCache` with 5-min sliding TTL; `DestroyKey` for crypto-shred (tenant offboarding for GDPR / contract termination — complete on the serving replica when the call returns, minute-grain replica-fanout time across the fleet via an `INotificationChannel` broadcast).
 
 Custom resolvers (per-`(scopeId, userId)`, BYOK, KMS-backed) plug in against the same interface. Provider-specific preflight validators (`AwsS3EncryptionAtRestValidator`, `AzureBlobEncryptionAtRestValidator`, `GcsEncryptionAtRestValidator`) confirm encryption-at-rest is enabled at the bucket level.
 

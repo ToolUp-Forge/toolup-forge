@@ -366,6 +366,26 @@ V1 resolvers ship with stable `KeyId`s (`_platform/master/v1`, `_platform/scopes
 
 The canonical admin path is the `POST /api/_platform/encryption/destroy-scope-key/{scopeId}` endpoint, gated by `TOOLUP_ADMIN_TOKEN` env var + `X-Admin-Token` request header. Auth is intentionally cross-tenant — team-level RBAC doesn't apply because tenant offboarding is a deployment-admin operation.
 
+#### Timing contract: minute-grain replica-fanout time, not instant (Phase 22b)
+
+**On the replica that serves the destroy request, the shred is complete when `DestroyKey` returns. Across the rest of the fleet it completes at minute grain.** The original Phase 22 framing — "instant tenant offboarding" — described the single-replica case and read as a fleet-wide promise, which it never was: `DestroyKey` evicts the *local* `IMemoryCache` entry and deletes the *shared* `ISecretStore` secret, and neither of those reaches a sibling replica's already-warm cache. Before Phase 22b that cache kept the destroyed key usable for up to the full 5-minute sliding TTL, so a shred that returned success on replica A went on serving that tenant's plaintext on replica B for minutes.
+
+Phase 22b closes the window by broadcasting rather than waiting for it to expire. After the local eviction and the persistent delete succeed, `DestroyKey` publishes a `KeyDestroyedEnvelope` — `(ScopeId, KeyId, RequestedBy, RequestedAt)` plus the originating replica's id — as a `CustomNotification` on `NotificationKind.PlatformReservedScope`. Every replica subscribes at startup (compose calls `WireToChannel` once the channel resolves); on receipt each one evicts its own cache entry for that scope and records an `EncryptionKeyDestroyAcknowledged` audit event. The publish happens strictly *after* the persistent delete, so a replica that evicts on the broadcast cannot repopulate from a secret that is still present.
+
+**The propagation window is the active `INotificationChannel` companion's fanout latency — the SDK promises nothing tighter than the interface's own precision contract, which is minute grain.** Two consequences to hold onto:
+
+| Composed channel | Fanout reach | Effective shred window on sibling replicas |
+|---|---|---|
+| `InMemoryNotifications` / `NoNotifications` (in-process default) | the publishing process only | unchanged — up to the 5-minute sliding TTL |
+| `RedisNotifications` (or another distributed companion) | every subscribed replica | the companion's pub/sub delivery latency, typically sub-second, contractually minute-grain |
+
+- **A single-replica deployment needs no distributed channel.** There is no sibling cache to evict, so the broadcast is a harmless no-op and the shred really is complete on return (GP 11 / GP 13 — the fanout costs a deployment that cannot use it nothing).
+- **A multi-replica deployment needs one, and two preflight validators say so.** `PerScopeKeyResolverDistributedValidator` fails startup with `Error` when the operator has declared `TOOLUP_REPLICA_COUNT > 1` alongside an in-process channel. `KeyDestroyAckCoverageValidator` (Phase 22b) emits a `Warning` for the shape that does *not* declare it — a `Team` / `MultiTeam` deployment with `PerScopeKeyResolver` and an in-process channel — because with an in-process channel a fleet-wide gap and a fleet of one produce byte-identical evidence: zero acknowledgements either way.
+
+That last point is why the acknowledgement event is per replica and names the replica that made it (`AcknowledgedBy`, defaulting to `{machine-name}/{process-id}` — the pod identity in a container deployment). Auditing a shred means counting acknowledgements against expected replicas; a single undifferentiated "destroyed" row cannot answer that. `AcknowledgedAt - RequestedAt` gives the measured fanout delay per replica, so the window above is observable in the trail rather than merely asserted here.
+
+Ordering is deliberately not part of the contract (portability rule 5, Phase 9c): eviction is idempotent and order-insensitive, so a distributed companion may fan out per shard with no cross-shard sequencing promise. Every replica converges on "evicted" regardless of the order envelopes arrive in.
+
 ### Performance budget
 
 - AES-GCM throughput is hundreds of MB/s on a single core; the cipher itself is rarely the bottleneck.
@@ -387,12 +407,13 @@ The canonical admin path is the `POST /api/_platform/encryption/destroy-scope-ke
 
 ### Audit emission
 
-Three audit cases under `SourceModule = "_platform.audit"` (the SDK's standard audit module):
+Four audit cases under `SourceModule = "_platform.audit"` (the SDK's standard audit module):
 - `EncryptionKeyCreated` — auto-creation on first resolution.
 - `EncryptionKeyRotated` — reserved for the future v2 rotation flow.
-- `EncryptionKeyDestroyed` — `PerScopeKeyResolver.DestroyKey` invocation.
+- `EncryptionKeyDestroyed` — `PerScopeKeyResolver.DestroyKey` invocation, on the replica that served it.
+- `EncryptionKeyDestroyAcknowledged` (Phase 22b) — one per *other* replica, when its subscription handler evicts the destroyed key. Carries `AcknowledgedBy` / `OriginReplicaId` and both instants, so the fanout is auditable per replica. The originating replica does not self-acknowledge.
 
-`UserId` on the payload is `"system"` for SDK-managed auto-creation; the authenticated actor for explicit destruction.
+`UserId` on the payload is `"system"` for SDK-managed auto-creation; the authenticated actor for explicit destruction. On the acknowledgement it stays the *requester* carried across from the envelope, not the acknowledging replica — so "who crypto-shredded this tenant" returns one actor across every replica's row.
 
 
 ---

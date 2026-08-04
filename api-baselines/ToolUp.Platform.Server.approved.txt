@@ -3468,6 +3468,9 @@ ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor()
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor(ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JsonFrameDatasetCodec (class)
 ToolUp.Platform.JsonFrameDatasetCodec..ctor()
+ToolUp.Platform.KeyDestroyAckCoverageValidator (class)
+ToolUp.Platform.KeyDestroyAckCoverageValidator+KeyDestroyAckCoverageValidator (class)
+ToolUp.Platform.KeyDestroyAckCoverageValidator+KeyDestroyAckCoverageValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Lease (class)
 ToolUp.Platform.Lease..ctor(System.String, System.Int64, System.DateTime, System.DateTime)
 ToolUp.Platform.Lease.AcquiredAt : System.DateTime { get }
@@ -4320,6 +4323,7 @@ ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver (class)
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.DestroyKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EncryptionTypes+KeyResolutionError]]
 ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.WireToChannel(ToolUp.Platform.INotificationChannel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.WireToChannel(ToolUp.Platform.INotificationChannel, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator (class)
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator (class)
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

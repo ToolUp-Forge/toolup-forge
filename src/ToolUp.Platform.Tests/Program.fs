@@ -371,6 +371,8 @@ let allTests =
         PasskeyAuthProviderTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
+        // Phase 22b — cross-replica encryption-key destruction.
+        CrossReplicaKeyDestructionTests.tests
         TenantLifecycleAggregatorTests.tests
         LifecycleSummaryStoreTests.tests
         OffboardConfirmationTests.tests
@@ -973,6 +975,16 @@ let allTests =
         PrivacyBudgetLedgerTests.ledgerContractTests
         PrivacyBudgetLedgerTests.atomicityTests
         PrivacyBudgetLedgerTests.gateTests
+        // Phase 481 — the calibrated-noise mechanism: exact discrete
+        // Laplace / Gaussian sampling over a CSPRNG, applied to a
+        // cleared release, charged to the ledger at the mechanism's own
+        // epsilon. Every distributional case is paired with a zero-noise
+        // control that must fail it.
+        NoiseMechanismTests.samplerTests
+        NoiseMechanismTests.policyTests
+        NoiseMechanismTests.cohortTests
+        NoiseMechanismTests.gateTests
+        NoiseMechanismTests.compositionTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

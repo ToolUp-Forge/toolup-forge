@@ -2,8 +2,10 @@ module ToolUp.Platform.PerScopeKeyResolver
 
 open System
 open System.Security.Cryptography
+open System.Text.Json
 open System.Threading
 open Microsoft.Extensions.Caching.Memory
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.EncryptionTypes
@@ -58,6 +60,11 @@ open ToolUp.Platform.BlobEncryption
 //   action.
 // - `EncryptionKeyDestroyed` on `DestroyKey`. UserId is the actor who
 //   invoked the admin endpoint (passed in by the caller).
+// - `EncryptionKeyDestroyAcknowledged` (Phase 22b) on each OTHER
+//   replica, when its `KeyDestroyed` subscription handler evicts the
+//   cache entry. Forensic completeness: the trail shows the shred
+//   reached the whole fleet, not just the replica that served the
+//   admin request. The originating replica does not self-acknowledge.
 //
 // Both audit emissions go to the `_platform.audit` source module via
 // `IAuditLog.Record`. If `IAuditLog` is not provided (constructor
@@ -79,16 +86,65 @@ let private CacheKeyPrefix = "blob-encryption-key:"
 [<Literal>]
 let private ResolverName = "PerScopeKeyResolver"
 
-/// Gap audit #1 — `CustomNotification` key used to broadcast key
-/// destruction across silos. Subscribers in other instances evict
+/// Gap audit #1 / Phase 22b — `CustomNotification` key used to broadcast
+/// key destruction across silos. Subscribers in other instances evict
 /// their local cache for the named scope so the 5-minute sliding-TTL
 /// "decrypt-after-destroy" window collapses to one notification
 /// round-trip. Published on `PlatformReservedScope = "_platform"`
 /// (cross-scope reserved bus, same convention as `MembershipChanged`).
-[<Literal>]
-let private KeyDestroyedNotificationKey = "_platform.encryption.key-destroyed"
+///
+/// The constant itself now lives in `EncryptionTypes` so a distributed
+/// channel companion can recognise the topic without re-deriving the
+/// string; this alias keeps the call sites below unchanged.
+let private KeyDestroyedNotificationKey = KeyDestroyedNotification.NotificationKey
 
 let private cacheSlidingTtl = TimeSpan.FromMinutes 5.0
+
+/// Phase 22b — JSON options for the destruction envelope. The F#
+/// converter set is mandatory (records / `DateTimeOffset` / options all
+/// break on a bare `JsonSerializerOptions`); constructed once at module
+/// level per the SDK's SSE / non-Remoting JSON convention.
+let private envelopeJson = FableConverters.create ()
+
+/// Phase 22b — this process's replica identity, stamped onto every
+/// published envelope and every acknowledgement so a shared audit trail
+/// can tell N replicas apart.
+///
+/// Deliberately derived, not configured: `MachineName` is the container /
+/// pod name under every container orchestrator the SDK targets, so a
+/// replica is already uniquely named without introducing an env var the
+/// operator must remember to set (and whose absence would silently
+/// collapse every replica onto one identity). The process id
+/// disambiguates several replicas colocated on one host.
+let internal defaultReplicaId () =
+    sprintf "%s/%d" Environment.MachineName Environment.ProcessId
+
+/// Phase 22b — decode a destruction-broadcast payload.
+///
+/// Legacy-tolerant by construction (GP 11): before Phase 22b the payload
+/// was the bare `scopeId` string, which is not valid JSON for this record
+/// and would throw. A rolling upgrade therefore has replicas of both
+/// vintages on the bus, and the SECURITY-CRITICAL half of the handler —
+/// evict the cache — must still run when an old-format message arrives.
+/// So a payload that does not parse is treated as a bare scopeId: the
+/// eviction proceeds, and the acknowledgement is skipped because the
+/// fields it needs were never sent. Failing closed on eviction here would
+/// mean a destroyed key keeps decrypting, which is the whole defect.
+let internal decodeKeyDestroyedPayload (payload: string) : KeyDestroyedEnvelope option * string =
+    let legacy = (None, payload)
+
+    if String.IsNullOrWhiteSpace payload then
+        (None, "")
+    else
+        try
+            let env = JsonSerializer.Deserialize<KeyDestroyedEnvelope>(payload, envelopeJson)
+
+            if obj.ReferenceEquals(env, null) || String.IsNullOrWhiteSpace env.ScopeId then
+                legacy
+            else
+                (Some env, env.ScopeId)
+        with _ ->
+            legacy
 
 /// Build the `KeyId` string for a given scope. Format is
 /// `_platform/scopes/{scopeId}/v1` so future v2 rotation can simply
@@ -129,12 +185,29 @@ let private generateKey () : byte[] =
 /// continue to decrypt the offboarded scope's blobs until their TTL
 /// elapses. Compose calls `WireToChannel` after `INotificationChannel`
 /// resolves; on `DestroyKey`, the resolver publishes a
-/// `CustomNotification(KeyDestroyedNotificationKey, scopeId)` and other
-/// silos' subscribed handlers evict their caches synchronously.
+/// `CustomNotification(KeyDestroyedNotificationKey, <envelope JSON>)` and
+/// other silos' subscribed handlers evict their caches synchronously.
+///
+/// Phase 22b sharpened that broadcast: the payload is now a typed
+/// `KeyDestroyedEnvelope` carrying `(ScopeId, KeyId, RequestedBy,
+/// RequestedAt)` plus the originating replica id, and each receiving
+/// replica records an `EncryptionKeyDestroyAcknowledged` audit event so
+/// the trail proves the shred reached the whole fleet. The propagation
+/// window is the active channel companion's fanout latency — minute-grain
+/// per the `INotificationChannel` precision contract, not instant.
 type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option) =
 
     let mutable channel: INotificationChannel option = None
     let mutable subscriptionId: NotificationSubscriptionId option = None
+
+    /// Phase 22b — this replica's identity, stamped on published
+    /// envelopes and recorded on acknowledgements. Defaults to the
+    /// derived `{machine}/{pid}`; the two-argument `WireToChannel`
+    /// overload overrides it, which is what lets a test stand two
+    /// "replicas" up in one process (they would otherwise share one
+    /// identity and each suppress the other's acknowledgement as a
+    /// self-echo).
+    let mutable replicaId = defaultReplicaId ()
 
     /// Auto-create / load / cache. Returns the `EncryptionKey` for the
     /// requested scope. Emits `EncryptionKeyCreated` audit event on
@@ -292,13 +365,19 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
     /// All blobs encrypted under this scope's key become permanently
     /// undecryptable after this operation completes.
     ///
-    /// Multi-instance: when wired via `WireToChannel`, publishes a
-    /// `CustomNotification(KeyDestroyedNotificationKey, scopeId)` on
-    /// `PlatformReservedScope` after the local + persistent delete
-    /// succeeds. Other silos' subscribed handlers evict their caches
-    /// synchronously. Without `WireToChannel` (single-instance dev),
-    /// no publish; the local cache + secret-store delete is the
-    /// entirety of the operation.
+    /// Multi-instance (Phase 22b): when wired via `WireToChannel`,
+    /// publishes a `CustomNotification(KeyDestroyedNotificationKey,
+    /// <KeyDestroyedEnvelope JSON>)` on `PlatformReservedScope` after the
+    /// local + persistent delete succeeds. Other silos' subscribed
+    /// handlers evict their caches and each record an
+    /// `EncryptionKeyDestroyAcknowledged` audit event. Without
+    /// `WireToChannel` (single-instance dev), no publish; the local cache
+    /// + secret-store delete is the entirety of the operation — which is
+    /// why the fanout costs a single-replica deployment nothing (GP 13).
+    ///
+    /// The publish happens AFTER the persistent delete, never before: a
+    /// replica that evicted on the broadcast must not be able to
+    /// re-populate its cache from a secret that is still present.
     ///
     /// `actorUserId` is the authenticated user invoking the admin
     /// endpoint; used as the `UserId` on the emitted audit event.
@@ -325,18 +404,29 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
                     )
             | None -> ()
 
-            // Gap audit #1 — broadcast destruction to other silos so
-            // they evict their caches synchronously. Channel-handler
+            // Gap audit #1 / Phase 22b — broadcast destruction to other
+            // silos so they evict their caches. Channel-handler
             // exceptions are caught by the channel itself (GP 12 r3);
             // a publish-side failure logs but doesn't fail DestroyKey
             // (the local + persistent delete already succeeded).
             match channel with
             | Some ch ->
                 try
+                    let envelope: KeyDestroyedEnvelope = {
+                        ScopeId = scopeId
+                        KeyId = keyIdFor scopeId
+                        RequestedBy = actorUserId
+                        RequestedAt = DateTimeOffset.UtcNow
+                        OriginReplicaId = replicaId
+                    }
+
                     do!
                         ch.Publish(
                             NotificationKind.PlatformReservedScope,
-                            CustomNotification(KeyDestroyedNotificationKey, scopeId)
+                            CustomNotification(
+                                KeyDestroyedNotificationKey,
+                                JsonSerializer.Serialize(envelope, envelopeJson)
+                            )
                         )
                 with _ ->
                     ()
@@ -359,8 +449,22 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
     /// Idempotent: a second call replaces the prior subscription. The
     /// resolver doesn't expose unsubscribe — the resolver's lifetime is
     /// the process lifetime.
-    member _.WireToChannel(notificationChannel: INotificationChannel) : Async<unit> = async {
+    member this.WireToChannel(notificationChannel: INotificationChannel) : Async<unit> =
+        this.WireToChannel(notificationChannel, defaultReplicaId ())
+
+    /// Phase 22b — `WireToChannel` with an explicit replica identity.
+    ///
+    /// Production wiring uses the one-argument overload, which derives the
+    /// identity from `{machine-name}/{process-id}` — already unique per
+    /// container. This overload exists for the case that derivation cannot
+    /// serve: two resolver instances in ONE process standing in for two
+    /// replicas (the in-process fanout test, and any deployment that hosts
+    /// several logical replicas per process). They would otherwise share
+    /// one identity, and each would discard the other's broadcast as its
+    /// own echo — the fanout would test as working while doing nothing.
+    member _.WireToChannel(notificationChannel: INotificationChannel, replicaIdentity: string) : Async<unit> = async {
         channel <- Some notificationChannel
+        replicaId <- replicaIdentity
 
         // Subscribe to the cross-scope reserved bus for destruction
         // notifications from other silos. Handler is synchronous (GP 12
@@ -369,8 +473,64 @@ type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLo
         let handler (env: NotificationEnvelope) =
             match env.Notification with
             | CustomNotification(key, payloadJson) when key = KeyDestroyedNotificationKey ->
-                let scopeId = payloadJson
-                cache.Remove(cacheKeyFor scopeId) |> ignore
+                let decoded, scopeId = decodeKeyDestroyedPayload payloadJson
+
+                // Self-echo suppression. The in-process channel
+                // delivers a publish back to the publisher, so without
+                // this a single-replica deployment would record a
+                // spurious "another replica acknowledged" event about
+                // itself — and the forensic question this event exists
+                // to answer ("did the shred reach the fleet?") would
+                // read as answered on a fleet of one. The eviction is
+                // skipped too: `DestroyKey` already did it locally
+                // before publishing.
+                let isSelfEcho =
+                    match decoded with
+                    | Some e -> e.OriginReplicaId = replicaId
+                    | None -> false
+
+                if not isSelfEcho && not (String.IsNullOrWhiteSpace scopeId) then
+                    // Eviction first, and synchronously — it is the
+                    // security-critical half, and it must have happened
+                    // before any later read on this replica can hit the
+                    // cache.
+                    cache.Remove(cacheKeyFor scopeId) |> ignore
+
+                    // Then the forensic record, off the channel's
+                    // delivery thread. `INotificationChannel` documents
+                    // handlers as synchronous with long-running work
+                    // dispatched by the handler itself, and an audit
+                    // write goes to blob storage — blocking the
+                    // publisher on it would make one slow replica's
+                    // storage the publisher's latency. `IAuditLog.Record`
+                    // swallows its own failures; the try/with guards the
+                    // dispatch itself so a throw can never escape into
+                    // the channel.
+                    match decoded, auditLog with
+                    | Some e, Some log ->
+                        try
+                            Async.Start(
+                                log.Record(
+                                    scopeId,
+                                    EncryptionKeyDestroyAcknowledged {
+                                        UserId = e.RequestedBy
+                                        ScopeId = e.ScopeId
+                                        KeyId = e.KeyId
+                                        Resolver = ResolverName
+                                        AcknowledgedBy = replicaId
+                                        OriginReplicaId = e.OriginReplicaId
+                                        RequestedAt = e.RequestedAt
+                                        AcknowledgedAt = DateTimeOffset.UtcNow
+                                    }
+                                )
+                            )
+                        with _ ->
+                            ()
+                    // A pre-Phase-22b payload (bare scopeId) carries
+                    // none of the acknowledgement's fields. Evict —
+                    // done above — and skip the record rather than
+                    // fabricate an actor and an instant.
+                    | _ -> ()
             | _ -> ()
 
         let! subId = notificationChannel.Subscribe(NotificationKind.PlatformReservedScope, handler)

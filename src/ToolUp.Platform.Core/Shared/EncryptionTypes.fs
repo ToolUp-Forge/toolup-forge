@@ -75,6 +75,80 @@ module KeyResolutionError =
         | KeyDestroyed id -> sprintf "Encryption key destroyed (crypto-shredded): %s" id
         | StorageFailure m -> sprintf "Encryption key storage failure: %s" m
 
+// ─── Phase 22b — cross-replica key-destruction fanout ───────────────
+//
+// `PerScopeKeyResolver.DestroyKey` evicts its LOCAL `IMemoryCache`
+// entry and deletes the persisted `ISecretStore` secret. Neither reaches
+// a sibling replica, whose cache keeps the key warm for up to the
+// 5-minute sliding TTL — so a crypto-shred that "succeeded" on replica A
+// keeps serving plaintext on replica B for minutes. Phase 22b closes
+// that window by publishing this envelope through `INotificationChannel`
+// on `NotificationKind.PlatformReservedScope`; every replica's subscribed
+// handler evicts the matching cache entry on receipt and records an
+// `EncryptionKeyDestroyAcknowledged` audit event.
+//
+// The propagation window is therefore the active channel companion's
+// fanout latency, NOT zero — see the timing contract in the technical
+// guide (chapter 3, "Blob storage encryption at rest"). The in-process
+// default channel reaches only the publishing process, which is exactly
+// right for a single-replica deployment and is why the fanout is a
+// harmless no-op there (GP 11 / GP 13).
+//
+// **Portability rule 5 (no cross-shard ordering) is satisfied** — cache
+// eviction is order-insensitive and idempotent. Two envelopes for the
+// same scope, or envelopes for different scopes arriving in any order,
+// converge to the same state: every replica has evicted. No replica
+// needs to observe a total order, so a distributed companion is free to
+// fan out per-shard with no cross-shard sequencing promise.
+
+/// Phase 22b — the cross-replica key-destruction envelope. Published on
+/// `NotificationKind.PlatformReservedScope` under
+/// `KeyDestroyedNotification.NotificationKey` as a
+/// `CustomNotification` whose payload is this record's JSON.
+///
+/// **Identity-by-value (portability rule 1).** Every field is a string
+/// or an instant — no live handles, so a replica can be a separate
+/// process, container, grain, or actor without a signature change.
+type KeyDestroyedEnvelope = {
+    /// Scope whose key was destroyed. The receiving replica evicts its
+    /// cache entry for exactly this scope.
+    ScopeId: string
+    /// Stable key identifier that was destroyed
+    /// (`_platform/scopes/{scopeId}/v1`). Carried so an acknowledging
+    /// replica records the same `KeyId` the originating replica did,
+    /// and so a future v2-rotating resolver can evict per-version.
+    KeyId: string
+    /// Authenticated actor who invoked the crypto-shred on the
+    /// originating replica. `"system"` when the SDK destroyed the key
+    /// without a user action. Carried across so every replica's
+    /// acknowledgement is attributable to the same admin action rather
+    /// than to the replica itself.
+    RequestedBy: string
+    /// When the destroy was requested on the originating replica.
+    /// Subtracting this from the acknowledgement time is the measured
+    /// replica-fanout window — the number the timing contract in the
+    /// technical guide promises at minute grain.
+    RequestedAt: System.DateTimeOffset
+    /// Replica the destroy originated on. Additive to the four fields
+    /// above and load-bearing: a replica that receives its OWN publish
+    /// (which the in-process channel always does) must not acknowledge
+    /// it, or a single-replica deployment would record a spurious
+    /// "another replica saw it" forensic event.
+    OriginReplicaId: string
+}
+
+/// Phase 22b — wire constants for the cross-replica key-destruction
+/// broadcast. Public so a distributed `INotificationChannel` companion,
+/// or a deployment auditing its own fanout, can recognise the topic
+/// without re-deriving the string.
+module KeyDestroyedNotification =
+    /// `CustomNotification` key the destruction envelope travels under.
+    /// Published on the cross-scope reserved bus
+    /// (`NotificationKind.PlatformReservedScope`), the same convention
+    /// `MembershipChanged` uses.
+    [<Literal>]
+    let NotificationKey = "_platform.encryption.key-destroyed"
+
 /// Envelope header constants. The server-side decorator
 /// (`EncryptedBlobStorage`) writes and reads the envelope; clients
 /// never see this.

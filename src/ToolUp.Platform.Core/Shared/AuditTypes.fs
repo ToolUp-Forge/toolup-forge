@@ -536,6 +536,59 @@ type EncryptionKeyEventPayload = {
     Resolver: string
 }
 
+/// Phase 22b — one replica's acknowledgement that it evicted its cached
+/// copy of a destroyed encryption key. Emitted by `PerScopeKeyResolver`'s
+/// `KeyDestroyed` subscription handler, once per replica that receives
+/// the broadcast; NOT emitted by the replica that originated the destroy
+/// (that one already recorded `EncryptionKeyDestroyed`).
+///
+/// **Why a distinct payload rather than `EncryptionKeyEventPayload`.**
+/// Forensic completeness is the point of this event — "prove every
+/// replica saw the destroy" is only answerable if each acknowledgement
+/// names the replica that made it, and the propagation delay is only
+/// computable if both instants are recorded. Neither fits the four
+/// lifecycle fields, and adding required fields to
+/// `EncryptionKeyEventPayload` would break every consumer that
+/// constructs one.
+type EncryptionKeyDestroyAckPayload = {
+    /// Actor who requested the destroy on the originating replica,
+    /// carried across from the `KeyDestroyedEnvelope`. `"system"` when
+    /// the SDK destroyed the key without a user action. Deliberately the
+    /// requester, not the acknowledging replica — so a query for "who
+    /// crypto-shredded this tenant" returns one actor across every
+    /// replica's acknowledgement.
+    UserId: string
+    /// Scope whose key was destroyed and whose cache entry this replica
+    /// evicted.
+    ScopeId: string
+    /// Stable key identifier that was destroyed. Matches the
+    /// `EncryptionKeyDestroyed` event on the originating replica and the
+    /// envelope header of every blob now undecryptable.
+    KeyId: string
+    /// Resolver class name that handled the eviction — always
+    /// `"PerScopeKeyResolver"` today; present so a third-party resolver
+    /// adopting the same broadcast is distinguishable in the trail.
+    Resolver: string
+    /// The replica that evicted and is acknowledging. Distinguishes one
+    /// replica's acknowledgement from another's in the shared audit
+    /// trail — without it, N replicas produce N indistinguishable rows
+    /// and "did every replica see it?" is unanswerable. Defaults to
+    /// `{machine-name}/{process-id}`, which in a container deployment is
+    /// the pod / container identity.
+    AcknowledgedBy: string
+    /// The replica the destroy originated on (the one that recorded
+    /// `EncryptionKeyDestroyed`). Pairs each acknowledgement with its
+    /// originating action when several destroys are in flight.
+    OriginReplicaId: string
+    /// When the destroy was requested on the originating replica.
+    RequestedAt: DateTimeOffset
+    /// When this replica completed its eviction.
+    /// `AcknowledgedAt - RequestedAt` is the measured replica-fanout
+    /// window for this replica — the number the technical guide's timing
+    /// contract promises only at minute grain.
+    AcknowledgedAt: DateTimeOffset
+}
+
 /// Debounced health-probe state transition. Emitted by
 /// `HealthStateTracker` after a probe's stable state changes (3
 /// consecutive observations of a new status). Single-observation
@@ -2944,6 +2997,14 @@ type AuditEvent =
     /// blobs encrypted with the destroyed key are permanently
     /// undecryptable.
     | EncryptionKeyDestroyed of EncryptionKeyEventPayload
+    /// Phase 22b — one replica evicted its cached copy of a key another
+    /// replica destroyed. Emitted per receiving replica by
+    /// `PerScopeKeyResolver`'s `KeyDestroyed` subscription handler, so the
+    /// trail proves the crypto-shred reached the whole fleet rather than
+    /// only the replica that served the admin request. The originating
+    /// replica records `EncryptionKeyDestroyed` and does not
+    /// self-acknowledge.
+    | EncryptionKeyDestroyAcknowledged of EncryptionKeyDestroyAckPayload
     /// Entity created (first version saved).
     | EntityCreated of EntityLifecycleEventPayload
     /// Entity updated (subsequent version saved).
@@ -3484,6 +3545,7 @@ module AuditEvent =
         | EncryptionKeyCreated _ -> "EncryptionKeyCreated"
         | EncryptionKeyRotated _ -> "EncryptionKeyRotated"
         | EncryptionKeyDestroyed _ -> "EncryptionKeyDestroyed"
+        | EncryptionKeyDestroyAcknowledged _ -> "EncryptionKeyDestroyAcknowledged"
         | EntityCreated _ -> "EntityCreated"
         | EntityUpdated _ -> "EntityUpdated"
         | EntityDeleted _ -> "EntityDeleted"

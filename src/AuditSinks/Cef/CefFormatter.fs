@@ -181,6 +181,11 @@ let private mediumEvents =
         "DatasetDeclassified"
         "DiagnosticBundleAccessed"
         "EncryptionKeyCreated"
+        // Phase 22b — a replica confirming it evicted a destroyed key.
+        // Not itself destructive (the EncryptionKeyDestroyed that caused
+        // it is Critical); Medium because its ABSENCE across a fleet is
+        // the security signal a reviewer looks for.
+        "EncryptionKeyDestroyAcknowledged"
         "EntityDeleted"
         "FileDeleted"
         "HealthStateChanged"

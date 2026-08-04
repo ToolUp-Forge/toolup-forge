@@ -96,6 +96,8 @@ let registerFirstPartyConfigValidators
         PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(encryptionKeyResolver)
     ) // refuse per-scope key resolver + in-proc channel under multi-instance
 
+    addConfigValidator (KeyDestroyAckCoverageValidator.KeyDestroyAckCoverageValidator(config, services)) // Phase 22b — warn per-scope key resolver + in-proc channel in a Team/MultiTeam shape (crypto-shred fanout reaches no sibling replica; the Error arm above only fires when ReplicaCount is declared)
+
     addConfigValidator (
         ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(config, secretStore)
     ) // warn share-token signing key would auto-generate (unmanaged) in a production/multi-instance share-token deployment (Wave 19; self-gates to Ok otherwise)

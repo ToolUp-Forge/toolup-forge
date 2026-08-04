@@ -453,6 +453,7 @@
         <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
         <Compile Include="Server\AdminTokenValidator.fs" />
         <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
+        <Compile Include="Server\KeyDestroyAckCoverageValidator.fs" />
         <Compile Include="Server\HealthCheck.fs" />
         <!-- Phase 118 — degraded-capability registry + /dev/inspect
              contributor. Before HealthCheckResponseWriter (consumes the

@@ -561,6 +561,10 @@
         <Compile Include="InProcess\PasskeyAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
+        <!-- Phase 22b — cross-replica crypto-shred fanout: eviction on a
+             sibling replica, per-replica acknowledgement audit, the wire
+             envelope, and KeyDestroyAckCoverageValidator. -->
+        <Compile Include="InProcess\CrossReplicaKeyDestructionTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
         <!-- Phase 54e — durable last-LifecycleSummary store (blob round-trip,
              restart survival, corrupt-blob tolerance). -->
@@ -1202,6 +1206,18 @@
              charge policy, refund on a failed dispatch, and the TTL
              reclaim of an abandoned reservation. -->
         <Compile Include="InProcess\PrivacyBudgetLedgerTests.fs" />
+        <!-- Phase 481 — the calibrated-noise mechanism that makes the
+             Phase 190 epsilon a privacy loss rather than a query quota:
+             exact discrete Laplace / discrete Gaussian samplers asserted
+             against their closed forms (every spread + shape case paired
+             with a ZERO-noise control that must fail it), epsilon and
+             sensitivity scaling, the CSPRNG production path proven
+             separately from the seeded test path, the lattice snap that
+             is the other half of the Mironov defence, ledger charging at
+             the mechanism's own epsilon, the no-un-noised-fallback rule
+             on an exhausted budget, and the compose-time refusal of a
+             policy nothing would apply. Pure dispatch; no TestServer. -->
+        <Compile Include="InProcess\NoiseMechanismTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

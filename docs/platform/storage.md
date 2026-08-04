@@ -76,7 +76,7 @@ ServerApp.empty
 |> ...
 ```
 
-**`PerScopeKeyResolver`** — per-tenant. `IMemoryCache` with 5-min sliding TTL so reads are fast after warmup. `DestroyKey scopeId actorUserId` crypto-shreds the tenant's data (subsequent reads fail because the envelope's KeyId can't be resolved). Crypto-shred is instant — far faster than walking and deleting every encrypted object.
+**`PerScopeKeyResolver`** — per-tenant. `IMemoryCache` with 5-min sliding TTL so reads are fast after warmup. `DestroyKey scopeId actorUserId` crypto-shreds the tenant's data (subsequent reads fail because the envelope's KeyId can't be resolved) — far faster than walking and deleting every encrypted object. **Timing: complete on the serving replica when the call returns; minute-grain replica-fanout time across the rest of the fleet.** The shred broadcasts a `KeyDestroyed` envelope through `INotificationChannel` so every other replica evicts its cached key and records an `EncryptionKeyDestroyAcknowledged` audit event, so the propagation window is whatever the composed channel companion delivers in — sub-second in practice with `RedisNotifications`, but never tighter than the interface's minute-grain precision contract, and *not* propagated at all by the in-process default (correct for a single replica; see the timing contract in the [technical guide](../../src/ToolUp.Platform/technical-guide/03-authentication-secrets-and-encryption.md#timing-contract-minute-grain-replica-fanout-time-not-instant-phase-22b)).
 
 ```fsharp skip=fragment
 let resolver = PerScopeKeyResolver(secretStore, blobStorage) :> IBlobEncryptionKeyResolver

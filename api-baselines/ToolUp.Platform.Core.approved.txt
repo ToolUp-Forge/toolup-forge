@@ -715,6 +715,7 @@ ToolUp.Platform.AuditEvent.IsDatasetSpillDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDiagnosticBundleAccessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEgressBlocked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyCreated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyAcknowledged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyRotated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityCreated : System.Boolean { get }
@@ -896,6 +897,8 @@ ToolUp.Platform.AuditEvent+EgressBlocked (class)
 ToolUp.Platform.AuditEvent+EgressBlocked.Item : ToolUp.Platform.EgressBlockedPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyCreated (class)
 ToolUp.Platform.AuditEvent+EncryptionKeyCreated.Item : ToolUp.Platform.EncryptionKeyEventPayload { get }
+ToolUp.Platform.AuditEvent+EncryptionKeyDestroyAcknowledged (class)
+ToolUp.Platform.AuditEvent+EncryptionKeyDestroyAcknowledged.Item : ToolUp.Platform.EncryptionKeyDestroyAckPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyDestroyed (class)
 ToolUp.Platform.AuditEvent+EncryptionKeyDestroyed.Item : ToolUp.Platform.EncryptionKeyEventPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyRotated (class)
@@ -1090,6 +1093,7 @@ ToolUp.Platform.AuditEvent+Tags.DatasetSpillDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DiagnosticBundleAccessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EgressBlocked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyCreated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyAcknowledged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyRotated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityCreated : System.Int32 (literal)
@@ -3186,6 +3190,16 @@ ToolUp.Platform.EmailEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[Sy
 ToolUp.Platform.EmailEnvelope.Content : ToolUp.Platform.EmailContent { get }
 ToolUp.Platform.EmailEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.EmailEnvelope.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload (class)
+ToolUp.Platform.EncryptionKeyDestroyAckPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.AcknowledgedAt : System.DateTimeOffset { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.AcknowledgedBy : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.KeyId : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.OriginReplicaId : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.RequestedAt : System.DateTimeOffset { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.Resolver : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.ScopeId : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.UserId : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload (class)
 ToolUp.Platform.EncryptionKeyEventPayload..ctor(System.String, System.String, System.String, System.String)
 ToolUp.Platform.EncryptionKeyEventPayload.KeyId : System.String { get }
@@ -3205,6 +3219,15 @@ ToolUp.Platform.EncryptionTypes+EncryptionKey (class)
 ToolUp.Platform.EncryptionTypes+EncryptionKey..ctor(System.String, System.Byte[])
 ToolUp.Platform.EncryptionTypes+EncryptionKey.KeyId : System.String { get }
 ToolUp.Platform.EncryptionTypes+EncryptionKey.Material : System.Byte[] { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope (class)
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String)
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope.KeyId : System.String { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope.OriginReplicaId : System.String { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope.RequestedAt : System.DateTimeOffset { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope.RequestedBy : System.String { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedEnvelope.ScopeId : System.String { get }
+ToolUp.Platform.EncryptionTypes+KeyDestroyedNotification (class)
+ToolUp.Platform.EncryptionTypes+KeyDestroyedNotification.NotificationKey : System.String (literal)
 ToolUp.Platform.EncryptionTypes+KeyResolutionError (class)
 ToolUp.Platform.EncryptionTypes+KeyResolutionError.IsKeyDestroyed : System.Boolean { get }
 ToolUp.Platform.EncryptionTypes+KeyResolutionError.IsKeyNotFound : System.Boolean { get }
