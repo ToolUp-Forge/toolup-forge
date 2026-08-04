@@ -95,6 +95,7 @@ module Names =
     // Deployment shape
     let replicaCount = "TOOLUP_REPLICA_COUNT"
     let notificationChannel = "TOOLUP_NOTIFICATION_CHANNEL"
+    let distributedLock = "TOOLUP_DISTRIBUTED_LOCK"
     let redisConnection = "TOOLUP_REDIS_CONNECTION"
     let requireHttps = "TOOLUP_REQUIRE_HTTPS"
     let trustForwardedHeaders = "TOOLUP_TRUST_FORWARDED_HEADERS"
@@ -347,9 +348,18 @@ let all: ConfigKeyDescriptor list = [
         Category = "Deployment shape"
     }
     {
+        EnvVar = Names.distributedLock
+        Description =
+            "Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into."
+        Type = EnumKey [ "inprocess"; "redis" ]
+        Default = Some "inprocess"
+        IsSecret = false
+        Category = "Deployment shape"
+    }
+    {
         EnvVar = Names.redisConnection
         Description =
-            "Redis connection string for the distributed notification channel / caches used when TOOLUP_NOTIFICATION_CHANNEL=redis."
+            "Redis connection string for the distributed notification channel / caches / distributed lock used when TOOLUP_NOTIFICATION_CHANNEL=redis or TOOLUP_DISTRIBUTED_LOCK=redis."
         Type = StringKey
         Default = None
         IsSecret = true

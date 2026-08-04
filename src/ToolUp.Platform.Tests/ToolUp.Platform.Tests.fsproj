@@ -97,6 +97,10 @@
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\ILifecycleLockContract.fs" />
+        <!-- Phase 9i — the SDK-wide cross-instance lease primitive. Bound
+             to the in-process default here; the Redis reference impl binds
+             the same pack in InProcess\RedisDistributedLockTests.fs. -->
+        <Compile Include="Contracts\IDistributedLockContract.fs" />
         <Compile Include="Contracts\IPeerBearerAuthContract.fs" />
         <Compile Include="Contracts\IAuthProviderContract.fs" />
         <Compile Include="Contracts\IAIProviderContract.fs" />
@@ -306,6 +310,10 @@
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
+        <!-- Phase 9i — IDistributedLockContract against the Redis reference
+             impl; env-gated on TOOLUP_REDIS_CONNECTION (same server as the
+             channel pack above), pending when unset. -->
+        <Compile Include="InProcess\RedisDistributedLockTests.fs" />
         <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
         <Compile Include="InProcess\NotificationAddressBookTests.fs" />
         <Compile Include="InProcess\SmtpNotificationSinkTests.fs" />

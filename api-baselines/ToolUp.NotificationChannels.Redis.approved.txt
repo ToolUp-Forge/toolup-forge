@@ -10,6 +10,13 @@ ToolUp.Platform.NotificationChannels.Redis+RedisNotificationChannelModule (class
 ToolUp.Platform.NotificationChannels.Redis+RedisNotificationChannelModule.connect(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : System.Tuple`2[StackExchange.Redis.IConnectionMultiplexer, ToolUp.Platform.INotificationChannel]
 ToolUp.Platform.NotificationChannels.Redis+RedisNotificationChannelModule.fromConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationChannel
 ToolUp.Platform.NotificationChannels.Redis+RedisNotificationChannelModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationChannel
+ToolUp.Platform.NotificationChannels.RedisDistributedLock (class)
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLock (class)
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLock..ctor(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule (class)
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock]
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IDistributedLock
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.resolver : ToolUp.Platform.DistributedLockResolver { get }
 ToolUp.Platform.NotificationChannels.RedisHealth (class)
 ToolUp.Platform.NotificationChannels.RedisHealth+RedisNotificationChannelHealth (class)
 ToolUp.Platform.NotificationChannels.RedisHealth+RedisNotificationChannelHealth..ctor(StackExchange.Redis.IConnectionMultiplexer)

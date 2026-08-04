@@ -525,6 +525,36 @@ let compose
     // `ComposeEncryption.registerEncryptionResolver`).
     registerEncryptionResolver services encryptionKeyResolver
 
+    // Phase 9i — SDK-wide cross-instance lease primitive. Registered
+    // UNCONDITIONALLY (not behind a config mode) so any subsystem or
+    // module can resolve an `IDistributedLock` without first checking
+    // whether the deployment composed one: the in-process default is
+    // always a correct answer for a single instance, and asking every
+    // consumer to handle absence is how three subsystems ended up
+    // re-deriving their own `SemaphoreSlim` instead.
+    //
+    // `InProcessDistributedLock.shared` is the SAME instance the eagerly
+    // constructed subsystems default to (the job scheduler's per-`JobId`
+    // dispatch mutex, `BlobBackedPlatformAdminStore`'s write lock), so an
+    // in-process acquirer of a given lock id contends with every other
+    // regardless of which path handed it the lock.
+    //
+    // **Overriding it with a companion.** A distributed deployment
+    // registers its own `AddSingleton<IDistributedLock>` from
+    // `ComposeExtensions.ServiceConfig`, which runs after this block —
+    // last registration wins for `GetRequiredService`, so every
+    // DI-resolving consumer gets the companion. The two compose-time
+    // subsystems above bind this default instance; threading a companion
+    // lock into those is the Phase 9c follow-on (it needs the lock
+    // resolved BEFORE their construction, i.e. a `compose` signature
+    // change, which is not worth spending on until a distributed
+    // scheduler companion exists to need it).
+    //
+    // GP 13 — an unused registration is one singleton and no hosted
+    // service, no middleware, no allocation on any request path.
+    services.AddSingleton<IDistributedLock>(InProcessDistributedLock.shared)
+    |> ignore
+
     // Phase 118 — degraded-capability registry. Registered
     // unconditionally (best-effort sites must be able to register into it)
     // but zero-cost when empty (GP 13): the `/health` writer skips the

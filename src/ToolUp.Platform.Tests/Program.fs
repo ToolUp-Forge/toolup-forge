@@ -193,6 +193,9 @@ let allTests =
         TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
+        // Phase 9i — IDistributedLockContract bound to the Redis reference
+        // impl; pending unless TOOLUP_REDIS_CONNECTION is set.
+        RedisDistributedLockTests.tests
         TransactionalDispatcherTests.tests
         NotificationAddressBookTests.tests
         SmtpNotificationSinkTests.tests
@@ -375,6 +378,9 @@ let allTests =
         PrincipalRegistryTests.tests
         ITenantLifecycleContract.tests
         ILifecycleLockContract.tests
+        // Phase 9i — the SDK-wide cross-instance lease primitive
+        // (in-process default; the Redis binding is env-gated below).
+        IDistributedLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         // Phase 599 — entity-write outbox (write-ahead intent + version

@@ -135,7 +135,8 @@ How a pure-Kestrel deployment partitions across silos via `ServerConfig.ProcessP
 
 - Three pure-Kestrel deployment shapes (`AllInOne` / `WebOnly` + `WorkerOnly` / `WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 - Substrate contract — what every shape must share
-- Cross-silo coordination contract (single-leader subsystems, `IDistributedLock` Phase 9i deferral, `ReplicaCount` pinning)
+- Cross-silo coordination contract (single-leader subsystems, `ReplicaCount` pinning)
+- The `IDistributedLock` lease primitive (Phase 9i) — lock semantics, what "held" means while you process under a lease, the fence-token usage pattern, interaction with retry policies, `TOOLUP_DISTRIBUTED_LOCK` selection, and the single-Redis-lease (not Redlock) contract
 - Operator visibility — `/dev/inspect`'s `ProcessProfile` panel
 - Follow-ups (deferred)
 

@@ -12,6 +12,11 @@
     <!-- Phase 54h — distributed offboard exclusion lock (ILifecycleLock)
          over Redis SET NX PX, sharing the channel's multiplexer. -->
     <Compile Include="RedisLifecycleLock.fs" />
+    <!-- Phase 9i — cross-instance IDistributedLock (the SDK-wide lease
+         primitive) over Redis SET NX PX + INCR fence tokens +
+         compare-and-act Lua release/renew, sharing the channel's
+         multiplexer. Activated via TOOLUP_DISTRIBUTED_LOCK=redis. -->
+    <Compile Include="RedisDistributedLock.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

@@ -1181,6 +1181,7 @@ ToolUp.Platform.ConfigKeys+Names.authMode : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.awsS3Bucket : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.azureStorageConnectionString : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.blobStorage : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.distributedLock : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.gcsBucket : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.initialPlatformAdmin : System.String { get }
 ToolUp.Platform.ConfigKeys+Names.initialTeamId : System.String { get }
@@ -1808,6 +1809,20 @@ ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Name : System.String { ge
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Status : System.String { get }
 ToolUp.Platform.DiagnosticBundleHandler (class)
 ToolUp.Platform.DiagnosticBundleHandler.route(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.DistributedLock (class)
+ToolUp.Platform.DistributedLock.acquireBlocking(ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
+ToolUp.Platform.DistributedLock.acquireBlockingEvery(System.TimeSpan, ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
+ToolUp.Platform.DistributedLock.defaultPollInterval : System.TimeSpan { get }
+ToolUp.Platform.DistributedLock.releaseDetached(Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit], ToolUp.Platform.IDistributedLock, ToolUp.Platform.Lease) : System.Void
+ToolUp.Platform.DistributedLock.withLease`1(ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Lease, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.DistributedLockResolver (class)
+ToolUp.Platform.DistributedLockResolver..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock]]], System.String)
+ToolUp.Platform.DistributedLockResolver.ConnectionEnvVar : System.String { get }
+ToolUp.Platform.DistributedLockResolver.Name : System.String { get }
+ToolUp.Platform.DistributedLockResolver.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock]]] { get }
+ToolUp.Platform.DistributedLockSelection (class)
+ToolUp.Platform.DistributedLockSelection.EnvVar : System.String (literal)
+ToolUp.Platform.DistributedLockSelection.fromEnv(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DistributedLockResolver]) : ToolUp.Platform.IDistributedLock
 ToolUp.Platform.DryRun (class)
 ToolUp.Platform.DryRun.shouldCompose(ToolUp.Platform.RegistrationCatalogue, ToolUp.Platform.CompositionDescriptor) : ToolUp.Platform.CompositionDryRunReport
 ToolUp.Platform.DryRun.shouldComposeWithin(System.TimeSpan, ToolUp.Platform.RegistrationCatalogue, ToolUp.Platform.CompositionDescriptor) : ToolUp.Platform.CompositionDryRunReport
@@ -2658,6 +2673,10 @@ ToolUp.Platform.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp
 ToolUp.Platform.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
 ToolUp.Platform.IDeployPipeline.GetDeployState(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploySummary, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPipeline.Rollback(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.IDistributedLock (interface)
+ToolUp.Platform.IDistributedLock.Release(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IDistributedLock.Renew(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
+ToolUp.Platform.IDistributedLock.TryAcquire(System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Lease]]
 ToolUp.Platform.IEgressGate (interface)
 ToolUp.Platform.IEgressGate.Apply(ToolUp.Platform.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.IEmbeddingCache (class)
@@ -3211,6 +3230,11 @@ ToolUp.Platform.InMemoryTimeSeriesStoreModule (class)
 ToolUp.Platform.InMemoryTimeSeriesStoreModule.create() : ToolUp.Platform.ITimeSeriesStore
 ToolUp.Platform.InMemoryTreePatchChannel (class)
 ToolUp.Platform.InMemoryTreePatchChannel..ctor(ToolUp.Platform.ILiveChannel, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String])
+ToolUp.Platform.InProcessDistributedLock (class)
+ToolUp.Platform.InProcessDistributedLock..ctor()
+ToolUp.Platform.InProcessDistributedLockModule (class)
+ToolUp.Platform.InProcessDistributedLockModule.create() : ToolUp.Platform.IDistributedLock
+ToolUp.Platform.InProcessDistributedLockModule.shared : ToolUp.Platform.IDistributedLock { get }
 ToolUp.Platform.InProcessLifecycleLock (class)
 ToolUp.Platform.InProcessLifecycleLock..ctor()
 ToolUp.Platform.InProcessLifecycleLockModule (class)
@@ -3323,7 +3347,7 @@ ToolUp.Platform.JobScheduler.JobsSourceModule : System.String (literal)
 ToolUp.Platform.JobScheduler.create(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler.createWithCatchUp(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler+InProcessJobScheduler (class)
-ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
+ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock])
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
@@ -3444,6 +3468,18 @@ ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor()
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor(ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JsonFrameDatasetCodec (class)
 ToolUp.Platform.JsonFrameDatasetCodec..ctor()
+ToolUp.Platform.Lease (class)
+ToolUp.Platform.Lease..ctor(System.String, System.Int64, System.DateTime, System.DateTime)
+ToolUp.Platform.Lease.AcquiredAt : System.DateTime { get }
+ToolUp.Platform.Lease.ExpiresAt : System.DateTime { get }
+ToolUp.Platform.Lease.FenceToken : System.Int64 { get }
+ToolUp.Platform.Lease.LockId : System.String { get }
+ToolUp.Platform.LeaseModule (class)
+ToolUp.Platform.LeaseModule.isLive(ToolUp.Platform.Lease) : System.Boolean
+ToolUp.Platform.LeaseModule.isLiveAt(System.DateTime, ToolUp.Platform.Lease) : System.Boolean
+ToolUp.Platform.LeaseModule.originalTtl(ToolUp.Platform.Lease) : System.TimeSpan
+ToolUp.Platform.LeaseModule.remaining(ToolUp.Platform.Lease) : System.TimeSpan
+ToolUp.Platform.LeaseModule.remainingAt(System.DateTime, ToolUp.Platform.Lease) : System.TimeSpan
 ToolUp.Platform.LedgerDisposition (class)
 ToolUp.Platform.LedgerDisposition.Completed : ToolUp.Platform.LedgerDisposition { get }
 ToolUp.Platform.LedgerDisposition.IsCompleted : System.Boolean { get }
@@ -4334,7 +4370,7 @@ ToolUp.Platform.PlatformAdminStore (class)
 ToolUp.Platform.PlatformAdminStore.allowDevAdminBootstrapEnvVar : System.String (literal)
 ToolUp.Platform.PlatformAdminStore.bootstrap(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, ToolUp.Platform.IPlatformAdminStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PlatformAdminStore+BlobBackedPlatformAdminStore (class)
-ToolUp.Platform.PlatformAdminStore+BlobBackedPlatformAdminStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog)
+ToolUp.Platform.PlatformAdminStore+BlobBackedPlatformAdminStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock])
 ToolUp.Platform.PlatformApiHandler (class)
 ToolUp.Platform.PlatformApiHandler.accessibilityApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.PlatformApiHandler.computeAccessibleModules(ToolUp.Platform.ServerConfig, ToolUp.Platform.AccessContext, System.Boolean, System.Boolean) : ToolUp.Platform.AccessibleModulesResponse

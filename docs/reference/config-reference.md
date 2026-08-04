@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Server/Server/ConfigKeyDescriptor.fs. -->
 
-Every environment variable the platform reads at startup, projected from the central config-key registry (39 keys). Run `--print-config` to see the effective resolved value of each on a running deployment, or `--validate-config` to run the startup preflight without booting.
+Every environment variable the platform reads at startup, projected from the central config-key registry (40 keys). Run `--print-config` to see the effective resolved value of each on a running deployment, or `--validate-config` to run the startup preflight without booting.
 
 ## Storage & secrets
 
@@ -47,10 +47,11 @@ Every environment variable the platform reads at startup, projected from the cen
 | Env var | Type | Default | Secret | Description |
 |---|---|---|---|---|
 | `TOOLUP_AUDIT_ADMIN_REQUIRED` | bool | false | no | When true, audit-log read endpoints require Platform Admin rather than team-level access. |
+| `TOOLUP_DISTRIBUTED_LOCK` | enum: inprocess, redis | inprocess | no | Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into. |
 | `TOOLUP_MAX_FILE_BYTES` | int | — | no | Maximum accepted upload size in bytes for file-management endpoints. |
 | `TOOLUP_MAX_REQUEST_BODY_BYTES` | int | — | no | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
 | `TOOLUP_NOTIFICATION_CHANNEL` | enum: inmemory, redis | inmemory | no | Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel. |
-| `TOOLUP_REDIS_CONNECTION` | string | — | yes | Redis connection string for the distributed notification channel / caches used when TOOLUP_NOTIFICATION_CHANNEL=redis. |
+| `TOOLUP_REDIS_CONNECTION` | string | — | yes | Redis connection string for the distributed notification channel / caches / distributed lock used when TOOLUP_NOTIFICATION_CHANNEL=redis or TOOLUP_DISTRIBUTED_LOCK=redis. |
 | `TOOLUP_REPLICA_COUNT` | int | 1 | no | Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates. |
 | `TOOLUP_REQUIRE_HTTPS` | bool | false | no | When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces. |
 | `TOOLUP_SMOKE_TOKEN` | string | — | yes | Bearer token guarding the post-deploy smoke-test endpoint (GET /api/_internal/smoke). |

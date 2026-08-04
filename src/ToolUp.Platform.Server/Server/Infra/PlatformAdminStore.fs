@@ -3,7 +3,6 @@ module ToolUp.Platform.PlatformAdminStore
 open System
 open System.Text
 open System.Text.Json
-open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -15,16 +14,29 @@ open ToolUp.Platform.BlobStorage
 // `PlatformAdminRevoked` audit events under `_platform` scope on every
 // successful mutation.
 //
-// **Concurrency.** Reads are lock-free — a single blob fetch + parse.
-// Writes serialise through a process-wide `SemaphoreSlim(1, 1)` because
-// the assign / revoke operations are read-modify-write: load list,
-// mutate, save. Without the lock, two concurrent assignments would each
-// load the same baseline, append their target, and the second write
-// would clobber the first. Admin operations are rare, so global write
-// serialisation is fine — per-key locking would be over-engineering.
-// Single-instance only; the planned distributed companion (Phase 9c
-// half 2) will move to a CAS-based blob update or a Redis-backed
-// counterpart.
+// **Concurrency (Phase 9i).** Reads are lock-free — a single blob fetch
+// + parse. Writes serialise through a single lease on `IDistributedLock`
+// because the assign / revoke operations are read-modify-write: load
+// list, mutate, save. Without the lock, two concurrent assignments would
+// each load the same baseline, append their target, and the second write
+// would clobber the first — and a concurrent last-admin revoke can brick
+// the platform, which is why `MultiInstanceAdminCoherenceValidator`
+// refuses `ReplicaCount > 1` for this store.
+//
+// One global lock id (`toolup:platform-admin:write`), not one per admin:
+// admin operations are rare and the blob is a single list, so global
+// write serialisation is right — per-key locking would be
+// over-engineering and would not prevent the lost update anyway (both
+// writers rewrite the whole document).
+//
+// This replaced a process-wide `SemaphoreSlim(1, 1)`. Under the
+// in-process default the serialisation is identical; a deployment that
+// composes a store-backed lock and passes it here gets the same
+// serialisation across instances, which is what lifts the
+// single-instance restriction. A CAS-based blob update
+// (`IBlobStorage.UploadIfMatch`) is the complementary defence — the lock
+// serialises intent, the ETag refuses a lost update even if the lease
+// lapsed — and remains the Phase 9c follow-on.
 //
 // **Bootstrap.** The `bootstrap` function reads
 // `TOOLUP_INITIAL_PLATFORM_ADMIN` and assigns the named user as the
@@ -36,6 +48,17 @@ open ToolUp.Platform.BlobStorage
 let private platformContainer = "_platform"
 let private blobName = "platform-admins.json"
 let private bootstrapActor = "_bootstrap"
+
+/// Phase 9i — the single lock id every admin write serialises on.
+/// Namespaced so it cannot collide with another subsystem's ids in a
+/// shared store.
+let private writeLockId = "toolup:platform-admin:write"
+
+/// Lease TTL for one admin write. The critical section is a blob
+/// download, a list mutation, a blob upload and an audit emission — small
+/// and bounded, so a minute is generous while still reclaiming promptly
+/// if a holder dies mid-write.
+let private writeLeaseTtl = TimeSpan.FromMinutes 1.0
 
 [<Literal>]
 let private initialAdminEnvVar = "TOOLUP_INITIAL_PLATFORM_ADMIN"
@@ -71,8 +94,12 @@ module private Json =
 /// Default `IPlatformAdminStore` impl. Persists to `_platform/platform-
 /// admins.json` via the injected `IBlobStorage`; emits audit events via
 /// the injected `IAuditLog` after every successful mutation.
-type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog) =
-    let writeLock = new SemaphoreSlim(1, 1)
+type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?distributedLock: IDistributedLock) =
+    /// Phase 9i — defaults to the process-wide in-process lock (the same
+    /// instance `compose` registers), so every admin writer in the process
+    /// serialises on one table exactly as the previous `SemaphoreSlim`
+    /// did.
+    let writeLock = defaultArg distributedLock InProcessDistributedLock.shared
 
     let load () = async {
         let! result = storage.Download(platformContainer, blobName)
@@ -91,14 +118,12 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog) =
         | Error e -> return Error e
     }
 
-    let withWriteLock (op: unit -> Async<'T>) = async {
-        do! writeLock.WaitAsync() |> Async.AwaitTask
-
-        try
-            return! op ()
-        finally
-            writeLock.Release() |> ignore
-    }
+    let withWriteLock (op: unit -> Async<'T>) =
+        // `withLease` waits for the lease, releases on every exit path
+        // including exceptions, and re-raises the original exception with
+        // its stack intact — the `try/finally` this replaced, expressed
+        // once over the seam instead of per call site.
+        DistributedLock.withLease writeLock writeLockId writeLeaseTtl (fun _lease -> op ())
 
     interface IPlatformAdminStore with
         member _.IsPlatformAdmin userId = async {

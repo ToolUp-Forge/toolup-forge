@@ -238,6 +238,14 @@
         <!-- Phase 524 — read-only provenance chain traversal (grounding ledger v0). -->
         <Compile Include="Server\IProvenanceGraph.fs" />
         <Compile Include="Server\ProvenanceGraph.fs" />
+        <!-- Phase 9i — SDK-wide cross-instance lease primitive
+             (IDistributedLock + Lease + the in-process default). Sits
+             before every consumer: the job scheduler's per-JobId dispatch
+             mutex, the blob-backed Platform-Admin store's read-modify-write
+             serialisation, and SDK.Server's DI registration. Depends only
+             on ILogger, so it can sit this early. -->
+        <Compile Include="Server\IDistributedLock.fs" />
+        <Compile Include="Server\InProcessDistributedLock.fs" />
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />

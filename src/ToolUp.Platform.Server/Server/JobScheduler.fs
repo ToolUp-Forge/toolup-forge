@@ -175,12 +175,17 @@ module private Json =
 // is set. A distributed scheduler companion (Akka, Orleans Reminders,
 // Hangfire) is the migration path for multi-silo deployments.
 //
-// **Dispatch concurrency.** Each in-flight job acquires a per-`JobId`
-// `SemaphoreSlim` so concurrent ticks for the same job (e.g., a tick
-// that fires while the previous run is still going) cannot interleave.
-// The semaphore is local to this scheduler instance — distributed
-// implementations rely on `IBlobStorage.UploadIfMatch` / their own
-// leasing mechanism.
+// **Dispatch concurrency (Phase 9i).** Each in-flight job takes a
+// per-`JobId` lease on the injected `IDistributedLock` before any
+// read-modify-write cycle, so concurrent ticks for the same job (e.g. a
+// tick that fires while the previous run is still going) cannot
+// interleave. This replaced a per-`JobId` `SemaphoreSlim`: under the
+// in-process default the exclusion is identical (one table, one process),
+// but a deployment that composes a store-backed lock now gets the same
+// exclusion ACROSS instances for free — the seam is the whole point.
+// Distributed *schedulers* still additionally rely on
+// `IBlobStorage.UploadIfMatch` / their own leasing for due-job selection;
+// this lock covers the dispatch critical section, not tick election.
 
 type InProcessJobScheduler
     (
@@ -190,7 +195,8 @@ type InProcessJobScheduler
         config: ServerConfig,
         logger: ILogger,
         activitySink: IActivitySink,
-        ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark
+        ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark,
+        ?distributedLock: IDistributedLock
     ) =
     inherit BackgroundService()
 
@@ -202,13 +208,39 @@ type InProcessJobScheduler
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
 
-    /// Per-`JobId` mutex. Acquired before any read-modify-write cycle
-    /// against the store. Lazily created — entries persist for the
-    /// scheduler's lifetime; size is bounded by the active job count.
-    let jobLocks = ConcurrentDictionary<JobId, SemaphoreSlim>()
+    /// Phase 9i — the lease primitive backing the per-`JobId` dispatch
+    /// mutex. Defaults to the process-wide in-process lock (the same
+    /// instance `compose` registers in DI), so a hand-constructed
+    /// scheduler and a composed one contend on the same table; a
+    /// deployment wanting cross-instance exclusion passes a store-backed
+    /// companion.
+    let jobLock = defaultArg distributedLock InProcessDistributedLock.shared
 
-    let lockFor (jobId: JobId) =
-        jobLocks.GetOrAdd(jobId, fun _ -> new SemaphoreSlim(1, 1))
+    /// Lock id for a job's dispatch critical section. Namespaced so it
+    /// cannot collide with another subsystem's ids in a shared store.
+    let jobLockId (jobId: JobId) = sprintf "toolup:job-dispatch:%O" jobId
+
+    /// Lease TTL for a dispatch hold. Deliberately generous: the critical
+    /// section spans the WHOLE retry loop, including its backoff
+    /// `Async.Sleep`s, and a lease that lapses mid-loop would admit a
+    /// second dispatcher for the same job — the one failure mode the lock
+    /// exists to prevent. The `SemaphoreSlim` this replaced had no
+    /// expiry at all, so a long window is also the behaviour-preserving
+    /// choice. Heartbeat renewal (`IDistributedLock.Renew` on a timer,
+    /// letting the TTL drop to seconds) is the follow-on for deployments
+    /// where a crashed dispatcher must be reclaimed promptly.
+    let dispatchLeaseTtl = TimeSpan.FromHours 1.0
+
+    /// Release from a `finally`. Best-effort: a failed release costs only
+    /// the lease's remaining TTL, so it is logged, never raised — the
+    /// dispatch itself already succeeded by this point.
+    let releaseJobLease (lease: Lease) =
+        lease
+        |> DistributedLock.releaseDetached
+            (fun ex ->
+                logger.Warn
+                    $"[JobScheduler] event=lock_release_failed lockId=%s{lease.LockId} fence=%d{lease.FenceToken}: {ex.Message} — the lease will expire via its TTL")
+            jobLock
 
     // ─── Phase 9b.A — missed-tick telemetry ──────────────────────
     //
@@ -335,8 +367,13 @@ type InProcessJobScheduler
     /// shape but operates against `IJobStore` rather than the
     /// delivery log.
     let dispatchOne (job: JobDefinition) (source: TriggerSource) (scheduledAt: DateTime) = async {
-        let mutexLock = lockFor job.JobId
-        do! mutexLock.WaitAsync() |> Async.AwaitTask
+        // Phase 9i — wait for the job's dispatch lease. `acquireBlocking`
+        // preserves the `SemaphoreSlim.WaitAsync` semantics this replaced
+        // (a concurrent tick for the same job queues rather than being
+        // dropped); the primitive itself is fail-fast, so a distributed
+        // scheduler that would rather skip a contended tick uses
+        // `TryAcquire` directly.
+        let! dispatchLease = DistributedLock.acquireBlocking jobLock (jobLockId job.JobId) dispatchLeaseTtl
 
         // Phase 9l — start a child activity per dispatch so the
         // OTel span tree links job run → audit emission →
@@ -559,15 +596,18 @@ type InProcessJobScheduler
 
                     do! store.Update updated
         finally
-            mutexLock.Release() |> ignore
+            releaseJobLease dispatchLease
             dispatchActivityOpt |> Option.iter _.Dispose()
     }
 
     // ─── Status transitions ──────────────────────────────────────
 
     let setStatus (scopeId: string) (jobId: JobId) (status: JobStatus) = async {
-        let mutexLock = lockFor jobId
-        do! mutexLock.WaitAsync() |> Async.AwaitTask
+        // Phase 9i — same per-`JobId` lease as `dispatchOne`, so a status
+        // transition can never interleave with an in-flight dispatch's
+        // read-modify-write. A short TTL is right here (the section is one
+        // store read + one write), unlike the dispatch hold.
+        let! lease = DistributedLock.acquireBlocking jobLock (jobLockId jobId) (TimeSpan.FromMinutes 1.0)
 
         try
             match! store.Get(scopeId, jobId) with
@@ -586,7 +626,7 @@ type InProcessJobScheduler
 
                 do! store.Update updated
         finally
-            mutexLock.Release() |> ignore
+            releaseJobLease lease
     }
 
     // ─── Build + persist a fresh job ─────────────────────────────

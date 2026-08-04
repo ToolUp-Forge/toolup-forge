@@ -60,7 +60,7 @@ ServerApp.empty
 
 **Persistence.** Whatever fits the deployment — `InMemoryEventStore` for dev / staging, `PersistentBlobBacked` for any deployment with retention requirements. No cross-process coordination needed because there is only one process.
 
-**Replica count.** `1` is the safe default. Two `AllInOne` replicas double-fire the scheduler / webhook timer / OAuth refresher — every single-leader concern fires on both. Lift to `ReplicaCount > 1` only after the [`IDistributedLock` coordination contract](#idistributedlock-deferred-to-phase-9i) ships.
+**Replica count.** `1` is the safe default. Two `AllInOne` replicas double-fire the scheduler / webhook timer / OAuth refresher — every single-leader concern fires on both. Lift to `ReplicaCount > 1` only once those three subsystems lease their ticks — Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) but deliberately not tick election, so the pin still stands.
 
 ### Shape 2 — web + worker (`WebOnly` + `WorkerOnly`)
 
@@ -78,11 +78,11 @@ ServerApp.empty
 └─────────────────────────────┘    │  │ OAuth refresh/cleanup │  │
               │                     │  └───────────────────────┘  │
               └──── shared ─────────►  ReplicaCount = 1            │
-                  persistence       │  (until Phase 9i)            │
+                  persistence       │  (ticks not leased yet)      │
                   + Redis channel   └─────────────────────────────┘
 ```
 
-**When it fits.** The default split when "we have any background work and we want to scale request handling horizontally without doubling the scheduler". Web silos scale freely (stateless under `WebOnly`); the worker silo is pinned to one replica until `IDistributedLock` ships.
+**When it fits.** The default split when "we have any background work and we want to scale request handling horizontally without doubling the scheduler". Web silos scale freely (stateless under `WebOnly`); the worker silo is pinned to one replica until its ticks are leased (Phase 9i shipped the `IDistributedLock` primitive, not tick election).
 
 **Composition root — web silo.** `ProcessProfile = WebOnly`; cloud-backed persistence; distributed notification channel.
 
@@ -127,7 +127,7 @@ The worker silo's HTTP pipeline is not mounted (`ProcessProfileGate.shouldRegist
 | Silo | Replica count | Why |
 |---|---|---|
 | Web (`WebOnly`) | `≥ 1` — scale freely | Every `BackgroundService` is gated off; nothing to double-fire |
-| Worker (`WorkerOnly`) | `= 1` until Phase 9i | Cron tick + webhook retry timer + OAuth refresher double-fire across replicas without [`IDistributedLock`](#idistributedlock-deferred-to-phase-9i) |
+| Worker (`WorkerOnly`) | `= 1` until the ticks are leased | Cron tick + webhook retry timer + OAuth refresher double-fire across replicas; Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) but no tick election yet |
 
 ### Shape 3 — web + worker + dispatcher (`WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 
@@ -167,7 +167,7 @@ ServerApp.empty
 
 The dispatcher silo mounts the HTTP pipeline so its admin endpoints (`/api/_platform/health`, `/dev/inspect`, etc.) are reachable; the worker silo's scheduler routes still register because the substrate is the same. `ProcessProfileGate.shouldRegisterBackgroundService` returns `true` only for `TransactionalDispatcherSubsystem` and `WebhookDispatcherSubsystem` under `DispatcherOnly`; every other background subsystem is gated off.
 
-**Replica count.** `= 1` on the dispatcher silo until Phase 9i ships — webhook retry uses an in-process timer that double-fires across replicas. The web silo is freely scalable (as in shape 2).
+**Replica count.** `= 1` on the dispatcher silo — webhook retry uses an in-process timer that double-fires across replicas, and it has not yet been migrated to take a lease per tick (Phase 9i shipped the primitive; see [the lease primitive](#idistributedlock--the-lease-primitive-phase-9i)). The web silo is freely scalable (as in shape 2).
 
 ## Substrate contract — what every shape must share
 
@@ -200,25 +200,111 @@ The four background subsystems with single-leader semantics:
 | OAuth refresher | Token-refresh polling that renews expiring tokens before they expire | In-process timer; **not safe** across multiple replicas |
 | Audit replicator + usage flusher | Drains the event store / usage log into external sinks | Idempotent on the sink side (vendor dedup keys per `ToolUp.AuditSinks.*` README); safe across replicas if the sink contract is honoured |
 
-The first three are why `ReplicaCount = 1` on the worker and dispatcher silos is non-negotiable until Phase 9i ships. The last one is the silver lining — the largest by data volume is already coordinated, just by a different mechanism (sink-side dedup, not in-process locking).
+The first three are why `ReplicaCount = 1` on the worker and dispatcher silos is non-negotiable. The last one is the silver lining — the largest by data volume is already coordinated, just by a different mechanism (sink-side dedup, not in-process locking).
 
-### `IDistributedLock` — deferred to Phase 9i
+### `IDistributedLock` — the lease primitive (Phase 9i)
 
-Phase 9i (`IDistributedLock` primitive) ships the cross-silo single-leader coordination layer. The intended shape:
+Phase 9i ships the **primitive**, not the adoption. Read the scope boundary before planning a replica count off this section:
+
+- ✅ **Shipped** — `IDistributedLock` + `Lease`, the always-registered `InProcessDistributedLock` default, a `RedisDistributedLock` companion, an `IDistributedLockContract` conformance pack, and two migrated consumers (the job scheduler's per-`JobId` dispatch mutex and `BlobBackedPlatformAdminStore`'s write serialisation, both of which previously held a process-local `SemaphoreSlim` that stopped excluding anything the moment a second replica appeared).
+- ⛔ **Not shipped** — **tick election.** The scheduler's cron tick, the webhook retry timer, and the OAuth refresher still run on in-process timers with no lease around the tick itself. **`ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos therefore still stands.** Treat it as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` still double-fires silently.
+
+The distinction is worth being pedantic about: the scheduler now leases *the dispatch of a given job*, which means two replicas cannot interleave two runs of the same job. It does not lease *the decision that a job is due*, so two replicas would each still notice the same due job and one would simply lose the dispatch lease — the work happens once, but only because the loser's lease acquire fails, and only after both replicas have already read the store. That is a de-duplication side-effect, not leader election, and it is not what the `ReplicaCount` pin is asking about.
+
+#### The shipped shape
 
 ```fsharp
+type Lease = {
+    LockId: string
+    FenceToken: int64
+    AcquiredAt: DateTime
+    ExpiresAt: DateTime
+}
+
 type IDistributedLock =
-    abstract TryAcquire :
-        leaseId:string * ttl:TimeSpan -> Async<DistributedLeaseToken option>
-    abstract Renew : token:DistributedLeaseToken -> Async<bool>
-    abstract Release : token:DistributedLeaseToken -> Async<unit>
+    abstract TryAcquire : lockId: string * ttl: TimeSpan -> Async<Lease option>
+    abstract Renew      : lease: Lease -> Async<Lease>
+    abstract Release    : lease: Lease -> Async<unit>
 ```
 
-Once shipped, each single-leader subsystem (scheduler tick, webhook retry timer, OAuth refresher) acquires a lease before each tick; replicas that fail to acquire skip the tick and try again on the next interval. Lift the `ReplicaCount = 1` pin on the worker and dispatcher silos at that point.
+Registered unconditionally by `compose`, so any subsystem or module resolves an `IDistributedLock` from DI without first checking whether the deployment composed one. The default is `InProcessDistributedLock` — a `ConcurrentDictionary<string, Lease>` that is *correct* for a single instance and excludes nothing across replicas. A distributed deployment overrides it from `ComposeExtensions.ServiceConfig`:
 
-**Until then:** `ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos. Treat that as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` will double-fire silently.
+```fsharp
+let lck =
+    DistributedLockSelection.fromEnv logger [ RedisDistributedLock.resolver ]
 
-> The single-leader leasing layer is a tracked follow-up; the [migration doc](../../../docs/migrations/16a-process-profile-gating.md) carries the substrate detail today.
+{ ComposeExtensions.empty with
+    ServiceConfig = Some(fun s -> s.AddSingleton<IDistributedLock>(lck)) }
+```
+
+`DistributedLockSelection.fromEnv` reads **`TOOLUP_DISTRIBUTED_LOCK`** (`inprocess` — the default — or a resolver name such as `redis`, whose connection string comes from `TOOLUP_REDIS_CONNECTION`). Same shape as `NotificationChannel.fromEnv`, deliberately: a deployment wiring both distributed substrates writes the same two lines twice rather than learning two conventions. An unrecognised value or a missing connection string **warns and falls back to in-process** rather than failing startup, because the in-process lock is a correct answer for one instance; the multi-instance case is caught separately at preflight by `MultiInstanceAdminCoherenceValidator`, which is the right place for a fail-closed gate.
+
+#### Lock semantics
+
+**Acquire is fail-fast.** `TryAcquire` returns `None` immediately when another holder has the id — it never queues. That is the deliberate default: a caller that cannot proceed usually wants to *skip* (this tick already ran elsewhere; the admin write is already in flight) rather than have an unbounded wait imposed on it, and a poll loop on a store-backed lock costs one round-trip per interval. `DistributedLock.acquireBlocking` is available for migrating a `SemaphoreSlim.WaitAsync` call site whose semantics genuinely are "queue", and both migrated consumers use it precisely so their in-process behaviour is unchanged — but new code should prefer `TryAcquire` with an explicit `None` branch.
+
+**The TTL is data, and it is a promise the store keeps, not the holder.** A lease lapses at `ExpiresAt` whether or not the holder finished. That is what stops a crashed holder deadlocking an id forever, and it is also the hazard: a TTL shorter than the worst-case critical section admits a second holder mid-work. Budget generously, or `Renew` on a heartbeat. The job scheduler takes the generous route with a one-hour dispatch lease, because its critical section spans a whole retry loop including the loop's backoff sleeps.
+
+**`Release` and `Renew` are holder-checked and never throw on loss.** Both compare the caller's `FenceToken` against the current holder's, so a lease that lapsed and was re-taken by someone else is never released out from under its new holder and never renewed back into existence. `Release` is idempotent — a `finally` can call it unconditionally. `Renew` signals failure by **returning the lease unchanged** rather than raising, so the caller's own `Lease.isLive` check is the arbiter:
+
+```fsharp
+let! renewed = lck.Renew lease
+if Lease.isLive renewed then keepWorking renewed else abandon ()
+```
+
+**Distinct ids never contend**, and no ordering is promised between two different lock ids (GP 12 rule 5). Namespace your ids — the shipped consumers use `toolup:job-dispatch:{jobId}` and `toolup:platform-admin:write` — so two subsystems sharing one Redis cannot collide.
+
+#### What "held" means while you process under a lease
+
+This is the part that bites, so state it plainly: **holding a lease is not a guarantee that you still hold it.** Between the `TryAcquire` that returned `Some` and any given line of your critical section, the lease may have lapsed — a long GC pause, a paused VM, a slow store round-trip, a machine that lost the network and came back. The store has by then handed the id to someone else, and *your* process has no way to have noticed. Every distributed lock has this property; an implementation claiming otherwise is claiming a synchronous global clock.
+
+So "held" means exactly one thing: **at the instant of the acquire, no other holder had the id.** Everything you build on top of that must be one of:
+
+1. **Short enough that lapsing is implausible**, with a TTL that dwarfs the section. Good for a blob read-modify-write (the Platform-Admin store's minute-long lease over a few hundred milliseconds of work).
+2. **Renewed on a heartbeat**, with the work abandoned the moment a `Renew` comes back not-live. Right for a long, resumable job.
+3. **Fenced at the write**, so a lapsed holder's late write is refused by the store rather than silently interleaved. The only option that is actually *safe* rather than merely unlikely to be wrong.
+
+Option 3 is what `FenceToken` is for.
+
+#### The fence-token usage pattern
+
+`FenceToken` strictly increases per `LockId` across acquisitions, and is **stable across `Renew`** (renewing extends the same hold, it does not start a new one). The pattern is the standard one (Kleppmann's fencing tokens): the *downstream store* records the highest token it has seen for a resource and refuses any write carrying a lower one.
+
+```fsharp
+// The holder threads its token into the write:
+match! lck.TryAcquire(lockId, ttl) with
+| None -> ()              // someone else holds it — skip
+| Some lease ->
+    try
+        do! store.WriteFenced(resourceId, lease.FenceToken, payload)
+        // ^ refuses the write if it has already seen a HIGHER token,
+        //   i.e. if this lease lapsed and someone else took over.
+    finally
+        DistributedLock.releaseDetached onError lck lease
+```
+
+Two things follow, and both are easy to get wrong:
+
+- **The token is worthless if the write path ignores it.** A subsystem that acquires a lease and then writes unconditionally has bought contention *reduction*, not mutual exclusion. That is a legitimate and often sufficient trade — it is exactly what the two migrated consumers do today — but call it what it is, and do not describe such a subsystem as safe across replicas.
+- **A monotonicity break is dangerous in the wrong direction.** If tokens ever repeat or decrease, a stale holder's write outranks a live holder's and the fence actively causes the corruption it exists to prevent. This is why the Redis impl derives tokens from `INCR` on a counter key that carries **no TTL** (an expired counter restarts at 1), and why the contract pack asserts strict increase rather than mere difference.
+
+#### Interaction with retry policies
+
+Leases and retries interact in three specific ways:
+
+- **The lease must span the whole retry loop, not one attempt.** A per-attempt lease releases between attempts, which is precisely when a competing dispatcher slips in — you would have serialised the attempts and not the job. The job scheduler holds one lease across the entire `RetryPolicy` loop for this reason, which is also why its TTL is measured in hours rather than seconds: `MaxAttempts` × the backoff delays is the number the TTL has to beat.
+- **A `None` from `TryAcquire` is not a failure and must not consume a retry attempt.** "Someone else is doing this" is a *skip*, not an error: counting it as an attempt burns the budget for real failures and can dead-letter a job that never actually ran. Keep the acquire outside the retry loop, as the migrated consumers do.
+- **Backoff sleeps are inside the critical section, so they are inside the TTL.** This is the trap that makes a lock look fine in testing and lapse in production: the work is fast, but `RetryPolicy.delayFor` sleeps for minutes between attempts, and the lease is being held (and expiring) throughout. Either budget the TTL against the *sum* of the delays or renew across them.
+
+`releaseDetached` is the helper for releasing from a synchronous `finally` or `Dispose`: best-effort and non-throwing, because a failed release costs only the lease's remaining TTL, which the next acquire reclaims. Never let a release failure surface as a dispatch failure — the work already succeeded.
+
+#### Conformance
+
+`IDistributedLockContract` (`src/ToolUp.Platform.Tests/Contracts/`) is the bar every implementation is held to: acquire, re-acquire-returns-`None`, TTL-expiry reclaims, fence-token strict increase, release-returns-the-id-immediately, plus distinct-ids-never-contend, release-is-idempotent, release-is-holder-checked, and renew-extends-live / refuses-lost. It is bound to the in-process default on every checkout and to `RedisDistributedLock` when `TOOLUP_REDIS_CONNECTION` is set (pending, not green, when it is unset). Running both in one job is how GP 12 portability is proven against a second backend rather than asserted.
+
+**`RedisDistributedLock` is a single-Redis lease, not Redlock**, and its file header says so at length. One Redis (or one primary of a replicated pair): a failover to a replica that has not yet received the lock key hands the id to a second holder. Redlock's multi-master quorum addresses that at the cost of N independent Redis deployments and a correctness argument that is itself contested; for the subsystems this seam serves, a lease occasionally handed out twice during a failover degrades to the behaviour they had *before* any lock existed, and `FenceToken` is the path to real safety for anything that needs it. A deployment needing quorum semantics implements the interface over its own consensus store — which is the point of having a seam.
+
+> The substrate detail behind the process-profile gating lives in the [migration doc](../../../docs/migrations/16a-process-profile-gating.md).
 
 ## Operator visibility
 
@@ -251,6 +337,6 @@ The HTML view renders the same data as a table. The `Reason` column makes the ga
 
 ## Follow-ups (deferred)
 
-- **`IDistributedLock` (Phase 9i)** — cross-silo single-leader coordination. Until it lands, `ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos.
+- **Tick election over `IDistributedLock`** — Phase 9i shipped the [lease primitive](#idistributedlock--the-lease-primitive-phase-9i) and migrated the two read-modify-write consumers, but the three tick-owning subsystems (scheduler cron tick, webhook retry timer, OAuth refresher) still run unleased timers. Until they take a lease per tick, `ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos.
 - **`WorkerOnly` → `Host.CreateApplicationBuilder()`** — the silo binds no port at all. The [`IServerHost.createWorkerHost`](../../ToolUp.Platform.Server/Server/IServerHost.fs) helper supports it; the compose-side construction-branch refactor is the follow-up commit on the Phase 16a body. Until it lands, sibling load balancers should not route HTTP at a `WorkerOnly` deployment (Kestrel binds the port but no Giraffe router responds).
 - **Per-silo Platform Admin surface (Phase 61)** — the production-safe equivalent of `/dev/inspect`'s `ProcessProfile` panel, accessible to Owner/Admin without enabling `EnableDevEndpoints`.
