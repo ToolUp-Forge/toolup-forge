@@ -742,6 +742,13 @@ type MemoizedComputeDispatcher
                 // probe, then Phase 318 exactly — deliberately no blob
                 // read, see the header.
                 return! inner.Poll handle
+            | Some key when key.ScopeId <> handle.ScopeId ->
+                // The byHandle index is keyed by HandleId alone, so a poll
+                // presenting the right HandleId under the WRONG scope would
+                // otherwise be answered from the owning scope's cache entry,
+                // bypassing the inner backend's scope check (GP 4). Fall
+                // through to the backend, which enforces scope its own way.
+                return! inner.Poll handle
             | Some key ->
                 let composite = ComputeMemoKey.composite key
 

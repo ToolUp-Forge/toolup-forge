@@ -456,6 +456,43 @@ let scopeIsolationTests =
             Expect.equal backend.SubmitCount 2 "control — team-2 memoizes against itself"
         }
 
+        test "a poll presenting a cached HandleId under a forged scope is never answered from cache" {
+            // Phase 324's contract pack found this gap: byHandle is keyed
+            // by HandleId alone, so without a scope compare in Poll's
+            // short-circuit a forged-ScopeId poll was served the owning
+            // scope's ResultRef, bypassing the backend's own scope check
+            // (GP 4).
+            let backend = RecordingBackend "pool"
+            let blobs = InMemoryBlobStorage() :> IBlobStorage
+
+            let memo =
+                MemoizedComputeDispatcher(backend, ttl = ttl, blobs = blobs) :> IExternalComputeDispatcher
+
+            let handle, _ = submitAndPoll memo "team-1" spec1
+            let before = backend.PollCount
+
+            let forged = { handle with ScopeId = "team-2" }
+            memo.Poll forged |> Async.RunSynchronously |> ignore
+
+            Expect.equal
+                backend.PollCount
+                (before + 1)
+                "the forged-scope poll fell through to the backend instead of the cache"
+
+            // Control: the genuine handle IS still short-circuited, so the
+            // assertion above is about the scope compare and not about the
+            // cache having emptied.
+            let beforeGenuine = backend.PollCount
+            let cached = memo.Poll handle |> Async.RunSynchronously
+
+            Expect.equal
+                cached
+                (ExternalOutcome.Succeeded "blob://out/1")
+                "genuine scope still served the cached outcome"
+
+            Expect.equal backend.PollCount beforeGenuine "and without touching the backend"
+        }
+
         test "the entries are structurally partitioned — one blob per scope, under that scope's prefix" {
             let backend = RecordingBackend "pool"
             let blobs = InMemoryBlobStorage() :> IBlobStorage
