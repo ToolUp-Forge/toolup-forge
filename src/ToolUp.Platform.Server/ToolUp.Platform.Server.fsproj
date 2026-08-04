@@ -210,6 +210,12 @@
         <Compile Include="Server\ITenantFleet.fs" />
         <Compile Include="Server\IDeployPipeline.fs" />
         <Compile Include="Server\IContainerScheduler.fs" />
+        <!-- Phase 318 — external-compute broker seam + its no-op default.
+             Distinct from IContainerScheduler (which launches and owns a
+             container's lifecycle): this hands work to a backend that owns
+             its own execution and returns an opaque handle to poll. Value
+             types live in Core's Shared/ExternalCompute.fs. -->
+        <Compile Include="Server\IExternalComputeDispatcher.fs" />
         <!-- Phase 26 — single-node default impl of ITenantFleet over
              IEntityStore + IContainerScheduler + IDeployPipeline.
              Per-tenant SemaphoreSlim for serialised state mutations;

@@ -300,6 +300,26 @@ let registerTelemetrySink (services: IServiceCollection) (config: ServerConfig) 
     | CustomTelemetrySink -> () // consumer composed its own ITelemetrySink singleton
     | NoTelemetrySink -> services.AddSingleton<ITelemetrySink>(NoOpTelemetrySink()) |> ignore
 
+/// Phase 318 — register the external-compute dispatcher.
+/// `NoExternalCompute` (the default) registers the
+/// `NoExternalComputeDispatcher`, so `IExternalComputeDispatcher` always
+/// resolves and a submit path is a typed not-configured refusal rather than
+/// a DI resolution failure; nothing is started and no dependency is pulled
+/// (GP 13). `CustomExternalCompute` registers nothing, leaving the
+/// deployment's own companion dispatcher (an HTTP worker pool, a batch
+/// backend) in DI.
+///
+/// Lazy factory for the same reason as `registerGraphStore`: the default is
+/// not constructed until the first `IExternalComputeDispatcher` resolve, so a
+/// deployment that never submits external work allocates nothing.
+let registerExternalCompute (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.ExternalCompute with
+    | CustomExternalCompute -> () // consumer composed its own IExternalComputeDispatcher singleton
+    | NoExternalCompute ->
+        services.AddSingleton<IExternalComputeDispatcher>(fun _ ->
+            NoExternalComputeDispatcher() :> IExternalComputeDispatcher)
+        |> ignore
+
 /// Register the `IColumnMappingStore` substrate when
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default
 /// store (`ColumnMappingStore.create`) wraps the resolved

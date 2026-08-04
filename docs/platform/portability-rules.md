@@ -1,6 +1,6 @@
 # Portability rules for distributed implementations
 
-Many SDK interfaces (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, `ISubjectResolver`, `IAnonymousSessionMigrator`, etc.) could plausibly be implemented by a distributed task framework — Akka.NET, Orleans, Hangfire, Redis-backed, etc. Doing so without breaking consumers requires that the **shape of the contract itself** stays portable.
+Many SDK interfaces (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, `ISubjectResolver`, `IAnonymousSessionMigrator`, `IExternalComputeDispatcher`, etc.) could plausibly be implemented by a distributed task framework — Akka.NET, Orleans, Hangfire, Redis-backed, etc. Doing so without breaking consumers requires that the **shape of the contract itself** stays portable.
 
 The six rules below define that portability discipline. Any interface that *might* be implemented distributed-side **must** satisfy all six. The conformance test packs (`IJobSchedulerContract`, `IModuleQueryBusContract`, `IShareTokenStoreContract`, `IDataSourceContract`, `IEntityStoreContract`, etc.) are the executable enforcement bar — every implementation passes the same tests.
 

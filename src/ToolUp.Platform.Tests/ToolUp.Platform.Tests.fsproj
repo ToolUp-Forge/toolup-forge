@@ -155,6 +155,12 @@
         <Compile Include="Contracts\IModelRegistryContract.fs" />
         <!-- Phase 454 — model-scoring seam conformance (reference scorer + blob store). -->
         <Compile Include="Contracts\IModelScorerContract.fs" />
+        <!-- Phase 318 — external-compute broker seam: the NoExternalCompute
+             default as a typed refusal (never a DI failure, never a throw),
+             the core types' Fable-JSON round-trip (including `Running None`),
+             the compose registration in both modes, and the Phase 9c six-rule
+             portability audit as executable cases rather than header prose. -->
+        <Compile Include="Contracts\IExternalComputeDispatcherContract.fs" />
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />

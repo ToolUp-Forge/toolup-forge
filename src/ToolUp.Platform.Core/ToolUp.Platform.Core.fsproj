@@ -312,6 +312,13 @@
              Fable-safe types + pure helpers; SHA-256 hash / STJ loader guarded
              under #if !FABLE_COMPILER (the JwtCrypto ship-with-guard pattern). -->
         <Compile Include="Shared\DataVocabulary.fs" />
+        <!-- Phase 318 — external-compute value types (ExternalHandle /
+             ExternalWorkSpec / ExternalOutcome / ExternalComputeError) + the
+             ExternalComputeMode opt-in DU. Before SDK.Shared.fs so
+             ServerConfig can carry an `ExternalCompute` field. Pure /
+             Fable-safe (BCL primitives only — no backend SDK type), so a
+             Client can hold an ExternalHandle opaquely. -->
+        <Compile Include="Shared\ExternalCompute.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />

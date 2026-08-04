@@ -2251,6 +2251,14 @@ type ServerConfig = {
     /// Phase 600 — out-of-process model-execution submitter API. Default:
     /// `NoModelExecutionApi` — route not mounted, zero cost (GP 13).
     ModelExecution: ModelExecutionApiMode
+    /// Phase 318 — external-compute substrate selection
+    /// (`IExternalComputeDispatcher`). Default: `NoExternalCompute` — the
+    /// `NoExternalComputeDispatcher` is registered, so the seam resolves and
+    /// every `Submit` returns a clean not-configured `Error`; no background
+    /// service, no dependency pulled (GP 13). `CustomExternalCompute` leaves
+    /// a companion-registered dispatcher (an HTTP worker pool, a batch
+    /// backend) in place.
+    ExternalCompute: ExternalComputeMode
     /// Phase 163 — end-user product-telemetry sink selection. Default:
     /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
     /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
@@ -3321,6 +3329,10 @@ module ServerConfig =
         Datasets = NoDatasets
         ModelFitting = NoModelFitting
         ModelExecution = NoModelExecutionApi
+        // Phase 318 — no external-compute backend composed; the seam
+        // resolves to NoExternalComputeDispatcher and every Submit is a
+        // typed not-configured refusal (GP 13).
+        ExternalCompute = NoExternalCompute
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint

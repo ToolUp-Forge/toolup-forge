@@ -101,6 +101,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 - [`storage.md`](storage.md) — `IBlobStorage` companions and the encryption-at-rest decorator.
 - [`events.md`](events.md) — event store, audit log, audit-sink replication.
 - [`jobs.md`](jobs.md) — cron + event-triggered + manual background jobs.
+- [`external-compute.md`](external-compute.md) — `IExternalComputeDispatcher`: brokering a unit of work to compute outside this process (GPU box, batch service, worker pool), the opaque submit/poll/cancel handle model, the `NoExternalCompute` default, and how it composes with `IJobScheduler`.
 - [`data-subject-requests.md`](data-subject-requests.md) — GDPR Article 15/17 export + erasure, the erasure-policy choice tree, per-store behaviour.
 - [`client-remoting-proxies.md`](client-remoting-proxies.md) — module-level proxy convention + send-time request-guard contract for `*.Client` companions.
 - [`dom-props.md`](dom-props.md) — typed `svgProp.*` / `dataProp.*` / `ariaProp.*` helpers for hand-rolled DOM attributes; React requires camelCase for SVG and silently drops kebab-case forms, and the `data-*` / `aria-*` / `role` families share the same `prop.custom` code path with a hardcoded exception today.

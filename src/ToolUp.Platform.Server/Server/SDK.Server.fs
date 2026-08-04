@@ -631,6 +631,12 @@ let compose
     // consumer's companion sink in place.
     registerTelemetrySink services config
 
+    // Phase 318 — external-compute broker. NoExternalCompute (default)
+    // registers the NoExternalComputeDispatcher lazily, so Submit is a
+    // typed not-configured refusal; CustomExternalCompute leaves the
+    // consumer's companion dispatcher in place.
+    registerExternalCompute services config
+
     // Column-mapping substrate (mapping-aware Data Manager). Conditional
     // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
     // registration entirely.

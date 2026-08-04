@@ -841,6 +841,7 @@ ToolUp.Platform.ComposeStores.registerDatasetStore(Microsoft.Extensions.Dependen
 ToolUp.Platform.ComposeStores.registerDeployPlane(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityOutbox(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]]) : System.Void
+ToolUp.Platform.ComposeStores.registerExternalCompute(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
 ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -2780,6 +2781,11 @@ ToolUp.Platform.IEntityStore+IEntityStore.Query`1(System.String, ToolUp.Platform
 ToolUp.Platform.IEntityStore+IEntityStore.Save`1(System.String, T) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IExportEnvelopeSigner (interface)
 ToolUp.Platform.IExportEnvelopeSigner.SignEnvelope(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportSignature, System.String]]
+ToolUp.Platform.IExternalComputeDispatcher (interface)
+ToolUp.Platform.IExternalComputeDispatcher.Backend : System.String { get }
+ToolUp.Platform.IExternalComputeDispatcher.Cancel(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IExternalComputeDispatcher.Poll(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExternalOutcome]
+ToolUp.Platform.IExternalComputeDispatcher.Submit(System.String, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Platform.ExternalComputeError]]
 ToolUp.Platform.IFactEvidenceSource (interface)
 ToolUp.Platform.IFactEvidenceSource.FactsForResult(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FactEvidence]]
 ToolUp.Platform.IFactEvidenceSource.GetFact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FactEvidence]]
@@ -4064,6 +4070,9 @@ ToolUp.Platform.NarrativeSettingsModule.key(Microsoft.FSharp.Collections.FSharpL
 ToolUp.Platform.NarrativeSettingsModule.ofPairs(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.NarrativeSettings
 ToolUp.Platform.NarrativeSupersession (class)
 ToolUp.Platform.NarrativeSupersession.findStaleNarratives(ToolUp.Platform.INarrativeStore, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.NarrativeEntryInfo, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag]]]]
+ToolUp.Platform.NoExternalComputeDispatcher (class)
+ToolUp.Platform.NoExternalComputeDispatcher..ctor()
+ToolUp.Platform.NoExternalComputeDispatcher.BackendName : System.String { get }
 ToolUp.Platform.NoOpAnonymousSessionMigrator (class)
 ToolUp.Platform.NoOpAnonymousSessionMigrator..ctor()
 ToolUp.Platform.NoOpHostedTreeUsageExport (class)

@@ -36,6 +36,12 @@ let allTests =
         IModelRegistryContract.tests
         // Phase 454 — model-scoring seam conformance (reference scorer + blob store).
         IModelScorerContract.tests
+        // Phase 318 — external-compute broker seam: the NoExternalCompute
+        // default, the Fable-JSON round-trip of the core types, and the
+        // Phase 9c six-rule portability audit.
+        IExternalComputeDispatcherContract.tests
+        IExternalComputeDispatcherContract.wireTests
+        IExternalComputeDispatcherContract.portabilityAudit
         // Phase 456 — model evaluation & champion-challenger harness.
         ModelEvaluationTests.tests
         // Phase 599 — batch fit submission + bulk outcome/registry retrieval.
