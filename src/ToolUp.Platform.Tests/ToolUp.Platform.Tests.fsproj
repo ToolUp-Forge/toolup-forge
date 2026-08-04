@@ -1246,6 +1246,20 @@
              than republishing the true cohort size. Real P-256 approval
              signatures; no TestServer. -->
         <Compile Include="InProcess\CohortActivationTests.fs" />
+        <!-- Phase 491 — the governed outbound signal feed: Phase 490's
+             continuous sibling. A revocation stops a feed that is
+             ALREADY RUNNING (measured on the next tick, paired with a
+             control that keeps emitting); the declared bound is
+             enforced on all three axes (the epsilon ceiling
+             arithmetically, MaxEmissions, NotAfter); an exhausted
+             budget pauses rather than degrading, and every delivered
+             count is demonstrably the calibrated one; and a wholly
+             fresh composition over the same cursor resumes at the next
+             sequence, re-delivering only the one emission whose
+             delivery had not been confirmed — byte-identically, with no
+             new sample and no new epsilon. Real P-256 approval
+             signatures; deterministic noise; an injected clock; no
+             TestServer. -->
         <Compile Include="InProcess\OutboundSignalFeedTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped

@@ -1013,6 +1013,13 @@ let allTests =
         CohortActivationTests.egressTests
         CohortActivationTests.tokenTests
         CohortActivationTests.compositionTests
+        // Phase 491 — the governed outbound signal feed: Phase 490's
+        // continuous sibling. Continuity changes four things and each
+        // has its own list here — a revocation must stop a RUNNING
+        // feed (invariant 0 is re-asked per emission, never cached), a
+        // feed must carry a bound it cannot outrun, an exhausted
+        // budget must pause rather than degrade, and a restart must
+        // resume rather than replay.
         OutboundSignalFeedTests.revocationTests
         OutboundSignalFeedTests.boundTests
         OutboundSignalFeedTests.budgetTests
