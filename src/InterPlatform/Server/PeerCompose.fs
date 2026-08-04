@@ -203,6 +203,38 @@ type PeerServerApp = {
     /// `INoiseMechanism` and takes no branch on the release path
     /// (GP 13).
     NoisedReleases: (string * NoisedReleasePolicy) list
+    /// Phase 316, composed by Phase 629 — the retention policy the
+    /// composed `IPeerJobResultStore` enforces over parked long-running
+    /// peer results.
+    ///
+    /// `PeerJobRetentionPolicy.default'` (30-day TTL, no delete-on-read)
+    /// unless a composition says otherwise, which is exactly the value
+    /// `BlobPeerJobResultStore(blobs)` already selected for itself — so
+    /// this field carries the pre-629 behaviour byte-for-byte (GP 11)
+    /// and merely makes it a lever. Set it with `withJobRetention`.
+    JobRetention: PeerJobRetentionPolicy
+    /// Phase 483, composed by Phase 629 — whether the multi-round
+    /// protocol orchestrator (`IRoundOrchestrator` + `IRoundStateStore`
+    /// + `IRoundObserver`) is registered from the already-present
+    /// substrate (`IPeerFanout` / `IBlobStorage` / `IAuditLog` /
+    /// `INotificationChannel`).
+    ///
+    /// `false` by default: an orchestrator nobody drives is three
+    /// singletons and a blob-store dependency a non-orchestrating
+    /// federation should not carry (GP 13). Opt in with
+    /// `withRoundOrchestrator`.
+    RoundOrchestration: bool
+    /// Phase 338, composed by Phase 629 — the receiver-side token policy
+    /// `JwtPeerAuthProvider` applies on top of signature / `exp` / `nbf`
+    /// / `aud`: the replay seen-set and the contract binding.
+    ///
+    /// `PeerTokenPolicy.unscoped` unless a composition says otherwise —
+    /// no `jti` examined, no store consulted, no `cid` checked — which
+    /// is precisely what the two-argument `JwtPeerAuthProvider`
+    /// constructor supplied before this phase (GP 11 / GP 13). Set it
+    /// with `withTokenPolicy`, or one axis at a time with
+    /// `withReplayGuard` / `withContractBoundCalls`.
+    TokenPolicy: PeerTokenPolicy
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -275,6 +307,9 @@ module PeerServerApp =
         FederationPins = FederationPinStore.empty
         PrivacyBudget = None
         NoisedReleases = []
+        JobRetention = PeerJobRetentionPolicy.default'
+        RoundOrchestration = false
+        TokenPolicy = PeerTokenPolicy.unscoped
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -850,6 +885,160 @@ module PeerServerApp =
             FederationPins = FederationPinStore.withRequiredTrust requirement app.FederationPins
     }
 
+    /// Phase 316, composed by Phase 629 — bound how long the parked
+    /// result of a long-running peer call stays readable.
+    ///
+    ///     app |> PeerServerApp.withJobRetention (
+    ///                PeerJobRetentionPolicy.default'
+    ///                |> PeerJobRetentionPolicy.withTtl (TimeSpan.FromDays 1.0)
+    ///                |> PeerJobRetentionPolicy.withDeleteOnRead (TimeSpan.FromMinutes 5.0))
+    ///
+    /// **Phase 316 shipped the mechanism with no lever.** The policy was
+    /// a constructor argument on `BlobPeerJobResultStore`, and the
+    /// compose path called the one-argument overload — so the only way
+    /// to change retention was to register a whole store of your own,
+    /// which is a strange price for a `TimeSpan`. These documents hold
+    /// the *typed* federated results of a peer call, so retention is a
+    /// data-protection lever (GP 4) before it is a storage-growth one.
+    ///
+    /// A tunable, not a switch: retention is always in force, and a
+    /// composition that never calls this runs under
+    /// `PeerJobRetentionPolicy.default'` — the exact value the store
+    /// already chose for itself, so an existing deployment is
+    /// byte-for-byte unaffected (GP 11).
+    ///
+    /// Applies to the SDK-composed `BlobPeerJobResultStore` only. A
+    /// deployment that registers its own `IPeerJobResultStore` through
+    /// the base `ServiceConfig` keeps it, and honours whatever policy it
+    /// was built with — `IPeerJobResultStore.Retention` is the value it
+    /// reports (GP 12 rule 3).
+    let withJobRetention (retention: PeerJobRetentionPolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            JobRetention = retention
+    }
+
+    /// Phase 483, composed by Phase 629 — register the multi-round
+    /// protocol orchestrator, so a deployment can drive a resumable
+    /// cross-party round protocol by resolving `IRoundOrchestrator`
+    /// rather than by hand-building one.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withLocalPeer me
+    ///     |> PeerServerApp.withRoundOrchestrator
+    ///
+    /// Three singletons, all assembled from substrate the peer
+    /// composition already resolves and all `TryAdd` so a deployment
+    /// that registered its own through the base `ServiceConfig` (which
+    /// runs first) keeps it:
+    ///
+    ///   * `IRoundStateStore` → `BlobRoundStateStore` over the resolved
+    ///     `IBlobStorage`. The durable one deliberately —
+    ///     `InMemoryRoundStateStore` loses its state with the process,
+    ///     which defeats the resume the orchestrator exists for.
+    ///   * `IRoundObserver` → `PlatformRoundObserver` over the resolved
+    ///     `IAuditLog` and `INotificationChannel`, each optional
+    ///     independently, so a partial host still observes whichever
+    ///     half it has.
+    ///   * `IRoundOrchestrator` → `DefaultRoundOrchestrator` over the
+    ///     composed `IPeerFanout` plus the two above.
+    ///
+    /// **Off by default, and this is a GP 13 call rather than a safety
+    /// one.** Nothing here is dangerous; it is simply three singletons
+    /// and a `_platform` blob prefix that a federation running no round
+    /// protocol has no use for. `RoundOrchestrator.create ()` remains
+    /// the un-composed escape hatch for a caller that wants one without
+    /// the DI registration.
+    let withRoundOrchestrator (app: PeerServerApp) : PeerServerApp = { app with RoundOrchestration = true }
+
+    /// Phase 338, composed by Phase 629 — set the receiver-side token
+    /// policy: the replay seen-set and the contract binding.
+    ///
+    ///     app |> PeerServerApp.withTokenPolicy (
+    ///                PeerTokenPolicy.unscoped
+    ///                |> PeerTokenPolicy.withReplayGuard (BlobPeerReplayGuard blobs))
+    ///
+    /// **Phase 338 shipped both seams with no composition path**, which
+    /// is the shape Phase 330's unreferenced `VerifyDelegation` took: a
+    /// defence a deployment can only reach by registering its own
+    /// `IPeerAuthProvider` is a defence nobody turns on. This is the
+    /// lever.
+    ///
+    /// Applies to the SDK-composed `JwtPeerAuthProvider`. A deployment
+    /// that registers its own provider through the base `ServiceConfig`
+    /// keeps it, and is responsible for its own policy.
+    ///
+    /// **Ordering matters** — this replaces the whole record, so a later
+    /// `withTokenPolicy` discards an earlier `withReplayGuard` /
+    /// `withContractBoundCalls`. Call it first, or build the policy
+    /// whole and pass it (the same caveat `withInsecurePeerTransport`
+    /// carries against `withTransportPolicy`).
+    ///
+    /// A composition that never calls this runs under
+    /// `PeerTokenPolicy.unscoped` — byte-for-byte the pre-338 validation
+    /// path, consulting no store (GP 11 / GP 13).
+    let withTokenPolicy (policy: PeerTokenPolicy) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TokenPolicy = policy
+    }
+
+    /// Phase 338, composed by Phase 629 — enforce single-use peer tokens
+    /// against `guard`, so a captured token is spendable once rather
+    /// than being a bearer capability for its whole 300 s + skew
+    /// lifetime.
+    ///
+    ///     app |> PeerServerApp.withReplayGuard (BlobPeerReplayGuard blobs)
+    ///
+    /// **Off by default, and the rollout order is why.** Every minted
+    /// token has carried a `jti` since Phase 338 precisely so a fleet
+    /// can upgrade first and switch enforcement on second; a receiver
+    /// that starts enforcing before its counterparties mint nonces
+    /// refuses every one of their calls with `missing 'jti'`. Compose
+    /// this only once the peers calling this deployment are known to be
+    /// on a post-338 substrate — see the migration doc's rollout order.
+    ///
+    /// The guard is a store and it fails CLOSED:
+    /// `ReplayGuardUnavailable` refuses the call rather than admitting
+    /// an unchecked token, which is the whole reason it is not a cache.
+    /// `BlobPeerReplayGuard` is the distributed-ready choice (it REFUSES
+    /// an `IBlobStorage` without conditional writes, at construction);
+    /// `InMemoryPeerReplayGuard` is correct only for a single-instance
+    /// receiver, and says so through `IsDistributed = false`.
+    ///
+    /// Additive over whatever `TokenPolicy` the composition already
+    /// carries, so it composes with `withContractBoundCalls` in either
+    /// order.
+    let withReplayGuard (guard: IPeerReplayGuard) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TokenPolicy = PeerTokenPolicy.withReplayGuard guard app.TokenPolicy
+    }
+
+    /// Phase 338, composed by Phase 629 — bind every inbound peer token
+    /// to the ONE contract it is spent against, through the `cid` claim.
+    ///
+    ///     app |> PeerServerApp.withContractBoundCalls
+    ///
+    /// The host validates a contract call through
+    /// `IPeerCallScopedAuth.ValidateScopedPeerToken` for the contract id
+    /// the request addressed (Phase 629), so composing this is all a
+    /// deployment has to do — there is no longer a validation path a
+    /// deployment must implement itself for the binding to bite.
+    ///
+    /// **Both ends must move, and this end refuses loudly if they have
+    /// not.** Under `ContractBoundCalls` a token with no `cid` is
+    /// refused: the receiver was told to require a binding and cannot
+    /// honour "the issuer did not say". So the rollout is: every peer
+    /// that calls this deployment mints through
+    /// `IssueScopedPeerToken` under a `ContractBoundCalls` policy
+    /// FIRST, then this deployment composes this. Off by default for
+    /// exactly that reason (GP 11).
+    ///
+    /// Additive over the composition's existing `TokenPolicy`, so it
+    /// composes with `withReplayGuard` in either order.
+    let withContractBoundCalls (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TokenPolicy = PeerTokenPolicy.withContractBinding app.TokenPolicy
+    }
+
     /// Phase 309 — classify this composition's audience-binding posture.
     /// Pure and total; exposed so a deployment can assert its own posture
     /// in its own tests without booting a server, and so the advisory /
@@ -1151,6 +1340,84 @@ module PeerServerApp =
     let auditFederationGraph (now: System.DateTimeOffset) (app: PeerServerApp) : CompositionDefect list =
         FederationPreflight.check (federationPreflightInput now app)
 
+    /// Phase 629 — this deployment's own peer identity, defaulted the way
+    /// `run` defaults it (a blank id when no `LocalPeer` was composed).
+    /// One definition, so a factory below and the compose path cannot
+    /// disagree about which identity the singletons are built against.
+    let private composedIdentity (app: PeerServerApp) : PeerIdentity =
+        app.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
+
+    /// Phase 629 — the `IPeerJobResultStore` this composition would
+    /// register, over `blobs`. `run`'s DI factory is a one-line call to
+    /// this, so the retention knob is assertable without booting a server
+    /// (the posture `auditAudienceBinding` / `auditCleanRoomTemplates`
+    /// take for their own postures).
+    let jobResultStore (app: PeerServerApp) (blobs: IBlobStorage) : IPeerJobResultStore =
+        BlobPeerJobResultStore(blobs, app.JobRetention) :> IPeerJobResultStore
+
+    /// Phase 629 — the `IPeerAuthProvider` this composition would
+    /// register, over `secrets`. Carries the composed `TokenPolicy`
+    /// (Phase 338's replay guard + contract binding) and this
+    /// deployment's own id as the bound audience (Phase 130). Exposed on
+    /// the same terms as `jobResultStore`.
+    let peerAuthProvider (app: PeerServerApp) (secrets: ISecretStore) : IPeerAuthProvider =
+        JwtPeerAuthProvider(secrets, (composedIdentity app).PeerId, app.TokenPolicy) :> IPeerAuthProvider
+
+    /// Phase 629 — the Phase 483 round-orchestration registrations, or
+    /// `services` untouched when `withRoundOrchestrator` was not composed.
+    ///
+    /// A module-level function rather than three lines inside `run` so a
+    /// deployment (or a test) can apply it to a bare `IServiceCollection`
+    /// and resolve exactly what a composition would get, without booting
+    /// a server. Every registration is `TryAdd`: a deployment that
+    /// registered its own `IRoundStateStore` / `IRoundObserver` /
+    /// `IRoundOrchestrator` through the base `ServiceConfig` (which runs
+    /// first) keeps it, and the SDK default only fills the gap.
+    ///
+    /// The substrate is resolved lazily per singleton, so the order this
+    /// runs in relative to the rest of the peer graph does not matter —
+    /// `IPeerFanout` is `TryAdd`ed by the same compose pass and is
+    /// resolved at first orchestrator use, not here.
+    let roundOrchestrationServices (app: PeerServerApp) (services: IServiceCollection) : IServiceCollection =
+        if not app.RoundOrchestration then
+            services
+        else
+            services.TryAddSingleton<IRoundStateStore>(
+                System.Func<System.IServiceProvider, IRoundStateStore>(fun sp ->
+                    let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+                    BlobRoundStateStore(blobs) :> IRoundStateStore)
+            )
+
+            services.TryAddSingleton<IRoundObserver>(
+                System.Func<System.IServiceProvider, IRoundObserver>(fun sp ->
+                    // Both halves optional and independently so, exactly
+                    // as `PlatformRoundObserver` is written for: a
+                    // deployment with `AuditLog = NoAuditLog` still gets
+                    // progress, and a partial host with neither observes
+                    // nothing rather than failing to compose.
+                    let auditLog =
+                        sp.GetService(typeof<IAuditLog>)
+                        |> Option.ofObj
+                        |> Option.map (fun x -> x :?> IAuditLog)
+
+                    let channel =
+                        sp.GetService(typeof<INotificationChannel>)
+                        |> Option.ofObj
+                        |> Option.map (fun x -> x :?> INotificationChannel)
+
+                    PlatformRoundObserver(auditLog, channel) :> IRoundObserver)
+            )
+
+            services.TryAddSingleton<IRoundOrchestrator>(
+                System.Func<System.IServiceProvider, IRoundOrchestrator>(fun sp ->
+                    let fanout = sp.GetService(typeof<IPeerFanout>) :?> IPeerFanout
+                    let store = sp.GetService(typeof<IRoundStateStore>) :?> IRoundStateStore
+                    let observer = sp.GetService(typeof<IRoundObserver>) :?> IRoundObserver
+                    DefaultRoundOrchestrator(fanout, store, observer) :> IRoundOrchestrator)
+            )
+
+            services
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -1346,12 +1613,24 @@ module PeerServerApp =
                             // an empty audience reaching here is a posture
                             // the operator was told about rather than a
                             // silent default.
-                            JwtPeerAuthProvider(secrets, localIdentity.PeerId) :> IPeerAuthProvider)
+                            //
+                            // Phase 629 — built through `peerAuthProvider`
+                            // so the composed `TokenPolicy` (Phase 338's
+                            // replay guard + contract binding) rides it.
+                            // The default `PeerTokenPolicy.unscoped` is
+                            // exactly what the two-argument constructor
+                            // supplied before this phase, so an existing
+                            // composition validates identically (GP 11).
+                            peerAuthProvider app secrets)
                     )
                     .AddSingleton<IPeerJobResultStore>(
                         System.Func<System.IServiceProvider, IPeerJobResultStore>(fun sp ->
                             let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-                            BlobPeerJobResultStore(blobs) :> IPeerJobResultStore)
+                            // Phase 629 — carries the composed
+                            // `JobRetention`. Its default is the value
+                            // `BlobPeerJobResultStore(blobs)` already
+                            // chose for itself (GP 11).
+                            jobResultStore app blobs)
                     )
                     .AddSingleton<IPeerRegistry>(
                         System.Func<System.IServiceProvider, IPeerRegistry>(fun sp ->
@@ -1615,6 +1894,13 @@ module PeerServerApp =
                             :> ConfigValidation.IConfigValidator
                         )
                         |> ignore
+
+                    // Phase 483 / 629 — the multi-round orchestrator
+                    // trio, and ONLY when `withRoundOrchestrator` was
+                    // composed. A federation that runs no round protocol
+                    // registers nothing and reaches no blob prefix
+                    // (GP 13). See `roundOrchestrationServices`.
+                    roundOrchestrationServices app withFusion |> ignore
 
                     withFusion
 

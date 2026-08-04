@@ -1117,6 +1117,14 @@ let allTests =
         PeerJwtReplayTests.guardTests
         PeerJwtReplayTests.replayDefenceTests
         PeerJwtReplayTests.callScopingTests
+        // Phase 629 — compose-level registration for the deferred peer
+        // knobs (316 retention, 483 round orchestrator, 338 token
+        // policy), each asserted both ways: composing it registers the
+        // intended thing, and NOT composing it leaves the pre-629 value
+        // exactly in place.
+        PeerComposeKnobTests.jobRetentionTests
+        PeerComposeKnobTests.roundOrchestratorTests
+        PeerComposeKnobTests.tokenPolicyTests
         // Phase 309 — peer audience binding for contract hosts: a
         // wrong-audience token is refused by a bound receiver and
         // ADMITTED by an unbound one (the negative control that makes
@@ -1162,6 +1170,11 @@ let allTests =
         // carry "", with the in-tree client asserted unchanged.
         PeerWireHardeningTests.requestBodyCapTests
         PeerWireHardeningTests.pollCorrelationTests
+        // Phase 629 — the host validates a contract call through the
+        // Phase 338 scoped seam, so a composed `cid` binding is enforced
+        // by the shipped host. Pinned by a negative control that ADMITS
+        // the mis-scoped token under the pre-629 posture.
+        PeerWireHardeningTests.contractBindingTests
         // Phase 331 — receiver-side cascade-budget authority: the host
         // derives `HopsRemaining` / `Route` / `RootRequestId` /
         // `ParentRequestId` from the validated principal + its own policy

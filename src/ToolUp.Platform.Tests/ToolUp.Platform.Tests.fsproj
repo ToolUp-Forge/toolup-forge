@@ -1336,6 +1336,13 @@
              behaviour over it, each rejection paired with a control that
              asserts the same sequence SUCCEEDS with the defence removed. -->
         <Compile Include="InProcess\PeerJwtReplayTests.fs" />
+        <!-- Phase 629 — compose-level registration for the deferred peer
+             knobs: withJobRetention (316), withRoundOrchestrator (483),
+             withReplayGuard / withContractBoundCalls (338). Each knob is
+             asserted BOTH ways — composing it registers the intended
+             thing, and NOT composing it leaves the pre-629 value exactly
+             in place (the GP 11 half). -->
+        <Compile Include="InProcess\PeerComposeKnobTests.fs" />
         <!-- Phase 309 — peer audience binding for contract hosts: the
              cross-receiver exposure an unbound receiver carries (pinned
              by a negative control that ADMITS the mis-addressed token),

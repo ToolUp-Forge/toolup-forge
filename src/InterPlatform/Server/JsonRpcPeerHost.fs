@@ -491,16 +491,66 @@ module JsonRpcPeerHost =
     /// it propagate. A disconnected client is not a rejected credential,
     /// and turning one into a 401 would both lie in the logs and write to
     /// a response nobody is reading.
-    let private authenticate (auth: IPeerAuthProvider) (token: string) : Async<Result<PeerPrincipal, PeerError>> = async {
-        try
-            return! auth.ValidatePeerToken token
-        with ex when not (ex :? OperationCanceledException) ->
-            return
-                Error(
-                    PeerUnauthorized
-                        $"Peer token could not be validated ({ex.GetType().Name}) — refusing the call rather than reporting a server fault for a credential defect"
-                )
-    }
+    let private authenticateWith
+        (validate: unit -> Async<Result<PeerPrincipal, PeerError>>)
+        : Async<Result<PeerPrincipal, PeerError>> =
+        async {
+            try
+                return! validate ()
+            with ex when not (ex :? OperationCanceledException) ->
+                return
+                    Error(
+                        PeerUnauthorized
+                            $"Peer token could not be validated ({ex.GetType().Name}) — refusing the call rather than reporting a server fault for a credential defect"
+                    )
+        }
+
+    let private authenticate (auth: IPeerAuthProvider) (token: string) : Async<Result<PeerPrincipal, PeerError>> =
+        authenticateWith (fun () -> auth.ValidatePeerToken token)
+
+    /// Phase 629 — authenticate an inbound token FOR the contract the
+    /// request addressed, so Phase 338's `cid` binding is enforced by the
+    /// shipped host.
+    ///
+    /// **Without this, `ContractBoundCalls` was unreachable from an
+    /// ordinary composition.** The scoped seam shipped in Phase 338 but
+    /// nothing on the receiving side ever called it: the host validated
+    /// every contract call through the plain `ValidatePeerToken`, which
+    /// passes `expectedContract = None`. Under `ContractBoundCalls` that
+    /// path deliberately REFUSES a `cid`-carrying token — "this receiver
+    /// cannot see which contract the call is for" — so a deployment that
+    /// composed the binding refused every scoped token its counterparties
+    /// minted, and a deployment that did not compose it accepted a token
+    /// minted for a different contract. Only a deployment that
+    /// implemented its own validation path got the binding it asked for.
+    /// The contract id is right here in the route, so the host is the
+    /// only place that can supply it.
+    ///
+    /// **The Phase 338 claim ordering is preserved by construction**, not
+    /// by re-implementing it: `ValidateScopedPeerToken` runs the same
+    /// `PeerJwt.finishValidation` the unscoped path does, where the
+    /// contract-scope check sits with the other claim checks and the
+    /// replay claim is spent LAST — after the signature, `exp`, `nbf`,
+    /// `aud` and `cid`. An unauthenticated caller still cannot burn
+    /// seen-set entries with forged tokens.
+    ///
+    /// A provider that does not implement `IPeerCallScopedAuth` falls
+    /// back to the plain path — it has no binding to enforce. And under
+    /// the default `UnscopedCalls` policy `ValidateScopedPeerToken` is
+    /// `ValidatePeerToken` with the contract id discarded, so every
+    /// pre-629 composition validates byte-for-byte as it did (GP 11).
+    /// The other three routes stay on the unscoped path deliberately:
+    /// capability discovery and a job poll are not contract dispatch, and
+    /// a token bound to a contract is not being spent against one there.
+    let private authenticateForContract
+        (auth: IPeerAuthProvider)
+        (contractId: string)
+        (token: string)
+        : Async<Result<PeerPrincipal, PeerError>> =
+        match auth with
+        | :? IPeerCallScopedAuth as scoped ->
+            authenticateWith (fun () -> scoped.ValidateScopedPeerToken(token, contractId))
+        | _ -> authenticate auth token
 
     /// Phase 330 — verify the *originator* a validated principal asserts,
     /// before anything acts on it.
@@ -540,7 +590,13 @@ module JsonRpcPeerHost =
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
-                let! validation = authenticate auth token |> Async.StartAsTask
+                // Phase 629 — validated FOR this contract, so a composed
+                // `ContractBoundCalls` policy binds the `cid` claim here
+                // rather than needing a deployment-authored validation
+                // path. Same position in the sequence the unscoped call
+                // occupied: before the delegation check, before the body
+                // is read.
+                let! validation = authenticateForContract auth contractId token |> Async.StartAsTask
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx

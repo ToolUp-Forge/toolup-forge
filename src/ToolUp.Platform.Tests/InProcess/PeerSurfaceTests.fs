@@ -346,6 +346,69 @@ let tests =
                 // Like the ledger and unlike the approval registry, it
                 // registers no contract, so nothing is owed to `Serves`.
                 "NoisedReleases"
+                // Phase 316 / 629 — NOT projected, on the `WireLimits`
+                // argument almost unchanged. Retention IS faintly
+                // observable: a caller polling a long-running result
+                // after the record was reclaimed sees `Pending`, the
+                // same answer it gets for a job that has not finished.
+                // But it is receiver-side storage lifecycle an operator
+                // retunes at a restart — and unlike a body ceiling it is
+                // not even a term a caller could fit under, because the
+                // poll window a caller cares about is minutes and the
+                // default is thirty days. Projecting it would make a
+                // retention tweak invalidate every pinned copy for a
+                // value no counterparty can act on.
+                "JobRetention"
+                // Phase 483 / 629 — NOT projected, and this is the
+                // easiest exemption since `TransportPolicy`. The
+                // orchestrator is INITIATOR-side machinery: it fans out
+                // rounds to participants over `IPeerFanout` and persists
+                // its own run state. It registers no contract a
+                // counterparty calls, mounts no route, and adds nothing
+                // to the wire face — a participant in a round sees only
+                // the ordinary contract calls the orchestrator makes,
+                // which are already in `Consumes`. Composition, not
+                // face.
+                "RoundOrchestration"
+                // Phase 338 / 629 — NOT projected, and this is the
+                // exemption that is genuinely arguable rather than
+                // obvious, so it gets the long version.
+                //
+                // The posture IS counterparty-relevant, more directly
+                // than anything else on this list. Under
+                // `ContractBoundCalls` a counterparty MUST mint through
+                // `IssueScopedPeerToken` or every call it makes is
+                // refused; under a composed replay guard its tokens are
+                // single-use, so a retry of the same token fails. Those
+                // are not observations about our internals — they are
+                // terms a counterparty has to satisfy, which is exactly
+                // what a face is for. And a home already exists:
+                // `PeerTrustPosture.ReplayStance`, today the constant
+                // `"freshness-window"`.
+                //
+                // It stays out because filling that field in is a
+                // BREAKING change dressed as a strengthening, and the
+                // mechanism that breaks is in this repo. A trust
+                // requirement is an exact string match on a facet
+                // (`PeerTrustRequirement.replayStance`), so a
+                // counterparty that pinned `"freshness-window"` — the
+                // only value that has ever existed — has its requirement
+                // FAIL the moment this deployment composes a guard and
+                // the stance reads `"freshness-window+single-use"`.
+                // Strengthening a defence must not read as losing a
+                // facet. Making the stance a lattice (a stronger posture
+                // satisfies a requirement for a weaker one) is the fix,
+                // and it is a `formatVersion`-class decision about the
+                // requirement vocabulary — the surface's own phase to
+                // make, exactly as it is for the clean-room floor and
+                // the ε ceiling above.
+                //
+                // Until then the posture is not hidden: it is the one
+                // thing in this list a counterparty learns immediately
+                // and unambiguously from the structured refusal, at the
+                // exact moment it matters — `missing 'cid'`, `missing
+                // 'jti'`, or `replayed`, each naming what to do.
+                "TokenPolicy"
             ]
 
             let actual =

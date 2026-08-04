@@ -644,3 +644,205 @@ let pollCorrelationTests =
             Expect.equal (dispatches.Value - before) 1 "the contract implementation was reached exactly once"
         }
     ]
+
+// ─── (3) Phase 629 — host-side contract binding (the `cid` claim) ────
+//
+// Phase 338 shipped `PeerCallScope` / `IPeerCallScopedAuth` and nothing
+// on the receiving side ever called the scoped seam: the host validated
+// every contract call through the plain `ValidatePeerToken`, which passes
+// `expectedContract = None`. So `ContractBoundCalls` was reachable only
+// by a deployment that wrote its own validation path — and a deployment
+// that composed it through the SDK got the WORST of both, because the
+// unscoped path deliberately refuses a `cid`-carrying token. The contract
+// id is in the route, so the host is the only place that can supply it.
+//
+// The cases below are built around one token minted for a DIFFERENT
+// contract than the one it is presented at, driven through the same
+// `invokeRoutes` harness as the ceiling cases above. The load-bearing one
+// is the negative control: under the pre-629 posture that same token is
+// ADMITTED and the handler runs, so "refused" here cannot mean "refuses
+// everything".
+
+/// The receiver's provider under a given token policy. `expectedAudience`
+/// is left blank deliberately — this section is about `cid`, and binding
+/// the audience too would let an audience refusal masquerade as a
+/// contract-binding one.
+let private receiverAuthUnder (secrets: ISecretStore) (policy: PeerTokenPolicy) =
+    JwtPeerAuthProvider(secrets, "", policy) :> IPeerAuthProvider
+
+/// A caller-side provider that mints `cid`-bearing tokens.
+let private scopedIssuer (secrets: ISecretStore) =
+    JwtPeerAuthProvider(secrets, "", PeerTokenPolicy.unscoped |> PeerTokenPolicy.withContractBinding)
+    :> IPeerCallScopedAuth
+
+let private issueFor (issuer: IPeerCallScopedAuth) (boundTo: string) = async {
+    match! issuer.IssueScopedPeerToken(callerId, receiverId, Anonymous, boundTo) with
+    | Ok token -> return token
+    | Error e -> return failtestf "Expected a minted scoped token, got %A" e
+}
+
+/// The caller's own key material, kept separate from the receiver's so
+/// the issuing and validating providers are genuinely different objects.
+let private callerSecrets () =
+    let s = InMemorySecretStore() :> ISecretStore
+    seedSigningKey s callerId.PeerId callerKey
+    s
+
+/// One well-formed `Measure` dispatch at `/peer/v1/{contractId}`, under
+/// the supplied receiver policy. Returns the status, the body, and how
+/// many times the contract implementation was actually reached — the
+/// difference between "refused at the wire" and "ran and then failed".
+let private dispatchUnder (policy: PeerTokenPolicy) (token: string) = async {
+    let secrets = InMemorySecretStore() :> ISecretStore
+    seedSigningKey secrets callerId.PeerId callerKey
+    let auth = receiverAuthUnder secrets policy
+
+    let context: PeerCallContext = {
+        Peer = callerId
+        User = Anonymous
+        ContractVersion = v1
+        Route = [ callerId.PeerId ]
+        RootRequestId = "root-request-629"
+        ParentRequestId = None
+        HopsRemaining = 4
+    }
+
+    let payload: PeerWirePayload = {
+        Context = context
+        Arguments = """["hello"]"""
+    }
+
+    let envelope = JsonRpc.request context.RootRequestId "Measure" payload
+    let bytes = Encoding.UTF8.GetBytes(JsonRpc.serialize envelope)
+    let stream = new CountingStream(bytes)
+    let before = dispatches.Value
+
+    let! status, body =
+        invokeRoutes (receiverServices auth (Some tightCap)) (Some token) (Some(int64 bytes.Length)) stream
+        |> Async.AwaitTask
+
+    return status, body, dispatches.Value - before
+}
+
+let private boundPolicy =
+    PeerTokenPolicy.unscoped |> PeerTokenPolicy.withContractBinding
+
+let contractBindingTests =
+    testList "Phase 629 — the host enforces Phase 338's cid binding" [
+
+        testCaseAsync "a token bound to a DIFFERENT contract is refused by the shipped host"
+        <| async {
+            // The reach half of the Phase 338 threat, now stopped by the
+            // substrate: a token minted for `directory` is a bearer
+            // capability over `ledger` too, unless the receiver checks the
+            // binding against the contract the request actually addressed.
+            let issuer = scopedIssuer (callerSecrets ())
+            let! token = issueFor issuer "directory"
+
+            let! status, body, ran = dispatchUnder boundPolicy token
+
+            Expect.equal status 401 "a mis-scoped token is a credential defect, answered like every other one"
+
+            let _, err = structuredError body
+
+            match err with
+            | PeerUnauthorized reason ->
+                Expect.stringContains
+                    reason
+                    "bound to a different contract"
+                    "…and the refusal names the binding, not some other check the token also happened to fail"
+            | other -> failtestf "Expected PeerUnauthorized, got %A" other
+
+            Expect.equal ran 0 "the contract implementation was never reached"
+        }
+
+        testCaseAsync "NEGATIVE CONTROL — the SAME token is ADMITTED under the pre-629 posture"
+        <| async {
+            // The whole weight of the case above rests here. Under
+            // `PeerTokenPolicy.unscoped` — what every composition had
+            // before this phase, and still has unless it opts in — the
+            // identical mis-scoped token dispatches and the handler runs.
+            // So the 401 above is the binding talking, not a host that
+            // refuses everything, and this is simultaneously the GP 11
+            // claim: nothing changes for a deployment that composes no
+            // policy.
+            let issuer = scopedIssuer (callerSecrets ())
+            let! token = issueFor issuer "directory"
+
+            let! status, body, ran = dispatchUnder PeerTokenPolicy.unscoped token
+
+            Expect.equal status 200 "the pre-629 posture admits a token minted for another contract entirely"
+
+            let response = JsonRpc.deserialize<JsonRpcResponse> body
+            Expect.isNone response.Error "…with no error at all"
+
+            Expect.equal
+                (response.Result |> Option.map JsonRpc.deserialize<int>)
+                (Some 5)
+                "…and the handler's typed result came back"
+
+            Expect.equal ran 1 "the contract implementation ran exactly once — this is the exposure the binding closes"
+        }
+
+        testCaseAsync "a CORRECTLY-scoped token is accepted, so the host passes the right contract id"
+        <| async {
+            // The other direction, and the one a "refuse anything scoped"
+            // implementation would fail: the host must hand
+            // `ValidateScopedPeerToken` the contract id from the ROUTE.
+            // Pre-629 this token was refused too — the unscoped path
+            // rejects a `cid`-carrying token outright — so a deployment
+            // that composed the binding refused every scoped token its
+            // counterparties minted.
+            let issuer = scopedIssuer (callerSecrets ())
+            let! token = issueFor issuer contractId
+
+            let! status, body, ran = dispatchUnder boundPolicy token
+
+            Expect.equal status 200 "the token names the contract it was presented at, so it is spent"
+
+            let response = JsonRpc.deserialize<JsonRpcResponse> body
+
+            Expect.equal
+                (response.Result |> Option.map JsonRpc.deserialize<int>)
+                (Some 5)
+                "…and dispatch proceeded normally"
+
+            Expect.equal ran 1 "the contract implementation ran"
+        }
+
+        testCaseAsync "under the binding, an UNBOUND token is refused — the rollout order, made concrete"
+        <| async {
+            // A receiver told to require a binding cannot honour "the
+            // issuer did not say". This is why the knob is opt-in and why
+            // its doc comment spells the order out: every peer that calls
+            // this deployment mints scoped FIRST, then this deployment
+            // composes `withContractBoundCalls`.
+            let plainIssuer = JwtPeerAuthProvider(callerSecrets (), "") :> IPeerAuthProvider
+
+            let! token = async {
+                match! plainIssuer.IssuePeerToken(callerId, receiverId, Anonymous) with
+                | Ok t -> return t
+                | Error e -> return failtestf "Expected a minted token, got %A" e
+            }
+
+            let! status, body, ran = dispatchUnder boundPolicy token
+
+            Expect.equal status 401 "an unbound token is refused once the receiver binds"
+
+            let _, err = structuredError body
+
+            match err with
+            | PeerUnauthorized reason ->
+                Expect.stringContains reason "Missing 'cid'" "…and the refusal tells the caller exactly what to mint"
+            | other -> failtestf "Expected PeerUnauthorized, got %A" other
+
+            Expect.equal ran 0 "nothing dispatched"
+
+            // CONTROL — the same unbound token is fine when the receiver
+            // has not composed the binding, which is every pre-629
+            // deployment.
+            let! okStatus, _, okRan = dispatchUnder PeerTokenPolicy.unscoped token
+            Expect.equal okStatus 200 "the default posture is untouched"
+            Expect.equal okRan 1 "…and still dispatches"
+        }
+    ]
