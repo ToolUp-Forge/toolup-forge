@@ -1512,6 +1512,14 @@ let allTests =
         // asserts exactly two — so the pair measures the CAS gate rather
         // than the harness's luck at interleaving.
         ExternalCallbackTests.tests
+        // Phase 486 — signed worker outcomes. Every refusal arm is paired
+        // with a positive CONTROL on the same material: the tampered-body
+        // test shows the identical genuine envelope verifying over the
+        // result it was signed for, so "refused" cannot be a verifier that
+        // refuses everything. The policy is asserted in BOTH directions at
+        // the HTTP boundary, and the GP 13 pin sends a header so malformed
+        // that a 200 proves the gate never ran.
+        SignedWorkerOutcomeTests.tests
         // Phase 321 — job progress checkpoints. The coalescing rule is the
         // hot zone and carries two mutation controls: a terminal and a
         // durable checkpoint must each publish at ZERO elapsed time inside

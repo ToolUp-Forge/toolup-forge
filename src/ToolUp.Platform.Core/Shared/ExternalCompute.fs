@@ -595,3 +595,359 @@ module ExternalCallback =
         | ExternalOutcome.Pending
         | ExternalOutcome.Running _ ->
             Error $"%s{ExternalOutcome.label outcome} is not terminal and has no completion-callback form"
+
+// ─── Phase 486 — signed worker outcomes (the wire half) ──────────────
+//
+// Phase 440 and Phase 320 authenticate the **transport**: a caller that
+// holds the per-handle secret may resolve that handle. Neither says
+// anything about *which worker* produced the result, nor binds the result
+// to the worker that computed it. A compromised relay, a
+// mis-routed queue consumer, or a backend node re-using another node's
+// credential all satisfy Phase 320 and are indistinguishable from the
+// honest case. This is the missing attribution: the worker signs its own
+// outcome with a **registered per-worker key**, and the ingress verifies
+// the signature before the outcome is accepted.
+//
+// **It rides a HEADER, not the body — and that is load-bearing.** The
+// obvious design adds six fields to `ExternalCallbackPayload`. It was
+// rejected for three reasons, in increasing order of importance:
+//   1. `ExternalCallbackPayload` is the *outcome* contract, and a
+//      credential is not an outcome. The per-handle secret already sits
+//      in a header for exactly this reason.
+//   2. Six additive fields retype the record's constructor, which is a
+//      break for every consumer that builds one and a churn on the
+//      public-API baseline, for a capability most deployments never use.
+//   3. **GP 11 becomes structural rather than argued.** An unsigned
+//      deployment sends no header, and the ingress reads no header — the
+//      request, the parse, the record and the resolution are
+//      byte-for-byte what Phase 320 produced. There is no "the field was
+//      `None`" path to reason about.
+//
+// **The signature binds the BODY, via the artifact hash.** The signed
+// tuple is `(handleId, artifactHash, diagnosticsHash, timestamp)`, and
+// `artifactHash` is the hash of the *canonical descriptor of the outcome
+// the callback delivers* (`outcomeDescriptor` below). So a relay that
+// replays a genuine envelope against a substituted `resultRef` produces a
+// descriptor that no longer hashes to the signed `artifactHash`, and the
+// ingress refuses it. Without that binding the signature would attest
+// only that *some* worker said *something* about this handle, which is
+// attribution without integrity — the failure mode this phase exists to
+// close.
+//
+// **The algorithm is NOT read from the wire.** It comes from the
+// registered key. A caller-supplied algorithm field is a downgrade
+// oracle: an attacker who can name the algorithm can name the weakest one
+// the server implements. The envelope records which algorithm verified it
+// *after* the fact, for attribution; it never selects one.
+//
+// **Forward compatibility is deliberate.** Unknown parameters in the
+// header are ignored, so the envelope can gain a TEE-attestation
+// parameter later without a redesign or a version bump for every existing
+// worker. The trade is explicit: a parameter an older server does not know
+// is a parameter it does not verify, which is why the *signed* tuple is
+// closed and versioned (`v=1`) even though the *parameter list* is open.
+
+/// Phase 486 — the signature algorithm a registered worker key uses.
+///
+/// Two cases, and the asymmetry between them is a fact about the runtime,
+/// not a preference: **.NET 10's BCL has no Ed25519 primitive** (verified
+/// by scanning `System.Security.Cryptography` 10.0.0.0 — four `ECDsa*`
+/// types, zero `Ed*`), so `Es256` is the only algorithm the platform can
+/// verify without a third-party crypto dependency (GP 1 / GP 2).
+/// `Ed25519` is therefore expressible, registrable, and verified by a
+/// composed companion verifier — never by the in-tree default, which
+/// refuses it by name rather than pretending.
+[<RequireQualifiedAccess>]
+type WorkerKeyAlgorithm =
+    /// ECDSA on NIST P-256 with SHA-256, IEEE-P1363 (`r || s`) signature
+    /// encoding — the JWS `ES256` shape. Verified in-tree with BCL
+    /// `System.Security.Cryptography`; no vendor dependency.
+    | Es256
+    /// EdDSA on Curve25519 (Ed25519). No BCL primitive exists on .NET 10,
+    /// so verification requires a composed companion verifier; the
+    /// in-tree default refuses it with a message naming that.
+    | Ed25519
+
+[<RequireQualifiedAccess>]
+module WorkerKeyAlgorithm =
+    /// Stable lowercase label for logs / audit payloads / stored records.
+    let label =
+        function
+        | WorkerKeyAlgorithm.Es256 -> "es256"
+        | WorkerKeyAlgorithm.Ed25519 -> "ed25519"
+
+    /// Parse a stored / operator-supplied label. `None` for anything else
+    /// — an unrecognised algorithm is never coerced to a default, because
+    /// the default would be the one an attacker picks.
+    let parse (value: string) : WorkerKeyAlgorithm option =
+        match (if isNull value then "" else value.Trim().ToLowerInvariant()) with
+        | "es256" -> Some WorkerKeyAlgorithm.Es256
+        | "ed25519" -> Some WorkerKeyAlgorithm.Ed25519
+        | _ -> None
+
+/// Phase 486 — the signature envelope a worker presents alongside its
+/// completion callback, as parsed from the request header.
+///
+/// Identity by value (GP 12 rule 1): six strings, no live handle, no key
+/// material. `SignedAt` is the **literal text the worker signed** and is
+/// never reformatted — a normalising round-trip through `DateTimeOffset`
+/// would change the bytes and break every signature it touched, which is
+/// the classic canonicalisation defect.
+type WorkerOutcomeSignature = {
+    /// Stable identity of the worker that produced the outcome. Resolved
+    /// against the worker key registry; never trusted on its own.
+    WorkerId: string
+    /// Which of that worker's registered keys signed. Present so a worker
+    /// can rotate without a flag day: the old and new keys are both
+    /// registered, and each signature names the one it used.
+    KeyId: string
+    /// The signing timestamp, exactly as signed. Verified for freshness
+    /// against the platform clock; the *text* is what enters the signing
+    /// payload.
+    SignedAt: string
+    /// Lowercase hex SHA-256 over `outcomeDescriptor` of the terminal
+    /// outcome this callback delivers. The binding between the signature
+    /// and the body.
+    ArtifactHash: string
+    /// Lowercase hex SHA-256 over the worker's diagnostics bundle. A
+    /// **commitment**, not a reference: the platform records it and never
+    /// dereferences it, so what the signature buys is that the
+    /// diagnostics a worker later produces can be checked against what it
+    /// committed to at completion time.
+    DiagnosticsHash: string
+    /// Base64url (unpadded) signature over `signingPayload`.
+    Signature: string
+}
+
+[<RequireQualifiedAccess>]
+module WorkerOutcomeSignature =
+    /// Request header carrying the envelope.
+    ///
+    /// A header for the same reason `ExternalCallback.SecretHeader` is one
+    /// — and additionally so that an unsigned deployment's request is
+    /// byte-for-byte a Phase 320 request (see the section header).
+    [<Literal>]
+    let Header = "X-ToolUp-Worker-Signature"
+
+    /// Domain separation tag opening the signing payload. Prevents a
+    /// signature minted for one ToolUp protocol being replayed as another
+    /// — the reason every signed shape in the SDK carries one.
+    [<Literal>]
+    let Domain = "toolup.signed-outcome.v1"
+
+    /// The envelope-format version the `v` parameter must carry. The
+    /// *signed tuple* is closed and versioned; the parameter list is open
+    /// (unknown parameters ignored). See the section header.
+    [<Literal>]
+    let Version = "1"
+
+    /// Longest header this parser will look at. A bound, not a policy:
+    /// the envelope is ~300 characters and a megabyte of `k=v` pairs is a
+    /// parser-pressure probe, not a worker.
+    [<Literal>]
+    let MaxHeaderLength = 2048
+
+    /// Longest accepted `worker` / `key` identifier.
+    [<Literal>]
+    let MaxIdentifierLength = 128
+
+    /// Is `value` a safe identifier — `A-Z a-z 0-9 . _ : -`, non-empty,
+    /// within `MaxIdentifierLength`?
+    ///
+    /// Restrictive **by intent**. These two values are echoed into logs,
+    /// audit payloads and a JSON response, and they arrive from an
+    /// unauthenticated request: a permissive charset here is how a newline
+    /// gets into a log line and a `,` gets into the parameter list it was
+    /// split on.
+    let isSafeIdentifier (value: string) : bool =
+        not (String.IsNullOrEmpty value)
+        && value.Length <= MaxIdentifierLength
+        && value
+           |> Seq.forall (fun c ->
+               (c >= 'a' && c <= 'z')
+               || (c >= 'A' && c <= 'Z')
+               || (c >= '0' && c <= '9')
+               || c = '.'
+               || c = '_'
+               || c = ':'
+               || c = '-')
+
+    /// Is `value` a lowercase hex SHA-256 digest (64 hex characters)?
+    ///
+    /// Lowercase is *required*, not normalised: the digest text enters the
+    /// signing payload, so accepting either case would make two distinct
+    /// payloads verify against one signature and turn the hash comparison
+    /// into a case-folding question.
+    let isHexDigest (value: string) : bool =
+        not (isNull value)
+        && value.Length = 64
+        && value |> Seq.forall (fun c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))
+
+    /// Is `value` unpadded base64url (`A-Z a-z 0-9 - _`)?
+    ///
+    /// Unpadded, so the value cannot contain `=` — which is what lets the
+    /// parameter parser split on the FIRST `=` and reject any value
+    /// containing another, closing the "smuggle a second parameter inside
+    /// a value" shape without a stateful tokeniser.
+    let isBase64Url (value: string) : bool =
+        not (String.IsNullOrEmpty value)
+        && value
+           |> Seq.forall (fun c ->
+               (c >= 'a' && c <= 'z')
+               || (c >= 'A' && c <= 'Z')
+               || (c >= '0' && c <= '9')
+               || c = '-'
+               || c = '_')
+
+    /// The canonical descriptor of a **terminal** outcome — the text the
+    /// `ArtifactHash` is taken over, and therefore the exact part of the
+    /// callback body the signature binds.
+    ///
+    /// One line per case, prefixed by the outcome label so no two cases
+    /// can ever produce the same descriptor (a `Succeeded ""` and a
+    /// `Cancelled` must not collide, or a relay could convert one into the
+    /// other under a valid signature). `Error` for a non-terminal outcome,
+    /// which has no completion form at all.
+    let outcomeDescriptor (outcome: ExternalOutcome) : Result<string, string> =
+        match outcome with
+        | ExternalOutcome.Succeeded resultRef -> Ok $"succeeded:%s{resultRef}"
+        | ExternalOutcome.Failed error ->
+            let retriable = if error.Retriable then "true" else "false"
+            Ok $"failed:%s{retriable}:%s{error.Message}"
+        | ExternalOutcome.Cancelled -> Ok "cancelled:"
+        | ExternalOutcome.Pending
+        | ExternalOutcome.Running _ ->
+            Error $"%s{ExternalOutcome.label outcome} is not terminal and has no signed-outcome descriptor"
+
+    /// The exact text a worker signs, and the exact text the platform
+    /// verifies against. Newline-separated so no field's content can
+    /// consume another's boundary (`worker` and `key` are charset-limited
+    /// and the two digests are hex, so none of them can contain `\n`).
+    ///
+    /// `handleId` comes from the callback body and is rendered
+    /// lowercase-`D` — the platform's own canonical `Guid` text — so a
+    /// worker that upper-cases or brace-wraps its handle id still signs
+    /// the same bytes the platform verifies.
+    let signingPayload (handleId: Guid) (envelope: WorkerOutcomeSignature) : string =
+        String.concat "\n" [
+            Domain
+            (string handleId).ToLowerInvariant()
+            envelope.ArtifactHash
+            envelope.DiagnosticsHash
+            envelope.SignedAt
+        ]
+
+    /// Render an envelope into its header form — the shape a worker emits
+    /// and the shape `parse` accepts. Shipped (rather than left to each
+    /// worker) so the emitting and parsing halves cannot drift, and so a
+    /// test signs what the ingress reads by construction.
+    let render (envelope: WorkerOutcomeSignature) : string =
+        String.concat "," [
+            $"v=%s{Version}"
+            $"worker=%s{envelope.WorkerId}"
+            $"key=%s{envelope.KeyId}"
+            $"t=%s{envelope.SignedAt}"
+            $"artifact=%s{envelope.ArtifactHash}"
+            $"diagnostics=%s{envelope.DiagnosticsHash}"
+            $"sig=%s{envelope.Signature}"
+        ]
+
+    /// Parse a header into an envelope, or say why it is not one.
+    ///
+    /// Every refusal is a **shape** problem the emitting worker can fix,
+    /// and is deliberately distinct from a verification failure for the
+    /// reason `ExternalCallback.toOutcome`'s refusals are: a worker with a
+    /// malformed header has a bug, not a forged key, and conflating the
+    /// two buries the forgery signal under integration noise. The ingress
+    /// still refuses both uniformly on the wire.
+    let parse (header: string) : Result<WorkerOutcomeSignature, string> =
+        if String.IsNullOrWhiteSpace header then
+            Error "the signature header is empty"
+        elif header.Length > MaxHeaderLength then
+            Error $"the signature header exceeds %d{MaxHeaderLength} characters"
+        else
+            let parameters =
+                header.Split ','
+                |> Array.map _.Trim()
+                |> Array.filter (fun part -> part <> "")
+                |> Array.fold
+                    (fun acc part ->
+                        match acc with
+                        | Error _ -> acc
+                        | Ok pairs ->
+                            match part.IndexOf '=' with
+                            | -1 -> Error $"parameter '%s{part}' is not a key=value pair"
+                            | at ->
+                                let key = part.Substring(0, at).Trim().ToLowerInvariant()
+                                let value = part.Substring(at + 1).Trim()
+
+                                if key = "" then
+                                    Error "a parameter has an empty name"
+                                elif value.Contains "=" then
+                                    Error $"parameter '%s{key}' has a value containing '='"
+                                else
+                                    // Last wins is NOT acceptable here: a
+                                    // duplicate parameter is exactly how a
+                                    // parser-differential attack gets one
+                                    // side to read `worker=a` and the other
+                                    // `worker=b`.
+                                    Ok(pairs |> Map.add key value))
+                    (Ok Map.empty)
+
+            let duplicated =
+                header.Split ','
+                |> Array.choose (fun part ->
+                    match part.Trim().IndexOf '=' with
+                    | -1 -> None
+                    | at -> Some(part.Trim().Substring(0, at).Trim().ToLowerInvariant()))
+                |> Array.countBy id
+                |> Array.filter (fun (_, count) -> count > 1)
+                |> Array.map fst
+
+            match parameters with
+            | Error e -> Error e
+            | Ok _ when duplicated.Length > 0 -> Error $"""duplicate parameter(s): %s{String.concat ", " duplicated}"""
+            | Ok pairs ->
+                let required (name: string) =
+                    match pairs.TryFind name with
+                    | Some v when v <> "" -> Ok v
+                    | _ -> Error $"parameter '%s{name}' is missing or empty"
+
+                match required "v" with
+                | Error e -> Error e
+                | Ok version when version <> Version ->
+                    Error $"unsupported signature envelope version '%s{version}'; this platform accepts v=%s{Version}"
+                | Ok _ ->
+                    match
+                        required "worker", required "key", required "t", required "artifact", required "diagnostics"
+                    with
+                    | Ok workerId, Ok keyId, Ok signedAt, Ok artifact, Ok diagnostics ->
+                        match required "sig" with
+                        | Error e -> Error e
+                        | Ok signature ->
+                            if not (isSafeIdentifier workerId) then
+                                Error "parameter 'worker' is not a valid identifier"
+                            elif not (isSafeIdentifier keyId) then
+                                Error "parameter 'key' is not a valid identifier"
+                            elif not (isHexDigest artifact) then
+                                Error "parameter 'artifact' is not a lowercase hex SHA-256 digest"
+                            elif not (isHexDigest diagnostics) then
+                                Error "parameter 'diagnostics' is not a lowercase hex SHA-256 digest"
+                            elif not (isBase64Url signature) then
+                                Error "parameter 'sig' is not unpadded base64url"
+                            elif String.IsNullOrWhiteSpace signedAt || signedAt.Length > MaxIdentifierLength then
+                                Error "parameter 't' is missing or implausibly long"
+                            else
+                                Ok {
+                                    WorkerId = workerId
+                                    KeyId = keyId
+                                    SignedAt = signedAt
+                                    ArtifactHash = artifact
+                                    DiagnosticsHash = diagnostics
+                                    Signature = signature
+                                }
+                    | Error e, _, _, _, _
+                    | _, Error e, _, _, _
+                    | _, _, Error e, _, _
+                    | _, _, _, Error e, _
+                    | _, _, _, _, Error e -> Error e

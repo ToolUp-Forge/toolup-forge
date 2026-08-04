@@ -595,6 +595,10 @@ ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore (class)
 ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.BlobWorkerCspContributor (class)
 ToolUp.Platform.BlobWorkerCspContributor..ctor()
+ToolUp.Platform.BlobWorkerKeyRegistry (class)
+ToolUp.Platform.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.BlobWorkerKeyRegistry.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWorkerKeyRegistry]
 ToolUp.Platform.BlobXmlRepository (class)
 ToolUp.Platform.BlobXmlRepository..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.BootstrapTeam (class)
@@ -3882,6 +3886,14 @@ ToolUp.Platform.IWebhookRegistry.ListSubscriptions(System.String) : Microsoft.FS
 ToolUp.Platform.IWebhookRegistry.RotateSecret(System.String, System.Guid, System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]
 ToolUp.Platform.IWebhookRegistry.SetConsecutiveFailures(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IWebhookRegistry.UpdateStatus(System.String, System.Guid, ToolUp.Platform.WebhookStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IWorkerKeyRegistry (interface)
+ToolUp.Platform.IWorkerKeyRegistry.Approve(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
+ToolUp.Platform.IWorkerKeyRegistry.EnrolOnFirstContact(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
+ToolUp.Platform.IWorkerKeyRegistry.IsDistributed : System.Boolean { get }
+ToolUp.Platform.IWorkerKeyRegistry.List() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkerSigningKey]]
+ToolUp.Platform.IWorkerKeyRegistry.Register(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
+ToolUp.Platform.IWorkerKeyRegistry.Resolve(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WorkerSigningKey]]
+ToolUp.Platform.IWorkerKeyRegistry.Revoke(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
 ToolUp.Platform.IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -3934,6 +3946,9 @@ ToolUp.Platform.InMemoryTimeSeriesStoreModule (class)
 ToolUp.Platform.InMemoryTimeSeriesStoreModule.create() : ToolUp.Platform.ITimeSeriesStore
 ToolUp.Platform.InMemoryTreePatchChannel (class)
 ToolUp.Platform.InMemoryTreePatchChannel..ctor(ToolUp.Platform.ILiveChannel, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String])
+ToolUp.Platform.InMemoryWorkerKeyRegistry (class)
+ToolUp.Platform.InMemoryWorkerKeyRegistry..ctor()
+ToolUp.Platform.InMemoryWorkerKeyRegistry.Count : System.Int32 { get }
 ToolUp.Platform.InProcessDistributedLock (class)
 ToolUp.Platform.InProcessDistributedLock..ctor()
 ToolUp.Platform.InProcessDistributedLockModule (class)
@@ -5026,6 +5041,16 @@ ToolUp.Platform.OrphanSubscription (class)
 ToolUp.Platform.OrphanSubscription..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.OrphanSubscription.Kind : ToolUp.Platform.EventKind { get }
 ToolUp.Platform.OrphanSubscription.SubscribedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
+ToolUp.Platform.OutcomeAttribution (class)
+ToolUp.Platform.OutcomeAttribution..ctor(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String, System.String, System.String)
+ToolUp.Platform.OutcomeAttribution.Algorithm : ToolUp.Platform.WorkerKeyAlgorithm { get }
+ToolUp.Platform.OutcomeAttribution.ArtifactHash : System.String { get }
+ToolUp.Platform.OutcomeAttribution.DiagnosticsHash : System.String { get }
+ToolUp.Platform.OutcomeAttribution.KeyId : System.String { get }
+ToolUp.Platform.OutcomeAttribution.SignedAt : System.String { get }
+ToolUp.Platform.OutcomeAttribution.WorkerId : System.String { get }
+ToolUp.Platform.OutcomeAttributionModule (class)
+ToolUp.Platform.OutcomeAttributionModule.describe(ToolUp.Platform.OutcomeAttribution) : System.String
 ToolUp.Platform.OwnerTeamBootstrapLifecycle (class)
 ToolUp.Platform.OwnerTeamBootstrapLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.OwnerTeamBootstrapLifecycle+OwnerTeamBootstrapLifecycle (class)
@@ -6054,6 +6079,89 @@ ToolUp.Platform.ShareTokenStore+SignedPayload.TokenId : System.String { get }
 ToolUp.Platform.SignedExportDepsValidator (class)
 ToolUp.Platform.SignedExportDepsValidator+SignedExportDepsValidator (class)
 ToolUp.Platform.SignedExportDepsValidator+SignedExportDepsValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.SignedOutcomePolicy (class)
+ToolUp.Platform.SignedOutcomePolicy.IsNoSignedOutcomes : System.Boolean { get }
+ToolUp.Platform.SignedOutcomePolicy.IsRequireForAllBackends : System.Boolean { get }
+ToolUp.Platform.SignedOutcomePolicy.IsRequireForIsolatingBackends : System.Boolean { get }
+ToolUp.Platform.SignedOutcomePolicy.IsVerifyWhenPresented : System.Boolean { get }
+ToolUp.Platform.SignedOutcomePolicy.NoSignedOutcomes : ToolUp.Platform.SignedOutcomePolicy { get }
+ToolUp.Platform.SignedOutcomePolicy.RequireForAllBackends : ToolUp.Platform.SignedOutcomePolicy { get }
+ToolUp.Platform.SignedOutcomePolicy.RequireForIsolatingBackends : ToolUp.Platform.SignedOutcomePolicy { get }
+ToolUp.Platform.SignedOutcomePolicy.Tag : System.Int32 { get }
+ToolUp.Platform.SignedOutcomePolicy.VerifyWhenPresented : ToolUp.Platform.SignedOutcomePolicy { get }
+ToolUp.Platform.SignedOutcomePolicy+Tags (class)
+ToolUp.Platform.SignedOutcomePolicy+Tags.NoSignedOutcomes : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomePolicy+Tags.RequireForAllBackends : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomePolicy+Tags.RequireForIsolatingBackends : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomePolicy+Tags.VerifyWhenPresented : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomePolicyModule (class)
+ToolUp.Platform.SignedOutcomePolicyModule.label(ToolUp.Platform.SignedOutcomePolicy) : System.String
+ToolUp.Platform.SignedOutcomeRejection (class)
+ToolUp.Platform.SignedOutcomeRejection.IsArtifactHashMismatch : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsKeyNotApproved : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsKeyRevoked : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsMalformedEnvelope : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsSignatureInvalid : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsSignatureRequired : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsStaleTimestamp : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsUnknownWorkerKey : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.IsUnparseableTimestamp : System.Boolean { get }
+ToolUp.Platform.SignedOutcomeRejection.Tag : System.Int32 { get }
+ToolUp.Platform.SignedOutcomeRejection+ArtifactHashMismatch (class)
+ToolUp.Platform.SignedOutcomeRejection+ArtifactHashMismatch.actual : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+ArtifactHashMismatch.signed : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyNotApproved (class)
+ToolUp.Platform.SignedOutcomeRejection+KeyNotApproved.keyId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyNotApproved.status : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyNotApproved.workerId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyRevoked (class)
+ToolUp.Platform.SignedOutcomeRejection+KeyRevoked.keyId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyRevoked.reason : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+KeyRevoked.workerId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+MalformedEnvelope (class)
+ToolUp.Platform.SignedOutcomeRejection+MalformedEnvelope.reason : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+SignatureInvalid (class)
+ToolUp.Platform.SignedOutcomeRejection+SignatureInvalid.reason : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+SignatureRequired (class)
+ToolUp.Platform.SignedOutcomeRejection+SignatureRequired.backend : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+SignatureRequired.policy : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+StaleTimestamp (class)
+ToolUp.Platform.SignedOutcomeRejection+StaleTimestamp.signedAt : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+StaleTimestamp.skew : System.TimeSpan { get }
+ToolUp.Platform.SignedOutcomeRejection+StaleTimestamp.tolerance : System.TimeSpan { get }
+ToolUp.Platform.SignedOutcomeRejection+Tags (class)
+ToolUp.Platform.SignedOutcomeRejection+Tags.ArtifactHashMismatch : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.KeyNotApproved : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.KeyRevoked : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.MalformedEnvelope : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.SignatureInvalid : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.SignatureRequired : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.StaleTimestamp : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.UnknownWorkerKey : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+Tags.UnparseableTimestamp : System.Int32 (literal)
+ToolUp.Platform.SignedOutcomeRejection+UnknownWorkerKey (class)
+ToolUp.Platform.SignedOutcomeRejection+UnknownWorkerKey.keyId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+UnknownWorkerKey.workerId : System.String { get }
+ToolUp.Platform.SignedOutcomeRejection+UnparseableTimestamp (class)
+ToolUp.Platform.SignedOutcomeRejection+UnparseableTimestamp.signedAt : System.String { get }
+ToolUp.Platform.SignedOutcomeRejectionModule (class)
+ToolUp.Platform.SignedOutcomeRejectionModule.describe(ToolUp.Platform.SignedOutcomeRejection) : System.String
+ToolUp.Platform.SignedOutcomeRejectionModule.label(ToolUp.Platform.SignedOutcomeRejection) : System.String
+ToolUp.Platform.SignedOutcomeVerification (class)
+ToolUp.Platform.SignedOutcomeVerification..ctor(ToolUp.Platform.SignedOutcomePolicy, ToolUp.Platform.IWorkerKeyRegistry, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WorkerSigningKey, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], System.TimeSpan)
+ToolUp.Platform.SignedOutcomeVerification.MaxClockSkew : System.TimeSpan { get }
+ToolUp.Platform.SignedOutcomeVerification.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.SignedOutcomeVerification.Policy : ToolUp.Platform.SignedOutcomePolicy { get }
+ToolUp.Platform.SignedOutcomeVerification.Registry : ToolUp.Platform.IWorkerKeyRegistry { get }
+ToolUp.Platform.SignedOutcomeVerification.Verify : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WorkerSigningKey, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
+ToolUp.Platform.SignedOutcomeVerificationModule (class)
+ToolUp.Platform.SignedOutcomeVerificationModule.DefaultMaxClockSkew : System.TimeSpan { get }
+ToolUp.Platform.SignedOutcomeVerificationModule.create(ToolUp.Platform.SignedOutcomePolicy, ToolUp.Platform.IWorkerKeyRegistry) : ToolUp.Platform.SignedOutcomeVerification
+ToolUp.Platform.SignedOutcomeVerifier (class)
+ToolUp.Platform.SignedOutcomeVerifier.ContextItemKey : System.String (literal)
+ToolUp.Platform.SignedOutcomeVerifier.artifactHash(ToolUp.Platform.ExternalOutcome) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.SignedOutcomeVerifier.requiresSignature(ToolUp.Platform.SignedOutcomePolicy, System.Boolean) : System.Boolean
+ToolUp.Platform.SignedOutcomeVerifier.verify(ToolUp.Platform.SignedOutcomeVerification, System.String, System.Boolean, System.Guid, ToolUp.Platform.ExternalOutcome, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OutcomeAttribution], ToolUp.Platform.SignedOutcomeRejection]]
 ToolUp.Platform.SingleKeyResolver (class)
 ToolUp.Platform.SingleKeyResolver.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
 ToolUp.Platform.SingleKeyResolver+SingleKeyResolver (class)
@@ -6829,6 +6937,80 @@ ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy..ctor(Microsoft.FSharp.Coll
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule (class)
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule.empty : ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.WorkerKeyError (class)
+ToolUp.Platform.WorkerKeyError.IsInvalidIdentifier : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.IsInvalidPublicKey : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.IsKeyConflict : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.IsKeyRevoked : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.IsStoreFailure : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.IsUnknownKey : System.Boolean { get }
+ToolUp.Platform.WorkerKeyError.Tag : System.Int32 { get }
+ToolUp.Platform.WorkerKeyError+InvalidIdentifier (class)
+ToolUp.Platform.WorkerKeyError+InvalidIdentifier.reason : System.String { get }
+ToolUp.Platform.WorkerKeyError+InvalidPublicKey (class)
+ToolUp.Platform.WorkerKeyError+InvalidPublicKey.reason : System.String { get }
+ToolUp.Platform.WorkerKeyError+KeyConflict (class)
+ToolUp.Platform.WorkerKeyError+KeyConflict.keyId : System.String { get }
+ToolUp.Platform.WorkerKeyError+KeyConflict.workerId : System.String { get }
+ToolUp.Platform.WorkerKeyError+KeyRevoked (class)
+ToolUp.Platform.WorkerKeyError+KeyRevoked.keyId : System.String { get }
+ToolUp.Platform.WorkerKeyError+KeyRevoked.reason : System.String { get }
+ToolUp.Platform.WorkerKeyError+KeyRevoked.workerId : System.String { get }
+ToolUp.Platform.WorkerKeyError+StoreFailure (class)
+ToolUp.Platform.WorkerKeyError+StoreFailure.message : System.String { get }
+ToolUp.Platform.WorkerKeyError+Tags (class)
+ToolUp.Platform.WorkerKeyError+Tags.InvalidIdentifier : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+Tags.InvalidPublicKey : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+Tags.KeyConflict : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+Tags.KeyRevoked : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+Tags.StoreFailure : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+Tags.UnknownKey : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyError+UnknownKey (class)
+ToolUp.Platform.WorkerKeyError+UnknownKey.keyId : System.String { get }
+ToolUp.Platform.WorkerKeyError+UnknownKey.workerId : System.String { get }
+ToolUp.Platform.WorkerKeyErrorModule (class)
+ToolUp.Platform.WorkerKeyErrorModule.describe(ToolUp.Platform.WorkerKeyError) : System.String
+ToolUp.Platform.WorkerKeyErrorModule.label(ToolUp.Platform.WorkerKeyError) : System.String
+ToolUp.Platform.WorkerKeyRegistry (class)
+ToolUp.Platform.WorkerKeyRegistry.describe(ToolUp.Platform.WorkerSigningKey) : System.String
+ToolUp.Platform.WorkerKeyRegistry.isUsable(ToolUp.Platform.WorkerSigningKey) : System.Boolean
+ToolUp.Platform.WorkerKeyRegistry.sameMaterial(ToolUp.Platform.WorkerSigningKey, System.String) : System.Boolean
+ToolUp.Platform.WorkerKeyRegistry.validate(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.WorkerKeyError]
+ToolUp.Platform.WorkerKeyStatus (class)
+ToolUp.Platform.WorkerKeyStatus.Approved : ToolUp.Platform.WorkerKeyStatus { get }
+ToolUp.Platform.WorkerKeyStatus.IsApproved : System.Boolean { get }
+ToolUp.Platform.WorkerKeyStatus.IsPendingApproval : System.Boolean { get }
+ToolUp.Platform.WorkerKeyStatus.IsRevoked : System.Boolean { get }
+ToolUp.Platform.WorkerKeyStatus.PendingApproval : ToolUp.Platform.WorkerKeyStatus { get }
+ToolUp.Platform.WorkerKeyStatus.Tag : System.Int32 { get }
+ToolUp.Platform.WorkerKeyStatus+Revoked (class)
+ToolUp.Platform.WorkerKeyStatus+Revoked.at : System.DateTime { get }
+ToolUp.Platform.WorkerKeyStatus+Revoked.reason : System.String { get }
+ToolUp.Platform.WorkerKeyStatus+Tags (class)
+ToolUp.Platform.WorkerKeyStatus+Tags.Approved : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyStatus+Tags.PendingApproval : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyStatus+Tags.Revoked : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyStatusModule (class)
+ToolUp.Platform.WorkerKeyStatusModule.label(ToolUp.Platform.WorkerKeyStatus) : System.String
+ToolUp.Platform.WorkerPublicKey (class)
+ToolUp.Platform.WorkerPublicKey.Ed25519KeyBytes : System.Int32 (literal)
+ToolUp.Platform.WorkerPublicKey.tryDecode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Platform.WorkerPublicKey.tryImportEs256(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Security.Cryptography.ECDsa, System.String]
+ToolUp.Platform.WorkerPublicKey.validate(ToolUp.Platform.WorkerKeyAlgorithm, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.WorkerSignature (class)
+ToolUp.Platform.WorkerSignature.Es256SignatureBytes : System.Int32 (literal)
+ToolUp.Platform.WorkerSignature.bclVerifier(ToolUp.Platform.WorkerSigningKey, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.WorkerSignature.decodeBase64Url(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Platform.WorkerSignature.verifyEs256(ToolUp.Platform.WorkerSigningKey, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.WorkerSigningKey (class)
+ToolUp.Platform.WorkerSigningKey..ctor(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String, ToolUp.Platform.WorkerKeyStatus, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.WorkerSigningKey.Algorithm : ToolUp.Platform.WorkerKeyAlgorithm { get }
+ToolUp.Platform.WorkerSigningKey.ApprovedBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WorkerSigningKey.EnrolledAt : System.DateTime { get }
+ToolUp.Platform.WorkerSigningKey.KeyId : System.String { get }
+ToolUp.Platform.WorkerSigningKey.PublicKey : System.String { get }
+ToolUp.Platform.WorkerSigningKey.Status : ToolUp.Platform.WorkerKeyStatus { get }
+ToolUp.Platform.WorkerSigningKey.WorkerId : System.String { get }
 ToolUp.Remoting.AspNetCore.AppBuilderExtensions (class)
 ToolUp.Remoting.AspNetCore.AppBuilderExtensions.IApplicationBuilder.UseRemoting`1(Microsoft.AspNetCore.Builder.IApplicationBuilder, ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : System.Void
 ToolUp.Remoting.AspNetCore.Extensions (class)

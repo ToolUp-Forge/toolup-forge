@@ -40,7 +40,14 @@ open ToolUp.Platform
 //      would be an oracle
 //   3. resolve the handle → the stored record
 //   4. verify the secret against THAT record's hash, constant-time
-//   5. claim + drive, behind `IExternalCompletionSink`
+//   5. **Phase 486** — verify the worker's outcome signature, when the
+//      deployment composed a `SignedOutcomeVerification` (absent ⇒ this
+//      gate does not exist: one null DI probe, no branch, no allocation,
+//      GP 11 / GP 13). AFTER the secret, deliberately: the signature gate
+//      resolves a registry and does curve arithmetic, and doing that for
+//      an unauthenticated caller would hand a prober a free oracle on the
+//      key registry. Transport auth first, attribution second.
+//   6. claim + drive, behind `IExternalCompletionSink`
 //
 // Verification is step 4 and not step 1 because there is nothing to
 // verify against until the record is loaded — the secret is per handle.
@@ -120,13 +127,26 @@ type private Decision =
     | Throttled
     /// Refused. `reason` is internal-only — the response is uniform.
     | Refused of reason: string * handleId: Guid option
+    /// Phase 486 — the transport authenticated but the worker signature
+    /// gate refused.
+    ///
+    /// Its own case rather than a `Refused` with a `signature-*` reason
+    /// because the rejection carries a typed cause worth logging in full:
+    /// the `signature-artifact-mismatch` arm in particular says "a
+    /// possibly-genuine signature arrived over a substituted result", and
+    /// collapsing that to a bare label in the warning would leave the
+    /// operator with the one refusal whose meaning they cannot recover.
+    /// The wire response is identical to `Refused` — uniform 403.
+    | SignatureRefused of SignedOutcomeRejection * handleId: Guid
     /// External compute is composed but no usable handle store is, so
     /// callbacks cannot be authenticated or routed at all.
     | StoreMissing
     /// The handle authenticated, but no completion sink is registered.
     | SinkMissing of ExternalHandleRecord * ExternalOutcome
-    /// The handle authenticated and the sink answered.
-    | Applied of ExternalHandleRecord * ExternalOutcome * ExternalResolution
+    /// The handle authenticated and the sink answered. Carries the Phase
+    /// 486 attribution when a worker signature was verified, `None` when
+    /// none was presented (or verification is not composed).
+    | Applied of ExternalHandleRecord * ExternalOutcome * ExternalResolution * OutcomeAttribution option
 
 let private clientIp (ctx: HttpContext) : string =
     match ctx.Connection.RemoteIpAddress with
@@ -186,8 +206,8 @@ let refusalCount (ip: string) : int =
     | true, (count, _) -> count
     | _ -> 0
 
-let private readSecretHeader (ctx: HttpContext) : string option =
-    match ctx.Request.Headers.TryGetValue ExternalCallback.SecretHeader with
+let private readHeader (name: string) (ctx: HttpContext) : string option =
+    match ctx.Request.Headers.TryGetValue name with
     | true, values when values.Count > 0 ->
         match values[0] with
         | null
@@ -195,8 +215,39 @@ let private readSecretHeader (ctx: HttpContext) : string option =
         | v -> Some v
     | _ -> None
 
-/// The five gates. Reads the request, resolves + authenticates the
-/// handle, and drives the run — writing nothing to the response.
+let private readSecretHeader (ctx: HttpContext) : string option =
+    readHeader ExternalCallback.SecretHeader ctx
+
+/// Phase 486 — the composed signed-outcome verification, or `None`.
+///
+/// `None` is the default and means the gate does not exist: no registry
+/// resolution, no header read, no crypto (GP 13). A deployment opts in by
+/// registering exactly one `SignedOutcomeVerification` singleton.
+let private resolveVerification (ctx: HttpContext) : SignedOutcomeVerification option =
+    match ctx.RequestServices.GetService(typeof<SignedOutcomeVerification>) with
+    | :? SignedOutcomeVerification as v -> Some v
+    | _ -> None
+
+/// Phase 486 — whether the backend that produced this outcome declares the
+/// Phase 478 isolation posture, which is what
+/// `RequireForIsolatingBackends` keys on.
+///
+/// Read from the COMPOSED dispatcher, not from the request: the handle
+/// names its backend, and the deployment composed exactly one dispatcher
+/// for it. A deployment with no introspectable dispatcher declares nothing
+/// and therefore reads as non-isolating — the same direction
+/// `ExecutionProfileGate.postureOf` defaults, so forgetting to declare is
+/// never mistaken for declaring.
+let private backendIsIsolating (ctx: HttpContext) : bool =
+    match ctx.RequestServices.GetService(typeof<IExternalComputeDispatcher>) with
+    | :? IExternalComputeDispatcher as dispatcher ->
+        ExecutionProfileGate.postureOf dispatcher
+        |> IsolationPosture.honours ExecutionProfile.Isolated
+    | _ -> false
+
+/// The six gates. Reads the request, resolves + authenticates the
+/// handle, verifies the worker signature when composed, and drives the run
+/// — writing nothing to the response.
 let private decide (ctx: HttpContext) (ip: string) : Async<Decision> = async {
     if isThrottled ip then
         return Throttled
@@ -230,31 +281,65 @@ let private decide (ctx: HttpContext) (ip: string) : Async<Decision> = async {
                             if not (ExternalCallbackSecret.verify record.CallbackSecretHash presented) then
                                 return Refused("secret-mismatch", Some payload.HandleId)
                             else
-                                match ctx.RequestServices.GetService(typeof<IExternalCompletionSink>) with
-                                | :? IExternalCompletionSink as sink ->
-                                    let! resolution = sink.ResolveExternal(record.Handle, record.JobRunId, outcome)
+                                // Phase 486 — the signature gate. Absent
+                                // verification short-circuits to `Ok None`
+                                // without reading a header or touching a
+                                // registry, so an opted-out deployment
+                                // takes the identical path Phase 320
+                                // took.
+                                let! attribution =
+                                    match resolveVerification ctx with
+                                    | None -> async { return Ok None }
+                                    | Some verification ->
+                                        SignedOutcomeVerifier.verify
+                                            verification
+                                            record.Handle.Backend
+                                            (backendIsIsolating ctx)
+                                            record.Handle.HandleId
+                                            outcome
+                                            (readHeader WorkerOutcomeSignature.Header ctx)
 
-                                    return Applied(record, outcome, resolution)
-                                | _ -> return SinkMissing(record, outcome)
+                                match attribution with
+                                | Error rejection ->
+                                    // A signature failure NEVER falls
+                                    // through to acceptance. The run stays
+                                    // `AwaitingExternal` and the poll loop
+                                    // resolves it from the backend's own
+                                    // report — so refusing here costs
+                                    // latency, not the job.
+                                    return SignatureRefused(rejection, payload.HandleId)
+                                | Ok verified ->
+                                    match ctx.RequestServices.GetService(typeof<IExternalCompletionSink>) with
+                                    | :? IExternalCompletionSink as sink ->
+                                        // Stamp the attribution before the
+                                        // sink runs, so a consumer's own
+                                        // post-handler stage can read it
+                                        // from `HttpContext.Items` (the
+                                        // seam that avoids widening
+                                        // `IExternalCompletionSink`).
+                                        verified
+                                        |> Option.iter (fun a ->
+                                            ctx.Items[SignedOutcomeVerifier.ContextItemKey] <- box a)
+
+                                        let! resolution = sink.ResolveExternal(record.Handle, record.JobRunId, outcome)
+
+                                        return Applied(record, outcome, resolution, verified)
+                                    | _ -> return SinkMissing(record, outcome)
                     | _ -> return StoreMissing
 }
 
-/// Emit the rejection audit + the rate-limited warning. Both, always —
-/// the audit is the complete trail, the warning is the alertable signal.
-let private auditRefusal (ctx: HttpContext) (ip: string) (reason: string) (handleId: Guid option) = async {
+/// Count the refusal toward the throttle and record the audit row —
+/// **without** the generic forged-callback warning.
+///
+/// Split out for the Phase 486 signature gate, which logs its own,
+/// more-specific line: emitting both would put two warnings on one refusal
+/// and make the generic one (whose whole job is to be the alertable signal
+/// for a FORGED callback) fire for a caller that demonstrably held a valid
+/// credential. The counter and the audit row are unconditional either way —
+/// the trail stays complete, which is the property the warning throttle
+/// exists not to compromise.
+let private recordAndAuditRefusal (ctx: HttpContext) (ip: string) (reason: string) (handleId: Guid option) = async {
     recordRefusal ip
-
-    if shouldWarn ip then
-        resolveLogger ctx
-        |> Option.iter (fun l ->
-            l.Warn(
-                sprintf
-                    "[external-compute-callback] event=callback_refused reason=%s handle=%s from=%s — a completion callback was refused. If this repeats from an address that is not your compute backend, treat it as a forged-callback attempt. Further warnings from this address are suppressed for %g minutes; the audit trail (ExternalCallbackRejected) records every one."
-                    reason
-                    (handleId |> Option.map string |> Option.defaultValue "<none>")
-                    ip
-                    warningWindowMinutes
-            ))
 
     match resolveAudit ctx with
     | Some audit ->
@@ -271,6 +356,24 @@ let private auditRefusal (ctx: HttpContext) (ip: string) (reason: string) (handl
     | None -> ()
 }
 
+/// Emit the rejection audit + the rate-limited warning. Both, always —
+/// the audit is the complete trail, the warning is the alertable signal.
+let private auditRefusal (ctx: HttpContext) (ip: string) (reason: string) (handleId: Guid option) = async {
+    do! recordAndAuditRefusal ctx ip reason handleId
+
+    if shouldWarn ip then
+        resolveLogger ctx
+        |> Option.iter (fun l ->
+            l.Warn(
+                sprintf
+                    "[external-compute-callback] event=callback_refused reason=%s handle=%s from=%s — a completion callback was refused. If this repeats from an address that is not your compute backend, treat it as a forged-callback attempt. Further warnings from this address are suppressed for %g minutes; the audit trail (ExternalCallbackRejected) records every one."
+                    reason
+                    (handleId |> Option.map string |> Option.defaultValue "<none>")
+                    ip
+                    warningWindowMinutes
+            ))
+}
+
 /// Audit a resolution. Emitted on EVERY resolution the ingress reaches,
 /// including the idempotent duplicate (GP 6) — see the payload doc for
 /// why the no-op is audited too.
@@ -280,6 +383,7 @@ let private auditResolved
     (outcome: ExternalOutcome)
     (resolution: string)
     (runStatus: string option)
+    (attribution: OutcomeAttribution option)
     =
     async {
         match resolveAudit ctx with
@@ -295,6 +399,14 @@ let private auditResolved
                         Outcome = ExternalOutcome.label outcome
                         Resolution = resolution
                         RunStatus = runStatus
+                        // Phase 486 — attribution, or honest silence. The
+                        // fields are `None` together or `Some` together;
+                        // there is no path that records a worker id
+                        // without having verified a signature for it.
+                        WorkerId = attribution |> Option.map _.WorkerId
+                        WorkerKeyId = attribution |> Option.map _.KeyId
+                        SignatureAlgorithm = attribution |> Option.map (_.Algorithm >> WorkerKeyAlgorithm.label)
+                        ArtifactHash = attribution |> Option.map _.ArtifactHash
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
@@ -328,6 +440,37 @@ let private callbackHandler: HttpHandler =
             ctx.Response.StatusCode <- 403
             return! ctx.WriteTextAsync "external-compute callback refused"
 
+        | SignatureRefused(rejection, handleId) ->
+            // The signature warning is NOT rate-limited by
+            // `shouldWarn`, unlike the generic forged-callback one.
+            // Deliberate: reaching this gate means the caller already
+            // presented a valid per-handle secret, so it is not the
+            // scripted-prober traffic the throttle exists to bound — it is
+            // either the deployment's own worker misbehaving or a
+            // credential-holding party signing wrongly, and both are
+            // low-volume and worth one line each. The refusal still
+            // counts toward the throttle, so a flood is still bounded.
+            resolveLogger ctx
+            |> Option.iter (fun l ->
+                l.Warn(
+                    sprintf
+                        "[external-compute-callback] event=callback_signature_refused reason=%s handle=%O from=%s — %s"
+                        (SignedOutcomeRejection.label rejection)
+                        handleId
+                        ip
+                        (SignedOutcomeRejection.describe rejection)
+                ))
+
+            do!
+                recordAndAuditRefusal ctx ip (SignedOutcomeRejection.label rejection) (Some handleId)
+                |> Async.StartImmediateAsTask
+
+            // Same uniform 403 as every other refusal. A caller learns
+            // that its callback was refused and nothing about which gate
+            // refused it — the operator's log and audit trail carry that.
+            ctx.Response.StatusCode <- 403
+            return! ctx.WriteTextAsync "external-compute callback refused"
+
         | StoreMissing ->
             // The route mounts only when external compute is composed, so
             // this is a deployment that opted in without a usable handle
@@ -345,31 +488,47 @@ let private callbackHandler: HttpHandler =
 
         | SinkMissing(record, outcome) ->
             do!
-                auditResolved ctx record outcome "sink-not-configured" None
+                auditResolved ctx record outcome "sink-not-configured" None None
                 |> Async.StartImmediateAsTask
 
             ctx.Response.StatusCode <- 503
             return! ctx.WriteTextAsync "external-compute callback: no completion sink configured"
 
-        | Applied(record, outcome, resolution) ->
+        | Applied(record, outcome, resolution, attribution) ->
             match resolution with
             | ExternalResolution.Resolved status ->
                 do!
-                    auditResolved ctx record outcome "resolved" (Some status)
+                    auditResolved ctx record outcome "resolved" (Some status) attribution
                     |> Async.StartImmediateAsTask
 
                 ctx.Response.StatusCode <- 200
 
+                // Phase 486 — the verified worker id is echoed so the
+                // BACKEND can confirm the platform attributed the outcome
+                // to the node it believes produced it. `None` when
+                // unsigned, which keeps the unsigned body byte-for-byte
+                // Phase 320's (a `None` serialises to `null` only if the
+                // field is present, so the field is omitted entirely).
                 return!
-                    ctx.WriteJsonAsync {|
-                        HandleId = record.Handle.HandleId
-                        Resolution = "resolved"
-                        RunStatus = status
-                    |}
+                    match attribution with
+                    | None ->
+                        ctx.WriteJsonAsync {|
+                            HandleId = record.Handle.HandleId
+                            Resolution = "resolved"
+                            RunStatus = status
+                        |}
+                    | Some a ->
+                        ctx.WriteJsonAsync {|
+                            HandleId = record.Handle.HandleId
+                            Resolution = "resolved"
+                            RunStatus = status
+                            WorkerId = a.WorkerId
+                            WorkerKeyId = a.KeyId
+                        |}
 
             | ExternalResolution.AlreadyResolved ->
                 do!
-                    auditResolved ctx record outcome "already-resolved" None
+                    auditResolved ctx record outcome "already-resolved" None attribution
                     |> Async.StartImmediateAsTask
 
                 ctx.Response.StatusCode <- 200
@@ -385,7 +544,7 @@ let private callbackHandler: HttpHandler =
                 // the run is not awaiting, so there is nothing the
                 // backend could usefully retry.
                 do!
-                    auditResolved ctx record outcome "no-awaiting-run" None
+                    auditResolved ctx record outcome "no-awaiting-run" None attribution
                     |> Async.StartImmediateAsTask
 
                 ctx.Response.StatusCode <- 200
@@ -402,7 +561,7 @@ let private callbackHandler: HttpHandler =
                 // forgery signal, because two independent stores
                 // disagreeing about a handle's scope is never routine.
                 do!
-                    auditResolved ctx record outcome "scope-mismatch" None
+                    auditResolved ctx record outcome "scope-mismatch" None attribution
                     |> Async.StartImmediateAsTask
 
                 resolveLogger ctx
@@ -426,7 +585,7 @@ let private callbackHandler: HttpHandler =
 
             | ExternalResolution.SinkNotConfigured ->
                 do!
-                    auditResolved ctx record outcome "sink-not-configured" None
+                    auditResolved ctx record outcome "sink-not-configured" None attribution
                     |> Async.StartImmediateAsTask
 
                 ctx.Response.StatusCode <- 503

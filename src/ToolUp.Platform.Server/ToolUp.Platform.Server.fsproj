@@ -252,6 +252,17 @@
              callback ingress drives a run through, so it compiles before
              JobScheduler.fs (which implements it). -->
         <Compile Include="Server\IExternalHandleStore.fs" />
+        <!-- Phase 486 — per-worker signing keys behind the completion
+             callback: worker identity to public key, with an approval flow
+             and sticky revocation. Before SignedOutcomeVerifier.fs (which
+             resolves keys through it) and before ExternalComputeCallback.fs
+             (which verifies with it). -->
+        <Compile Include="Server\WorkerKeyRegistry.fs" />
+        <!-- Phase 486 — the signed-outcome gates: policy, envelope
+             verification (BCL es256; ed25519 behind the
+             WorkerSignatureVerifier seam), and the typed rejection the
+             callback ingress audits. -->
+        <Compile Include="Server\SignedOutcomeVerifier.fs" />
         <!-- Phase 26 — single-node default impl of ITenantFleet over
              IEntityStore + IContainerScheduler + IDeployPipeline.
              Per-tenant SemaphoreSlim for serialised state mutations;

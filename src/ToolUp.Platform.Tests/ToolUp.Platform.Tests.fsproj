@@ -1674,6 +1674,17 @@
              test is not measuring the gate), and the GP 13 pins that a
              default deployment composes neither store nor sink. -->
         <Compile Include="InProcess\ExternalCallbackTests.fs" />
+        <!-- Phase 486 — signed worker outcomes: the header envelope's
+             parse/render round-trip and its refusal shapes, the
+             IWorkerKeyRegistry laws bound over BOTH implementations
+             (sticky revocation, key-substitution refusal, pending is not
+             usable), the verifier with a positive CONTROL beside every
+             refusal (the tampered-artifact test proves the same genuine
+             envelope verifies over its own body), the policy asserted in
+             BOTH directions at the HTTP boundary, and the GP 13 pin that a
+             deployment composing no verification does not read the header
+             at all. -->
+        <Compile Include="InProcess\SignedWorkerOutcomeTests.fs" />
         <!-- Phase 321 — job progress checkpoints: the checkpoint type's
              clamping, the pure coalescing rule WITH mutation controls
              pinning that terminal/durable are evaluated before the

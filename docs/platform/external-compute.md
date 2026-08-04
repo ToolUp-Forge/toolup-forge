@@ -375,7 +375,7 @@ Five flat primitives, deliberately, rather than a serialised `ExternalOutcome`: 
 | Status | When | What the backend should do |
 |---|---|---|
 | `200` | Resolved, already resolved, or the run was no longer awaiting. The body's `resolution` field says which (`resolved` / `already-resolved` / `no-awaiting-run`). | Nothing. All three are terminal for the backend. |
-| `403` | Any refusal — malformed body, missing or wrong secret, unknown handle, non-terminal status, scope mismatch. | Check the credential and the payload. The response deliberately does not say which. |
+| `403` | Any refusal — malformed body, missing or wrong secret, unknown handle, non-terminal status, scope mismatch, or (where signed outcomes are composed) a signature that did not verify. | Check the credential and the payload. The response deliberately does not say which. |
 | `429` | Too many refused callbacks from this address recently. | Back off. |
 | `503` | The deployment opted into external compute but composed no usable handle store. | Nothing; the run resolves by poll. |
 
@@ -431,6 +431,144 @@ The route is mounted only when `ServerConfig.ExternalCompute = CustomExternalCom
 **The path is `/_platform/...` and not `/api/...`, deliberately — do not move it.** Both the surface-enforcement middleware and the CSRF middleware are scoped to `/api/*`, so this route is outside the session-auth and double-submit-token envelope. That is what lets a GPU service POST to it with nothing but its per-handle secret; relocating it under `/api/` would demand an XSRF token from a caller that has no browser, no cookie jar and no way to obtain one, and every backend would start failing with `csrf_validation_failed`. The endpoint pays for that exemption itself: it authenticates every request against the handle's own secret hash, refuses uniformly, throttles per source address, and audits both outcomes. Same posture as the anonymous `/_platform/signing-key/` route.
 
 Handle records live under `_platform/external-compute/handles/{scopeId}/{handleId}.json`, **scope-partitioned** (GP 4), with a small `external-compute/handle-index/{handleId}` pointer so a callback carrying only a handle id resolves in one read rather than a listing. A record whose own `ScopeId` disagrees with the partition it was read from is refused rather than followed, so a mis-pointed index produces "unknown handle" and never a cross-scope read.
+
+## Signed worker outcomes
+
+The per-handle secret answers **"may this caller resolve this handle"**. It cannot answer **"which worker produced this result"**, because the secret is handed to a *backend* and every node behind that backend presents the same one. A compromised relay, a mis-routed queue consumer, and a pool node re-using a sibling's credential all satisfy the callback contract above and are indistinguishable from the honest case.
+
+Signed outcomes close that gap. A worker signs `(handleId, artifactHash, diagnosticsHash, timestamp)` with a **registered per-worker key**, and the ingress verifies the signature — and the artifact hash — before the outcome is accepted. Two properties, and the second is the one that makes the first worth having:
+
+- **Attribution** — the verified worker identity is recorded on the outcome.
+- **Integrity** — `artifactHash` is the digest of the *canonical descriptor of the outcome the callback delivers*, so a relay that replays a genuine envelope against a substituted `resultRef` produces a body that no longer hashes to the signed digest. Without that binding the signature would attest only that some worker said *something* about this handle.
+
+Entirely opt-in. A deployment that composes no `SignedOutcomeVerification` reads no header, resolves no registry, and performs no crypto — the request, the parse, the record and the resolution are byte-for-byte what the section above describes (GP 11 / GP 13).
+
+### The envelope
+
+One header, not six body fields:
+
+```
+POST /_platform/external-compute/callback
+X-ToolUp-External-Callback-Secret: <the per-handle secret>
+X-ToolUp-Worker-Signature: v=1,worker=gpu-node-7,key=k-2026-08,t=2026-08-04T10:00:00.0000000Z,
+                           artifact=<64 lowercase hex>,diagnostics=<64 lowercase hex>,sig=<base64url>
+
+{ "handleId": "3f2b...", "status": "succeeded", "resultRef": "s3://bucket/out.bin" }
+```
+
+| Parameter | Meaning |
+|---|---|
+| `v` | Envelope version. `1`. |
+| `worker` | Worker identity, resolved against the key registry. Charset `A-Z a-z 0-9 . _ : -`, ≤ 128 chars. |
+| `key` | Which of that worker's registered keys signed — so rotation needs no flag day. |
+| `t` | The signing timestamp, **as signed**. Verified for freshness (±5 minutes by default). |
+| `artifact` | Lowercase hex SHA-256 over the outcome descriptor. The binding to the body. |
+| `diagnostics` | Lowercase hex SHA-256 over the worker's diagnostics bundle. A **commitment**, recorded and never dereferenced. |
+| `sig` | Unpadded base64url signature over the canonical signing payload. |
+
+**A header rather than body fields**, for three reasons in increasing order of importance: a credential is not an outcome (the per-handle secret is already a header); six additive record fields would retype the wire contract for every consumer that builds one; and, decisively, it makes the GP 11 claim *structural* — an unsigned deployment sends no header and the ingress reads none, so there is no "the field was `None`" path to reason about.
+
+Unknown parameters are **ignored**, so the envelope can gain a TEE-attestation parameter later without a version bump for every existing worker. The trade is explicit: a parameter an older server does not know is a parameter it does not verify, which is why the *signed tuple* is closed and versioned even though the parameter list is open. Duplicate parameters are refused rather than last-wins — a duplicate is how a parser-differential attack gets two sides to read different values.
+
+### What gets signed
+
+```
+toolup.signed-outcome.v1
+<handleId, lowercase D-format>
+<artifactHash>
+<diagnosticsHash>
+<t, byte-for-byte as it appears in the header>
+```
+
+Newline-separated; the domain tag prevents a signature minted for one ToolUp protocol being replayed as another; the handle id means a genuine envelope cannot be moved between handles. `t` is never reformatted — a normalising round-trip through `DateTimeOffset` would change the bytes and break every signature it touched.
+
+The artifact descriptor is one line per terminal outcome, prefixed by the outcome label so no two cases can collide (`Succeeded ""` and `Cancelled` must not be interconvertible under a valid signature):
+
+| Outcome | Descriptor |
+|---|---|
+| `Succeeded resultRef` | `succeeded:<resultRef>` |
+| `Failed { Message; Retriable }` | `failed:<true\|false>:<message>` |
+| `Cancelled` | `cancelled:` |
+
+A .NET worker should call `SignedOutcomeVerifier.artifactHash` and `WorkerOutcomeSignature.signingPayload` / `render` rather than re-derive any of this — two implementations of one digest is how a signature scheme stops interoperating.
+
+### Algorithms — and an honest limitation
+
+| Algorithm | Verified by | Notes |
+|---|---|---|
+| `es256` | the in-tree verifier | ECDSA P-256 / SHA-256, **IEEE P1363 (`r \|\| s`) encoding**, BCL only. |
+| `ed25519` | a composed `WorkerSignatureVerifier` | Registrable; the in-tree verifier refuses it **by name**. |
+
+**.NET 10's BCL ships no Ed25519 primitive** — `System.Security.Cryptography` 10.0.0.0 exposes four `ECDsa*` types and zero `Ed*` — and pulling BouncyCastle or NSec into `ToolUp.Platform.Server` would put a third-party crypto stack in the SDK core (GP 1) for a capability most deployments never compose. So `es256` is the default, and `ed25519` is reachable through a structural function seam, the same GP 1 decoupling the detached-JWS verifier uses:
+
+```fsharp skip=fragment
+let verify: WorkerSignatureVerifier =
+    fun key payload signature ->
+        match key.Algorithm with
+        | WorkerKeyAlgorithm.Ed25519 -> myEd25519Verify key.PublicKey payload signature
+        | _ -> WorkerSignature.bclVerifier key payload signature
+```
+
+An algorithm that silently never verified would be strictly worse than one that says why, which is why the refusal names the missing dependency rather than reporting a key problem.
+
+The `es256` encoding is stated explicitly to `VerifyData` rather than left to an overload default: OpenSSL emits ASN.1 DER by default, JWS `ES256` uses P1363, and an implicit choice here presents as "signatures from my worker never verify" with nothing naming the encoding. A DER-length signature is refused with the encoding named.
+
+### The worker key registry
+
+`IWorkerKeyRegistry` maps worker identity to public key. **Only public keys live here**, which is why there is no `ISecretStore` on the surface: the private half never leaves the worker, and a registry that accepted private material could forge the attribution it exists to prove. Custody here is *integrity* custody, not confidentiality custody.
+
+Two enrolment paths, one of which cannot self-authorise:
+
+| Path | Lands | Usable? |
+|---|---|---|
+| `Register` — the operator states the key out of band | `Approved` | yes |
+| `EnrolOnFirstContact` — a worker presents a key the registry has never seen | `PendingApproval` | **no** |
+
+First contact **verifies nothing**: an unapproved key is exactly as useless as an unregistered one. What it buys is that an operator approves a key they can *see* rather than transcribing one — the difference between a five-second admin action and a manual key-distribution project nobody completes. A repeat first contact can neither demote an approved key nor overwrite its material.
+
+Three laws worth stating because they are what make the path safe:
+
+- **Revocation is sticky.** A revoked `(worker, key)` pair can never return to `Approved` — not by re-enrolment, not by re-registration, not by a second approval. A restorable revocation is a speed bump: the compromise that caused it is precisely a capability to re-present that key. Rotation is a **new key id**, which is why the envelope names the key and not only the worker.
+- **Material is never overwritten.** Presenting different material under a known key id is a `KeyConflict` — the key-substitution shape — and the stored key is left untouched.
+- **Key material is validated at registration, not at first callback.** A malformed key discovered when a signature arrives is discovered inside an unauthenticated request path, hours after the mistake, and presents as "this worker's signatures are all rejected". Validated at registration it presents as "that is not a P-256 SPKI", to the operator who just typed it. The curve is checked too — a P-384 key is valid SPKI, valid ECDSA, and still wrong for `es256`.
+
+Two implementations, and the difference matters for revocation specifically: `InMemoryWorkerKeyRegistry` (`IsDistributed = false`) loses registrations on restart, which fails *closed*; but it also holds them **per replica**, which fails *open* in one direction — a revocation applied on replica A leaves replica B still accepting the revoked key. Multi-replica deployments want `BlobWorkerKeyRegistry` (`IsDistributed = true`), which stores one blob per key under `_platform/external-compute/worker-keys/{workerId}/{keyId}.json` and **refuses to construct without `IConditionalBlobStorage`**: every mutation is a read-decide-write whose decision is a security decision, and a download-modify-upload fallback lets a concurrent enrolment overwrite a revocation.
+
+The registry is **deployment-scoped, not tenant-scoped**, and GP 4 is unaffected. A worker is a piece of the deployment's compute fleet, not a tenant's asset — the same GPU node legitimately serves many scopes — so keying by scope would either duplicate every key per tenant or invent a tenancy the fleet does not have. The tenant boundary stays exactly where the callback ingress put it: the *handle record's* `ScopeId`, read from platform state and never from the request. This registry answers "who signed", never "what may they touch".
+
+### Policy
+
+```fsharp skip=fragment
+services.AddSingleton(
+    SignedOutcomeVerification.create RequireForIsolatingBackends myWorkerKeyRegistry)
+```
+
+| Policy | Unsigned outcome | Presented signature |
+|---|---|---|
+| `NoSignedOutcomes` (the default, and what an **absent** registration means) | accepted | **not examined at all** |
+| `VerifyWhenPresented` | accepted | must verify |
+| `RequireForIsolatingBackends` | refused for a backend declaring the isolation posture; accepted otherwise | must verify |
+| `RequireForAllBackends` | refused | must verify |
+
+Four modes rather than a `bool` because the middle pair is how the feature is rolled out: turn on `VerifyWhenPresented`, watch the audit trail until every worker signs, then tighten. A binary switch would make adoption a flag day.
+
+**`RequireForIsolatingBackends` is the `ExecutionProfile.Isolated` clause, keyed to the BACKEND rather than to the individual spec — a deliberate reading, for two reasons.** The first is what the ingress actually has: neither `ExternalHandle` nor the stored handle record carries the profile, and `JobResult.HandedOff` carries only the handle, so recovering the submitted profile at callback time would mean a field on a persisted record, a parameter on `IExternalHandleStore.Register`, and a payload on a DU case — all breaking, for one boolean. The second is that the posture-keyed form is *stronger*: it cannot be dodged by mislabelling a spec `Standard`, because it covers every outcome a clean-room-capable backend produces. A backend that declares nothing reads as non-isolating, so forgetting to declare is never mistaken for declaring.
+
+### Where the gate sits, and what a refusal costs
+
+The signature gate runs **after** the per-handle secret check. Deliberately: it resolves a registry and does curve arithmetic, and doing that for an unauthenticated caller would hand a prober a free oracle on the key registry. Transport auth first, attribution second — and a caller with a wrong secret gets the `secret-mismatch` refusal, never a signature one.
+
+Within the gate the **artifact-hash match precedes the signature check**. Both must pass, so the order is not a correctness question; it is a question of what a rejection *means*. `signature-artifact-mismatch` says "a possibly-genuine signature arrived over a substituted result"; `signature-invalid` says "this is not a signature by that key". Checking the hash first means a relay-substitution incident is reported as itself rather than reading in the audit trail as a key problem.
+
+A refusal **never falls through to acceptance**, and it costs latency rather than the job: the run stays `AwaitingExternal` and the reconciliation poll resolves it from the backend's own report.
+
+### Observability
+
+- **Attribution rides the resolution event.** `ExternalCallbackResolved` gained `WorkerId` / `WorkerKeyId` / `SignatureAlgorithm` / `ArtifactHash`, all `string option`. They are `None` together or `Some` together — there is no path that records a worker id without having verified a signature for it, because a presented-but-unverified signature refuses the callback rather than reaching this event. The audit trail is the queryable attribution surface, since `IExternalCompletionSink` cannot gain a field without breaking every implementation of it. The verified attribution is also stamped into `HttpContext.Items` under `SignedOutcomeVerifier.ContextItemKey`, and the `200` body echoes `workerId` so the backend can confirm the platform attributed the outcome to the node it believes produced it.
+- **Every signature refusal is audited** under the `signature-*` reason family on `ExternalCallbackRejected`, and logged with the full typed cause. That warning is deliberately *not* rate-limited by the forged-callback throttle: reaching this gate means the caller already presented a valid per-handle secret, so it is not the scripted-prober traffic the throttle bounds — it is the deployment's own worker misbehaving, or a credential-holding party signing wrongly, and both are low-volume and worth one line each. The refusal still counts toward the throttle, so a flood is still bounded.
+- **`signature-artifact-mismatch` is the one to alert on hardest.** Every other signature refusal is a key or a clock problem. That one is a substituting relay.
+
+Neither the key material nor the work payload appears in any event.
 
 ## Memoizing a repeated submission
 

@@ -3132,6 +3132,28 @@ type ExternalCallbackResolvedPayload = {
     /// `"externally-cancelled"`); `None` for every non-`"resolved"`
     /// resolution.
     RunStatus: string option
+    /// Phase 486 — the **verified** worker identity that produced this
+    /// outcome. `None` when no signature was presented (or the deployment
+    /// has not composed signed-outcome verification), so the field
+    /// distinguishes "unattributed" from "attributed to X" and never
+    /// asserts an unverified claim: a presented-but-unverified signature
+    /// refuses the callback rather than reaching this event.
+    ///
+    /// This is where per-worker attribution is *recorded* — the audit
+    /// trail is the queryable surface, since `IExternalCompletionSink`
+    /// cannot gain a field without breaking every implementation of it.
+    WorkerId: string option
+    /// Phase 486 — which of that worker's registered keys signed. Present
+    /// exactly when `WorkerId` is.
+    WorkerKeyId: string option
+    /// Phase 486 — the algorithm the signature verified under
+    /// (`WorkerKeyAlgorithm.label`), taken from the REGISTERED key and
+    /// never from the request.
+    SignatureAlgorithm: string option
+    /// Phase 486 — the verified digest of the outcome the worker signed
+    /// (`SignedOutcomeVerifier.artifactHash`). The provenance link between
+    /// this audit row and the artefact the worker committed to.
+    ArtifactHash: string option
     OccurredAt: DateTimeOffset
 }
 
@@ -3153,9 +3175,20 @@ type ExternalCallbackRejectedPayload = {
     HandleId: string option
     /// Why, internally: `"malformed-body"`, `"missing-secret"`,
     /// `"unknown-handle"`, `"secret-mismatch"`, `"scope-mismatch"`,
-    /// `"non-terminal-status"`, `"throttled"`. The HTTP response is
-    /// uniform — this field is the part that is not (the Phase 232
-    /// encryption-admin posture).
+    /// `"non-terminal-status"`, `"throttled"` — plus, from Phase 486's
+    /// signed-outcome gate, the `"signature-*"` family
+    /// (`SignedOutcomeRejection.label`: `"signature-required"`,
+    /// `"signature-malformed-envelope"`, `"signature-unknown-key"`,
+    /// `"signature-key-not-approved"`, `"signature-key-revoked"`,
+    /// `"signature-artifact-mismatch"`,
+    /// `"signature-unparseable-timestamp"`,
+    /// `"signature-stale-timestamp"`, `"signature-invalid"`). The HTTP
+    /// response is uniform — this field is the part that is not (the Phase
+    /// 232 encryption-admin posture).
+    ///
+    /// `"signature-artifact-mismatch"` is the one to alert on hardest: it
+    /// means a signature that may well be genuine arrived over a result it
+    /// does not cover, which is what a substituting relay looks like.
     Reason: string
     /// Remote address the refusal came from, for correlation with the
     /// rate-limited warning. `"unknown"` when the connection reports

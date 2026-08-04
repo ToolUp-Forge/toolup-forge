@@ -3825,7 +3825,8 @@ ToolUp.Platform.ExternalCallbackRejectedPayload.HandleId : Microsoft.FSharp.Core
 ToolUp.Platform.ExternalCallbackRejectedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.ExternalCallbackRejectedPayload.Reason : System.String { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload (class)
-ToolUp.Platform.ExternalCallbackResolvedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.ExternalCallbackResolvedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.ExternalCallbackResolvedPayload.ArtifactHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.Backend : System.String { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.HandleId : System.String { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.JobRunId : System.String { get }
@@ -3834,6 +3835,9 @@ ToolUp.Platform.ExternalCallbackResolvedPayload.Outcome : System.String { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.Resolution : System.String { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.RunStatus : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ExternalCallbackResolvedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ExternalCallbackResolvedPayload.SignatureAlgorithm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalCallbackResolvedPayload.WorkerId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalCallbackResolvedPayload.WorkerKeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ExternalComputeError (class)
 ToolUp.Platform.ExternalComputeError..ctor(System.String, System.Boolean)
 ToolUp.Platform.ExternalComputeError.Message : System.String { get }
@@ -9226,6 +9230,39 @@ ToolUp.Platform.WebhookTestResult.DeliveryId : System.Guid { get }
 ToolUp.Platform.WebhookTestResult.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.WebhookTestResult.LatencyMs : System.Int64 { get }
 ToolUp.Platform.WebhookTestResult.StatusCode : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.WorkerKeyAlgorithm (class)
+ToolUp.Platform.WorkerKeyAlgorithm.Ed25519 : ToolUp.Platform.WorkerKeyAlgorithm { get }
+ToolUp.Platform.WorkerKeyAlgorithm.Es256 : ToolUp.Platform.WorkerKeyAlgorithm { get }
+ToolUp.Platform.WorkerKeyAlgorithm.IsEd25519 : System.Boolean { get }
+ToolUp.Platform.WorkerKeyAlgorithm.IsEs256 : System.Boolean { get }
+ToolUp.Platform.WorkerKeyAlgorithm.Tag : System.Int32 { get }
+ToolUp.Platform.WorkerKeyAlgorithm+Tags (class)
+ToolUp.Platform.WorkerKeyAlgorithm+Tags.Ed25519 : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyAlgorithm+Tags.Es256 : System.Int32 (literal)
+ToolUp.Platform.WorkerKeyAlgorithmModule (class)
+ToolUp.Platform.WorkerKeyAlgorithmModule.label(ToolUp.Platform.WorkerKeyAlgorithm) : System.String
+ToolUp.Platform.WorkerKeyAlgorithmModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WorkerKeyAlgorithm]
+ToolUp.Platform.WorkerOutcomeSignature (class)
+ToolUp.Platform.WorkerOutcomeSignature..ctor(System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.WorkerOutcomeSignature.ArtifactHash : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignature.DiagnosticsHash : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignature.KeyId : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignature.Signature : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignature.SignedAt : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignature.WorkerId : System.String { get }
+ToolUp.Platform.WorkerOutcomeSignatureModule (class)
+ToolUp.Platform.WorkerOutcomeSignatureModule.Domain : System.String (literal)
+ToolUp.Platform.WorkerOutcomeSignatureModule.Header : System.String (literal)
+ToolUp.Platform.WorkerOutcomeSignatureModule.MaxHeaderLength : System.Int32 (literal)
+ToolUp.Platform.WorkerOutcomeSignatureModule.MaxIdentifierLength : System.Int32 (literal)
+ToolUp.Platform.WorkerOutcomeSignatureModule.Version : System.String (literal)
+ToolUp.Platform.WorkerOutcomeSignatureModule.isBase64Url(System.String) : System.Boolean
+ToolUp.Platform.WorkerOutcomeSignatureModule.isHexDigest(System.String) : System.Boolean
+ToolUp.Platform.WorkerOutcomeSignatureModule.isSafeIdentifier(System.String) : System.Boolean
+ToolUp.Platform.WorkerOutcomeSignatureModule.outcomeDescriptor(ToolUp.Platform.ExternalOutcome) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.WorkerOutcomeSignatureModule.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerOutcomeSignature, System.String]
+ToolUp.Platform.WorkerOutcomeSignatureModule.render(ToolUp.Platform.WorkerOutcomeSignature) : System.String
+ToolUp.Platform.WorkerOutcomeSignatureModule.signingPayload(System.Guid, ToolUp.Platform.WorkerOutcomeSignature) : System.String
 ToolUp.Platform.WorkflowActionExecutedPayload (class)
 ToolUp.Platform.WorkflowActionExecutedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.WorkflowActionExecutedPayload.ActionName : System.String { get }
