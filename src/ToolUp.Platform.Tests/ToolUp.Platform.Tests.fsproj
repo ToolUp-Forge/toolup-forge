@@ -161,6 +161,16 @@
              the compose registration in both modes, and the Phase 9c six-rule
              portability audit as executable cases rather than header prose. -->
         <Compile Include="Contracts\IExternalComputeDispatcherContract.fs" />
+        <!-- Phase 324.D — IExternalHandleStore conformance pack: the routing /
+             authentication / exactly-once gate, MOVED here from Phase 320's
+             in-process pack and generalised (scope partitioning became a law
+             every backend must honour rather than a blob-only test; the
+             callback-vs-poll race reduced to the gate so a companion can run
+             it without a scheduler). Bound against both shipped stores, whose
+             atomicity primitives genuinely differ (ConcurrentDictionary CAS
+             vs an ETag conditional write), plus a self-test proving the pack
+             rejects a read-then-write gate. -->
+        <Compile Include="Contracts\IExternalHandleStoreContract.fs" />
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />

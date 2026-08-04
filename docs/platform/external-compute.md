@@ -583,6 +583,64 @@ Default is `NoJobProgress`. On the default, `ctx.Progress` is a no-op reporter, 
 
 No framework type appears on the seam: no `Microsoft.Extensions.*`, no `HttpContext`, no `CancellationToken`, no `Task`. The whole interface is expressible from `ToolUp.Platform` value types alone, and a reflection case in the contract pack holds it that way.
 
+## Conformance — the stability gate for a companion
+
+**A dispatcher companion is not stable until it passes the conformance pack unmodified.** Same discipline the `IJobScheduler` / `IJobStore` / `IModuleQueryBus` packs impose: the pack is the executable definition of what a dispatcher must do, independent of *how*, and "unmodified" is the whole of it. A companion that needs a case relaxed, skipped, or reworded has found either a defect in itself or a defect in the contract — and the second possibility is the reason the pack exists. A case that passes for an HTTP backend but is *unexpressible* for a declarative-watch one means the seam has acquired an HTTP-ism, and the fix belongs in the interface, not in the companion.
+
+Two packs, in `ToolUp.Platform.Tests`:
+
+| Pack | Binds | Covers |
+|---|---|---|
+| `IExternalComputeDispatcherContract.contractFor` | any `IExternalComputeDispatcher` | submit → poll → terminal, a resolvable result ref, idempotent re-poll, error classification in both directions, `ResourceHints` acceptance, independence of un-keyed submissions, idempotent resubmit, cancel (in-flight, already-terminal, repeated), scope isolation |
+| `IExternalHandleStoreContract.contractFor` | any `IExternalHandleStore` | register / resolve round-trip (hash, never cleartext), non-destructive `Resolve`, exactly-once `MarkTerminal`, 32-way concurrent single-winner, the callback-vs-poll race, scope partitioning, `Register`'s overwrite clause |
+
+### Binding it
+
+`contractFor` takes a name, a declaration of what the backend honours, and a factory. The factory is called **per law**, so one case's units never leak into another's — which matters when the backend is a shared stub server or a real cluster.
+
+```fsharp skip=fragment
+open ToolUp.Platform.Tests.Contracts
+
+let myBackendTests =
+    IExternalComputeDispatcherContract.contractFor
+        "MyComputeBackend"
+        { ExternalComputeConformance.strict with
+            SettleBudget = TimeSpan.FromSeconds 30.0 }
+        (fun () ->
+            let backend = MyComputeBackend.create config
+            {
+                Dispatcher = backend
+                Drive = fun handle outcome -> MyComputeBackend.forceStatus backend handle outcome
+            })
+```
+
+`Drive` is the one thing a companion must supply beyond the dispatcher itself: *make the unit behind this handle reach this outcome*, however that backend expresses it — a table write for a request/response service, a status patch on a declared object for a watch-based one. It says nothing about *when*, because **no law polls once and asserts**: every terminal assertion goes through `settle`, which polls to a terminal outcome within `SettleBudget`. That is what lets one law text cover an immediately-consistent stub and an eventually-consistent watch with no branch. `SettleBudget` is a ceiling, never an asserted deadline — no case claims something happened *within* a time, so a slow machine can only push these toward "polled more often than needed".
+
+### What the pack declares rather than demands
+
+Two clauses in this seam are deliberately not absolute, and a pack that demanded them anyway would have stopped describing the contract and started describing the first implementation:
+
+- **`HonoursIdempotency`.** `Submit`'s contract says an implementation *should* return the existing handle for a key it has already accepted. The platform cannot enforce it — it holds no record of the backend's own accepted keys, which is exactly why [the memoization decorator](#memoizing-a-repeated-submission) exists as the portable answer. Declare `true` and the pack demands same-key-same-handle (and that both handles report the one unit's single outcome); declare `false` and it demands only that the key is still *accepted*, never refused.
+- **`ValidatesHandleScope`.** `Poll` and `Cancel` take a handle and no scope parameter — the scope rides the handle — so there is no scope argument for a caller to lie about. The one cross-scope shape this seam can express is a **re-scoped handle**: the same `HandleId` and `NativeRef` presented under a different `ScopeId`. A backend that keys its own record by scope refuses that; one that keys purely by the opaque `NativeRef` cannot tell, and demanding it would invent a requirement no HTTP or container backend can honour from the information it holds.
+
+  **So GP 4 is enforced a layer up, and that layer has its own pack.** The completion-callback ingress takes the scope from the platform's stored record and never from the request, and `IExternalHandleStore` is scope-partitioned with a cross-check the record must survive. `IExternalHandleStoreContract` holds that under contract for every store implementation. The dispatcher law asserts what the dispatcher seam can honestly promise, and — where a backend declares it cannot check the scope — asserts instead the *precondition* the layer above depends on: that the handle carries its scope faithfully.
+
+Declaring `false` on either is not a failing grade. It is a statement about where a guarantee comes from, and it is checked: the pack asserts the fallback rather than skipping the case.
+
+### The packs have teeth, and that is tested
+
+Both packs ship a `selfTests` list that runs the laws against deliberately non-conformant implementations and requires each to **fail** — a read-then-write `MarkTerminal`, a backend that forgets a terminal outcome after one read, one whose `Cancel` does nothing, one whose `Cancel` clobbers a completed result, one that flattens a retriable failure into a terminal one, one that ignores the handle's scope, one that refuses resource hints, one that mints a single shared handle.
+
+Several of those cases assert the *inverse* as well: that the broken implementation still **passes** the laws which do not cover its defect. That is the evidence a given law is load-bearing rather than decorative, and it is not a formality — a read-then-write `MarkTerminal` passes every sequential case in the store pack, so without the two concurrency laws the pack would certify the one defect the gate exists to prevent.
+
+A conformance pack that has never been shown to reject anything is a list of things that happened to be true of the implementation it was written beside.
+
+### Bound implementations
+
+The dispatcher pack runs against a reference request/response backend and against both shipped decorator stacks over it — the routing dispatcher (which restamps `ExternalHandle.Backend`) and the memoization decorator (which short-circuits `Poll` from a cache). The store pack runs against both shipped stores, whose atomicity primitives genuinely differ: a `ConcurrentDictionary` compare-and-set and an ETag conditional write.
+
+Binding more than one is the point rather than a bonus. An interface only one implementation has ever satisfied is a description of that implementation, and a pack cannot distinguish a portable clause from an accidental one until a second backend with a different primitive has run through it.
+
 ## See also
 
 - [`jobs.md`](jobs.md) — the in-process job scheduler this seam extends beyond the process.

@@ -78,101 +78,28 @@ let private plainBlobStorage () : IBlobStorage =
         member _.Erase(_, _, _, _) = async { return Ok(Unchecked.defaultof<_>) }
     }
 
-let private storeContract (name: string) (factory: unit -> IExternalHandleStore) =
-    testList $"{name} — IExternalHandleStore contract" [
-        test "register then resolve returns the handle, the run id and the secret hash" {
-            let store = factory ()
-            let handle = handleFor "team-alpha" "gpu-pool"
-            let runId = Guid.NewGuid()
-            let secret, hash = ExternalCallbackSecret.mint ()
-
-            store.Register(handle, runId, hash) |> Async.RunSynchronously
-
-            match store.Resolve handle.HandleId |> Async.RunSynchronously with
-            | None -> failtest "the registered handle did not resolve"
-            | Some record ->
-                Expect.equal record.Handle.HandleId handle.HandleId "handle id"
-                Expect.equal record.Handle.ScopeId "team-alpha" "scope rides the handle"
-                Expect.equal record.Handle.Backend "gpu-pool" "backend"
-                Expect.equal record.JobRunId runId "job run id"
-                Expect.isFalse record.Terminal "a fresh registration is not terminal"
-                Expect.isNone record.TerminalAt "no terminal timestamp yet"
-
-                // The store holds ONLY the hash. Asserted by showing the
-                // stored value is the hash of the secret and not the
-                // secret — a store that persisted the cleartext would
-                // pass a "the field is populated" test.
-                Expect.equal record.CallbackSecretHash (ExternalCallbackSecret.hash secret) "stored value is the hash"
-                Expect.notEqual record.CallbackSecretHash secret "the cleartext secret is NOT stored"
-        }
-
-        test "an unknown handle resolves to None" {
-            let store = factory ()
-
-            Expect.isNone (store.Resolve(Guid.NewGuid()) |> Async.RunSynchronously) "unknown handle"
-        }
-
-        test "320.D — MarkTerminal returns true exactly once; the second caller is a no-op" {
-            let store = factory ()
-            let handle = handleFor "team-beta" "gpu-pool"
-            let _, hash = ExternalCallbackSecret.mint ()
-            store.Register(handle, Guid.NewGuid(), hash) |> Async.RunSynchronously
-
-            Expect.isTrue (store.MarkTerminal handle.HandleId |> Async.RunSynchronously) "first claim wins"
-            Expect.isFalse (store.MarkTerminal handle.HandleId |> Async.RunSynchronously) "second claim is refused"
-            Expect.isFalse (store.MarkTerminal handle.HandleId |> Async.RunSynchronously) "and stays refused"
-
-            match store.Resolve handle.HandleId |> Async.RunSynchronously with
-            | Some record ->
-                Expect.isTrue record.Terminal "the record records the claim"
-                Expect.isSome record.TerminalAt "and when it was won"
-            | None -> failtest "the record vanished"
-        }
-
-        test "MarkTerminal on an unknown handle is false — 'nothing to claim' is not 'somebody claimed it'" {
-            // Load-bearing distinction, not a formality: the scheduler
-            // reads a `false` here and asks `Resolve` whether the handle
-            // exists, because an unregistered handle must fall back to
-            // the ungated path rather than leave its run awaiting
-            // forever. A store that returned `true` for an unknown handle
-            // would break the other side of that decision.
-            let store = factory ()
-
-            Expect.isFalse (store.MarkTerminal(Guid.NewGuid()) |> Async.RunSynchronously) "unknown handle"
-        }
-
-        test "320.D — 32 concurrent MarkTerminal calls produce exactly one winner" {
-            let store = factory ()
-            let handle = handleFor "team-gamma" "gpu-pool"
-            let _, hash = ExternalCallbackSecret.mint ()
-            store.Register(handle, Guid.NewGuid(), hash) |> Async.RunSynchronously
-
-            let winners =
-                Array.init 32 (fun _ -> store.MarkTerminal handle.HandleId)
-                |> Async.Parallel
-                |> Async.RunSynchronously
-                |> Array.filter id
-                |> Array.length
-
-            Expect.equal winners 1 "exactly one of 32 concurrent claimants wins"
-        }
-
-        test "IsDistributed is declared as data" {
-            let store = factory ()
-            // Read it; the value differs per implementation and each is
-            // pinned in its own test below. What matters here is that the
-            // member answers rather than throwing.
-            store.IsDistributed |> ignore
-        }
-    ]
+// The parameterised store contract that used to live here — register /
+// resolve / MarkTerminal-exactly-once / 32-way concurrency / IsDistributed,
+// bound against both shipped implementations — **moved to
+// `Contracts/IExternalHandleStoreContract.fs` in Phase 324.D**, where a
+// companion store binds it unmodified, and where it gained the laws this
+// pack could not express portably: scope partitioning as a property every
+// backend must honour (it was asserted here for the blob store only, by
+// writing blob names), the callback-vs-poll race reduced to the gate itself,
+// `Resolve`'s non-destructiveness, and `Register`'s overwrite clause. It is
+// wired into the runner directly, so it runs whether or not this pack does.
+//
+// What stays here is what is genuinely specific to THIS store or to the
+// ingress: the per-implementation `IsDistributed` values, the
+// conditional-write construction refusal, and the forged-partition test,
+// which exercises `BlobExternalHandleStore`'s pointer indirection rather
+// than the seam.
 
 let private blobStore () =
     BlobExternalHandleStore(InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage) :> IExternalHandleStore
 
 let private storeTests =
-    testList "Phase 320 — IExternalHandleStore" [
-        storeContract "InMemoryExternalHandleStore" (fun () -> InMemoryExternalHandleStore() :> IExternalHandleStore)
-        storeContract "BlobExternalHandleStore" blobStore
+    testList "Phase 320 — IExternalHandleStore (blob-store specifics; the seam contract is Phase 324.D)" [
 
         test "the in-memory store declares itself NOT distributed" {
             Expect.isFalse (InMemoryExternalHandleStore() :> IExternalHandleStore).IsDistributed "in-memory"

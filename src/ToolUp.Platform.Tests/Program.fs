@@ -42,6 +42,17 @@ let allTests =
         IExternalComputeDispatcherContract.tests
         IExternalComputeDispatcherContract.wireTests
         IExternalComputeDispatcherContract.portabilityAudit
+        // Phase 324 — the conformance bar every IExternalComputeDispatcher
+        // companion must pass UNMODIFIED before it is called stable: the
+        // parameterised submit/poll/terminal + idempotency + cancel + scope
+        // suite (bound against the reference backend and both shipped
+        // decorator stacks over it), the IExternalHandleStore sub-pack (bound
+        // against both shipped stores), and the two self-tests that prove
+        // each pack rejects a deliberately non-conformant implementation.
+        IExternalComputeDispatcherContract.conformanceTests
+        IExternalComputeDispatcherContract.selfTests
+        IExternalHandleStoreContract.tests
+        IExternalHandleStoreContract.selfTests
         // Phase 456 — model evaluation & champion-challenger harness.
         ModelEvaluationTests.tests
         // Phase 599 — batch fit submission + bulk outcome/registry retrieval.
