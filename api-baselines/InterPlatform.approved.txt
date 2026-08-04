@@ -184,6 +184,9 @@ ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalExpired : System.Int32
 ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalPending : System.Int32 (literal)
 ToolUp.InterPlatform.BilateralApprovalStatus+Tags.ApprovalRevoked : System.Int32 (literal)
 ToolUp.InterPlatform.BilateralApprovalStatus+Tags.BilaterallyApproved : System.Int32 (literal)
+ToolUp.InterPlatform.BlobFeedStateStore (class)
+ToolUp.InterPlatform.BlobFeedStateStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.InterPlatform.BlobFeedStateStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IFeedStateStore]
 ToolUp.InterPlatform.BlobPeerJobResultStore (class)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.InterPlatform.BlobPeerJobResultStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerJobRetentionPolicy)
@@ -452,6 +455,124 @@ ToolUp.InterPlatform.FederationPreflightInput.Consumes : Microsoft.FSharp.Collec
 ToolUp.InterPlatform.FederationPreflightInput.LocalPeerId : System.String { get }
 ToolUp.InterPlatform.FederationPreflightInput.Now : System.DateTimeOffset { get }
 ToolUp.InterPlatform.FederationPreflightInput.Pins : ToolUp.InterPlatform.FederationPinStore { get }
+ToolUp.InterPlatform.FeedEmission (class)
+ToolUp.InterPlatform.FeedEmission..ctor(System.String, System.String, System.Int64, System.String, ToolUp.InterPlatform.ActivationRelease, System.Decimal, System.DateTimeOffset)
+ToolUp.InterPlatform.FeedEmission.AuthorisationId : System.String { get }
+ToolUp.InterPlatform.FeedEmission.EmittedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FeedEmission.Epsilon : System.Decimal { get }
+ToolUp.InterPlatform.FeedEmission.FeedId : System.String { get }
+ToolUp.InterPlatform.FeedEmission.IdempotencyKey : System.String { get }
+ToolUp.InterPlatform.FeedEmission.Release : ToolUp.InterPlatform.ActivationRelease { get }
+ToolUp.InterPlatform.FeedEmission.Sequence : System.Int64 { get }
+ToolUp.InterPlatform.FeedHalt (class)
+ToolUp.InterPlatform.FeedHalt.IsFeedBudgetExhausted : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.IsFeedOperatorPaused : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.IsFeedOperatorStopped : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.IsFeedUnauthorised : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.IsFeedVolumeReached : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.IsFeedWindowClosed : System.Boolean { get }
+ToolUp.InterPlatform.FeedHalt.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FeedHalt+FeedBudgetExhausted (class)
+ToolUp.InterPlatform.FeedHalt+FeedBudgetExhausted.reason : System.String { get }
+ToolUp.InterPlatform.FeedHalt+FeedOperatorPaused (class)
+ToolUp.InterPlatform.FeedHalt+FeedOperatorPaused.reason : System.String { get }
+ToolUp.InterPlatform.FeedHalt+FeedOperatorStopped (class)
+ToolUp.InterPlatform.FeedHalt+FeedOperatorStopped.reason : System.String { get }
+ToolUp.InterPlatform.FeedHalt+FeedUnauthorised (class)
+ToolUp.InterPlatform.FeedHalt+FeedUnauthorised.reason : System.String { get }
+ToolUp.InterPlatform.FeedHalt+FeedVolumeReached (class)
+ToolUp.InterPlatform.FeedHalt+FeedVolumeReached.emissions : System.Int32 { get }
+ToolUp.InterPlatform.FeedHalt+FeedWindowClosed (class)
+ToolUp.InterPlatform.FeedHalt+FeedWindowClosed.at : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FeedHalt+Tags (class)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedBudgetExhausted : System.Int32 (literal)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedOperatorPaused : System.Int32 (literal)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedOperatorStopped : System.Int32 (literal)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedUnauthorised : System.Int32 (literal)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedVolumeReached : System.Int32 (literal)
+ToolUp.InterPlatform.FeedHalt+Tags.FeedWindowClosed : System.Int32 (literal)
+ToolUp.InterPlatform.FeedInspection (class)
+ToolUp.InterPlatform.FeedInspection..ctor(System.String, ToolUp.InterPlatform.FeedStatus, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.Decimal, System.Decimal, System.Decimal, System.Decimal, System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FeedEmission])
+ToolUp.InterPlatform.FeedInspection.EmissionBound : System.Int32 { get }
+ToolUp.InterPlatform.FeedInspection.EmissionCount : System.Int32 { get }
+ToolUp.InterPlatform.FeedInspection.EpsilonCeiling : System.Decimal { get }
+ToolUp.InterPlatform.FeedInspection.EpsilonCommitted : System.Decimal { get }
+ToolUp.InterPlatform.FeedInspection.EpsilonRemaining : System.Decimal { get }
+ToolUp.InterPlatform.FeedInspection.EpsilonReserved : System.Decimal { get }
+ToolUp.InterPlatform.FeedInspection.FeedId : System.String { get }
+ToolUp.InterPlatform.FeedInspection.LastEmittedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.FeedInspection.LastEpsilon : System.Decimal { get }
+ToolUp.InterPlatform.FeedInspection.MaxEmissions : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.InterPlatform.FeedInspection.NextDueAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.FeedInspection.NotAfter : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.FeedInspection.Pending : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FeedEmission] { get }
+ToolUp.InterPlatform.FeedInspection.Status : ToolUp.InterPlatform.FeedStatus { get }
+ToolUp.InterPlatform.FeedState (class)
+ToolUp.InterPlatform.FeedState..ctor(System.String, System.String, System.String, ToolUp.InterPlatform.FeedStatus, System.Int32, System.Decimal, System.Decimal, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FeedEmission], System.Int64)
+ToolUp.InterPlatform.FeedState.AuthorisationId : System.String { get }
+ToolUp.InterPlatform.FeedState.AuthorisationVersion : System.String { get }
+ToolUp.InterPlatform.FeedState.EmissionCount : System.Int32 { get }
+ToolUp.InterPlatform.FeedState.EpsilonSpent : System.Decimal { get }
+ToolUp.InterPlatform.FeedState.FeedId : System.String { get }
+ToolUp.InterPlatform.FeedState.LastEmittedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.FeedState.LastEpsilon : System.Decimal { get }
+ToolUp.InterPlatform.FeedState.LastSequence : System.Int64 { get }
+ToolUp.InterPlatform.FeedState.Pending : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FeedEmission] { get }
+ToolUp.InterPlatform.FeedState.Revision : System.Int64 { get }
+ToolUp.InterPlatform.FeedState.Status : ToolUp.InterPlatform.FeedStatus { get }
+ToolUp.InterPlatform.FeedStateWriteError (class)
+ToolUp.InterPlatform.FeedStateWriteError.FeedStateConflict : ToolUp.InterPlatform.FeedStateWriteError { get }
+ToolUp.InterPlatform.FeedStateWriteError.IsFeedStateConflict : System.Boolean { get }
+ToolUp.InterPlatform.FeedStateWriteError.IsFeedStateUnavailable : System.Boolean { get }
+ToolUp.InterPlatform.FeedStateWriteError.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FeedStateWriteError+FeedStateUnavailable (class)
+ToolUp.InterPlatform.FeedStateWriteError+FeedStateUnavailable.reason : System.String { get }
+ToolUp.InterPlatform.FeedStateWriteError+Tags (class)
+ToolUp.InterPlatform.FeedStateWriteError+Tags.FeedStateConflict : System.Int32 (literal)
+ToolUp.InterPlatform.FeedStateWriteError+Tags.FeedStateUnavailable : System.Int32 (literal)
+ToolUp.InterPlatform.FeedStatus (class)
+ToolUp.InterPlatform.FeedStatus.FeedRunning : ToolUp.InterPlatform.FeedStatus { get }
+ToolUp.InterPlatform.FeedStatus.IsFeedPaused : System.Boolean { get }
+ToolUp.InterPlatform.FeedStatus.IsFeedRunning : System.Boolean { get }
+ToolUp.InterPlatform.FeedStatus.IsFeedStopped : System.Boolean { get }
+ToolUp.InterPlatform.FeedStatus.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FeedStatus+FeedPaused (class)
+ToolUp.InterPlatform.FeedStatus+FeedPaused.at : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FeedStatus+FeedPaused.halt : ToolUp.InterPlatform.FeedHalt { get }
+ToolUp.InterPlatform.FeedStatus+FeedStopped (class)
+ToolUp.InterPlatform.FeedStatus+FeedStopped.at : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FeedStatus+FeedStopped.halt : ToolUp.InterPlatform.FeedHalt { get }
+ToolUp.InterPlatform.FeedStatus+Tags (class)
+ToolUp.InterPlatform.FeedStatus+Tags.FeedPaused : System.Int32 (literal)
+ToolUp.InterPlatform.FeedStatus+Tags.FeedRunning : System.Int32 (literal)
+ToolUp.InterPlatform.FeedStatus+Tags.FeedStopped : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick (class)
+ToolUp.InterPlatform.FeedTick.IsFeedEmissionRefused : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.IsFeedEmitted : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.IsFeedHalted : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.IsFeedNotDue : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.IsFeedRedelivered : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.IsFeedUnavailable : System.Boolean { get }
+ToolUp.InterPlatform.FeedTick.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FeedTick+FeedEmissionRefused (class)
+ToolUp.InterPlatform.FeedTick+FeedEmissionRefused.refusal : ToolUp.InterPlatform.ActivationRefusal { get }
+ToolUp.InterPlatform.FeedTick+FeedEmitted (class)
+ToolUp.InterPlatform.FeedTick+FeedEmitted.emission : ToolUp.InterPlatform.FeedEmission { get }
+ToolUp.InterPlatform.FeedTick+FeedHalted (class)
+ToolUp.InterPlatform.FeedTick+FeedHalted.halt : ToolUp.InterPlatform.FeedHalt { get }
+ToolUp.InterPlatform.FeedTick+FeedNotDue (class)
+ToolUp.InterPlatform.FeedTick+FeedNotDue.nextDueAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.FeedTick+FeedRedelivered (class)
+ToolUp.InterPlatform.FeedTick+FeedRedelivered.emission : ToolUp.InterPlatform.FeedEmission { get }
+ToolUp.InterPlatform.FeedTick+FeedUnavailable (class)
+ToolUp.InterPlatform.FeedTick+FeedUnavailable.reason : System.String { get }
+ToolUp.InterPlatform.FeedTick+Tags (class)
+ToolUp.InterPlatform.FeedTick+Tags.FeedEmissionRefused : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick+Tags.FeedEmitted : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick+Tags.FeedHalted : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick+Tags.FeedNotDue : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick+Tags.FeedRedelivered : System.Int32 (literal)
+ToolUp.InterPlatform.FeedTick+Tags.FeedUnavailable : System.Int32 (literal)
 ToolUp.InterPlatform.GateDecision (class)
 ToolUp.InterPlatform.GateDecision.IsNoisedRelease : System.Boolean { get }
 ToolUp.InterPlatform.GateDecision.IsReleased : System.Boolean { get }
@@ -495,6 +616,10 @@ ToolUp.InterPlatform.ICommutativeCipher.Apply(System.Byte[], System.Byte[]) : Mi
 ToolUp.InterPlatform.ICommutativeCipher.GenerateKey() : System.Byte[]
 ToolUp.InterPlatform.ICommutativeCipher.HashToPoint(System.Byte[]) : System.Byte[]
 ToolUp.InterPlatform.ICommutativeCipher.Remove(System.Byte[], System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.InterPlatform.CommutativeCipherError]
+ToolUp.InterPlatform.IFeedStateStore (interface)
+ToolUp.InterPlatform.IFeedStateStore.IsDurable : System.Boolean { get }
+ToolUp.InterPlatform.IFeedStateStore.Load(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FeedState], System.String]]
+ToolUp.InterPlatform.IFeedStateStore.Save(ToolUp.InterPlatform.FeedState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, ToolUp.InterPlatform.FeedStateWriteError]]
 ToolUp.InterPlatform.INoiseEntropy (interface)
 ToolUp.InterPlatform.INoiseEntropy.Fill(System.Byte[]) : System.Void
 ToolUp.InterPlatform.INoiseMechanism (interface)
@@ -565,6 +690,11 @@ ToolUp.InterPlatform.IRoundStateStore (interface)
 ToolUp.InterPlatform.IRoundStateStore.Clear(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.Save(System.String, ToolUp.InterPlatform.RoundState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.IRoundStateStore.TryLoad(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.RoundState]]
+ToolUp.InterPlatform.ISignalFeedSink (interface)
+ToolUp.InterPlatform.ISignalFeedSink.Deliver(ToolUp.InterPlatform.FeedEmission) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.InterPlatform.ISignalFeedSink.Descriptor : ToolUp.InterPlatform.ActivationDestination { get }
+ToolUp.InterPlatform.ISignalSource (interface)
+ToolUp.InterPlatform.ISignalSource.Sample(System.String, System.Int64) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.CohortResult, System.String]]
 ToolUp.InterPlatform.ITemplateApprovalApi (class)
 ToolUp.InterPlatform.ITemplateApprovalApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TemplateApprovalRecord, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.TemplateApprovalAck]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]]])
 ToolUp.InterPlatform.ITemplateApprovalApi.QueryApprovals : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.TemplateApprovalRecord]]] { get }
@@ -580,6 +710,8 @@ ToolUp.InterPlatform.InMemoryCommutativeCipher (class)
 ToolUp.InterPlatform.InMemoryCommutativeCipher..ctor()
 ToolUp.InterPlatform.InMemoryCommutativeCipherModule (class)
 ToolUp.InterPlatform.InMemoryCommutativeCipherModule.create() : ToolUp.InterPlatform.ICommutativeCipher
+ToolUp.InterPlatform.InMemoryFeedStateStore (class)
+ToolUp.InterPlatform.InMemoryFeedStateStore..ctor()
 ToolUp.InterPlatform.InMemoryPeerHandshake (class)
 ToolUp.InterPlatform.InMemoryPeerHandshake..ctor(ToolUp.InterPlatform.IPlatformPeer, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractCapability], ToolUp.InterPlatform.PeerHandshakeError]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], ToolUp.InterPlatform.PeerHandshakeError]]])
 ToolUp.InterPlatform.InMemoryPeerReplayGuard (class)
@@ -1625,6 +1757,52 @@ ToolUp.InterPlatform.ServedContract..ctor(System.String, Microsoft.FSharp.Collec
 ToolUp.InterPlatform.ServedContract.ContractId : System.String { get }
 ToolUp.InterPlatform.ServedContract.Routines : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.ServedContract.Versions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion] { get }
+ToolUp.InterPlatform.SignalFeed (class)
+ToolUp.InterPlatform.SignalFeed.emit(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.FeedTick]
+ToolUp.InterPlatform.SignalFeed.inspect(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedInspection, System.String]]
+ToolUp.InterPlatform.SignalFeed.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.SignalFeed.pause(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
+ToolUp.InterPlatform.SignalFeed.resume(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
+ToolUp.InterPlatform.SignalFeed.start(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
+ToolUp.InterPlatform.SignalFeed.stop(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
+ToolUp.InterPlatform.SignalFeed.validate(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.SignalFeedCanonical (class)
+ToolUp.InterPlatform.SignalFeedCanonical.domain : System.String (literal)
+ToolUp.InterPlatform.SignalFeedCanonical.idempotencyKey(System.String, System.String, System.Int64) : System.String
+ToolUp.InterPlatform.SignalFeedDeps (class)
+ToolUp.InterPlatform.SignalFeedDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.InterPlatform.SignalFeedDeps.Approval : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
+ToolUp.InterPlatform.SignalFeedDeps.Audit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.SignalFeedDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
+ToolUp.InterPlatform.SignalFeedDeps.Budget : ToolUp.InterPlatform.PrivacyBudgetMeter { get }
+ToolUp.InterPlatform.SignalFeedDeps.Mechanism : ToolUp.InterPlatform.INoiseMechanism { get }
+ToolUp.InterPlatform.SignalFeedDeps.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.InterPlatform.SignalFeedDeps.Signal : ToolUp.InterPlatform.ISignalSource { get }
+ToolUp.InterPlatform.SignalFeedDeps.Sink : ToolUp.InterPlatform.ISignalFeedSink { get }
+ToolUp.InterPlatform.SignalFeedDeps.State : ToolUp.InterPlatform.IFeedStateStore { get }
+ToolUp.InterPlatform.SignalFeedDepsModule (class)
+ToolUp.InterPlatform.SignalFeedDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore) : ToolUp.InterPlatform.SignalFeedDeps
+ToolUp.InterPlatform.SignalFeedDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.SignalFeedDeps) : ToolUp.InterPlatform.SignalFeedDeps
+ToolUp.InterPlatform.SignalFeedDepsModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.InterPlatform.SignalFeedDeps) : ToolUp.InterPlatform.SignalFeedDeps
+ToolUp.InterPlatform.SignalFeedSpec (class)
+ToolUp.InterPlatform.SignalFeedSpec..ctor(System.String, ToolUp.InterPlatform.ActivationAuthorisation, ToolUp.InterPlatform.ActivationShape, System.TimeSpan, ToolUp.InterPlatform.NoisedReleasePolicy, System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.InterPlatform.SignalFeedSpec.Authorisation : ToolUp.InterPlatform.ActivationAuthorisation { get }
+ToolUp.InterPlatform.SignalFeedSpec.Cadence : System.TimeSpan { get }
+ToolUp.InterPlatform.SignalFeedSpec.EpsilonCeiling : System.Decimal { get }
+ToolUp.InterPlatform.SignalFeedSpec.FeedId : System.String { get }
+ToolUp.InterPlatform.SignalFeedSpec.MaxEmissions : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.InterPlatform.SignalFeedSpec.Noise : ToolUp.InterPlatform.NoisedReleasePolicy { get }
+ToolUp.InterPlatform.SignalFeedSpec.NotAfter : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.InterPlatform.SignalFeedSpec.Shape : ToolUp.InterPlatform.ActivationShape { get }
+ToolUp.InterPlatform.SignalFeedSpecModule (class)
+ToolUp.InterPlatform.SignalFeedSpecModule.authorisationId(ToolUp.InterPlatform.SignalFeedSpec) : System.String
+ToolUp.InterPlatform.SignalFeedSpecModule.create(System.String, ToolUp.InterPlatform.ActivationAuthorisation, ToolUp.InterPlatform.ActivationShape, System.TimeSpan, ToolUp.InterPlatform.NoisedReleasePolicy, System.Decimal) : ToolUp.InterPlatform.SignalFeedSpec
+ToolUp.InterPlatform.SignalFeedSpecModule.emissionBound(ToolUp.InterPlatform.SignalFeedSpec) : System.Int32
+ToolUp.InterPlatform.SignalFeedSpecModule.epsilonPerEmission(ToolUp.InterPlatform.SignalFeedSpec) : System.Decimal
+ToolUp.InterPlatform.SignalFeedSpecModule.template(ToolUp.InterPlatform.SignalFeedSpec) : ToolUp.InterPlatform.CleanRoomTemplate
+ToolUp.InterPlatform.SignalFeedSpecModule.validate(ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.SignalFeedSpecModule.withMaxEmissions(System.Int32, ToolUp.InterPlatform.SignalFeedSpec) : ToolUp.InterPlatform.SignalFeedSpec
+ToolUp.InterPlatform.SignalFeedSpecModule.withNotAfter(System.DateTimeOffset, ToolUp.InterPlatform.SignalFeedSpec) : ToolUp.InterPlatform.SignalFeedSpec
 ToolUp.InterPlatform.SpendOutcome (class)
 ToolUp.InterPlatform.SpendOutcome.IsSpendCommitted : System.Boolean { get }
 ToolUp.InterPlatform.SpendOutcome.IsSpendReturned : System.Boolean { get }

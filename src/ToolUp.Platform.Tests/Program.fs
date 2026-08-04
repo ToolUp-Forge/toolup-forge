@@ -1013,6 +1013,14 @@ let allTests =
         CohortActivationTests.egressTests
         CohortActivationTests.tokenTests
         CohortActivationTests.compositionTests
+        OutboundSignalFeedTests.revocationTests
+        OutboundSignalFeedTests.boundTests
+        OutboundSignalFeedTests.budgetTests
+        OutboundSignalFeedTests.restartTests
+        OutboundSignalFeedTests.noiseTests
+        OutboundSignalFeedTests.validationTests
+        OutboundSignalFeedTests.operatorTests
+        OutboundSignalFeedTests.stateStoreTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

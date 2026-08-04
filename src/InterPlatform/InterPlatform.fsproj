@@ -195,6 +195,24 @@
          template. -->
     <Compile Include="Server\IActivationDestination.fs" />
     <Compile Include="Server\CohortActivation.fs" />
+    <!-- Phase 491 — the governed outbound signal feed: Phase 490's
+         continuous sibling. Appended at the END, after
+         `CohortActivation.fs`, because it reuses that pair's
+         authorisation vocabulary, canonical encoding and release types
+         verbatim (`ActivationAuthorisation`, `ActivationCanonical`,
+         `ActivationShape`, `ActivationRelease`, `ActivationRefusal`) and
+         adds only what CONTINUITY changes — a mandatory bound, a
+         persisted emission cursor, and a per-emission re-evaluation of
+         invariant 0 so a revocation stops a RUNNING feed rather than
+         merely the next fresh one. Its other dependencies are all far
+         above: `CleanRoomGate.fs` (it dispatches THROUGH the gate, once
+         per emission), `PrivacyBudgetLedger.fs` (the cumulative ε the
+         feed spends continuously) and `NoiseMechanism.fs` (the
+         per-emission calibration, mandatory here where Phase 490 leaves
+         it optional). Nothing downstream depends on it: the feed is not
+         composed by `PeerServerApp.run` and starts no timer of its own
+         (GP 13). -->
+    <Compile Include="Server\OutboundSignalFeed.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

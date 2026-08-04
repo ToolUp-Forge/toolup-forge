@@ -1246,6 +1246,7 @@
              than republishing the true cohort size. Real P-256 approval
              signatures; no TestServer. -->
         <Compile Include="InProcess\CohortActivationTests.fs" />
+        <Compile Include="InProcess\OutboundSignalFeedTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->
