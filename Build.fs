@@ -52,6 +52,10 @@ let config = {
             TestPack.create
                 "AlgorithmProviders"
                 "src/ToolUp.AlgorithmProviders.Tests/ToolUp.AlgorithmProviders.Tests.fsproj"
+            // Phase 193 — emulator-backed multi-cloud parity matrix. Every
+            // emulator leg is env-gated (clean skip on a fresh checkout); the
+            // divergence fixture + seam ratchets always run.
+            TestPack.create "CloudParity" "src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj"
         ]
 }
 
