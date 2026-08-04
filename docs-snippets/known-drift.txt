@@ -234,4 +234,3 @@ d431c9d8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#22 (line 554) 
 33f8f43e src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#2 (line 90) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
 dc10fe45 src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#3 (line 109) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
 8eea8b51 src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#4 (line 155) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
-cd7eec95 src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#5 (line 210) — error FS0039: The type 'DistributedLeaseToken' is not defined.

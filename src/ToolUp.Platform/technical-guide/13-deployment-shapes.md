@@ -229,7 +229,7 @@ type IDistributedLock =
 
 Registered unconditionally by `compose`, so any subsystem or module resolves an `IDistributedLock` from DI without first checking whether the deployment composed one. The default is `InProcessDistributedLock` — a `ConcurrentDictionary<string, Lease>` that is *correct* for a single instance and excludes nothing across replicas. A distributed deployment overrides it from `ComposeExtensions.ServiceConfig`:
 
-```fsharp
+```fsharp skip=fragment
 let lck =
     DistributedLockSelection.fromEnv logger [ RedisDistributedLock.resolver ]
 
@@ -247,7 +247,7 @@ let lck =
 
 **`Release` and `Renew` are holder-checked and never throw on loss.** Both compare the caller's `FenceToken` against the current holder's, so a lease that lapsed and was re-taken by someone else is never released out from under its new holder and never renewed back into existence. `Release` is idempotent — a `finally` can call it unconditionally. `Renew` signals failure by **returning the lease unchanged** rather than raising, so the caller's own `Lease.isLive` check is the arbiter:
 
-```fsharp
+```fsharp skip=fragment
 let! renewed = lck.Renew lease
 if Lease.isLive renewed then keepWorking renewed else abandon ()
 ```
@@ -270,7 +270,7 @@ Option 3 is what `FenceToken` is for.
 
 `FenceToken` strictly increases per `LockId` across acquisitions, and is **stable across `Renew`** (renewing extends the same hold, it does not start a new one). The pattern is the standard one (Kleppmann's fencing tokens): the *downstream store* records the highest token it has seen for a resource and refuses any write carrying a lower one.
 
-```fsharp
+```fsharp skip=fragment
 // The holder threads its token into the write:
 match! lck.TryAcquire(lockId, ttl) with
 | None -> ()              // someone else holds it — skip
