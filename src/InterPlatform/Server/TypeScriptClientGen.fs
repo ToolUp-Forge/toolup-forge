@@ -36,6 +36,23 @@ open System.Text
 // type stripping (>= 22.6 behind `--experimental-strip-types`, >= 23.6
 // by default) with **no build step and no toolchain**, which is the same
 // promise the dependency-free `fetch` transport already makes.
+//
+// ─── Phase 631 — the poll helper is a three-way discriminator ─────────
+//
+// A `JobStatus` has three terminal states, not two: `"Pending"`,
+// `{"Completed":…}` and `{"Failed":…}` (wire specification §5.5.6). The
+// helper used to return `T | null`, which has room for two of them — so a
+// failed job read as `null`, indistinguishable from "not finished", and a
+// caller following the generated idiom (poll until non-null) polled a
+// dead job forever. It now returns a `PeerJobPoll<T>`, a tagged object
+// whose `state` is `"pending" | "succeeded" | "failed"`, and a failure
+// carries the receiver's `outcome` — the failing error's case name, the
+// same string the receiver records against the job — plus its payload.
+//
+// `succeeded` also *decodes* the result. The embedded result rides as a
+// string (§3.1 rule 12), and the old signature promised `T` while handing
+// back that string; the return type was a lie either way, and parsing is
+// the half that makes it true.
 
 let private pascal (s: string) : string =
     if String.IsNullOrEmpty s then
@@ -93,6 +110,50 @@ let emit (schema: PeerContractSchema) : string =
     line "  Versions: PeerContractVersion[];"
     line "}"
     line ""
+
+    // Phase 631 — the poll discriminator, emitted only where the contract
+    // actually has a long-running method. A client with none carries no
+    // poll machinery at all.
+    let hasLongRunning =
+        schema.Methods |> List.exists (fun m -> m.Lifetime = LongRunningMethod)
+
+    if hasLongRunning then
+        line "/// The three terminal states of a long-running call, per the federation-seam"
+        line "/// wire specification §5.5.6. `succeeded` and `failed` are both TERMINAL: a"
+        line "/// caller stops polling on either, and only `pending` means \"ask again\"."
+        line "export type PeerJobPoll<T> ="
+        line "  | { state: \"pending\" }"
+        line "  | { state: \"succeeded\"; result: T }"
+        line "  | { state: \"failed\"; outcome: string; detail: unknown };"
+        line ""
+        line "/// Project a wire `JobStatus` onto `PeerJobPoll`."
+        line "///"
+        line "/// A union case with no payload rides as the bare case-name string (§3.1"
+        line "/// rule 11), so `Pending` arrives as \"Pending\" and not as an object. A"
+        line "/// completed result is an embedded document (§3.1 rule 12) — a string whose"
+        line "/// content is itself JSON — so it is decoded here rather than handed back"
+        line "/// raw. A failure carries the error's case name as `outcome`, which is the"
+        line "/// same string the receiver records as the job's outcome."
+        line "export function peerJobPoll(status: unknown): PeerJobPoll<any> {"
+        line "  if (typeof status === \"string\") return { state: \"pending\" };"
+        line "  if (status !== null && typeof status === \"object\") {"
+        line "    const tagged = status as Record<string, unknown>;"
+        line "    if (\"Completed\" in tagged) {"
+        line "      return { state: \"succeeded\", result: JSON.parse(tagged.Completed as string) };"
+        line "    }"
+        line "    if (\"Failed\" in tagged) {"
+        line "      const failure = tagged.Failed;"
+        line "      if (typeof failure === \"string\") return { state: \"failed\", outcome: failure, detail: null };"
+        line "      const outcome = Object.keys(failure as Record<string, unknown>)[0];"
+        line "      return { state: \"failed\", outcome, detail: (failure as Record<string, unknown>)[outcome] };"
+        line "    }"
+        line "  }"
+        line "  // Refused rather than reported as pending: an unreadable status treated"
+        line "  // as \"not finished yet\" is the poll-forever defect this shape exists to"
+        line "  // close."
+        line "  throw new Error(`unrecognised job status: ${JSON.stringify(status)}`);"
+        line "}"
+        line ""
 
     // One interface per referenced record.
     for record in schema.Records do
@@ -180,14 +241,13 @@ let emit (schema: PeerContractSchema) : string =
             line "    return { jobId: JSON.parse(result) };"
             line "  }"
             line ""
-            line $"  async poll{m.Name}(jobId: string): Promise<{tsType m.Returns} | null> {{"
+            line $"  async poll{m.Name}(jobId: string): Promise<PeerJobPoll<{tsType m.Returns}>> {{"
             line $"    const res = await fetch(`${{this.baseUrl}}/peer/v1/{schema.ContractId}/jobs/${{jobId}}`, {{"
             line "      headers: { \"Authorization\": `Bearer ${this.token}` },"
             line "    });"
             line "    const env = await res.json();"
             line "    if (env.Error) throw new Error(env.Error.Message);"
-            line "    const status = JSON.parse(env.Result);"
-            line "    return status.Completed !== undefined ? status.Completed : null;"
+            line "    return peerJobPoll(JSON.parse(env.Result));"
             line "  }"
             line ""
 

@@ -32,6 +32,23 @@ open System.Text
 // directly. This was not a theoretical divergence: it is what the
 // cross-runtime harness found the first time the Python and Node clients'
 // request bytes were compared to each other.
+//
+// ─── Phase 631 — the poll helper is a three-way discriminator ─────────
+//
+// A `JobStatus` has three terminal states, not two: `"Pending"`,
+// `{"Completed":…}` and `{"Failed":…}` (wire specification §5.5.6). The
+// helper used to return the completed payload or `None`, which has room
+// for two of them — so a failed job read as `None`, indistinguishable
+// from "not finished", and a caller following the generated idiom (poll
+// until non-`None`) polled a dead job forever. It now returns a
+// `PeerJobPoll` dataclass whose `state` is `"pending"` / `"succeeded"` /
+// `"failed"`, and a failure carries the receiver's `outcome` — the
+// failing error's case name, the same string the receiver records against
+// the job — plus its payload.
+//
+// `succeeded` also *decodes* the result: the embedded result rides as a
+// string (§3.1 rule 12), and handing that string back as though it were
+// the value was a second, quieter version of the same defect.
 
 let private pascal (s: string) : string =
     if String.IsNullOrEmpty s then
@@ -90,6 +107,56 @@ let emit (schema: PeerContractSchema) : string =
     line "    return json.dumps(value, separators=(\",\", \":\"), ensure_ascii=False)"
     line ""
     line ""
+
+    // Phase 631 — the poll discriminator, emitted only where the contract
+    // actually has a long-running method. A client with none carries no
+    // poll machinery at all.
+    let hasLongRunning =
+        schema.Methods |> List.exists (fun m -> m.Lifetime = LongRunningMethod)
+
+    if hasLongRunning then
+        line "@dataclass"
+        line "class PeerJobPoll:"
+        line "    \"\"\"The three terminal states of a long-running call, §5.5.6."
+        line ""
+        line "    `state` is \"pending\", \"succeeded\" or \"failed\". The last two are both"
+        line "    TERMINAL: stop polling on either, and only \"pending\" means ask again."
+        line "    `result` carries the decoded result when succeeded; `outcome` carries"
+        line "    the failing error's case name — the same string the receiver records as"
+        line "    the job's outcome — and `detail` its payload, when failed."
+        line "    \"\"\""
+        line ""
+        line "    state: str"
+        line "    result: Any = None"
+        line "    outcome: Optional[str] = None"
+        line "    detail: Any = None"
+        line ""
+        line ""
+        line "def _peer_job_poll(status) -> PeerJobPoll:"
+        line "    \"\"\"Project a wire JobStatus onto PeerJobPoll."
+        line ""
+        line "    A union case with no payload rides as a bare string (§3.1 rule 11), so"
+        line "    `Pending` — the ordinary not-yet-done state — arrives as \"Pending\" and"
+        line "    not as an object. A completed result is an embedded document (§3.1 rule"
+        line "    12), a string whose content is itself JSON, so it is decoded here rather"
+        line "    than handed back raw."
+        line "    \"\"\""
+        line "    if isinstance(status, str):"
+        line "        return PeerJobPoll(state=\"pending\")"
+        line "    if isinstance(status, dict):"
+        line "        if \"Completed\" in status:"
+        line "            return PeerJobPoll(state=\"succeeded\", result=json.loads(status[\"Completed\"]))"
+        line "        if \"Failed\" in status:"
+        line "            failure = status[\"Failed\"]"
+        line "            if isinstance(failure, str):"
+        line "                return PeerJobPoll(state=\"failed\", outcome=failure)"
+        line "            outcome = next(iter(failure))"
+        line "            return PeerJobPoll(state=\"failed\", outcome=outcome, detail=failure[outcome])"
+        line "    # Refused rather than reported as pending: an unreadable status treated"
+        line "    # as \"not finished yet\" is the poll-forever defect this shape closes."
+        line "    raise RuntimeError(f\"unrecognised job status: {status!r}\")"
+        line ""
+        line ""
 
     for record in schema.Records do
         line "@dataclass"
@@ -164,7 +231,7 @@ let emit (schema: PeerContractSchema) : string =
             line $"    def {m.Name}(self{sep}{args}) -> str:"
             line $"        return json.loads(self._rpc(\"{m.Name}\", [{argList}]))  # job id"
             line ""
-            line $"    def poll_{m.Name}(self, job_id: str):"
+            line $"    def poll_{m.Name}(self, job_id: str) -> PeerJobPoll:"
 
             line
                 $"        req = urllib.request.Request(f\"{{self.base_url}}/peer/v1/{schema.ContractId}/jobs/{{job_id}}\","
@@ -172,14 +239,9 @@ let emit (schema: PeerContractSchema) : string =
             line "            headers={\"Authorization\": f\"Bearer {self.token}\"})"
             line "        with urllib.request.urlopen(req) as resp:"
             line "            env = json.loads(resp.read())"
-            line "        status = json.loads(env[\"Result\"])"
-            line "        # A union case with no payload rides as a bare string (wire"
-            line "        # spec §3.1 rule 11), so `Pending` — the ordinary not-yet-done"
-            line "        # state — arrives as \"Pending\", not as an object. Calling"
-            line "        # .get on it raised AttributeError until Phase 189."
-            line "        if not isinstance(status, dict):"
-            line "            return None"
-            line "        return status.get(\"Completed\")"
+            line "        if env.get(\"Error\"):"
+            line "            raise RuntimeError(f\"peer error {env['Error']['Code']}: {env['Error']['Message']}\")"
+            line "        return _peer_job_poll(json.loads(env[\"Result\"]))"
             line ""
 
     sb.ToString()

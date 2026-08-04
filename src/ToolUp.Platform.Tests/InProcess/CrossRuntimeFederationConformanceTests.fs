@@ -205,6 +205,42 @@ let private legValueText (leg: ReportedLeg) =
     | Some value -> value.GetRawText()
     | None -> failtestf "leg '%s' reported no value" leg.Name
 
+/// One member of a leg's reported value, which Phase 631 made a tagged
+/// object rather than a bare result-or-null. Reading it by name is what
+/// lets the two runtimes report the shape each language is idiomatic in —
+/// a TypeScript discriminated union carries only the members its case
+/// declares, a Python dataclass carries all four with `None` defaults —
+/// without the assertions having to know which produced the report.
+let private legMember (leg: ReportedLeg) (name: string) : JsonElement =
+    match leg.Value with
+    | Some value when value.ValueKind = JsonValueKind.Object ->
+        match value.TryGetProperty name with
+        | true, found -> found
+        | _ -> failtestf "leg '%s' reported no '%s' member: %s" leg.Name name (value.GetRawText())
+    | Some value ->
+        failtestf
+            "leg '%s' reported a %A rather than the tagged poll object: %s"
+            leg.Name
+            value.ValueKind
+            (value.GetRawText())
+    | None -> failtestf "leg '%s' reported no value" leg.Name
+
+/// The state the corpus's third poll vector pins, with the outcome string
+/// the receiver would record for it. `errorCaseName` is the receiver's own
+/// function — the one `PeerJobCompletedPayload.Outcome` is built from — so
+/// the expectation is anchored to what the receiver says, not to a
+/// literal re-typed here.
+let private corpusFailure () =
+    match (pollStates ())[2] with
+    | PeerJobStatus.Failed err ->
+        let message =
+            match err with
+            | PeerHandler message -> message
+            | other -> failtestf "the corpus's failed poll state must carry a PeerHandler error; it carries %A" other
+
+        JsonRpc.errorCaseName err, message
+    | other -> failtestf "the corpus's third poll state must be Failed; it is %A" other
+
 // ─── Per-runtime certification ───────────────────────────────────────
 
 let private emissionTests (runtime: string) =
@@ -383,29 +419,65 @@ let private consumptionTests (runtime: string) =
                 Expect.isTrue pending.Ok $"polling a pending job must not raise; it reported: {pending.Error}"
 
                 Expect.equal
-                    (legValueText pending)
-                    "null"
-                    "a Pending state rides as the bare case-name string (§3.1 rule 11) and must read as 'no result yet'"
+                    ((legMember pending "state").GetString())
+                    "pending"
+                    "a Pending state rides as the bare case-name string (§3.1 rule 11) and must read as the non-terminal 'ask again' case"
 
                 let completed = legNamed run "pollCompleted"
                 Expect.isTrue completed.Ok $"polling a completed job must not raise; it reported: {completed.Error}"
 
                 Expect.equal
-                    (JsonRpc.deserialize<string> (legValueText completed))
-                    completedPayload
-                    "a Completed state must yield the embedded result document the corpus carries"
+                    ((legMember completed "state").GetString())
+                    "succeeded"
+                    "a Completed state must read as the terminal success case"
 
+                // Phase 631 — the embedded result document is DECODED, not
+                // handed back as the string it rides in (§3.1 rule 12).
+                // The old helper's return type promised the value and gave
+                // back the string; parsing is what makes the type true.
+                Expect.equal
+                    (JsonRpc.deserialize<LedgerReconciliation> ((legMember completed "result").GetRawText()))
+                    (JsonRpc.deserialize<LedgerReconciliation> completedPayload)
+                    "a Completed state must yield the decoded result document the corpus carries")
+        }
+
+        // ─── Phase 631 — the terminal-failure leg ─────────────────────
+        //
+        // Phase 189 found and recorded this: both generated poll helpers
+        // reported a failed job as "no result yet", so a caller following
+        // the generated idiom — poll until a result appears — polled a
+        // job that had already terminally failed, forever. The receiver
+        // was answering correctly; the client threw the answer away
+        // because the emitted return type had room for two of the three
+        // states the specification defines.
+        test "a terminally-failed job is reported as failed, carrying the receiver's outcome" {
+            withRuntime runtime (fun run ->
+                let expectedOutcome, expectedMessage = corpusFailure ()
                 let failed = legNamed run "pollFailed"
+
                 Expect.isTrue failed.Ok $"polling a failed job must not raise; it reported: {failed.Error}"
 
-                // Both generated clients report a failed job as "no result
-                // yet", because the emitted poll helper's return type has
-                // no room for the failure. That is a real limitation of
-                // the generated SDK, recorded in the Phase 189 migration
-                // doc rather than papered over here; what this asserts is
-                // that the two runtimes agree about it, which is the
-                // property a conformance harness can actually defend.
-                Expect.equal (legValueText failed) "null" "a Failed state must not be reported as a completed result")
+                let state = (legMember failed "state").GetString()
+
+                Expect.equal
+                    state
+                    "failed"
+                    "a Failed state must be reported as failed. Reporting it as 'pending' — which is what an optional-result return type forces — makes a terminally-dead job indistinguishable from a running one, and a caller polling until a result appears never stops"
+
+                Expect.notEqual
+                    state
+                    "pending"
+                    "a terminal state must never read as the non-terminal one; that is the whole of the poll-forever defect"
+
+                Expect.equal
+                    ((legMember failed "outcome").GetString())
+                    expectedOutcome
+                    "the failure must carry the receiver's outcome string — the failing error's case name, the same value the receiver records against the job — so a caller can log WHY rather than only THAT it failed"
+
+                Expect.stringContains
+                    ((legMember failed "detail").GetRawText())
+                    expectedMessage
+                    "the failing error's payload must reach the caller alongside its class")
         }
 
         test "the capability handshake answers with the receiver's registered contract" {

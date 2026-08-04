@@ -54,18 +54,31 @@ Records referenced by a method are flattened into the schema's `Records` table a
 
 Both clients take `(baseUrl, token, callerPeerId)`. `token` is a bearer token the receiver's `JwtPeerAuthProvider` validates (HS256, shared secret) — see "Identity" below. Immediate methods return the typed result; long-running methods return a `jobId` and a `poll*` helper. Both also carry `capabilities()`, the first-contact handshake against `GET /peer/v1/capabilities`, so a non-F# peer can read the receiver's supported contract versions rather than hard-coding one.
 
+A poll helper returns a **three-way terminal discriminator** — `pending` / `succeeded` / `failed` — not an optional result, because a job has three terminal states and an optional result can express two of them ([`FEDERATION_WIRE.md`](FEDERATION_WIRE.md) §5.5.6). `succeeded` carries the decoded result; `failed` carries the receiver's outcome string (the failing error's class) and its payload. Both end the poll loop.
+
 The class name is the contract id split on its separators and PascalCased segment by segment, so `"buyer-seller"` yields `BuyerSellerClient`. The generated TypeScript is erasable-syntax-only: Node runs it directly (≥ 23.6, or ≥ 22.6 with `--experimental-strip-types`) with no build step.
 
 ```typescript
 const client = new BuyerSellerClient("https://seller.example", token, "buyer-acme");
 const reach = await client.GetReach({ Segment: "auto-intenders", MinK: 50 });
 const { jobId } = await client.BuildReport({ Segment: "auto-intenders", MinK: 50 });
-const report = await client.pollBuildReport(jobId);   // null until the job finishes
+
+const poll = await client.pollBuildReport(jobId);
+if (poll.state === "succeeded") use(poll.result);
+else if (poll.state === "failed") logFailure(poll.outcome, poll.detail);
+// "pending" is the only state that means "ask again"
 ```
 
 ```python
 client = BuyerSellerClient("https://seller.example", token, "buyer-acme")
 reach = client.GetReach({"Segment": "auto-intenders", "MinK": 50})
+
+job_id = client.BuildReport({"Segment": "auto-intenders", "MinK": 50})
+poll = client.poll_BuildReport(job_id)
+if poll.state == "succeeded":
+    use(poll.result)
+elif poll.state == "failed":
+    log_failure(poll.outcome, poll.detail)
 ```
 
 ## Identity
@@ -77,6 +90,8 @@ A non-F# peer must be registered in the receiver's peer directory (`IPeerRegistr
 The generators are **execution-verified**. They were emit-verified first — deterministic from the schema, pinned by the `IPeerNonFSharpSdkContract` snapshot tests — and the generated output is now additionally *run*: a real Node and a real Python drive the emitted client against a live `JsonRpcPeerHost` dispatch behind a live bearer-token check, and the documents it produces and consumes are certified against the wire corpus. See [`cross-runtime/`](cross-runtime/).
 
 That step was worth taking rather than assuming. Running the output found three defects reading it had not — the Python client emitted non-canonical JSON, its poll helper crashed on the ordinary `Pending` state, and a dotted contract id produced a class name neither language could parse. String-containment assertions cannot see any of those. The fixes and what a consumer holding a checked-in generated client should do about them are in [`../migrations/189-cross-runtime-federation-conformance-harness.md`](../migrations/189-cross-runtime-federation-conformance-harness.md).
+
+It also found a fourth, which the harness could only *record* rather than fix, because fixing it changed the emitted return type: both poll helpers reported a terminally-failed job as "no result yet", so a caller polling until a result appeared polled a dead job forever. That is the three-way discriminator above, and it is a **breaking change to generated client code** — a consumer holding a checked-in client must regenerate. See [`../migrations/631-generated-client-terminal-job-states.md`](../migrations/631-generated-client-terminal-job-states.md).
 
 ## Writing a peer without a generator
 

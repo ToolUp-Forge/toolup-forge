@@ -12,6 +12,7 @@
 #
 #   python driver.py <baseUrl> <token> <callerPeerId>
 
+import dataclasses
 import importlib
 import inspect
 import json
@@ -32,10 +33,21 @@ client = client_class(base_url, token, caller_peer_id)
 legs = []
 
 
+def jsonable(value):
+    """Reduce a generated dataclass to a plain dict for the report.
+
+    Phase 631's poll helper returns a `PeerJobPoll` dataclass, which
+    `json.dumps` cannot serialise. The Node twin returns a plain tagged
+    object, so reducing here is what keeps the two reports one shape and
+    the harness's single interpretation path honest.
+    """
+    return dataclasses.asdict(value) if dataclasses.is_dataclass(value) else value
+
+
 def leg(name, call):
     """Run one leg, recording either its value or the failure it raised."""
     try:
-        legs.append({"name": name, "ok": True, "value": call()})
+        legs.append({"name": name, "ok": True, "value": jsonable(call())})
     except Exception as error:  # noqa: BLE001 - the failure IS the observation
         legs.append({"name": name, "ok": False, "error": str(error)})
 

@@ -477,6 +477,17 @@ A long-running method returns a job id rather than a result; the caller polls
 
 Rules:
 
+- **`Completed` and `Failed` are both TERMINAL; only `Pending` is not.** A caller MUST stop polling
+  once either terminal state is observed, and a client library MUST expose all three states
+  distinguishably. An interface that offers only "result" and "no result" cannot express `Failed`,
+  so it reports a job that has already terminally failed as one that has not finished — and a
+  caller following the obvious idiom polls a dead job forever. This is stated because it is not
+  inferable from the encoding: the three states are enumerated above, and an implementer reading
+  only the encoding can still project them onto two.
+- **A `Failed` status names its failure class.** The `<structured error>` is a tagged union per
+  §3.1 rule 11, so its case name is the failure's class and is the value a receiver records as the
+  job's outcome. A client SHOULD surface that name to its caller alongside the payload — "why", not
+  only "that".
 - **The poll response echoes the polled `jobId` as its `Id`**, on every path including refusals. A
   `GET` carries no request envelope, so the job id is the only identifier both sides already agree
   on — and a response that correlates to nothing breaks pipelining for any client that reuses a
@@ -649,6 +660,8 @@ Ordered by how often each one is the thing that is wrong.
 - [ ] `mixed:` facets sorted, and read as satisfying nothing.
 - [ ] Cascade context derived by the receiver, never copied from the request body.
 - [ ] Poll responses echo the job id; a job is polled only by the peer that scheduled it.
+- [ ] All three job states are distinguishable to a caller, and polling stops on either terminal
+      one — a two-valued "result or not" projection is non-conformant.
 - [ ] Unknown members ignored; unknown error classes fall back to the numeric code.
 
 ---

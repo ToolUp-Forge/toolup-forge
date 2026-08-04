@@ -97,11 +97,15 @@ exists to prevent.
 - **The long-running dispatch leg.** The receiver is composed without a job-fusion substrate, so a
   `LongRunning` method fails with a clear "substrate not enabled" error by design. The poll *legs*
   are covered against all three terminal states the corpus pins; only the dispatch half is absent.
-- **A failed job is reported as "no result yet".** Both generated poll helpers return `null` for a
-  `Failed` status, because the emitted return type has no room for the failure — so a caller polling
-  a job that has already failed will poll forever. Both runtimes agree about it, which is what the
-  harness asserts; changing it would change the generated helper's return type and is a breaking
-  change to the generated SDK, filed rather than smuggled in here.
+- ~~**A failed job is reported as "no result yet".**~~ **FIXED by
+  [Phase 631](631-generated-client-terminal-job-states.md).** Both generated poll helpers returned
+  `null` for a `Failed` status, because the emitted return type had no room for the failure — so a
+  caller polling a job that had already failed polled forever. Both runtimes agreed about it, which
+  is what this harness asserted; changing it changed the generated helper's return type and was a
+  breaking change to the generated SDK, so it was filed rather than smuggled in here. The helpers
+  now return a three-way terminal discriminator carrying the receiver's outcome string, and the
+  harness's poll legs assert the failure rather than the shared blind spot. **Regenerate your
+  client** — see that migration note for the old and new call shapes.
 - **Delegated user assertions.** The generated clients send `User = "Anonymous"`; the `Direct` and
   `Delegated` cases are not reachable from the generated surface at all.
 

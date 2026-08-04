@@ -114,6 +114,40 @@ let tests =
             Expect.stringContains ts "Bearer ${this.token}" "the bearer token is sent"
             Expect.stringContains ts "async pollBuildReport(jobId: string)" "a long-running method emits a poll helper"
 
+        // Phase 631 — the poll helper is a three-way terminal
+        // discriminator, not an optional result. Pinned here at the
+        // shape tier; that it BEHAVES this way against a live receiver is
+        // `CrossRuntimeFederationConformanceTests`, which executes it.
+        testCase "TypeScript emit types the poll helper as a three-way terminal discriminator"
+        <| fun _ ->
+            let ts = TypeScriptClientGen.emit schema
+            Expect.stringContains ts "export type PeerJobPoll<T> =" "the discriminator is declared"
+            Expect.stringContains ts "| { state: \"pending\" }" "the non-terminal case"
+            Expect.stringContains ts "| { state: \"succeeded\"; result: T }" "the terminal success case"
+
+            Expect.stringContains
+                ts
+                "| { state: \"failed\"; outcome: string; detail: unknown };"
+                "the terminal failure case carries the receiver's outcome string"
+
+            Expect.stringContains
+                ts
+                "async pollBuildReport(jobId: string): Promise<PeerJobPoll<ReachResult>>"
+                "the poll helper returns the discriminator, not an optional result"
+
+        testCase "TypeScript emits no poll machinery for a contract with no long-running method"
+        <| fun _ ->
+            let immediateOnly = {
+                schema with
+                    Methods = schema.Methods |> List.filter (fun m -> m.Lifetime = ImmediateMethod)
+            }
+
+            let ts = TypeScriptClientGen.emit immediateOnly
+
+            Expect.isFalse
+                (ts.Contains "PeerJobPoll")
+                "a client with nothing to poll must not carry the poll discriminator (GP 13)"
+
         // ─── Stage 3 — Python generator ───────────────────────────
 
         testCase "Python emit declares a dataclass per record"
@@ -137,4 +171,35 @@ let tests =
                 py
                 "def poll_BuildReport(self, job_id: str)"
                 "a long-running method emits a poll helper"
+
+        // Phase 631 — the Python twin of the discriminator, in the
+        // language's own idiom: a small stdlib dataclass, so the promise
+        // that a generated client carries no third-party runtime
+        // dependency (GP 1) survives the change.
+        testCase "Python emit returns a three-way terminal discriminator dataclass"
+        <| fun _ ->
+            let py = PythonClientGen.emit schema
+            Expect.stringContains py "class PeerJobPoll:" "the discriminator is a dataclass"
+            Expect.stringContains py "    state: str" "the three-way tag"
+            Expect.stringContains py "    outcome: Optional[str] = None" "the receiver's outcome string on failure"
+
+            Expect.stringContains
+                py
+                "def poll_BuildReport(self, job_id: str) -> PeerJobPoll:"
+                "the poll helper returns the discriminator, not an optional result"
+
+            Expect.stringContains py "state=\"failed\", outcome=outcome" "a failed job surfaces its outcome"
+
+        testCase "Python emits no poll machinery for a contract with no long-running method"
+        <| fun _ ->
+            let immediateOnly = {
+                schema with
+                    Methods = schema.Methods |> List.filter (fun m -> m.Lifetime = ImmediateMethod)
+            }
+
+            let py = PythonClientGen.emit immediateOnly
+
+            Expect.isFalse
+                (py.Contains "PeerJobPoll")
+                "a client with nothing to poll must not carry the poll discriminator (GP 13)"
     ]
