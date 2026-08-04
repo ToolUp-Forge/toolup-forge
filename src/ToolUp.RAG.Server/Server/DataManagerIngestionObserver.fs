@@ -49,7 +49,19 @@ let create
     // container + documentId so two scopes ingesting same-named files
     // don't collide. The total comes from the persisted `Pending`
     // entry (survives a restart); only the live progress count is
-    // in-memory, which is correct — a restart re-drains the queue.
+    // in-memory.
+    //
+    // Phase 509 — that used to read "which is correct — a restart
+    // re-drains the queue", and it was not true. On the DEFAULT
+    // in-memory queue a restart drops every queued job, so the document
+    // never re-drains and its `Pending` entry sits forever; that gap is
+    // closed from the other end by
+    // `RAGServerApp.withIngestionRecoverySweep`, which marks such
+    // entries `Failed` at startup. On a queue backed by an
+    // `IIngestionQueueStore` the job IS redelivered, so losing the live
+    // progress count is genuinely harmless — the redelivery re-indexes
+    // every chunk and the count rebuilds from zero against the same
+    // persisted total.
     let progress = ConcurrentDictionary<string, int>()
     let keyOf (job: IngestionJob) = job.Container + "/" + job.DocumentId
 
