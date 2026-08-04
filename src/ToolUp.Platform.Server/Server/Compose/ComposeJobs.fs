@@ -321,6 +321,41 @@ let private tryResolveExternalDispatcher
 
             None
 
+/// Phase 320 — the external-handle store behind the completion-callback
+/// ingress: handle-to-run routing, the callback secret's hash, and the
+/// atomic `MarkTerminal` gate that makes callback-vs-poll exactly-once.
+///
+/// `None` for `NoExternalCompute` (the default) — nothing can be
+/// outstanding, so there is nothing to store and no blob layout to create
+/// (GP 13). `None` also when the deployment opted in but its blob backend
+/// cannot do conditional writes, and that arm is the interesting one:
+///
+/// **The fallback is polling, never a racy gate.** The obvious
+/// alternative — hand back an `InMemoryExternalHandleStore` so the
+/// endpoint at least works — would give a multi-replica deployment a
+/// per-replica gate, and a per-replica gate lets a callback on replica A
+/// and a poll on replica B both win. That resolves one unit of work twice
+/// while reporting itself as protected, which is worse than not having
+/// the feature. So a backend without conditional writes gets no handle
+/// store, no callback ingress that can authenticate, and the Phase 319
+/// poll loop it already had — with the shortfall named in a warning
+/// rather than inferred from a 503 later.
+let private tryResolveExternalHandleStore
+    (config: ServerConfig)
+    (resolvedBlobStorage: IBlobStorage)
+    (logger: ILogger)
+    : IExternalHandleStore option =
+    match config.ExternalCompute with
+    | NoExternalCompute -> None
+    | CustomExternalCompute ->
+        match BlobExternalHandleStore.TryCreate resolvedBlobStorage with
+        | Some store -> Some store
+        | None ->
+            logger.Warn
+                "[ComposeJobs] event=external_handle_store_unavailable ServerConfig.ExternalCompute = CustomExternalCompute but the composed IBlobStorage does not implement IConditionalBlobStorage, so no durable external-handle store could be built. Completion callbacks (POST /_platform/external-compute/callback) will answer 503 and every external hand-off will resolve by the reconciliation poll instead — correct, just slower. Compose a blob backend with conditional-write support (the local, Azure, S3 and GCS backends all have it) to enable push resolution."
+
+            None
+
 let registerJobScheduler
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -344,6 +379,15 @@ let registerJobScheduler
         // composed one. `None` keeps the reconciliation pass off.
         let externalDispatcher = tryResolveExternalDispatcher services config resolvedLogger
 
+        // Phase 320 — the handle store behind the completion-callback
+        // ingress. Registered in DI (not merely handed to the scheduler)
+        // because the ingress handler resolves it per request.
+        let externalHandleStore =
+            tryResolveExternalHandleStore config resolvedBlobStorage resolvedLogger
+
+        externalHandleStore
+        |> Option.iter (fun store -> services.AddSingleton<IExternalHandleStore>(store) |> ignore)
+
         let scheduler =
             // Phase 598 — hand the scheduler the shared trigger
             // watermark when the deployment opted into catch-up;
@@ -353,15 +397,32 @@ let registerJobScheduler
                 // Phase 319 — one arity covers both catch-up shapes, so
                 // the two features compose rather than excluding each
                 // other.
-                JobScheduler.createWithExternalCompute
-                    jobStore
-                    eventStore
-                    resolvedNotificationChannel
-                    config
-                    resolvedLogger
-                    resolvedActivitySink
-                    watermark
-                    dispatcher
+                //
+                // Phase 320 — and one more arity for the handle store,
+                // so a deployment whose backend cannot support callbacks
+                // still gets the Phase 319 scheduler exactly as before.
+                match externalHandleStore with
+                | Some handleStore ->
+                    JobScheduler.createWithExternalCallback
+                        jobStore
+                        eventStore
+                        resolvedNotificationChannel
+                        config
+                        resolvedLogger
+                        resolvedActivitySink
+                        watermark
+                        dispatcher
+                        handleStore
+                | None ->
+                    JobScheduler.createWithExternalCompute
+                        jobStore
+                        eventStore
+                        resolvedNotificationChannel
+                        config
+                        resolvedLogger
+                        resolvedActivitySink
+                        watermark
+                        dispatcher
             | None, Some watermark ->
                 JobScheduler.createWithCatchUp
                     jobStore
@@ -385,6 +446,15 @@ let registerJobScheduler
         services.AddSingleton<IJobStore>(jobStore) |> ignore
         services.AddSingleton<IJobScheduler>(scheduler :> IJobScheduler) |> ignore
         services.AddSingleton<JobScheduler.InProcessJobScheduler>(scheduler) |> ignore
+
+        // Phase 320 — the seam the completion-callback ingress drives a
+        // run through. Registered only when a handle store exists: with
+        // no store there is no way to authenticate or route a callback,
+        // so a registered sink would be a surface nothing can reach
+        // (GP 13). The in-process scheduler implements it.
+        if externalHandleStore.IsSome then
+            services.AddSingleton<IExternalCompletionSink>(scheduler :> IExternalCompletionSink)
+            |> ignore
 
         // Phase 9b.A — register the scheduler as the deployment's
         // `IJobSchedulerTelemetry` source (the in-process default

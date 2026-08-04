@@ -248,6 +248,23 @@ let buildRouteHandlers
         | Some _ -> EncryptionAdminHandler.routes
         | None -> []
 
+    // Phase 320 — external-compute completion-callback ingress (POST
+    // /_platform/external-compute/callback). Mounted only when the
+    // deployment composed an external-compute backend; a deployment on
+    // the `NoExternalCompute` default has no such path at all and the
+    // Giraffe terminal middleware answers a clean 404 (GP 13).
+    //
+    // Gated on the config rather than on the presence of an
+    // `IExternalHandleStore`, deliberately: an opted-in deployment whose
+    // blob backend cannot do conditional writes has no store, and a
+    // silently-absent endpoint there would look identical to a
+    // misconfigured backend URL. The handler answers 503 with the
+    // remedy named instead.
+    let externalComputeCallbackHandler =
+        match config.ExternalCompute with
+        | NoExternalCompute -> []
+        | CustomExternalCompute -> ExternalComputeCallback.routes
+
     // Job API auto-injected when the scheduler is enabled.
     // `NoJobScheduler` deployments skip the route entirely; clients
     // calling the JobApi proxy on such a deployment receive a 404
@@ -670,6 +687,7 @@ let buildRouteHandlers
             @ usageQueryApiHandler
             @ homeOverviewApiHandler
             @ encryptionAdminHandler
+            @ externalComputeCallbackHandler
             @ metricsRoutes
             @ notificationRoutes
             @ csrfTokenRoutes

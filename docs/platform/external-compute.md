@@ -342,6 +342,96 @@ Two operational notes. Reconciliation is batched per scope (`AwaitingExternalRun
 - **Round-trip `JobRun.ExternalHandle`.** Every field — a converter that reconstructs the record with defaults passes an `isSome` check and fails a real one.
 - **Answer from the awaiting set, and take runs OUT of it as they go terminal.** The removal half is the one that fails silently: a store that only ever adds looks correct until the scheduler is re-polling handles for work that finished days ago. Do not satisfy the query by scanning run history — run rows are unbounded, and this is on the tick path. Index the status transition, as the blob-backed default does with its `_awaiting-external` secondary index.
 
+## The completion callback
+
+Polling is the universal fallback, and it stays the fallback. But it costs a tick interval of latency and a poll per outstanding handle, and a backend that can call a webhook can do better than being asked. `POST /_platform/external-compute/callback` is that path: the backend pushes its terminal outcome, and the run resolves immediately.
+
+Nothing about correctness depends on it. A callback that never arrives, arrives twice, or arrives forged all end with the run resolved **exactly once** — the callback is a latency optimisation layered on a poll loop that was already sufficient.
+
+### The contract
+
+```
+POST /_platform/external-compute/callback
+Content-Type: application/json
+X-ToolUp-External-Callback-Secret: <the per-handle secret>
+
+{ "handleId": "3f2b...", "status": "succeeded", "resultRef": "s3://bucket/out.bin" }
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `handleId` | always | `ExternalHandle.HandleId` of the finished work. The **only** routing input taken from the caller. |
+| `status` | always | `succeeded`, `failed` or `cancelled`. Case- and whitespace-insensitive. |
+| `resultRef` | for `succeeded` | Opaque backend reference to the result. The platform echoes it and never dereferences it. |
+| `error` | for `failed` | Failure description. Becomes `ExternalComputeError.Message`. |
+| `retriable` | optional | Read only for `failed`. **Absent means terminal** — a backend that does not say a failure is worth retrying is not asserting that it is, and defaulting the other way would re-submit external work on a backend's silence. |
+
+Five flat primitives, deliberately, rather than a serialised `ExternalOutcome`: the caller is a GPU or batch service that is almost certainly not written in F#, and a DU with a nested error record is only serialisable through a converter set no third-party backend has. Same reasoning that put JSON-RPC 2.0 on the peer seam — an open contract at the boundary, typed values inside it.
+
+**Only terminal statuses are accepted.** `pending` and `running` are refused by name. A callback exists to deliver an outcome; accepting a non-outcome would mean the ingress could be handed a status that resolves nothing while still consuming the handle's one-shot terminal claim.
+
+### Responses
+
+| Status | When | What the backend should do |
+|---|---|---|
+| `200` | Resolved, already resolved, or the run was no longer awaiting. The body's `resolution` field says which (`resolved` / `already-resolved` / `no-awaiting-run`). | Nothing. All three are terminal for the backend. |
+| `403` | Any refusal — malformed body, missing or wrong secret, unknown handle, non-terminal status, scope mismatch. | Check the credential and the payload. The response deliberately does not say which. |
+| `429` | Too many refused callbacks from this address recently. | Back off. |
+| `503` | The deployment opted into external compute but composed no usable handle store. | Nothing; the run resolves by poll. |
+
+**A duplicate is `200`, not `409`,** and that is a deliberate choice about failure modes rather than a shrug: idempotency is the guarantee this endpoint is built to provide, and a backend that retries on non-2xx would retry a correct duplicate forever. The body distinguishes the cases for a backend that cares.
+
+### Where the secret comes from
+
+The platform mints a fresh 256-bit secret per hand-off and stores **only its SHA-256**. The cleartext exists once, in the `ExternalCallbackCredential` handed to the backend:
+
+```fsharp skip=fragment
+type MyDispatcher() =
+    interface IExternalComputeDispatcher with
+        member _.Backend = "gpu-pool"
+        member _.Submit(scopeId, spec) = submitToBackend scopeId spec
+        member _.Poll(handle) = pollBackend handle
+        member _.Cancel(handle) = cancelBackend handle
+
+    // Opt in to the push path by ALSO implementing this.
+    interface IExternalCallbackCapableBackend with
+        member _.AcceptCallbackCredential(handle, credential) = async {
+            // Make the credential reachable by whatever will POST the
+            // callback. Do not log the secret.
+            do! setWebhook handle.NativeRef credential.CallbackPath credential.Secret
+        }
+```
+
+A second interface a backend *also* implements, exactly like `IIsolatedComputeBackend` above, and for the same reason: F# cannot author a default interface member, so a new member on the dispatcher seam would break every implementation that exists — including shipped consumer ones — for a capability most backends do not have. **A backend that does not implement it is never handed a secret and is reconciled by polling, exactly as before (GP 11).**
+
+One ordering property, stated because it is real rather than hidden: the credential is keyed by `ExternalHandle.HandleId`, which does not exist until `Submit` has returned it, so the credential necessarily arrives *after* the backend accepted the work. A backend fast enough to finish before that call lands cannot call back — and that run resolves by poll on the next tick. The window is one blob write wide, and correctness never depends on the credential arriving; only latency does.
+
+### Idempotency, and where the guarantee actually comes from
+
+`IExternalHandleStore.MarkTerminal` is an **atomic compare-and-set**: the first caller to claim a handle gets `true`, every other caller gets `false`. Both the callback ingress and the reconciliation poll go through it, in one shared code path — so whichever arrives first resolves the run and the other is a no-op.
+
+It matters to be precise about which failure this closes, because a single-instance deployment was already safe:
+
+- **Within one process**, the per-`JobId` dispatch lease plus the "is the run still `AwaitingExternal`" re-verify already serialise the callback against the poll. Measured, not assumed: an *ungated* single-process race produced zero double resolutions across 40 rounds.
+- **Across replicas** there is no shared lease and no shared awaiting view. Both callers pass their own re-verify, and the CAS is the only thing between them. The platform test pack models exactly this — two schedulers over one job store with **separate** locks — and it *places* the interleave rather than racing for it: the second replica's poll is held inside `Poll`, past its own awaiting re-verify, while the callback resolves the run underneath it. Deterministic in both directions, so the paired control (same construction, no handle store) does not merely show a double resolution is possible — it shows one happens, every run.
+
+That is why the store demands `IConditionalBlobStorage` and **refuses to construct without it**. A download-modify-upload fallback races precisely where the callback and the poll meet, and a gate that is racy under load is worse than no gate because it reads as defended. For the same reason, compose does **not** quietly fall back to the in-memory store when the blob backend lacks conditional writes: a per-replica gate on a multi-replica deployment lets both callers win. It composes no store at all, logs the shortfall, and leaves the poll loop — correct, just slower.
+
+### Observability
+
+- **Every resolution is audited** (`ExternalCallbackResolved`), including the idempotent duplicate. "This handle was resolved twice and the second was a no-op" is exactly the fact an incident reconstruction needs, and a trail that recorded only the first could not distinguish a well-behaved retrying backend from a forged replay.
+- **Every refusal is audited** (`ExternalCallbackRejected`) *and* emits a **rate-limited warning** naming the internal reason. A forged callback is something to alert on, and a bare 403 in an access log is not an alert. The warning is throttled per source address so a scripted probe cannot turn the log into the denial-of-service; the audit event is **not** throttled, because the trail has to stay complete precisely when the log has gone quiet.
+
+Neither the secret nor the work payload appears in either event.
+
+### Enabling it
+
+The route is mounted only when `ServerConfig.ExternalCompute = CustomExternalCompute`. A deployment on the `NoExternalCompute` default has no such path — the Giraffe terminal middleware answers a clean 404, and there is no hosted service, no middleware and no allocation (GP 13).
+
+**The path is `/_platform/...` and not `/api/...`, deliberately — do not move it.** Both the surface-enforcement middleware and the CSRF middleware are scoped to `/api/*`, so this route is outside the session-auth and double-submit-token envelope. That is what lets a GPU service POST to it with nothing but its per-handle secret; relocating it under `/api/` would demand an XSRF token from a caller that has no browser, no cookie jar and no way to obtain one, and every backend would start failing with `csrf_validation_failed`. The endpoint pays for that exemption itself: it authenticates every request against the handle's own secret hash, refuses uniformly, throttles per source address, and audits both outcomes. Same posture as the anonymous `/_platform/signing-key/` route.
+
+Handle records live under `_platform/external-compute/handles/{scopeId}/{handleId}.json`, **scope-partitioned** (GP 4), with a small `external-compute/handle-index/{handleId}` pointer so a callback carrying only a handle id resolves in one read rather than a listing. A record whose own `ScopeId` disagrees with the partition it was read from is refused rather than followed, so a mis-pointed index produces "unknown handle" and never a cross-scope read.
+
 ## Memoizing a repeated submission
 
 `MemoizedComputeDispatcher` is an opt-in decorator over any

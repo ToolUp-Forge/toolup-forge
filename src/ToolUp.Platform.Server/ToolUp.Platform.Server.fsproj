@@ -245,6 +245,13 @@
              memoizable, and a deployment that never constructs the
              decorator is unchanged (GP 13). -->
         <Compile Include="Server\MemoizedComputeDispatcher.fs" />
+        <!-- Phase 320 — external-handle store: routing (handle to job
+             run), authentication (the callback secret's hash) and the
+             atomic MarkTerminal gate that makes callback-vs-poll
+             exactly-once. Also the IExternalCompletionSink seam the
+             callback ingress drives a run through, so it compiles before
+             JobScheduler.fs (which implements it). -->
+        <Compile Include="Server\IExternalHandleStore.fs" />
         <!-- Phase 26 — single-node default impl of ITenantFleet over
              IEntityStore + IContainerScheduler + IDeployPipeline.
              Per-tenant SemaphoreSlim for serialised state mutations;
@@ -493,6 +500,12 @@
         <Compile Include="Server\ITeamQuotaPolicy.fs" />
         <Compile Include="Server\PerScopeKeyResolver.fs" />
         <Compile Include="Server\EncryptionAdminHandler.fs" />
+        <!-- Phase 320 — the external-compute completion-callback ingress.
+             After JobScheduler.fs (which implements the
+             IExternalCompletionSink it resolves) and before
+             BuildRouteHandlers (which mounts it, only when the deployment
+             composed an external-compute backend — GP 13). -->
+        <Compile Include="Server\ExternalComputeCallback.fs" />
         <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
         <Compile Include="Server\AdminTokenValidator.fs" />
         <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />

@@ -232,3 +232,58 @@ module ExecutionProfileGate =
           interface IIsolatedComputeBackend with
               member _.IsolationPosture = posture
         }
+
+// ─── Phase 320 — declaring that a backend can call back ──────────────
+//
+// The push path needs one thing the poll path does not: the backend has
+// to be TOLD the per-handle secret, or it cannot authenticate its own
+// callback. This is the seam that tells it.
+//
+// **A second interface a backend also implements, not a member on
+// `IExternalComputeDispatcher`.** Identical reasoning to
+// `IIsolatedComputeBackend` above — F# cannot author a default
+// interface member, so a new abstract member on the dispatcher seam
+// would break every implementation that exists, including shipped
+// consumer ones, for a capability most backends do not have. A backend
+// that does not implement this interface is simply never handed a
+// credential and is reconciled by polling, which is the behaviour it
+// already had (GP 11).
+//
+// **Why the credential arrives AFTER acceptance rather than as a
+// `Submit` parameter.** The credential is keyed by
+// `ExternalHandle.HandleId`, and the handle does not exist until
+// `Submit` has returned it — so a credential passed INTO `Submit` could
+// not name the handle it authenticates, and the platform could not have
+// stored its hash against a record it cannot yet key. Threading a
+// pre-minted handle id through `Submit` would mean changing the
+// dispatcher seam (breaking) and taking handle minting away from the
+// backend that owns it.
+//
+// The honest cost of that ordering is stated rather than hidden: a
+// backend fast enough to finish before this call lands cannot call
+// back, because it does not yet hold the secret. That run resolves by
+// poll on the next tick — the fallback that was always there. The
+// window is one blob write wide and only affects work that completed
+// faster than the platform could record having submitted it, which is
+// not the workload shape this substrate exists for (a GPU training run,
+// a batch render). Correctness never depends on the credential
+// arriving: nothing is lost, only latency.
+type IExternalCallbackCapableBackend =
+    /// Accept the completion-callback credential for `handle`. Called
+    /// **once** per accepted hand-off, immediately after the platform
+    /// has durably registered the handle, and only when the deployment
+    /// composed a handle store.
+    ///
+    /// The implementation's job is to make the credential reachable by
+    /// whatever will POST the callback — stamp it onto the backend's own
+    /// job record, patch the queued work item's webhook config, hand it
+    /// to the worker. It MUST NOT log the secret.
+    ///
+    /// **Best-effort, and the platform treats it so.** A throw or a
+    /// failure here is logged and swallowed: the work is already
+    /// accepted and running, the run is already durably
+    /// `AwaitingExternal`, and the poll loop resolves it regardless. A
+    /// failure to deliver a callback credential is a latency
+    /// regression, never a lost job — so it must not be allowed to
+    /// become one by failing the hand-off after the payload has left.
+    abstract AcceptCallbackCredential: handle: ExternalHandle * credential: ExternalCallbackCredential -> Async<unit>

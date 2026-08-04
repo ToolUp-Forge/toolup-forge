@@ -3054,6 +3054,70 @@ type SchemaChangedPayload = {
     InstancesMigrated: int
 }
 
+/// Phase 320 — an external-compute completion callback was accepted and
+/// its handle resolved (or found already resolved). Emitted on **every**
+/// resolution, including the idempotent duplicate (GP 6): "this handle
+/// was resolved twice and the second was a no-op" is exactly the fact an
+/// incident reconstruction needs, and an audit trail that records only
+/// the first cannot distinguish a well-behaved retrying backend from a
+/// forged replay.
+///
+/// Carries no secret and no payload — identifiers, the outcome label, and
+/// what the platform did with it.
+type ExternalCallbackResolvedPayload = {
+    /// `ExternalHandle.HandleId` the callback named.
+    HandleId: string
+    /// `ExternalHandle.Backend` from the stored record — the platform's
+    /// own view of which backend owns the work, never the caller's claim.
+    Backend: string
+    /// Scope the handle was submitted under, from the stored record.
+    ScopeId: string
+    /// `JobRun.RunId` the handle routed to.
+    JobRunId: string
+    /// Terminal outcome the callback reported (`ExternalOutcome.label`).
+    Outcome: string
+    /// What the platform did: `"resolved"` (this callback won the
+    /// terminal claim and drove the run), `"already-resolved"` (a
+    /// duplicate, or the reconciliation poll got there first — no-op),
+    /// `"no-awaiting-run"`, `"scope-mismatch"`, `"sink-not-configured"`.
+    Resolution: string
+    /// Terminal run status written, when this callback drove the run
+    /// (`"succeeded"` / `"failed"` / `"dead-lettered"` /
+    /// `"externally-cancelled"`); `None` for every non-`"resolved"`
+    /// resolution.
+    RunStatus: string option
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 320 — an external-compute completion callback was REFUSED.
+///
+/// A distinct event from `ExternalCallbackResolved` rather than a
+/// `Resolution` value on it, because the two answer different questions
+/// and are read by different people: resolutions are operational history,
+/// refusals are a **forged-callback signal** an operator wants to alert
+/// on. Folding them into one kind means the alert query has to filter on
+/// a payload field, and the same reasoning gave `BeaconRejected` its own
+/// case rather than a flag on the beacon event.
+///
+/// `HandleId` is a `string option` because the most suspicious refusals
+/// are the ones whose body did not parse at all.
+type ExternalCallbackRejectedPayload = {
+    /// The handle the caller named, when the body parsed far enough to
+    /// carry one.
+    HandleId: string option
+    /// Why, internally: `"malformed-body"`, `"missing-secret"`,
+    /// `"unknown-handle"`, `"secret-mismatch"`, `"scope-mismatch"`,
+    /// `"non-terminal-status"`, `"throttled"`. The HTTP response is
+    /// uniform — this field is the part that is not (the Phase 232
+    /// encryption-admin posture).
+    Reason: string
+    /// Remote address the refusal came from, for correlation with the
+    /// rate-limited warning. `"unknown"` when the connection reports
+    /// none.
+    ClientIp: string
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -3629,6 +3693,13 @@ type AuditEvent =
     /// Phase 7b — a user-authored schema version was created, updated,
     /// migrated, or deleted.
     | SchemaChanged of SchemaChangedPayload
+    /// Phase 320 — an external-compute completion callback resolved its
+    /// handle, or found it already resolved (the idempotent no-op).
+    | ExternalCallbackResolved of ExternalCallbackResolvedPayload
+    /// Phase 320 — an external-compute completion callback was refused.
+    /// The forged-callback signal; see the payload doc for why it is its
+    /// own kind rather than a field on the resolution event.
+    | ExternalCallbackRejected of ExternalCallbackRejectedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -3786,6 +3857,8 @@ module AuditEvent =
         | SchemaProposed _ -> "SchemaProposed"
         | SchemaApproved _ -> "SchemaApproved"
         | SchemaChanged _ -> "SchemaChanged"
+        | ExternalCallbackResolved _ -> "ExternalCallbackResolved"
+        | ExternalCallbackRejected _ -> "ExternalCallbackRejected"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

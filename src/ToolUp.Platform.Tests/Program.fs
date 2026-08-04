@@ -1481,6 +1481,14 @@ let allTests =
         // still looks like it works, and a family an operator learns to
         // scroll past protects nothing.
         RagConfigValidatorExtensionTests.tests
+        // Phase 320 — external-compute completion-callback ingress. The
+        // load-bearing arm is the MULTI-INSTANCE interleave (two
+        // schedulers, separate locks, one shared store), PLACED via a
+        // rendezvous rather than raced for: it asserts exactly one
+        // completion, and its ungated twin on the identical construction
+        // asserts exactly two — so the pair measures the CAS gate rather
+        // than the harness's luck at interleaving.
+        ExternalCallbackTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

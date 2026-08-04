@@ -1631,6 +1631,16 @@
              including the cross-validator pin that the local-embedder
              pair never both fire on one deployment. -->
         <Compile Include="InProcess\RagConfigValidatorExtensionTests.fs" />
+        <!-- Phase 320 — external-compute completion-callback ingress: the
+             IExternalHandleStore contract bound over both implementations
+             (including the atomic MarkTerminal under 32-way concurrency),
+             the secret mint/verify pair, the language-neutral wire
+             contract, the push-resolves-with-zero-polls assertion, the
+             concurrent callback-vs-poll race with its OWN ungated control
+             (an always-wins store must produce a double, else the gated
+             test is not measuring the gate), and the GP 13 pins that a
+             default deployment composes neither store nor sink. -->
+        <Compile Include="InProcess\ExternalCallbackTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

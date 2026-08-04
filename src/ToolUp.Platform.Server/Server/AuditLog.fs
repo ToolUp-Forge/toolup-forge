@@ -1404,6 +1404,23 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> SchemaChanged(fromAuditJson<SchemaChangedPayload> j)
     }
+    // Phase 320 — external-compute completion-callback ingress.
+    {
+        EventType = "ExternalCallbackResolved"
+        TryEncode =
+            (function
+            | ExternalCallbackResolved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ExternalCallbackResolved(fromAuditJson<ExternalCallbackResolvedPayload> j)
+    }
+    {
+        EventType = "ExternalCallbackRejected"
+        TryEncode =
+            (function
+            | ExternalCallbackRejected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ExternalCallbackRejected(fromAuditJson<ExternalCallbackRejectedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

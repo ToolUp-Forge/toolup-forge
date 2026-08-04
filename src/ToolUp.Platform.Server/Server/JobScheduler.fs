@@ -321,7 +321,8 @@ type InProcessJobScheduler
         activitySink: IActivitySink,
         ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark,
         ?distributedLock: IDistributedLock,
-        ?externalDispatcher: IExternalComputeDispatcher
+        ?externalDispatcher: IExternalComputeDispatcher,
+        ?externalHandleStore: IExternalHandleStore
     ) =
     inherit BackgroundService()
 
@@ -764,6 +765,63 @@ type InProcessJobScheduler
 
                             do! store.RecordRun awaitingRow
 
+                            // Phase 320 — register the handle and mint
+                            // its callback credential.
+                            //
+                            // Ordering is deliberate and load-bearing:
+                            // the awaiting ROW is durable first (above),
+                            // so a crash here leaves a run the poll loop
+                            // still resolves; then the handle record, so
+                            // a callback can route; then the credential
+                            // hand-off, which is the only step whose
+                            // failure costs nothing but latency.
+                            //
+                            // Skipped entirely when no handle store is
+                            // composed — every pre-320 deployment then
+                            // takes the identical path it always did
+                            // (GP 11 / GP 13).
+                            match externalHandleStore with
+                            | None -> ()
+                            | Some handleStore ->
+                                let secret, secretHash = ExternalCallbackSecret.mint ()
+
+                                try
+                                    do! handleStore.Register(handle, runId, secretHash)
+
+                                    // Only a backend that DECLARED the
+                                    // capability is handed a secret. One
+                                    // that did not is reconciled by
+                                    // polling, exactly as before — and
+                                    // never receives a credential it
+                                    // would have no code path for.
+                                    match externalDispatcher |> Option.map box with
+                                    | Some(:? IExternalCallbackCapableBackend as capable) ->
+                                        try
+                                            do!
+                                                capable.AcceptCallbackCredential(
+                                                    handle,
+                                                    {
+                                                        HandleId = handle.HandleId
+                                                        Secret = secret
+                                                        CallbackPath = ExternalCallback.Route
+                                                    }
+                                                )
+                                        with ex ->
+                                            // Swallowed by contract (see
+                                            // `AcceptCallbackCredential`).
+                                            // The work is accepted, the
+                                            // run is durable, the poll
+                                            // loop resolves it — turning
+                                            // this into a failure would
+                                            // trade a latency regression
+                                            // for a lost job.
+                                            logger.Warn
+                                                $"[JobScheduler] event=callback_credential_refused jobId=%O{current.JobId} runId=%O{runId} handle=%O{handle.HandleId} backend=%s{handle.Backend}: {ex.Message} — the backend cannot call back; this run will resolve by poll"
+                                    | _ -> ()
+                                with ex ->
+                                    logger.Warn
+                                        $"[JobScheduler] event=handle_registration_failed jobId=%O{current.JobId} runId=%O{runId} handle=%O{handle.HandleId}: {ex.Message} — no completion callback can route to this run; it will resolve by poll"
+
                             do!
                                 emitEvent current.ScopeId "JobExternalHandedOff" {
                                     JobId = current.JobId
@@ -955,6 +1013,305 @@ type InProcessJobScheduler
             else
                 Ok()
 
+    // ─── Phase 320 — the exactly-once terminal claim ─────────────
+    //
+    // Ask the handle store whether THIS caller may resolve `handle`.
+    //
+    // `true` means proceed. Two distinct cases produce it, and keeping
+    // them both is what stops this gate becoming a way to strand a run:
+    //
+    //   * No handle store composed. Every pre-320 deployment, and any
+    //     deployment whose blob backend cannot do conditional writes.
+    //     The gate is absent, and Phase 319's path runs byte-identically
+    //     (GP 11).
+    //   * The handle is not registered. A hand-off recorded before the
+    //     store existed, or one registered in an
+    //     `InMemoryExternalHandleStore` the process has since restarted.
+    //     `MarkTerminal` answers `false` for an unknown handle — it has
+    //     nothing to claim — and treating that as "somebody else won"
+    //     would leave the run `AwaitingExternal` forever, polled every
+    //     tick, never resolved. That is the precise failure this store
+    //     exists to prevent, reached from the other side, so an unknown
+    //     handle falls back to the ungated path rather than blocking.
+    //
+    // The read-back is not racy in practice: registration completes
+    // strictly before the awaiting row can be reconciled (both happen
+    // inside the same `HandedOff` arm, row first), so a handle being
+    // reconciled is never mid-registration.
+    let claimTerminal (handle: ExternalHandle) = async {
+        match externalHandleStore with
+        | None -> return true
+        | Some handleStore ->
+            let! claimed = handleStore.MarkTerminal handle.HandleId
+
+            if claimed then
+                return true
+            else
+                let! known = handleStore.Resolve handle.HandleId
+
+                match known with
+                | Some _ -> return false
+                | None ->
+                    logger.Warn
+                        $"[JobScheduler] event=external_handle_unregistered handle=%O{handle.HandleId} backend=%s{handle.Backend} — no handle-store record, so the exactly-once gate cannot apply; resolving ungated (a completion callback for this handle would be refused)"
+
+                    return true
+    }
+
+    // ─── Phase 320 — the ONE terminal-drive path ─────────────────
+    //
+    // Extracted from the Phase 319 reconciliation pass so the
+    // completion callback and the poll loop share it rather than each
+    // carrying a copy. "Identical to an in-process failure" was already
+    // Phase 319's acceptance criterion; "identical whether it arrived by
+    // push or by poll" is Phase 320's, and two code paths that must stay
+    // identical do not.
+    //
+    // **The `MarkTerminal` claim is at the head of this function, which
+    // is what makes callback-vs-poll exactly-once.** Both callers reach
+    // the claim through here, so there is one gate rather than two that
+    // must agree, and every write below it happens only for the caller
+    // that won. `outcome` must be terminal — the non-terminal poll case
+    // is handled by the caller, because "still running" is a decision
+    // not to write at all rather than a way of resolving.
+    let applyExternalOutcome
+        (scope: string)
+        (job: JobDefinition)
+        (run: JobRun)
+        (handle: ExternalHandle)
+        (outcome: ExternalOutcome)
+        (now: DateTime)
+        : Async<ExternalResolution> =
+        async {
+            if not (ExternalOutcome.isTerminal outcome) then
+                // Defensive: the wire contract refuses non-terminal
+                // statuses and the poll loop branches before calling.
+                return ExternalResolution.NoAwaitingRun
+            elif run.ScopeId <> handle.ScopeId then
+                // GP 4. The handle's scope comes from the handle store's
+                // own partition, the run's from the job store — two
+                // independent sources, so a disagreement means one of
+                // them is pointing somewhere it should not, and nothing
+                // is written until they agree.
+                logger.Error(
+                    $"[JobScheduler] event=external_scope_mismatch handle=%O{handle.HandleId} handleScope=%s{handle.ScopeId} runScope=%s{run.ScopeId} runId=%O{run.RunId} — refusing to resolve across scopes",
+                    None
+                )
+
+                return ExternalResolution.ScopeMismatch(handle.ScopeId, run.ScopeId)
+            else
+                let! claimed = claimTerminal handle
+
+                if not claimed then
+                    logger.Info(
+                        sprintf
+                            "[JobScheduler] event=external_already_resolved jobId=%O runId=%O handle=%O backend=%s outcome=%s — another caller (callback or poll) claimed this handle first; no-op"
+                            run.JobId
+                            run.RunId
+                            handle.HandleId
+                            handle.Backend
+                            (ExternalOutcome.label outcome)
+                    )
+
+                    return ExternalResolution.AlreadyResolved
+                else
+
+                    let awaitedMs = int64 (now - run.StartedAt).TotalMilliseconds
+
+                    /// Write the terminal run row for this attempt.
+                    /// Overwrites the awaiting row in place (same `RunId` +
+                    /// `StartedAt` ⇒ same blob), which is also what removes
+                    /// it from the store's awaiting index.
+                    let recordTerminal status error = async {
+                        do!
+                            store.RecordRun {
+                                run with
+                                    Status = status
+                                    CompletedAt = Some now
+                                    Error = error
+                                    DurationMs = Some awaitedMs
+                            }
+                    }
+
+                    /// The external-side companion event — emitted alongside
+                    /// the standard terminal event, never instead of it.
+                    let emitReconciled resultRef error retriable = async {
+                        do!
+                            emitEvent scope "JobExternalReconciled" {
+                                JobId = run.JobId
+                                ScopeId = scope
+                                Handler = job.Handler
+                                RunId = run.RunId
+                                Attempt = run.Attempt
+                                HandleId = handle.HandleId
+                                Backend = handle.Backend
+                                NativeRef = handle.NativeRef
+                                Outcome = ExternalOutcome.label outcome
+                                ResultRef = resultRef
+                                Error = error
+                                Retriable = retriable
+                                AwaitedMs = awaitedMs
+                            }
+                    }
+
+                    /// Dead-letter this attempt exactly as an in-process
+                    /// `PermanentFailure` / exhausted-retry does: the same
+                    /// run status, the same `JobDeadLettered` payload, the
+                    /// same `Warning` notification, the same
+                    /// `ConsecutiveFailures` bump.
+                    let deadLetter (error: string) = async {
+                        do! recordTerminal DeadLettered (Some error)
+
+                        do!
+                            emitEvent scope "JobDeadLettered" {
+                                JobId = run.JobId
+                                ScopeId = scope
+                                Handler = job.Handler
+                                Error = error
+                                Attempts = run.Attempt
+                            }
+
+                        do! notifyDeadLetter scope job error
+
+                        do!
+                            store.Update {
+                                job with
+                                    LastRunAt = Some now
+                                    LastRunStatus = Some DeadLettered
+                                    LastRunError = Some error
+                                    ConsecutiveFailures = job.ConsecutiveFailures + 1
+                            }
+                    }
+
+                    match outcome with
+                    | ExternalOutcome.Succeeded resultRef ->
+                        do! recordTerminal Succeeded None
+
+                        // Byte-identical to the in-process success path's
+                        // event.
+                        do!
+                            emitEvent scope "JobCompleted" {
+                                JobId = run.JobId
+                                ScopeId = scope
+                                Handler = job.Handler
+                                RunId = run.RunId
+                                Attempt = run.Attempt
+                                DurationMs = awaitedMs
+                            }
+
+                        do! emitReconciled (Some resultRef) None None
+
+                        do!
+                            store.Update {
+                                job with
+                                    LastRunAt = Some now
+                                    LastRunStatus = Some Succeeded
+                                    LastRunError = None
+                                    ConsecutiveFailures = 0
+                            }
+
+                        return ExternalResolution.Resolved "succeeded"
+
+                    | ExternalOutcome.Failed error ->
+                        do! emitReconciled None (Some error.Message) (Some error.Retriable)
+
+                        let attemptsRemain = run.Attempt < job.RetryPolicy.MaxAttempts
+
+                        if error.Retriable && attemptsRemain then
+                            // Record the attempt as `Failed` (not
+                            // dead-lettered) and continue the SAME retry
+                            // sequence at the next attempt number. The row
+                            // must be written before the re-dispatch so the
+                            // run leaves the awaiting index and the 319.E
+                            // guard does not mistake it for outstanding work
+                            // and refuse its own retry.
+                            do! recordTerminal Failed (Some error.Message)
+
+                            do!
+                                emitEvent scope "JobFailed" {
+                                    JobId = run.JobId
+                                    ScopeId = scope
+                                    Handler = job.Handler
+                                    RunId = run.RunId
+                                    Attempt = run.Attempt
+                                    Error = error.Message
+                                    DurationMs = awaitedMs
+                                }
+
+                            do!
+                                store.Update {
+                                    job with
+                                        LastRunAt = Some now
+                                        LastRunStatus = Some Failed
+                                        LastRunError = Some error.Message
+                                }
+
+                            logger.Info(
+                                sprintf
+                                    "[JobScheduler] event=external_retry jobId=%O runId=%O handler=%s backend=%s attempt=%d nextAttempt=%d maxAttempts=%d"
+                                    run.JobId
+                                    run.RunId
+                                    job.Handler
+                                    handle.Backend
+                                    run.Attempt
+                                    (run.Attempt + 1)
+                                    job.RetryPolicy.MaxAttempts
+                            )
+
+                            // Fire-and-forget, like every other dispatch.
+                            // From the poll path it blocks on this job's
+                            // lease until the caller's `finally` releases it
+                            // — `acquireBlocking` waits rather than failing,
+                            // so the queueing is correct rather than merely
+                            // tolerated.
+                            Async.Start(
+                                dispatchFrom (run.Attempt + 1) job (ScheduledByEvent("_external-retry", run.RunId)) now
+                            )
+
+                            return ExternalResolution.Resolved "failed"
+                        else
+                            // Terminal backend failure, or a retriable one
+                            // with the retry budget spent. Both dead-letter —
+                            // the first skipping the remaining attempts
+                            // exactly as `PermanentFailure` does.
+                            do! deadLetter error.Message
+                            return ExternalResolution.Resolved "dead-lettered"
+
+                    | ExternalOutcome.Cancelled ->
+                        // Terminal, but NOT a failure: no dead-letter
+                        // notification and no `ConsecutiveFailures` bump,
+                        // because a cancelled attempt says nothing about the
+                        // job's health and must not push it toward an
+                        // auto-disable threshold.
+                        do! recordTerminal ExternallyCancelled None
+                        do! emitReconciled None None None
+
+                        do!
+                            store.Update {
+                                job with
+                                    LastRunAt = Some now
+                                    LastRunStatus = Some ExternallyCancelled
+                                    LastRunError = None
+                            }
+
+                        logger.Info(
+                            sprintf
+                                "[JobScheduler] event=external_cancelled jobId=%O runId=%O handler=%s backend=%s awaitedMs=%d"
+                                run.JobId
+                                run.RunId
+                                job.Handler
+                                handle.Backend
+                                awaitedMs
+                        )
+
+                        return ExternalResolution.Resolved "externally-cancelled"
+
+                    | ExternalOutcome.Pending
+                    | ExternalOutcome.Running _ ->
+                        // Unreachable — guarded at the head.
+                        return ExternalResolution.NoAwaitingRun
+        }
+
     // ─── Phase 319 — external hand-off reconciliation ────────────
     //
     // The other half of `JobResult.HandedOff`. A run sitting in
@@ -1119,76 +1476,6 @@ type InProcessJobScheduler
                                         | Some handle ->
 
                                             let! outcome = dispatcher.Poll handle
-                                            let awaitedMs = int64 (now - run.StartedAt).TotalMilliseconds
-
-                                            /// Write the terminal run row for this
-                                            /// attempt. Overwrites the awaiting row in
-                                            /// place (same `RunId` + `StartedAt` ⇒ same
-                                            /// blob), which is also what removes it
-                                            /// from the store's awaiting index.
-                                            let recordTerminal status error = async {
-                                                do!
-                                                    store.RecordRun {
-                                                        run with
-                                                            Status = status
-                                                            CompletedAt = Some now
-                                                            Error = error
-                                                            DurationMs = Some awaitedMs
-                                                    }
-                                            }
-
-                                            /// The external-side companion event —
-                                            /// emitted alongside the standard terminal
-                                            /// event, never instead of it.
-                                            let emitReconciled resultRef error retriable = async {
-                                                do!
-                                                    emitEvent scope "JobExternalReconciled" {
-                                                        JobId = run.JobId
-                                                        ScopeId = scope
-                                                        Handler = job.Handler
-                                                        RunId = run.RunId
-                                                        Attempt = run.Attempt
-                                                        HandleId = handle.HandleId
-                                                        Backend = handle.Backend
-                                                        NativeRef = handle.NativeRef
-                                                        Outcome = ExternalOutcome.label outcome
-                                                        ResultRef = resultRef
-                                                        Error = error
-                                                        Retriable = retriable
-                                                        AwaitedMs = awaitedMs
-                                                    }
-                                            }
-
-                                            /// Dead-letter this attempt exactly as an
-                                            /// in-process `PermanentFailure` /
-                                            /// exhausted-retry does: the same run
-                                            /// status, the same `JobDeadLettered`
-                                            /// payload, the same `Warning`
-                                            /// notification, the same
-                                            /// `ConsecutiveFailures` bump.
-                                            let deadLetter (error: string) = async {
-                                                do! recordTerminal DeadLettered (Some error)
-
-                                                do!
-                                                    emitEvent scope "JobDeadLettered" {
-                                                        JobId = run.JobId
-                                                        ScopeId = scope
-                                                        Handler = job.Handler
-                                                        Error = error
-                                                        Attempts = run.Attempt
-                                                    }
-
-                                                do! notifyDeadLetter scope job error
-
-                                                do!
-                                                    store.Update {
-                                                        job with
-                                                            LastRunAt = Some now
-                                                            LastRunStatus = Some DeadLettered
-                                                            LastRunError = Some error
-                                                            ConsecutiveFailures = job.ConsecutiveFailures + 1
-                                                    }
-                                            }
 
                                             match outcome with
                                             | ExternalOutcome.Pending
@@ -1201,6 +1488,12 @@ type InProcessJobScheduler
                                                 // 321, which is where
                                                 // `Running of progress` starts being
                                                 // persisted rather than logged.
+                                                //
+                                                // Also deliberately BEFORE the shared
+                                                // terminal path: "still running" is a
+                                                // decision not to write at all, so it
+                                                // must not consume the handle's
+                                                // one-shot terminal claim.
                                                 logger.Debug(
                                                     sprintf
                                                         "[JobScheduler] event=reconcile_still_awaiting jobId=%O runId=%O handler=%s backend=%s outcome=%s awaitedMs=%d"
@@ -1209,134 +1502,18 @@ type InProcessJobScheduler
                                                         job.Handler
                                                         handle.Backend
                                                         (ExternalOutcome.label outcome)
-                                                        awaitedMs
+                                                        (int64 (now - run.StartedAt).TotalMilliseconds)
                                                 )
 
-                                            | ExternalOutcome.Succeeded resultRef ->
-                                                do! recordTerminal Succeeded None
+                                            | terminalOutcome ->
+                                                // Phase 320 — the poll now goes
+                                                // through the SAME gated path the
+                                                // completion callback does, so
+                                                // whichever arrives first resolves the
+                                                // run and the other is a no-op.
+                                                let! _ = applyExternalOutcome scope job run handle terminalOutcome now
 
-                                                // Byte-identical to the in-process
-                                                // success path's event.
-                                                do!
-                                                    emitEvent scope "JobCompleted" {
-                                                        JobId = run.JobId
-                                                        ScopeId = scope
-                                                        Handler = job.Handler
-                                                        RunId = run.RunId
-                                                        Attempt = run.Attempt
-                                                        DurationMs = awaitedMs
-                                                    }
-
-                                                do! emitReconciled (Some resultRef) None None
-
-                                                do!
-                                                    store.Update {
-                                                        job with
-                                                            LastRunAt = Some now
-                                                            LastRunStatus = Some Succeeded
-                                                            LastRunError = None
-                                                            ConsecutiveFailures = 0
-                                                    }
-
-                                            | ExternalOutcome.Failed error ->
-                                                do! emitReconciled None (Some error.Message) (Some error.Retriable)
-
-                                                let attemptsRemain = run.Attempt < job.RetryPolicy.MaxAttempts
-
-                                                if error.Retriable && attemptsRemain then
-                                                    // Record the attempt as `Failed`
-                                                    // (not dead-lettered) and continue
-                                                    // the SAME retry sequence at the
-                                                    // next attempt number. The row must
-                                                    // be written before the re-dispatch
-                                                    // so the run leaves the awaiting
-                                                    // index and the 319.E guard does
-                                                    // not mistake it for outstanding
-                                                    // work and refuse its own retry.
-                                                    do! recordTerminal Failed (Some error.Message)
-
-                                                    do!
-                                                        emitEvent scope "JobFailed" {
-                                                            JobId = run.JobId
-                                                            ScopeId = scope
-                                                            Handler = job.Handler
-                                                            RunId = run.RunId
-                                                            Attempt = run.Attempt
-                                                            Error = error.Message
-                                                            DurationMs = awaitedMs
-                                                        }
-
-                                                    do!
-                                                        store.Update {
-                                                            job with
-                                                                LastRunAt = Some now
-                                                                LastRunStatus = Some Failed
-                                                                LastRunError = Some error.Message
-                                                        }
-
-                                                    logger.Info(
-                                                        sprintf
-                                                            "[JobScheduler] event=reconcile_retry jobId=%O runId=%O handler=%s backend=%s attempt=%d nextAttempt=%d maxAttempts=%d"
-                                                            run.JobId
-                                                            run.RunId
-                                                            job.Handler
-                                                            handle.Backend
-                                                            run.Attempt
-                                                            (run.Attempt + 1)
-                                                            job.RetryPolicy.MaxAttempts
-                                                    )
-
-                                                    // Fire-and-forget, like every other
-                                                    // dispatch. It blocks on this job's
-                                                    // lease for one poll interval until
-                                                    // the `finally` below releases it —
-                                                    // `acquireBlocking` waits rather
-                                                    // than failing, so the queueing is
-                                                    // correct rather than merely
-                                                    // tolerated.
-                                                    Async.Start(
-                                                        dispatchFrom
-                                                            (run.Attempt + 1)
-                                                            job
-                                                            (ScheduledByEvent("_external-retry", run.RunId))
-                                                            now
-                                                    )
-                                                else
-                                                    // Terminal backend failure, or a
-                                                    // retriable one with the retry
-                                                    // budget spent. Both dead-letter —
-                                                    // the first skipping the remaining
-                                                    // attempts exactly as
-                                                    // `PermanentFailure` does.
-                                                    do! deadLetter error.Message
-
-                                            | ExternalOutcome.Cancelled ->
-                                                // Terminal, but NOT a failure: no
-                                                // dead-letter notification and no
-                                                // `ConsecutiveFailures` bump, because a
-                                                // cancelled attempt says nothing about
-                                                // the job's health and must not push it
-                                                // toward an auto-disable threshold.
-                                                do! recordTerminal ExternallyCancelled None
-                                                do! emitReconciled None None None
-
-                                                do!
-                                                    store.Update {
-                                                        job with
-                                                            LastRunAt = Some now
-                                                            LastRunStatus = Some ExternallyCancelled
-                                                            LastRunError = None
-                                                    }
-
-                                                logger.Info(
-                                                    sprintf
-                                                        "[JobScheduler] event=reconcile_cancelled jobId=%O runId=%O handler=%s backend=%s awaitedMs=%d"
-                                                        run.JobId
-                                                        run.RunId
-                                                        job.Handler
-                                                        handle.Backend
-                                                        awaitedMs
-                                                )
+                                                ()
                             finally
                                 releaseJobLease lease
                         with ex ->
@@ -1823,6 +2000,98 @@ type InProcessJobScheduler
                     GeneratedAt = now
                 })
 
+    // ─── Phase 320 — IExternalCompletionSink ─────────────────────
+    //
+    // The push counterpart to `reconcileAwaitingExternal`. Same lease,
+    // same re-verify-under-the-lease, same shared terminal-drive path —
+    // the ONLY differences are that the outcome was handed to us instead
+    // of polled, and that the run is located by `RunId` (from the handle
+    // store) rather than swept out of the awaiting index.
+    //
+    // **Why the lease is taken here too.** Without it a callback landing
+    // mid-tick interleaves with the reconciliation's read-modify-write
+    // on the same job, and `MarkTerminal` alone does not prevent that:
+    // the gate makes exactly one of them *proceed*, but the loser may
+    // already be inside a `RecordRun`. The lease is what makes the
+    // winner's writes atomic against a concurrent dispatch, exactly as
+    // it does for the poll.
+    interface IExternalCompletionSink with
+        member _.ResolveExternal(handle: ExternalHandle, jobRunId: Guid, outcome: ExternalOutcome) = async {
+            let now = DateTime.UtcNow
+
+            // Locate the awaiting run BEFORE taking a lease, because the
+            // lease is per-`JobId` and the callback carries none — it
+            // carries a handle. Scoped by `handle.ScopeId`, which came
+            // from the handle store's own partition and never from the
+            // request (GP 4), so this query cannot be steered across
+            // tenants by a caller.
+            //
+            // This unleased read is a *locator*, not a decision. Every
+            // decision is re-taken under the lease below, exactly as the
+            // reconciliation pass re-verifies after its own batch query.
+            let! located = store.AwaitingExternalRuns(handle.ScopeId, awaitingExternalBatchSize)
+
+            match located |> List.tryFind (fun r -> r.RunId = jobRunId) with
+            | None ->
+                logger.Info(
+                    sprintf
+                        "[JobScheduler] event=callback_no_awaiting_run handle=%O runId=%O scope=%s — no AwaitingExternal run matches; already resolved, or never awaiting"
+                        handle.HandleId
+                        jobRunId
+                        handle.ScopeId
+                )
+
+                return ExternalResolution.NoAwaitingRun
+            | Some located ->
+                // The SAME lock id the dispatch and the reconciliation
+                // pass use. A different id would leave the callback
+                // interleaving with a dispatch's read-modify-write, which
+                // is the failure the lease exists to prevent —
+                // `MarkTerminal` decides who proceeds, the lease is what
+                // makes the winner's writes atomic.
+                let! lease =
+                    DistributedLock.acquireBlocking jobLock (jobLockId located.JobId) (TimeSpan.FromMinutes 5.0)
+
+                try
+                    // Re-verify under the lease. Between the locator read
+                    // and this acquisition the reconciliation pass (or a
+                    // `Cancel`) may already have resolved the run.
+                    let! recent = store.GetRecentRuns(handle.ScopeId, located.JobId, awaitingGuardRunLookback)
+
+                    match
+                        recent
+                        |> List.tryFind (fun r -> r.RunId = jobRunId && r.Status = AwaitingExternal)
+                    with
+                    | None ->
+                        logger.Info(
+                            sprintf
+                                "[JobScheduler] event=callback_no_awaiting_run handle=%O runId=%O scope=%s — the run left AwaitingExternal before the lease was acquired"
+                                handle.HandleId
+                                jobRunId
+                                handle.ScopeId
+                        )
+
+                        return ExternalResolution.NoAwaitingRun
+                    | Some run ->
+                        let! definition = store.Get(handle.ScopeId, run.JobId)
+
+                        match definition with
+                        | None ->
+                            // The job definition was deleted while its
+                            // external work ran. The poll path
+                            // dead-letters this case; here we decline
+                            // rather than duplicate that policy, so
+                            // orphan handling keeps a single owner and
+                            // the next tick applies it.
+                            logger.Warn
+                                $"[JobScheduler] event=callback_orphan_run handle=%O{handle.HandleId} jobId=%O{run.JobId} runId=%O{run.RunId} scope=%s{handle.ScopeId} — job definition no longer exists; leaving the run for the reconciliation pass to abandon"
+
+                            return ExternalResolution.NoAwaitingRun
+                        | Some job -> return! applyExternalOutcome handle.ScopeId job run handle outcome now
+                finally
+                    releaseJobLease lease
+        }
+
 // ─── Convenience constructor ─────────────────────────────────────
 
 let create
@@ -1903,4 +2172,50 @@ let createWithExternalCompute
             logger,
             activitySink,
             externalDispatcher = externalDispatcher
+        )
+
+/// Phase 320 — `createWithExternalCompute` plus the handle store that
+/// makes the completion-callback ingress work: handle-to-run routing, the
+/// callback secret's hash, and the atomic `MarkTerminal` gate.
+///
+/// A **separate arity** rather than an extra parameter on
+/// `createWithExternalCompute`, because that function is curried — adding
+/// a parameter would break every existing call site for a capability they
+/// do not use (GP 11). A scheduler built by the older factory carries no
+/// handle store, mints no secrets, registers no handles, and reconciles
+/// exactly as Phase 319 did.
+let createWithExternalCallback
+    (store: IJobStore)
+    (eventStore: IEventStore)
+    (notificationChannel: INotificationChannel)
+    (config: ServerConfig)
+    (logger: ILogger)
+    (activitySink: IActivitySink)
+    (triggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
+    (externalDispatcher: IExternalComputeDispatcher)
+    (externalHandleStore: IExternalHandleStore)
+    : InProcessJobScheduler =
+    match triggerWatermark with
+    | Some watermark ->
+        new InProcessJobScheduler(
+            store,
+            eventStore,
+            notificationChannel,
+            config,
+            logger,
+            activitySink,
+            triggerWatermark = watermark,
+            externalDispatcher = externalDispatcher,
+            externalHandleStore = externalHandleStore
+        )
+    | None ->
+        new InProcessJobScheduler(
+            store,
+            eventStore,
+            notificationChannel,
+            config,
+            logger,
+            activitySink,
+            externalDispatcher = externalDispatcher,
+            externalHandleStore = externalHandleStore
         )

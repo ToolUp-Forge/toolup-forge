@@ -566,6 +566,10 @@ ToolUp.Platform.BlobEncryption (class)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver (interface)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver.ResolveKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.EncryptionTypes+EncryptionKey]
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver.ResolveKeyById(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EncryptionTypes+EncryptionKey, ToolUp.Platform.EncryptionTypes+KeyResolutionError]]
+ToolUp.Platform.BlobExternalHandleStore (class)
+ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.BlobExternalHandleStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore]
 ToolUp.Platform.BlobModelRegistry (class)
 ToolUp.Platform.BlobModelRegistry..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
 ToolUp.Platform.BlobModelRegistryModule (class)
@@ -2750,6 +2754,45 @@ ToolUp.Platform.ExposedSurfaceKindModule (class)
 ToolUp.Platform.ExposedSurfaceKindModule.actionKind(ToolUp.Platform.ExposedSurfaceKind) : System.String
 ToolUp.Platform.ExposedSurfaceKindModule.label(ToolUp.Platform.ExposedSurfaceKind) : System.String
 ToolUp.Platform.ExposedSurfaceKindModule.ofLabel(System.String) : ToolUp.Platform.ExposedSurfaceKind
+ToolUp.Platform.ExternalCallbackSecret (class)
+ToolUp.Platform.ExternalCallbackSecret.SecretBytes : System.Int32 (literal)
+ToolUp.Platform.ExternalCallbackSecret.hash(System.String) : System.String
+ToolUp.Platform.ExternalCallbackSecret.mint() : System.Tuple`2[System.String, System.String]
+ToolUp.Platform.ExternalCallbackSecret.verify(System.String, System.String) : System.Boolean
+ToolUp.Platform.ExternalComputeCallback (class)
+ToolUp.Platform.ExternalComputeCallback.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Platform.ExternalComputeCallback.refusalCount(System.String) : System.Int32
+ToolUp.Platform.ExternalComputeCallback.resetThrottleState() : System.Void
+ToolUp.Platform.ExternalComputeCallback.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.ExternalHandleRecord (class)
+ToolUp.Platform.ExternalHandleRecord..ctor(ToolUp.Platform.ExternalHandle, System.Guid, System.String, System.Boolean, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.ExternalHandleRecord.CallbackSecretHash : System.String { get }
+ToolUp.Platform.ExternalHandleRecord.Handle : ToolUp.Platform.ExternalHandle { get }
+ToolUp.Platform.ExternalHandleRecord.JobRunId : System.Guid { get }
+ToolUp.Platform.ExternalHandleRecord.RegisteredAt : System.DateTime { get }
+ToolUp.Platform.ExternalHandleRecord.Terminal : System.Boolean { get }
+ToolUp.Platform.ExternalHandleRecord.TerminalAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.ExternalResolution (class)
+ToolUp.Platform.ExternalResolution.AlreadyResolved : ToolUp.Platform.ExternalResolution { get }
+ToolUp.Platform.ExternalResolution.IsAlreadyResolved : System.Boolean { get }
+ToolUp.Platform.ExternalResolution.IsNoAwaitingRun : System.Boolean { get }
+ToolUp.Platform.ExternalResolution.IsResolved : System.Boolean { get }
+ToolUp.Platform.ExternalResolution.IsScopeMismatch : System.Boolean { get }
+ToolUp.Platform.ExternalResolution.IsSinkNotConfigured : System.Boolean { get }
+ToolUp.Platform.ExternalResolution.NoAwaitingRun : ToolUp.Platform.ExternalResolution { get }
+ToolUp.Platform.ExternalResolution.SinkNotConfigured : ToolUp.Platform.ExternalResolution { get }
+ToolUp.Platform.ExternalResolution.Tag : System.Int32 { get }
+ToolUp.Platform.ExternalResolution+Resolved (class)
+ToolUp.Platform.ExternalResolution+Resolved.status : System.String { get }
+ToolUp.Platform.ExternalResolution+ScopeMismatch (class)
+ToolUp.Platform.ExternalResolution+ScopeMismatch.handleScope : System.String { get }
+ToolUp.Platform.ExternalResolution+ScopeMismatch.runScope : System.String { get }
+ToolUp.Platform.ExternalResolution+Tags (class)
+ToolUp.Platform.ExternalResolution+Tags.AlreadyResolved : System.Int32 (literal)
+ToolUp.Platform.ExternalResolution+Tags.NoAwaitingRun : System.Int32 (literal)
+ToolUp.Platform.ExternalResolution+Tags.Resolved : System.Int32 (literal)
+ToolUp.Platform.ExternalResolution+Tags.ScopeMismatch : System.Int32 (literal)
+ToolUp.Platform.ExternalResolution+Tags.SinkNotConfigured : System.Int32 (literal)
 ToolUp.Platform.ExternalTableBinding (class)
 ToolUp.Platform.ExternalTableBinding..ctor(System.String, System.String, System.String)
 ToolUp.Platform.ExternalTableBinding.Kind : System.String { get }
@@ -3390,11 +3433,20 @@ ToolUp.Platform.IEntityStore+IEntityStore.Query`1(System.String, ToolUp.Platform
 ToolUp.Platform.IEntityStore+IEntityStore.Save`1(System.String, T) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IExportEnvelopeSigner (interface)
 ToolUp.Platform.IExportEnvelopeSigner.SignEnvelope(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportSignature, System.String]]
+ToolUp.Platform.IExternalCallbackCapableBackend (interface)
+ToolUp.Platform.IExternalCallbackCapableBackend.AcceptCallbackCredential(ToolUp.Platform.ExternalHandle, ToolUp.Platform.ExternalCallbackCredential) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IExternalCompletionSink (interface)
+ToolUp.Platform.IExternalCompletionSink.ResolveExternal(ToolUp.Platform.ExternalHandle, System.Guid, ToolUp.Platform.ExternalOutcome) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExternalResolution]
 ToolUp.Platform.IExternalComputeDispatcher (interface)
 ToolUp.Platform.IExternalComputeDispatcher.Backend : System.String { get }
 ToolUp.Platform.IExternalComputeDispatcher.Cancel(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IExternalComputeDispatcher.Poll(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExternalOutcome]
 ToolUp.Platform.IExternalComputeDispatcher.Submit(System.String, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Platform.ExternalComputeError]]
+ToolUp.Platform.IExternalHandleStore (interface)
+ToolUp.Platform.IExternalHandleStore.IsDistributed : System.Boolean { get }
+ToolUp.Platform.IExternalHandleStore.MarkTerminal(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.IExternalHandleStore.Register(ToolUp.Platform.ExternalHandle, System.Guid, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IExternalHandleStore.Resolve(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandleRecord]]
 ToolUp.Platform.IFactEvidenceSource (interface)
 ToolUp.Platform.IFactEvidenceSource.FactsForResult(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FactEvidence]]
 ToolUp.Platform.IFactEvidenceSource.GetFact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FactEvidence]]
@@ -3846,6 +3898,9 @@ ToolUp.Platform.InMemoryEntityLockStore..ctor(ToolUp.Platform.INotificationChann
 ToolUp.Platform.InMemoryEventStore (class)
 ToolUp.Platform.InMemoryEventStore+InMemoryEventStore (class)
 ToolUp.Platform.InMemoryEventStore+InMemoryEventStore..ctor()
+ToolUp.Platform.InMemoryExternalHandleStore (class)
+ToolUp.Platform.InMemoryExternalHandleStore..ctor()
+ToolUp.Platform.InMemoryExternalHandleStore.Count : System.Int32 { get }
 ToolUp.Platform.InMemoryHostedTreeUsageExport (class)
 ToolUp.Platform.InMemoryHostedTreeUsageExport..ctor()
 ToolUp.Platform.InMemoryLiveSessionHost (class)
@@ -3988,9 +4043,10 @@ ToolUp.Platform.JobScheduler (class)
 ToolUp.Platform.JobScheduler.JobsSourceModule : System.String (literal)
 ToolUp.Platform.JobScheduler.create(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler.createWithCatchUp(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
+ToolUp.Platform.JobScheduler.createWithExternalCallback(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.IExternalHandleStore) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler.createWithExternalCompute(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler+InProcessJobScheduler (class)
-ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalComputeDispatcher])
+ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalComputeDispatcher], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore])
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ReconcileAwaitingExternal() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

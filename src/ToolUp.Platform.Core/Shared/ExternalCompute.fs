@@ -437,3 +437,161 @@ type ExternalComputeMode =
     /// DI by the deployment; `compose` registers no default and leaves the
     /// consumer's `IExternalComputeDispatcher` singleton in place.
     | CustomExternalCompute
+
+// ─── Phase 320 — the completion-callback wire contract ───────────────
+//
+// Polling (Phase 319) is the universal fallback and stays the fallback.
+// This is the push path: a backend that supports webhooks calls the
+// platform the moment its work reaches a terminal state, and the run
+// resolves with no poll latency.
+//
+// **Why a flat record rather than `ExternalOutcome` on the wire.** The
+// caller is a GPU / batch service that is almost certainly not written
+// in F#, and `ExternalOutcome` is a DU with a nested
+// `ExternalComputeError` record — serialisable, but only through a
+// converter set no third-party backend has. The wire shape is therefore
+// five primitive fields a shell script can emit with `curl`, and
+// `ExternalCallback.toOutcome` is the one place that lifts it back into
+// the typed outcome the scheduler already knows how to apply. Same
+// reasoning that put JSON-RPC 2.0 on the peer seam rather than the
+// in-tree typed transport: an open contract at the boundary, typed
+// values inside it.
+//
+// **Only terminal statuses are accepted.** A callback exists to deliver
+// an outcome, and `Pending` / `Running` are not outcomes — a backend
+// reporting progress is Phase 321's surface, and accepting it here
+// would mean the ingress could be handed a status that resolves
+// nothing while still consuming the handle's one-shot terminal claim.
+// `toOutcome` refuses them by name.
+
+/// Phase 320 — the per-handle callback credential the platform mints at
+/// hand-off and hands to a callback-capable backend, so the backend can
+/// authenticate itself when it calls back.
+///
+/// The platform stores only `Secret`'s **hash**; this record is the one
+/// and only time the cleartext exists outside the backend. Identity by
+/// value (GP 12 rule 1) — three primitives, so it survives being
+/// persisted by the backend alongside its own job record.
+type ExternalCallbackCredential = {
+    /// The handle the callback resolves. Echoed back as
+    /// `ExternalCallbackPayload.HandleId`.
+    HandleId: Guid
+    /// High-entropy per-handle secret, presented in the
+    /// `ExternalCallback.SecretHeader` request header. **Never logged,
+    /// never audited, never persisted platform-side in cleartext.**
+    Secret: string
+    /// Platform path the callback is POSTed to
+    /// (`ExternalCallback.Route`). Carried on the credential rather than
+    /// left for the backend to hardcode, so a deployment that mounts the
+    /// platform under a prefix hands the right path out.
+    CallbackPath: string
+}
+
+/// Phase 320 — the callback request body. Flat primitives by design
+/// (see the section header); `ExternalCallback.toOutcome` validates and
+/// lifts it into an `ExternalOutcome`.
+type ExternalCallbackPayload = {
+    /// `ExternalHandle.HandleId` of the work that finished. The **only**
+    /// routing input the platform accepts from the caller — the scope,
+    /// the job run, and the backend all come from the platform's own
+    /// stored record, never from the request (GP 4: a caller cannot name
+    /// a scope it does not already own a handle in).
+    HandleId: Guid
+    /// Terminal status label, matching `ExternalOutcome.label`:
+    /// `"succeeded"` | `"failed"` | `"cancelled"`. Case-insensitive.
+    Status: string
+    /// Opaque backend reference to the result, required for
+    /// `"succeeded"` and ignored otherwise.
+    ResultRef: string option
+    /// Failure description, required for `"failed"` and ignored
+    /// otherwise.
+    Error: string option
+    /// Whether a re-submission could plausibly succeed. Read only for
+    /// `"failed"`; `None` is treated as `false` (terminal), because a
+    /// backend that does not say is not asserting the work is worth
+    /// retrying, and defaulting the other way would re-submit work on a
+    /// backend's silence.
+    Retriable: bool option
+}
+
+[<RequireQualifiedAccess>]
+module ExternalCallback =
+    /// The ingress path. Mounted only when the deployment composed an
+    /// external-compute backend (GP 13) — absent, and therefore a clean
+    /// 404, on every deployment that did not.
+    [<Literal>]
+    let Route = "/_platform/external-compute/callback"
+
+    /// Request header carrying `ExternalCallbackCredential.Secret`.
+    ///
+    /// A header, not a query parameter: query strings land in access
+    /// logs, proxy logs and `Referer` headers, and a per-handle bearer
+    /// secret in an access log is a credential leak that survives in
+    /// whatever log aggregator the deployment ships to.
+    [<Literal>]
+    let SecretHeader = "X-ToolUp-External-Callback-Secret"
+
+    /// Lift a wire payload into the typed outcome, or explain why it is
+    /// not one.
+    ///
+    /// Refusals are all **shape** problems the caller can fix, and are
+    /// deliberately distinct from an authentication failure: a backend
+    /// that posts `"running"` has a bug, not a forged credential, and
+    /// conflating the two would bury a real forged-callback signal under
+    /// a misconfigured integration's noise.
+    let toOutcome (payload: ExternalCallbackPayload) : Result<ExternalOutcome, string> =
+        match
+            (if isNull payload.Status then
+                 ""
+             else
+                 payload.Status.Trim().ToLowerInvariant())
+        with
+        | "succeeded" ->
+            match payload.ResultRef with
+            | Some r when not (String.IsNullOrWhiteSpace r) -> Ok(ExternalOutcome.Succeeded r)
+            | _ -> Error "status 'succeeded' requires a non-empty resultRef"
+        | "failed" ->
+            match payload.Error with
+            | Some e when not (String.IsNullOrWhiteSpace e) ->
+                Ok(
+                    ExternalOutcome.Failed {
+                        Message = e
+                        Retriable = payload.Retriable |> Option.defaultValue false
+                    }
+                )
+            | _ -> Error "status 'failed' requires a non-empty error"
+        | "cancelled" -> Ok ExternalOutcome.Cancelled
+        | "pending"
+        | "running" ->
+            Error
+                "status 'pending'/'running' is not a terminal outcome; the completion callback delivers terminal outcomes only (progress reporting is a separate surface)"
+        | other -> Error $"unrecognised status '%s{other}'; expected one of succeeded, failed, cancelled"
+
+    /// Build the wire payload for a terminal outcome — the shape a
+    /// backend emits. `Error` for a non-terminal outcome, which has no
+    /// wire form here by construction.
+    let ofOutcome (handleId: Guid) (outcome: ExternalOutcome) : Result<ExternalCallbackPayload, string> =
+        let baseline = {
+            HandleId = handleId
+            Status = ExternalOutcome.label outcome
+            ResultRef = None
+            Error = None
+            Retriable = None
+        }
+
+        match outcome with
+        | ExternalOutcome.Succeeded resultRef ->
+            Ok {
+                baseline with
+                    ResultRef = Some resultRef
+            }
+        | ExternalOutcome.Failed error ->
+            Ok {
+                baseline with
+                    Error = Some error.Message
+                    Retriable = Some error.Retriable
+            }
+        | ExternalOutcome.Cancelled -> Ok baseline
+        | ExternalOutcome.Pending
+        | ExternalOutcome.Running _ ->
+            Error $"%s{ExternalOutcome.label outcome} is not terminal and has no completion-callback form"
