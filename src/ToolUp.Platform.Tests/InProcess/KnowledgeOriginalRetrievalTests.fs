@@ -18,6 +18,12 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
+// Phase 200 — abbreviated rather than `open`ed on purpose: the preview
+// seam module also exports a `createDefault`, and opening it would
+// silently shadow the Phase 104 resolver's `createDefault` that every
+// case in the first three lists below calls.
+module PreviewSeam = KnowledgeBase.ServerOriginalPreviewSeam
+
 // ─── Wave 15 — KB original-document retrieval ────────────────────────
 //
 // Phase 104 — `IOriginalSourceResolver` contract pack: one branch per
@@ -501,9 +507,463 @@ let private lineageTests =
             Expect.isNone back.ChunkId "missing ChunkId absorbs to None"
     ]
 
+// ─── Phase 200 — anchor-highlighting preview seam ────────────────────
+//
+// The join Phases 102/104/106 left to the consumer: a document + a
+// citation's `SourceLocator` → a `PreviewTarget` a viewer opens at and
+// highlights. Covered here: the total anchor projection (including the
+// deliberate `WholeDocument` absences, which are the cases a fabricated
+// "page 1" default would quietly replace), the two delivery modes,
+// TTL-boundedness of the signed-URL mode, the scope gate's
+// indistinguishable refusal (GP 4), and the GP 13 pin that a
+// deployment composing no seam registers nothing.
+
+/// Capturing signer double — records whether it was reached, so the
+/// "resolver said no" case can assert the signer was never asked to
+/// mint a URL for a document that has no original.
+type private CapturingSigner(result: Result<string, string>) =
+    let calls = ResizeArray<string * string * TimeSpan>()
+
+    member _.Calls = List.ofSeq calls
+
+    interface PreviewSeam.IPreviewUrlSigner with
+        member _.Sign(doc, container, ttl) = async {
+            calls.Add(doc.Id, container, ttl)
+            return result
+        }
+
+let private previewAnchorTests =
+    testList "Phase 200 — SourceLocator → PreviewAnchor projection" [
+        testCase "every SourceLocator case projects onto its anchor"
+        <| fun _ ->
+            Expect.equal (PreviewAnchor.ofLocator (Some(SourceLocator.Page 4))) (PreviewAnchor.Page 4) "page → Page"
+
+            Expect.equal
+                (PreviewAnchor.ofLocator (Some(SourceLocator.Slide 12)))
+                (PreviewAnchor.Slide 12)
+                "slide → Slide"
+
+            Expect.equal
+                (PreviewAnchor.ofLocator (Some(SourceLocator.Sheet "Q3")))
+                (PreviewAnchor.Sheet "Q3")
+                "sheet → Sheet"
+
+            Expect.equal
+                (PreviewAnchor.ofLocator (Some(SourceLocator.Section "Pricing")))
+                (PreviewAnchor.Section "Pricing")
+                "section → Section"
+
+            Expect.equal
+                (PreviewAnchor.ofLocator (Some(SourceLocator.RowGroup(2, 50))))
+                (PreviewAnchor.Rows(2, 50))
+                "row group → Rows"
+
+        testCase "a citation with no locator anchors WholeDocument, never a fabricated page 1"
+        <| fun _ -> Expect.equal (PreviewAnchor.ofLocator None) PreviewAnchor.WholeDocument "absence is a case (GP 9)"
+
+        testCase "a character span projects onto CharRange"
+        <| fun _ ->
+            // The mapping point for a citation carrying document-relative
+            // character offsets: the caller passes the raw offset pair, so
+            // the preview seam never takes a dependency on a retrieval-side
+            // span record.
+            Expect.equal (PreviewAnchor.ofCharSpan 120 180) (PreviewAnchor.CharRange(120, 180)) "half-open span"
+            Expect.equal (PreviewAnchor.ofCharSpan 0 1) (PreviewAnchor.CharRange(0, 1)) "single character at offset 0"
+
+        testCase "a degenerate character span degrades to WholeDocument"
+        <| fun _ ->
+            Expect.equal (PreviewAnchor.ofCharSpan 10 10) PreviewAnchor.WholeDocument "empty span highlights nothing"
+            Expect.equal (PreviewAnchor.ofCharSpan 50 10) PreviewAnchor.WholeDocument "inverted span"
+            Expect.equal (PreviewAnchor.ofCharSpan -1 40) PreviewAnchor.WholeDocument "negative start"
+    ]
+
+let private previewSeamTests =
+    testList "Phase 200 — IOriginalPreviewSeam delivery modes" [
+        testCaseAsync "inline seam pairs the resolved original with the projected anchor"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let bytes = Encoding.UTF8.GetBytes "pdf-bytes"
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", bytes)
+            let seam = PreviewSeam.createDefault (createDefault ())
+            let doc = mkDoc "doc-1" "report.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, Some(SourceLocator.Page 4))
+
+            match result with
+            | Ok target ->
+                Expect.equal target.DocumentId "doc-1" "target names the document"
+                Expect.equal target.Anchor (PreviewAnchor.Page 4) "anchor matches the citation"
+                Expect.equal target.ContentType "application/pdf" "content type surfaces without opening the bytes"
+                Expect.equal target.FileName "report.pdf" "file name"
+                Expect.equal target.SizeBytes (int64 bytes.Length) "size"
+
+                match target.Content with
+                | PreviewContent.Inline original ->
+                    Expect.equal original.Content bytes "inline delivery carries the original bytes"
+                    // The top-level metadata must mirror the embedded
+                    // record — they are constructed together precisely so
+                    // they cannot drift.
+                    Expect.equal original.ContentType target.ContentType "content type mirrors"
+                    Expect.equal original.FileName target.FileName "file name mirrors"
+                    Expect.equal original.SizeBytes target.SizeBytes "size mirrors"
+                | other -> failtest $"expected inline delivery, got %A{other}"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+
+        testCaseAsync "a citation without a locator still previews, anchored WholeDocument"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", Encoding.UTF8.GetBytes "x")
+            let seam = PreviewSeam.createDefault (createDefault ())
+            let doc = mkDoc "doc-1" "report.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+
+            match result with
+            | Ok target -> Expect.equal target.Anchor PreviewAnchor.WholeDocument "no locator → open at the top"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+
+        testCaseAsync "a source kind with no original refuses NoOriginalAvailable"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let seam = PreviewSeam.createDefault (createDefault ())
+            let doc = mkDoc "doc-3" "Overview.md" "md" (FromNarrative narrativeSource)
+
+            let! result = seam.Preview(storage, "team-a", doc, Some(SourceLocator.Section "Summary"))
+            Expect.equal result (Error NoOriginalAvailable) "typed absence — the seam never fabricates a target"
+        }
+
+        testCaseAsync "a document whose blob is gone refuses NoOriginalAvailable"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let seam = PreviewSeam.createDefault (createDefault ())
+            let doc = mkDoc "doc-4" "ghost.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, Some(SourceLocator.Page 1))
+            Expect.equal result (Error NoOriginalAvailable) "missing blob → typed absence, not a throw"
+        }
+
+        testCaseAsync "a throwing resolver surfaces as OriginalRetrievalFailed, never an exception (GP 9)"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+
+            let exploding =
+                { new IOriginalSourceResolver with
+                    member _.Resolve(_, _, _) = async { return failwith "storage exploded" }
+                }
+
+            let seam = PreviewSeam.createDefault exploding
+            let doc = mkDoc "doc-1" "report.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+
+            match result with
+            | Error(OriginalRetrievalFailed reason) -> Expect.stringContains reason "exploded" "diagnostic preserved"
+            | other -> failtest $"expected OriginalRetrievalFailed, got %A{other}"
+        }
+
+        testCaseAsync "a deployment-custom resolver is honoured by the seam — one resolution rule, not two"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+
+            // The same "deployment serves narratives after all" resolver the
+            // Phase 104 pack composes: swapping it must change what the
+            // preview seam resolves, without the seam knowing anything about it.
+            let custom =
+                { new IOriginalSourceResolver with
+                    member _.Resolve(_, _, doc) = async {
+                        return
+                            Some {
+                                FileName = doc.FileName
+                                ContentType = "text/markdown"
+                                SizeBytes = 8L
+                                Content = Encoding.UTF8.GetBytes "rendered"
+                            }
+                    }
+                }
+
+            let seam = PreviewSeam.createDefault custom
+            let doc = mkDoc "doc-6" "Overview.md" "md" (FromNarrative narrativeSource)
+
+            let! result = seam.Preview(storage, "team-a", doc, Some(SourceLocator.Section "Summary"))
+
+            match result with
+            | Ok target ->
+                Expect.equal target.ContentType "text/markdown" "custom branch served"
+                Expect.equal target.Anchor (PreviewAnchor.Section "Summary") "anchor unaffected by the swap"
+            | Error e -> failtest $"custom resolver should have resolved, got {e}"
+        }
+    ]
+
+let private previewSignedUrlTests =
+    testList "Phase 200 — signed-URL delivery is TTL-bounded" [
+        testCaseAsync "signed-URL mode returns a URL + expiry and keeps the bytes out of the response"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let bytes = Encoding.UTF8.GetBytes "pdf-bytes"
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", bytes)
+
+            let now = DateTimeOffset(2026, 8, 4, 12, 0, 0, TimeSpan.Zero)
+            let signer = CapturingSigner(Ok "https://blobs.example/doc-1?sig=abc")
+
+            let options = {
+                PreviewSeam.PreviewSignedUrlOptions.defaults with
+                    Ttl = TimeSpan.FromMinutes 15.0
+                    Now = fun () -> now
+            }
+
+            let seam =
+                PreviewSeam.createSignedUrl (createDefault ()) (signer :> PreviewSeam.IPreviewUrlSigner) options
+
+            let doc = mkDoc "doc-1" "report.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, Some(SourceLocator.Page 7))
+
+            match result with
+            | Ok target ->
+                Expect.equal target.Anchor (PreviewAnchor.Page 7) "anchor is delivery-mode independent"
+                Expect.equal target.ContentType "application/pdf" "viewer choice without downloading"
+                Expect.equal target.SizeBytes (int64 bytes.Length) "size still surfaced"
+
+                match target.Content with
+                | PreviewContent.SignedUrl(url, expiresAt) ->
+                    Expect.equal url "https://blobs.example/doc-1?sig=abc" "signer's URL"
+                    Expect.equal expiresAt (now.AddMinutes 15.0) "expiry is exactly now + TTL"
+                    Expect.isTrue (expiresAt > now) "TTL-bounded, and bounded forward"
+                | other -> failtest $"expected a signed URL, got %A{other}"
+
+                Expect.equal
+                    signer.Calls
+                    [ "doc-1", "team-a", TimeSpan.FromMinutes 15.0 ]
+                    "signer saw the TTL it must honour"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+
+        testCaseAsync "a signer failure refuses — it never falls back to inlining the bytes"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", Encoding.UTF8.GetBytes "x")
+            let signer = CapturingSigner(Error "signing key unavailable")
+
+            let seam =
+                PreviewSeam.createSignedUrl
+                    (createDefault ())
+                    (signer :> PreviewSeam.IPreviewUrlSigner)
+                    PreviewSeam.PreviewSignedUrlOptions.defaults
+
+            let doc = mkDoc "doc-1" "report.pdf" "pdf" UploadedFile
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+
+            match result with
+            | Error(OriginalRetrievalFailed reason) ->
+                Expect.stringContains reason "signing key unavailable" "signer diagnostic surfaces"
+            | other -> failtest $"expected OriginalRetrievalFailed, got %A{other}"
+        }
+
+        testCaseAsync "a document with no original never reaches the signer"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let signer = CapturingSigner(Ok "https://blobs.example/should-not-be-minted")
+
+            let seam =
+                PreviewSeam.createSignedUrl
+                    (createDefault ())
+                    (signer :> PreviewSeam.IPreviewUrlSigner)
+                    PreviewSeam.PreviewSignedUrlOptions.defaults
+
+            let doc = mkDoc "doc-3" "Overview.md" "md" (FromNarrative narrativeSource)
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+            Expect.equal result (Error NoOriginalAvailable) "absence short-circuits"
+            Expect.isEmpty signer.Calls "no URL minted for a document that has no original"
+        }
+
+        testCase "a non-positive TTL is refused at construction, not on a request path"
+        <| fun _ ->
+            let signer =
+                CapturingSigner(Ok "https://blobs.example/x") :> PreviewSeam.IPreviewUrlSigner
+
+            let bad = {
+                PreviewSeam.PreviewSignedUrlOptions.defaults with
+                    Ttl = TimeSpan.Zero
+            }
+
+            Expect.throwsT<ArgumentException>
+                (fun () -> PreviewSeam.createSignedUrl (createDefault ()) signer bad |> ignore)
+                "a zero TTL mints already-expired links — fail the compose, not the request"
+
+        testCase "the default TTL matches the media-tier signed-URL default"
+        <| fun _ ->
+            Expect.equal
+                PreviewSeam.PreviewSignedUrlOptions.defaults.Ttl
+                (TimeSpan.FromHours 1.0)
+                "one hour, as IMediaLibrary's SignedUrlDefaultTtl"
+    ]
+
+let private previewScopeTests =
+    testList "Phase 200 — previewOriginal scope gate (GP 4)" [
+        testCaseAsync "an in-scope document previews from its id alone"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", Encoding.UTF8.GetBytes "pdf")
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" "report.pdf" "pdf" UploadedFile ]
+            let seam = PreviewSeam.createDefault (createDefault ())
+
+            let! result = PreviewSeam.previewOriginal seam storage "team-a" "doc-1" (Some(SourceLocator.Page 2))
+
+            match result with
+            | Ok target ->
+                Expect.equal target.DocumentId "doc-1" "resolved from the scope's index"
+                Expect.equal target.Anchor (PreviewAnchor.Page 2) "anchor"
+            | Error e -> failtest $"expected Ok, got {e}"
+        }
+
+        testCaseAsync "an unknown id and another team's document refuse identically — no existence oracle"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            // doc-9 exists — in team-b's index and container.
+            let! _ = storage.Upload("team-b", "knowledge/doc-9/secret.pdf", Encoding.UTF8.GetBytes "secret")
+            do! saveIndex storage "team-b" [ mkDoc "doc-9" "secret.pdf" "pdf" UploadedFile ]
+            do! saveIndex storage "team-a" []
+            let seam = PreviewSeam.createDefault (createDefault ())
+
+            let! unknown = PreviewSeam.previewOriginal seam storage "team-a" "doc-nope" None
+            let! foreign = PreviewSeam.previewOriginal seam storage "team-a" "doc-9" None
+
+            Expect.equal unknown (Error NotInScope) "unknown id"
+            Expect.equal foreign (Error NotInScope) "another team's document"
+            Expect.equal unknown foreign "byte-identical refusals — absence and denial are indistinguishable (GP 4)"
+        }
+
+        testCaseAsync "an in-scope document with no original refuses NoOriginalAvailable, not NotInScope"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            do! saveIndex storage "team-a" [ mkDoc "doc-5" "Overview.md" "md" (FromNarrative narrativeSource) ]
+            let seam = PreviewSeam.createDefault (createDefault ())
+
+            let! result = PreviewSeam.previewOriginal seam storage "team-a" "doc-5" None
+
+            Expect.equal
+                result
+                (Error NoOriginalAvailable)
+                "in-scope-but-unavailable is a different answer from out-of-scope"
+        }
+    ]
+
+/// The DI namespace is opened HERE and not at file scope on purpose:
+/// `Microsoft.Extensions.DependencyInjection` puts `Add` extension
+/// methods in scope, which suppresses F#'s implicit-tuple resolution on
+/// the plain `ResizeArray.Add(a, b)` calls the Phase 104/107 doubles
+/// above make. A file-scope open compiles them into errors — a
+/// pointless churn of lines this phase has no business touching.
+module private PreviewCompose =
+    open Microsoft.Extensions.DependencyInjection
+
+    let tests =
+        testList "Phase 200 — opt-in compose (GP 11 / GP 13)" [
+            test "an app that never composes a preview seam registers nothing" {
+                let app = ServerApp.empty
+
+                Expect.isNone
+                    app.Extensions.ServiceConfig
+                    "no preview seam composed → no service config → the pre-200 composition, byte-for-byte"
+
+                let services = ServiceCollection()
+                let sp = services.BuildServiceProvider()
+
+                Expect.isTrue
+                    (isNull (box (sp.GetService<PreviewSeam.IOriginalPreviewSeam>())))
+                    "there is no default seam in DI — the SDK ships no viewer path a deployment did not ask for"
+            }
+
+            test "withOriginalPreviewSeam registers exactly one singleton, and it is the composed instance" {
+                let seam = PreviewSeam.createDefault (createDefault ())
+                let app = ServerApp.empty |> PreviewSeam.withOriginalPreviewSeam seam
+
+                let services = ServiceCollection()
+                let before = services.Count
+
+                match app.Extensions.ServiceConfig with
+                | Some cfg -> cfg services |> ignore
+                | None -> failtest "composing the seam must populate ServiceConfig"
+
+                Expect.equal (services.Count - before) 1 "one knob, one registration — no hidden hosted service"
+
+                let sp = services.BuildServiceProvider()
+                let resolved = sp.GetService<PreviewSeam.IOriginalPreviewSeam>()
+                Expect.isTrue (obj.ReferenceEquals(resolved, seam)) "the composed instance is what resolves"
+            }
+
+            test "an existing ServiceConfig is chained, never replaced" {
+                let marker =
+                    { new ILogger with
+                        member _.Debug _ = ()
+                        member _.Info _ = ()
+                        member _.Warn _ = ()
+                        member _.Error(_, _) = ()
+                    }
+
+                let app =
+                    {
+                        ServerApp.empty with
+                            Extensions = {
+                                ServerApp.empty.Extensions with
+                                    ServiceConfig = Some(fun s -> s.AddSingleton<ILogger>(marker))
+                            }
+                    }
+                    |> PreviewSeam.withOriginalPreviewSeam (PreviewSeam.createDefault (createDefault ()))
+
+                let services = ServiceCollection()
+
+                match app.Extensions.ServiceConfig with
+                | Some cfg -> cfg services |> ignore
+                | None -> failtest "ServiceConfig must survive composition"
+
+                let sp = services.BuildServiceProvider()
+
+                Expect.isTrue
+                    (obj.ReferenceEquals(sp.GetService<ILogger>(), marker))
+                    "a previously-composed registration is preserved"
+
+                Expect.isFalse
+                    (isNull (box (sp.GetService<PreviewSeam.IOriginalPreviewSeam>())))
+                    "and the seam is added alongside it"
+            }
+
+            testCaseAsync "the Phase 102 retrieval path is unchanged by the seam's presence"
+            <| async {
+                let storage = InMemoryBlobStorage() :> IBlobStorage
+                let bytes = Encoding.UTF8.GetBytes "pdf-bytes"
+                let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", bytes)
+                do! saveIndex storage "team-a" [ mkDoc "doc-1" "report.pdf" "pdf" UploadedFile ]
+
+                let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+
+                let! before = getOriginalDocument deps "doc-1"
+
+                // Compose a preview seam — it is registered in DI and is not
+                // on `getOriginalDocument`'s path at all.
+                ServerApp.empty
+                |> PreviewSeam.withOriginalPreviewSeam (PreviewSeam.createDefault (createDefault ()))
+                |> ignore
+
+                let! after = getOriginalDocument deps "doc-1"
+
+                Expect.equal after before "the original-retrieval result is identical with a seam composed (GP 13)"
+                Expect.isOk before "and it is the same successful fetch it was pre-200"
+            }
+        ]
+
 let tests =
-    testList "KnowledgeOriginalRetrieval (Wave 15 — Phases 102/103/104/106/107)" [
+    testList "KnowledgeOriginalRetrieval (Wave 15 — Phases 102/103/104/106/107; Phase 200 preview seam)" [
         resolverTests
         handlerTests
         lineageTests
+        previewAnchorTests
+        previewSeamTests
+        previewSignedUrlTests
+        previewScopeTests
+        PreviewCompose.tests
     ]

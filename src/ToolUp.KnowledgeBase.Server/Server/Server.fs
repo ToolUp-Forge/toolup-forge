@@ -91,6 +91,20 @@ let platformKnowledgeApi = KnowledgeBase.ServerPlatformAdmin.platformKnowledgeAp
 let withOriginalSourceResolver =
     KnowledgeBase.ServerOriginalSourceResolver.withOriginalSourceResolver
 
+/// Phase 200 — register an `IOriginalPreviewSeam` so a deployment can
+/// serve "open the original at the cited spot, highlighted" previews:
+/// a resolved original (inline, or behind a time-bound signed URL)
+/// paired with a neutral `PreviewAnchor` projected from the citation's
+/// `SourceLocator`. The SDK ships no viewer (GP 1) — only the seam and
+/// the anchor contract. Defined in `Server/IOriginalPreviewSeam.fs`;
+/// re-exported here so the public name
+/// `KnowledgeBase.Server.withOriginalPreviewSeam` sits alongside the
+/// other compose-time hooks. Apps that never call this register
+/// nothing and keep the pre-200 original-retrieval path byte-for-byte
+/// (GP 13).
+let withOriginalPreviewSeam =
+    KnowledgeBase.ServerOriginalPreviewSeam.withOriginalPreviewSeam
+
 /// Phase 119 — compose a Knowledge Base upload policy: a `MaxUploadBytes`
 /// size cap, an `AllowedExtensions` type allowlist, and how to treat an
 /// upload whose type no extractor recognises (`Reject` vs

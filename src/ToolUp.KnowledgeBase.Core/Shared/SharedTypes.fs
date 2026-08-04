@@ -265,6 +265,168 @@ type KnowledgeBaseError =
     /// Carries the underlying message for diagnostics.
     | OriginalRetrievalFailed of reason: string
 
+// ─── Original-document preview (Phase 200) ───────────────────────
+//
+// Phase 106 gave a citation a `SourceLocator` — *where* in the original
+// the answer came from. Phase 102/104 gave the caller the original's
+// bytes. Nothing tied the two together, so every consumer had to
+// re-derive "open the PDF at page 4 and highlight it" from two
+// unrelated values. `PreviewAnchor` + `PreviewTarget` are that tie: a
+// neutral, viewer-agnostic descriptor a consumer's PDF / PPTX / HTML
+// viewer reads to open-at-and-highlight. The SDK ships no viewer
+// (GP 1) — only the seam, the descriptor, and the projection.
+
+/// Where a consumer's viewer should open the original document, and
+/// what it should highlight. Deliberately *neutral*: it names a
+/// location in document terms (page, slide, sheet, heading, row range,
+/// character range), never a viewer API, a DOM selector, or a
+/// URL-fragment convention — so one anchor serves a PDF.js viewer, a
+/// server-side render, and a plain download alike.
+///
+/// `RequireQualifiedAccess` because the case names collide with
+/// `SourceLocation`'s, which files commonly open alongside this one.
+///
+/// **Consuming each case** (the documented anchor contract; see
+/// `docs/migrations/200-original-document-preview-anchor-highlight-seam.md`):
+///
+///   * `Page n` — PDF viewers: scroll to 1-based page `n`
+///     (`#page=n` in the PDF open-parameters convention).
+///   * `Slide n` — PPTX viewers: 1-based slide index.
+///   * `Sheet name` — XLSX viewers: activate the named worksheet.
+///   * `Section heading` — DOCX / HTML / markdown: locate the heading
+///     text and scroll to it. Text, not an id — the SDK does not
+///     control the viewer's id scheme.
+///   * `Rows(from, to)` — CSV / tabular: inclusive 1-based *source*
+///     row range, header row included in the numbering.
+///   * `CharRange(from, to)` — a document-relative character span,
+///     half-open `[from, to)`, for text-shaped originals where a
+///     citation carries exact offsets rather than a structural
+///     location. This is the case a character-offset citation span maps
+///     onto (see `PreviewAnchor.ofCharSpan`).
+///   * `WholeDocument` — no precise anchor is known. Open at the top
+///     and highlight nothing. Never fabricated into a guessed page
+///     (GP 9): absence is a case, not a default of 1.
+[<RequireQualifiedAccess>]
+type PreviewAnchor =
+    /// 1-based page within a paginated document (PDF).
+    | Page of number: int
+    /// 1-based slide within a presentation (PPTX).
+    | Slide of number: int
+    /// Worksheet name within a workbook (XLSX).
+    | Sheet of name: string
+    /// Section heading text within a structured document (DOCX, md).
+    | Section of heading: string
+    /// Inclusive 1-based source-row range within tabular data (CSV).
+    | Rows of startRow: int * endRow: int
+    /// Half-open `[startOffset, endOffset)` document-relative character
+    /// span for text-shaped originals.
+    | CharRange of startOffset: int * endOffset: int
+    /// No precise anchor — open at the top, highlight nothing.
+    | WholeDocument
+
+module PreviewAnchor =
+    /// Project the neutral `SourceLocator` a citation carries (Phase
+    /// 106) onto the anchor a viewer consumes. Total and lossless in
+    /// the direction that matters: every locator case has an anchor,
+    /// and a citation with *no* locator becomes `WholeDocument` rather
+    /// than a fabricated page 1 (GP 9).
+    let ofLocator (locator: ToolUp.Platform.VectorKnowledgeTypes.SourceLocator option) : PreviewAnchor =
+        match locator with
+        | None -> PreviewAnchor.WholeDocument
+        | Some(ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Page number) -> PreviewAnchor.Page number
+        | Some(ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Slide number) -> PreviewAnchor.Slide number
+        | Some(ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Sheet name) -> PreviewAnchor.Sheet name
+        | Some(ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Section heading) -> PreviewAnchor.Section heading
+        | Some(ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.RowGroup(startRow, endRow)) ->
+            PreviewAnchor.Rows(startRow, endRow)
+
+    /// Project a **document-relative character span** onto a
+    /// `CharRange` anchor. Takes a plain offset pair rather than any
+    /// citation-span type so the preview seam never grows a dependency
+    /// on a retrieval-side record: a caller holding a span record maps
+    /// it here at its own boundary, exactly as `SourceLocation.toLocator`
+    /// maps at the producer boundary.
+    ///
+    /// A degenerate span (negative start, or an end at or before the
+    /// start) degrades to `WholeDocument` — a viewer asked to highlight
+    /// nothing should open the document, not throw or highlight a
+    /// nonsense range.
+    let ofCharSpan (startOffset: int) (endOffset: int) : PreviewAnchor =
+        if startOffset < 0 || endOffset <= startOffset then
+            PreviewAnchor.WholeDocument
+        else
+            PreviewAnchor.CharRange(startOffset, endOffset)
+
+/// How the original's bytes reach the consumer's viewer.
+///
+/// `Inline` embeds the `OriginalDocument` (the Phase 102 wire record) —
+/// simplest, and what a deployment that composes nothing extra gets.
+/// `SignedUrl` hands back a **time-bound** URL instead, so large
+/// originals are fetched directly from storage rather than streamed
+/// through the API — the same byte-light posture `IMediaLibrary` takes
+/// for range-served media (Phase 88). The URL carries its own expiry so
+/// a client can tell a stale link from a denied one without a round trip.
+[<RequireQualifiedAccess>]
+type PreviewContent =
+    /// The original bytes, inline.
+    | Inline of original: OriginalDocument
+    /// A time-bound URL and the instant it stops working (UTC).
+    | SignedUrl of url: string * expiresAt: DateTimeOffset
+
+/// Everything a consumer's viewer needs to open the original document
+/// at the cited location: the content reference plus the neutral anchor.
+/// Carries the original's metadata at the top level so the
+/// `SignedUrl` delivery mode can pick a viewer by content type without
+/// first downloading anything.
+///
+/// For `PreviewContent.Inline`, `FileName` / `ContentType` / `SizeBytes`
+/// mirror the embedded `OriginalDocument`'s fields — construct through
+/// `PreviewTarget.ofOriginal` / `PreviewTarget.withSignedUrl` so the two
+/// cannot diverge.
+type PreviewTarget = {
+    /// The `KnowledgeDocument.Id` this preview is of.
+    DocumentId: string
+    /// Original file name (e.g. "Q3 brand audit.pdf").
+    FileName: string
+    /// MIME content type — which viewer to pick.
+    ContentType: string
+    /// Size of the original in bytes.
+    SizeBytes: int64
+    /// How the bytes are delivered.
+    Content: PreviewContent
+    /// Where to open, and what to highlight.
+    Anchor: PreviewAnchor
+}
+
+module PreviewTarget =
+    /// Inline-delivery target over a resolved original.
+    let ofOriginal (documentId: string) (anchor: PreviewAnchor) (original: OriginalDocument) : PreviewTarget = {
+        DocumentId = documentId
+        FileName = original.FileName
+        ContentType = original.ContentType
+        SizeBytes = original.SizeBytes
+        Content = PreviewContent.Inline original
+        Anchor = anchor
+    }
+
+    /// Signed-URL-delivery target over a resolved original: the same
+    /// metadata, but the bytes stay out of the response.
+    let withSignedUrl
+        (documentId: string)
+        (anchor: PreviewAnchor)
+        (original: OriginalDocument)
+        (url: string)
+        (expiresAt: DateTimeOffset)
+        : PreviewTarget =
+        {
+            DocumentId = documentId
+            FileName = original.FileName
+            ContentType = original.ContentType
+            SizeBytes = original.SizeBytes
+            Content = PreviewContent.SignedUrl(url, expiresAt)
+            Anchor = anchor
+        }
+
 // ─── Upload policy (Phase 119) ────────────────────────────────────
 
 /// How an upload whose type no extractor recognises is handled.

@@ -48,6 +48,10 @@
         <Compile Include="Server\AIContext.fs" />
         <Compile Include="Server\Inventory.fs" />
         <Compile Include="Server\OriginalSourceResolver.fs" />
+        <!-- Phase 200 — opt-in anchor-highlighting preview seam over the
+             Phase 104 resolver. After OriginalSourceResolver.fs, which it
+             composes; before Api/, which it deliberately does not touch. -->
+        <Compile Include="Server\IOriginalPreviewSeam.fs" />
         <!-- Phase 512 — per-scope age-based retention sweep. Before
              UploadPolicy.fs, which composes its job handler. -->
         <Compile Include="Server\RetentionSweep.fs" />

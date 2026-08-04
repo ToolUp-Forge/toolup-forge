@@ -207,6 +207,64 @@ SharedTypes+OriginalDocument.Content : System.Byte[] { get }
 SharedTypes+OriginalDocument.ContentType : System.String { get }
 SharedTypes+OriginalDocument.FileName : System.String { get }
 SharedTypes+OriginalDocument.SizeBytes : System.Int64 { get }
+SharedTypes+PreviewAnchor (class)
+SharedTypes+PreviewAnchor.IsCharRange : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsPage : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsRows : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsSection : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsSheet : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsSlide : System.Boolean { get }
+SharedTypes+PreviewAnchor.IsWholeDocument : System.Boolean { get }
+SharedTypes+PreviewAnchor.Tag : System.Int32 { get }
+SharedTypes+PreviewAnchor.WholeDocument : SharedTypes+PreviewAnchor { get }
+SharedTypes+PreviewAnchor+CharRange (class)
+SharedTypes+PreviewAnchor+CharRange.endOffset : System.Int32 { get }
+SharedTypes+PreviewAnchor+CharRange.startOffset : System.Int32 { get }
+SharedTypes+PreviewAnchor+Page (class)
+SharedTypes+PreviewAnchor+Page.number : System.Int32 { get }
+SharedTypes+PreviewAnchor+Rows (class)
+SharedTypes+PreviewAnchor+Rows.endRow : System.Int32 { get }
+SharedTypes+PreviewAnchor+Rows.startRow : System.Int32 { get }
+SharedTypes+PreviewAnchor+Section (class)
+SharedTypes+PreviewAnchor+Section.heading : System.String { get }
+SharedTypes+PreviewAnchor+Sheet (class)
+SharedTypes+PreviewAnchor+Sheet.name : System.String { get }
+SharedTypes+PreviewAnchor+Slide (class)
+SharedTypes+PreviewAnchor+Slide.number : System.Int32 { get }
+SharedTypes+PreviewAnchor+Tags (class)
+SharedTypes+PreviewAnchor+Tags.CharRange : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.Page : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.Rows : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.Section : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.Sheet : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.Slide : System.Int32 (literal)
+SharedTypes+PreviewAnchor+Tags.WholeDocument : System.Int32 (literal)
+SharedTypes+PreviewAnchorModule (class)
+SharedTypes+PreviewAnchorModule.ofCharSpan(System.Int32, System.Int32) : SharedTypes+PreviewAnchor
+SharedTypes+PreviewAnchorModule.ofLocator(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator]) : SharedTypes+PreviewAnchor
+SharedTypes+PreviewContent (class)
+SharedTypes+PreviewContent.IsInline : System.Boolean { get }
+SharedTypes+PreviewContent.IsSignedUrl : System.Boolean { get }
+SharedTypes+PreviewContent.Tag : System.Int32 { get }
+SharedTypes+PreviewContent+Inline (class)
+SharedTypes+PreviewContent+Inline.original : SharedTypes+OriginalDocument { get }
+SharedTypes+PreviewContent+SignedUrl (class)
+SharedTypes+PreviewContent+SignedUrl.expiresAt : System.DateTimeOffset { get }
+SharedTypes+PreviewContent+SignedUrl.url : System.String { get }
+SharedTypes+PreviewContent+Tags (class)
+SharedTypes+PreviewContent+Tags.Inline : System.Int32 (literal)
+SharedTypes+PreviewContent+Tags.SignedUrl : System.Int32 (literal)
+SharedTypes+PreviewTarget (class)
+SharedTypes+PreviewTarget..ctor(System.String, System.String, System.String, System.Int64, SharedTypes+PreviewContent, SharedTypes+PreviewAnchor)
+SharedTypes+PreviewTarget.Anchor : SharedTypes+PreviewAnchor { get }
+SharedTypes+PreviewTarget.Content : SharedTypes+PreviewContent { get }
+SharedTypes+PreviewTarget.ContentType : System.String { get }
+SharedTypes+PreviewTarget.DocumentId : System.String { get }
+SharedTypes+PreviewTarget.FileName : System.String { get }
+SharedTypes+PreviewTarget.SizeBytes : System.Int64 { get }
+SharedTypes+PreviewTargetModule (class)
+SharedTypes+PreviewTargetModule.ofOriginal(System.String, SharedTypes+PreviewAnchor, SharedTypes+OriginalDocument) : SharedTypes+PreviewTarget
+SharedTypes+PreviewTargetModule.withSignedUrl(System.String, SharedTypes+PreviewAnchor, SharedTypes+OriginalDocument, System.String, System.DateTimeOffset) : SharedTypes+PreviewTarget
 SharedTypes+SourceLocation (class)
 SharedTypes+SourceLocation.IsPage : System.Boolean { get }
 SharedTypes+SourceLocation.IsRowGroup : System.Boolean { get }

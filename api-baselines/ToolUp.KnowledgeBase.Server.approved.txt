@@ -29,6 +29,7 @@ KnowledgeBase.Server.withKnowledgeQuota : Microsoft.FSharp.Core.FSharpFunc`2[Sha
 KnowledgeBase.Server.withKnowledgeQuotaAndUsageEndpoint : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeQuotaPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withKnowledgeRetention : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]]] { get }
 KnowledgeBase.Server.withKnowledgeUsageEndpoint : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp] { get }
+KnowledgeBase.Server.withOriginalPreviewSeam : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withOriginalSourceResolver : Microsoft.FSharp.Core.FSharpFunc`2[KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withUploadPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeUploadPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.ServerAIContext (class)
@@ -112,6 +113,25 @@ KnowledgeBase.ServerNotes (class)
 KnowledgeBase.ServerNotes.buildNoteChunk(System.String, System.String, System.String, System.Int32, System.Int32, System.String) : System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+TextChunk, SharedTypes+SourceReference]
 KnowledgeBase.ServerNotes.chunkNoteBody(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 KnowledgeBase.ServerNotes.sanitiseTitle(System.String) : System.String
+KnowledgeBase.ServerOriginalPreviewSeam (class)
+KnowledgeBase.ServerOriginalPreviewSeam.createDefault(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver) : KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam
+KnowledgeBase.ServerOriginalPreviewSeam.createSignedUrl(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions) : KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam
+KnowledgeBase.ServerOriginalPreviewSeam.previewOriginal(KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewTarget, SharedTypes+KnowledgeBaseError]]
+KnowledgeBase.ServerOriginalPreviewSeam.withOriginalPreviewSeam(KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+KnowledgeBase.ServerOriginalPreviewSeam+DefaultOriginalPreviewSeam (class)
+KnowledgeBase.ServerOriginalPreviewSeam+DefaultOriginalPreviewSeam..ctor(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver)
+KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam (interface)
+KnowledgeBase.ServerOriginalPreviewSeam+IOriginalPreviewSeam.Preview(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+PreviewTarget, SharedTypes+KnowledgeBaseError]]
+KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner (interface)
+KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner.Sign(SharedTypes+KnowledgeDocument, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions (class)
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions.Ttl : System.TimeSpan { get }
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptionsModule (class)
+KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptionsModule.defaults : KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions { get }
+KnowledgeBase.ServerOriginalPreviewSeam+SignedUrlOriginalPreviewSeam (class)
+KnowledgeBase.ServerOriginalPreviewSeam+SignedUrlOriginalPreviewSeam..ctor(KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, KnowledgeBase.ServerOriginalPreviewSeam+IPreviewUrlSigner, KnowledgeBase.ServerOriginalPreviewSeam+PreviewSignedUrlOptions)
 KnowledgeBase.ServerOriginalSourceResolver (class)
 KnowledgeBase.ServerOriginalSourceResolver.contentTypeFor(System.String) : System.String
 KnowledgeBase.ServerOriginalSourceResolver.createDefault() : KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver

@@ -30,6 +30,17 @@ open SharedTypes
 // Force a download (`attachment`) and pin the `Content-Type` from
 // `OriginalDocument.ContentType` rather than letting the browser sniff.
 // See `docs/knowledge-base/concepts.md` (Serving originals safely).
+//
+// ── Preview seam (Phase 200) ──────────────────────────────────────
+// This resolver answers "what are the original's bytes". It does not
+// answer "where in the original was this cited" — that join lives in
+// `IOriginalPreviewSeam.fs`, which composes THIS interface and pairs a
+// resolved original with a neutral `PreviewAnchor` projected from the
+// citation's `SourceLocator`. The seam is opt-in and off this file's
+// path entirely: nothing below changed for it, and a deployment that
+// never composes a preview seam runs the pre-200 code byte-for-byte
+// (GP 13). A deployment swapping THIS resolver automatically changes
+// what the preview seam resolves too — one resolution rule, not two.
 
 /// Resolve the original document behind a KB index entry, branching on
 /// the entry's `KnowledgeSource`. Returns `None` when the source kind
