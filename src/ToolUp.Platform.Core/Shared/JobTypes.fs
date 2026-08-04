@@ -454,3 +454,261 @@ type ScheduleError =
     /// Persistence layer threw or returned an unexpected error.
     /// Wraps the inner message verbatim for diagnostics.
     | StorageFailure of string
+
+// ─── Phase 321 — long-running job progress checkpoints ───────────────
+//
+// The scheduler surfaces terminal outcomes and nothing between them, so a
+// multi-hour run is an opaque `Running` until it finishes and an operator
+// cannot tell a healthy job from a hung one. A `ProgressCheckpoint` is the
+// unit that closes that gap: "37%", "epoch 4/10", "materialising
+// embeddings".
+//
+// **Two consumers, two durability postures, one type.** Every checkpoint
+// fans out to `INotificationChannel` for the live progress bar — transient,
+// best-effort, coalesced under load. A `Durable = true` checkpoint ALSO
+// persists to `IEventStore`, which is the audit timeline that answers "how
+// long did epoch 4 take" after the fact. The flag is the caller's
+// declaration of which it wants; nothing infers it.
+//
+// **Fable-safe by construction.** BCL primitives + F# records only, so the
+// type ships in the Fable-packed source and the admin UI renders the same
+// shape the server publishes (GP 10). No `AsyncLocal`, no server tier, no
+// notification/event-store type is named here — the sink that consumes
+// these lives in `ToolUp.Platform.Server` and the reporter seam below is
+// the only thing a handler touches.
+
+/// A single progress observation from a long-running job.
+///
+/// `Fraction` is `float option` in `[0, 1]` and the `option` is
+/// load-bearing: a stage that genuinely cannot estimate completion says
+/// `None` rather than inventing a number, exactly as
+/// `ExternalOutcome.Running` does. Values outside the range are clamped by
+/// `ProgressCheckpoint.create` rather than rejected — a progress report is
+/// never worth failing a job over.
+type ProgressCheckpoint = {
+    /// Completion in `[0, 1]`, or `None` when the stage cannot estimate.
+    /// `Some 1.0` marks the run's terminal checkpoint — see
+    /// `ProgressCheckpoint.isTerminal`, which the coalescer consults
+    /// before any shedding decision.
+    Fraction: float option
+    /// Operator-facing description of what is happening now
+    /// ("materialising embeddings"). Never a credential, and never a
+    /// payload dump — this string reaches an end user's progress bar.
+    Message: string
+    /// Optional coarse phase label ("epoch 4/10", "extract", "score").
+    /// Distinct from `Message` so a UI can group checkpoints by stage
+    /// without parsing prose.
+    Stage: string option
+    /// When the reporting side observed this progress — NOT when the sink
+    /// received it. The coalescer measures its rate-limit window against
+    /// this field, so a caller replaying buffered checkpoints gets
+    /// truthful shedding rather than a burst that all looks simultaneous.
+    At: DateTime
+    /// `true` ⇒ also persist to `IEventStore` for the durable timeline,
+    /// and never shed under rate limiting. Reserve it for checkpoints
+    /// worth keeping after the run ends (stage boundaries), not for every
+    /// tick of a progress bar — a durable checkpoint is a blob write.
+    Durable: bool
+}
+
+module ProgressCheckpoint =
+    /// Clamp a caller-supplied fraction into `[0, 1]`, mapping `NaN` to
+    /// `None`. A malformed progress number is never a reason to fail the
+    /// work that reported it.
+    let clampFraction (fraction: float option) : float option =
+        match fraction with
+        | None -> None
+        | Some f when Double.IsNaN f -> None
+        | Some f -> Some(max 0.0 (min 1.0 f))
+
+    /// Build a transient checkpoint (`Durable = false`) stamped `At =
+    /// DateTime.UtcNow`, with the fraction clamped.
+    let create (fraction: float option) (message: string) : ProgressCheckpoint = {
+        Fraction = clampFraction fraction
+        Message = message
+        Stage = None
+        At = DateTime.UtcNow
+        Durable = false
+    }
+
+    /// `create` plus a stage label.
+    let createAt (fraction: float option) (message: string) (stage: string option) (at: DateTime) : ProgressCheckpoint = {
+        Fraction = clampFraction fraction
+        Message = message
+        Stage = stage
+        At = at
+        Durable = false
+    }
+
+    /// Mark a checkpoint durable — it persists to `IEventStore` and is
+    /// never shed by the coalescer.
+    let durable (checkpoint: ProgressCheckpoint) : ProgressCheckpoint = { checkpoint with Durable = true }
+
+    /// Attach a stage label.
+    let withStage (stage: string) (checkpoint: ProgressCheckpoint) : ProgressCheckpoint = {
+        checkpoint with
+            Stage = Some stage
+    }
+
+    /// `true` when this checkpoint reports completion (`Fraction >= 1.0`).
+    ///
+    /// **This predicate is why coalescing is safe.** The rate limiter
+    /// consults it BEFORE the interval window, so the checkpoint that says
+    /// "done" cannot be the one dropped as too-frequent — which is the
+    /// single failure a progress bar cannot recover from (it would sit at
+    /// 94% forever on a job that succeeded).
+    let isTerminal (checkpoint: ProgressCheckpoint) : bool =
+        match checkpoint.Fraction with
+        | Some f -> f >= 1.0
+        | None -> false
+
+/// Rate-limit policy for the transient (notification) leg of progress
+/// fan-out. Retry/shedding behaviour as data, not as a callback
+/// (GP 12 rule 3).
+type ProgressCoalescePolicy = {
+    /// Minimum spacing between two published transient checkpoints for one
+    /// job. A checkpoint arriving inside the window is superseded by the
+    /// next one that clears it — coalesced to the latest value, not
+    /// buffered and replayed. `TimeSpan.Zero` publishes everything.
+    MinInterval: TimeSpan
+}
+
+module ProgressCoalescePolicy =
+    /// One transient publish per second per job. Chosen against the
+    /// consumer, not the producer: a progress bar redrawing faster than
+    /// this is imperceptible, while a tight handler loop can emit
+    /// thousands of checkpoints a second and flood every SSE connection in
+    /// the scope.
+    let defaults = {
+        MinInterval = TimeSpan.FromSeconds 1.0
+    }
+
+    /// Publish every checkpoint — no shedding. For tests and for
+    /// deployments whose handlers self-throttle.
+    let unlimited = { MinInterval = TimeSpan.Zero }
+
+module ProgressCoalescer =
+    /// Should this checkpoint be published on the transient leg?
+    ///
+    /// Pure and total, so the shedding rule is unit-testable without a
+    /// sink, a channel, or a clock. **The three never-shed arms are
+    /// evaluated before the interval check, and that order is the
+    /// contract** — reversing it would let a burst of intermediate
+    /// checkpoints swallow the terminal one.
+    ///
+    /// - a terminal checkpoint (`Fraction >= 1.0`) always publishes;
+    /// - a `Durable = true` checkpoint always publishes (it is already
+    ///   paying for a blob write; suppressing its live twin would make the
+    ///   audit timeline and the progress bar disagree);
+    /// - the first checkpoint for a job always publishes, so a UI gets an
+    ///   immediate frame instead of waiting out one window;
+    /// - otherwise publish only once `MinInterval` has elapsed since the
+    ///   last published checkpoint.
+    let shouldPublish
+        (policy: ProgressCoalescePolicy)
+        (lastPublishedAt: DateTime option)
+        (checkpoint: ProgressCheckpoint)
+        : bool =
+        if ProgressCheckpoint.isTerminal checkpoint then
+            true
+        elif checkpoint.Durable then
+            true
+        else
+            match lastPublishedAt with
+            | None -> true
+            | Some last -> checkpoint.At - last >= policy.MinInterval
+
+/// The handler-facing progress seam. A handler reports through this and
+/// never resolves a sink from DI — `ctx.Progress` (the `JobContext`
+/// extension in `ToolUp.Platform.Server`) hands one over already bound to
+/// the running job's id and scope, so a handler cannot report progress
+/// against someone else's job (GP 4).
+///
+/// An interface rather than a function record so the no-op is a shared
+/// singleton and an implementation can hold coalescing state without it
+/// leaking onto the seam.
+type IJobProgressReporter =
+    /// Report one checkpoint. Best-effort by contract: implementations
+    /// swallow and log their own transport failures, so a handler never
+    /// needs to guard a progress call and progress reporting can never be
+    /// the reason a job fails.
+    abstract Report: checkpoint: ProgressCheckpoint -> Async<unit>
+
+module JobProgressReporter =
+    /// The reporter a handler gets when the deployment composed no
+    /// progress sink (GP 13). Allocation-free per call and returns an
+    /// already-completed async — `ctx.Progress.Report` in an unconfigured
+    /// deployment costs one interface dispatch and no I/O.
+    let noOp =
+        { new IJobProgressReporter with
+            member _.Report(_checkpoint: ProgressCheckpoint) = async.Return()
+        }
+
+/// Wire payload for a progress checkpoint published on
+/// `INotificationChannel`. Flat and Fable-safe: the client deserialises
+/// this record from the `CustomNotification` payload and drives a progress
+/// bar from it, so it carries the ids needed to route without a second
+/// lookup.
+type JobProgressPayload = {
+    JobId: JobId
+    ScopeId: string
+    /// Registered handler name, when the publisher knows it (the scheduler
+    /// does; a handler reporting through `ctx.Progress` does not, and gets
+    /// `None` rather than a fabricated label).
+    Handler: string option
+    Fraction: float option
+    Message: string
+    Stage: string option
+    At: DateTime
+    Durable: bool
+}
+
+module JobProgress =
+    /// Reserved `CustomNotification` key for progress checkpoints.
+    ///
+    /// **A reserved key rather than a new `Notification` DU case, and that
+    /// is deliberate.** A new case would force every `match` over
+    /// `Notification` in every consumer to grow an arm — a source-breaking
+    /// change for a purely additive feature (GP 11) — and would retype the
+    /// DU in the public baseline. `CustomNotification` is the sanctioned
+    /// extension point for exactly this, and the platform-reserved
+    /// `_platform.*` prefix is what keeps the key from colliding with a
+    /// module-owned one.
+    ///
+    /// The literal IS the wire contract: a client subscribing to progress
+    /// matches this string. Payload shape is `JobProgressPayload`.
+    [<Literal>]
+    let NotificationKey = "_platform.jobs.progress"
+
+    /// `IEventStore` event type for a durable checkpoint, written under
+    /// `SourceModule = "_platform.jobs"` alongside the five Phase 9b
+    /// lifecycle events. Payload shape is `JobProgressPayload`.
+    [<Literal>]
+    let EventType = "JobProgressCheckpoint"
+
+    /// `IEventStore.SourceModule` durable checkpoints are written under —
+    /// the same `_platform.jobs` the five Phase 9b lifecycle events use, so
+    /// one `ReadBySource` returns a run's whole story in order.
+    ///
+    /// **Duplicated from `JobScheduler.JobsSourceModule` rather than
+    /// referenced, deliberately.** The sink compiles before the scheduler
+    /// (the scheduler depends on the seam, not the reverse), so the
+    /// foundational tier cannot back-reference the literal. This is the
+    /// same call the reserved-notification-kind convention makes: the wire
+    /// value is the contract, not the F# constant. `JobProgressTests`
+    /// asserts the two are equal, so a divergence fails a test rather than
+    /// silently splitting the jobs event stream in two.
+    [<Literal>]
+    let SourceModule = "_platform.jobs"
+
+    /// Lift a checkpoint into its wire payload for the given job.
+    let toPayload (jobId: JobId) (scopeId: string) (handler: string option) (checkpoint: ProgressCheckpoint) = {
+        JobId = jobId
+        ScopeId = scopeId
+        Handler = handler
+        Fraction = checkpoint.Fraction
+        Message = checkpoint.Message
+        Stage = checkpoint.Stage
+        At = checkpoint.At
+        Durable = checkpoint.Durable
+    }

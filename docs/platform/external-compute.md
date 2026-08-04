@@ -71,7 +71,7 @@ So hints are **advisory and stringly-typed**, and the contract sits on the behav
 
 ### `Running of progress: float option`
 
-The option is load-bearing. A backend that cannot report progress returns `None`; it does not invent a number. This is portability rule 6 (precision at the lower bound) applied to progress rather than to time — a `float` field would force every backend to fabricate a figure, and a fabricated figure is indistinguishable from a real one at the call site. A dedicated job-progress sink is where a backend that *can* report progress surfaces it richly; this field is the coarse signal every backend can honour.
+The option is load-bearing. A backend that cannot report progress returns `None`; it does not invent a number. This is portability rule 6 (precision at the lower bound) applied to progress rather than to time — a `float` field would force every backend to fabricate a figure, and a fabricated figure is indistinguishable from a real one at the call site. [`IJobProgressSink`](#progress-checkpoints) is where a backend that *can* report progress surfaces it richly; this field is the coarse signal every backend can honour, and the reconciliation poll forwards it to the sink automatically.
 
 ### Retriability is data
 
@@ -483,6 +483,90 @@ capped and drain FIFO in bounded batches, reporting cap pressure through
 discipline the in-process idempotency store follows, and for the same
 reason: a silent mass wipe under pressure turns every discarded entry back
 into work already paid for.
+
+## Progress checkpoints
+
+A terminal outcome is the only thing the scheduler surfaced before this: a multi-hour run was an opaque `Running` row until it finished, so an operator staring at it could not tell a healthy job from a hung one. `IJobProgressSink` is the checkpoint API that closes the gap, and it serves in-process handlers and externally-run work through the same type.
+
+```fsharp skip=signature
+ProgressCheckpoint = {
+    Fraction: float option   // [0, 1], or None when the stage cannot estimate
+    Message:  string         // "materialising embeddings"
+    Stage:    string option  // "epoch 4/10"
+    At:       DateTime       // when the REPORTER observed it, not when the sink received it
+    Durable:  bool           // also persist to IEventStore, and never shed
+}
+```
+
+### Two legs, two durability postures
+
+| Leg | Destination | Which checkpoints | Why |
+|---|---|---|---|
+| **transient** | `INotificationChannel`, under the reserved `CustomNotification` key `_platform.jobs.progress` | every checkpoint, scope-gated, **coalesced** under load | drives a live progress bar; losing one intermediate frame is imperceptible |
+| **durable** | `IEventStore`, `SourceModule = _platform.jobs`, `EventType = JobProgressCheckpoint` | `Durable = true` **and every terminal checkpoint** | drives the audit timeline that answers "how long did epoch 4 take"; each write is a blob, so it is opt-in *per checkpoint* rather than per deployment |
+
+Progress events share `_platform.jobs` with the five [lifecycle events](jobs.md#lifecycle-events), so one `ReadBySource` returns a run's whole story rather than two streams a reader has to join.
+
+A **reserved `CustomNotification` key** rather than a new `Notification` case, deliberately: a new DU case would force every `match` over `Notification` in every consumer to grow an arm — a source-breaking change for a purely additive feature (GP 11). The literal `_platform.jobs.progress` *is* the wire contract, and the `_platform.` prefix is what keeps it from colliding with a module-owned key.
+
+### Coalescing — and the one checkpoint that is never shed
+
+A chatty handler can emit thousands of checkpoints a second, and publishing each floods every SSE connection in the scope. The transient leg therefore rate-limits per job (`ProgressCoalescePolicy.MinInterval`, default one second): a checkpoint arriving inside the window is **superseded** by the next one that clears it, so what a subscriber sees is the latest value rather than a replayed backlog.
+
+Three classes are **never** shed, and `ProgressCoalescer.shouldPublish` checks them *before* it checks the interval:
+
+1. a **terminal** checkpoint (`Fraction >= 1.0`);
+2. a **`Durable = true`** checkpoint — it is already paying for a blob write, and suppressing its live twin would make the audit timeline and the progress bar disagree;
+3. the **first** checkpoint for a job, so a UI gets an immediate frame instead of waiting out one window.
+
+That ordering is the contract, not an implementation detail. A progress bar that drops intermediate frames is imperceptible; one that drops the *final* frame sits at 94% forever on a job that succeeded, and no later checkpoint arrives to correct it. Because the asymmetry is what matters, the rule lives in a pure function in the Core tier with its own tests — including two mutation controls that assert a terminal and a durable checkpoint publish at *zero* elapsed time inside an hour-long window, which is precisely the input that distinguishes the correct ordering from the naive one. Reversing the branches turns those cases red.
+
+The durable leg does not shed at all. `Durable = true` is the caller declaring a checkpoint worth keeping; a rate limiter that silently dropped some of them would turn the timeline into a sample while still reading as a record.
+
+### Reporting from a handler
+
+A handler reports through `ctx.Progress` and never resolves the sink:
+
+```fsharp skip=fragment
+// inside IJobHandler.Execute
+do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
+
+// a stage boundary worth keeping after the run ends
+do!
+    ctx.Progress.Report(
+        ProgressCheckpoint.create (Some 0.4) "epoch 4/10"
+        |> ProgressCheckpoint.withStage "epoch"
+        |> ProgressCheckpoint.durable
+    )
+```
+
+The reporter is **bound to the running job's id and scope**, so a handler cannot report progress into another tenant's scope even by accident (GP 4) — the seam offers no way to name a different job. It rides the async chain (the same ambient mechanism the correlation-id scope uses) rather than sitting as a `JobContext` field: `JobContext` is a public record with no field defaults, so a new field would source-break every handler test harness that constructs one, which is exactly what GP 11 exists to prevent. The scope is established immediately before `Execute` and torn down immediately after, including when the handler throws, so nothing survives an attempt and portability rule 4 still holds.
+
+Reporting **never throws and never needs a guard**. A progress report is observability about the work, not part of it, so a channel that is down or an event store that refuses a write is logged at `Warn` and swallowed. The two legs are independent: one failing does not take the other with it.
+
+### Externally-run jobs get progress for free
+
+When the reconciliation poll sees `ExternalOutcome.Running (Some p)` it emits a checkpoint with `Fraction = p`, labelled `Stage = "external"` and naming the backend — so a job handed off to a GPU service reports progress with **no handler code at all**. Those checkpoints are transient: the poll produces one per tick for the whole remote duration, and the terminal outcome is already recorded by the ordinary resolution path. A backend answering `Running None` yields **no** checkpoint fraction — "running, cannot estimate" is not turned into a number.
+
+### Reading the latest checkpoint
+
+`IJobProgressSink.Latest jobId` returns the most recent checkpoint **as reported**, not as published — so a checkpoint shed by the rate limiter still updates it. `None` when a job has reported nothing, or when an implementation keeps no cache.
+
+This is the read a typed long-running-operation handle needs to populate a `Running of progress` arm, and the read an SSE progress stream needs per frame. Both bridges are **deliberately not wired here**: the typed-handle substrate mints its own job identity independent of `IJobScheduler`'s `JobId`, so nothing can currently map one to the other, and inventing that mapping belongs to the phase that fuses the two identity spaces rather than to this one. `Latest` is the whole platform-side surface those bridges need; when the identity fusion lands, each is a few lines against it.
+
+### Enabling it
+
+```fsharp
+let config = {
+    ServerConfig.defaults with
+        JobScheduler = InProcessJobScheduler
+        JobProgress = EnabledJobProgress
+}
+```
+
+Default is `NoJobProgress`. On the default, `ctx.Progress` is a no-op reporter, no `IJobProgressSink` is registered in DI, and not one notification or event is generated — a handler can report unconditionally and an opted-out deployment pays one interface dispatch per call (GP 13). Nothing is registered under `NoJobProgress` on purpose: a resolvable no-op sink would invite consumer code to resolve and report against a deployment that asked for none.
+
+`compose` takes the sink **from the scheduler** rather than building a second one. That matters: the fan-out sink holds the per-job rate-limit state, so two instances would each keep their own window and a chatty handler would publish at twice the configured rate — the flood the coalescer exists to prevent, reintroduced by duplication.
 
 ## Portability-rule conformance
 

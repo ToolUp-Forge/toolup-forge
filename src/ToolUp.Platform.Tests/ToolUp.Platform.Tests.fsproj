@@ -1648,6 +1648,16 @@
              test is not measuring the gate), and the GP 13 pins that a
              default deployment composes neither store nor sink. -->
         <Compile Include="InProcess\ExternalCallbackTests.fs" />
+        <!-- Phase 321 — job progress checkpoints: the checkpoint type's
+             clamping, the pure coalescing rule WITH mutation controls
+             pinning that terminal/durable are evaluated before the
+             interval window (reordering them turns those two cases red),
+             the burst test asserting BOTH that intermediates were shed and
+             that the terminal frame survived, the durable-vs-transient
+             split in both directions, and the GP 13 pin that an
+             unconfigured deployment generates zero notification and zero
+             event traffic. -->
+        <Compile Include="InProcess\JobProgressTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

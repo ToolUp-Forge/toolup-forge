@@ -291,6 +291,13 @@
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
+        <!-- Phase 321 — the job-progress-checkpoint seam + its fan-out
+             default, plus the ctx.Progress JobContext extension. Before
+             JobScheduler.fs (which constructs the sink and pushes the
+             ambient reporter around each handler dispatch) and after
+             IJobHandler.fs, so a handler file can see ctx.Progress. Needs
+             only INotificationChannel / IEventStore / ILogger from Core. -->
+        <Compile Include="Server\IJobProgressSink.fs" />
         <!-- Phase 437 — resource-envelope seam adapters: the concurrency
              gate that decorates a budgeted component's IJobHandler, the
              RouteLimit projection that folds a component's declared

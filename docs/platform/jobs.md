@@ -146,6 +146,18 @@ Five events emit to `IEventStore` under `SourceModule = "_platform.jobs"`:
 
 These events feed the audit log. Operators query the audit trail for per-job history.
 
+A sixth type, `JobProgressCheckpoint`, joins them under the same `SourceModule` when a deployment opts into [progress checkpoints](external-compute.md#progress-checkpoints) — deliberately the same stream, so one `ReadBySource` returns a run's whole story rather than two a reader has to join. It is emitted only for checkpoints the reporter marked `Durable = true` and for the terminal one; a live progress bar rides `INotificationChannel` instead and costs no blob write.
+
+### Progress checkpoints
+
+A handler with a long body reports intermediate progress through `ctx.Progress`:
+
+```fsharp skip=fragment
+do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
+```
+
+Off by default (`ServerConfig.JobProgress = NoJobProgress`), in which case the call is a no-op costing one interface dispatch (GP 13). The checkpoint model, the reserved `_platform.jobs.progress` notification key, and the coalescing rule that never sheds the terminal checkpoint are documented in [`external-compute.md`](external-compute.md#progress-checkpoints), alongside the reconciliation poll that gives externally-run jobs progress with no handler code.
+
 ## `JobApi` ToolUp.Remoting surface
 
 When the scheduler is enabled, the SDK auto-injects `JobApi`:
@@ -281,6 +293,7 @@ Five-field, `*` / values / commas / `*/N`. Not POSIX cron, not Quartz cron. For 
 
 ```fsharp skip=fragment
 ServerConfig.JobScheduler = NoJobScheduler | InProcessJobScheduler
+ServerConfig.JobProgress = NoJobProgress | EnabledJobProgress
 ```
 
 Environment variables:
@@ -290,7 +303,7 @@ Health probe:
 - `JobSchedulerHealth` — verifies the background service is running. Auto-registered when the scheduler is enabled.
 
 Audit emission:
-- Five lifecycle events under `_platform.jobs` (above). Replicated by audit sinks for compliance retention.
+- Five lifecycle events under `_platform.jobs` (above), plus `JobProgressCheckpoint` when progress is enabled. Replicated by audit sinks for compliance retention.
 
 ## Distributed companion roadmap
 

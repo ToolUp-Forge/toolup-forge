@@ -322,7 +322,8 @@ type InProcessJobScheduler
         ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark,
         ?distributedLock: IDistributedLock,
         ?externalDispatcher: IExternalComputeDispatcher,
-        ?externalHandleStore: IExternalHandleStore
+        ?externalHandleStore: IExternalHandleStore,
+        ?progressSink: IJobProgressSink
     ) =
     inherit BackgroundService()
 
@@ -333,6 +334,39 @@ type InProcessJobScheduler
     let catchUpEnabled = config.EventTriggerCatchUp && triggerWatermark.IsSome
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
+
+    /// Phase 321 — the progress sink, when the deployment wants progress.
+    ///
+    /// **Derived from config rather than threaded through a new factory
+    /// arity**, and that is a deliberate departure from how Phase 319's
+    /// dispatcher and Phase 320's handle store arrive. Those are *companion
+    /// instances* the deployment composes and the scheduler cannot build.
+    /// The fan-out sink is different: it needs only the channel, the event
+    /// store and the logger — all three of which this constructor already
+    /// holds — so a factory parameter would buy nothing except a
+    /// combinatorial explosion of arities (`create` × catch-up × external ×
+    /// callback × progress). The optional parameter stays as the override
+    /// seam for a test or a distributed replacement.
+    ///
+    /// `None` when `JobProgress = NoJobProgress` (the default): handlers get
+    /// `JobProgressReporter.noOp`, the reconciliation poll skips its
+    /// checkpoint emission, and not one notification or event is written
+    /// (GP 13).
+    let progressSink: IJobProgressSink option =
+        match progressSink with
+        | Some sink -> Some sink
+        | None ->
+            match config.JobProgress with
+            | NoJobProgress -> None
+            | EnabledJobProgress ->
+                // No `handlerFor` resolver is supplied: mapping a `JobId` to
+                // its registered handler name needs a store read, and this
+                // would run on the publish path of every checkpoint — a
+                // blob read per progress frame to populate a label. Payloads
+                // therefore carry `Handler = None` rather than a value
+                // bought at that price; a consumer that wants the label
+                // joins on `JobId` against the job it already has.
+                Some(FanOutJobProgressSink(notificationChannel, eventStore, logger) :> IJobProgressSink)
 
     /// Phase 9i — the lease primitive backing the per-`JobId` dispatch
     /// mutex. Defaults to the process-wide in-process lock (the same
@@ -659,6 +693,25 @@ type InProcessJobScheduler
                             }
 
                         let! result = async {
+                            // Phase 321 — make this attempt's progress
+                            // reporter ambient so the handler reaches it as
+                            // `ctx.Progress` without resolving a sink from
+                            // DI (321.B).
+                            //
+                            // `use` is load-bearing: the scope must pop even
+                            // when the handler throws, or a subsequent
+                            // dispatch on the same execution-context lineage
+                            // could inherit a reporter bound to the WRONG
+                            // job id — a cross-scope progress publish, which
+                            // is a GP 4 breach and not merely a wrong label.
+                            // The `with` arm below catches the throw, so
+                            // without `use` the pop would be skipped
+                            // silently.
+                            use _progress =
+                                JobProgressScope.push (
+                                    JobProgressSink.reporterForOption progressSink current.JobId current.ScopeId
+                                )
+
                             try
                                 return! handler.Execute ctx
                             with ex ->
@@ -1482,18 +1535,58 @@ type InProcessJobScheduler
                                             | ExternalOutcome.Running _ ->
                                                 // Still going. Deliberately NO store
                                                 // write: re-recording an unchanged row
-                                                // every tick is pure blob churn, and
-                                                // there is no field to record progress
-                                                // into — `JobRun` gains one in Phase
-                                                // 321, which is where
-                                                // `Running of progress` starts being
-                                                // persisted rather than logged.
+                                                // every tick is pure blob churn.
+                                                //
+                                                // Phase 321 resolved the "nowhere to
+                                                // put the progress" half of this, and
+                                                // NOT by adding a `JobRun` field as
+                                                // Phase 319 anticipated. A field would
+                                                // reintroduce exactly the per-tick blob
+                                                // rewrite this arm exists to avoid, and
+                                                // would make an additive change to a
+                                                // persisted record for a value that is
+                                                // interesting live and uninteresting
+                                                // afterwards. Fractional progress now
+                                                // goes to `IJobProgressSink` instead —
+                                                // the notification channel for the live
+                                                // bar, the event store only for the
+                                                // durable/terminal subset (321.D).
                                                 //
                                                 // Also deliberately BEFORE the shared
                                                 // terminal path: "still running" is a
                                                 // decision not to write at all, so it
                                                 // must not consume the handle's
                                                 // one-shot terminal claim.
+                                                match progressSink, outcome with
+                                                | Some sink, ExternalOutcome.Running(Some fraction) ->
+                                                    // An externally-run job gets a
+                                                    // progress bar with no handler code
+                                                    // at all — the backend reported a
+                                                    // fraction, so the platform
+                                                    // publishes it. `Durable = false`:
+                                                    // a poll-driven checkpoint arrives
+                                                    // once per tick forever and is not
+                                                    // worth a blob each; the terminal
+                                                    // outcome is already recorded by
+                                                    // `applyExternalOutcome`.
+                                                    do!
+                                                        sink.Report(
+                                                            run.JobId,
+                                                            scope,
+                                                            ProgressCheckpoint.createAt
+                                                                (Some fraction)
+                                                                $"external work in progress on %s{handle.Backend}"
+                                                                (Some "external")
+                                                                now
+                                                        )
+                                                | _ ->
+                                                    // No sink composed, or a backend
+                                                    // that reports `Running None` —
+                                                    // which says "running, cannot
+                                                    // estimate" and must NOT be turned
+                                                    // into a fabricated fraction.
+                                                    ()
+
                                                 logger.Debug(
                                                     sprintf
                                                         "[JobScheduler] event=reconcile_still_awaiting jobId=%O runId=%O handler=%s backend=%s outcome=%s awaitedMs=%d"
@@ -1916,6 +2009,17 @@ type InProcessJobScheduler
     /// changes nothing.
     member _.ReconcileAwaitingExternal() : Async<unit> =
         reconcileAwaitingExternal DateTime.UtcNow
+
+    /// Phase 321 — the progress sink this scheduler is using, or `None`
+    /// when the deployment did not opt in.
+    ///
+    /// Exposed so `compose` can register the SAME instance in DI rather
+    /// than constructing a second one. That matters and is not tidiness:
+    /// the fan-out sink holds the per-job rate-limit state, so two
+    /// instances would each keep their own window and a chatty handler
+    /// would publish at twice the configured rate — the flood the
+    /// coalescer exists to prevent, reintroduced by duplication.
+    member _.ProgressSink: IJobProgressSink option = progressSink
 
     // ─── IJobScheduler ───────────────────────────────────────────
 

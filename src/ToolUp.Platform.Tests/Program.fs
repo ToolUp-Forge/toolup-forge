@@ -784,6 +784,10 @@ let allTests =
         KbQuotaRetentionTests.tests
         // Phase 510 — KB document versioning + incremental re-index.
         KbVersioningTests.tests
+        // Phase 511 — bulk / programmatic KB import: archive bomb +
+        // zip-slip guards, the inert-by-default URL gate, and the
+        // per-item scan / dedup / quota claim through the batch surface.
+        KbBulkImportTests.tests
         BrandingTests.tests
         BrandKitTests.tests
         // Phase 269 — brandkit → hosted-tree theme-token bridge: projection,
@@ -1493,6 +1497,15 @@ let allTests =
         // asserts exactly two — so the pair measures the CAS gate rather
         // than the harness's luck at interleaving.
         ExternalCallbackTests.tests
+        // Phase 321 — job progress checkpoints. The coalescing rule is the
+        // hot zone and carries two mutation controls: a terminal and a
+        // durable checkpoint must each publish at ZERO elapsed time inside
+        // an hour-long shedding window, which is the exact input that
+        // distinguishes "terminal checked before the interval" from
+        // "checked after". The burst case asserts both halves — that 200
+        // intermediates coalesced to one frame AND that the terminal frame
+        // arrived — because either alone is vacuous.
+        JobProgressTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

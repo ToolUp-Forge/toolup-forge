@@ -447,6 +447,21 @@ let registerJobScheduler
         services.AddSingleton<IJobScheduler>(scheduler :> IJobScheduler) |> ignore
         services.AddSingleton<JobScheduler.InProcessJobScheduler>(scheduler) |> ignore
 
+        // Phase 321 — the progress sink, registered ONLY when the
+        // deployment opted in (`JobProgress = EnabledJobProgress`). Taken
+        // from the scheduler rather than constructed here, so DI and the
+        // scheduler share one instance and therefore one per-job
+        // rate-limit window — two instances would silently double the
+        // publish rate a chatty handler achieves.
+        //
+        // Nothing is registered under `NoJobProgress`: a resolvable no-op
+        // sink would invite consumer code to resolve and report against a
+        // deployment that asked for none, which is the opposite of GP 13.
+        // Handlers reach progress through `ctx.Progress` regardless, and
+        // that is a no-op when this is absent.
+        scheduler.ProgressSink
+        |> Option.iter (fun sink -> services.AddSingleton<IJobProgressSink>(sink) |> ignore)
+
         // Phase 320 — the seam the completion-callback ingress drives a
         // run through. Registered only when a handle store exists: with
         // no store there is no way to authenticate or route a callback,

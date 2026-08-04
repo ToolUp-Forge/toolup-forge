@@ -2807,6 +2807,10 @@ ToolUp.Platform.FactEvidence.Metric : System.String { get }
 ToolUp.Platform.FactEvidence.ResultRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.FactEvidence.Subject : System.String { get }
 ToolUp.Platform.FactEvidence.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.FanOutJobProgressSink (class)
+ToolUp.Platform.FanOutJobProgressSink..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProgressCoalescePolicy], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]]])
+ToolUp.Platform.FanOutJobProgressSink.Forget(System.Guid) : System.Void
+ToolUp.Platform.FanOutJobProgressSink.TrackedJobs : System.Int32 { get }
 ToolUp.Platform.FeatureFlagHandler (class)
 ToolUp.Platform.FeatureFlagHandler.featureFlagApi(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IFeatureFlagApi
 ToolUp.Platform.FeatureFlagSource (class)
@@ -3504,6 +3508,9 @@ ToolUp.Platform.IIsolatedComputeBackend (interface)
 ToolUp.Platform.IIsolatedComputeBackend.IsolationPosture : ToolUp.Platform.IsolationPosture { get }
 ToolUp.Platform.IJobHandler (interface)
 ToolUp.Platform.IJobHandler.Execute(ToolUp.Platform.JobContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobResult]
+ToolUp.Platform.IJobProgressSink (interface)
+ToolUp.Platform.IJobProgressSink.Latest(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProgressCheckpoint]]
+ToolUp.Platform.IJobProgressSink.Report(System.Guid, System.String, ToolUp.Platform.ProgressCheckpoint) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IJobScheduler (interface)
 ToolUp.Platform.IJobScheduler.Cancel(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IJobScheduler.Disable(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -4036,9 +4043,17 @@ ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator (c
 ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.JobApiHandler (class)
 ToolUp.Platform.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
+ToolUp.Platform.JobContextProgressExtensions (class)
+ToolUp.Platform.JobContextProgressExtensions.JobContext.get_Progress(ToolUp.Platform.JobContext) : ToolUp.Platform.IJobProgressReporter
 ToolUp.Platform.JobNotifyEventStore (class)
 ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore (class)
 ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
+ToolUp.Platform.JobProgressScope (class)
+ToolUp.Platform.JobProgressScope.current() : ToolUp.Platform.IJobProgressReporter
+ToolUp.Platform.JobProgressScope.push(ToolUp.Platform.IJobProgressReporter) : System.IDisposable
+ToolUp.Platform.JobProgressSink (class)
+ToolUp.Platform.JobProgressSink.reporterFor(ToolUp.Platform.IJobProgressSink, System.Guid, System.String) : ToolUp.Platform.IJobProgressReporter
+ToolUp.Platform.JobProgressSink.reporterForOption(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobProgressSink], System.Guid, System.String) : ToolUp.Platform.IJobProgressReporter
 ToolUp.Platform.JobScheduler (class)
 ToolUp.Platform.JobScheduler.JobsSourceModule : System.String (literal)
 ToolUp.Platform.JobScheduler.create(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
@@ -4046,8 +4061,9 @@ ToolUp.Platform.JobScheduler.createWithCatchUp(ToolUp.Platform.IJobStore, ToolUp
 ToolUp.Platform.JobScheduler.createWithExternalCallback(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.IExternalHandleStore) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler.createWithExternalCompute(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler+InProcessJobScheduler (class)
-ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalComputeDispatcher], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore])
+ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalComputeDispatcher], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobProgressSink])
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.JobScheduler+InProcessJobScheduler.ProgressSink : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobProgressSink] { get }
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ReconcileAwaitingExternal() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
@@ -4823,6 +4839,8 @@ ToolUp.Platform.NoOpAnonymousSessionMigrator (class)
 ToolUp.Platform.NoOpAnonymousSessionMigrator..ctor()
 ToolUp.Platform.NoOpHostedTreeUsageExport (class)
 ToolUp.Platform.NoOpHostedTreeUsageExport..ctor()
+ToolUp.Platform.NoOpJobProgressSink (class)
+ToolUp.Platform.NoOpJobProgressSink..ctor()
 ToolUp.Platform.NoOpRateLimiter (class)
 ToolUp.Platform.NoOpRateLimiter..ctor()
 ToolUp.Platform.NoOpUserClaims (class)

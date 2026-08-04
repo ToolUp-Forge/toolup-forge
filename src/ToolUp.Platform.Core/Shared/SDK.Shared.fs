@@ -283,6 +283,27 @@ type JobSchedulerMode =
     /// distributed companion to avoid double-dispatch.
     | InProcessJobScheduler
 
+/// Phase 321 — selects whether the job scheduler fans progress
+/// checkpoints out to `INotificationChannel` + `IEventStore`.
+///
+/// Default: `NoJobProgress` — no `IJobProgressSink` in DI, and
+/// `ctx.Progress` hands handlers the no-op reporter, so a handler that
+/// reports progress in an opted-out deployment costs one interface
+/// dispatch and publishes nothing (GP 11 + GP 13). Progress is
+/// observability, and observability that a deployment did not ask for is
+/// notification traffic and blob writes it did not budget for.
+type JobProgressMode =
+    /// No progress fan-out. Default. `ctx.Progress` is the no-op reporter
+    /// and the external reconciliation poll logs fractional progress
+    /// exactly as Phase 319 did.
+    | NoJobProgress
+    /// Fan progress checkpoints out: every checkpoint to
+    /// `INotificationChannel` under the reserved
+    /// `_platform.jobs.progress` key (scope-gated, coalesced), and each
+    /// `Durable = true` or terminal checkpoint additionally to
+    /// `IEventStore` under `_platform.jobs`.
+    | EnabledJobProgress
+
 /// Selects whether `compose` registers the data-ingestion substrate.
 /// Default: `NoDataIngestion` — no `IDataIngestor`, no
 /// `IDataSourceConfigStore`, no `_platform/data-sources/` blob
@@ -2045,6 +2066,15 @@ type ServerConfig = {
     /// (minute-precision, single-instance). Distributed companions
     /// add new cases here.
     JobScheduler: JobSchedulerMode
+    /// Phase 321 — long-running job progress checkpoints. Default:
+    /// `NoJobProgress` — `ctx.Progress` is the no-op reporter, no
+    /// `IJobProgressSink` is registered, and no notification or event
+    /// traffic is generated (GP 13). `EnabledJobProgress` fans checkpoints
+    /// out to `INotificationChannel` (coalesced, scope-gated) and persists
+    /// the durable + terminal ones to `IEventStore`. Requires a composed
+    /// `JobScheduler` to have any effect — a deployment with
+    /// `NoJobScheduler` runs no jobs to report on.
+    JobProgress: JobProgressMode
     /// Phase 9b.A — opt-in back-fill of `OnEvent`-triggered jobs after
     /// detected scheduler tick drift. Default: `false` — a missed
     /// minute boundary surfaces as a `JobSchedulerTickMissed`
@@ -3369,6 +3399,9 @@ module ServerConfig =
         ResultStore = NoResultStore
         Lineage = NoLineageStore
         JobScheduler = NoJobScheduler
+        // Phase 321 — no progress fan-out; `ctx.Progress` is the no-op
+        // reporter and nothing is published or persisted (GP 13).
+        JobProgress = NoJobProgress
         BackfillMissedTicks = false
         EventTriggerCatchUp = false
         ShareTokenStore = NoShareTokenStore
