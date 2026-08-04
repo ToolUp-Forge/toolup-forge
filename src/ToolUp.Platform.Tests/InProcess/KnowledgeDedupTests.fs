@@ -273,6 +273,8 @@ let tests =
                 Source = UploadedFile
                 ContentHash = Some hash
                 Version = 1
+                // Phase 502.C — untagged fixture.
+                Tags = []
             }
 
             do! upsertIndexEntry storage "team-dedup-e" failedDoc

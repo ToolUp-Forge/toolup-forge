@@ -799,6 +799,9 @@ let allTests =
         // rest, the convention-path read fallback, and data-subject
         // erasure coverage a raw blob never had.
         KbObjectRetentionTests.tests
+        // Phase 502.C — KB document tagging: the chunk re-stamp that makes
+        // a tag reachable by the Phase 502.A retrieval filter.
+        KbDocumentTagsTests.tests
         // Phase 511 — bulk / programmatic KB import: archive bomb +
         // zip-slip guards, the inert-by-default URL gate, and the
         // per-item scan / dedup / quota claim through the batch surface.

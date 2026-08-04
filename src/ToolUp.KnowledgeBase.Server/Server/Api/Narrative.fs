@@ -171,6 +171,12 @@ let ingestNarrative
                         match duplicate with
                         | Some existingDoc -> existingDoc.Version
                         | None -> 1
+                    // Phase 502.C — narrative documents carry no tags.
+                    // `SetDocumentTags` refuses them outright rather than
+                    // writing a tag that could never reach a retrieval
+                    // filter: these chunks are produced by the owning
+                    // module, so nothing here would re-stamp them.
+                    Tags = []
                 }
 
                 // Vector-chunk cleanup on overwrite. When the regenerated

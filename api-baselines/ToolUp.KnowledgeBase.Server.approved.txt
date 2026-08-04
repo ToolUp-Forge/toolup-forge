@@ -95,6 +95,7 @@ KnowledgeBase.ServerApiDocuments.getScopeUsage(KnowledgeBase.ServerApiDeps+Knowl
 KnowledgeBase.ServerApiDocuments.getStatus(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+IngestionStatus]
 KnowledgeBase.ServerApiDocuments.getSuggestedQuestions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 KnowledgeBase.ServerApiDocuments.importBatch(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+BulkImportRequest) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+BulkImportReport]
+KnowledgeBase.ServerApiDocuments.setDocumentTags(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+SetDocumentTagsRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]
 KnowledgeBase.ServerApiDocuments.uploadDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]
 KnowledgeBase.ServerApiDocuments.uploadDocumentCore(System.Boolean, KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[SharedTypes+KnowledgeDocument]
 KnowledgeBase.ServerApiNarrative (class)

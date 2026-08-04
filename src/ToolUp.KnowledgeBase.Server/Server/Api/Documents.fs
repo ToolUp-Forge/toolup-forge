@@ -247,6 +247,33 @@ let private resolveOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : 
     | _ -> return! fromResolver ()
 }
 
+// ─── Document tags (Phase 502.C) ──────────────────────────────────
+
+/// Stamp a document's tags into every chunk as `_tag.{tag} = "true"`.
+///
+/// This is the whole of the retrieval-side mechanism: the Phase 502.A
+/// filter is AND-combined strict equality over chunk metadata in which
+/// a chunk missing the key does not pass, so a stamped chunk is
+/// selectable by `Filters = Some (Map ["_tag.policy", "true"])` and an
+/// unstamped one is excluded — with no change to the pipeline at all.
+/// An empty tag set returns the chunks unchanged, so an untagged
+/// document's chunk metadata is byte-identical to its pre-502.C shape
+/// (GP 11).
+let private stampTags
+    (tags: string list)
+    (pairs: (ToolUp.Platform.VectorKnowledgeTypes.TextChunk * SourceReference) list)
+    : (ToolUp.Platform.VectorKnowledgeTypes.TextChunk * SourceReference) list =
+    match KnowledgeTags.metadataPairs tags with
+    | [] -> pairs
+    | tagPairs ->
+        pairs
+        |> List.map (fun (chunk, src) ->
+            let metadata =
+                tagPairs
+                |> List.fold (fun (m: Map<string, string>) (k, v) -> m.Add(k, v)) chunk.Metadata
+
+            { chunk with Metadata = metadata }, src)
+
 // ─── Chunk-level content diff (Phase 510) ─────────────────────────
 
 /// Lowercase SHA-256 hex of one chunk's rendered text — the identity a
@@ -447,6 +474,14 @@ let private persistAndIngest
                 match predecessor with
                 | Some prior -> prior.Version + 1
                 | None -> 1
+            // Phase 502.C — a new version of a tagged document keeps its
+            // tags. The lineage is the same document, so dropping them
+            // here would silently un-scope every query that had been
+            // narrowing to it, on nothing more than a re-upload.
+            Tags =
+                match predecessor with
+                | Some prior -> KnowledgeTags.normalise prior.Tags
+                | None -> []
         }
 
         // Phase 105 — through `IDataObjectStore` when the deployment
@@ -509,7 +544,12 @@ let private persistAndIngest
                 // (+ Phase 106 neutral locator) into each chunk so retrieval
                 // surfaces `RetrievedSource.OriginalRef` without rebuilding
                 // the blob-name convention.
-                let chunks = stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
+                // Phase 502.C — and the document's tags, so a tagged
+                // lineage's new version is filterable the moment it is
+                // indexed rather than only after a manual re-tag.
+                let chunks =
+                    stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
+                    |> stampTags doc.Tags
 
                 if box deps.Queue <> null && not chunks.IsEmpty then
                     // Stamp ChunkCount BEFORE enqueue: the observer reads
@@ -797,6 +837,9 @@ let uploadDocumentCore
                 Source = UploadedFile
                 ContentHash = None
                 Version = 1
+                // Nothing was persisted for a refusal, so there is no
+                // document to tag.
+                Tags = []
             }
 
         // Phase 510 — the document this upload supersedes, if any. Identity
@@ -1302,6 +1345,188 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                 KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
                 do! deps.PublishInventory()
                 return Ok()
+}
+
+// ─── Document tagging (Phase 502.C) ──────────────────────────────
+
+/// Re-derive a document's current chunk set from its retained source
+/// material, with `tags` stamped in.
+///
+/// There is no metadata-update primitive on `IVectorStore` — the
+/// surface is `Upsert` / `Search` / `ListChunks` / `DeleteChunk`, and
+/// `ListChunks` returns chunks without their vectors — so "change the
+/// metadata on the chunks that are already indexed" is not expressible
+/// as an edit. Re-deriving and re-upserting under the SAME chunk ids
+/// is, and it is not as expensive as it looks: the content is
+/// unchanged, and the embedding cache is content-hash keyed, so each
+/// chunk costs an upsert and a cache hit rather than an embedding call.
+///
+/// `None` when the document has no re-derivable source (its original is
+/// gone, or the kind has none) — the caller turns that into a refusal
+/// rather than a half-applied tag.
+let private rederiveChunks
+    (deps: KnowledgeApiDeps)
+    (doc: KnowledgeDocument)
+    (tags: string list)
+    : Async<(string * ToolUp.Platform.VectorKnowledgeTypes.TextChunk) list option> =
+    async {
+        let! derived = async {
+            match doc.Source with
+            | UploadedFile ->
+                match! readOriginalBytes deps doc.Id doc.FileName with
+                | None -> return None
+                | Some bytes ->
+                    let ext = doc.FileType
+
+                    let! extracted = extractChunks deps.OcrProvider deps.TableExtractor doc.Id doc.FileName bytes
+
+                    return Some(stampOriginalRefs doc.Id doc.FileName ext (int64 bytes.Length) extracted)
+            | Note note ->
+                match! deps.Storage.Download(deps.Scope.Container, sprintf "knowledge/%s/note.md" doc.Id) with
+                | Error _ -> return None
+                | Ok bodyBytes ->
+                    let body = System.Text.Encoding.UTF8.GetString bodyBytes
+                    let paragraphs = KnowledgeBase.ServerNotes.chunkNoteBody body
+
+                    return
+                        Some(
+                            paragraphs
+                            |> List.mapi (fun i p ->
+                                KnowledgeBase.ServerNotes.buildNoteChunk
+                                    doc.Id
+                                    doc.FileName
+                                    note.Title
+                                    paragraphs.Length
+                                    i
+                                    p)
+                        )
+            // Refused by the caller before it gets here; kept total.
+            | FromNarrative _ -> return None
+        }
+
+        return
+            derived
+            |> Option.map (fun pairs ->
+                pairs
+                |> stampTags tags
+                |> List.mapi (fun i (chunk, _) -> sprintf "%s:chunk:%d" doc.Id i, chunk))
+    }
+
+/// Phase 502.C — replace a document's tag set and re-stamp its chunks
+/// so the tags are actually filterable.
+///
+/// **Setting a tag is a re-index, not a label**, and the whole design
+/// follows from that. Tags reach retrieval as `_tag.{tag}` chunk
+/// metadata, which is what `RetrievalRequest.Filters` matches; a tag
+/// written only to the index record would narrow nothing, and a filter
+/// that silently matches nothing is precisely the defect Phase 502.A
+/// was filed to remove. So this either re-stamps the chunks or refuses
+/// — it never half-applies.
+///
+/// Gated exactly like `deleteDocument` (fail-closed on an unresolved
+/// scope, then owner/admin in Team / MultiTeam): a tag change rewrites
+/// which documents other members' scoped queries can reach, so it is a
+/// shared-state write, not a personal annotation.
+///
+/// Idempotent by construction: normalising first means "set the tags it
+/// already has" — in any order, any casing — compares equal and
+/// re-indexes nothing.
+let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Async<Result<KnowledgeDocument, string>> = async {
+    match KnowledgeApiDeps.guardResolvedScope deps with
+    | Error e -> return Error e
+    | Ok() ->
+        match! deps.EnsureContextWriteAllowed() with
+        | Error msg -> return Error msg
+        | Ok() ->
+            let! index = loadIndex deps.Storage deps.Scope.Container
+
+            match index |> List.tryFind (fun d -> d.Id = req.DocId) with
+            | None -> return Error "Document not found in this scope."
+            | Some doc ->
+                match doc.Source with
+                | FromNarrative _ ->
+                    // Loud, not partial. A narrative's chunks belong to
+                    // the module that committed them, so a tag set here
+                    // could never reach a filter — and reporting success
+                    // for that would recreate the silent no-op 502.A
+                    // removed.
+                    return
+                        Error
+                            "Tags are not supported on module-generated narrative documents: their chunks are produced by the owning module, so a tag set here could never be reached by a retrieval filter."
+                | UploadedFile
+                | Note _ ->
+                    let normalised = KnowledgeTags.normalise req.Tags
+
+                    if normalised = KnowledgeTags.normalise doc.Tags then
+                        // Nothing changed — do not pay a re-index for a
+                        // no-op write.
+                        return Ok doc
+                    else
+                        let! rederived = rederiveChunks deps doc normalised
+
+                        match rederived with
+                        | None ->
+                            return
+                                Error
+                                    "The document's original content is no longer available, so its chunks cannot be re-stamped with the new tags. Re-upload the document and tag it again."
+                        | Some chunkPairs ->
+                            let updated = { doc with Tags = normalised }
+                            do! upsertIndexEntry deps.Storage deps.Scope.Container updated
+
+                            // Re-upsert EVERY position. The Phase 510
+                            // incremental diff is deliberately bypassed:
+                            // it compares chunk CONTENT hashes, and a tag
+                            // change alters no content at all, so the
+                            // diff would correctly report nothing changed
+                            // and the new metadata would never be
+                            // written. Content-hash-keyed embeddings mean
+                            // the cost is upserts, not embedding calls.
+                            if box deps.Queue <> null && not (List.isEmpty chunkPairs) then
+                                let initialStatus = Embedding(0, chunkPairs.Length)
+
+                                statusCache.AddOrUpdate(doc.Id, initialStatus, fun _ _ -> initialStatus)
+                                |> ignore
+
+                                do! updateIndexStatus deps.Storage deps.Scope.Container doc.Id initialStatus
+
+                                let job: DocumentIngestionJob = {
+                                    DocumentId = doc.Id
+                                    DocumentName = doc.FileName
+                                    Chunks = chunkPairs
+                                    Scope = deps.VectorScope
+                                    ScopeId = deps.Scope.ScopeId
+                                    Container = deps.Scope.Container
+                                    OriginatingUserId = Some deps.UserId
+                                }
+
+                                let accepted = deps.Queue.Enqueue(job)
+                                deps.RecordEnqueue accepted
+
+                                if not accepted then
+                                    let reason =
+                                        sprintf
+                                            "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                            deps.Queue.Count
+                                            deps.Queue.Capacity
+
+                                    do! deps.MarkIngestionFailed doc.Id doc.FileName reason
+
+                                    return Error reason
+                                else
+                                    deps.Logger.Info(
+                                        sprintf
+                                            "[KnowledgeBase] Tags on '%s' (docId=%s) set to [%s]; %d chunk(s) re-stamped."
+                                            doc.FileName
+                                            doc.Id
+                                            (String.concat "; " normalised)
+                                            chunkPairs.Length
+                                    )
+
+                                    do! deps.PublishInventory()
+                                    return Ok updated
+                            else
+                                do! deps.PublishInventory()
+                                return Ok updated
 }
 
 // ─── Original-document retrieval (Phase 102) ─────────────────────

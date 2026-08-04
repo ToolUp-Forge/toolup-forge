@@ -1039,6 +1039,13 @@
              un-retained control, and the GP 11 pin that a deployment
              which never opts in makes no store call at all. -->
         <Compile Include="InProcess\KbObjectRetentionTests.fs" />
+        <!-- Phase 502.C — KB document tagging: the chunk re-stamp that
+             makes a tag reachable by the Phase 502.A filter (asserted on
+             the chunks that reach the queue, never on the returned
+             record), normalisation, the no-op idempotence pin, the
+             narrative refusal, tag inheritance across a Phase 510
+             version, and the legacy null-list coercion. -->
+        <Compile Include="InProcess\KbDocumentTagsTests.fs" />
         <!-- Phase 511 — bulk / programmatic KB import: archive expansion
              under decompression-bomb guards, zip-slip entry names refused
              by classification rather than silently flattened, the URL

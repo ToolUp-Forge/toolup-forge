@@ -129,6 +129,8 @@ let private storedDoc (docId: string) (age: TimeSpan) (size: int64) : KnowledgeD
     Source = UploadedFile
     ContentHash = None
     Version = 1
+    // Phase 502.C — untagged fixture.
+    Tags = []
 }
 
 let private withSource (source: KnowledgeSource) (doc: KnowledgeDocument) = { doc with Source = source }

@@ -331,7 +331,11 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
             else
                 let needle = search.Trim().ToLowerInvariant()
 
-                [ doc.FileName; doc.UploadedBy; sourceKindKey doc.Source ]
+                // Phase 502.C — tags are searchable here as well as
+                // filterable at retrieval. They are the one field a user
+                // chose themselves, so leaving them out of the box
+                // labelled "search" would be the surprising choice.
+                (doc.Tags @ [ doc.FileName; doc.UploadedBy; sourceKindKey doc.Source ])
                 |> List.exists (fun field -> field.ToLowerInvariant().Contains needle)
 
         let matchesFileType (doc: KnowledgeDocument) =
@@ -398,7 +402,29 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 prop.children [
                     Html.td [
                         prop.className "px-4 py-3 text-sm font-medium text-gray-900"
-                        prop.text doc.FileName
+                        prop.children [
+                            Html.div [ prop.text doc.FileName ]
+                            // Phase 502.C — tags under the file name
+                            // rather than in their own column: they are
+                            // an unbounded set, and a column would either
+                            // truncate them or force the table wider for
+                            // every untagged document. Absent when empty,
+                            // so an untagged corpus renders exactly as it
+                            // did before.
+                            if not (List.isEmpty doc.Tags) then
+                                Html.div [
+                                    prop.className "mt-1 flex flex-wrap gap-1"
+                                    prop.children [
+                                        for tag in doc.Tags do
+                                            Html.span [
+                                                prop.key tag
+                                                prop.className
+                                                    "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700"
+                                                prop.text tag
+                                            ]
+                                    ]
+                                ]
+                        ]
                     ]
                     Html.td [
                         prop.className "px-4 py-3"

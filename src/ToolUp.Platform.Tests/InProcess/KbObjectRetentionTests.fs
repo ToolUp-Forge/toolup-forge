@@ -353,6 +353,8 @@ let tests =
                 Source = UploadedFile
                 ContentHash = None
                 Version = 1
+                // Phase 502.C — untagged fixture.
+                Tags = []
             }
 
             do! saveIndex storage container [ legacyDoc ]

@@ -468,6 +468,155 @@ let private wireBehaviours =
         }
     ]
 
+// ── 502.C — the tag vocabulary against the shipped filter ──
+//
+// 502.A/B pinned that `Filters` narrows; 502.D pinned that it reaches
+// the pipeline from the prompt path. What was missing was a VOCABULARY
+// — a way for a user to say "only policy documents" — and the claim
+// 502.C makes is that adding one needed no pipeline change at all.
+//
+// These behaviours are what makes that claim checkable rather than
+// asserted. The corpus below is stamped through
+// `KnowledgeTags.metadataPairs`, i.e. the same function the KB
+// ingestion path calls, and then filtered through the same
+// `RetrievalPipeline` every other behaviour in this file uses. Nothing
+// is hand-written except one assertion pinning the concrete key string
+// — without which a silent change to the convention would simply move
+// both sides together and prove nothing.
+
+let private tagRows: (string * string list * string) list = [
+    "t-hr1", [ "policy"; "hr" ], "widget policy alpha leave entitlement"
+    "t-hr2", [ "policy"; "hr" ], "widget policy beta leave entitlement"
+    "t-fin", [ "policy"; "finance" ], "widget policy gamma expense limits"
+    "t-guide", [ "guide" ], "widget guide delta setup steps"
+    // Untagged: the strict-absence control. A chunk with no `_tag.*` key
+    // must not be admitted by ANY tag filter.
+    "t-none", [], "widget epsilon loose note"
+]
+
+let private bindTagPipeline () : Bound =
+    let tempDir =
+        Path.Combine(Path.GetTempPath(), "toolup-tag-filter-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory tempDir |> ignore
+    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+
+    let store =
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
+            storage,
+            logger = SilentLogger(),
+            flushIntervalMs = 60000
+        )
+
+    let pipeline =
+        new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store :> IVectorStore, BowEmbedder()) :> IRetrievalPipeline
+
+    for id, tags, body in tagRows do
+        pipeline.Index
+            id
+            {
+                Content = body
+                // Stamped exactly as the KB stamps a document's chunks.
+                Metadata = SharedTypes.KnowledgeTags.metadataPairs tags |> Map.ofList
+            }
+            Deployment
+        |> Async.RunSynchronously
+
+    {
+        Name = "502.C — tag vocabulary"
+        Pipeline = pipeline
+        Dispose =
+            fun () ->
+                (store :> IDisposable).Dispose()
+
+                try
+                    Directory.Delete(tempDir, true)
+                with _ ->
+                    ()
+    }
+
+let private tagFilter (tags: string list) =
+    Some(SharedTypes.KnowledgeTags.metadataPairs tags |> Map.ofList)
+
+let private tagBehaviours =
+    let bound = bindTagPipeline ()
+    let allTagIds = tagRows |> List.map (fun (id, _, _) -> id) |> Set.ofList
+
+    testList bound.Name [
+
+        // The one hand-written assertion in this block. Everything else
+        // derives its keys from `metadataPairs`, so without this the
+        // whole section would follow a convention change instead of
+        // catching it.
+        test "the chunk-metadata key convention is `_tag.{tag}` = \"true\"" {
+            Expect.equal (SharedTypes.KnowledgeTags.metadataKey "policy") "_tag.policy" "the stamped key shape"
+
+            Expect.equal
+                (SharedTypes.KnowledgeTags.metadataPairs [ "policy" ])
+                [ "_tag.policy", "true" ]
+                "presence is the signal; the value exists only because the filter compares values"
+        }
+
+        // Negative control — without it every narrowing assertion below
+        // would pass against a pipeline that returned nothing.
+        test "no filter returns the whole tag corpus (control)" {
+            Expect.equal (retrieve bound None 10) allTagIds "an unfiltered query reaches every chunk"
+        }
+
+        test "filtering on one tag returns only that tag's chunks" {
+            Expect.equal
+                (retrieve bound (tagFilter [ "guide" ]) 10)
+                (Set.ofList [ "t-guide" ])
+                "only the guide-tagged chunk comes back"
+        }
+
+        test "a tag shared by several documents returns all of them" {
+            Expect.equal
+                (retrieve bound (tagFilter [ "policy" ]) 10)
+                (Set.ofList [ "t-hr1"; "t-hr2"; "t-fin" ])
+                "the policy tag spans two documents, and both are in scope"
+        }
+
+        // The multi-tag arm. `t-fin` carries `policy` but not `hr`, so it
+        // is the chunk that proves the combination is AND rather than OR
+        // — an OR would return it and the assertion would fail.
+        test "two tags AND together — a chunk carrying only one of them is excluded" {
+            Expect.equal
+                (retrieve bound (tagFilter [ "policy"; "hr" ]) 10)
+                (Set.ofList [ "t-hr1"; "t-hr2" ])
+                "policy AND hr excludes the finance-tagged policy chunk"
+        }
+
+        test "an untagged chunk is excluded by every tag filter (strict absence)" {
+            let policyResults = retrieve bound (tagFilter [ "policy" ]) 10
+            let guideResults = retrieve bound (tagFilter [ "guide" ]) 10
+
+            Expect.isFalse (policyResults.Contains "t-none") "the untagged chunk cannot prove it belongs to the slice"
+            Expect.isFalse (guideResults.Contains "t-none") "and the same holds for any other tag"
+
+            Expect.isTrue
+                ((retrieve bound None 10).Contains "t-none")
+                "but it IS reachable unfiltered — so its exclusion is the filter's doing, not a missing chunk"
+        }
+
+        test "a tag no document carries returns nothing, not everything" {
+            Expect.isEmpty
+                (retrieve bound (tagFilter [ "nonexistent" ]) 10)
+                "an unmatched tag narrows to empty — the silent no-op 502.A removed would return the whole corpus here"
+        }
+
+        // Normalisation is load-bearing for retrieval, not cosmetic: the
+        // stamp is written from the normalised form, so a filter built
+        // from raw user input has to normalise identically or it matches
+        // nothing at all.
+        test "a filter built from unnormalised user input still matches" {
+            Expect.equal
+                (retrieve bound (tagFilter [ "  POLICY  " ]) 10)
+                (Set.ofList [ "t-hr1"; "t-hr2"; "t-fin" ])
+                "casing and surrounding whitespace are normalised on both sides, so the query still hits"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 502 — metadata-filtered retrieval" [
@@ -475,4 +624,5 @@ let tests =
         filterBehaviours bindStaticCorpusPipeline
         promptPathBehaviours
         wireBehaviours
+        tagBehaviours
     ]

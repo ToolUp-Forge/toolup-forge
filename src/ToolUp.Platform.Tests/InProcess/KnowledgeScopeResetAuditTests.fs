@@ -69,6 +69,8 @@ let private mkDoc (docId: string) : KnowledgeDocument = {
     Source = UploadedFile
     ContentHash = None
     Version = 1
+    // Phase 502.C — untagged fixture.
+    Tags = []
 }
 
 let private chunk content : TextChunk = {

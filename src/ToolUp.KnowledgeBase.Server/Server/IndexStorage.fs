@@ -26,13 +26,32 @@ let indexBlobName = "knowledge/index.json"
 let private normaliseVersion (doc: KnowledgeDocument) : KnowledgeDocument =
     if doc.Version < 1 then { doc with Version = 1 } else doc
 
+/// Phase 502.C — the same treatment for `Tags`, and for a sharper
+/// reason than `Version`'s.
+///
+/// A pre-502.C `index.json` record carries no `Tags` property, and a
+/// missing JSON *list* deserialises to `null`. F# `[]` is NOT null, so
+/// every `doc.Tags |> List.map …` on a legacy record would throw —
+/// silently, on read, in a document list that had worked for months.
+/// Coercing once here means no read site has to remember, and
+/// `saveIndex` can never persist a null back: every write is of a value
+/// that came through this function or was constructed by current code.
+///
+/// `null -> []` is not a fallback, it is the truth: a document written
+/// before tags existed has no tags.
+let private normaliseTags (doc: KnowledgeDocument) : KnowledgeDocument =
+    if isNull (box doc.Tags) then
+        { doc with Tags = [] }
+    else
+        doc
+
 let loadIndex (storage: IBlobStorage) (container: string) = async {
     match! storage.Download(container, indexBlobName) with
     | Ok bytes ->
         try
             return
                 fromJson<KnowledgeDocument list> (Encoding.UTF8.GetString bytes)
-                |> List.map normaliseVersion
+                |> List.map (normaliseVersion >> normaliseTags)
         with _ ->
             return []
     | Error _ -> return []

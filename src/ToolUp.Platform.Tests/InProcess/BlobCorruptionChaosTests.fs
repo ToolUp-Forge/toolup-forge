@@ -97,6 +97,8 @@ let private knowledgeDoc (id: string) : KnowledgeDocument = {
     ContentHash = None
     // Phase 510 — pre-versioning fixture: version 1 of its own lineage.
     Version = 1
+    // Phase 502.C — untagged fixture.
+    Tags = []
 }
 
 // ─── Share-token corrupt-claim cases (download-side faults) ──────────

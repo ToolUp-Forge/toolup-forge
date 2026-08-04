@@ -61,7 +61,10 @@ ClientModel+Msg.IsResetIndexCompleted : System.Boolean { get }
 ClientModel+Msg.IsResetIndexRequested : System.Boolean { get }
 ClientModel+Msg.IsSaveAIContext : System.Boolean { get }
 ClientModel+Msg.IsSaveNote : System.Boolean { get }
+ClientModel+Msg.IsSetTagsFailed : System.Boolean { get }
+ClientModel+Msg.IsSetTagsRequested : System.Boolean { get }
 ClientModel+Msg.IsStatusPolled : System.Boolean { get }
+ClientModel+Msg.IsTagsUpdated : System.Boolean { get }
 ClientModel+Msg.IsUploadCompleted : System.Boolean { get }
 ClientModel+Msg.IsUploadFailed : System.Boolean { get }
 ClientModel+Msg.IsUploadRequested : System.Boolean { get }
@@ -105,6 +108,11 @@ ClientModel+Msg+SaveNote (class)
 ClientModel+Msg+SaveNote.Item1 : ClientModel+NoteEditorTarget { get }
 ClientModel+Msg+SaveNote.body : System.String { get }
 ClientModel+Msg+SaveNote.title : System.String { get }
+ClientModel+Msg+SetTagsFailed (class)
+ClientModel+Msg+SetTagsFailed.Item : System.String { get }
+ClientModel+Msg+SetTagsRequested (class)
+ClientModel+Msg+SetTagsRequested.docId : System.String { get }
+ClientModel+Msg+SetTagsRequested.tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ClientModel+Msg+StatusPolled (class)
 ClientModel+Msg+StatusPolled.Item1 : System.String { get }
 ClientModel+Msg+StatusPolled.Item2 : SharedTypes+IngestionStatus { get }
@@ -134,10 +142,15 @@ ClientModel+Msg+Tags.ResetIndexCompleted : System.Int32 (literal)
 ClientModel+Msg+Tags.ResetIndexRequested : System.Int32 (literal)
 ClientModel+Msg+Tags.SaveAIContext : System.Int32 (literal)
 ClientModel+Msg+Tags.SaveNote : System.Int32 (literal)
+ClientModel+Msg+Tags.SetTagsFailed : System.Int32 (literal)
+ClientModel+Msg+Tags.SetTagsRequested : System.Int32 (literal)
 ClientModel+Msg+Tags.StatusPolled : System.Int32 (literal)
+ClientModel+Msg+Tags.TagsUpdated : System.Int32 (literal)
 ClientModel+Msg+Tags.UploadCompleted : System.Int32 (literal)
 ClientModel+Msg+Tags.UploadFailed : System.Int32 (literal)
 ClientModel+Msg+Tags.UploadRequested : System.Int32 (literal)
+ClientModel+Msg+TagsUpdated (class)
+ClientModel+Msg+TagsUpdated.Item : SharedTypes+KnowledgeDocument { get }
 ClientModel+Msg+UploadCompleted (class)
 ClientModel+Msg+UploadCompleted.Item : ToolUp.Platform.ApiCall`2[System.Tuple`2[System.Byte[], System.String], SharedTypes+KnowledgeDocument] { get }
 ClientModel+Msg+UploadFailed (class)

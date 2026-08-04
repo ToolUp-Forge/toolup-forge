@@ -272,11 +272,93 @@ let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElemen
 // because they have their own dedicated page (the Documents list shows
 // uploads + narratives only).
 
+/// Phase 502.C — inline tag editor for one document row.
+///
+/// The draft lives in `React.useState` and is dispatched only on submit
+/// (Enter or Save), per the MVU discipline in `CLAUDE.md`: a
+/// per-keystroke `Msg` here would re-render the whole document table on
+/// every character.
+///
+/// Comma-separated because that is what a one-line input can express
+/// without inventing a chip widget; the SERVER normalises (trim,
+/// lower-case, collapse whitespace to `-`, de-duplicate, cap), and the
+/// row re-renders from the document the server returns — so the user
+/// sees the canonical tag, which is the one a retrieval filter will
+/// actually match, rather than what they typed.
+[<ReactComponent>]
+let private TagEditor (doc: KnowledgeDocument) (dispatch: Msg -> unit) =
+    let editing, setEditing = React.useState false
+    let draft, setDraft = React.useState (String.concat ", " doc.Tags)
+
+    let submit () =
+        let tags =
+            draft.Split(',')
+            |> Array.map (fun t -> t.Trim())
+            |> Array.filter (fun t -> t <> "")
+            |> List.ofArray
+
+        dispatch (SetTagsRequested(doc.Id, tags))
+        setEditing false
+
+    if editing then
+        Html.div [
+            prop.className "inline-flex items-center gap-1"
+            prop.children [
+                Html.input [
+                    prop.className "w-40 px-2 py-1 text-xs border border-gray-300 rounded"
+                    prop.placeholder "policy, 2024"
+                    prop.value draft
+                    prop.autoFocus true
+                    prop.onChange setDraft
+                    prop.onKeyDown (fun e ->
+                        if e.key = "Enter" then
+                            submit ()
+                        elif e.key = "Escape" then
+                            setDraft (String.concat ", " doc.Tags)
+                            setEditing false)
+                ]
+                Html.button [
+                    prop.className "text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    prop.text "Save"
+                    prop.onClick (fun _ -> submit ())
+                ]
+                Html.button [
+                    prop.className "text-xs text-gray-500 hover:text-gray-700"
+                    prop.text "Cancel"
+                    prop.onClick (fun _ ->
+                        setDraft (String.concat ", " doc.Tags)
+                        setEditing false)
+                ]
+            ]
+        ]
+    else
+        Html.button [
+            prop.className "text-xs text-gray-600 hover:text-gray-900 font-medium"
+            prop.text (if List.isEmpty doc.Tags then "Add tags" else "Edit tags")
+            prop.onClick (fun _ ->
+                setDraft (String.concat ", " doc.Tags)
+                setEditing true)
+        ]
+
 let private deleteRowAction (dispatch: Msg -> unit) (doc: KnowledgeDocument) : ReactElement =
-    Html.button [
-        prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-        prop.text "Delete"
-        prop.onClick (fun _ -> dispatch (DeleteRequested doc.Id))
+    Html.div [
+        prop.className "inline-flex items-center gap-3"
+        prop.children [
+            // Phase 502.C — narrative documents cannot carry tags (their
+            // chunks are the owning module's, so a tag could never reach
+            // a retrieval filter and the server refuses outright). Not
+            // offering the affordance is better than offering one that
+            // always errors.
+            match doc.Source with
+            | FromNarrative _ -> Html.none
+            | UploadedFile
+            | Note _ -> TagEditor doc dispatch
+            Html.button [
+                prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
+                prop.text "Delete"
+                prop.onClick (fun _ -> dispatch (DeleteRequested doc.Id))
+            ]
+        ]
     ]
 
 let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =

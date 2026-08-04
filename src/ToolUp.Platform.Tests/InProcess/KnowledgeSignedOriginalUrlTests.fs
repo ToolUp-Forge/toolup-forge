@@ -68,6 +68,8 @@ let private mkDoc (docId: string) (fileName: string) (fileType: string) (source:
     Source = source
     ContentHash = None
     Version = 1
+    // Phase 502.C — untagged fixture.
+    Tags = []
 }
 
 let private mkDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDeps = {

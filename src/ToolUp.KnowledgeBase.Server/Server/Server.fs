@@ -57,6 +57,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         GetScopeUsage = fun () -> getScopeUsage deps
         GetDocumentVersions = getDocumentVersions deps
         ImportBatch = importBatch deps
+        SetDocumentTags = setDocumentTags deps
     }
 
 // ─── Public surface re-exports (helpers split into sibling modules) ─

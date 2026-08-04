@@ -60,6 +60,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 // lineage: `UpdateNote` already edits in place, so a note
                 // is permanently version 1 of itself.
                 Version = 1
+                // Phase 502.C — a fresh note starts untagged; tags are
+                // applied afterwards through `SetDocumentTags`, which
+                // re-chunks the note body and stamps them.
+                Tags = []
             }
 
             // Persist raw body so the note round-trips even if the

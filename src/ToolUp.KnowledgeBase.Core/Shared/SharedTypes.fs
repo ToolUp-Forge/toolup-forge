@@ -159,7 +159,116 @@ type KnowledgeDocument = {
     /// legacy document is therefore version 1 of its own lineage, which
     /// is exactly what it is.
     Version: int
+    /// Phase 502.C — free-form document tags, normalised by
+    /// `KnowledgeTags.normalise` (trimmed, lower-cased, de-duplicated,
+    /// order-preserving, bounded). Set through
+    /// `KnowledgeApi.SetDocumentTags`, and stamped into every one of the
+    /// document's chunks as `_tag.{tag} = "true"` so
+    /// `RetrievalRequest.Filters` can scope a query to them.
+    ///
+    /// **The tag vocabulary lives here rather than in a side index**, on
+    /// the merits rather than by default. A tag is an attribute OF the
+    /// document: a side index keyed by document id would be a second
+    /// source of truth needing its own delete cascade, its own
+    /// `ResetIndex` handling and a join on every `GetDocuments` call,
+    /// and it would still have to reach the wire for a client to render
+    /// or edit it. The earlier deferral chose the side index because
+    /// widening a Fable-shared, persisted record was forbidden at the
+    /// time; the operator lifted that on 2026-08-04 and the decision was
+    /// re-taken on design grounds.
+    ///
+    /// The persisted-record hazard the deferral named is real and is
+    /// handled the way Phase 510 handled it for `Version`: a pre-502.C
+    /// `index.json` record carries no `Tags` property, and a missing
+    /// JSON *list* deserialises to `null` — which F# `[]` is NOT — so
+    /// `loadIndex` coerces null to `[]` once, at the store, rather than
+    /// leaving an NRE waiting at each of the read sites. There is no
+    /// `Fable.SimpleJson parseAs` exposure: `KnowledgeDocument` crosses
+    /// the wire through ToolUp.Remoting and is not parsed client-side
+    /// (grep-verified), so the throw-on-missing-field hazard that
+    /// applies to `localStorage`-persisted client records does not
+    /// apply here.
+    Tags: string list
 }
+
+/// Phase 502.C — the document-tag vocabulary.
+///
+/// Tags exist to be FILTERED ON, so their whole job is to survive the
+/// round trip from "what the user typed" to "a metadata key a strict
+/// string-equality filter can match". Normalisation is therefore not
+/// cosmetic: `"Policy "` and `"policy"` must be the same tag or a
+/// filter silently returns nothing, which is the exact failure mode
+/// Phase 502.A existed to remove.
+module KnowledgeTags =
+
+    /// Maximum tags per document. Every tag becomes a metadata key on
+    /// every chunk, so the bound is on the chunk metadata size, not on
+    /// anybody's taste in taxonomies.
+    [<Literal>]
+    let MaxTagsPerDocument = 24
+
+    /// Maximum characters in one normalised tag.
+    [<Literal>]
+    let MaxTagLength = 48
+
+    /// Chunk-metadata key for one tag: `_tag.{tag}`, stamped with the
+    /// value `"true"`.
+    ///
+    /// **One key PER TAG rather than one joined `_tags` value**, and
+    /// that shape is what makes tags work with the filter machinery
+    /// exactly as it already ships. `RetrievalRequest.Filters` is
+    /// AND-combined strict equality in which a chunk MISSING the key
+    /// does not pass (Phase 502.A). A joined value could only ever be
+    /// matched in full, so a two-tag document would be unreachable by a
+    /// one-tag query; with a key per tag, `{"_tag.policy": "true"}`
+    /// matches, and `{"_tag.policy": "true"; "_tag.2024": "true"}` is
+    /// multi-tag AND for free. No pipeline change was needed for any of
+    /// it — 502.C adds a vocabulary, not a filtering capability.
+    let metadataKey (tag: string) = "_tag." + tag
+
+    /// The value stamped under `metadataKey`. Presence is the signal;
+    /// the value exists only because the filter compares values.
+    [<Literal>]
+    let MetadataValue = "true"
+
+    /// Canonical form of one tag: trimmed, lower-cased (invariant),
+    /// inner whitespace collapsed to single `-`, truncated to
+    /// `MaxTagLength`. Returns `None` for anything that normalises to
+    /// nothing.
+    let normaliseOne (tag: string) : string option =
+        if isNull tag then
+            None
+        else
+            let collapsed =
+                tag.Trim().ToLowerInvariant().Split([| ' '; '\t'; '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+                |> String.concat "-"
+
+            if collapsed = "" then
+                None
+            else
+                Some(
+                    if collapsed.Length > MaxTagLength then
+                        collapsed.Substring(0, MaxTagLength)
+                    else
+                        collapsed
+                )
+
+    /// Canonical form of a tag set: each tag normalised, empties
+    /// dropped, duplicates removed, **input order preserved** (so a UI
+    /// can show tags in the order they were typed), capped at
+    /// `MaxTagsPerDocument`.
+    let normalise (tags: string list) : string list =
+        if isNull (box tags) then
+            []
+        else
+            tags
+            |> List.choose normaliseOne
+            |> List.distinct
+            |> List.truncate MaxTagsPerDocument
+
+    /// Every chunk-metadata pair a document's tags contribute.
+    let metadataPairs (tags: string list) : (string * string) list =
+        tags |> normalise |> List.map (fun t -> metadataKey t, MetadataValue)
 
 /// Phase 510 — an immutable record of one superseded version of a
 /// document lineage. Written once, at the moment a new version takes
@@ -1161,6 +1270,19 @@ type UpdateNoteRequest = {
     Body: string
 }
 
+/// Phase 502.C — parameters for replacing a document's tag set.
+///
+/// **Replace, not add/remove.** A set-valued PUT is idempotent and has
+/// one obvious outcome; an add/remove pair would need conflict rules
+/// the caller cannot see (two clients removing different tags from a
+/// stale view). `Tags = []` clears them.
+type SetDocumentTagsRequest = {
+    DocId: string
+    /// The new tag set, normalised server-side by
+    /// `KnowledgeTags.normalise` — the caller never has to.
+    Tags: string list
+}
+
 // ─── Standing AI context ────────────────────────────────────────
 
 /// Team-curated standing context the AI assistant sees on every
@@ -1348,4 +1470,31 @@ type KnowledgeApi = {
     [<AllowAnonymous>]
     [<RateLimit(4, RateLimitSeconds.perMinute)>]
     ImportBatch: BulkImportRequest -> Async<BulkImportReport>
+    /// Phase 502.C — replace a document's tag set, and re-stamp its
+    /// chunks so the tags are actually filterable.
+    ///
+    /// Tags become `_tag.{tag} = "true"` on every chunk of the
+    /// document, which is what `RetrievalRequest.Filters` matches — so
+    /// setting a tag is not a labelling operation, it is a re-index of
+    /// the document's chunk metadata. That is why this returns
+    /// `Result` and why it is gated: the write costs an extraction and
+    /// an upsert per chunk (embeddings come back from the
+    /// content-hash-keyed cache, since the content did not change).
+    ///
+    /// **Setting tags on a `FromNarrative` document is REFUSED, not
+    /// silently partial.** A narrative's chunks are produced by the
+    /// owning module, so tags written here could never reach retrieval
+    /// — and a tag that lands on the record but not the chunks is
+    /// exactly the silent no-op class Phase 502.A existed to remove.
+    ///
+    /// Owner / Admin gated in Team / MultiTeam modes (the same gate
+    /// `DeleteDocument` uses — a tag change rewrites what other
+    /// members' queries can reach), unrestricted in Anonymous /
+    /// AuthenticatedEphemeral / Individual where the caller only reaches
+    /// their own scope. Refused when storage scope is unresolved.
+    /// Idempotent: setting the tags a document already has re-indexes
+    /// nothing.
+    [<AllowAnonymous>]
+    [<Audit "Custom:KnowledgeDocumentTagsSet">]
+    SetDocumentTags: SetDocumentTagsRequest -> Async<Result<KnowledgeDocument, string>>
 }

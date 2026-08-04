@@ -87,6 +87,14 @@ type Msg =
     | UploadCompleted of ApiCall<byte[] * string, KnowledgeDocument>
     | DeleteRequested of string
     | DocumentDeleted of string
+    /// Phase 502.C — replace a document's tag set. The server
+    /// normalises and re-stamps the document's chunks, so the returned
+    /// document is authoritative for what the tags actually became (a
+    /// client that echoed its own input would drift from the canonical
+    /// form the retrieval filter matches).
+    | SetTagsRequested of docId: string * tags: string list
+    | TagsUpdated of KnowledgeDocument
+    | SetTagsFailed of string
     /// The upload / delete RPC threw (network, 413, 500, expired auth) — without
     /// these the `Cmd.OfAsync.perform` swallowed the error and the spinner hung.
     | UploadFailed of string
@@ -329,6 +337,33 @@ let update (msg: Msg) (model: Model) =
     | DocumentDeleted docId ->
         let docs = model.Documents |> List.filter (fun d -> d.Id <> docId)
         { model with Documents = docs }, Cmd.none
+
+    | SetTagsRequested(docId, tags) ->
+        model,
+        Cmd.OfAsync.either
+            (fun req -> knowledgeApi.SetDocumentTags req)
+            { DocId = docId; Tags = tags }
+            (function
+            | Ok doc -> TagsUpdated doc
+            | Error reason -> SetTagsFailed reason)
+            (fun ex -> SetTagsFailed ex.Message)
+
+    | TagsUpdated doc ->
+        // Replace in place with the SERVER's document: tags are
+        // normalised server-side (trimmed, lower-cased, de-duplicated,
+        // capped), and the canonical form is what the retrieval filter
+        // matches, so echoing the raw input would show the user a tag
+        // that narrows nothing.
+        let docs = model.Documents |> List.map (fun d -> if d.Id = doc.Id then doc else d)
+
+        { model with Documents = docs }, Cmd.none
+
+    | SetTagsFailed reason ->
+        {
+            model with
+                LoadError = Some(sprintf "Couldn't update the document's tags: %s" reason)
+        },
+        Cmd.none
 
     | UploadFailed reason ->
         {
