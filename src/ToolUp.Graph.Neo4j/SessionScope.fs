@@ -10,8 +10,8 @@ open Neo4j.Driver
 
 // ─── Phase 68b — per-call session scope (the build-once/read-per-call shape) ──
 //
-// The single most important shape in this companion (task 68b.A, the workspace
-// "Investigate gaps" build-once/read-per-call lens): the `IDriver` is expensive
+// The single most important shape in this companion (task 68b.A, the
+// build-once/read-per-call lens): the `IDriver` is expensive
 // and is a **host-lifetime singleton**, but tenant context — which database a
 // call targets, or which impersonated user it runs as — is applied **per
 // session, opened fresh on each `IGraphStore` call from the current `scopeId`**.

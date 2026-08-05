@@ -260,7 +260,7 @@ let tests =
             let cfg = {
                 baseConfig with
                     Issuer = Some "toolup-passkey"
-                    Audience = Some "toolup-app"
+                    Audience = Some "example-app"
             }
 
             let token =

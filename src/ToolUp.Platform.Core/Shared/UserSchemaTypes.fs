@@ -45,8 +45,8 @@ type AuthoredBy =
     | Human
     /// The AI proposed this version and a human approved it. Carries the
     /// originating conversation id so the proposal→approval trace is
-    /// recoverable. The *proposing* flow that mints this is the Diametrical
-    /// half of Phase 7b; the substrate only records the approved outcome.
+    /// recoverable. The *proposing* flow that mints this lives in the
+    /// consuming application; the substrate only records the approved outcome.
     | AIWithApproval of conversationId: string
 
 /// BI-friendly semantic column type (Vision §18.4). A deliberate superset

@@ -46,7 +46,7 @@ The stores under test (`InMemoryPendingInviteStore`, `BlobShareTokenStore`,
 
 Phase 205's spec was authored against the ETag-conditional-write half of Phase 116 (a generic guarded
 `BlobMapStore` decorator over `IBlobStorage.UploadWithETag`). That half remains **deferred**: it is
-gated on [Phase 9c](../../../Diametrical/roadmap/phases/09c-distributed-task-framework-companion-support.md)
+gated on the distributed-task-framework companion-support work (Phase 9c)
 half-2 (`UploadWithETag`), which has not shipped — so `BlobMapStore.fs` does not exist and is not
 referenced by this pack. The pack therefore targets the *shipped* Phase 116 halves (fail-closed
 decode + quarantine; single-instance `SemaphoreSlim` guards). The cross-replica CAS properties

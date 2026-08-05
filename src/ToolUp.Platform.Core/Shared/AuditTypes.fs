@@ -3040,9 +3040,10 @@ module UserSchemaSourceModule =
     let value = "_platform.user_schema"
 
 /// Phase 7b — the AI proposed a candidate user-authored schema for a
-/// scope, surfaced for human review. Emitted by the AI-propose flow (the
-/// Diametrical half of Phase 7b); the substrate ships the payload so an
-/// approved proposal's provenance is durable end-to-end.
+/// scope, surfaced for human review. Emitted by the AI-propose flow
+/// (which lives in the consuming application, not the substrate); the
+/// substrate ships the payload so an approved proposal's provenance is
+/// durable end-to-end.
 type SchemaProposedPayload = {
     /// Actor the proposal is attributed to (the user in the conversation).
     UserId: string

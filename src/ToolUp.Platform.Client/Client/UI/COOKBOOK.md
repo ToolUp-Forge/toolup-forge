@@ -314,7 +314,7 @@ AgGrid.grid [
 ]
 ```
 
-### Publish the grid api (for a client tool / UIControl)
+### Publish the grid api (for a client-resident AI tool)
 
 ```fsharp
 // From inside onGridReady, publish the IGridApi under a stable key so a
