@@ -552,29 +552,6 @@ let private persistAndIngest
                     |> stampTags doc.Tags
 
                 if box deps.Queue <> null && not chunks.IsEmpty then
-                    // Stamp ChunkCount BEFORE enqueue: the observer reads
-                    // it from the index to compute progress, and the first
-                    // chunk callback can fire before this method returns.
-                    do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
-
-                    let initialStatus = Embedding(0, chunks.Length)
-
-                    // Seed the cache; the observer's `AddOrUpdate` won't
-                    // overwrite a fresher value (e.g. one already advanced
-                    // to Embedding(1, n) by a racing callback).
-                    statusCache.AddOrUpdate(
-                        docId,
-                        initialStatus,
-                        fun _ existing ->
-                            match existing with
-                            | Queued
-                            | ExtractingText -> initialStatus
-                            | other -> other
-                    )
-                    |> ignore
-
-                    do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
-
                     // Phase 510 — incremental re-index. On a supersede,
                     // compare each new chunk's content hash against the
                     // previous version's manifest and enqueue only the
@@ -599,13 +576,44 @@ let private persistAndIngest
 
                     // Phase 510 — the shorter-re-upload orphan tail. Run
                     // BEFORE the enqueue so the stale ids are gone from
-                    // every index even if the queue then refuses the job:
-                    // a refused ingestion leaves the document `Failed` and
+                    // every index even if the queue then refuses the job
+                    // (a refused ingestion leaves the document `Failed` and
                     // retryable, whereas a surviving tail would keep being
-                    // served as live content with nothing to signal it.
+                    // served as live content with nothing to signal it) —
+                    // and BEFORE the index writes below, so that by the
+                    // time the index reports this document past extraction
+                    // the previous version's tail is already unreachable.
+                    // Ordering, not just hygiene: everything Phase 510
+                    // derives sits ABOVE the status write, keeping that
+                    // write adjacent to the enqueue exactly as pre-510 —
+                    // an observer that sees `Embedding` must never find
+                    // the supersede's cleanup still pending.
                     match predecessor with
                     | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
                     | None -> ()
+
+                    // Stamp ChunkCount BEFORE enqueue: the observer reads
+                    // it from the index to compute progress, and the first
+                    // chunk callback can fire before this method returns.
+                    do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
+
+                    let initialStatus = Embedding(0, chunks.Length)
+
+                    // Seed the cache; the observer's `AddOrUpdate` won't
+                    // overwrite a fresher value (e.g. one already advanced
+                    // to Embedding(1, n) by a racing callback).
+                    statusCache.AddOrUpdate(
+                        docId,
+                        initialStatus,
+                        fun _ existing ->
+                            match existing with
+                            | Queued
+                            | ExtractingText -> initialStatus
+                            | other -> other
+                    )
+                    |> ignore
+
+                    do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
 
                     let job: DocumentIngestionJob = {
                         DocumentId = docId
