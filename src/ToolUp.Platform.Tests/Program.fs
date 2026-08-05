@@ -1502,6 +1502,11 @@ let allTests =
         DataObjectOrphanSweepTests.tests
         DataObjectOrphanSweepTests.validatorTests
         DataObjectOrphanSweepTests.composeTests
+        // Phase 634 — the IN-BAND GC's half of the same problem: a
+        // `Delete` racing a `Save` must not reclaim the writer's
+        // not-yet-referenced content, while still removing the bytes the
+        // delete itself released (Phase 105's gone-at-rest contract).
+        DataObjectOrphanSweepTests.inBandGraceTests
         // Phase 9m.B — RAG config validators (extension). The gating
         // cases are the load-bearing ones: a validator that over-fires
         // still looks like it works, and a family an operator learns to

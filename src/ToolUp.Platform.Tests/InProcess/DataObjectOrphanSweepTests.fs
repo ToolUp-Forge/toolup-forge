@@ -54,6 +54,14 @@ type private AgeStampedBlobStorage() =
     /// When set, `Delete` refuses any blob name matching this predicate.
     member val RefuseDelete: (string -> bool) = (fun _ -> false) with get, set
 
+    /// Phase 634 — runs immediately after a successful `Upload`, before
+    /// control returns to the writer. This is the seam the `Delete`/
+    /// `Save` race test needs: a `Save`'s content write has landed and
+    /// its metadata write has not yet been issued, and the hook runs a
+    /// concurrent `Delete` in exactly that gap. Deterministic by
+    /// construction — no thread scheduling to lose.
+    member val OnUploaded: (string -> unit) = (fun _ -> ()) with get, set
+
     member _.Names(container: string) =
         blobs.Keys
         |> Seq.filter (fun (c, _) -> c = container)
@@ -74,6 +82,7 @@ type private AgeStampedBlobStorage() =
             else
                 blobs[(container, blobName)] <- content
                 stamps[(container, blobName)] <- DateTime.UtcNow
+                this.OnUploaded blobName
                 return Ok blobName
         }
 
@@ -392,6 +401,274 @@ let tests =
             Expect.isFalse
                 (DataObjectOrphanSweepPolicy.isInert (DataObjectOrphanSweepPolicy.forScopes [ scope ]))
                 "a scope list makes it live"
+        }
+    ]
+
+// ─── Phase 634 — the in-band GC's grace window ───────────────────────
+//
+// `collectOrphanedContent` runs on the tail of `Delete` / `Evict` /
+// `Erase`. Until Phase 634 it reclaimed every unreferenced content blob
+// immediately, which is safe only for the blobs the caller itself just
+// released. A concurrent `Save` in the same scope, between its content
+// write and its metadata write, presents an unreferenced blob that is
+// indistinguishable from a crash residue — and reclaiming it loses LIVE
+// content: the writer's `Save` returns `Ok`, and every later read of the
+// object fails with `StorageFailure`, forever, with nothing having
+// errored at write time.
+//
+// The rule is a UNION, and each half needs its own arm:
+//
+//   * **The race.** `does not destroy a concurrent Save's content`
+//     drives the interleave through the real `Save` path via the
+//     `OnUploaded` seam. Remove the window and it goes red — it is the
+//     only case in this pack that a live writer loses data.
+//   * **The released set.** `content this operation released is
+//     reclaimed immediately, however fresh` is the other half, and it is
+//     not a nicety: an erasure's guarantee is bytes-gone-at-rest, not
+//     merely dereferenced (Phase 105 pins it on `Delete` and `Erase`).
+//     A window applied to EVERYTHING would defer those to a scheduled
+//     sweep a deployment may never have composed — trading a data-loss
+//     race for a GDPR regression. Widen the window to all candidates and
+//     this goes red while the race arm stays green.
+//   * **The control.** `still reclaims a genuinely-old unreferenced
+//     orphan` uses a crash-residue blob no operation released, so it
+//     exercises the AGE arm rather than the released-set arm. It must
+//     SURVIVE the window mutation — a "fix" that stopped reclaiming
+//     would be caught here.
+//   * **The boundary.** `the in-band window is the sweep's published
+//     minimum` pins the duplicated constant to
+//     `DataObjectOrphanSweepPolicy.MinimumGracePeriod`, which is the
+//     only thing keeping the two definitions from drifting apart (the
+//     store compiles ~327 files before the policy and cannot name it).
+
+/// Complete a real `Save` and return the container-relative name of the
+/// content blob it wrote.
+let private saveComplete (storage: AgeStampedBlobStorage) (objectId: string) (content: byte[]) : string =
+    let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+
+    let before = storage.Names container |> Set.ofList
+
+    store.Save(scope, objectId, content, "text/plain", "user-1", Map.empty, Unversioned)
+    |> Async.RunSynchronously
+    |> fun r -> Expect.isOk r $"the complete save of {objectId} succeeds"
+
+    storage.Names container
+    |> List.filter (fun n -> n.Contains "_content/" && not (before.Contains n))
+    |> function
+        | [ one ] -> one
+        | other -> failtestf "expected exactly one new content blob for %s, got %A" objectId other
+
+[<Tests>]
+let inBandGraceTests =
+    testList "Phase 634 — in-band orphan GC grace window" [
+
+        test "the in-band GC does not destroy a concurrent Save's content" {
+            let storage = AgeStampedBlobStorage()
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+
+            // A: a complete object whose content is well past the window,
+            // so its reclamation is the pre-634 behaviour and must still
+            // happen. B's content is distinct, so the two never dedup
+            // onto one blob.
+            let aContent = saveComplete storage "obj-a" (bytesOf "a-content")
+            storage.Backdate(container, aContent, DateTime.UtcNow - TimeSpan.FromHours 1.0)
+
+            // The interleave: the moment B's content write lands, a
+            // Delete(A) runs — inside B's content→metadata gap, which is
+            // the whole window this phase exists to close.
+            let mutable interleaved = false
+
+            storage.OnUploaded <-
+                fun name ->
+                    if not interleaved && name.Contains "_content/" then
+                        interleaved <- true
+
+                        store.Delete(scope, "obj-a")
+                        |> Async.RunSynchronously
+                        |> fun r -> Expect.isOk r "the racing delete itself succeeds"
+
+            let saved =
+                store.Save(scope, "obj-b", bytesOf "b-content", "text/plain", "user-1", Map.empty, Unversioned)
+                |> Async.RunSynchronously
+
+            storage.OnUploaded <- fun _ -> ()
+
+            Expect.isTrue interleaved "the delete really did land inside the gap"
+            Expect.isOk saved "B's save reports success"
+
+            // The assertion that matters: B's bytes are readable. Before
+            // Phase 634 this failed with StorageFailure — the metadata
+            // survived and pointed at a hash whose blob had been GC'd.
+            match store.Get(scope, "obj-b") |> Async.RunSynchronously with
+            | Ok(_, bytes) -> Expect.equal bytes (bytesOf "b-content") "B's content survives the racing delete"
+            | Error e -> failtestf "B's content was destroyed by the racing in-band GC: %A" e
+
+            // …and the GC was not merely inert: A's old orphan went.
+            Expect.isFalse
+                (storage.Names container |> List.contains aContent)
+                "the racing delete still reclaimed A's own content, which was outside the window"
+        }
+
+        test "content this operation released is reclaimed immediately, however fresh" {
+            let storage = AgeStampedBlobStorage()
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+
+            // Saved and deleted well inside the grace window. The window
+            // must NOT apply: these are the bytes the caller just
+            // dereferenced, and an erasure's guarantee is that they are
+            // gone at rest — Phase 105 asserts exactly this on the KB
+            // retention path, which is why the rule is a union rather
+            // than a blanket age filter.
+            let content = saveComplete storage "obj-1" (bytesOf "payload")
+
+            store.Delete(scope, "obj-1")
+            |> Async.RunSynchronously
+            |> fun r -> Expect.isOk r "the delete succeeds"
+
+            Expect.isFalse
+                (storage.Names container |> List.contains content)
+                "the deleted object's own content is gone at rest, not merely dereferenced"
+        }
+
+        test "Erase HardDelete removes the subject's bytes inside the window too" {
+            let storage = AgeStampedBlobStorage()
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+
+            let content = saveComplete storage "obj-1" (bytesOf "personal")
+
+            store.Erase(scope, "user-1", ErasurePolicy.HardDelete, false)
+            |> Async.RunSynchronously
+            |> fun r -> Expect.isOk r "the erasure succeeds"
+
+            Expect.isFalse
+                (storage.Names container |> List.contains content)
+                "the erased subject's bytes are removed, not deferred to a sweep that may not be composed"
+        }
+
+        test "the in-band GC still reclaims a genuinely-old unreferenced orphan (GP 11)" {
+            let storage = AgeStampedBlobStorage()
+
+            // A crash residue — no operation ever released it, so only
+            // the AGE arm of the rule can reclaim it.
+            let stranded =
+                strandContent storage "obj-crashed" (bytesOf "residue")
+                |> Async.RunSynchronously
+
+            storage.Backdate(container, stranded, DateTime.UtcNow - TimeSpan.FromDays 2.0)
+
+            // Any in-band pass in this container should sweep it up.
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+            saveComplete storage "obj-other" (bytesOf "other") |> ignore
+
+            store.Delete(scope, "obj-other")
+            |> Async.RunSynchronously
+            |> fun r -> Expect.isOk r "the unrelated delete succeeds"
+
+            Expect.isFalse
+                (storage.Names container |> List.contains stranded)
+                "an old orphan is reclaimed inline, exactly as before Phase 634"
+
+            Expect.isEmpty
+                (DataObjectStore.listOrphanedContent storage container |> Async.RunSynchronously)
+                "nothing is left orphaned"
+        }
+
+        test "the in-band window is the sweep's published minimum" {
+            let minimum = DataObjectOrphanSweepPolicy.MinimumGracePeriod
+
+            // Strand an UNRELEASED orphan aged `age`, run an unrelated
+            // `Delete`, and report whether it survived. Unreleased is
+            // load-bearing — a released blob goes regardless of age, so
+            // this boundary would not be measurable through one.
+            let survivesAtAge (age: TimeSpan) =
+                let storage = AgeStampedBlobStorage()
+
+                let stranded =
+                    strandContent storage "obj-crashed" (bytesOf "residue")
+                    |> Async.RunSynchronously
+
+                storage.Backdate(container, stranded, DateTime.UtcNow - age)
+
+                let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+                saveComplete storage "obj-other" (bytesOf "other") |> ignore
+                store.Delete(scope, "obj-other") |> Async.RunSynchronously |> ignore
+
+                storage.Names container |> List.contains stranded
+
+            Expect.isTrue
+                (survivesAtAge (minimum - TimeSpan.FromSeconds 30.0))
+                "an orphan younger than the sweep's published minimum grace is deferred in-band"
+
+            Expect.isFalse
+                (survivesAtAge (minimum + TimeSpan.FromSeconds 30.0))
+                "an orphan older than it is reclaimed in-band"
+        }
+
+        test "a blob deferred in-band is still reclaimable by the scheduled sweep" {
+            let storage = AgeStampedBlobStorage()
+
+            // The residue Phase 634 newly leaves: a fresh unreleased
+            // orphan the in-band pass declines. The Phase 7c sweep is
+            // what accounts for it — the handoff, asserted end to end.
+            let stranded =
+                strandContent storage "obj-crashed" (bytesOf "residue")
+                |> Async.RunSynchronously
+
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+            saveComplete storage "obj-other" (bytesOf "other") |> ignore
+            store.Delete(scope, "obj-other") |> Async.RunSynchronously |> ignore
+
+            Expect.contains (storage.Names container) stranded "in-band deferred it"
+
+            let orphans =
+                DataObjectStore.listOrphanedContent storage container |> Async.RunSynchronously
+
+            Expect.hasLength orphans 1 "and it is visible to the sweep as an orphan"
+
+            let now = DateTime.UtcNow
+            storage.Backdate(container, stranded, now - TimeSpan.FromHours 25.0)
+
+            let audit = CapturingAuditLog()
+            let report = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+
+            Expect.hasLength report.Reclaimed 1 "the scheduled sweep reclaims it once past its own window"
+            Expect.equal report.DeferredByGrace 0 "and its accounting is undisturbed"
+            Expect.isFalse (storage.Names container |> List.contains stranded) "the blob is gone"
+        }
+
+        test "Evict defers a concurrent Save's content on the same path" {
+            let storage = AgeStampedBlobStorage()
+            let store = DataObjectStore.DataObjectStore(storage, noopLogger) :> IDataObjectStore
+
+            // Evict and Erase share `collectOrphanedContent` with Delete;
+            // one of them is pinned here so a future refactor that fixes
+            // only the Delete path cannot pass.
+            let aContent = saveComplete storage "obj-a" (bytesOf "a-content")
+            storage.Backdate(container, aContent, DateTime.UtcNow - TimeSpan.FromHours 1.0)
+
+            let mutable interleaved = false
+
+            storage.OnUploaded <-
+                fun name ->
+                    if not interleaved && name.Contains "_content/" then
+                        interleaved <- true
+                        store.Evict(scope, "obj-a") |> Async.RunSynchronously |> ignore
+
+            store.Save(scope, "obj-b", bytesOf "b-content", "text/plain", "user-1", Map.empty, Unversioned)
+            |> Async.RunSynchronously
+            |> ignore
+
+            storage.OnUploaded <- fun _ -> ()
+
+            Expect.isTrue interleaved "the evict landed inside the gap"
+
+            match store.Get(scope, "obj-b") |> Async.RunSynchronously with
+            | Ok(_, bytes) -> Expect.equal bytes (bytesOf "b-content") "B's content survives the racing evict"
+            | Error e -> failtestf "B's content was destroyed by the racing in-band GC: %A" e
+
+            Expect.isFalse
+                (storage.Names container |> List.contains aContent)
+                "A's own out-of-window content was still reclaimed"
         }
     ]
 

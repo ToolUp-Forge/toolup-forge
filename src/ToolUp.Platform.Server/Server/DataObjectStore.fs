@@ -201,7 +201,8 @@ let private downloadMetadata
 //
 //   1. A `Delete` / `Evict` / `Erase` removed the last metadata blob
 //      referencing it — the in-band case `collectOrphanedContent`
-//      already reclaims inline, on the same call.
+//      reclaims inline, on the same call, for anything older than its
+//      own short grace window (Phase 634).
 //   2. **A `Save` wrote its content blob and then died before writing
 //      its metadata blob.** `Save` is content-first by design (the
 //      metadata blob names a hash that must already exist), so a crash,
@@ -268,6 +269,32 @@ let private orphanedContentNames (blobStorage: IBlobStorage) (container: string)
             else
                 false)
 }
+
+/// Phase 634 — the grace window the IN-BAND GC applies to candidates
+/// the calling operation did NOT itself release (the pass that runs on
+/// the tail of `Delete` / `Evict` / `Erase`). Such a blob, younger than
+/// this, is left for a later pass rather than reclaimed inline, because
+/// at that age it is indistinguishable from a concurrent `Save` that has
+/// written its content and not yet its metadata.
+///
+/// **This is the same value as `DataObjectOrphanSweepPolicy.Minimum-
+/// GracePeriod`** — the floor the scheduled sweep clamps *up* to,
+/// refusing a caller who asks for zero. It is duplicated rather than
+/// referenced only because that module compiles ~327 files later and
+/// cannot be named from here; the duplication is pinned by a test that
+/// asserts the in-band boundary lands exactly on the sweep's published
+/// minimum, so a change to one that is not made to the other goes red.
+///
+/// **Deliberately not a config knob.** The sweep's tunable
+/// `GracePeriod` (default 24h) is the wrong value for this pass and its
+/// policy record is unreachable from here in any case: honouring 24h
+/// in-band would mean a `Delete` reclaimed nothing for a day, so a
+/// deployment that never composed the sweep — the default — would leak
+/// every deleted object's content indefinitely, trading a rare
+/// data-loss race for a certain storage leak. The floor is the whole
+/// requirement here: it need only exceed the content-write→metadata-
+/// write gap of a live `Save`, which is milliseconds.
+let private inBandOrphanGracePeriod = TimeSpan.FromMinutes 5.0
 
 /// Phase 7c — orphaned content blobs in `container`, each stamped with
 /// its size and last-write time. `container` is the scope's own
@@ -368,19 +395,63 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         }
 
     /// Garbage-collect orphaned content blobs after a delete. Delegates
-    /// the "which blobs are orphaned" question to `orphanedContentNames`
+    /// the "which blobs are orphaned" question to `listOrphanedContent`
     /// (Phase 7c) so this in-band pass and the scheduled sweep share one
-    /// definition of orphanhood, then deletes what it names.
+    /// definition of orphanhood, then deletes what it names — subject to
+    /// the Phase 634 rule below.
     ///
-    /// **No grace window here, deliberately.** This runs on the tail of a
-    /// caller's own `Delete` / `Evict` / `Erase` in the same scope: the
-    /// caller has just removed the metadata, so the orphan is a
-    /// consequence of the operation in progress rather than a suspected
-    /// crash residue. The grace window belongs to the scheduled sweep,
-    /// which cannot tell "abandoned by a dead process" from "written a
-    /// millisecond ago by a live one" any other way.
-    let collectOrphanedContent (container: string) : Async<int> = async {
-        let! toDelete = orphanedContentNames blobStorage container
+    /// `releasedHashes` are the content hashes named by the metadata the
+    /// CALLING operation just removed or rewrote. Anything else that
+    /// looks orphaned is something this operation knows nothing about.
+    ///
+    /// **A candidate is reclaimed when it was released by this
+    /// operation, OR it is older than `inBandOrphanGracePeriod`.**
+    /// Phase 634; before it, every candidate was reclaimed
+    /// unconditionally, on the argument that an orphan seen on the tail
+    /// of the caller's own `Delete` is a consequence of the operation in
+    /// progress rather than a suspected crash residue. That argument is
+    /// sound — for the blobs this caller released. It says nothing about
+    /// the blob a CONCURRENT `Save` in the same scope wrote a
+    /// millisecond ago and has not yet named from its metadata. To an
+    /// unconditional pass that blob is indistinguishable from a crash
+    /// residue, and reclaiming it destroys LIVE content: the writer's
+    /// `Save` returns `Ok`, and every subsequent read of the object
+    /// fails with `StorageFailure`, permanently, with nothing having
+    /// errored at write time. Strictly worse than the crash-orphan leak
+    /// Phase 7c closed, which costs storage rather than data.
+    ///
+    /// **Why the released set and not the window alone.** Removing bytes
+    /// the caller just dereferenced is a contract, not an optimisation:
+    /// an erasure sweep's guarantee is that the subject's bytes are gone
+    /// at rest, not merely unreferenced — Phase 105 pins exactly that on
+    /// both `Delete` and `Erase`. Deferring those to a scheduled sweep a
+    /// deployment may never have composed would trade a data-loss race
+    /// for a GDPR regression. The window is therefore applied only to
+    /// candidates this operation did NOT release — which is precisely
+    /// the set that can contain a live in-flight `Save`.
+    ///
+    /// **Residual, out of scope and unfixable by any window:** a
+    /// concurrent `Save` whose content is BYTE-IDENTICAL to something
+    /// being deleted dedups onto the existing blob (`uploadContentIf-
+    /// Missing` skips the upload), so its hash is in `releasedHashes`
+    /// and its blob is old. Neither arm of this rule protects it, and
+    /// neither does the scheduled sweep's window. Closing that needs
+    /// reference counting or a write lease over the dedup pool, not an
+    /// age heuristic.
+    ///
+    /// The stat this needs (`LastModified`) is why it now goes through
+    /// `listOrphanedContent` rather than `orphanedContentNames`. One
+    /// consequence, deliberate and in the safe direction: a candidate
+    /// whose `GetMetadata` fails is dropped rather than deleted, exactly
+    /// as it is for the scheduled sweep.
+    let collectOrphanedContent (container: string) (releasedHashes: Set<string>) : Async<int> = async {
+        let! candidates = listOrphanedContent blobStorage container
+        let cutoff = DateTime.UtcNow - inBandOrphanGracePeriod
+
+        let toDelete =
+            candidates
+            |> List.filter (fun o -> releasedHashes.Contains o.ContentHash || o.LastModified <= cutoff)
+            |> List.map _.BlobName
 
         let! _ =
             toDelete
@@ -388,6 +459,18 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             |> Async.Parallel
 
         return toDelete.Length
+    }
+
+    /// Content hashes named by a set of version-metadata blobs. Read
+    /// BEFORE those blobs are deleted — it is what tells the Phase 634
+    /// in-band GC which of its candidates the operation itself released.
+    let releasedContentHashes (container: string) (blobNames: string list) : Async<Set<string>> = async {
+        let! metas =
+            blobNames
+            |> List.map (downloadMetadata blobStorage container)
+            |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
+
+        return metas |> Array.choose id |> Array.map _.ContentHash |> Set.ofArray
     }
 
     // Phase 448.D follow-on — bounded ranged reads over the content-
@@ -618,12 +701,19 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             | Some _ ->
                 let! versions = listVersionBlobs blobStorage container objectId
 
+                // Phase 634 — read what these versions reference BEFORE
+                // removing them, so the in-band GC can tell the content
+                // this delete released (reclaim now, Phase 105's
+                // bytes-gone-at-rest contract) from an unrelated orphan
+                // that might be a concurrent `Save` mid-flight.
+                let! released = releasedContentHashes container (versions |> List.map snd)
+
                 let! _ =
                     versions
                     |> List.map (fun (_, name) -> blobStorage.Delete(container, name))
                     |> Async.Parallel
 
-                let! _orphaned = collectOrphanedContent container
+                let! _orphaned = collectOrphanedContent container released
                 return Ok()
         }
 
@@ -639,12 +729,15 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             match versions with
             | [] -> return Ok()
             | _ ->
+                // Phase 634 — same released-set read as `Delete`.
+                let! released = releasedContentHashes container (versions |> List.map snd)
+
                 let! _ =
                     versions
                     |> List.map (fun (_, name) -> blobStorage.Delete(container, name))
                     |> Async.Parallel
 
-                let! _orphaned = collectOrphanedContent container
+                let! _orphaned = collectOrphanedContent container released
                 return Ok()
         }
 
@@ -730,6 +823,17 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                             Note = Some(sprintf "%d object(s) would be %s in scope %s" matched.Length verb scopeId)
                         }
                 else
+                    // Phase 634 — the hashes this erasure releases. Read
+                    // from the metadata already in hand, so no extra
+                    // round trip: these are reclaimed inline however
+                    // fresh, which is Phase 105's "the subject's bytes
+                    // are gone at rest, not merely dereferenced".
+                    let releasedHashes =
+                        matched
+                        |> List.collect (fun (_, metas) ->
+                            metas |> List.choose (fun (_, mo) -> mo |> Option.map _.ContentHash))
+                        |> Set.ofList
+
                     match policy with
                     | ErasurePolicy.HardDelete ->
                         let versionBlobs = matched |> List.collect (fun (_, metas) -> metas |> List.map fst)
@@ -740,7 +844,7 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                             |> Async.Parallel
                             |> Async.Ignore
 
-                        let! _ = collectOrphanedContent container
+                        let! _ = collectOrphanedContent container releasedHashes
 
                         return
                             Result.Ok {
@@ -784,7 +888,11 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                             |> Async.Ignore
 
                         if redactContent then
-                            let! _ = collectOrphanedContent container
+                            // The redacted metadata now names the
+                            // tombstone hash, so the originals are
+                            // released — minus the tombstone itself,
+                            // which is live and freshly written.
+                            let! _ = collectOrphanedContent container (releasedHashes.Remove tombstoneHash)
                             ()
 
                         let verb = if redactContent then "tombstoned" else "redacted"
