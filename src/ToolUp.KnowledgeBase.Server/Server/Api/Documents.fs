@@ -682,6 +682,35 @@ let private persistAndIngest
 
                         do! deps.MarkIngestionFailed docId safeName reason
                 elif chunks.IsEmpty then
+                    // Phase 510 — the degenerate orphan tail. An empty new
+                    // version (a recognised-but-empty file, an unsupported
+                    // format, a scan with no OCR composed) skips the
+                    // extract-and-enqueue branch above — and with it the
+                    // shorter-tail deletion — so on a supersede the ENTIRE
+                    // previous version's namespace (`{docId}:chunk:0 ..
+                    // oldCount-1`) would survive in the vector store and
+                    // the sparse index under the live document id, exactly
+                    // the leak `deleteOrphanTail` closes for the shorter-
+                    // tail case, in the all-chunks-are-tail form. Same
+                    // ordering discipline as that path: the deletion (and
+                    // the manifest reset below) completes BEFORE the
+                    // terminal status lands in the index, so an observer
+                    // that sees the document settle never finds the
+                    // supersede's cleanup still pending.
+                    match predecessor with
+                    | Some prior ->
+                        do! deleteOrphanTail deps docId 0 prior.ChunkCount
+
+                        // The chunk-hash manifest must not keep describing
+                        // the chunks just deleted: a later version whose
+                        // content matched them would diff as "unchanged"
+                        // and skip re-embedding positions the indexes no
+                        // longer hold — silently missing content, not the
+                        // harmless redundant re-embed `saveChunkHashes`'s
+                        // crash-ordering argument tolerates.
+                        do! saveChunkHashes deps.Storage deps.Scope.Container docId []
+                    | None -> ()
+
                     // Phase 119 — distinguish "no extractor for this type"
                     // (stored but never searchable) from a recognised-but-empty
                     // file. The pre-119 code reported both as `Complete 0`, which

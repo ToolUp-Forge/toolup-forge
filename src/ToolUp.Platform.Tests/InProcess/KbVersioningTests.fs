@@ -328,6 +328,60 @@ let tests =
                 "the live document reports only the chunks the current version actually indexed"
         }
 
+        testCaseAsync
+            "an EMPTY new version leaves ZERO orphan chunks — the whole previous namespace is tail, and it is deleted"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let queue = IngestionQueue()
+            let lifecycle = RecordingIndexLifecycle()
+
+            let deps =
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-h"
+
+            let! first = uploadDocument deps (csvOf 300 "0299") "report.csv"
+            let! longVersion = waitForIngest storage "team-ver-h" first.Id
+            drain queue |> ignore
+
+            Expect.isGreaterThan
+                longVersion.ChunkCount
+                1
+                "the fixture's first version was multi-chunk (otherwise there is no tail to orphan)"
+
+            // A header-only CSV: a RECOGNISED type that extracts ZERO
+            // chunks, so the extract-and-enqueue branch — where the
+            // shorter-tail deletion lives — is skipped entirely and the
+            // document terminates as `Complete 0`. This is the degenerate
+            // all-chunks-are-tail form of the orphan defect: without a
+            // deletion on the empty-chunks path, every previous-version
+            // chunk survives under the live document id.
+            let emptyCsv = "name,score\n" |> Encoding.UTF8.GetBytes
+            let! second = uploadDocument deps emptyCsv "report.csv"
+            let! emptyVersion = waitForIngest storage "team-ver-h" second.Id
+            drain queue |> ignore
+
+            Expect.equal second.Id first.Id "the empty re-upload still supersedes in place"
+            Expect.equal emptyVersion.Status (Complete 0) "a recognised-but-empty revision terminates as Complete 0"
+            Expect.equal emptyVersion.ChunkCount 0 "the live document indexes no chunks"
+
+            let expectedTail = [
+                for i in 0 .. longVersion.ChunkCount - 1 do
+                    sprintf "%s:chunk:%d" first.Id i
+            ]
+
+            Expect.equal
+                (lifecycle.DeletedChunkIds |> List.sort)
+                (expectedTail |> List.sort)
+                "EVERY previous-version chunk id was deleted through the IIndexLifecycle fan-out — the whole namespace is tail when the new version is empty"
+
+            // The chunk-hash manifest must not keep describing the deleted
+            // chunks: a later version whose content matched them would diff
+            // as "unchanged" and skip re-embedding positions the indexes no
+            // longer hold — silently missing content, not a redundant
+            // re-embed.
+            let! manifest = loadChunkHashes storage "team-ver-h" first.Id
+            Expect.isEmpty manifest "the chunk-hash manifest was reset alongside the deletion"
+        }
+
         testCaseAsync "an unchanged section is NOT re-embedded — only changed chunk positions reach the ingestion job"
         <| async {
             let storage = InMemoryBlobStorage() :> IBlobStorage
