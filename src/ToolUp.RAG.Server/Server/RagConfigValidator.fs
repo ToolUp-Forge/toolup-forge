@@ -145,12 +145,20 @@ type RagPersistenceValidator
 /// attribution, and different short-window telemetry).
 ///
 /// Returns `Warning` (not `Error`) — single-instance multi-team
-/// deployments (the common single-node shape) are fine. Operators on
-/// multi-instance can either accept best-effort cache hit-rate
-/// (`ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true`) or
-/// wire a tenant-aware `IEmbeddingCache` override at the composition
-/// root once that extension point exists.
-type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, ?timeout: TimeSpan) =
+/// deployments (the common single-node shape) are fine.
+///
+/// Phase 633 — `crossReplicaCache` is the composed-cache observation the
+/// validator could not previously make: built from `ServerConfig` alone it
+/// could only see that a deployment MIGHT diverge, never that the operator
+/// had already addressed it, so it warned at a deployment doing the right
+/// thing. `RAGServerApp.withEmbeddingCache` composing a cross-replica cache
+/// (the shipped backing is `ToolUp.EmbeddingCaches.Redis`) removes the
+/// divergence outright, so the warning is **lifted** — the premise it rests
+/// on no longer holds. It is not silenced: an operator who composed nothing,
+/// or composed the process-local `InMemoryEmbeddingCache` explicitly, still
+/// sees it, and the remaining escape hatch is still
+/// `ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true`.
+type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossReplicaCache: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
     interface IConfigValidator with
@@ -162,16 +170,18 @@ type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, ?timeout:
             let multiInstance = serverConfig.ReplicaCount > 1
             let accepted = serverConfig.AcceptSharedEmbeddingCacheInTeamMode
 
-            if isTeamMode && multiInstance && not accepted then
+            if isTeamMode && multiInstance && not accepted && not crossReplicaCache then
                 return
                     Warning(
-                        "Default InMemoryEmbeddingCache is active in Team / MultiTeam mode with ReplicaCount > 1. "
+                        "Process-local InMemoryEmbeddingCache is active in Team / MultiTeam mode with ReplicaCount > 1. "
                         + "The cache key (EmbeddingCacheKey in ToolUp.Platform.IEmbeddingCache) carries no tenant "
                         + "component, so each replica maintains an independent cache for the same text — retrieval "
-                        + "and per-call latency become non-deterministic across replicas. Accept this and silence the "
-                        + "warning via ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true "
-                        + "(TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE=1), or wire a tenant-aware IEmbeddingCache "
-                        + "override at composeWithRAG once that extension point exists."
+                        + "and per-call latency become non-deterministic across replicas. Compose a cross-replica "
+                        + "cache (RAGServerApp.withEmbeddingCache — e.g. the ToolUp.EmbeddingCaches.Redis companion), "
+                        + "which removes the divergence and lifts this warning; or accept best-effort per-replica "
+                        + "hit-rate via ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true "
+                        + "(TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE=1). Verify in the HealthMonitorUI admin "
+                        + "tab or /dev/inspect Validators panel."
                     )
             else
                 return Ok

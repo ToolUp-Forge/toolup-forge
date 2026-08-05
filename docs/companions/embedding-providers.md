@@ -100,11 +100,15 @@ Replace the in-memory cache with a Redis-backed companion:
 ```fsharp skip=fragment
 RAGServerApp.create (...)
 |> ...
-|> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create redis :> IEmbeddingCache)
+|> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
 |> ...
 ```
 
+`RedisEmbeddingCache.create : string -> ILogger option -> IEmbeddingCache` connects with the shipped defaults and owns the multiplexer. Use `fromMultiplexer` to share a connection pool the deployment already owns (the same `IConnectionMultiplexer` backing `RedisNotificationChannel` / `RedisDistributedLock`), or `createWith` to override `RedisEmbeddingCacheOptions`.
+
 The Redis cache survives process restarts and serves across multiple app instances. Useful at scale.
+
+It also **lifts** the `team-mode-shared-embedding-cache` preflight warning. That validator fires when the process-local `InMemoryEmbeddingCache` is active in `Team` / `MultiTeam` mode with `ReplicaCount > 1`, because each replica then keeps its own entries for the same text. A cross-replica cache removes that divergence, so the warning stops applying rather than being suppressed — `ServerConfig.AcceptSharedEmbeddingCacheInTeamMode` stays `false`. Composing `InMemoryEmbeddingCache` through the hook by hand is accepted and behaves exactly as the default, warning included: what lifts the warning is the cache spanning replicas, not the hook being called.
 
 ## Version stamping + re-embedding
 

@@ -173,6 +173,7 @@ ToolUp.RAG.RAGCompose (class)
 ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.Platform.ServerApp
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
 ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Boolean
 ToolUp.RAG.RAGCompose.resolveFraming(ToolUp.RAG.RAGCompose+GroundingMode, System.String) : System.String
 ToolUp.RAG.RAGCompose.resolveFramingWithTools(ToolUp.RAG.RAGCompose+GroundingMode, System.String, ToolUp.RAG.RAGPromptBuilder+ToolFraming) : System.String
 ToolUp.RAG.RAGCompose.strictlyGroundedDirective : System.String { get }
@@ -191,9 +192,10 @@ ToolUp.RAG.RAGCompose+GroundingMode+Tags.Permissive : System.Int32 (literal)
 ToolUp.RAG.RAGCompose+GroundingMode+Tags.Preferred : System.Int32 (literal)
 ToolUp.RAG.RAGCompose+GroundingMode+Tags.StrictlyGrounded : System.Int32 (literal)
 ToolUp.RAG.RAGCompose+RAGServerApp (class)
-ToolUp.RAG.RAGCompose+RAGServerApp..ctor(ToolUp.AI.AICompose+AIServerApp, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], System.String, System.Int32, System.Int32, ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, System.Boolean, ToolUp.RAG.RAGCompose+GroundingMode, System.Boolean, ToolUp.RAG.CitationNormaliser+RagCitationPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.RAG.RAGCompose+RAGServerApp..ctor(ToolUp.AI.AICompose+AIServerApp, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], System.String, System.Int32, System.Int32, ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, System.Boolean, ToolUp.RAG.RAGCompose+GroundingMode, System.Boolean, ToolUp.RAG.CitationNormaliser+RagCitationPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache])
 ToolUp.RAG.RAGCompose+RAGServerApp.AI : ToolUp.AI.AICompose+AIServerApp { get }
 ToolUp.RAG.RAGCompose+RAGServerApp.CitationPolicy : ToolUp.RAG.CitationNormaliser+RagCitationPolicy { get }
+ToolUp.RAG.RAGCompose+RAGServerApp.EmbeddingCache : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache] { get }
 ToolUp.RAG.RAGCompose+RAGServerApp.EmbeddingProvider : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider { get }
 ToolUp.RAG.RAGCompose+RAGServerApp.EnableDocumentSummaries : System.Boolean { get }
 ToolUp.RAG.RAGCompose+RAGServerApp.EnableMmr : System.Boolean { get }
@@ -237,6 +239,7 @@ ToolUp.RAG.RAGCompose+RAGServerAppModule.withConfigValidator(ToolUp.Platform.Con
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withCspContributor(ToolUp.Platform.ICspContributor, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withDocumentSummaries(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withDurableIngestionQueue(ToolUp.RAG.IngestionTypes+IIngestionQueueStore, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
+ToolUp.RAG.RAGCompose+RAGServerAppModule.withEmbeddingCache(ToolUp.Platform.IEmbeddingCache+IEmbeddingCache, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withEmbeddingProvider(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
 ToolUp.RAG.RAGCompose+RAGServerAppModule.withEntityOutbox(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
@@ -341,7 +344,7 @@ ToolUp.RAG.RagConfigValidator+RetrievalDefaultsValidator..ctor(Microsoft.FSharp.
 ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator (class)
 ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator (class)
-ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator (class)
 ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+VectorisationHandlerContributor (class)

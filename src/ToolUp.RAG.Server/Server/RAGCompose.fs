@@ -859,7 +859,36 @@ type RAGServerApp = {
     /// `recoverStuckDocumentsAtStartup` uses. Set via
     /// `RAGServerApp.withIngestionRecoverySweep`.
     IngestionRecoveryScopes: string list
+    /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
+    /// the supplied `IEmbeddingProvider` in. `None` (default) constructs
+    /// the process-local `InMemoryEmbeddingCache`, so an existing
+    /// deployment is byte-for-byte unchanged (GP 11).
+    ///
+    /// A process-local cache is correct but per-replica: `EmbeddingCacheKey`
+    /// carries no tenant component and each replica keeps its own entries,
+    /// so the same text hits on replica A and misses on replica B — which
+    /// is what `TeamModeSharedEmbeddingCacheValidator` warns about under
+    /// `ReplicaCount > 1`. Composing a cross-replica cache (the shipped
+    /// backing is the `ToolUp.EmbeddingCaches.Redis` companion) removes the
+    /// divergence **and lifts that warning**, because the premise it rests
+    /// on no longer holds. Set via `RAGServerApp.withEmbeddingCache`.
+    EmbeddingCache: IEmbeddingCache option
 }
+
+/// Phase 633 — does this app's composed `IEmbeddingCache` span replicas?
+///
+/// This is the exact predicate `composeWithRAG` feeds into
+/// `TeamModeSharedEmbeddingCacheValidator`, exposed so the lift can be
+/// asserted (by a deployment's own preflight, or by a test) without
+/// standing up a whole composition. Note what it deliberately does NOT
+/// say: composing `InMemoryEmbeddingCache` explicitly returns `false`,
+/// because the concern is the per-replica divergence, not whether a hook
+/// was called — an operator who wires the process-local cache by hand has
+/// changed nothing about what the validator is warning at.
+let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
+    match app.EmbeddingCache with
+    | Some composed -> not (composed :? InMemoryEmbeddingCache)
+    | None -> false
 
 // ─── composeRAG ───────────────────────────────────────────────────
 //
@@ -1145,12 +1174,19 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | Some analyzer ->
                 new InMemoryBM25Index(blobStorageForRag, logger = ragLogger, analyzer = analyzer) :> ISparseIndex
 
-        // Wrap the supplied embedder so repeated query / chunk text hits an
-        // in-memory LRU cache rather than the underlying provider. Cache key
-        // includes provider + model + dimensions so a model swap automatically
+        // Wrap the supplied embedder so repeated query / chunk text hits a
+        // cache rather than the underlying provider. Cache key includes
+        // provider + model + dimensions so a model swap automatically
         // invalidates entries.
+        //
+        // Phase 633 — `withEmbeddingCache` substitutes the cache. Unset
+        // (the default) constructs exactly the `InMemoryEmbeddingCache`
+        // this site hard-constructed before, so an existing deployment is
+        // byte-for-byte unchanged (GP 11).
         let embeddingCache: IEmbeddingCache =
-            new InMemoryEmbeddingCache() :> IEmbeddingCache
+            match app.EmbeddingCache with
+            | Some composed -> composed
+            | None -> new InMemoryEmbeddingCache() :> IEmbeddingCache
 
         let cachedEmbedder: IEmbeddingProvider =
             CachingEmbeddingProvider.create app.EmbeddingProvider embeddingCache
@@ -1685,7 +1721,13 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(finalConfig, queue.IsDurable)
         // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
         // under multi-instance Team mode (cache key has no tenant component).
-        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator finalConfig
+        // Phase 633 — the warning is lifted when a CROSS-REPLICA cache is
+        // composed: the premise it rests on (each replica keeps its own
+        // entries) no longer holds.
+        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(
+            finalConfig,
+            hasCrossReplicaEmbeddingCache app
+        )
         // Wave 2A Gap #9 — surface the clamp log so silent clamping of
         // operator-supplied values is visible at startup.
         ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
@@ -1775,6 +1817,7 @@ module RAGServerApp =
         {
             AI = AIServerApp.create factory providerProfile
             EmbeddingProvider = embedder
+            EmbeddingCache = None
             IngestionObservers = []
             Reranker = None
             EnableMmr = false
@@ -1820,6 +1863,7 @@ module RAGServerApp =
         {
             AI = AIServerApp.createFrom factory providerProfile baseApp
             EmbeddingProvider = embedder
+            EmbeddingCache = None
             IngestionObservers = []
             Reranker = None
             EnableMmr = false
@@ -2114,6 +2158,32 @@ module RAGServerApp =
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
     let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
+
+    /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
+    /// the supplied `IEmbeddingProvider` in, so a model's embedding is paid
+    /// for once per FLEET rather than once per process.
+    ///
+    /// Without this the cache is the process-local `InMemoryEmbeddingCache`:
+    /// correct, bounded, and entirely per-replica. `EmbeddingCacheKey`
+    /// carries no tenant component and each replica keeps its own entries,
+    /// so the same text hits on replica A and misses on replica B —
+    /// different latency, different metering attribution, different
+    /// short-window telemetry. That is what
+    /// `TeamModeSharedEmbeddingCacheValidator` warns about under
+    /// `ReplicaCount > 1`, and composing a cross-replica cache **lifts that
+    /// warning** rather than merely silencing it.
+    ///
+    /// The shipped cross-replica backing is the
+    /// `ToolUp.EmbeddingCaches.Redis` companion
+    /// (`RedisEmbeddingCache.create connectionString logger`); any store
+    /// every replica can read and write can implement `IEmbeddingCache`.
+    /// Composing `InMemoryEmbeddingCache` explicitly is accepted and
+    /// behaves exactly as the default — including the warning, because it
+    /// is still process-local.
+    let withEmbeddingCache (cache: IEmbeddingCache) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            EmbeddingCache = Some cache
+    }
 
     /// Phase 501 — compose a language-aware analyzer for the sparse (BM25)
     /// index. Companion packages under `src/SparseIndices/<Name>/` provide

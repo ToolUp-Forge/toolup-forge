@@ -2621,8 +2621,12 @@ type ServerConfig = {
     /// is non-deterministic across replicas. Default `false` —
     /// `TeamModeSharedEmbeddingCacheValidator` emits a `Warning`. Set
     /// `true` (or `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE=1`)
-    /// to silence the warning, or wire a tenant-aware `IEmbeddingCache`
-    /// override at the composition root.
+    /// to accept best-effort per-replica hit-rate and silence the
+    /// warning. Phase 633 — the better answer is usually to remove the
+    /// divergence instead: compose a cross-replica cache via
+    /// `RAGServerApp.withEmbeddingCache` (the shipped backing is the
+    /// `ToolUp.EmbeddingCaches.Redis` companion), which LIFTS the warning
+    /// rather than suppressing it, and leaves this flag `false`.
     AcceptSharedEmbeddingCacheInTeamMode: bool
 
     /// Phase 9m.B — explicit opt-in to running RAG with no durable

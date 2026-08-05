@@ -597,14 +597,264 @@ let private liveTests (connectionString: string) =
         }
     ]
 
+// ─── Phase 633 — the compose seam (`RAGServerApp.withEmbeddingCache`) ──
+//
+// Phase 513 shipped this companion, but `composeWithRAG` hard-constructed
+// `InMemoryEmbeddingCache` at the compose site — so the companion was
+// reachable only by raw DI, while two docs pages already described a
+// `withEmbeddingCache` builder that did not exist. Phase 633 ships the
+// builder and closes 513's deferred 513.C: the Team-mode shared-cache
+// validator was constructed from `ServerConfig` alone and therefore could
+// not see that a deployment had ALREADY addressed the concern, so it
+// warned at a correctly-configured fleet.
+//
+// Three things are pinned here, and the third is the one that matters:
+//
+//  • the hook plumbs through to the composition (the resolved
+//    `IEmbeddingCache` is the composed instance, not a fresh default);
+//  • unset is byte-identical to the pre-633 behaviour (GP 11) — an
+//    `InMemoryEmbeddingCache`, and the warning still fires;
+//  • the LIFT is conditioned on the cache being genuinely cross-replica,
+//    not on the hook having been called. Composing
+//    `InMemoryEmbeddingCache` by hand changes nothing about the
+//    per-replica divergence, so it must keep warning.
+
+let private stubFactory =
+    { new ToolUp.AI.IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+
+        member _.Resolve _ = async { return Error ToolUp.AI.NoProviderConfigured }
+
+        member _.TryResolveByLabel(_, _) = async { return Error ToolUp.AI.NoProviderConfigured }
+
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private stubProfile =
+    { new ToolUp.Platform.Providers.IProviderProfile with
+        member _.Get _ = async { return None }
+        member _.Set(_, _) = async { return Ok() }
+        member _.Clear _ = async { return () }
+        member _.ResolveEntry(_, _, _) = async { return None }
+        member _.SetEntryHealth(_, _, _) = async { return Ok() }
+    }
+
+let private stubEmbedder =
+    { new IEmbeddingProvider with
+        member _.GenerateEmbedding _ = async { return Array.zeroCreate 8 }
+
+        member _.GenerateEmbeddings texts = async {
+            return texts |> Seq.map (fun _ -> Array.zeroCreate<float32> 8) |> Seq.toArray
+        }
+
+        member _.ProviderId = "stub"
+        member _.ModelId = "stub-model"
+        member _.Dimensions = 8
+    }
+
+/// An `IEmbeddingCache` that is NOT `InMemoryEmbeddingCache` — structurally
+/// what every cross-replica companion (`RedisEmbeddingCache` included) looks
+/// like to the composition. Used so the always-on arm can prove the lift
+/// without a broker; the live arm below repeats it against the real
+/// companion type.
+let private crossReplicaStub () =
+    { new IEmbeddingCache with
+        member _.TryGet _ = async { return None }
+        member _.Set _ _ = async { return () }
+        member _.HitRate() = async { return 0.0 }
+        member _.Clear() = async { return () }
+    }
+
+let private newApp () =
+    ToolUp.RAG.RAGCompose.RAGServerApp.create stubFactory stubProfile stubEmbedder
+
+/// Resolve the `IEmbeddingCache` the composition actually registered —
+/// the only evidence that the hook reaches `composeWithRAG` rather than
+/// merely landing in the record.
+let private composedCache (app: ToolUp.RAG.RAGCompose.RAGServerApp) : IEmbeddingCache =
+    let composed = ToolUp.RAG.RAGCompose.composeRAG app
+
+    let services =
+        Microsoft.Extensions.DependencyInjection.ServiceCollection()
+        :> Microsoft.Extensions.DependencyInjection.IServiceCollection
+
+    let services =
+        match composed.Extensions.ServiceConfig with
+        | Some f -> f services
+        | None -> services
+
+    let provider =
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+            services
+
+    provider.GetService typeof<IEmbeddingCache> :?> IEmbeddingCache
+
+let private teamCfg (replicaCount: int) (accepted: bool) : ToolUp.Platform.ServerConfig = {
+    ToolUp.Platform.ServerConfig.defaults with
+        Surfaces = [ ToolUp.Platform.SurfaceProfile.team ]
+        ReplicaCount = replicaCount
+        AcceptSharedEmbeddingCacheInTeamMode = accepted
+}
+
+let private validate
+    (config: ToolUp.Platform.ServerConfig)
+    (crossReplicaCache: bool)
+    : ToolUp.Platform.ConfigValidation.ValidationResult =
+    let v =
+        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(config, crossReplicaCache)
+        :> ToolUp.Platform.ConfigValidation.IConfigValidator
+
+    v.Validate() |> Async.RunSynchronously
+
+let private composeSeamTests =
+    testList "Phase 633 — RAGServerApp.withEmbeddingCache" [
+        testList "the hook" [
+            test "unset ⇒ the composition still builds InMemoryEmbeddingCache (GP 11)" {
+                let app = newApp ()
+                Expect.isNone app.EmbeddingCache "no hook composed ⇒ the field stays None"
+
+                Expect.isTrue
+                    (composedCache app :? ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache)
+                    "the pre-633 default must survive unchanged — this is the byte-identical pin"
+            }
+
+            test "composed ⇒ the composition resolves THAT instance, not a fresh default" {
+                let cache = crossReplicaStub ()
+                let app = newApp () |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache cache
+
+                Expect.isTrue
+                    (Object.ReferenceEquals(composedCache app, cache))
+                    "withEmbeddingCache must reach composeWithRAG, not merely set a record field"
+            }
+        ]
+
+        testList "hasCrossReplicaEmbeddingCache — what the lift is conditioned on" [
+            test "unset ⇒ false" {
+                Expect.isFalse
+                    (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache (newApp ()))
+                    "the default cache is process-local"
+            }
+
+            test "a cross-replica companion ⇒ true" {
+                let app =
+                    newApp ()
+                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (crossReplicaStub ())
+
+                Expect.isTrue
+                    (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)
+                    "a fleet-wide cache spans replicas"
+            }
+
+            test "InMemoryEmbeddingCache composed BY HAND ⇒ still false" {
+                let app =
+                    newApp ()
+                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (
+                        ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache() :> IEmbeddingCache
+                    )
+
+                Expect.isFalse
+                    (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)
+                    "calling the hook is not the point — removing the per-replica divergence is; an operator who wires the process-local cache by hand has changed nothing the validator warns at"
+            }
+        ]
+
+        testList "513.C — the Team-mode warning is LIFTED by a cross-replica cache, not removed" [
+            test "single instance ⇒ Ok (was always fine)" {
+                Expect.equal
+                    (validate (teamCfg 1 false) false)
+                    ToolUp.Platform.ConfigValidation.Ok
+                    "one replica cannot diverge from itself"
+            }
+
+            test "process-local cache + ReplicaCount = 2 ⇒ Warning (the concern still fires)" {
+                match validate (teamCfg 2 false) false with
+                | ToolUp.Platform.ConfigValidation.Warning msg ->
+                    Expect.stringContains msg "ReplicaCount > 1" "names the multi-replica premise"
+
+                    Expect.stringContains
+                        msg
+                        "withEmbeddingCache"
+                        "points at the fix this phase shipped, not just the escape hatch"
+
+                    Expect.stringContains msg "AcceptSharedEmbeddingCacheInTeamMode" "still documents the escape hatch"
+                | other -> failtestf "expected Warning, got %A" other
+            }
+
+            test "cross-replica cache + ReplicaCount = 2 ⇒ Ok (the premise no longer holds)" {
+                Expect.equal
+                    (validate (teamCfg 2 false) true)
+                    ToolUp.Platform.ConfigValidation.Ok
+                    "every replica reads and writes the same entries, so there is no divergence left to warn about"
+            }
+
+            test "the escape hatch still silences it independently of the cache" {
+                Expect.equal
+                    (validate (teamCfg 2 true) false)
+                    ToolUp.Platform.ConfigValidation.Ok
+                    "AcceptSharedEmbeddingCacheInTeamMode = true is unchanged by 633"
+            }
+
+            test "end to end: compose a cross-replica cache ⇒ Team-mode preflight is silent" {
+                let app =
+                    newApp ()
+                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (crossReplicaStub ())
+
+                Expect.equal
+                    (validate (teamCfg 2 false) (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app))
+                    ToolUp.Platform.ConfigValidation.Ok
+                    "the acceptance criterion, driven through the same predicate composeWithRAG feeds the validator"
+            }
+
+            test "end to end: compose nothing ⇒ Team-mode preflight still warns" {
+                let app = newApp ()
+
+                match validate (teamCfg 2 false) (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app) with
+                | ToolUp.Platform.ConfigValidation.Warning _ -> ()
+                | other -> failtestf "an unchanged deployment must be byte-identical to pre-633; got %A" other
+            }
+        ]
+    ]
+
+/// The live half of the compose seam: the SHIPPED companion type — not a
+/// structural stand-in — lifts the warning. Env-gated like the rest of the
+/// live arm.
+let private liveComposeSeamTests (connectionString: string) =
+    testList "Phase 633 — the shipped Redis companion lifts the warning" [
+        test "RedisEmbeddingCache composed via withEmbeddingCache ⇒ preflight Ok" {
+            let options = {
+                RedisEmbeddingCacheOptions.defaults with
+                    KeyPrefix = freshPrefix ()
+            }
+
+            let cache, dispose = makeCacheWith connectionString options
+
+            try
+                let app = newApp () |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache cache
+
+                Expect.isTrue
+                    (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)
+                    "the real companion must satisfy the predicate the stub stands in for"
+
+                Expect.equal
+                    (validate (teamCfg 2 false) (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app))
+                    ToolUp.Platform.ConfigValidation.Ok
+                    "the acceptance criterion, against a real cross-replica cache"
+            finally
+                dispose.Dispose()
+        }
+    ]
+
 // ─── Registration ────────────────────────────────────────────────────
 
 let tests =
     testList "RedisEmbeddingCache" [
         structuralTests
+        composeSeamTests
 
         match liveConnectionString with
-        | Some connectionString -> liveTests connectionString
+        | Some connectionString -> testList "live" [ liveTests connectionString; liveComposeSeamTests connectionString ]
         | None ->
             // A single Pending case so the report lists the live arm as
             // explicitly skipped rather than absent — the absence of a
