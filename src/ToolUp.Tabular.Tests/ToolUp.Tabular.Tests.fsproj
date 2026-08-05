@@ -9,6 +9,7 @@
         <Compile Include="Fixtures.fs" />
         <Compile Include="InProcess\CsvTests.fs" />
         <Compile Include="InProcess\XlsxTests.fs" />
+        <Compile Include="InProcess\XlsmTests.fs" />
         <Compile Include="InProcess\ReaderTests.fs" />
         <Compile Include="InProcess\WorkedExampleTests.fs" />
         <Compile Include="Program.fs" />

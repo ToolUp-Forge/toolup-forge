@@ -89,10 +89,32 @@ let private columnReference (index: int) =
 
     sb.ToString()
 
-let private buildWorkbook (stream: MemoryStream) (sheetName: string) (rows: Fx list list) : unit =
-    use document = SpreadsheetDocument.Create(stream, SpreadsheetDocumentType.Workbook)
+let private buildWorkbook
+    (stream: MemoryStream)
+    (documentType: SpreadsheetDocumentType)
+    (macroPart: bool)
+    (sheetName: string)
+    (rows: Fx list list)
+    : unit =
+    use document = SpreadsheetDocument.Create(stream, documentType)
     let workbookPart = document.AddWorkbookPart()
     workbookPart.Workbook <- Workbook()
+
+    // Phase 639 — the macro part. A real `vbaProject.bin` is a
+    // compound-file OLE container; the reader never opens it, never
+    // resolves the relationship, and never executes anything, so the
+    // fixture's payload only has to EXIST as a part with the right
+    // content type + relationship. Stub bytes are therefore both
+    // sufficient and the point: if the grid read ever depended on the
+    // macro part's contents, this fixture would fail.
+    if macroPart then
+        let vbaPart = workbookPart.AddNewPart<VbaProjectPart>()
+        use vbaStream = vbaPart.GetStream(FileMode.Create)
+        // The OLE compound-file signature, then filler — enough to be
+        // a recognisable, non-empty binary part.
+        let stub = [| 0xD0uy; 0xCFuy; 0x11uy; 0xE0uy; 0xA1uy; 0xB1uy; 0x1Auy; 0xE1uy |]
+        vbaStream.Write(stub, 0, stub.Length)
+        vbaStream.Write(Array.zeroCreate<byte> 64, 0, 64)
 
     // Stylesheet: format 0 = general, format 1 = date (14).
     // Built imperatively — OpenXmlElement implements
@@ -216,7 +238,17 @@ let private buildWorkbook (stream: MemoryStream) (sheetName: string) (rows: Fx l
 /// stylesheet cell format with the built-in date numFmtId 14.
 let xlsxBytes (sheetName: string) (rows: Fx list list) : byte[] =
     use stream = new MemoryStream()
-    buildWorkbook stream sheetName rows
+    buildWorkbook stream SpreadsheetDocumentType.Workbook false sheetName rows
+    stream.ToArray()
+
+/// Phase 639 — the same workbook as `xlsxBytes`, packaged as a
+/// **macro-enabled** workbook: the `[Content_Types].xml` declaration
+/// changes and a stub `vbaProject.bin` part is present. Nothing about
+/// the sheet grid differs, which is exactly what the parity tests
+/// assert.
+let xlsmBytes (sheetName: string) (rows: Fx list list) : byte[] =
+    use stream = new MemoryStream()
+    buildWorkbook stream SpreadsheetDocumentType.MacroEnabledWorkbook true sheetName rows
     stream.ToArray()
 
 /// Excel serial for 2021-01-01 (1900 date system).

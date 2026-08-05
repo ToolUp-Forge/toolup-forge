@@ -305,8 +305,11 @@ ToolUp.AssetStore.ImageFormatModule.mimeType(ToolUp.AssetStore.ImageFormat) : Sy
 ToolUp.AssetStore.MagicBytes (class)
 ToolUp.AssetStore.MagicBytes.containsMarkup(System.Int32, System.Byte[]) : System.Boolean
 ToolUp.AssetStore.MagicBytes.isRasterImage(System.String) : System.Boolean
+ToolUp.AssetStore.MagicBytes.macroEnabledSpreadsheetPackage : System.String { get }
 ToolUp.AssetStore.MagicBytes.markup : System.String { get }
+ToolUp.AssetStore.MagicBytes.openXmlPackage(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AssetStore.MagicBytes.sniff(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AssetStore.MagicBytes.spreadsheetPackage : System.String { get }
 ToolUp.AssetStore.MagicBytes.unrecognised : System.String { get }
 ToolUp.AssetStore.MimeRendererRegistry (class)
 ToolUp.AssetStore.MimeRendererRegistryModule (class)
@@ -314,12 +317,14 @@ ToolUp.AssetStore.MimeRendererRegistryModule.empty : ToolUp.AssetStore.MimeRende
 ToolUp.AssetStore.MimeRendererRegistryModule.register(System.String, ToolUp.AssetStore.IMimeDerivativeRenderer, ToolUp.AssetStore.MimeRendererRegistry) : ToolUp.AssetStore.MimeRendererRegistry
 ToolUp.AssetStore.MimeRendererRegistryModule.resolve(System.String, ToolUp.AssetStore.MimeRendererRegistry) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IMimeDerivativeRenderer]
 ToolUp.AssetStore.MimeSniffOptions (class)
-ToolUp.AssetStore.MimeSniffOptions..ctor(System.Boolean, System.Boolean, System.Int32)
+ToolUp.AssetStore.MimeSniffOptions..ctor(System.Boolean, System.Boolean, System.Int32, System.Boolean)
 ToolUp.AssetStore.MimeSniffOptions.AllowUnrecognisedBytes : System.Boolean { get }
 ToolUp.AssetStore.MimeSniffOptions.MarkupScanBytes : System.Int32 { get }
+ToolUp.AssetStore.MimeSniffOptions.RecogniseSpreadsheetPackages : System.Boolean { get }
 ToolUp.AssetStore.MimeSniffOptions.RejectMarkupPolyglots : System.Boolean { get }
 ToolUp.AssetStore.MimeSniffOptionsModule (class)
 ToolUp.AssetStore.MimeSniffOptionsModule.defaults : ToolUp.AssetStore.MimeSniffOptions { get }
+ToolUp.AssetStore.MimeSniffOptionsModule.withSpreadsheetPackages : ToolUp.AssetStore.MimeSniffOptions { get }
 ToolUp.AssetStore.ProfileEntry (class)
 ToolUp.AssetStore.ProfileEntry.IsGeneralDerivative : System.Boolean { get }
 ToolUp.AssetStore.ProfileEntry.IsImageDerivative : System.Boolean { get }

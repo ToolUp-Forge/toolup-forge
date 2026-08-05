@@ -7,7 +7,13 @@ open Expecto
 open ToolUp.Tabular.Tests.InProcess
 
 let allTests =
-    testList "ToolUp.Tabular.Tests" [ CsvTests.tests; XlsxTests.tests; ReaderTests.tests; WorkedExampleTests.tests ]
+    testList "ToolUp.Tabular.Tests" [
+        CsvTests.tests
+        XlsxTests.tests
+        XlsmTests.tests
+        ReaderTests.tests
+        WorkedExampleTests.tests
+    ]
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

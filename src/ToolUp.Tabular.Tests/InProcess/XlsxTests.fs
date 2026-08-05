@@ -111,7 +111,7 @@ let tests =
 
             match result.RowErrors[0].Kind with
             | RowErrorKind.UnparseableRow message ->
-                Expect.stringContains message "not a readable XLSX workbook" "fatal message"
+                Expect.stringContains message "not a readable XLSX/XLSM workbook" "fatal message"
             | other -> failtestf "expected UnparseableRow, got %A" other
 
         testCase "mixed-validity workbook reports failing cells with raw text"

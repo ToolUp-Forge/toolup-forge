@@ -91,6 +91,67 @@ let private gifHtmlPolyglot =
 /// Bytes matching nothing in the table.
 let private unknownBytes = withBody [| 0x2Auy; 0x13uy; 0x77uy; 0x01uy |]
 
+// ── Phase 639 — Office Open XML spreadsheet packages ─────────────
+//
+// Real OPC packages, built with the BCL zip writer rather than an
+// OpenXml dependency: the validator reads exactly one part — the
+// `[Content_Types].xml` manifest — so a fixture carrying that part
+// (plus a stand-in workbook part, and for the macro flavour a
+// `vbaProject.bin`) exercises the whole code path faithfully. The
+// grid-level parity against genuine OpenXml-written workbooks is
+// pinned in the ToolUp.Tabular pack, where the reader lives.
+
+let private zipOf (entries: (string * byte[]) list) : byte[] =
+    use buffer = new MemoryStream()
+
+    // Nested so the archive is disposed — and its central directory
+    // therefore flushed — before `ToArray` reads the buffer.
+    let writeArchive () =
+        use archive =
+            new Compression.ZipArchive(buffer, Compression.ZipArchiveMode.Create, true)
+
+        for name, content in entries do
+            let entry = archive.CreateEntry name
+            use entryStream = entry.Open()
+            entryStream.Write(content, 0, content.Length)
+
+    writeArchive ()
+    buffer.ToArray()
+
+let private opcPackage (workbookPartType: string) (extraParts: (string * byte[]) list) : byte[] =
+    let manifest =
+        sprintf
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/><Override PartName="/xl/workbook.xml" ContentType="%s"/></Types>"""
+            workbookPartType
+
+    zipOf [
+        "[Content_Types].xml", Text.Encoding.UTF8.GetBytes manifest
+        "xl/workbook.xml", Text.Encoding.UTF8.GetBytes "<workbook/>"
+        yield! extraParts
+    ]
+
+/// A plain `.xlsx` package.
+let private xlsxPackage =
+    opcPackage "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml" []
+
+/// A macro-enabled `.xlsm` package — same manifest shape, macro
+/// content type, plus the `vbaProject.bin` part itself.
+let private xlsmPackage =
+    opcPackage "application/vnd.ms-excel.sheet.macroEnabled.main+xml" [
+        "xl/vbaProject.bin", [| 0xD0uy; 0xCFuy; 0x11uy; 0xE0uy; 0xA1uy; 0xB1uy; 0x1Auy; 0xE1uy |]
+    ]
+
+/// A zip that is not an OPC package at all.
+let private plainZip = zipOf [ "notes.txt", Text.Encoding.UTF8.GetBytes "hello" ]
+
+let private xlsxMime =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+let private xlsmMime = "application/vnd.ms-excel.sheet.macroEnabled.12"
+
+let private packageAwareValidator () =
+    SniffingUploadValidator MimeSniffOptions.withSpreadsheetPackages :> IUploadValidator
+
 // ── Doubles ─────────────────────────────────────────────────────
 
 /// A validator standing in for a scan backend that is configured but
@@ -404,6 +465,139 @@ let tests =
                     "unrecognised bytes are refused unless a deployment says otherwise"
 
                 Expect.isTrue MimeSniffOptions.defaults.RejectMarkupPolyglots "polyglot detection on by default"
+            }
+        ]
+
+        // ── Phase 639 — spreadsheet packages (.xlsx / .xlsm) ─────────
+
+        testList "MagicBytes.openXmlPackage" [
+            test "reads the flavour from the container's own manifest" {
+                Expect.equal (MagicBytes.openXmlPackage xlsxPackage) (Some MagicBytes.spreadsheetPackage) ".xlsx"
+
+                Expect.equal
+                    (MagicBytes.openXmlPackage xlsmPackage)
+                    (Some MagicBytes.macroEnabledSpreadsheetPackage)
+                    ".xlsm — the macro part does not change how the grid is typed"
+            }
+
+            test "a zip that is not an OPC package stays unrecognised" {
+                Expect.isNone (MagicBytes.openXmlPackage plainZip) "no manifest part, no verdict"
+                Expect.isNone (MagicBytes.openXmlPackage zipBytes) "a bare zip header is not a package"
+            }
+
+            test "non-zip and malformed payloads return None rather than raising" {
+                Expect.isNone (MagicBytes.openXmlPackage pngBytes) "a PNG is not a package"
+                Expect.isNone (MagicBytes.openXmlPackage null) "null is not a package"
+                Expect.isNone (MagicBytes.openXmlPackage [||]) "empty is not a package"
+
+                // A truncated archive: the header matches, the central
+                // directory does not exist. The zip reader raises; the
+                // seam must absorb it, because a crafted upload must not
+                // become an exception unwinding through the upload path.
+                let truncated = Array.sub xlsxPackage 0 (xlsxPackage.Length / 2)
+                Expect.isNone (MagicBytes.openXmlPackage truncated) "a truncated archive is None, not a throw"
+            }
+
+            test "the sniff table still reports these as zip — the refinement is the validator's" {
+                Expect.equal (MagicBytes.sniff xlsmPackage) (Some "application/zip") "a package IS a zip"
+            }
+        ]
+
+        testList "SniffingUploadValidator — spreadsheet packages" [
+            testCaseAsync "OFF by default: a workbook is refused exactly as before (GP 11)"
+            <| async {
+                Expect.isFalse
+                    MimeSniffOptions.defaults.RecogniseSpreadsheetPackages
+                    "the opt-in is off unless a deployment asks for it"
+
+                let validator = SniffingUploadValidator() :> IUploadValidator
+                let! verdict = validator.Validate(xlsmPackage, xlsmMime)
+
+                match verdict with
+                | Error(MimeMismatch(declared, "application/zip")) ->
+                    // The echoed `declared` is the NORMALISED form (the
+                    // validator lower-cases before comparing), which is
+                    // why the constant is folded here too.
+                    Expect.equal declared (xlsmMime.ToLowerInvariant()) "the pre-639 refusal is unchanged"
+                | other -> failtestf "expected the unchanged zip mismatch, got %A" other
+            }
+
+            testCaseAsync "opted in, a macro-enabled workbook is admitted"
+            <| async {
+                let validator = packageAwareValidator ()
+                let! verdict = validator.Validate(xlsmPackage, xlsmMime)
+                Expect.equal verdict (Ok()) ".xlsm corroborated by the container's manifest"
+            }
+
+            testCaseAsync "the registered mixed-case spelling of the macro type is honoured"
+            <| async {
+                // `application/vnd.ms-excel.sheet.macroEnabled.12` is
+                // the registered spelling, capital E and all, and it is
+                // what a browser puts on the wire. The validator
+                // lower-cases the declared type before comparing, so an
+                // ordinal compare against the constant never matches —
+                // the one type in the table where case matters.
+                Expect.notEqual
+                    MagicBytes.macroEnabledSpreadsheetPackage
+                    (MagicBytes.macroEnabledSpreadsheetPackage.ToLowerInvariant())
+                    "the registered spelling really is mixed-case (this test is not vacuous)"
+
+                let validator = packageAwareValidator ()
+
+                for spelling in
+                    [
+                        MagicBytes.macroEnabledSpreadsheetPackage
+                        MagicBytes.macroEnabledSpreadsheetPackage.ToLowerInvariant()
+                        MagicBytes.macroEnabledSpreadsheetPackage.ToUpperInvariant()
+                        "  " + MagicBytes.macroEnabledSpreadsheetPackage + "  "
+                    ] do
+                    let! verdict = validator.Validate(xlsmPackage, spelling)
+                    Expect.equal verdict (Ok()) (sprintf "declared as '%s'" spelling)
+            }
+
+            testCaseAsync "opted in, a plain workbook is admitted too"
+            <| async {
+                let validator = packageAwareValidator ()
+                let! verdict = validator.Validate(xlsxPackage, xlsxMime)
+                Expect.equal verdict (Ok()) ".xlsx corroborated by the container's manifest"
+            }
+
+            testCaseAsync "the two flavours are NOT interchangeable — each must declare itself"
+            <| async {
+                let validator = packageAwareValidator ()
+                let! verdict = validator.Validate(xlsmPackage, xlsxMime)
+
+                match verdict with
+                | Error(MimeMismatch(declared, sniffed)) ->
+                    Expect.equal declared xlsxMime "the declared type is echoed"
+
+                    Expect.equal
+                        sniffed
+                        MagicBytes.macroEnabledSpreadsheetPackage
+                        "the refusal names what the container actually declares, not 'application/zip'"
+                | other -> failtestf "expected a package-level mismatch, got %A" other
+            }
+
+            testCaseAsync "the opt-in only widens — a spoof is still refused"
+            <| async {
+                let validator = packageAwareValidator ()
+
+                let! zipSpoof = validator.Validate(plainZip, xlsxMime)
+                Expect.notEqual zipSpoof (Ok()) "a zip that is not a workbook is not a workbook"
+
+                let! imageSpoof = validator.Validate(pngBytes, xlsxMime)
+                Expect.notEqual imageSpoof (Ok()) "a PNG declared as a workbook is still refused"
+
+                let! executableSpoof = validator.Validate(exeBytes, xlsxMime)
+                Expect.notEqual executableSpoof (Ok()) "an executable declared as a workbook is still refused"
+
+                // The corroborated arm is untouched: a payload the
+                // header check already agreed with is never re-judged.
+                let! genuinePng = validator.Validate(pngBytes, "image/png")
+                Expect.equal genuinePng (Ok()) "ordinary corroboration is unaffected"
+
+                let! polyglot = validator.Validate(gifHtmlPolyglot, "image/gif")
+                Expect.notEqual polyglot (Ok()) "the polyglot check is unaffected"
             }
         ]
 

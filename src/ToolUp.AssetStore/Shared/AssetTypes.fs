@@ -289,6 +289,86 @@ module MagicBytes =
         | "image/tiff" -> true
         | _ -> false
 
+    // ─── Phase 639 — Office Open XML packages ────────────────────
+    //
+    // An OOXML file (.xlsx, .xlsm, .docx, .pptx) IS a zip archive, so
+    // `sniff` correctly reports `application/zip` for every one of
+    // them — and a validator comparing that against a declared
+    // `…spreadsheetml.sheet` refuses a perfectly good workbook. The
+    // container is not opaque, though: an OPC package declares its own
+    // part content types in `[Content_Types].xml`, so the flavour can
+    // be read from the bytes rather than trusted from the header.
+    //
+    // Only the two spreadsheet flavours are mapped, because those are
+    // what the tabular ingestion leg reads. A `.docx` / `.pptx`
+    // package still reports `None` here and is handled exactly as
+    // before.
+
+    /// The package MIME of a plain workbook (`.xlsx`).
+    let spreadsheetPackage =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    /// The package MIME of a **macro-enabled** workbook (`.xlsm`).
+    ///
+    /// Recognising the type says nothing about running anything: the
+    /// ingestion leg extracts the sheet grid and never opens, extracts
+    /// or executes the package's `vbaProject.bin` part. A deployment
+    /// admitting this type is admitting a spreadsheet whose macros are
+    /// ignored, and can say so to its uploaders in those words.
+    let macroEnabledSpreadsheetPackage =
+        "application/vnd.ms-excel.sheet.macroEnabled.12"
+
+    /// Part content type an OPC package declares for the main workbook
+    /// part, per flavour.
+    let private workbookPartTypes = [
+        "application/vnd.ms-excel.sheet.macroEnabled.main+xml", macroEnabledSpreadsheetPackage
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml", spreadsheetPackage
+    ]
+
+    /// `[Content_Types].xml` is a manifest of part types, not content.
+    /// A megabyte of it would already be pathological, so the cap is a
+    /// cheap guard against a crafted archive declaring an enormous
+    /// entry rather than a real limit any workbook approaches.
+    let private contentTypesByteCap = 1 * 1024 * 1024
+
+    /// The OOXML **spreadsheet** package type these bytes declare, read
+    /// from the container's own `[Content_Types].xml`, or `None` when
+    /// the payload is not a zip, is not an OPC package, or declares a
+    /// workbook part this table does not map.
+    ///
+    /// Reads the manifest part only — no other part of the archive is
+    /// opened, and nothing in the archive is executed or extracted to
+    /// disk. Never raises: a truncated, encrypted or malformed archive
+    /// is `None`, which callers treat exactly as "cannot corroborate".
+    let openXmlPackage (bytes: byte[]) : string option =
+        // Fast reject before allocating an archive reader: an OPC
+        // package always begins with the local-file-header signature.
+        if not (matchesAt bytes 0 [| 0x50uy; 0x4Buy; 0x03uy; 0x04uy |]) then
+            None
+        else
+            try
+                use source = new IO.MemoryStream(bytes, false)
+
+                use archive =
+                    new IO.Compression.ZipArchive(source, IO.Compression.ZipArchiveMode.Read, true)
+
+                match archive.GetEntry "[Content_Types].xml" with
+                | null -> None
+                | entry when entry.Length > int64 contentTypesByteCap -> None
+                | entry ->
+                    use entryStream = entry.Open()
+                    use reader = new IO.StreamReader(entryStream, Text.Encoding.UTF8)
+                    let manifest = reader.ReadToEnd()
+
+                    workbookPartTypes
+                    |> List.tryPick (fun (partType, packageType) ->
+                        if manifest.Contains(partType, StringComparison.OrdinalIgnoreCase) then
+                            Some packageType
+                        else
+                            None)
+            with _ ->
+                None
+
     /// Does the leading `scanBytes` window carry a marker a browser
     /// or a server-side interpreter would treat as executable?
     ///

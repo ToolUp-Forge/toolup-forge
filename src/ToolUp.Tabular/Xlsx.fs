@@ -23,8 +23,34 @@ open DocumentFormat.OpenXml.Spreadsheet
 //
 // The vendor dependency stays in this companion (GP 1) — nothing
 // in ToolUp.Platform.* references OpenXml.
+//
+// ─── Phase 639 — macro-enabled workbooks (.xlsm) ────────────────
+//
+// A macro-enabled workbook is the SAME OPC package with two
+// differences: `[Content_Types].xml` declares the workbook part as
+// `application/vnd.ms-excel.sheet.macroEnabled.main+xml` instead of
+// `…spreadsheetml.sheet.main+xml`, and the package carries an extra
+// `xl/vbaProject.bin` part. Neither touches the sheet grid, so both
+// flavours read through this one code path and produce identical
+// rows, cells, shared strings, number formats and errors.
+//
+// **Macros are never executed, evaluated, or extracted.** This is a
+// data-extraction leg, and the claim is structural rather than a
+// promise: the reader resolves exactly four parts — the workbook
+// part, the shared-string table part, the workbook styles part, and
+// the selected worksheet part. `vbaProject.bin` is not among them.
+// Nothing here resolves its relationship, opens its stream, or
+// inspects a byte of it; the package enumeration the OpenXml reader
+// performs to find the workbook part is the only place its existence
+// is even observable, and that enumeration reads part names, not
+// part contents. There is no interpreter, no formula evaluator and
+// no VBA host in this package to run it with.
+//
+// "Run the workbook" — evaluating macros or formulas — is a
+// different feature with a different threat model and is deliberately
+// out of scope (see the README's "Out of scope").
 
-/// Low-level XLSX row reader. Most consumers want
+/// Low-level XLSX / XLSM row reader. Most consumers want
 /// `TabularReader.readXlsx` (schema validation + typed binding);
 /// this module is public for consumers that need raw rows.
 module Xlsx =
@@ -343,7 +369,10 @@ module Xlsx =
         | Skip
         | RowRead of XlsxRow
 
-    /// Stream the selected sheet's rows. Lazy and row-at-a-time:
+    /// Stream the selected sheet's rows. Accepts both `.xlsx` and
+    /// macro-enabled `.xlsm` packages — the grid reads identically
+    /// and any `vbaProject.bin` part is ignored, never executed
+    /// (Phase 639; see the file header). Lazy and row-at-a-time:
     /// the workbook is opened when enumeration starts and closed
     /// when it completes (or is disposed early); only one `Row`
     /// element is held at a time. A fatal problem — not a
@@ -361,7 +390,7 @@ module Xlsx =
             try
                 Ok(SpreadsheetDocument.Open(stream, false))
             with ex ->
-                Error(sprintf "not a readable XLSX workbook: %s" ex.Message)
+                Error(sprintf "not a readable XLSX/XLSM workbook: %s" ex.Message)
 
         match opened with
         | Error message -> Error message
@@ -369,7 +398,7 @@ module Xlsx =
             use document = document
 
             match document.WorkbookPart with
-            | null -> Error "not a readable XLSX workbook: no workbook part"
+            | null -> Error "not a readable XLSX/XLSM workbook: no workbook part"
             | workbookPart ->
                 match resolveSheet workbookPart selection with
                 | Error message -> Error message

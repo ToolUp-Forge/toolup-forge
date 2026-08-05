@@ -13,10 +13,12 @@ act on without reopening the file.
 - **CSV leg** — zero third-party dependencies. A BCL-only RFC 4180 parser: quoting,
   embedded delimiters and newlines, `""` escapes, configurable delimiter, BOM-first
   encoding detection (UTF-8 / UTF-16 / UTF-32; BOM-less input decodes as UTF-8).
-- **XLSX leg** — reads via `DocumentFormat.OpenXml` (the package's only third-party
-  dependency, isolated here per GP 1 — `ToolUp.Platform.*` never references it).
-  Shared strings, inline strings, number-format-aware date detection, sheet
-  selection by name or index.
+- **XLSX / XLSM leg** — reads via `DocumentFormat.OpenXml` (the package's only
+  third-party dependency, isolated here per GP 1 — `ToolUp.Platform.*` never
+  references it). Shared strings, inline strings, number-format-aware date
+  detection, sheet selection by name or index. Macro-enabled `.xlsm` workbooks read
+  through the same call and produce identical results — **macros are never
+  executed**, see below.
 - **Additive by construction** (GP 13) — the companion references nothing in
   `ToolUp.Platform.*` and nothing references it; deployments that don't compose it
   pay zero cost.
@@ -148,7 +150,39 @@ serials via the OLE-automation epoch. Two documented corners:
 
 Formula cells are read as their cached results (the stored value), not evaluated.
 
+## Macro-enabled workbooks (`.xlsm`) — macros are never executed
+
+Macro-enabled workbooks are read by the same `readXlsx*` / `streamXlsx` calls, with
+the same options and the same `XlsxReadOptions`. There is no separate API and no
+flag to set: a `.xlsm` and the equivalent `.xlsx` produce byte-for-byte the same
+rows, the same cell values and the same error report. The container differs only in
+its `[Content_Types].xml` declaration and in carrying an extra `xl/vbaProject.bin`
+part; neither is part of the sheet grid.
+
+**The macro part is ignored — never executed, never evaluated, never extracted.**
+That is structural, not a promise: the reader resolves exactly four parts — the
+workbook part, the shared-string table, the workbook stylesheet, and the selected
+worksheet — and `vbaProject.bin` is not among them. Nothing here resolves its
+relationship, opens its stream or reads a byte of it, and the package contains no
+interpreter, formula evaluator or VBA host that could run it. Enumerating the
+container to locate the workbook part reads part *names*, not part *contents*.
+
+Two consequences worth stating to your own users:
+
+- An upload surface that accepts `.xlsm` can honestly tell an uploader "macros in
+  this workbook are ignored" — not "we scanned them", not "we ran them safely".
+- Accepting `.xlsm` is still accepting a file that carries executable content **for
+  other software**. If your deployment stores originals and serves them back, the
+  macro travels with the file; that is a storage-and-egress decision, independent of
+  this reader. The upload-validation seam (`SniffingUploadValidator` with
+  `MimeSniffOptions.withSpreadsheetPackages`) corroborates that a payload declared as
+  a workbook really is one, which is a different question again.
+
+Running a workbook — evaluating macros or recalculating formulas — is a different
+feature with a different threat model and is deliberately out of scope.
+
 ## Out of scope
 
-XLSX *writing*, the legacy `.xls` binary format, formula evaluation, and schema
-*inference* (schemas are declared, not guessed).
+XLSX/XLSM *writing*, the legacy `.xls` binary format, **macro execution or
+extraction**, formula evaluation, and schema *inference* (schemas are declared, not
+guessed).

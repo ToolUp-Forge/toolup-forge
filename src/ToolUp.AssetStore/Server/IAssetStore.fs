@@ -31,6 +31,22 @@ type MimeSniffOptions = {
     /// markup early enough for a sniffing browser to find it) and
     /// keeps the check O(1) in the upload size.
     MarkupScanBytes: int
+    /// Phase 639 — corroborate a declared **spreadsheet package**
+    /// type (`.xlsx` / `.xlsm`) against the container's own
+    /// `[Content_Types].xml` rather than against the zip header.
+    ///
+    /// `false` (default, and the pre-639 behaviour exactly — GP 11)
+    /// leaves every OOXML upload sniffing as `application/zip`, so a
+    /// deployment declaring `…spreadsheetml.sheet` is refused. `true`
+    /// is the opt-in a deployment whose accept-list carries workbooks
+    /// takes; it only ever ADMITS payloads the header check would
+    /// have refused, and never newly refuses one.
+    ///
+    /// Admitting `.xlsm` admits a workbook whose macros the platform
+    /// ignores — the tabular ingestion leg extracts the sheet grid and
+    /// never opens, extracts or executes `vbaProject.bin`. That is a
+    /// posture a consumer can and should state to its uploaders.
+    RecogniseSpreadsheetPackages: bool
 }
 
 [<RequireQualifiedAccess>]
@@ -40,6 +56,14 @@ module MimeSniffOptions =
         AllowUnrecognisedBytes = false
         RejectMarkupPolyglots = true
         MarkupScanBytes = 1024
+        RecogniseSpreadsheetPackages = false
+    }
+
+    /// `defaults` plus the spreadsheet-package opt-in — the shape a
+    /// deployment that ingests workbooks wants.
+    let withSpreadsheetPackages: MimeSniffOptions = {
+        defaults with
+            RecogniseSpreadsheetPackages = true
     }
 
 /// In-tree reference `IUploadValidator`: cross-checks the declared
@@ -81,7 +105,40 @@ type SniffingUploadValidator(options: MimeSniffOptions) =
             match MagicBytes.sniff bytes with
             | None when options.AllowUnrecognisedBytes -> return Ok()
             | None -> return Error(MimeMismatch(declared, MagicBytes.unrecognised))
-            | Some sniffed when sniffed <> declared -> return Error(MimeMismatch(declared, sniffed))
+            | Some sniffed when sniffed <> declared ->
+                // Phase 639 — an Office Open XML workbook IS a zip, so
+                // the header check reports `application/zip` and the
+                // comparison above disagrees with a perfectly honest
+                // `…spreadsheetml.sheet` declaration. When the
+                // deployment has opted in, look at the container's own
+                // content-type manifest before refusing.
+                //
+                // Deliberately reached only on the mismatch arm: a
+                // payload the header check already corroborated is
+                // never re-judged, so turning the option on can only
+                // widen what is admitted (GP 11).
+                let packaged =
+                    if options.RecogniseSpreadsheetPackages then
+                        MagicBytes.openXmlPackage bytes
+                    else
+                        None
+
+                match packaged with
+                // Case-INSENSITIVE, and load-bearing: the registered
+                // macro-enabled type is spelled
+                // `…sheet.macroEnabled.12`, with a capital E, while
+                // `declared` was lower-cased above. Every type in the
+                // magic-byte table happens to be all-lowercase, so an
+                // ordinal compare has been correct until now and is
+                // silently wrong for this one. MIME types are
+                // case-insensitive by RFC 2045 either way.
+                | Some packageType when packageType.Equals(declared, System.StringComparison.OrdinalIgnoreCase) ->
+                    return Ok()
+                // The container disagreed too — report what it actually
+                // declares, which is far more useful to an operator
+                // than "application/zip".
+                | Some packageType -> return Error(MimeMismatch(declared, packageType))
+                | None -> return Error(MimeMismatch(declared, sniffed))
             | Some sniffed ->
                 if
                     options.RejectMarkupPolyglots
