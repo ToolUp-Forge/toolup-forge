@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.Contracts.ArchitectureFitness
 
 open System
+open System.Diagnostics
 open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
@@ -112,15 +113,44 @@ let lineOf (source: string) (offset: int) : int =
 let openPattern =
     Regex(@"^[ \t]*open[ \t]+([A-Za-z0-9_.]+)", RegexOptions.Multiline ||| RegexOptions.Compiled)
 
-/// True for build-output / Fable-output paths that must never be scanned
-/// (they hold generated copies of source that would double-count or, in
-/// the Fable test `output/` case, mirror cross-tier files legitimately).
-let isGeneratedPath (path: string) : bool =
-    let n = path.Replace('\\', '/')
+/// `path` expressed relative to `root`, forward-slashed and framed with a
+/// leading slash, so a `"/segment/"` test matches a real path segment and
+/// nothing above the checkout.
+///
+/// Every path test below goes through this. Testing the ABSOLUTE path
+/// instead reads the machine's directory layout rather than the repo's,
+/// and that is not hypothetical: this file's own sweeps run inside
+/// `.claude/worktrees/<name>/` whenever a session verifies in an isolated
+/// worktree, where every absolute path contains `/.claude/` — so an
+/// absolute prune classifies the entire checkout under test as foreign,
+/// empties the sweep, and trips the source-count floor. That is the
+/// second of the two failures this gate has actually produced.
+let pathUnder (root: string) (path: string) : string =
+    let r = root.Replace('\\', '/').TrimEnd('/')
+    let p = path.Replace('\\', '/')
+
+    let rel =
+        if p.StartsWith(r, StringComparison.OrdinalIgnoreCase) then
+            p.Substring r.Length
+        else
+            p
+
+    "/" + rel.TrimStart('/')
+
+/// True for build-output / Fable-output paths under `root` that must
+/// never be scanned (they hold generated copies of source that would
+/// double-count or, in the Fable test `output/` case, mirror cross-tier
+/// files legitimately).
+let isGeneratedPathUnder (root: string) (path: string) : bool =
+    let n = pathUnder root path
     n.Contains "/bin/" || n.Contains "/obj/" || n.Contains "/output/"
 
-/// Path segments that are not this repo's source and must be pruned from
-/// any sweep rooted at the repo root.
+/// `isGeneratedPathUnder` anchored at the live repo root.
+let isGeneratedPath (path: string) : bool = isGeneratedPathUnder (repoRoot ()) path
+
+/// Path segments that are not this repo's source. Used only by the
+/// fallback walk in `enumerateCheckoutFiles` — the primary enumeration
+/// asks git, which needs no such list (see the Phase 635 block below).
 ///
 /// `.claude/` is the load-bearing one. It holds `worktrees/<name>/` — a
 /// concurrent agent session's isolated git worktree, i.e. a COMPLETE
@@ -139,23 +169,140 @@ let isGeneratedPath (path: string) : bool =
 /// is `Publish` output; `.git/` is repository metadata.
 let prunedPathSegments = [ "/.claude/"; "/.git/"; "/node_modules/"; "/artifacts/" ]
 
-/// True for a path under any pruned segment. Complements
-/// `isGeneratedPath` — that one covers build output *of* our source, this
-/// one covers trees that are not our source at all.
-let isPrunedPath (path: string) : bool =
-    let n = path.Replace('\\', '/')
+/// True for a path under any pruned segment, measured relative to `root`.
+/// Complements `isGeneratedPathUnder` — that one covers build output *of*
+/// our source, this one covers trees that are not our source at all.
+///
+/// Relative, not absolute, and that distinction is load-bearing: see
+/// `pathUnder`. A checkout that itself lives under `.claude/worktrees/`
+/// must be measured as the checkout it is, not pruned out of existence.
+let isPrunedPathUnder (root: string) (path: string) : bool =
+    let n = pathUnder root path
 
     prunedPathSegments |> List.exists n.Contains
 
-/// Enumerate `.fs` files under `root` (recursive), skipping generated
-/// paths. Returns absolute paths; missing root yields an empty list.
+/// `isPrunedPathUnder` anchored at the live repo root.
+let isPrunedPath (path: string) : bool = isPrunedPathUnder (repoRoot ()) path
+
+// ─── Checkout scope — what the sweeps may look at (Phase 635) ─────────
+//
+// Every source-tree sweep below is rooted at the repo root, so it is only
+// as correct as its notion of "this checkout". A directory walk gets that
+// wrong in a way that stays invisible until it isn't: `.claude/worktrees/
+// <name>/` is a COMPLETE second checkout of this tree, created and
+// destroyed by concurrent agent sessions, and a walk that descends into
+// one measures the machine rather than the repo. Both observed failures
+// were that shape and both were spurious — a stale worktree's
+// `docs-snippets/ToolUp.DocSnippets.fsproj` (which legitimately carries
+// `NoWarn FS0025`, and is exempt at `docs-snippets/` but NOT at
+// `.claude/worktrees/x/docs-snippets/`) failed the no-self-exemption gate
+// for every session on the machine, and a verification worktree tripped
+// the source-count floor.
+//
+// The fix is not a longer prune list. A prune list is a second copy of
+// `.gitignore` that drifts the moment anyone adds an ignore rule, and it
+// only ever excludes the paths someone already got burned by. Ask git
+// instead: `ls-files --cached --others --exclude-standard` is precisely
+// "the files belonging to THIS checkout" — gitignore-aware by
+// construction, and git refuses to descend into a nested checkout at all,
+// so a worktree parked anywhere, not only under `.claude/`, is excluded
+// for free.
+//
+// `--others` (untracked but not ignored) is deliberate rather than
+// tracked-only: a violation introduced in a file that is not committed
+// yet must still fail locally, otherwise the gate only ever speaks after
+// the fact.
+//
+// The prune-list walk survives as the fallback for a checkout with no git
+// CLI (a source tarball). It is strictly weaker — it cannot see
+// `.gitignore` — and it is not the path this repo takes; the Phase 635
+// tests hold the git path to the stronger bar and pin the fallback to the
+// `.claude/` case it was written for.
+
+/// Run `git` in `workingDir`, returning stdout on a zero exit. `None`
+/// whenever git cannot answer — no CLI on PATH, not a work tree, non-zero
+/// exit, timeout — so every caller must carry a fallback.
+let private runGit (workingDir: string) (args: string list) : string option =
+    try
+        let psi = ProcessStartInfo("git")
+        psi.WorkingDirectory <- workingDir
+        psi.RedirectStandardOutput <- true
+        psi.RedirectStandardError <- true
+        psi.UseShellExecute <- false
+        psi.CreateNoWindow <- true
+
+        for a in args do
+            psi.ArgumentList.Add a
+
+        use proc = Process.Start psi
+
+        // Drain stderr concurrently — a full stderr pipe deadlocks a
+        // process whose stdout we are reading to the end.
+        let stderr = proc.StandardError.ReadToEndAsync()
+        let stdout = proc.StandardOutput.ReadToEnd()
+
+        if proc.WaitForExit 60_000 then
+            stderr.Wait 5_000 |> ignore
+            if proc.ExitCode = 0 then Some stdout else None
+        else
+            None
+    with _ ->
+        None
+
+/// Absolute paths of every file git considers part of the checkout at
+/// `root` — tracked, plus untracked-but-not-ignored. `None` when git
+/// cannot answer (see `runGit`); callers fall back to the prune walk.
+let gitCheckoutFiles (root: string) : string list option =
+    runGit root [
+        "--no-optional-locks"
+        "ls-files"
+        "-z"
+        "--cached"
+        "--others"
+        "--exclude-standard"
+    ]
+    |> Option.map (fun stdout ->
+        stdout.Split('\000')
+        |> Array.filter (fun rel -> rel <> "")
+        |> Array.map (fun rel -> Path.GetFullPath(Path.Combine(root, rel)))
+        |> Array.distinct // an unmerged path is listed once per stage
+        |> Array.filter File.Exists // index entries deleted from the tree
+        |> List.ofArray)
+
+/// Every file of the checkout at `root` the fitness sweeps may look at.
+/// Git-derived where git can answer; the prune-list walk otherwise.
+/// Un-memoised — the tests call it against synthetic trees.
+let enumerateCheckoutFiles (root: string) : string list =
+    match gitCheckoutFiles root with
+    | Some files -> files |> List.filter (isGeneratedPathUnder root >> not)
+    | None ->
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        |> Seq.filter (isGeneratedPathUnder root >> not)
+        |> Seq.filter (isPrunedPathUnder root >> not)
+        |> List.ofSeq
+
+/// The live checkout's file set, resolved once per test run — the sweeps
+/// below share it rather than each paying for its own walk.
+let private repoFilesCache = lazy (enumerateCheckoutFiles (repoRoot ()))
+
+/// Memoised `enumerateCheckoutFiles` over the live repo root.
+let repoFiles () : string list = repoFilesCache.Value
+
+/// Every `.fs` file of this checkout under `root` (recursive). Scoped by
+/// `repoFiles`, so build output, vendored packages, and a concurrent
+/// session's worktree are already gone. Missing root yields an empty list.
 let fsFilesUnder (root: string) : string list =
     if not (Directory.Exists root) then
         []
     else
-        Directory.EnumerateFiles(root, "*.fs", SearchOption.AllDirectories)
-        |> Seq.filter (isGeneratedPath >> not)
-        |> List.ofSeq
+        let prefix =
+            Path.GetFullPath(root).TrimEnd([| '/'; '\\' |])
+            + string Path.DirectorySeparatorChar
+
+        repoFiles ()
+        |> List.filter (fun p ->
+            p.EndsWith(".fs", StringComparison.OrdinalIgnoreCase)
+            && p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
 
 /// Repo-relative, forward-slashed rendering of an absolute path.
 let relative (absolute: string) : string =
@@ -214,7 +361,7 @@ let sharedTierFiles () : string list =
         []
     else
         Directory.EnumerateDirectories(srcRoot, "Shared", SearchOption.AllDirectories)
-        |> Seq.filter (fun d -> not (isGeneratedPath d))
+        |> Seq.filter (fun d -> not (isGeneratedPath d || isPrunedPath d))
         |> Seq.collect fsFilesUnder
         |> Seq.distinct
         |> List.ofSeq
@@ -305,7 +452,7 @@ let sampleModuleUnits () : ModuleUnit list =
         []
     else
         Directory.EnumerateDirectories(samplesRoot, "*.Module", SearchOption.AllDirectories)
-        |> Seq.filter (fun d -> not (isGeneratedPath d))
+        |> Seq.filter (fun d -> not (isGeneratedPath d || isPrunedPath d))
         |> Seq.map (fun dir ->
             let files =
                 fsFilesUnder dir |> List.map (fun path -> relative path, File.ReadAllText path)
@@ -435,22 +582,19 @@ let fs0025ExemptPrefixes: Fs0025Exemption list = [
 let private fs0025ScannedExtensions =
     Set.ofList [ ".fs"; ".fsx"; ".fsproj"; ".props" ]
 
-/// Every source / project file the gate applies to. One walk, extensions
-/// filtered in memory; build output and the non-source trees named in
-/// `prunedPathSegments` (vendored npm packages, a concurrent session's
-/// `.claude/worktrees/` checkout, …) are pruned first.
+/// Every source / project file the gate applies to: this checkout's file
+/// set (`repoFiles` — git-derived, so build output, vendored npm
+/// packages and a concurrent session's `.claude/worktrees/` checkout are
+/// all already absent), filtered to the scanned extensions and to the
+/// subtrees the policy does not cover.
 let fs0025ScannableFiles () : string list =
-    let root = repoRoot ()
     let exemptPrefixes = fs0025ExemptPrefixes |> List.map _.Prefix
 
-    Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-    |> Seq.filter (fun p -> fs0025ScannedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
-    |> Seq.filter (isGeneratedPath >> not)
-    |> Seq.filter (isPrunedPath >> not)
-    |> Seq.filter (fun p ->
+    repoFiles ()
+    |> List.filter (fun p -> fs0025ScannedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
+    |> List.filter (fun p ->
         let rel = relative p
         not (exemptPrefixes |> List.exists rel.StartsWith))
-    |> List.ofSeq
 
 /// The tree-wide policy declaration, read from `Directory.Build.props`.
 /// A gate that can be deleted to make a build go green is not a gate, so

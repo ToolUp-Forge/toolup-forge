@@ -1,5 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.ArchitectureFitnessTests
 
+open System
+open System.Diagnostics
 open System.IO
 open Expecto
 open ToolUp.Platform.Tests.Contracts.ArchitectureFitness
@@ -316,8 +318,14 @@ let private fs0025Tests =
             // root-anchored exemption prefixes, and it appears and vanishes
             // with no change to this repo — so its files must never reach
             // the gate.
+            // Measured relative to the repo root, never on the absolute
+            // path: a session verifying in an isolated worktree runs this
+            // very test from inside `.claude/worktrees/<name>/`, where
+            // every absolute path contains `/.claude/`. An absolute test
+            // here calls the checkout under test foreign — the second of
+            // the two failures this gate has actually produced.
             Expect.isEmpty
-                (files |> List.filter (fun p -> (p.Replace('\\', '/')).Contains "/.claude/"))
+                (files |> List.filter (fun p -> (pathUnder (repoRoot ()) p).Contains "/.claude/"))
                 "the sweep walked into .claude/ — a foreign worktree there fails the gate on files that are neither ours nor in scope"
         }
 
@@ -376,6 +384,218 @@ let private fs0025Tests =
         }
     ]
 
+// ─── Phase 635 — the sweeps are scoped to THIS checkout ───────────────
+//
+// The gates above are rooted at the repo root, so their verdict is only
+// as good as their notion of "this checkout". Twice, a concurrent agent
+// session's git worktree under `.claude/worktrees/` was walked into and
+// failed the gate for every session on the machine — once on a stale
+// worktree's `docs-snippets/ToolUp.DocSnippets.fsproj` (exempt at
+// `docs-snippets/`, not at `.claude/worktrees/x/docs-snippets/`), once on
+// the source-count floor. Neither had anything to do with this repo.
+//
+// The enumeration therefore asks git rather than walking directories.
+// These tests exercise that on a purpose-built throwaway tree, in both
+// directions — an in-scope violation must still be caught, an
+// out-of-scope copy of the same violation must not be — because an
+// exclusion that is never proved to still catch anything is
+// indistinguishable from switching the gate off.
+
+/// The violation the gate exists to catch, as a project file.
+let private fs0025ViolationProject =
+    "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <NoWarn>$(NoWarn);FS0025</NoWarn>\n  </PropertyGroup>\n</Project>\n"
+
+/// The same shape with an unrelated suppression — the detector must stay
+/// quiet on it, or "caught the violation" proves nothing.
+let private cleanProject =
+    "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <NoWarn>$(NoWarn);NU1701</NoWarn>\n  </PropertyGroup>\n</Project>\n"
+
+let private writeFixtureFile (root: string) (relPath: string) (contents: string) =
+    let full = Path.Combine(root, relPath.Replace('/', Path.DirectorySeparatorChar))
+    Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+    File.WriteAllText(full, contents)
+
+/// `git <args>` in `dir`; true on a zero exit. Used only to *build* the
+/// fixture — the code under test runs git itself.
+let private tryGit (dir: string) (args: string) : bool =
+    try
+        let psi = ProcessStartInfo("git", args)
+        psi.WorkingDirectory <- dir
+        psi.RedirectStandardOutput <- true
+        psi.RedirectStandardError <- true
+        psi.UseShellExecute <- false
+        psi.CreateNoWindow <- true
+        use proc = Process.Start psi
+        proc.StandardOutput.ReadToEnd() |> ignore
+        proc.StandardError.ReadToEnd() |> ignore
+        proc.WaitForExit 60_000 && proc.ExitCode = 0
+    with _ ->
+        false
+
+/// A throwaway tree shaped like this repo, carrying the same FS0025
+/// violation in four places: one in scope, three not. `asGitCheckout`
+/// selects which enumeration strategy the tree exercises.
+///
+/// Returns the root; the caller deletes it.
+let private plantFixtureTree (asGitCheckout: bool) : string =
+    let root =
+        Path.Combine(Path.GetTempPath(), "toolup-phase635-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory root |> ignore
+
+    writeFixtureFile root ".gitignore" ".claude/worktrees/\nscratch/\n"
+
+    // In scope: an ordinary project of this checkout.
+    writeFixtureFile root "src/Violation.fsproj" fs0025ViolationProject
+    writeFixtureFile root "src/Clean.fsproj" cleanProject
+
+    // Out of scope 1 — a concurrent session's worktree, at the exact path
+    // and filename that produced the observed false red.
+    writeFixtureFile root ".claude/worktrees/sibling/docs-snippets/ToolUp.DocSnippets.fsproj" fs0025ViolationProject
+
+    // Out of scope 2 — an ordinary gitignored directory with nothing to
+    // do with `.claude/`. A hardcoded prune list cannot exclude this one;
+    // it is the whole reason the enumeration asks git.
+    writeFixtureFile root "scratch/Ignored.fsproj" fs0025ViolationProject
+
+    // Out of scope 3 — a second checkout that is NOT gitignored. Git
+    // reports an untracked nested repository as a single directory entry
+    // and never lists its files, so a worktree parked anywhere at all is
+    // excluded without anyone having to predict where.
+    writeFixtureFile root "nested-checkout/src/Nested.fsproj" fs0025ViolationProject
+
+    if asGitCheckout then
+        tryGit root "init -q ." |> ignore
+        tryGit (Path.Combine(root, "nested-checkout")) "init -q ." |> ignore
+
+    root
+
+let private deleteFixtureTree (root: string) =
+    try
+        Directory.Delete(root, true)
+    with _ ->
+        () // a leftover temp tree is not worth failing a gate over
+
+/// Segment test against the path *relative to `root`*. Never against the
+/// absolute path — the checkout under test may itself live under any of
+/// the segments being looked for (see `pathUnder`).
+let private containsSegment (root: string) (segment: string) (path: string) = (pathUnder root path).Contains segment
+
+let private phase635Tests =
+    testList "Phase 635 — checkout-scoped enumeration" [
+
+        test "git-derived enumeration excludes ignored paths and nested checkouts" {
+            let root = plantFixtureTree true
+
+            try
+                match gitCheckoutFiles root with
+                | None ->
+                    skiptest
+                        "no usable git CLI — the fallback walk is covered by its own test below, but the git strategy this repo actually takes cannot be exercised here"
+                | Some _ ->
+                    // Verify the probe, not just the verdict: everything
+                    // below is only meaningful because git answered.
+                    let files = enumerateCheckoutFiles root
+
+                    let named name =
+                        files |> List.exists (fun p -> Path.GetFileName p = name)
+
+                    Expect.isTrue (named "Violation.fsproj") "an ordinary project of the checkout must be enumerated"
+
+                    Expect.isEmpty
+                        (files |> List.filter (containsSegment root "/.claude/"))
+                        "a concurrent session's worktree under .claude/ must never be enumerated — this is the failure the phase exists to close"
+
+                    Expect.isEmpty
+                        (files |> List.filter (containsSegment root "/scratch/"))
+                        "an ordinary gitignored directory must be excluded too. If this failed, the enumeration is matching a hardcoded path list rather than asking git, and it will drift the next time anyone edits .gitignore"
+
+                    Expect.isEmpty
+                        (files |> List.filter (containsSegment root "/nested-checkout/"))
+                        "a second checkout that is not gitignored must still be excluded — git reports an untracked nested repository as a directory, never as its files"
+            finally
+                deleteFixtureTree root
+        }
+
+        test "the same violation is caught in scope and ignored out of scope" {
+            let root = plantFixtureTree true
+
+            try
+                match gitCheckoutFiles root with
+                | None -> skiptest "no usable git CLI — see the enumeration test above"
+                | Some _ ->
+                    let findings =
+                        enumerateCheckoutFiles root
+                        |> List.filter (fun p -> p.EndsWith ".fsproj")
+                        |> List.collect (fun path -> scanProjectSuppressions path (File.ReadAllText path))
+
+                    // Four copies of the violation are planted; exactly
+                    // one is this checkout's. An exclusion that also
+                    // swallowed the real one would be a silent gate.
+                    Expect.hasLength
+                        findings
+                        1
+                        (sprintf
+                            "exactly the in-scope violation must be reported. Findings:\n%s"
+                            (findings |> List.map formatSourceFinding |> String.concat "\n"))
+
+                    Expect.equal
+                        (Path.GetFileName findings[0].File)
+                        "Violation.fsproj"
+                        "the surviving finding must be the one under src/, not a copy from a worktree, an ignored directory or a nested checkout"
+            finally
+                deleteFixtureTree root
+        }
+
+        test "the fallback walk still excludes .claude/ when git cannot answer" {
+            // Same tree with no git anywhere in it, so `gitCheckoutFiles`
+            // returns None and the prune-list walk takes over.
+            let root = plantFixtureTree false
+
+            try
+                // Verify the probe: if the temp directory happens to sit
+                // inside someone's work tree, git answers and this test
+                // would silently exercise the git path instead. Skip
+                // rather than assert — a machine whose TEMP is inside a
+                // repo is unusual, not broken, and a false red here would
+                // be the very class of failure this phase closes.
+                if (gitCheckoutFiles root).IsSome then
+                    skiptest "TEMP is itself inside a git work tree, so the no-git fallback cannot be isolated here"
+
+                let files = enumerateCheckoutFiles root
+
+                Expect.isTrue
+                    (files |> List.exists (fun p -> Path.GetFileName p = "Violation.fsproj"))
+                    "the fallback must still enumerate the checkout's own sources"
+
+                Expect.isEmpty
+                    (files |> List.filter (containsSegment root "/.claude/"))
+                    "the prune list must keep .claude/ out even without git — this is the case it was written for"
+
+                // Stated rather than hidden: the fallback cannot read
+                // .gitignore, so it does walk trees git would have
+                // excluded. That is why it is the fallback and not the
+                // strategy.
+                Expect.isTrue
+                    (files |> List.exists (containsSegment root "/scratch/"))
+                    "the fallback is expected to be weaker than git here; if it stopped being so, the prune list grew a second copy of .gitignore and this test should become an isEmpty"
+            finally
+                deleteFixtureTree root
+        }
+
+        test "the live checkout's file set carries no foreign worktree" {
+            Expect.isEmpty
+                (repoFiles () |> List.filter (containsSegment (repoRoot ()) "/.claude/"))
+                "the live enumeration reached into .claude/ — every sweep in this file is rooted at the repo root and would inherit the foreign files"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 174 — architecture-fitness gate" [ directionTests; liveSourceTests; failClosedTests; fs0025Tests ]
+    testList "Phase 174 — architecture-fitness gate" [
+        directionTests
+        liveSourceTests
+        failClosedTests
+        fs0025Tests
+        phase635Tests
+    ]
