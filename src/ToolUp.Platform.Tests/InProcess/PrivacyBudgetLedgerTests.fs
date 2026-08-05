@@ -26,9 +26,12 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 //      admit exactly the ceiling. Measured against a real conditional-
 //      blob backend, with the SAME ledger run against a backend whose
 //      conditional write ignores its precondition — the accounting
-//      mechanism removed and nothing else — which over-admits. That
+//      mechanism removed and nothing else — which over-admits by an
+//      EXACT count, on an interleave the control PLACES with a
+//      rendezvous (Phase 320's technique) rather than races for. That
 //      pairing is what makes the green result mean something: it shows
-//      the harness can see the failure it is claiming did not happen.
+//      the harness can see the failure it is claiming did not happen,
+//      deterministically rather than when the scheduler obliges.
 //
 // Everything else here is the settlement contract those two rest on: a
 // reservation that does not become a release is returned, a settlement
@@ -56,20 +59,17 @@ let private spendOf (id: string) (epsilon: decimal) (scope: BudgetScope) : Budge
     ExpiresAt = at.AddMinutes 15.0
 }
 
-/// An `IBlobStorage` + `IConditionalBlobStorage` double whose two
-/// behaviours are switchable, so the same ledger can be measured with
-/// its atomicity mechanism present and absent.
+/// An `IBlobStorage` + `IConditionalBlobStorage` double that honours its
+/// preconditions and, with `barrier > 1`, holds each `DownloadWithETag`
+/// until that many callers have arrived, then releases permanently. The
+/// barrier makes the CONTENTION deterministic: every concurrent reader
+/// observes the same pre-write state, which is exactly the window a
+/// non-atomic ledger would lose budget through. Retries pass straight
+/// through, so a conforming ledger still converges.
 ///
-///   * `honourPreconditions = false` makes `UploadWithETag` write
-///     unconditionally — the download-modify-upload the real ledger
-///     refuses to ship, reached without editing the ledger.
-///   * `barrier > 1` holds each `DownloadWithETag` until that many
-///     callers have arrived, then releases permanently. It makes the
-///     interleaving DETERMINISTIC: every concurrent reader observes the
-///     same pre-write state, which is exactly the window a non-atomic
-///     ledger loses budget through. Retries pass straight through, so a
-///     conforming ledger still converges.
-type private ProbeBlobStorage(honourPreconditions: bool, barrier: int) =
+/// The mechanism-ABSENT counterpart is `RendezvousBlobStorage` below,
+/// which places the losing interleave rather than racing for it.
+type private ProbeBlobStorage(barrier: int) =
     let inner = InMemoryBlobStorage()
     let barrierLock = obj ()
     let mutable arrived = 0
@@ -96,18 +96,95 @@ type private ProbeBlobStorage(honourPreconditions: bool, barrier: int) =
             return! (inner :> IConditionalBlobStorage).DownloadWithETag(container, blobName)
         }
 
-        member _.UploadWithETag(container, blobName, content, condition) = async {
-            if honourPreconditions then
-                return! (inner :> IConditionalBlobStorage).UploadWithETag(container, blobName, content, condition)
-            else
-                // The mechanism removed: write regardless of what the
-                // precondition says the caller observed.
-                let! written = (inner :> IBlobStorage).Upload(container, blobName, content)
+        member _.UploadWithETag(container, blobName, content, condition) =
+            (inner :> IConditionalBlobStorage).UploadWithETag(container, blobName, content, condition)
 
-                return
-                    match written with
-                    | Ok etag -> Ok etag
-                    | Error message -> Error(ConditionalWriteFailure message)
+    interface IBlobStorage with
+        member _.Upload(container, blobName, content) =
+            (inner :> IBlobStorage).Upload(container, blobName, content)
+
+        member _.Download(container, blobName) =
+            (inner :> IBlobStorage).Download(container, blobName)
+
+        member _.Delete(container, blobName) =
+            (inner :> IBlobStorage).Delete(container, blobName)
+
+        member _.List(container, prefix) =
+            (inner :> IBlobStorage).List(container, prefix)
+
+        member _.Exists(container, blobName) =
+            (inner :> IBlobStorage).Exists(container, blobName)
+
+        member _.GetMetadata(container, blobName) =
+            (inner :> IBlobStorage).GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            (inner :> IBlobStorage).DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            (inner :> IBlobStorage).Erase(container, prefix, policy, dryRun)
+
+/// An `IConditionalBlobStorage` whose conditional write ignores its
+/// precondition — the download-modify-upload the real ledger refuses to
+/// ship, reached without editing the ledger — and which HOLDS the first
+/// writer between its read and its write, the Phase 320 rendezvous
+/// (`ExternalCallbackTests.RendezvousDispatcher`, tests 320.D).
+///
+/// **Why parking inside `UploadWithETag` lands the interleave in the
+/// right place.** The ledger's `transact` reads the document, applies
+/// the accounting decision, *then* writes. A caller held here has
+/// already read and decided against a view that is about to go stale —
+/// exactly the window a non-atomic read-modify-write loses budget
+/// through. A second caller runs to completion inside that window, so
+/// the over-admission is PLACED, not raced for: the barrier control
+/// this replaced fired eight workers and hoped they interleaved, and
+/// failed on Phase 320's verification run precisely because under
+/// machine load they did not.
+type private RendezvousBlobStorage() =
+    let inner = InMemoryBlobStorage()
+    let reached = new System.Threading.ManualResetEventSlim(false)
+    let release = new System.Threading.ManualResetEventSlim(false)
+    let holdGate = obj ()
+    let mutable held = false
+
+    /// `true` for exactly the first writer; later writes (the second
+    /// caller's, and both settlements) pass straight through.
+    let tryHold () =
+        lock holdGate (fun () ->
+            if held then
+                false
+            else
+                held <- true
+                true)
+
+    /// Block until the first writer has read its view and reached its
+    /// write.
+    member _.WaitUntilWriting(timeoutMs: int) =
+        if not (reached.Wait timeoutMs) then
+            failtest "the held caller never reached its write"
+
+    /// Let the held writer land its now-stale view.
+    member _.Release() = release.Set()
+
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) =
+            (inner :> IConditionalBlobStorage).DownloadWithETag(container, blobName)
+
+        member _.UploadWithETag(container, blobName, content, _condition) = async {
+            if tryHold () then
+                reached.Set()
+
+                if not (release.Wait 30_000) then
+                    failtest "the rendezvous was never released"
+
+            // The mechanism removed: write regardless of what the
+            // precondition says the caller observed.
+            let! written = (inner :> IBlobStorage).Upload(container, blobName, content)
+
+            return
+                match written with
+                | Ok etag -> Ok etag
+                | Error message -> Error(ConditionalWriteFailure message)
         }
 
     interface IBlobStorage with
@@ -230,7 +307,7 @@ let policyTests =
 let private ledgerCases: (string * (unit -> IPrivacyBudgetLedger)) list = [
     "InMemoryPrivacyBudgetLedger", (fun () -> InMemoryPrivacyBudgetLedger(fun () -> at) :> IPrivacyBudgetLedger)
     "BlobPrivacyBudgetLedger",
-    (fun () -> BlobPrivacyBudgetLedger(ProbeBlobStorage(true, 1), (fun () -> at)) :> IPrivacyBudgetLedger)
+    (fun () -> BlobPrivacyBudgetLedger(ProbeBlobStorage 1, (fun () -> at)) :> IPrivacyBudgetLedger)
 ]
 
 let ledgerContractTests =
@@ -395,7 +472,7 @@ let ledgerContractTests =
                 "…and the probing form must decline rather than build a racy ledger"
 
             Expect.isSome
-                (BlobPrivacyBudgetLedger.TryCreate(ProbeBlobStorage(true, 1)))
+                (BlobPrivacyBudgetLedger.TryCreate(ProbeBlobStorage 1))
                 "CONTROL — a conditional backend still builds, so the refusal is a check and not a blanket"
         }
 
@@ -442,7 +519,7 @@ let atomicityTests =
             // precondition, retry against fresher state, and the ceiling
             // holds.
             let workers = 8
-            let blobs = ProbeBlobStorage(true, workers)
+            let blobs = ProbeBlobStorage workers
             let ledger = BlobPrivacyBudgetLedger(blobs, (fun () -> at)) :> IPrivacyBudgetLedger
 
             let admitted = admitUnderContention ledger 3m workers
@@ -455,21 +532,59 @@ let atomicityTests =
         }
 
         test "CONTROL — the same ledger over a backend that ignores its precondition over-admits" {
-            // The accounting mechanism removed and nothing else: the same
-            // ledger, the same harness, the same barrier — only the
+            // The accounting mechanism removed and nothing else: the
+            // same ledger, the same accounting decision — only the
             // backend's conditional write no longer conditions on
-            // anything. If this passed too, the case above would be
-            // measuring nothing.
-            let workers = 8
-            let blobs = ProbeBlobStorage(false, workers)
+            // anything, and the losing interleave is PLACED rather than
+            // raced for (the Phase 320 rendezvous). The first caller
+            // reads the empty document and is parked at its write; the
+            // second spends the whole ceiling inside that window; the
+            // first then lands its stale write. If this admitted only
+            // the ceiling, the case above would be measuring nothing.
+            let blobs = RendezvousBlobStorage()
             let ledger = BlobPrivacyBudgetLedger(blobs, (fun () -> at)) :> IPrivacyBudgetLedger
 
-            let admitted = admitUnderContention ledger 3m workers
+            let admit (i: int) = async {
+                match! ledger.ReserveBudget(spendOf $"w{i}" 1m budgetScope, 1m) with
+                | BudgetReserved(spend, _) ->
+                    do! ledger.RecordSpend(spend, SpendCommitted)
+                    return 1
+                | BudgetRefused _ -> return 0
+            }
 
-            Expect.isGreaterThan
-                admitted
-                3
-                "a non-atomic read-modify-write must over-admit here — if it does not, the atomicity probe above proves nothing"
+            // The first caller reads "nothing spent" and parks at its
+            // write, holding a view that is about to go stale.
+            let held = admit 1 |> Async.StartAsTask
+            blobs.WaitUntilWriting 5_000
+
+            // The second caller spends the last (and only) unit while
+            // the first is parked.
+            let second = run (admit 2)
+
+            // Release the stale write and let the first caller finish.
+            blobs.Release()
+
+            if not (held.Wait 30_000) then
+                failtest "the held caller never completed after release"
+
+            Expect.equal second 1 "the second caller must spend the last unit while the first is parked"
+
+            Expect.equal
+                held.Result
+                1
+                "…and the released stale write must be admitted too — nothing conditioned on the view it read"
+
+            Expect.equal
+                (held.Result + second)
+                2
+                "a ceiling of 1 admitted exactly 2 — the placed lost update; if this were 1, the atomicity probe above proves nothing"
+
+            let audited = run (ledger.RemainingBudget(budgetScope, 1m))
+
+            Expect.equal
+                audited.EpsilonCommitted
+                1m
+                "…and the book records only one of them: the stale write overwrote the second caller's settled spend, which is what a lost update is"
         }
 
         test "the in-memory ledger holds the ceiling under contention too" {
