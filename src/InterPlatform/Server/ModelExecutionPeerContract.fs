@@ -1,0 +1,1031 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+namespace ToolUp.InterPlatform
+
+open System
+open ToolUp.Platform
+
+// ─── Phase 638 — the federated model-execution profile ───────────────
+//
+// The model-execution submitter surface answers one question: "fit this
+// spec against that vintage, and give me back what the fit produced".
+// In a single deployment the answer is uninteresting, because the specs
+// and the data are already on the same machine. The interesting topology
+// is the one where they are not: one deployment holds the datasets and
+// runs the fits, another authors the specs and submits them, and the raw
+// series never crosses between them.
+//
+// This file is the forge binding for that topology — the peer-contract
+// registrations that put the submitter wire objects over InterPlatform
+// RPC, in the shape `docs/interplatform/FEDERATION_WIRE.md` §5.7
+// specifies. There are two contracts, and the split is the whole design:
+//
+//   * **The submitter contract** (`ModelExecutionProfile.ContractId`)
+//     carries submission, outcome retrieval, registry query and vintage
+//     resolution. Every one of them is **metadata-shaped**: a hash, a
+//     status, a diagnostic scalar, a row COUNT. None of them can return
+//     a row, because none of them has a shape a row could be put in.
+//   * **The governed-diagnostics contract**
+//     (`ModelExecutionProfile.DiagnosticsContractId`) carries the
+//     aggregate projections a remote modeller needs in order to model
+//     responsibly without eyeballing the raw series — collinearity,
+//     coverage, transform previews. Those answers ARE derived from rows,
+//     so they do not travel on a bare registration at all: the only
+//     construction route is `governedDiagnostics`, whose signature
+//     demands an `ICleanRoomBroker` and a `CleanRoomTemplate` and whose
+//     return type is `GatedContractRegistration`. A value of that type
+//     is evidence the clean-room gate is installed (see
+//     `CleanRoomGate.fs`); there is no ungated variant to reach for.
+//
+// ── Why "closed against row egress" is a fact and not a promise ──
+//
+// Three independent things have to be true at once, and each is checked
+// by something other than a reviewer's attention:
+//
+//   1. **No row-shaped method exists.** The contracts' methods are
+//      enumerated below; `ReadPage`-class access is not among them, and
+//      `admit` refuses a request naming one with a distinct refusal
+//      class (`RowAccessRefused`) rather than a generic "unknown
+//      method", so an operator reading a refusal log can tell a probe
+//      from a typo.
+//   2. **A diagnostic answer must clear the floor.** Every gated answer
+//      goes through the gate's checkability invariant, which withholds
+//      anything that is not a `CohortResult`. A projection that tried to
+//      smuggle rows back — as a list, a string, a record of some other
+//      shape — does not bypass the gate, it FAILS it.
+//   3. **Only declared diagnostics are answerable.** The template's
+//      `AllowedMethods` is the declaration, and the gate's surface
+//      invariant refuses anything off it *before the handler runs*. So
+//      the family is extensible by declaration and closed by default:
+//      adding a projection means declaring it, and a deployment that
+//      declares none answers none.
+//
+// ── Admission is a wrapper, not a call the handler makes ──
+//
+// `registration` builds the dispatch closure itself rather than
+// reflecting a record of functions, for the same reason `CleanRoomGate`
+// wraps a dispatch rather than asking handlers to call a broker: the
+// dispatch closure is the only route from a handler's answer to the
+// wire, and it is the only place the VALIDATED call context is
+// available. Resolving the peer binding, refusing an unbound peer,
+// refusing a scope-widening assertion and refusing an off-surface
+// operation therefore all happen where they cannot be forgotten, and a
+// handler that never thinks about any of it is still governed by all of
+// it.
+//
+// ── SpecHash opacity, carried through unchanged ──
+//
+// The submission carries the submitter's own `SpecHash` beside the
+// opaque payload, and this binding stores and keys exactly the hash it
+// was handed (`ModelExecutionWire.fs`'s posture). It never re-derives,
+// re-normalises or validates it against the payload — across a peer
+// boundary that would be worse than pointless, because the two sides do
+// not share a canonicalisation rule and the whole point of the hash is
+// that the submitter's rule is the one that counts.
+//
+// ── Cost when unused (GP 13) ──
+//
+// Nothing here is composed by `PeerServerApp.run`. A deployment that
+// never calls `host` or `governedDiagnostics` constructs none of these
+// types, registers no contract, and schedules no job.
+
+// ─── Wire shapes (FEDERATION_WIRE.md §5.7) ───────────────────────────
+
+/// A vintage of a dataset, named **scope-relatively**. There is no scope
+/// member: the data host resolves the scope from the peer binding, so a
+/// reference cannot address another tenant's data by construction
+/// (GP 4). A modeller that wants to state which scope it BELIEVES it is
+/// addressing does so on the request envelope, where it is checked and
+/// refused rather than routed on.
+type ModelExecutionPeerVintage = { DatasetId: string; Version: int }
+
+/// One requested gate, with the direction as its stable case-name string
+/// (`"AtLeast"` / `"AtMost"`) exactly as the submitter surface carries
+/// it.
+type ModelExecutionPeerGate = {
+    Name: string
+    Threshold: float
+    Direction: string
+}
+
+/// A fit submission as it crosses the seam: which vintage, the opaque
+/// provider spec and the submitter-minted hash of it, the provider kind,
+/// the reproducibility seed, and the gates to evaluate.
+type ModelExecutionPeerSubmission = {
+    Vintage: ModelExecutionPeerVintage
+    /// Opaque provider payload — neither side inspects it.
+    SpecPayload: string
+    /// Submitter-minted. Stored and keyed verbatim; never re-derived.
+    SpecHash: string
+    ProviderKind: string
+    Seed: int64
+    /// Sorted ordinally by `Name`.
+    Gates: ModelExecutionPeerGate list
+}
+
+/// One gate's verdict, as data.
+type ModelExecutionPeerGateVerdict = {
+    Name: string
+    Threshold: float
+    Direction: string
+    Observed: float
+    Passed: bool
+}
+
+/// A registered fit outcome. Every member is metadata or an aggregate
+/// scalar — there is deliberately no member a row could be carried in.
+type ModelExecutionPeerOutcome = {
+    CompositeKeyHash: string
+    SpecHash: string
+    DatasetVersion: string
+    Seed: int64
+    ProviderId: string
+    ProviderVersion: string
+    ArtifactId: string
+    ArtifactContentHash: string
+    /// Keys sorted ordinally (§3.1 rule 14).
+    Diagnostics: Map<string, float>
+    /// Sorted ordinally by `Name`.
+    GateVerdicts: ModelExecutionPeerGateVerdict list
+    Status: string
+    /// Keys sorted ordinally.
+    Annotations: Map<string, string>
+    RegisteredAt: DateTimeOffset
+}
+
+/// A conjunctive multi-key outcome filter plus its page window. An empty
+/// list matches anything; the lists are sorted ordinally so the same
+/// query canonicalises to the same bytes whoever built it.
+type ModelExecutionPeerQuery = {
+    SpecHashes: string list
+    DatasetVersions: string list
+    Statuses: string list
+    BatchId: string option
+    Cursor: string option
+    Limit: int
+}
+
+/// One page of a cursor-paginated outcome read.
+type ModelExecutionPeerPage = {
+    Outcomes: ModelExecutionPeerOutcome list
+    NextCursor: string option
+}
+
+/// A resolved vintage: enough for a modeller to pin what it is fitting
+/// against, and nothing more. `RowCount` is a cohort size, not a row.
+type ModelExecutionPeerVintageInfo = {
+    DatasetId: string
+    Version: int
+    RowCount: int64
+    Format: string
+    ContentHash: string
+    CreatedAt: DateTimeOffset
+}
+
+/// A governed-diagnostic request: which vintage, and which terms of it
+/// the projection is over. The diagnostic itself is the OPERATION, not a
+/// member — which is what lets the clean-room template's declared method
+/// surface be the declaration of what this deployment answers.
+type ModelExecutionPeerDiagnosticRequest = {
+    Vintage: ModelExecutionPeerVintage
+    /// Sorted ordinally.
+    Terms: string list
+}
+
+/// Why a model-execution request was refused at the seam.
+///
+/// Three of these classes exist because the profile is closed rather
+/// than merely narrow, and each names a different way a caller can try
+/// to widen it: asking for rows, asking for an undeclared projection,
+/// and asking under someone else's scope. The fourth carries the
+/// submitter surface's own typed refusal through unchanged, so a
+/// modeller enumerates what happened data-side without string-matching a
+/// message.
+[<RequireQualifiedAccess>]
+type ModelExecutionPeerRefusal =
+    /// The envelope declares a profile version this deployment cannot
+    /// read. Refused whole rather than read partially — a member the
+    /// reader has no field for would satisfy a check by omission.
+    | ProfileVersionUnsupported of requested: int * supported: int
+    /// The request named a row-level read. **The profile has no such
+    /// surface**, and saying so with its own class rather than a generic
+    /// "unknown operation" is deliberate: it is the one refusal an
+    /// operator wants to see counted.
+    | RowAccessRefused of operation: string
+    /// The request named an operation this deployment has not declared.
+    /// Declaration is the only route onto the diagnostics surface, so an
+    /// undeclared name is refused before any computation.
+    | UndeclaredDiagnostic of operation: string
+    /// The envelope asserted a scope other than the one the peer binding
+    /// addresses. The host never ROUTES on an asserted scope — it
+    /// refuses one that disagrees, which is the difference between a
+    /// diagnostic aid and an impersonation vector.
+    | ScopeWideningRefused of asserted: string
+    /// The validated caller has no binding here, so it addresses no
+    /// scope. Fail-closed: an unbound peer is refused, never defaulted.
+    | PeerUnbound of peerId: string
+    /// The envelope did not parse as a model-execution request.
+    | RequestUnreadable of reason: string
+    /// The submitter surface refused, and its typed reason is carried
+    /// through verbatim.
+    | SubmitterRefused of ModelExecutionRefusal
+
+[<RequireQualifiedAccess>]
+module ModelExecutionPeerRefusal =
+
+    /// The stable refusal CLASS (FEDERATION_WIRE.md §7.2). The class is
+    /// normative; the wording below is not, and an implementation in
+    /// another language will word it differently.
+    let className =
+        function
+        | ModelExecutionPeerRefusal.ProfileVersionUnsupported _ -> "model-execution-profile-version-unsupported"
+        | ModelExecutionPeerRefusal.RowAccessRefused _ -> "model-execution-row-read-refused"
+        | ModelExecutionPeerRefusal.UndeclaredDiagnostic _ -> "model-execution-undeclared-diagnostic"
+        | ModelExecutionPeerRefusal.ScopeWideningRefused _ -> "model-execution-scope-widening"
+        | ModelExecutionPeerRefusal.PeerUnbound _ -> "model-execution-peer-unbound"
+        | ModelExecutionPeerRefusal.RequestUnreadable _ -> "model-execution-request-unreadable"
+        | ModelExecutionPeerRefusal.SubmitterRefused _ -> "model-execution-submitter-refused"
+
+    /// Human-readable one-line description (logs + operator display; the
+    /// case, not this string, is the contract).
+    let describe =
+        function
+        | ModelExecutionPeerRefusal.ProfileVersionUnsupported(requested, supported) ->
+            $"the request declares model-execution profile version {requested}; this deployment reads at most {supported}"
+        | ModelExecutionPeerRefusal.RowAccessRefused operation ->
+            $"'{operation}' is a row-level read, and the model-execution profile serves no row-level surface"
+        | ModelExecutionPeerRefusal.UndeclaredDiagnostic operation ->
+            $"'{operation}' is not a declared operation of this deployment's model-execution profile"
+        | ModelExecutionPeerRefusal.ScopeWideningRefused asserted ->
+            $"the request asserted scope '{asserted}', which is not the scope this peer binding addresses"
+        | ModelExecutionPeerRefusal.PeerUnbound peerId ->
+            $"peer '{peerId}' has no model-execution binding on this deployment"
+        | ModelExecutionPeerRefusal.RequestUnreadable reason ->
+            $"the model-execution request could not be read: {reason}"
+        | ModelExecutionPeerRefusal.SubmitterRefused refusal -> ModelExecutionRefusal.describe refusal
+
+/// The versioned envelope every model-execution request rides in.
+///
+/// `Body` is an **embedded** document (§3.1 rule 12) — a string whose
+/// content is itself canonical JSON — so a relay can carry a request it
+/// does not understand, and so the operation's own shape can move
+/// without the envelope's shape moving with it.
+type ModelExecutionPeerRequest = {
+    /// The model-execution profile's own version. Distinct from the
+    /// seam's `FormatVersion` and from the contract's `ContractVersion`;
+    /// the three move independently.
+    ProfileVersion: int
+    /// The operation this envelope invokes — a declared submitter
+    /// operation or a declared diagnostic.
+    Operation: string
+    /// The scope the caller believes it is addressing, for its own
+    /// diagnostics. **Never routed on.** A value naming any scope other
+    /// than the peer binding's is refused; `null` asserts nothing and is
+    /// the ordinary case.
+    AssertedScope: string option
+    /// The operation's own document, embedded.
+    Body: string
+}
+
+/// What a model-execution call answers: a body, or a typed refusal.
+///
+/// A union rather than two nullable members, so "answered with nothing"
+/// is not expressible — the shape that lets a refusal be mistaken for an
+/// empty result.
+[<RequireQualifiedAccess>]
+type ModelExecutionPeerAnswer =
+    /// The operation's own result document, embedded.
+    | Answered of body: string
+    | Refused of refusal: ModelExecutionPeerRefusal
+
+// ─── Profile constants ───────────────────────────────────────────────
+
+/// The names, ids and versions FEDERATION_WIRE.md §5.7 fixes. Held in
+/// one place so the spec, the corpus and this binding cannot drift into
+/// three slightly different vocabularies.
+[<RequireQualifiedAccess>]
+module ModelExecutionProfile =
+
+    /// The model-execution profile's own version.
+    [<Literal>]
+    let Version = 1
+
+    /// The submitter contract's id.
+    [<Literal>]
+    let ContractId = "toolup.model-execution"
+
+    /// The governed-diagnostics contract's id. A separate contract, not
+    /// a separate method group: the two have different release rules,
+    /// and one gate over a contract whose methods are governed
+    /// differently is a gate whose surface argument does not hold.
+    [<Literal>]
+    let DiagnosticsContractId = "toolup.model-execution.diagnostics"
+
+    /// The wire version both contracts are served at.
+    let contractVersion: ContractVersion = { Major = 1; Minor = 0 }
+
+    /// The submitter operations the profile defines.
+    let operations: Set<string> =
+        Set.ofList [ "SubmitFit"; "GetOutcome"; "QueryOutcomes"; "ResolveVintage" ]
+
+    /// The governed-diagnostic projections the profile defines. A
+    /// DEPLOYMENT declares the subset it answers (see `template`); this
+    /// is the vocabulary, not the offer.
+    let diagnostics: Set<string> =
+        Set.ofList [ "Collinearity"; "Coverage"; "TransformPreview" ]
+
+    /// Operation names that denote row-level access. The profile serves
+    /// none of them; they are enumerated so that asking for one is
+    /// refused as what it is rather than as an unrecognised string.
+    ///
+    /// Deliberately generous — it names shapes the in-process surfaces
+    /// use AND the obvious synonyms a caller would try — because the
+    /// list costs nothing and its only job is to make the refusal log
+    /// legible.
+    let rowAccessOperations: Set<string> =
+        Set.ofList [
+            "ReadPage"
+            "ReadRows"
+            "GetRows"
+            "GetPage"
+            "DownloadContent"
+            "FetchContent"
+            "ExportRows"
+            "StreamRows"
+        ]
+
+    /// The clean-room template that DECLARES a deployment's governed
+    /// diagnostics. `AllowedMethods` is the declaration — the gate's
+    /// surface invariant refuses anything off it before the projection
+    /// runs — so narrowing the offer is a matter of declaring less, and
+    /// declaring nothing offers nothing.
+    ///
+    /// An entry that is not in `diagnostics` is dropped rather than
+    /// honoured: a template cannot mint a projection the profile does
+    /// not define, because the corresponding method would never be
+    /// dispatched anyway and a template that appears to offer one is a
+    /// lie an operator would read.
+    let template (templateId: string) (floor: PrivacyGate) (declared: Set<string>) : CleanRoomTemplate = {
+        TemplateId = templateId
+        AllowedMethods = Set.intersect declared diagnostics
+        Floor = floor
+    }
+
+// ─── Admission ───────────────────────────────────────────────────────
+
+/// What a deployment admits on the model-execution seam: the profile
+/// version it reads, the submitter operations it serves, and the
+/// diagnostics it has declared. Policy as data (GP 12 rule 3) — no
+/// callback decides admission, so the same value can be logged, shown on
+/// an admin surface, and compared between deployments.
+type ModelExecutionAdmission = {
+    ProfileVersion: int
+    Operations: Set<string>
+    Diagnostics: Set<string>
+}
+
+[<RequireQualifiedAccess>]
+module ModelExecutionAdmission =
+
+    /// The whole profile at the current version, with a declared
+    /// diagnostic set. The submitter operations are not narrowable —
+    /// they are what makes a deployment a data host at all — while the
+    /// diagnostics are exactly what a deployment chooses.
+    let create (declared: Set<string>) : ModelExecutionAdmission = {
+        ProfileVersion = ModelExecutionProfile.Version
+        Operations = ModelExecutionProfile.operations
+        Diagnostics = Set.intersect declared ModelExecutionProfile.diagnostics
+    }
+
+    /// A data host that answers no governed diagnostics: the submitter
+    /// operations and nothing else. This is the default a deployment
+    /// gets by not declaring, and it is the honest one — a diagnostic
+    /// nobody declared is one nobody agreed to.
+    let submitterOnly: ModelExecutionAdmission = create Set.empty
+
+// ─── Peer binding ────────────────────────────────────────────────────
+
+/// What one modeller peer is bound to on this data host: the scope its
+/// calls resolve under, and the already-scoped submitter surface they
+/// resolve through.
+///
+/// The binding is the ONLY thing that decides scope. Nothing on the wire
+/// contributes to it, which is what makes the profile's scope discipline
+/// structural rather than a validation rule somebody has to remember
+/// (GP 4).
+type ModelExecutionPeerBinding = {
+    PeerId: string
+    ScopeId: string
+    Api: ModelExecutionApi
+}
+
+/// How long the fit job waits for its outcome to appear in the registry.
+/// Expressed as data rather than a timeout callback so a distributed job
+/// substrate honours the same contract (GP 12 rule 3).
+type ModelExecutionFitPollPolicy = {
+    /// Registry reads attempted before the job reports the fit as still
+    /// unregistered. At least one read always happens.
+    Attempts: int
+    /// Wait between reads. `TimeSpan.Zero` polls back-to-back, which is
+    /// what an in-process reference provider wants.
+    Interval: TimeSpan
+}
+
+[<RequireQualifiedAccess>]
+module ModelExecutionFitPollPolicy =
+
+    /// A minute of patience at second granularity — generous for a fit
+    /// whose provider registers synchronously, and short enough that a
+    /// wedged provider surfaces as a refusal rather than a job that
+    /// never terminates.
+    let default': ModelExecutionFitPollPolicy = {
+        Attempts = 60
+        Interval = TimeSpan.FromSeconds 1.0
+    }
+
+    /// No waiting: one read, immediately. The shape an in-process
+    /// reference provider (and a test) wants.
+    let immediate: ModelExecutionFitPollPolicy = {
+        Attempts = 1
+        Interval = TimeSpan.Zero
+    }
+
+/// The substrate the submitter contract runs over.
+type ModelExecutionPeerDeps = {
+    /// Resolve a validated peer id to its binding. `None` refuses the
+    /// call with `PeerUnbound` — an unbound peer addresses no scope, and
+    /// defaulting one would be the whole isolation argument undone.
+    ///
+    /// Keyed by peer id rather than by call context because the
+    /// execution side of a long-running fit has neither a request nor a
+    /// principal: the owner rides the job payload as a value, and this
+    /// signature is what lets both halves resolve the same way (GP 12
+    /// rules 1 and 4).
+    ResolveBinding: string -> Async<ModelExecutionPeerBinding option>
+    Admission: ModelExecutionAdmission
+    FitPoll: ModelExecutionFitPollPolicy
+}
+
+/// The substrate the governed-diagnostics contract runs over.
+type ModelExecutionDiagnosticsDeps = {
+    ResolveBinding: string -> Async<ModelExecutionPeerBinding option>
+    /// Compute one declared aggregate projection over a vintage the
+    /// binding's scope owns. **This only computes.** Whether the answer
+    /// may be released is the gate's decision, and a projection that
+    /// answers in a shape the gate cannot check is withheld — so there
+    /// is no way for an implementation of this function to release rows
+    /// by returning them.
+    Project: ModelExecutionPeerBinding -> string -> ModelExecutionPeerDiagnosticRequest -> Async<CohortResult>
+}
+
+// ─── The binding ─────────────────────────────────────────────────────
+
+/// The forge binding for FEDERATION_WIRE.md §5.7: the peer contracts, the
+/// admission check every dispatch runs, and the projections between the
+/// submitter wire objects and the profile's own shapes.
+[<RequireQualifiedAccess>]
+module ModelExecutionPeerContract =
+
+    // ── Projections ──────────────────────────────────────────────────
+
+    let private toWireGateVerdict (v: ModelExecutionGateVerdict) : ModelExecutionPeerGateVerdict = {
+        Name = v.Name
+        Threshold = v.Threshold
+        Direction = v.Direction
+        Observed = v.Observed
+        Passed = v.Passed
+    }
+
+    /// A registered outcome, projected onto the profile's shape. The
+    /// verdict list is sorted ordinally so two data hosts that computed
+    /// the same fit produce the same bytes for it.
+    let toWireOutcome (o: ModelExecutionOutcome) : ModelExecutionPeerOutcome = {
+        CompositeKeyHash = o.CompositeKeyHash
+        SpecHash = o.SpecHash
+        DatasetVersion = o.DatasetVersion
+        Seed = o.Seed
+        ProviderId = o.ProviderId
+        ProviderVersion = o.ProviderVersion
+        ArtifactId = o.ArtifactId
+        ArtifactContentHash = o.ArtifactContentHash
+        Diagnostics = o.Diagnostics
+        GateVerdicts =
+            o.GateVerdicts
+            |> List.map toWireGateVerdict
+            |> List.sortWith (fun a b -> String.CompareOrdinal(a.Name, b.Name))
+        Status = o.Status
+        Annotations = o.Annotations
+        RegisteredAt = o.RegisteredAt
+    }
+
+    let toWireVintage (v: ModelExecutionDatasetVersion) : ModelExecutionPeerVintageInfo = {
+        DatasetId = v.DatasetId
+        Version = v.Version
+        RowCount = v.RowCount
+        Format = v.Format
+        ContentHash = v.ContentHash
+        CreatedAt = v.CreatedAt
+    }
+
+    /// A profile submission projected onto the submitter surface's own
+    /// shape. **The `SpecHash` is copied, never recomputed** — the
+    /// opacity posture, which matters more across a peer boundary than
+    /// within one deployment because the two sides do not share a
+    /// canonicalisation rule.
+    let ofWireSubmission (s: ModelExecutionPeerSubmission) : ModelExecutionFitSubmission = {
+        DatasetId = s.Vintage.DatasetId
+        DatasetVersion = s.Vintage.Version
+        SpecPayload = s.SpecPayload
+        SpecHash = s.SpecHash
+        ProviderKind = s.ProviderKind
+        Seed = s.Seed
+        Gates =
+            s.Gates
+            |> List.map (fun g -> {
+                Name = g.Name
+                Threshold = g.Threshold
+                Direction = g.Direction
+            })
+    }
+
+    // ── Admission ────────────────────────────────────────────────────
+
+    /// Decide whether a request may be dispatched at all, given what
+    /// this deployment admits and the scope the caller's binding
+    /// addresses.
+    ///
+    /// The order is not incidental. The version is checked first because
+    /// a document the reader cannot fully read is one whose later
+    /// members it would be guessing at; row access is checked next so
+    /// that a probe is named as a probe even at an unadmitted version;
+    /// and the scope assertion is checked last, on a request already
+    /// known to be one this deployment serves.
+    let admit
+        (admission: ModelExecutionAdmission)
+        (boundScope: string)
+        (request: ModelExecutionPeerRequest)
+        : Result<unit, ModelExecutionPeerRefusal> =
+        if request.ProfileVersion > admission.ProfileVersion then
+            Error(ModelExecutionPeerRefusal.ProfileVersionUnsupported(request.ProfileVersion, admission.ProfileVersion))
+        elif Set.contains request.Operation ModelExecutionProfile.rowAccessOperations then
+            Error(ModelExecutionPeerRefusal.RowAccessRefused request.Operation)
+        elif
+            not (
+                Set.contains request.Operation admission.Operations
+                || Set.contains request.Operation admission.Diagnostics
+            )
+        then
+            Error(ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation)
+        else
+            match request.AssertedScope with
+            | Some asserted when asserted <> boundScope ->
+                Error(ModelExecutionPeerRefusal.ScopeWideningRefused asserted)
+            | _ -> Ok()
+
+    /// Read a request envelope and admit it in one step — the reader an
+    /// implementation certifies the profile's `reject` vectors against.
+    ///
+    /// A document that does not parse is refused rather than partially
+    /// read, for the reason §5.3 gives about labels: a member the reader
+    /// has no value for would satisfy a check by omission.
+    let read
+        (admission: ModelExecutionAdmission)
+        (boundScope: string)
+        (json: string)
+        : Result<ModelExecutionPeerRequest, ModelExecutionPeerRefusal> =
+        let parsed =
+            try
+                let request = JsonRpc.deserialize<ModelExecutionPeerRequest> json
+
+                if
+                    isNull (box request)
+                    || isNull (box request.Operation)
+                    || isNull (box request.Body)
+                then
+                    Error "the document is not a model-execution request envelope"
+                else
+                    Ok request
+            with ex ->
+                Error ex.Message
+
+        match parsed with
+        | Error reason -> Error(ModelExecutionPeerRefusal.RequestUnreadable reason)
+        | Ok request ->
+            match admit admission boundScope request with
+            | Error refusal -> Error refusal
+            | Ok() -> Ok request
+
+    // ── Envelope helpers ─────────────────────────────────────────────
+
+    /// Build a request envelope for `operation` carrying `body` as its
+    /// embedded document. The modeller side's one construction route, so
+    /// a caller cannot forget the profile version.
+    let request (operation: string) (body: 'T) : ModelExecutionPeerRequest = {
+        ProfileVersion = ModelExecutionProfile.Version
+        Operation = operation
+        AssertedScope = None
+        Body = JsonRpc.serialize body
+    }
+
+    /// The same envelope, asserting the scope the caller believes it is
+    /// addressing. The host refuses a disagreement rather than routing
+    /// on it, so this is a self-check, never an addressing mechanism.
+    let requestAsserting (scope: string) (operation: string) (body: 'T) : ModelExecutionPeerRequest = {
+        request operation body with
+            AssertedScope = Some scope
+    }
+
+    /// The ordinal comparison every list sort in this profile uses.
+    /// Named rather than inlined so no call site can reach for a
+    /// culture-sensitive comparison, which would make a document's bytes
+    /// depend on the machine that produced them (§3.1 rule 10).
+    let private byOrdinal (key: 'a -> string) (a: 'a) (b: 'a) = String.CompareOrdinal(key a, key b)
+
+    /// A `SubmitFit` request envelope, with the requested gates put into
+    /// the profile's ordinal order. **The emitter owns the sort, not the
+    /// caller** — two modellers asking for the same gates in different
+    /// orders must produce the same document, or the envelope is not
+    /// canonical in the sense §3 means.
+    let submissionRequest (submission: ModelExecutionPeerSubmission) : ModelExecutionPeerRequest =
+        request "SubmitFit" {
+            submission with
+                Gates = submission.Gates |> List.sortWith (byOrdinal _.Name)
+        }
+
+    /// A governed-diagnostic request envelope for `diagnostic`, with the
+    /// terms in ordinal order for the same reason.
+    let diagnosticRequest
+        (diagnostic: string)
+        (projection: ModelExecutionPeerDiagnosticRequest)
+        : ModelExecutionPeerRequest =
+        request diagnostic {
+            projection with
+                Terms = projection.Terms |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+        }
+
+    /// Decode an `Answered` body into the operation's own shape.
+    /// `Refused` is returned as the typed refusal it carries — a caller
+    /// enumerates the class rather than matching on a message.
+    let answerBody<'T> (answer: ModelExecutionPeerAnswer) : Result<'T, ModelExecutionPeerRefusal> =
+        match answer with
+        | ModelExecutionPeerAnswer.Answered body -> Ok(JsonRpc.deserialize<'T> body)
+        | ModelExecutionPeerAnswer.Refused refusal -> Error refusal
+
+    let private answered (body: 'T) =
+        ModelExecutionPeerAnswer.Answered(JsonRpc.serialize body)
+
+    let private submitterRefused (refusal: ModelExecutionRefusal) =
+        ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.SubmitterRefused refusal)
+
+    // ── Argument marshalling ─────────────────────────────────────────
+    //
+    // Every operation takes exactly one positional argument: the request
+    // envelope, embedded as a string (§3.1 rule 12). Hand-marshalled
+    // rather than reflected so the bytes that cross the seam are the
+    // bytes the corpus pins — a reflection shim that re-encoded the
+    // envelope would produce a document the specification does not
+    // describe.
+
+    /// The positional-argument array a modeller sends.
+    let arguments (request: ModelExecutionPeerRequest) : string =
+        JsonRpc.serialize [ JsonRpc.serialize request ]
+
+    let private soleArgument (argsJson: string) : Result<string, ModelExecutionPeerRefusal> =
+        try
+            match JsonRpc.deserialize<string list> argsJson with
+            | [ single ] -> Ok single
+            | other ->
+                Error(
+                    ModelExecutionPeerRefusal.RequestUnreadable
+                        $"a model-execution call carries exactly one embedded request argument; this one carried {List.length other}"
+                )
+        with ex ->
+            Error(ModelExecutionPeerRefusal.RequestUnreadable ex.Message)
+
+    // ── The submitter contract ───────────────────────────────────────
+
+    /// The registry read a fit job waits on: the outcome keyed by the
+    /// submission's own spec hash. Pure over its arguments and holding
+    /// nothing between attempts (GP 12 rule 4).
+    let private awaitOutcome
+        (policy: ModelExecutionFitPollPolicy)
+        (api: ModelExecutionApi)
+        (specHash: string)
+        : Async<Result<ModelExecutionOutcome option, ModelExecutionRefusal>> =
+        let query: ModelExecutionOutcomeQuery = {
+            SpecHashes = [ specHash ]
+            DatasetVersions = []
+            Statuses = []
+            BatchId = None
+        }
+
+        let rec attempt (remaining: int) = async {
+            match! api.QueryOutcomes(query, None, 1) with
+            | Error e -> return Error e
+            | Ok page ->
+                match page.Outcomes with
+                | outcome :: _ -> return Ok(Some outcome)
+                | [] ->
+                    if remaining <= 1 then
+                        return Ok None
+                    else
+                        if policy.Interval > TimeSpan.Zero then
+                            do! Async.Sleep(int policy.Interval.TotalMilliseconds)
+
+                        return! attempt (remaining - 1)
+        }
+
+        attempt (max 1 policy.Attempts)
+
+    /// Run one admitted submitter operation against a binding.
+    let private runOperation
+        (deps: ModelExecutionPeerDeps)
+        (binding: ModelExecutionPeerBinding)
+        (request: ModelExecutionPeerRequest)
+        : Async<ModelExecutionPeerAnswer> =
+        async {
+            match request.Operation with
+            | "SubmitFit" ->
+                let submission = JsonRpc.deserialize<ModelExecutionPeerSubmission> request.Body
+
+                match! binding.Api.SubmitFit(ofWireSubmission submission) with
+                | Error e -> return submitterRefused e
+                | Ok _ ->
+                    match! awaitOutcome deps.FitPoll binding.Api submission.SpecHash with
+                    | Error e -> return submitterRefused e
+                    | Ok None ->
+                        return
+                            submitterRefused (ModelExecutionRefusal.NotFound $"outcome for spec {submission.SpecHash}")
+                    | Ok(Some outcome) -> return answered (toWireOutcome outcome)
+
+            | "GetOutcome" ->
+                let keyHash = JsonRpc.deserialize<string> request.Body
+
+                match! binding.Api.GetOutcome keyHash with
+                | Error e -> return submitterRefused e
+                | Ok outcome -> return answered (toWireOutcome outcome)
+
+            | "QueryOutcomes" ->
+                let query = JsonRpc.deserialize<ModelExecutionPeerQuery> request.Body
+
+                let inner: ModelExecutionOutcomeQuery = {
+                    SpecHashes = query.SpecHashes
+                    DatasetVersions = query.DatasetVersions
+                    Statuses = query.Statuses
+                    BatchId = query.BatchId
+                }
+
+                match! binding.Api.QueryOutcomes(inner, query.Cursor, query.Limit) with
+                | Error e -> return submitterRefused e
+                | Ok page ->
+                    return
+                        answered {
+                            Outcomes = page.Outcomes |> List.map toWireOutcome
+                            NextCursor = page.NextCursor
+                        }
+
+            | "ResolveVintage" ->
+                let vintage = JsonRpc.deserialize<ModelExecutionPeerVintage> request.Body
+
+                match! binding.Api.ResolveDatasetVersion(vintage.DatasetId, vintage.Version) with
+                | Error e -> return submitterRefused e
+                | Ok resolved -> return answered (toWireVintage resolved)
+
+            // Unreachable: `admit` has already refused anything outside
+            // the admitted operation set. Kept total rather than assumed
+            // — a surface whose default branch is an exception is one
+            // whose closure claim rests on a match nobody re-checks.
+            | other -> return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.UndeclaredDiagnostic other)
+        }
+
+    /// Resolve the binding, admit the request, and hand both to `run`.
+    /// The shared prologue of every dispatch on the seam — written once
+    /// so no path can be given a slightly weaker one.
+    let private governed
+        (resolveBinding: string -> Async<ModelExecutionPeerBinding option>)
+        (admission: ModelExecutionAdmission)
+        (peerId: string)
+        (argsJson: string)
+        (run: ModelExecutionPeerBinding -> ModelExecutionPeerRequest -> Async<ModelExecutionPeerAnswer>)
+        : Async<ModelExecutionPeerAnswer> =
+        async {
+            match! resolveBinding peerId with
+            | None -> return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.PeerUnbound peerId)
+            | Some binding ->
+                match soleArgument argsJson with
+                | Error refusal -> return ModelExecutionPeerAnswer.Refused refusal
+                | Ok document ->
+                    match read admission binding.ScopeId document with
+                    | Error refusal -> return ModelExecutionPeerAnswer.Refused refusal
+                    | Ok request -> return! run binding request
+        }
+
+    /// The long-running leg's job handler. It re-resolves the binding
+    /// from the owner peer id carried on the payload, because the
+    /// execution side has no request and no principal — the same reason
+    /// `PeerJobHandler` takes its owner from the payload rather than
+    /// from an ambient context (GP 12 rules 1 and 4).
+    type private FitJobHandler(deps: ModelExecutionPeerDeps, resultStore: IPeerJobResultStore) =
+
+        interface IJobHandler with
+            member _.Execute(ctx: JobContext) = async {
+                let envelope =
+                    try
+                        JsonRpc.deserialize<PeerJobPayload> ctx.Payload
+                    with _ -> {
+                        OwnerPeerId = ""
+                        ArgsJson = ctx.Payload
+                        RootRequestId = ""
+                    }
+
+                let! answer =
+                    governed
+                        deps.ResolveBinding
+                        deps.Admission
+                        envelope.OwnerPeerId
+                        envelope.ArgsJson
+                        (runOperation deps)
+
+                do!
+                    resultStore.SaveResult(
+                        ctx.ScopeId,
+                        ctx.JobId,
+                        envelope.OwnerPeerId,
+                        PeerJobStatus.Completed(JsonRpc.serialize answer)
+                    )
+
+                return Success
+            }
+
+    /// Schedule the long-running fit and answer with its job id, which
+    /// the caller polls at `GET /peer/v1/{contractId}/jobs/{jobId}`
+    /// (§5.5.6). The validated caller's peer id and the receiver-derived
+    /// correlation id ride the payload, so the parked result is owned by
+    /// the peer that scheduled it and the terminal row joins the
+    /// schedule-time one.
+    let private scheduleFit
+        (fusion: PeerJobFusion)
+        (context: PeerCallContext)
+        (argsJson: string)
+        : Async<Result<string, PeerError>> =
+        async {
+            let payload: PeerJobPayload = {
+                OwnerPeerId = context.Peer.PeerId
+                ArgsJson = argsJson
+                RootRequestId = context.RootRequestId
+            }
+
+            let registration: JobRegistration = {
+                ScopeId = PeerJob.Scope
+                Handler = PeerJob.handlerName ModelExecutionProfile.ContractId "SubmitFit"
+                Payload = JsonRpc.serialize payload
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = JobPrecision.Minute
+                CreatedBy = PeerJob.SourceModule
+                Tags = Map.empty
+            }
+
+            match! fusion.Scheduler.Schedule registration with
+            | Error _ -> return Error(PeerHandler "failed to schedule the federated fit")
+            | Ok jobId ->
+                match! fusion.Scheduler.TriggerOnce(PeerJob.Scope, jobId, PeerJob.SourceModule) with
+                | Error message -> return Error(PeerHandler $"failed to trigger the federated fit: {message}")
+                | Ok() -> return Ok(JsonRpc.serialize jobId)
+        }
+
+    /// The submitter contract's registration.
+    ///
+    /// `fusion` is `None` on a deployment with no job substrate. The
+    /// immediate operations are unaffected; `SubmitFit` refuses with a
+    /// typed `SubstrateDisabled` carried through the profile's own
+    /// passthrough class, so a modeller learns that this data host
+    /// cannot run fits rather than that something broke.
+    let registration (deps: ModelExecutionPeerDeps) (fusion: PeerJobFusion option) : PeerContractRegistration =
+        let dispatch: PeerDispatch =
+            fun context methodName argsJson -> async {
+                match methodName, fusion with
+                | "SubmitFit", Some f ->
+                    // Admission runs BEFORE the job is scheduled: an
+                    // unbound peer, a row-read probe or a scope-widening
+                    // assertion must not become a queued job that a
+                    // background worker then refuses out of sight.
+                    let! precheck =
+                        governed deps.ResolveBinding deps.Admission context.Peer.PeerId argsJson (fun _ _ -> async {
+                            return ModelExecutionPeerAnswer.Answered ""
+                        })
+
+                    match precheck with
+                    | ModelExecutionPeerAnswer.Refused _ -> return Ok(JsonRpc.serialize precheck)
+                    | ModelExecutionPeerAnswer.Answered _ -> return! scheduleFit f context argsJson
+
+                | "SubmitFit", None ->
+                    return
+                        Ok(
+                            JsonRpc.serialize (
+                                submitterRefused (ModelExecutionRefusal.SubstrateDisabled "job scheduler")
+                            )
+                        )
+
+                | _ ->
+                    let! answer =
+                        governed deps.ResolveBinding deps.Admission context.Peer.PeerId argsJson (fun binding request ->
+                            if request.Operation <> methodName then
+                                async {
+                                    return
+                                        ModelExecutionPeerAnswer.Refused(
+                                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                                        )
+                                }
+                            else
+                                runOperation deps binding request)
+
+                    return Ok(JsonRpc.serialize answer)
+            }
+
+        {
+            ContractId = ModelExecutionProfile.ContractId
+            Versions = [ ModelExecutionProfile.contractVersion ]
+            Dispatch = dispatch
+        }
+
+    /// The submitter contract plus the job handler its long-running leg
+    /// needs — the shape `PeerServerApp.withContract` consumes.
+    let host (deps: ModelExecutionPeerDeps) (fusion: PeerJobFusion option) : PeerContractHost = {
+        Registration = registration deps fusion
+        JobHandlers =
+            match fusion with
+            | None -> []
+            | Some f -> [
+                PeerJob.handlerName ModelExecutionProfile.ContractId "SubmitFit",
+                FitJobHandler(deps, f.ResultStore) :> IJobHandler
+              ]
+    }
+
+    // ── The governed-diagnostics contract ────────────────────────────
+
+    /// The ungated diagnostics registration. **Private on purpose.**
+    ///
+    /// Making it public would be the whole argument undone: the only
+    /// exported route is `governedDiagnostics`, whose signature demands
+    /// a broker and a template and whose return type is
+    /// `GatedContractRegistration` — so a composition cannot register
+    /// the projections without the gate, because there is no value of
+    /// the right shape to hand it.
+    let private diagnosticsRegistration (deps: ModelExecutionDiagnosticsDeps) : PeerContractRegistration =
+        let dispatch: PeerDispatch =
+            fun context methodName argsJson -> async {
+                match! deps.ResolveBinding context.Peer.PeerId with
+                | None -> return Error(PeerHandler "no model-execution binding")
+                | Some binding ->
+                    match soleArgument argsJson with
+                    | Error refusal -> return Error(PeerHandler(ModelExecutionPeerRefusal.describe refusal))
+                    | Ok document ->
+                        // The diagnostics seam admits at the ENVELOPE
+                        // level only: which projections are answerable is
+                        // the gate's surface invariant, already decided
+                        // before this dispatch ran.
+                        let admission = {
+                            ProfileVersion = ModelExecutionProfile.Version
+                            Operations = Set.empty
+                            Diagnostics = ModelExecutionProfile.diagnostics
+                        }
+
+                        match read admission binding.ScopeId document with
+                        | Error refusal -> return Error(PeerHandler(ModelExecutionPeerRefusal.describe refusal))
+                        | Ok request ->
+                            let projection =
+                                JsonRpc.deserialize<ModelExecutionPeerDiagnosticRequest> request.Body
+
+                            let! result = deps.Project binding methodName projection
+                            return Ok(JsonRpc.serialize result)
+            }
+
+        {
+            ContractId = ModelExecutionProfile.DiagnosticsContractId
+            Versions = [ ModelExecutionProfile.contractVersion ]
+            Dispatch = dispatch
+        }
+
+    /// The governed-diagnostics contract, gated.
+    ///
+    /// **The only construction route**, and the reason it takes a broker
+    /// and a template rather than reading them from a composition: a
+    /// deployment cannot end up believing it gated a surface it did not,
+    /// because there is no un-gated value of this contract to register.
+    ///
+    /// `template.AllowedMethods` is the declaration of what this
+    /// deployment answers. The gate refuses anything off it before the
+    /// projection runs, and withholds any answer that is not a
+    /// `CohortResult` — which is what closes the surface against row
+    /// egress rather than merely discouraging it.
+    let governedDiagnostics
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (deps: ModelExecutionDiagnosticsDeps)
+        : GatedContractRegistration =
+        CleanRoomGate.wrap broker template sink (diagnosticsRegistration deps)

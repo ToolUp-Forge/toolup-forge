@@ -1724,6 +1724,17 @@
              unconfigured deployment generates zero notification and zero
              event traffic. -->
         <Compile Include="InProcess\JobProgressTests.fs" />
+        <!-- Phase 638 — the federated model-execution profile: two
+             instances in one process, with the fit executing data-side
+             and every row-access name the profile enumerates refused as
+             a row read (paired with a positive control on the same
+             registration, so "everything was refused" cannot pass). The
+             governed-diagnostics cases carry a probe asserting that an
+             undeclared projection is refused BEFORE it runs, and the
+             scope cases carry the control that an assertion AGREEING
+             with the binding is not refused — so the refusal is about
+             the disagreement and not about assertions existing. -->
+        <Compile Include="InProcess\FederatedModelExecutionTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

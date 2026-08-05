@@ -380,6 +380,57 @@ The rules run as a **structural-class** `IConfigValidator` in the composition-va
 
 **Contract-level checking is what makes a heterogeneous federation safe**: nothing here inspects a counterparty's *composition*, only the wire face it already publishes. An aggregate group (Phase 595) pins exactly like a single instance — its posture facets are floors over the exposing members, and a facet the members disagree on publishes as `mixed:a|b`, which satisfies no requirement because a counterparty may rely on neither stance. A composition that pins nothing registers no validator, checks nothing, and is byte-for-byte a pre-591 composition.
 
+## Federated model execution (Phase 638)
+
+`ModelExecutionPeerContract.fs` binds the model-execution profile
+([`FEDERATION_WIRE.md` §5.7](../../docs/interplatform/FEDERATION_WIRE.md)) onto this substrate: one
+deployment holds the datasets and executes fits, another authors specifications and submits them,
+and **no raw series crosses the seam** — not by agreement, but because no shape in the profile can
+carry one.
+
+Two contracts, and the split is the design:
+
+| Contract | Carries | Registered with |
+|---|---|---|
+| `toolup.model-execution` | submission, outcome retrieval, registry query, vintage resolution — all metadata-shaped | `ModelExecutionPeerContract.host` |
+| `toolup.model-execution.diagnostics` | the declared aggregate projections a remote modeller needs (collinearity, coverage, transform previews) | `ModelExecutionPeerContract.governedDiagnostics` |
+
+The second one has **no ungated construction route**. `governedDiagnostics` demands an
+`ICleanRoomBroker` and a `CleanRoomTemplate` and returns a `GatedContractRegistration`, so a
+composition cannot register the projections without the gate — there is no value of the right shape
+to hand it. The template's `AllowedMethods` **is** the deployment's declaration of what it answers:
+the gate refuses anything off it before the projection runs, and withholds any answer that is not a
+`CohortResult`. A projection that returned rows does not bypass the gate, it fails it.
+
+A long fit rides the ordinary peer-job pattern: `SubmitFit` schedules onto `IJobScheduler`, answers
+with a job id, and the caller polls `GET /peer/v1/{contractId}/jobs/{jobId}`. Admission runs
+**before** the job is scheduled, so an unbound peer or a row-read probe never becomes a queued job
+that a background worker refuses out of sight.
+
+### The two roles are configuration, not code
+
+An ordinary single-instance deployment already co-locates both roles — it holds its own data, runs
+its own fits, and submits to itself in-process with none of this on a wire. Federating is what
+happens when a second deployment is given a binding, and the difference between the topologies is
+**peer configuration and nothing else**:
+
+- a **data host** registers the contracts and holds one `ModelExecutionPeerBinding` per
+  counterparty — the scope that peer's calls resolve under, decided receiver-side;
+- a **modeller** declares them consumed (`PeerSurface.consumes`) and pins the host's published
+  surface before it calls;
+- a **dual-role** deployment does both, and its published surface honestly lists the contracts
+  under `Serves` and under `Consumes`.
+
+Two consequences follow, and they are why this is worth stating rather than leaving implied. A
+deployment that starts single and later federates changes **no application code** — the fits it was
+already running are the fits a peer now submits. And a deployment that stops federating drops a
+binding; it does not unwind a data pipeline, because there never was one.
+
+**Scope is never on the wire.** A request MAY carry an `AssertedScope` for the caller's own
+diagnostics; the receiver never routes on it and refuses any value naming another scope. The
+distinction is the whole of it — a value the receiver checks is a self-check, and a value the
+receiver obeys is an impersonation vector.
+
 ## Routes
 
 Four routes, all auth-gated (fail-closed — a missing / invalid / expired bearer token is rejected *before* dispatch):

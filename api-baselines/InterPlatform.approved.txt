@@ -889,6 +889,174 @@ ToolUp.InterPlatform.MethodStatus+Tags (class)
 ToolUp.InterPlatform.MethodStatus+Tags.Active : System.Int32 (literal)
 ToolUp.InterPlatform.MethodStatus+Tags.Deprecated : System.Int32 (literal)
 ToolUp.InterPlatform.MethodStatus+Tags.Removed : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionAdmission (class)
+ToolUp.InterPlatform.ModelExecutionAdmission..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.InterPlatform.ModelExecutionAdmission.Diagnostics : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionAdmission.Operations : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionAdmission.ProfileVersion : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionAdmissionModule (class)
+ToolUp.InterPlatform.ModelExecutionAdmissionModule.create(Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.InterPlatform.ModelExecutionAdmission
+ToolUp.InterPlatform.ModelExecutionAdmissionModule.submitterOnly : ToolUp.InterPlatform.ModelExecutionAdmission { get }
+ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps (class)
+ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.ModelExecutionPeerBinding, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.CohortResult]]]])
+ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps.Project : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.ModelExecutionPeerBinding, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.CohortResult]]]] { get }
+ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps.ResolveBinding : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]] { get }
+ToolUp.InterPlatform.ModelExecutionFitPollPolicy (class)
+ToolUp.InterPlatform.ModelExecutionFitPollPolicy..ctor(System.Int32, System.TimeSpan)
+ToolUp.InterPlatform.ModelExecutionFitPollPolicy.Attempts : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionFitPollPolicy.Interval : System.TimeSpan { get }
+ToolUp.InterPlatform.ModelExecutionFitPollPolicyModule (class)
+ToolUp.InterPlatform.ModelExecutionFitPollPolicyModule.default' : ToolUp.InterPlatform.ModelExecutionFitPollPolicy { get }
+ToolUp.InterPlatform.ModelExecutionFitPollPolicyModule.immediate : ToolUp.InterPlatform.ModelExecutionFitPollPolicy { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer (class)
+ToolUp.InterPlatform.ModelExecutionPeerAnswer.IsAnswered : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer.IsRefused : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Answered (class)
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Answered.body : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Refused (class)
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Refused.refusal : ToolUp.InterPlatform.ModelExecutionPeerRefusal { get }
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Tags (class)
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Tags.Answered : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerAnswer+Tags.Refused : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerBinding (class)
+ToolUp.InterPlatform.ModelExecutionPeerBinding..ctor(System.String, System.String, ToolUp.Platform.ModelExecutionApi)
+ToolUp.InterPlatform.ModelExecutionPeerBinding.Api : ToolUp.Platform.ModelExecutionApi { get }
+ToolUp.InterPlatform.ModelExecutionPeerBinding.PeerId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerBinding.ScopeId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerContract (class)
+ToolUp.InterPlatform.ModelExecutionPeerContract.admit(ToolUp.InterPlatform.ModelExecutionAdmission, System.String, ToolUp.InterPlatform.ModelExecutionPeerRequest) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.InterPlatform.ModelExecutionPeerRefusal]
+ToolUp.InterPlatform.ModelExecutionPeerContract.answerBody`1(ToolUp.InterPlatform.ModelExecutionPeerAnswer) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.InterPlatform.ModelExecutionPeerRefusal]
+ToolUp.InterPlatform.ModelExecutionPeerContract.arguments(ToolUp.InterPlatform.ModelExecutionPeerRequest) : System.String
+ToolUp.InterPlatform.ModelExecutionPeerContract.diagnosticRequest(System.String, ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest) : ToolUp.InterPlatform.ModelExecutionPeerRequest
+ToolUp.InterPlatform.ModelExecutionPeerContract.governedDiagnostics(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.ModelExecutionPeerContract.host(ToolUp.InterPlatform.ModelExecutionPeerDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : ToolUp.InterPlatform.PeerContractHost
+ToolUp.InterPlatform.ModelExecutionPeerContract.ofWireSubmission(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.Platform.ModelExecutionFitSubmission
+ToolUp.InterPlatform.ModelExecutionPeerContract.read(ToolUp.InterPlatform.ModelExecutionAdmission, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ModelExecutionPeerRequest, ToolUp.InterPlatform.ModelExecutionPeerRefusal]
+ToolUp.InterPlatform.ModelExecutionPeerContract.registration(ToolUp.InterPlatform.ModelExecutionPeerDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : ToolUp.InterPlatform.PeerContractRegistration
+ToolUp.InterPlatform.ModelExecutionPeerContract.requestAsserting`1(System.String, System.String, T) : ToolUp.InterPlatform.ModelExecutionPeerRequest
+ToolUp.InterPlatform.ModelExecutionPeerContract.request`1(System.String, T) : ToolUp.InterPlatform.ModelExecutionPeerRequest
+ToolUp.InterPlatform.ModelExecutionPeerContract.submissionRequest(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.InterPlatform.ModelExecutionPeerRequest
+ToolUp.InterPlatform.ModelExecutionPeerContract.toWireOutcome(ToolUp.Platform.ModelExecutionOutcome) : ToolUp.InterPlatform.ModelExecutionPeerOutcome
+ToolUp.InterPlatform.ModelExecutionPeerContract.toWireVintage(ToolUp.Platform.ModelExecutionDatasetVersion) : ToolUp.InterPlatform.ModelExecutionPeerVintageInfo
+ToolUp.InterPlatform.ModelExecutionPeerDeps (class)
+ToolUp.InterPlatform.ModelExecutionPeerDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]], ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionFitPollPolicy)
+ToolUp.InterPlatform.ModelExecutionPeerDeps.Admission : ToolUp.InterPlatform.ModelExecutionAdmission { get }
+ToolUp.InterPlatform.ModelExecutionPeerDeps.FitPoll : ToolUp.InterPlatform.ModelExecutionFitPollPolicy { get }
+ToolUp.InterPlatform.ModelExecutionPeerDeps.ResolveBinding : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]] { get }
+ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest (class)
+ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest..ctor(ToolUp.InterPlatform.ModelExecutionPeerVintage, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest.Terms : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest.Vintage : ToolUp.InterPlatform.ModelExecutionPeerVintage { get }
+ToolUp.InterPlatform.ModelExecutionPeerGate (class)
+ToolUp.InterPlatform.ModelExecutionPeerGate..ctor(System.String, System.Double, System.String)
+ToolUp.InterPlatform.ModelExecutionPeerGate.Direction : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerGate.Name : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerGate.Threshold : System.Double { get }
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict (class)
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict..ctor(System.String, System.Double, System.String, System.Double, System.Boolean)
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict.Direction : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict.Name : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict.Observed : System.Double { get }
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict.Passed : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerGateVerdict.Threshold : System.Double { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome (class)
+ToolUp.InterPlatform.ModelExecutionPeerOutcome..ctor(System.String, System.String, System.String, System.Int64, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGateVerdict], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.DateTimeOffset)
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.ArtifactContentHash : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.ArtifactId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.CompositeKeyHash : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.DatasetVersion : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.GateVerdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGateVerdict] { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.ProviderId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.ProviderVersion : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.RegisteredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.Seed : System.Int64 { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.SpecHash : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerOutcome.Status : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerPage (class)
+ToolUp.InterPlatform.ModelExecutionPeerPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerOutcome], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.InterPlatform.ModelExecutionPeerPage.NextCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerPage.Outcomes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerOutcome] { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery (class)
+ToolUp.InterPlatform.ModelExecutionPeerQuery..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.InterPlatform.ModelExecutionPeerQuery.BatchId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery.Cursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery.DatasetVersions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery.Limit : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery.SpecHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerQuery.Statuses : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsPeerUnbound : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsProfileVersionUnsupported : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsRequestUnreadable : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsRowAccessRefused : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsScopeWideningRefused : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsSubmitterRefused : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsUndeclaredDiagnostic : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+PeerUnbound (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+PeerUnbound.peerId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported.requested : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported.supported : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+RequestUnreadable (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+RequestUnreadable.reason : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+RowAccessRefused (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+RowAccessRefused.operation : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+ScopeWideningRefused (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+ScopeWideningRefused.asserted : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+SubmitterRefused (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+SubmitterRefused.Item : ToolUp.Platform.ModelExecutionRefusal { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.PeerUnbound : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.ProfileVersionUnsupported : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.RequestUnreadable : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.RowAccessRefused : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.ScopeWideningRefused : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.SubmitterRefused : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.UndeclaredDiagnostic : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+UndeclaredDiagnostic (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+UndeclaredDiagnostic.operation : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusalModule (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusalModule.className(ToolUp.InterPlatform.ModelExecutionPeerRefusal) : System.String
+ToolUp.InterPlatform.ModelExecutionPeerRefusalModule.describe(ToolUp.InterPlatform.ModelExecutionPeerRefusal) : System.String
+ToolUp.InterPlatform.ModelExecutionPeerRequest (class)
+ToolUp.InterPlatform.ModelExecutionPeerRequest..ctor(System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.InterPlatform.ModelExecutionPeerRequest.AssertedScope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionPeerRequest.Body : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRequest.Operation : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerRequest.ProfileVersion : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission (class)
+ToolUp.InterPlatform.ModelExecutionPeerSubmission..ctor(ToolUp.InterPlatform.ModelExecutionPeerVintage, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGate])
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.Gates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGate] { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.ProviderKind : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.Seed : System.Int64 { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.SpecHash : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.SpecPayload : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.Vintage : ToolUp.InterPlatform.ModelExecutionPeerVintage { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintage (class)
+ToolUp.InterPlatform.ModelExecutionPeerVintage..ctor(System.String, System.Int32)
+ToolUp.InterPlatform.ModelExecutionPeerVintage.DatasetId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintage.Version : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo (class)
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo..ctor(System.String, System.Int32, System.Int64, System.String, System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.ContentHash : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.CreatedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.DatasetId : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.Format : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.RowCount : System.Int64 { get }
+ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.Version : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionProfile (class)
+ToolUp.InterPlatform.ModelExecutionProfile.ContractId : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.DiagnosticsContractId : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.Version : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.contractVersion : ToolUp.InterPlatform.ContractVersion { get }
+ToolUp.InterPlatform.ModelExecutionProfile.diagnostics : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionProfile.operations : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionProfile.rowAccessOperations : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.InterPlatform.ModelExecutionProfile.template(System.String, ToolUp.InterPlatform.PrivacyGate, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.InterPlatform.CleanRoomTemplate
 ToolUp.InterPlatform.NoPrivacyBudgetLedger (class)
 ToolUp.InterPlatform.NoPrivacyBudgetLedger..ctor()
 ToolUp.InterPlatform.NoiseDistribution (class)

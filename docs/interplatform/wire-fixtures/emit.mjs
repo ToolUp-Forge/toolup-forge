@@ -34,6 +34,11 @@
 //     ride as embedded strings and the error-code mapping.
 //   host-envelope — canonical encoding and stamping only. Its derivation
 //     is a host's own business; the wire contract is the document shape.
+//   model-execution — canonical encoding, and the two rules this family
+//     is the only carrier of: real numbers with a mandatory fractional
+//     digit, and map members whose keys are sorted ordinally. Both are
+//     places a JS emitter diverges by doing the obvious thing, which is
+//     exactly why they are triangulated here rather than trusted.
 //
 // Reject vectors are not emitted: they are documents an implementation
 // must REFUSE, so reproducing their bytes proves nothing. Certify against
@@ -321,7 +326,14 @@ const deriveAggregate = (groupPeerId, exposure) => {
     },
     budgets: {
       cascadeGuard: floorFacet([cascadeGuard, ...exposing.map((m) => m.surface.budgets.cascadeGuard)]),
-      longRunningEnabled: false,
+      // A BOOLEAN facet conjoins over the exposing members: the group
+      // dispatches long-running work only where every member it fronts
+      // does. (This emitter carried a hardcoded `false` until Phase 638,
+      // which is what the group and solo fixtures caught — the gateway
+      // used to forward only the invoke leg, and the rule moved when
+      // handle translation landed. A divergence between the two emitters
+      // is a specification defect by definition, and this one was.)
+      longRunningEnabled: exposing.every((m) => m.surface.budgets.longRunningEnabled),
     },
     pinnedVocabulary: pins,
   };
@@ -692,6 +704,172 @@ const hostEnvelopeStamp = () =>
     ["StampContentHash", str(sha256Hex(hostEnvelope()))],
   ]);
 
+// ── model execution ──────────────────────────────────────────────────
+//
+// The one family that carries real numbers. They are JSON numbers in
+// shortest round-trip decimal form and ALWAYS carry a fractional part —
+// `5.0`, never `5` — which is the divergence a JS emitter walks into
+// first, because `String(5)` is `"5"`.
+
+const real = (v) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+
+/** A 64-bit integer: sign-prefixed decimal string (§3.1 rule 7). */
+const int64 = (v) => str((v < 0 ? "" : "+") + String(v));
+
+/** A map member: a JSON object whose keys are sorted ORDINALLY — the one
+ * place member order is not the shape's declaration order. */
+const mapOf = (entries, encode) =>
+  obj([...entries].sort((a, b) => ordinal(a[0], b[0])).map(([k, v]) => [k, encode(v)]));
+
+const profileVersion = 1;
+
+const vintageRef = (v) =>
+  obj([
+    ["DatasetId", str(v.datasetId)],
+    ["Version", num(v.version)],
+  ]);
+
+const requestEnvelope = (operation, assertedScope, body) =>
+  obj([
+    ["ProfileVersion", num(profileVersion)],
+    ["Operation", str(operation)],
+    ["AssertedScope", opt(assertedScope, str)],
+    // The operation's own document rides EMBEDDED — a string whose
+    // content is itself canonical JSON (§3.1 rule 12).
+    ["Body", str(body)],
+  ]);
+
+const answered = (body) => caseOf("Answered", str(body));
+const refused = (refusal) => caseOf("Refused", refusal);
+
+const gateRequest = (g) =>
+  obj([
+    ["Name", str(g.name)],
+    ["Threshold", real(g.threshold)],
+    ["Direction", str(g.direction)],
+  ]);
+
+const gateVerdict = (g) =>
+  obj([
+    ["Name", str(g.name)],
+    ["Threshold", real(g.threshold)],
+    ["Direction", str(g.direction)],
+    ["Observed", real(g.observed)],
+    ["Passed", bool(g.passed)],
+  ]);
+
+// Gates declared out of order on purpose: the EMITTER owns the ordinal
+// sort, so two modellers asking for the same gates in different orders
+// produce the same document.
+const submission = {
+  vintage: { datasetId: "weekly-panel", version: 7 },
+  specPayload: '{"link":"log","terms":["price","promo"]}',
+  specHash: "sha256:1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014",
+  providerKind: "reference-regression",
+  seed: 20260716,
+  gates: [
+    { name: "vif-max", threshold: 5.0, direction: "AtMost" },
+    { name: "holdout-r2", threshold: 0.6, direction: "AtLeast" },
+  ],
+};
+
+const submissionBody = (s) =>
+  obj([
+    ["Vintage", vintageRef(s.vintage)],
+    ["SpecPayload", str(s.specPayload)],
+    // Submitter-minted and opaque: carried verbatim, never re-derived.
+    ["SpecHash", str(s.specHash)],
+    ["ProviderKind", str(s.providerKind)],
+    ["Seed", int64(s.seed)],
+    ["Gates", arr([...s.gates].sort((a, b) => ordinal(a.name, b.name)).map(gateRequest))],
+  ]);
+
+const outcome = {
+  compositeKeyHash: "sha256:60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+  specHash: submission.specHash,
+  datasetVersion: "consortium-north/weekly-panel@v7",
+  seed: submission.seed,
+  providerId: "reference-regression",
+  providerVersion: "1.4.0",
+  artifactId: "artifact-8821",
+  artifactContentHash: "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9",
+  diagnostics: [
+    ["holdout-r2", 0.71],
+    ["aic", 812.5],
+    ["vif-max", 3.25],
+  ],
+  gateVerdicts: [
+    { name: "vif-max", threshold: 5.0, direction: "AtMost", observed: 3.25, passed: true },
+    { name: "holdout-r2", threshold: 0.6, direction: "AtLeast", observed: 0.71, passed: true },
+  ],
+  status: "Approved",
+  annotations: [["batch", "wave-3"]],
+  registeredAt: "2026-07-16T10:15:00+00:00",
+};
+
+const outcomeBody = (o) =>
+  obj([
+    ["CompositeKeyHash", str(o.compositeKeyHash)],
+    ["SpecHash", str(o.specHash)],
+    ["DatasetVersion", str(o.datasetVersion)],
+    ["Seed", int64(o.seed)],
+    ["ProviderId", str(o.providerId)],
+    ["ProviderVersion", str(o.providerVersion)],
+    ["ArtifactId", str(o.artifactId)],
+    ["ArtifactContentHash", str(o.artifactContentHash)],
+    ["Diagnostics", mapOf(o.diagnostics, real)],
+    ["GateVerdicts", arr([...o.gateVerdicts].sort((a, b) => ordinal(a.name, b.name)).map(gateVerdict))],
+    ["Status", str(o.status)],
+    ["Annotations", mapOf(o.annotations, str)],
+    ["RegisteredAt", str(o.registeredAt)],
+  ]);
+
+const cell = (c) =>
+  obj([
+    ["Label", str(c.label)],
+    ["Count", num(c.count)],
+    ["Value", opt(c.value, real)],
+  ]);
+
+const aggregate = (a) =>
+  obj([
+    ["Shape", caseOnly(a.shape)],
+    ["Cells", arr(a.cells.map(cell))],
+  ]);
+
+const governedDiagnostics = [
+  {
+    shape: "Histogram",
+    cells: [
+      { label: "price|promo", count: 182, value: 0.42 },
+      { label: "price|seasonality", count: 182, value: 0.18 },
+    ],
+  },
+  { shape: "Aggregate", cells: [{ label: "observed-weeks", count: 182, value: 0.97 }] },
+  {
+    shape: "Histogram",
+    cells: [
+      { label: "adstock-decay-0.3", count: 182, value: 0.55 },
+      { label: "adstock-decay-0.6", count: 182, value: 0.31 },
+    ],
+  },
+];
+
+const modelExecutionRefusals = () =>
+  arr([
+    // A multi-payload union case rides as an ARRAY of its payloads in
+    // declaration order (§3.1 rule 11) — the arm most implementations
+    // get wrong, because the single-payload arm looks like the rule.
+    refused(caseOf("ProfileVersionUnsupported", arr([num(2), num(1)]))),
+    refused(caseOf("RowAccessRefused", str("ReadPage"))),
+    refused(caseOf("UndeclaredDiagnostic", str("Leverage"))),
+    refused(caseOf("ScopeWideningRefused", str("other-tenant"))),
+    refused(caseOf("PeerUnbound", str("buyer-acme"))),
+    refused(caseOf("RequestUnreadable", str("unexpected end of JSON input"))),
+    // The submitter surface's own typed refusal, nested unchanged.
+    refused(caseOf("SubmitterRefused", caseOf("UnknownProvider", str("reference-regression")))),
+  ]);
+
 // ── run ──────────────────────────────────────────────────────────────
 
 const documents = () => {
@@ -721,6 +899,10 @@ const documents = () => {
     "contract-invocation/job-poll.json": jobPoll(),
     "host-envelope/envelope.json": hostEnvelope(),
     "host-envelope/stamp.json": hostEnvelopeStamp(),
+    "model-execution/submission.json": requestEnvelope("SubmitFit", null, submissionBody(submission)),
+    "model-execution/outcome.json": answered(outcomeBody(outcome)),
+    "model-execution/diagnostics.json": arr(governedDiagnostics.map((a) => answered(aggregate(a)))),
+    "model-execution/refusals.json": modelExecutionRefusals(),
   };
 };
 

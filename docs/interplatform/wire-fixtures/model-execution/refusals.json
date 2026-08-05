@@ -1,0 +1,1 @@
+[{"Refused":{"ProfileVersionUnsupported":[2,1]}},{"Refused":{"RowAccessRefused":"ReadPage"}},{"Refused":{"UndeclaredDiagnostic":"Leverage"}},{"Refused":{"ScopeWideningRefused":"other-tenant"}},{"Refused":{"PeerUnbound":"buyer-acme"}},{"Refused":{"RequestUnreadable":"unexpected end of JSON input"}},{"Refused":{"SubmitterRefused":{"UnknownProvider":"reference-regression"}}}]

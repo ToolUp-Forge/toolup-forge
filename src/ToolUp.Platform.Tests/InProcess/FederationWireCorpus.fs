@@ -85,6 +85,12 @@ type WireProfile =
     | Participant
     | Gateway
     | ModuleHost
+    /// Phase 638 — the deployment that holds the datasets and runs the
+    /// fits.
+    | DataHost
+    /// Phase 638 — the deployment that authors the specs and submits
+    /// them.
+    | Modeller
 
 [<RequireQualifiedAccess>]
 module WireProfile =
@@ -94,16 +100,27 @@ module WireProfile =
         | Participant -> "participant"
         | Gateway -> "gateway"
         | ModuleHost -> "module-host"
+        | DataHost -> "participant-data-host"
+        | Modeller -> "participant-modeller"
 
     /// The families a profile's implementer must certify against — the
     /// per-profile partition of the corpus. Cumulative: a gateway is a
     /// participant that also fronts a group, and a module host is a
     /// gateway that also runs somebody else's module.
+    ///
+    /// The two model-execution roles are cumulative over `participant`
+    /// and require the identical family. They are separate profiles
+    /// because a conformance claim has to say which SIDE of each shape
+    /// the implementation emits: the refusals a data host must PRODUCE
+    /// are the ones a modeller must UNDERSTAND, and an implementation
+    /// that only ever produces them has certified half the seam.
     let rec families (profile: WireProfile) : string list =
         match profile with
         | Participant -> [ "peer-surface"; "pinned-exchange"; "attestation"; "contract-invocation" ]
         | Gateway -> families Participant @ [ "aggregate-surface" ]
         | ModuleHost -> families Gateway @ [ "host-envelope" ]
+        | DataHost
+        | Modeller -> families Participant @ [ "model-execution" ]
 
 /// What certifying against a vector means.
 type WireVectorKind =
@@ -602,6 +619,176 @@ let private referenceEnvelope: HostEnvelope = {
     ]
 }
 
+// ─── Reference values — model execution (data-host / modeller) ───────
+
+/// The scope the reference peer binding addresses. One reject vector
+/// asserts a different one, which is the whole of the scope-widening
+/// case: the value is refused, never routed on.
+[<Literal>]
+let modelExecutionBoundScope = "consortium-north"
+
+/// What the reference data host admits: the whole submitter surface and
+/// all three declared diagnostics. The reject vectors are read against
+/// exactly this, so "undeclared" means undeclared by a deployment that
+/// declared everything the profile defines.
+let referenceAdmission =
+    ModelExecutionAdmission.create ModelExecutionProfile.diagnostics
+
+let private referenceVintage: ModelExecutionPeerVintage = {
+    DatasetId = "weekly-panel"
+    Version = 7
+}
+
+/// Gates declared out of order — the emitter, not the author, owns the
+/// ordinal sort.
+let private referenceSubmission: ModelExecutionPeerSubmission = {
+    Vintage = referenceVintage
+    SpecPayload = """{"link":"log","terms":["price","promo"]}"""
+    SpecHash = "sha256:1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014"
+    ProviderKind = "reference-regression"
+    Seed = 20260716L
+    Gates = [
+        {
+            Name = "vif-max"
+            Threshold = 5.0
+            Direction = "AtMost"
+        }
+        {
+            Name = "holdout-r2"
+            Threshold = 0.6
+            Direction = "AtLeast"
+        }
+    ]
+}
+
+/// A registered outcome in the SUBMITTER surface's own shape, projected
+/// onto the profile's by the live `toWireOutcome` — so the corpus pins
+/// the projection as well as the encoding.
+let private referenceOutcome: ModelExecutionOutcome = {
+    CompositeKeyHash = "sha256:60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752"
+    SpecHash = referenceSubmission.SpecHash
+    DatasetVersion = "consortium-north/weekly-panel@v7"
+    Seed = referenceSubmission.Seed
+    ProviderId = "reference-regression"
+    ProviderVersion = "1.4.0"
+    ArtifactId = "artifact-8821"
+    ArtifactContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+    Diagnostics = Map.ofList [ "aic", 812.5; "holdout-r2", 0.71; "vif-max", 3.25 ]
+    GateVerdicts = [
+        {
+            Name = "vif-max"
+            Threshold = 5.0
+            Direction = "AtMost"
+            Observed = 3.25
+            Passed = true
+        }
+        {
+            Name = "holdout-r2"
+            Threshold = 0.6
+            Direction = "AtLeast"
+            Observed = 0.71
+            Passed = true
+        }
+    ]
+    Status = "Approved"
+    Annotations = Map.ofList [ "batch", "wave-3" ]
+    RegisteredAt = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+}
+
+/// The three declared governed diagnostics, each an aggregate
+/// projection the clean-room gate can evaluate. Every cell carries a
+/// cohort count, which is what the floor binds on; no cell carries a
+/// row, and none could.
+let private referenceDiagnostics: CohortResult list = [
+    {
+        Shape = Histogram
+        Cells = [
+            {
+                Label = "price|promo"
+                Count = 182
+                Value = Some 0.42
+            }
+            {
+                Label = "price|seasonality"
+                Count = 182
+                Value = Some 0.18
+            }
+        ]
+    }
+    {
+        Shape = Aggregate
+        Cells = [
+            {
+                Label = "observed-weeks"
+                Count = 182
+                Value = Some 0.97
+            }
+        ]
+    }
+    {
+        Shape = Histogram
+        Cells = [
+            {
+                Label = "adstock-decay-0.3"
+                Count = 182
+                Value = Some 0.55
+            }
+            {
+                Label = "adstock-decay-0.6"
+                Count = 182
+                Value = Some 0.31
+            }
+        ]
+    }
+]
+
+/// One refusal per class the profile defines — so a modeller's mapping
+/// is pinned by the corpus rather than inferred from the two classes it
+/// happened to trip.
+let private referenceRefusals: ModelExecutionPeerAnswer list =
+    [
+        ModelExecutionPeerRefusal.ProfileVersionUnsupported(2, 1)
+        ModelExecutionPeerRefusal.RowAccessRefused "ReadPage"
+        ModelExecutionPeerRefusal.UndeclaredDiagnostic "Leverage"
+        ModelExecutionPeerRefusal.ScopeWideningRefused "other-tenant"
+        ModelExecutionPeerRefusal.PeerUnbound "buyer-acme"
+        ModelExecutionPeerRefusal.RequestUnreadable "unexpected end of JSON input"
+        ModelExecutionPeerRefusal.SubmitterRefused(ModelExecutionRefusal.UnknownProvider "reference-regression")
+    ]
+    |> List.map ModelExecutionPeerAnswer.Refused
+
+/// The submitter's request envelope, built through the live constructor
+/// so the profile version cannot drift out of the corpus.
+let private submissionRequest () =
+    ModelExecutionPeerContract.submissionRequest referenceSubmission
+
+/// The answer envelope carrying the registered outcome — the fit's
+/// terminal result as a modeller collects it.
+let private outcomeAnswer () =
+    ModelExecutionPeerAnswer.Answered(JsonRpc.serialize (ModelExecutionPeerContract.toWireOutcome referenceOutcome))
+
+let private diagnosticAnswers () =
+    referenceDiagnostics
+    |> List.map (fun result -> ModelExecutionPeerAnswer.Answered(JsonRpc.serialize result))
+
+/// A request naming a row-level read. The profile serves no such
+/// surface, so the document exists only to be refused.
+let private rowReadRequest () =
+    ModelExecutionPeerContract.request "ReadPage" referenceVintage
+
+/// A request naming a projection nobody declared. Declaration is the
+/// only route onto the diagnostics surface.
+let private undeclaredDiagnosticRequest () =
+    ModelExecutionPeerContract.diagnosticRequest "Leverage" {
+        Vintage = referenceVintage
+        Terms = [ "promo"; "price" ]
+    }
+
+/// A well-formed request that asserts a scope other than the one this
+/// peer binding addresses.
+let private scopeWideningRequest () =
+    ModelExecutionPeerContract.requestAsserting "other-tenant" "GetOutcome" referenceOutcome.CompositeKeyHash
+
 // ─── The corpus ──────────────────────────────────────────────────────
 
 let private vector id family profile kind description file document : WireVector = {
@@ -813,6 +1000,91 @@ let vectors () : WireVector list =
             "The sidecar stamp a consumer pins beside a generated module, so it can tell later whether the host moved underneath it."
             "host-envelope/stamp.json"
             (JsonRpc.serialize (HostEnvelope.stampOf referenceEnvelope))
+
+        // ── model execution ───────────────────────────────────────────
+        vector
+            "model-execution/submission"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "A fit submission in the profile's versioned envelope: the vintage named scope-relatively, the opaque provider spec beside the submitter-minted hash the host stores verbatim, and the requested gates in ordinal order."
+            "model-execution/submission.json"
+            (JsonRpc.serialize (submissionRequest ()))
+
+        vector
+            "model-execution/outcome"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The answer envelope carrying a registered outcome — composite key, gate verdicts, aggregate diagnostics and artifact reference. Every member is metadata or an aggregate scalar; there is no member a row could ride in."
+            "model-execution/outcome.json"
+            (JsonRpc.serialize (outcomeAnswer ()))
+
+        vector
+            "model-execution/diagnostics"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The three declared governed diagnostics — collinearity, coverage and a transform preview — each an aggregate projection in the gate-checkable shape, so an answer that is not one is withheld rather than released."
+            "model-execution/diagnostics.json"
+            (JsonRpc.serialize (diagnosticAnswers ()))
+
+        vector
+            "model-execution/refusals"
+            "model-execution"
+            Modeller
+            RoundTrip
+            "One answer per refusal class the profile defines, including the submitter surface's own typed refusal carried through unchanged — so a modeller's mapping is pinned by the corpus rather than inferred from the classes it happened to trip."
+            "model-execution/refusals.json"
+            (JsonRpc.serialize referenceRefusals)
+
+        {
+            vector
+                "model-execution/reject-row-read"
+                "model-execution"
+                DataHost
+                Reject
+                "A request naming a row-level read. The profile serves no row-level surface, and the refusal names that specifically rather than reporting an unrecognised operation — a probe and a typo are different things to find in a log."
+                "model-execution/reject-row-read.json"
+                (JsonRpc.serialize (rowReadRequest ())) with
+                Reject = Some "model-execution-row-read-refused"
+        }
+
+        {
+            vector
+                "model-execution/reject-undeclared-diagnostic"
+                "model-execution"
+                DataHost
+                Reject
+                "A request naming a projection this deployment has not declared. Declaration is the only route onto the diagnostics surface, so the refusal happens before anything is computed."
+                "model-execution/reject-undeclared-diagnostic.json"
+                (JsonRpc.serialize (undeclaredDiagnosticRequest ())) with
+                Reject = Some "model-execution-undeclared-diagnostic"
+        }
+
+        {
+            vector
+                "model-execution/reject-scope-widening"
+                "model-execution"
+                DataHost
+                Reject
+                "A well-formed request asserting a scope other than the one the peer binding addresses. The host never routes on an asserted scope; it refuses a disagreement, which is the difference between a diagnostic aid and an impersonation vector."
+                "model-execution/reject-scope-widening.json"
+                (JsonRpc.serialize (scopeWideningRequest ())) with
+                Reject = Some "model-execution-scope-widening"
+        }
+
+        {
+            vector
+                "model-execution/reject-malformed"
+                "model-execution"
+                DataHost
+                Reject
+                "A truncated request envelope. It is refused whole rather than read as far as it parses — a member the reader has no value for would satisfy an admission check by omission."
+                "model-execution/reject-malformed.json"
+                "{\"ProfileVersion\":1,\"Operation\":\"GetOutcome\"," with
+                Reject = Some "model-execution-request-unreadable"
+        }
     ]
 
 // ─── Manifest ────────────────────────────────────────────────────────
@@ -858,7 +1130,7 @@ let renderManifest (vectors: WireVector list) : string =
     line "  ],"
     line "  \"profiles\": {"
 
-    let profiles = [ Participant; Gateway; ModuleHost ]
+    let profiles = [ Participant; Gateway; ModuleHost; DataHost; Modeller ]
 
     profiles
     |> List.iteri (fun i profile ->

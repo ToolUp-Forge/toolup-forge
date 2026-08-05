@@ -120,6 +120,13 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
         JsonRpc.serialize (JsonRpc.deserialize<PeerJobStatus<string> list> document)
     | "host-envelope", "host-envelope/stamp" -> JsonRpc.serialize (JsonRpc.deserialize<HostEnvelopeStamp> document)
     | "host-envelope", _ -> HostEnvelope.toJson (JsonRpc.deserialize<HostEnvelope> document)
+    | "model-execution", "model-execution/submission" ->
+        JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerRequest> document)
+    | "model-execution", "model-execution/outcome" ->
+        JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer> document)
+    | "model-execution", "model-execution/diagnostics"
+    | "model-execution", "model-execution/refusals" ->
+        JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer list> document)
     | family, id -> failwithf "no specified shape is bound to corpus family '%s' (vector '%s')" family id
 
 /// Recompute the stamp a hash vector claims, from the document's own
@@ -213,6 +220,24 @@ let private verifyInvocationRejection (entry: ManifestEntry) (document: string) 
 
     Expect.isNone decoded $"'{entry.Id}' must be refused before dispatch, and it decoded"
 
+/// Feed a model-execution request envelope to the shipped reader and
+/// require the named refusal CLASS back. The reader is
+/// `ModelExecutionPeerContract.read` — the same function the seam's
+/// dispatch runs, not a test-local re-implementation of it, so a
+/// certification that passes here is a statement about what the
+/// deployment does rather than about what the harness believes.
+let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
+    let outcome =
+        ModelExecutionPeerContract.read referenceAdmission modelExecutionBoundScope document
+
+    match outcome with
+    | Ok _ -> failtestf "'%s' must be refused, and was accepted" entry.Id
+    | Error refusal ->
+        Expect.equal
+            (ModelExecutionPeerRefusal.className refusal)
+            reason
+            $"'{entry.Id}' must be refused as '{reason}'; the reader said: {ModelExecutionPeerRefusal.describe refusal}"
+
 let private verifyRejection (entry: ManifestEntry) (document: string) : unit =
     let reason =
         Expect.wantSome entry.Reject $"'{entry.Id}' is a reject vector and must name its refusal class"
@@ -220,6 +245,7 @@ let private verifyRejection (entry: ManifestEntry) (document: string) : unit =
     match entry.Family, reason with
     | "pinned-exchange", _ -> verifyPinRejection entry reason document
     | "contract-invocation", "invocation-unparseable" -> verifyInvocationRejection entry document
+    | "model-execution", _ -> verifyModelExecutionRejection entry reason document
     | family, cls ->
         failwithf "the corpus names refusal class '%s' in family '%s', which this harness does not implement" cls family
 
@@ -234,7 +260,14 @@ let private corpusShapeTests =
 
             let families = entries |> List.map _.Family |> Set.ofList
 
-            for profile in [ "participant"; "gateway"; "module-host" ] do
+            for profile in
+                [
+                    "participant"
+                    "gateway"
+                    "module-host"
+                    "participant-data-host"
+                    "participant-modeller"
+                ] do
                 let required =
                     Expect.wantSome (Map.tryFind profile profiles) $"profile '{profile}' must be declared"
 

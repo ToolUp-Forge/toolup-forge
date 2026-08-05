@@ -224,6 +224,20 @@
          `PeerServerApp.run` and a deployment that never calls `hold`
          constructs none of it (GP 13). -->
     <Compile Include="Server\GatedComputeOutput.fs" />
+    <!-- Phase 638 — the federated model-execution profile: the peer
+         contracts that put the model-execution submitter wire objects
+         over peer RPC, the admission check every dispatch runs, and the
+         governed-diagnostics contract whose only construction route
+         demands the clean-room gate. Last, and appended rather than
+         placed: every dependency is above it (`CleanRoomGate.fs`, which
+         it wraps the diagnostics registration with, `CleanRoomBroker.fs`
+         for the answer shape, `PeerJobHandler.fs` for the job-fusion
+         pattern the long fit rides, and `IPlatformPeer.fs` for the
+         registration shape) and nothing downstream depends on it — it is
+         not composed by `PeerServerApp.run`, so a deployment that never
+         calls `host` or `governedDiagnostics` constructs none of it
+         (GP 13). -->
+    <Compile Include="Server\ModelExecutionPeerContract.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

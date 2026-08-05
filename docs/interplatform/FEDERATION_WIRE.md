@@ -19,7 +19,7 @@ document, and the corpus is the tie-breaker — it is emitted from running code,
 
 ## 1. Scope
 
-Six shape families are specified.
+Seven shape families are specified.
 
 | Family | Answers | Emitted by |
 |---|---|---|
@@ -29,6 +29,7 @@ Six shape families are specified.
 | **attestation** | what exact thing did these two parties agree, and who signed it? | every participant |
 | **contract invocation** | how is a call made, answered, and failed? | every participant |
 | **host envelope** | what can a module I run rely on here? | a module host |
+| **model execution** | how does one deployment fit a model against another's data without the data moving? | a data host and a modeller |
 
 **In scope:** the documents, their canonical encoding, their hashes and stamps, the error and
 refusal classes, and the versioning discipline that keeps them compatible.
@@ -56,9 +57,18 @@ claim of conformance MUST name it.
 | **participant** | peer surface, pinned exchange, attestation, contract invocation | The full bilateral relationship: publish a label, be pinned, sign and verify agreements, and **be called** over the data plane. |
 | **gateway** | participant + aggregate surface | The above, plus fronting a group of deployments as one peer. |
 | **module-host** | gateway + host envelope | The above, plus offering a surface a third party can author a module against. |
+| **participant-data-host** | participant + model execution | The above, plus **holding datasets and executing fits** a counterparty submits, and answering the aggregate projections it has declared. |
+| **participant-modeller** | participant + model execution | The above, plus **authoring specifications and submitting them** to a data host, and consuming what comes back. |
 
 Profiles are cumulative and the corpus is partitioned accordingly — `manifest.json` maps each
 profile to its required families, and every vector declares the lowest profile that must run it.
+
+**The two model-execution roles require the identical family and are still two profiles.** That is
+deliberate: they differ not in which documents they touch but in which side of each one they
+*emit*. The refusals a data host must PRODUCE are exactly the ones a modeller must UNDERSTAND, and
+an implementation that only ever produces them has certified half the seam while being able to
+claim all of it. A conformance claim therefore names the role, and an implementation that plays
+both — the ordinary single-deployment case (§5.7.8) — certifies against both.
 
 **The gateway shape is the intended cheap path.** A group does not have to re-platform to join a
 federation. A thin conformant gateway in front of an existing estate — one that derives an
@@ -102,6 +112,20 @@ rules are stated exhaustively rather than left to a library.
     **string** whose content is itself a canonical JSON document — not a nested object. The
     receiver decodes it as a second step. This is what lets a relay carry a payload it does not
     understand, and lets a result be forwarded without a re-encode that would change its bytes.
+13. **Real numbers** are JSON numbers in the **shortest decimal form that round-trips**, and they
+    **always carry a decimal point and at least one fractional digit** — `5.0`, never `5`.
+    Exponent notation MUST NOT be emitted; a magnitude that cannot be written in plain decimal
+    notation is outside every shape specified here. `NaN` and the infinities are not encodable and
+    MUST be refused before encoding rather than rendered as anything.
+    **The mandatory fractional digit is the rule most likely to be missed**, because the obvious
+    rendering in several runtimes drops it: an emitter that writes an integral real as `5` produces
+    a different, non-conformant document. Only the model-execution family (§5.7) carries reals; no
+    other document in this specification has a real-valued member.
+14. **Maps.** A member §5 marks *map* is a JSON object whose keys are sorted **ordinally
+    ascending**. This is the one place member order is not the shape's declaration order, and it is
+    stated per-member rather than inferred: a map has no declaration order to use, so it needs a
+    rule of its own, and the same ordinality argument as rule 10 applies — a locale-dependent sort
+    makes a document's bytes depend on the machine that produced them.
 
 ### 3.2 Divergences from RFC 8785 (JCS), field by field
 
@@ -111,11 +135,12 @@ here; there are no others.
 | # | JCS | Here | Why |
 |---|---|---|---|
 | 1 | Object members sorted lexicographically by UTF-16 code unit. | Members in the shape's **declaration order** (§5). | The shapes are versioned records with a published field order; that order is part of the contract, and re-sorting it would make the document's structure depend on the accident of its field names. An implementation that sorts lexicographically produces a **different, non-conformant document** — this is the divergence most likely to bite, so check it first. |
-| 2 | Numbers serialised as ECMAScript doubles. | 32-bit integers as JSON numbers; **64-bit integers as sign-prefixed decimal strings**. | A 64-bit integer is not exactly representable as a double, and silently rounding a byte ceiling or a budget is worse than encoding it as text. The sign prefix is always present, including for zero (`"+0"`). No document in this specification carries a floating-point number. |
+| 2 | Numbers serialised as ECMAScript doubles. | 32-bit integers as JSON numbers; **64-bit integers as sign-prefixed decimal strings**; reals per §3.1 rule 13. | A 64-bit integer is not exactly representable as a double, and silently rounding a byte ceiling or a budget is worse than encoding it as text. The sign prefix is always present, including for zero (`"+0"`). Reals appear only in the model-execution family, where a diagnostic IS a real number and encoding it as text would buy nothing — rule 13 pins the rendering instead. |
 | 3 | Says nothing about absent members. | Optional members are always present, `null` when absent. | A reader that distinguishes "absent" from "null" cannot be written against a document where emitters disagree about which to produce. Fixing it to `null` removes the question. |
 | 4 | Says nothing about instants. | ISO-8601 strings with an explicit offset. | An instant with no offset is ambiguous, and an epoch number would re-open divergence 2. |
 | 5 | Says nothing about unions. | §3.1 rule 11. | JSON has no sum type; the encoding has to be specified or every implementation invents one. |
 | 6 | Says nothing about nesting. | §3.1 rule 12 (embedded documents as strings). | See above. |
+| 7 | Object members sorted lexicographically by UTF-16 code unit. | A *map* member's keys sorted **ordinally** (§3.1 rule 14). | Close to JCS and not identical: JCS sorts by UTF-16 code unit, which differs from ordinal (UTF-8 / code-point) order for characters above the BMP. Every key in every map specified here is ASCII, so the two agree in practice — the rule is stated ordinally anyway, so that a future non-ASCII key has one answer rather than two. |
 
 An implementation MAY use a JCS library for string escaping (rule 5 is JCS-compatible) but MUST NOT
 delegate member ordering or number formatting to one.
@@ -250,10 +275,15 @@ selection**: an allow-list of `(ContractId, Owner?)` pairs. The rules are:
 6. **Consumption is external-only.** The group's `Consumes` is the exposing members' consumed
    contracts minus every contract any member of the group serves. Traffic satisfied inside the
    group is no part of the group's external face.
-7. **Routines and long-running dispatch.** A gateway that forwards only the invoke leg advertises
-   `Routines: []` and `LongRunningEnabled: false`. That is the honest report of what the group
-   itself dispatches: a member's long-running result is parked in the member's own store, which the
-   group's poll route cannot read.
+7. **Routines and long-running dispatch.** `LongRunningEnabled` is a boolean facet and **conjoins
+   over the exposing members**: the group dispatches long-running work exactly where every member
+   it fronts does. `Routines` is nonetheless `[]` — the group dispatches no handler of its own; it
+   translates a handle and forwards the poll to the member that owns the parked result. The two are
+   not in tension, and reading `Routines: []` as implying `LongRunningEnabled: false` is the
+   mistake this clause exists to prevent: one says *whose* handler runs, the other says *whether*
+   the leg is offered at all.
+   A gateway that does not translate handles publishes `LongRunningEnabled: false` — the honest
+   report of a group whose poll route cannot read a member's own store.
 
 Corpus: `aggregate-surface/group.json` (divergent posture, unanimous and non-unanimous pins, an
 unexposed member) and `aggregate-surface/solo.json` (the unanimous control).
@@ -518,6 +548,264 @@ host with a comparable composition model. A participant is under no obligation t
 canonical bytes and cannot live inside what it hashes. A consumer pins the stamp beside a generated
 module and re-checks it later to learn whether the host moved underneath it.
 
+### 5.7 Model execution (profiles: participant-data-host, participant-modeller)
+
+Two deployments, one of which holds the data. The **data host** owns the datasets and executes
+fits; the **modeller** authors specifications and submits them. The property the whole family
+exists to hold is that **the fit runs where the data lives**, so no raw series ever crosses the
+seam — not because the sides agree not to send it, but because no shape specified here can carry
+one.
+
+That claim is worth stating precisely, because "no rows on the wire" is easy to assert and easy to
+lose. It rests on three separate things, and each is checkable by someone who was not in the room:
+
+1. **No row-shaped operation exists.** §5.7.2 enumerates the operations. `ReadPage`-class access is
+   not among them, and §7.3 names the row-access vocabulary explicitly so that *asking* for one is
+   refused as what it is (`model-execution-row-read-refused`) rather than as an unrecognised
+   string. An operator counting refusals can tell a probe from a typo.
+2. **Every governed diagnostic is an aggregate the privacy gate can evaluate.** A projection
+   answers in the aggregate shape of §5.7.6 and nothing else. An answer in some other shape has
+   produced something no floor can be checked against, and the failure mode of a privacy gate must
+   be silence — so a projection that returned rows does not bypass the gate, it **fails** it.
+3. **Only declared projections are answerable.** The set a deployment declares IS its offer;
+   anything outside it is refused before any computation happens
+   (`model-execution-undeclared-diagnostic`). The family is therefore extensible by declaration and
+   closed by default: a deployment that declares nothing answers nothing.
+
+**Scope is never on the wire, and asserting one is not the same as choosing one.** Which data a
+call addresses is decided entirely by the receiver's binding for the validated calling peer. A
+request MAY carry an `AssertedScope` for the caller's own diagnostics; the receiver **MUST NOT
+route on it**, and MUST refuse a value that names any scope other than the binding's
+(`model-execution-scope-widening`). The distinction is the whole of it: a value the receiver checks
+is a self-check, and a value the receiver obeys is an impersonation vector.
+
+#### 5.7.1 The request envelope
+
+Every call carries exactly one positional argument: an **embedded** `ModelExecutionRequest`
+document (§3.1 rule 12).
+
+| Member | Type | Notes |
+|---|---|---|
+| `ProfileVersion` | int32 | This profile's own version. Currently `1`. Distinct from `FormatVersion` (§8) and from `ContractVersion` (§5.1); the three move independently and MUST NOT be conflated. |
+| `Operation` | string | The operation being invoked (§5.7.2) or the governed diagnostic being asked for (§5.7.6). |
+| `AssertedScope` | string, opt | What the caller believes it is addressing. Never routed on; a disagreement is refused. `null` asserts nothing and is the ordinary case. |
+| `Body` | **embedded** | The operation's own document. |
+
+A receiver MUST refuse a `ProfileVersion` greater than it supports
+(`model-execution-profile-version-unsupported`) and MUST NOT read such a document partially — a
+member the reader has no value for would satisfy an admission check by omission, which is the same
+argument §5.3 makes about labels.
+
+The `Operation` in the envelope and the method name on the wire (§5.5.1) MUST agree. They are
+carried twice on purpose: the method name is what the receiver dispatches on, and the envelope's
+copy is what a relay that never dispatches can route and record.
+
+Corpus: `model-execution/submission.json`.
+
+#### 5.7.2 Operations
+
+Served by the data host, under contract id `toolup.model-execution` at `ContractVersion` 1.0.
+
+| Operation | Body | Answer body | Leg |
+|---|---|---|---|
+| `SubmitFit` | `ModelExecutionSubmission` | `ModelExecutionOutcome` | **long-running** (§5.5.6) |
+| `GetOutcome` | a composite-key hash (a JSON string) | `ModelExecutionOutcome` | immediate |
+| `QueryOutcomes` | `ModelExecutionQuery` | `ModelExecutionPage` | immediate |
+| `ResolveVintage` | `ModelExecutionVintage` | `ModelExecutionVintageInfo` | immediate |
+
+`SubmitFit` is long-running because a fit is: it returns a job id and the caller polls
+`GET /peer/v1/{contractId}/jobs/{jobId}` for the terminal answer, with all three job states
+distinguishable per §5.5.6. A data host with no job substrate answers the submission with a typed
+refusal naming the absent substrate rather than failing the call — "this deployment cannot run
+fits" and "something broke" have different remedies.
+
+#### 5.7.3 Vintages and submissions
+
+**`ModelExecutionVintage`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `DatasetId` | string | **Scope-relative.** There is no scope member; see the scope rule above. |
+| `Version` | int32 | The pinned vintage. A fit names a version, never "latest": a submission that resolved differently on re-run is not reproducible, which is most of what a composite key is for. |
+
+**`ModelExecutionGate`**: `Name` (string), `Threshold` (real), `Direction` (string — `"AtLeast"` or
+`"AtMost"`).
+
+**`ModelExecutionSubmission`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `Vintage` | `ModelExecutionVintage` | |
+| `SpecPayload` | string | **Opaque.** Neither side inspects it; it is the modeller's own specification in the modeller's own encoding. |
+| `SpecHash` | string | **Submitter-minted, and stored and keyed verbatim.** A receiver MUST NOT re-derive, re-normalise or validate it against the payload. The two sides do not share a canonicalisation rule, and the point of the hash is that the submitter's rule is the one that counts — a receiver that re-hashed would key outcomes under an identity the submitter cannot reproduce. |
+| `ProviderKind` | string | Which fitter the host is being asked for. |
+| `Seed` | int64 (§3.1 rule 7) | Reproducibility seed. |
+| `Gates` | `ModelExecutionGate[]` | Sorted ordinally by `Name`. **The emitter owns the sort**, not the caller: two modellers asking for the same gates in different orders must produce the same document. |
+
+#### 5.7.4 Outcomes
+
+**`ModelExecutionGateVerdict`**: `Name` (string), `Threshold` (real), `Direction` (string),
+`Observed` (real), `Passed` (bool).
+
+**`ModelExecutionOutcome`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `CompositeKeyHash` | string | The outcome's addressable identity — what `GetOutcome` takes. |
+| `SpecHash` | string | The submitter's hash, echoed unchanged. |
+| `DatasetVersion` | string | The receiver's own key for the vintage the fit read. |
+| `Seed` | int64 | |
+| `ProviderId` | string | |
+| `ProviderVersion` | string | |
+| `ArtifactId` | string | A reference to the fitted artifact, held data-side. **A reference, not the artifact**: a model fitted on data that may not move is itself a derivative of that data, and the profile does not carry one. |
+| `ArtifactContentHash` | string | |
+| `Diagnostics` | **map**<string, real> | Keys sorted ordinally (§3.1 rule 14). Aggregate summary statistics over the fit. |
+| `GateVerdicts` | `ModelExecutionGateVerdict[]` | Sorted ordinally by `Name`. |
+| `Status` | string | The artifact's lifecycle status. |
+| `Annotations` | **map**<string, string> | Keys sorted ordinally. |
+| `RegisteredAt` | instant | |
+
+**Every member is metadata or an aggregate scalar.** That is the design, not an observation about
+one example: there is no member a row could ride in, so a data host cannot leak one through this
+shape even by accident, and a reviewer can establish that by reading the table rather than by
+auditing an implementation.
+
+**`ModelExecutionQuery`**: `SpecHashes` (string[]), `DatasetVersions` (string[]), `Statuses`
+(string[]), `BatchId` (string, opt), `Cursor` (string, opt), `Limit` (int32). The three lists are
+conjunctive filters, each sorted ordinally; an empty list matches anything.
+
+**`ModelExecutionPage`**: `Outcomes` (`ModelExecutionOutcome[]`), `NextCursor` (string, opt).
+
+**`ModelExecutionVintageInfo`**: `DatasetId` (string), `Version` (int32), `RowCount` (int64),
+`Format` (string), `ContentHash` (string), `CreatedAt` (instant). `RowCount` is a cohort size, which
+is a count and not a row; a deployment that considers its cohort sizes sensitive answers this
+operation through a gate like any other aggregate.
+
+Corpus: `model-execution/outcome.json`.
+
+#### 5.7.5 Refusals
+
+A **submitter-contract** answer is a union: `{"Answered": <embedded>}` or `{"Refused": <refusal>}`.
+(The governed-diagnostics contract answers differently, and §5.7.6 says why.)
+
+A union rather than two optional members, deliberately — "answered, with nothing" must not be
+expressible, because that is the shape in which a refusal gets mistaken for an empty result.
+
+| Class | Union case | Condition |
+|---|---|---|
+| `model-execution-profile-version-unsupported` | `ProfileVersionUnsupported` (requested, supported) | The envelope declares a profile version beyond the reader's. |
+| `model-execution-row-read-refused` | `RowAccessRefused` (operation) | The request named a row-level read (§7.3). The profile serves no such surface. |
+| `model-execution-undeclared-diagnostic` | `UndeclaredDiagnostic` (operation) | The request named an operation this deployment has not declared. |
+| `model-execution-scope-widening` | `ScopeWideningRefused` (asserted) | The envelope asserted a scope other than the peer binding's. |
+| `model-execution-peer-unbound` | `PeerUnbound` (peerId) | The validated caller has no binding here, so it addresses no scope. Fail-closed: never defaulted. |
+| `model-execution-request-unreadable` | `RequestUnreadable` (reason) | The document is not a request envelope. |
+| `model-execution-submitter-refused` | `SubmitterRefused` (refusal) | The deployment's own model-execution surface refused, and its typed reason is carried through **unchanged**. |
+
+The last one is the load-bearing one for a modeller. Carrying the inner refusal through rather than
+flattening it to a message is what lets a caller distinguish "no such provider" from "not
+authorised" from "the vintage does not exist" without matching on prose — the same argument §5.5.4
+makes for the numeric error code, applied one layer in.
+
+A gate withhold is **not** in this table. It reaches the caller as `PeerCleanRoomWithheld` (§5.5.4)
+carrying the template id and nothing else, for the reason stated there: a gate's own reasons are
+quantitative, and returning them hands a caller a counting oracle over the data the floor protects.
+
+Corpus: `model-execution/refusals.json`, plus one `reject` vector per input class.
+
+#### 5.7.6 Governed diagnostics
+
+A modeller who cannot see the series still has to know whether the model it is specifying is a
+reasonable one — whether two terms are collinear, whether a window is actually covered, what a
+transform does to the shape. The naive answer is "let them look at a sample", which is the row
+egress the whole profile exists to prevent. The answer here is a **declared aggregate projection**:
+a named question with a fixed aggregate answer shape, offered only if the deployment declared it.
+
+Served under contract id `toolup.model-execution.diagnostics` at `ContractVersion` 1.0. The
+**operation is the diagnostic** — there is no diagnostic-name member — because that is what lets a
+deployment's declared method surface be the declaration itself, checked by the receiver's privacy
+gate before the projection runs.
+
+| Diagnostic | Answers | Typical shape |
+|---|---|---|
+| `Collinearity` | how much do these terms move together? | histogram, one cell per term pair |
+| `Coverage` | how much of the window is actually observed? | aggregate, one cell |
+| `TransformPreview` | what does this transform do to the distribution? | histogram, one cell per bucket |
+
+**Request body — `ModelExecutionDiagnosticRequest`**: `Vintage` (`ModelExecutionVintage`), `Terms`
+(string[], sorted ordinally — the emitter owns the sort).
+
+**Answer body — `ModelExecutionAggregate`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `Shape` | union (no payload) | `Count` \| `Aggregate` \| `Histogram`. |
+| `Cells` | `ModelExecutionCell[]` | In the order the emitter produced. |
+
+**`ModelExecutionCell`**: `Label` (string), `Count` (int32 — the cohort size backing the cell, which
+is what a suppression or k-anonymity floor binds on), `Value` (real, opt — the aggregate where one
+applies).
+
+**The count is not decoration.** It is the member that makes the answer *checkable*: a floor can be
+evaluated against a cohort size and cannot be evaluated against a bare statistic, so a projection
+that omitted it would be one no gate could clear, and the correct outcome for an answer a gate
+cannot check is silence.
+
+**A governed diagnostic answers with the aggregate directly, NOT with the §5.7.5 answer union.**
+That looks like an inconsistency and is the opposite: the receiver's privacy gate evaluates
+whatever the method answered, so wrapping the aggregate in an envelope would hand the gate an
+envelope to evaluate — a shape no floor binds to — and the gate would correctly withhold every
+answer, including the ones that clear the floor. A refusal on this contract therefore rides the
+seam's own error channel: `PeerCleanRoomWithheld` (§5.5.4) for anything the gate declines, which is
+also what an undeclared projection produces, and deliberately indistinguishable from a floor
+withhold. Whether a projection was never offered or was offered and withheld is itself information
+about the data, and the caller gets neither.
+
+**Extending the family** means adding a diagnostic here and bumping `ProfileVersion` — it is not
+something a deployment does unilaterally, because a name one side invented is a name the other side
+refuses. **Narrowing** needs no coordination at all: a deployment declares less.
+
+Corpus: `model-execution/diagnostics.json`.
+
+#### 5.7.7 Reject vectors
+
+The corpus carries one document per refusable input, and each is a document a conformant reader
+MUST refuse with the class named:
+
+| Vector | Class |
+|---|---|
+| `model-execution/reject-row-read.json` | `model-execution-row-read-refused` |
+| `model-execution/reject-undeclared-diagnostic.json` | `model-execution-undeclared-diagnostic` |
+| `model-execution/reject-scope-widening.json` | `model-execution-scope-widening` |
+| `model-execution/reject-malformed.json` | `model-execution-request-unreadable` |
+
+The scope-widening vector is the one to read closely: it is **well-formed**, names a real
+operation, and would be answered without complaint by an implementation that treated
+`AssertedScope` as an addressing member. Refusing it is the difference between a diagnostic aid and
+an impersonation vector, and nothing about the document itself tells you which one you built.
+
+#### 5.7.8 Deployment: the two roles are configuration, not code
+
+A deployment does not choose to be a data host *or* a modeller at build time. It serves the
+contracts it registers and calls the ones it consumes, and **an ordinary single-instance deployment
+co-locates both roles**: it holds its own datasets, runs its own fits, and submits to itself
+in-process without any of this appearing on a wire at all. Federating is what happens when a second
+deployment is given a binding.
+
+So the difference between the two topologies is **peer configuration and nothing else**:
+
+- A **data host** registers the two contracts and holds one binding per counterparty — the scope
+  each peer's calls resolve under, decided receiver-side and never negotiated.
+- A **modeller** declares the contracts as consumed (§5.1 `ConsumedContract`) and pins the data
+  host's published surface (§5.3) before it calls.
+- A **dual-role** deployment does both. Its published surface lists the contracts under `Serves`
+  and under `Consumes`, which is honest and not a contradiction: it answers submissions from its
+  counterparties and sends its own elsewhere.
+
+Two consequences follow, and both are the reason to say this out loud rather than leave it implied.
+A deployment that starts single and later federates changes **no application code** — the fits it
+was already running are the fits a peer now submits. And a deployment that stops federating drops a
+binding; it does not unwind a data pipeline, because there was never one to unwind.
+
 ---
 
 ## 6. Labels are assertions
@@ -571,6 +859,38 @@ another language will and should word it differently.
 | `pin-stamp-mismatch` | pinned exchange | The document's stamp does not match a recomputation over its own surface. |
 | `pin-hash-not-agreed` | pinned exchange | Internally consistent, but not the document agreed out of band. |
 | `invocation-unparseable` | contract invocation | Not a well-formed request envelope. Refused before dispatch as a decode failure (`-32700`, HTTP `400`) — never partially read. |
+| `model-execution-profile-version-unsupported` | model execution | `ProfileVersion` beyond what the reader supports. |
+| `model-execution-row-read-refused` | model execution | The request named a row-level read (§7.3). |
+| `model-execution-undeclared-diagnostic` | model execution | The request named an operation the deployment has not declared. |
+| `model-execution-scope-widening` | model execution | The envelope asserted a scope other than the peer binding's. |
+| `model-execution-peer-unbound` | model execution | The validated caller has no binding on this deployment. |
+| `model-execution-request-unreadable` | model execution | Not a well-formed request envelope. |
+| `model-execution-submitter-refused` | model execution | The deployment's own model-execution surface refused; the typed reason is carried through. |
+
+### 7.3 Model-execution constants
+
+Contract ids, at `ContractVersion` 1.0:
+
+```
+toolup.model-execution                 the submitter operations (§5.7.2)
+toolup.model-execution.diagnostics     the governed projections (§5.7.6)
+```
+
+Operations (§5.7.2): `SubmitFit`, `GetOutcome`, `QueryOutcomes`, `ResolveVintage`.
+
+Declared diagnostics (§5.7.6): `Collinearity`, `Coverage`, `TransformPreview`.
+
+**Row-access vocabulary.** The profile serves none of these; they are enumerated so a request
+naming one is refused as `model-execution-row-read-refused` rather than as an unrecognised string:
+
+```
+ReadPage  ReadRows  GetRows  GetPage  DownloadContent  FetchContent  ExportRows  StreamRows
+```
+
+The list is deliberately generous — it names the shapes a row surface actually takes AND the
+obvious synonyms a caller would reach for. It costs nothing to extend and its only job is to make a
+refusal log legible: an operator wants to see that somebody asked for rows, not that somebody sent
+a string nobody recognised.
 
 ---
 
@@ -663,6 +983,10 @@ Ordered by how often each one is the thing that is wrong.
 - [ ] All three job states are distinguishable to a caller, and polling stops on either terminal
       one — a two-valued "result or not" projection is non-conformant.
 - [ ] Unknown members ignored; unknown error classes fall back to the numeric code.
+- [ ] Reals carry a **fractional digit** (`5.0`, not `5`) and never exponent notation (§3.1 rule 13).
+- [ ] Map keys sorted **ordinally** — the one member order that is not the declaration order.
+- [ ] A model-execution `AssertedScope` is **checked and refused**, never routed on.
+- [ ] A submitter-minted `SpecHash` is stored and keyed **verbatim**, never re-derived.
 
 ---
 
@@ -673,6 +997,13 @@ This repository ships the first conformant emitter of this specification, under
 and `src/ToolUp.Platform.Tests/InProcess/FederationWireConformanceTests.fs` certifies them against
 the committed corpus on every test run — including the forward-coupling check that fails when an
 emitter shape changes without regenerating the corpus.
+
+The model-execution profile's binding is `src/InterPlatform/Server/ModelExecutionPeerContract.fs`,
+and `src/ToolUp.Platform.Tests/InProcess/FederatedModelExecutionTests.fs` runs the two roles against
+each other in one process — including the negative half, that no dataset-page surface is reachable
+across the seam. The `reject` vectors are certified against the shipped reader
+(`ModelExecutionPeerContract.read`), not a harness-local re-implementation of it, so a green
+certification is a statement about what the deployment does.
 
 Regenerating the corpus:
 

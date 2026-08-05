@@ -1565,6 +1565,17 @@ let allTests =
         // intermediates coalesced to one frame AND that the terminal frame
         // arrived — because either alone is vacuous.
         JobProgressTests.tests
+        // Phase 638 — the federated model-execution profile. The round
+        // trip (submit → fit data-side → outcome) is the smallest part;
+        // the weight is on what CANNOT be reached: every row-access name
+        // the profile enumerates is refused with the row-read class
+        // specifically, and a control operation on the same registration
+        // is answered, so a broken dispatch cannot pass as a closed
+        // surface. The diagnostics arm shows an uncheckable answer being
+        // withheld by the gate rather than passed through, and an
+        // undeclared projection being refused with its handler probe at
+        // zero invocations.
+        FederatedModelExecutionTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

@@ -16,6 +16,7 @@ pinned-exchange/         what a consumer recorded of a counterparty's label
 attestation/             signed bilateral agreement records
 contract-invocation/     the data plane: request, response, errors, job poll
 host-envelope/           what a host offers a module it will run
+model-execution/         fitting a model against a counterparty's data, without the data moving
 ```
 
 ## Reading a fixture
@@ -30,8 +31,8 @@ not itself a specified wire shape.
 
 ## Certifying
 
-1. Pick a profile — `participant`, `gateway` or `module-host` — and read the families
-   `manifest.json` maps it to.
+1. Pick a profile — `participant`, `gateway`, `module-host`, `participant-data-host` or
+   `participant-modeller` — and read the families `manifest.json` maps it to.
 2. For every vector in those families, do what its `kind` says:
    - `round-trip` — decode and re-encode; the bytes must be identical.
    - `hash` — round-trip, and reproduce the stamp by recomputation (for an attestation, the

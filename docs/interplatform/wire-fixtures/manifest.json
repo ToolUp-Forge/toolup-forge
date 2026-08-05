@@ -7,12 +7,15 @@
     "pinned-exchange",
     "attestation",
     "contract-invocation",
-    "host-envelope"
+    "host-envelope",
+    "model-execution"
   ],
   "profiles": {
     "participant": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation" ],
     "gateway": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "aggregate-surface" ],
-    "module-host": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "aggregate-surface", "host-envelope" ]
+    "module-host": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "aggregate-surface", "host-envelope" ],
+    "participant-data-host": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "model-execution" ],
+    "participant-modeller": [ "peer-surface", "pinned-exchange", "attestation", "contract-invocation", "model-execution" ]
   },
   "vectors": [
     {
@@ -184,6 +187,82 @@
       "file": "host-envelope/stamp.json",
       "sha256": "9323bb084e0570e5ceec766ddd0b1e97279a4cd4c8eeb6918e119bab611f5255",
       "description": "The sidecar stamp a consumer pins beside a generated module, so it can tell later whether the host moved underneath it."
+    },
+    {
+      "id": "model-execution/submission",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "round-trip",
+      "file": "model-execution/submission.json",
+      "sha256": "07bcdfa33177838efc2f32b3440d0d624ba12222e7fbfb145f0857803c1405dd",
+      "description": "A fit submission in the profile's versioned envelope: the vintage named scope-relatively, the opaque provider spec beside the submitter-minted hash the host stores verbatim, and the requested gates in ordinal order."
+    },
+    {
+      "id": "model-execution/outcome",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "round-trip",
+      "file": "model-execution/outcome.json",
+      "sha256": "52da92126c1cc0a3973e4eda56dcda3c4d049f04843ba2b9c74c3311ce3be401",
+      "description": "The answer envelope carrying a registered outcome — composite key, gate verdicts, aggregate diagnostics and artifact reference. Every member is metadata or an aggregate scalar; there is no member a row could ride in."
+    },
+    {
+      "id": "model-execution/diagnostics",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "round-trip",
+      "file": "model-execution/diagnostics.json",
+      "sha256": "533a5c653fee59a248da13aa2135aca7239ba8510b80df4c8010e198178423ba",
+      "description": "The three declared governed diagnostics — collinearity, coverage and a transform preview — each an aggregate projection in the gate-checkable shape, so an answer that is not one is withheld rather than released."
+    },
+    {
+      "id": "model-execution/refusals",
+      "family": "model-execution",
+      "profile": "participant-modeller",
+      "kind": "round-trip",
+      "file": "model-execution/refusals.json",
+      "sha256": "1bc5862f0b7a18c83afca9679640e9dd3b5e715fd675cac4c51c14c94d448632",
+      "description": "One answer per refusal class the profile defines, including the submitter surface's own typed refusal carried through unchanged — so a modeller's mapping is pinned by the corpus rather than inferred from the classes it happened to trip."
+    },
+    {
+      "id": "model-execution/reject-row-read",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-row-read.json",
+      "sha256": "abac8de55da7969224386a4fd31e7f0a143afb3b206655b94867a0c0520efc01",
+      "reject": "model-execution-row-read-refused",
+      "description": "A request naming a row-level read. The profile serves no row-level surface, and the refusal names that specifically rather than reporting an unrecognised operation — a probe and a typo are different things to find in a log."
+    },
+    {
+      "id": "model-execution/reject-undeclared-diagnostic",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-undeclared-diagnostic.json",
+      "sha256": "8367052cbe86ef26496e7e47d38660bcd631ffb12e1f7fac0cb575873a4f84c1",
+      "reject": "model-execution-undeclared-diagnostic",
+      "description": "A request naming a projection this deployment has not declared. Declaration is the only route onto the diagnostics surface, so the refusal happens before anything is computed."
+    },
+    {
+      "id": "model-execution/reject-scope-widening",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-scope-widening.json",
+      "sha256": "cab32683658bf2d68db30e193be47becab17d61d36f26b57704488602ba2f5fd",
+      "reject": "model-execution-scope-widening",
+      "description": "A well-formed request asserting a scope other than the one the peer binding addresses. The host never routes on an asserted scope; it refuses a disagreement, which is the difference between a diagnostic aid and an impersonation vector."
+    },
+    {
+      "id": "model-execution/reject-malformed",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-malformed.json",
+      "sha256": "0336f453735ea45025309a4517cf6de39ce73ffc755ea1f038a48231e735fd10",
+      "reject": "model-execution-request-unreadable",
+      "description": "A truncated request envelope. It is refused whole rather than read as far as it parses — a member the reader has no value for would satisfy an admission check by omission."
     }
   ]
 }
