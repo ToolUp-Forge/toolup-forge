@@ -42,6 +42,11 @@ let private title (denial: SidebarVisibility.NavigationDenial) : string =
     match denial with
     | SidebarVisibility.NavigationDenial.NotSignedIn -> "Sign in to continue"
     | SidebarVisibility.NavigationDenial.NoActiveTeam -> "Pick a team first"
+    // Phase 637 — a curated-out module is not an access refusal, and
+    // titling it "you don't have access" would send the caller to ask an
+    // admin for a permission nobody withheld. The page is not part of
+    // this deployment's surface; say that.
+    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile -> "This page isn't part of this workspace"
     | SidebarVisibility.NavigationDenial.RequiresPlatformAdmin
     | SidebarVisibility.NavigationDenial.RequiresTeamOwnerAdmin
     | SidebarVisibility.NavigationDenial.NotExposedToTeam
@@ -63,6 +68,10 @@ let private hint (moduleName: string) (denial: SidebarVisibility.NavigationDenia
         sprintf "\"%s\" isn't available in your current workspace. Switching team or scope may reach it." moduleName
     | SidebarVisibility.NavigationDenial.NoActiveTeam ->
         sprintf "\"%s\" is scoped to a team, and you haven't picked one yet. Choose a team to continue." moduleName
+    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile ->
+        sprintf
+            "\"%s\" isn't one of the modules this workspace uses. An owner can add it to the workspace's module selection."
+            moduleName
 
 /// The SDK built-in denial surface. Rendered by the shell in the content
 /// area, so the sidebar, header and team switcher stay live around it —

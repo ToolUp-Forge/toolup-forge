@@ -114,12 +114,16 @@ let private managed = [ "Sales"; "SalesAnalysis"; "Forecast" ]
 let private exposed: AccessibleModulesResponse = {
     Managed = managed
     Accessible = managed
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 /// "Forecast" hidden from this team (Phase 245 exposure).
 let private hidden: AccessibleModulesResponse = {
     Managed = managed
     Accessible = [ "Sales"; "SalesAnalysis" ]
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 // ─── Axes (the Phase 570 matrix's, restated) ──────────────────────────

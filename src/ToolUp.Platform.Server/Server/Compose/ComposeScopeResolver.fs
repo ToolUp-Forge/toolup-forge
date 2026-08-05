@@ -58,6 +58,7 @@ let registerScopeResolution
     (resolvedLogger: ILogger)
     (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
     (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
+    (moduleRoutePrefixes: (string * string) list)
     (subjectMigratorOverride: IAnonymousSessionMigrator option)
     : unit =
 
@@ -134,9 +135,21 @@ let registerScopeResolution
         subjectMigratorOverride
         |> Option.defaultWith (fun () -> NoOpAnonymousSessionMigrator() :> IAnonymousSessionMigrator)
 
+    // Phase 637 — the module-route attribution registry, built from the
+    // SAME `ServerModule.RoutePrefixes` declarations `moduleSurfaceDefaults`
+    // is derived from, but keyed by module id: opt-in visibility route
+    // hardening has to answer "which module owns this path", and the
+    // surface registry has already discarded that by the time it is built.
+    // Registered unconditionally (it is inert data, and a deployment whose
+    // modules declare no prefixes gets `Prefixes = []`); the MIDDLEWARE
+    // that reads it is registered only under `EnforcedModuleVisibility`.
+    let moduleRouteRegistry =
+        ModuleVisibilityRoutes.ModuleRouteRegistry.create config.ModuleNames moduleRoutePrefixes
+
     services
         .AddSingleton<ISubjectResolver>(subjectResolver)
         .AddSingleton<SurfaceRequirementRegistry>(bridgeRegistry)
+        .AddSingleton<ModuleVisibilityRoutes.ModuleRouteRegistry>(moduleRouteRegistry)
         .AddSingleton<IStorageScopeResolver>(scopeResolver)
         .AddSingleton<IAnonymousSessionMigrator>(subjectMigrator)
         .AddScoped<AccessContext>(fun sp ->

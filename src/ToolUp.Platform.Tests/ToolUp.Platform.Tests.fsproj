@@ -1188,6 +1188,15 @@
              `Toolup.Sidebar`'s module initialiser reaches a Fable
              `importDefault` and cannot run under .NET. -->
         <Compile Include="InProcess\SidebarHidingContractTests.fs" />
+        <!-- Phase 637 — server-authoritative module-visibility profiles:
+             the monotone narrowing walk (and the ways it deliberately is
+             NOT the feature-flag walk), the ungoverned-id escape that
+             keeps an operator's first allowlist from hiding the admin
+             surface, stage 0 of the visibility fold (including that
+             `ShowAllModules` does not lift a profile), and the
+             route-attribution registry the opt-in hardening middleware
+             resolves against. -->
+        <Compile Include="InProcess\ModuleVisibilityContractTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target

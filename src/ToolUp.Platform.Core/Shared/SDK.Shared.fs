@@ -3109,6 +3109,16 @@ type ServerConfig = {
     /// mounts `PresenceContext.provider` client-side (awareness only —
     /// not co-editing).
     Presence: PresenceMode
+    /// Phase 637 — server-authoritative module-visibility profiles.
+    /// Default `NoModuleVisibility` — no store in DI, no admin API
+    /// mounted, no profile read on the accessible-modules path, and the
+    /// resolution the client receives is always `None`, so an existing
+    /// deployment is byte-for-byte unchanged until it opts in (GP 11 +
+    /// GP 13). `SurfacingModuleVisibility` curates navigation;
+    /// `EnforcedModuleVisibility` additionally 404s an excluded module's
+    /// declared route prefixes. See the `ModuleVisibilityMode` cases for
+    /// what each buys and what route hardening can and cannot reach.
+    ModuleVisibility: ModuleVisibilityMode
     /// Phase 594 — the data-vocabulary packs this deployment pins. Default
     /// `[]` — no pack pinned, so the composition validator's
     /// `vocabulary-typename-unknown` / `vocabulary-schema-mismatch` rules
@@ -3508,6 +3518,7 @@ module ServerConfig =
         RegisteredLocales = [ LocaleCode.en ]
         I18nCoverageMode = NoCoverageCheck
         Presence = NoPresence
+        ModuleVisibility = NoModuleVisibility
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
         ExpectedModules = None

@@ -919,6 +919,17 @@ let allTests =
         SidebarHidingContractTests.pinHideRuleTests
         SidebarHidingContractTests.legacyBlobTests
         SidebarHidingContractTests.paletteParityTests
+        // Phase 637 — server-authoritative module-visibility profiles.
+        // The narrowing walk, the ungoverned-id escape, stage 0 of the
+        // visibility fold, the server-side scope order, and the route
+        // attribution the opt-in hardening middleware resolves against.
+        // Five separate `[<Tests>]`-shaped bindings that must be listed
+        // here or they run as dormant values nobody executes.
+        ModuleVisibilityContractTests.resolutionTests
+        ModuleVisibilityContractTests.ungovernedTests
+        ModuleVisibilityContractTests.scopeWalkTests
+        ModuleVisibilityContractTests.foldTests
+        ModuleVisibilityContractTests.routeRegistryTests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through

@@ -930,6 +930,36 @@ let computeAccessibleModules
     {
         Managed = config.ModuleNames
         Accessible = accessible
+        // Phase 637 — resolving a profile is I/O, and this function is
+        // pure by contract (it is the piece the contract pack drives
+        // directly). The handler attaches the resolution with
+        // `withVisibilityProfile` after awaiting it; `None` here is the
+        // honest value for "nobody has asked yet", and it is also the
+        // final value on every deployment leaving
+        // `ServerConfig.ModuleVisibility = NoModuleVisibility` (GP 11).
+        VisibilityProfile = None
+    }
+
+/// Attach a resolved module-visibility profile to an accessible-modules
+/// response (Phase 637).
+///
+/// A separate combinator rather than a parameter on
+/// `computeAccessibleModules` for two reasons: that function is pure and
+/// resolution is async, and its signature is part of the approved public
+/// surface that consumers and the contract pack both call. Composing
+/// keeps both properties.
+///
+/// **The resolution is carried, not applied to `Accessible`.** Folding it
+/// in would be less code and strictly worse: the client could then no
+/// longer tell an RBAC exclusion from a curation one, and the route
+/// guard renders a different denial (and a different remedy) for each.
+let withVisibilityProfile
+    (resolution: ModuleVisibilityResolution option)
+    (response: AccessibleModulesResponse)
+    : AccessibleModulesResponse =
+    {
+        response with
+            VisibilityProfile = resolution
     }
 
 /// Build the `AccessibilityApi` handler. Read-only; reads the
@@ -980,7 +1010,27 @@ let accessibilityApiHandler (config: ServerConfig) =
                         | :? IPlatformAdminStore as store -> store.IsPlatformAdmin accessCtx.UserId
                         | _ -> async { return false }
 
-                    return computeAccessibleModules config accessCtx noActiveTeamInTeamMode isPlatformAdmin
+                    // Phase 637 — resolve the module-visibility profile
+                    // and carry it alongside the RBAC answer, so the
+                    // shell applies curation and accessibility from one
+                    // response (see `AccessibleModulesResponse`). Skipped
+                    // entirely on `NoModuleVisibility`, which is the
+                    // default: no store is registered, no blob is read,
+                    // and the field stays `None` — byte-for-byte the
+                    // pre-637 response (GP 11 + GP 13).
+                    let! visibility =
+                        match config.ModuleVisibility with
+                        | NoModuleVisibility -> async { return None }
+                        | SurfacingModuleVisibility
+                        | EnforcedModuleVisibility ->
+                            match ctx.RequestServices.GetService(typeof<IModuleVisibilityStore>) with
+                            | :? IModuleVisibilityStore as store ->
+                                ModuleVisibilityResolver.resolveFor store config.ModuleNames accessCtx
+                            | _ -> async { return None }
+
+                    return
+                        computeAccessibleModules config accessCtx noActiveTeamInTeamMode isPlatformAdmin
+                        |> withVisibilityProfile visibility
                 }
         })
 

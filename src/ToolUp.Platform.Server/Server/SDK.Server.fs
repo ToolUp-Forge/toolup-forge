@@ -126,6 +126,10 @@ let compose
     (shareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list)
     (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
     (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
+    // Phase 637 — `(moduleId, routePrefix)` attribution for opt-in
+    // module-visibility route hardening. Same declarations as
+    // `moduleSurfaceDefaults`, keyed by module rather than requirement.
+    (moduleRoutePrefixes: (string * string) list)
     (scheduledJobDeclarations: ScheduledJobDeclaration list)
     (storageResilience: ResilienceMode)
     (secretResilience: ResilienceMode)
@@ -1005,6 +1009,7 @@ let compose
         resolvedLogger
         moduleSurfaceDefaults
         routeSurfaceOverrides
+        moduleRoutePrefixes
         subjectMigratorOverride
 
     // Phase 9a — capture the `IServiceCollection` descriptors before

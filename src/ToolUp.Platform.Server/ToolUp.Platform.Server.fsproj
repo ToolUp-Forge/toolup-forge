@@ -706,6 +706,19 @@
         <Compile Include="Server\FeatureFlagSources.fs" />
         <Compile Include="Server\FlagEvaluator.fs" />
         <Compile Include="Server\FeatureFlagHandler.fs" />
+        <!-- Phase 637 — server-authoritative module-visibility profiles.
+             Store + blob impl + the scope walk + the admin handler + the
+             opt-in route-hardening middleware, in dependency order.
+             Beside the feature-flag family because the two share the
+             FlagScope vocabulary and the same scope set (the walk
+             direction differs — see ModuleVisibilityResolver). Before
+             PlatformApiHandler.fs, which attaches the resolution to the
+             accessible-modules response. -->
+        <Compile Include="Server\IModuleVisibilityStore.fs" />
+        <Compile Include="Server\ModuleVisibilityStore.fs" />
+        <Compile Include="Server\ModuleVisibilityResolver.fs" />
+        <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
+        <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
         <Compile Include="Server\Scope\StorageScopeResolver.fs" />
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />

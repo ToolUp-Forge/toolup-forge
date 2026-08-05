@@ -762,6 +762,18 @@ type ServerApp = {
     /// at `addModule` time. Folded into the per-process
     /// `SurfaceRequirementRegistry.Exact` map at `compose` time.
     RouteSurfaceOverrides: ((string * string) * SurfaceRequirement) list
+    /// Phase 637 — accumulated `(moduleId, routePrefix)` attribution.
+    /// The SAME `ServerModule.RoutePrefixes` declarations
+    /// `ModuleSurfaceDefaults` reads, paired with the module's `Name`
+    /// instead of its `SurfaceRequirement` — because opt-in
+    /// module-visibility route hardening has to answer "which module owns
+    /// this path", and `ModuleSurfaceDefaults` has already thrown the
+    /// module identity away by the time it reaches the registry.
+    /// Consumed only when `ServerConfig.ModuleVisibility =
+    /// EnforcedModuleVisibility`; accumulated unconditionally because it
+    /// costs one list append per module and the alternative is a
+    /// compose-order dependency on when the knob is read.
+    ModuleRoutePrefixes: (string * string) list
     /// Phase 9b.B — accumulated scheduled-job declarations. Sourced from
     /// each `ServerModule.JobHandlers` at `addModule` time and from
     /// direct `withScheduledJob` calls on the app (for composition-root-
@@ -883,6 +895,7 @@ module ServerApp =
         ShareTokenStoreDecorators = []
         ModuleSurfaceDefaults = []
         RouteSurfaceOverrides = []
+        ModuleRoutePrefixes = []
         ScheduledJobs = []
         UserDirectory = None
         ComposedCompanions = []
@@ -1971,6 +1984,16 @@ module ServerApp =
                         RegisteredSubjects = app.RegisteredSubjects @ subjectRegistryRegistrations
                         ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
                         RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
+                        // Phase 637 — the same declarations, keyed by
+                        // module id, so route hardening can attribute a
+                        // path to the module a profile has an opinion
+                        // about. A module declaring no `RoutePrefixes`
+                        // contributes nothing and is unreachable by
+                        // hardening — stated on `EnforcedModuleVisibility`
+                        // rather than silently discovered.
+                        ModuleRoutePrefixes =
+                            app.ModuleRoutePrefixes
+                            @ (m.RoutePrefixes |> List.map (fun prefix -> m.Name, prefix))
                         // Phase 9b.B — fan module-level job declarations
                         // onto the app's accumulator. Modules pre-9b.B
                         // declare no `JobHandlers`, so their contribution
@@ -2418,6 +2441,7 @@ module ServerApp =
                 app.ShareTokenStoreDecorators
                 app.ModuleSurfaceDefaults
                 app.RouteSurfaceOverrides
+                app.ModuleRoutePrefixes
                 app.ScheduledJobs
                 app.StorageResilience
                 app.SecretResilience

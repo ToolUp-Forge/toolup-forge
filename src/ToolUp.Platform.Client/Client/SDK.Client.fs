@@ -863,6 +863,11 @@ module Client =
         HasTeamScope = ClientConfig.hasTeamScope config
         ActiveTeamId = model.ActiveTeamId
         NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId config
+        // Phase 637 — the server-resolved visibility profile rides the
+        // accessible-modules response, so it needs no model field of its
+        // own and no second prefetch: it arrives, refreshes and clears on
+        // exactly the events `AccessibleModules` already does.
+        VisibilityProfile = model.AccessibleModules |> Option.bind _.VisibilityProfile
     }
 
     /// Phase 569.B — may this caller reach this module, with the reason

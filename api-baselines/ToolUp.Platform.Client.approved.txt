@@ -4300,12 +4300,14 @@ ToolUp.Platform.SidebarVisibility+NavigationDenial (class)
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsNoActiveTeam : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsNotAvailableToSubject : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsNotExposedToTeam : System.Boolean { get }
+ToolUp.Platform.SidebarVisibility+NavigationDenial.IsNotInVisibilityProfile : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsNotSignedIn : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsRequiresPlatformAdmin : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.IsRequiresTeamOwnerAdmin : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.NoActiveTeam : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.NotAvailableToSubject : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.NotExposedToTeam : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
+ToolUp.Platform.SidebarVisibility+NavigationDenial.NotInVisibilityProfile : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.NotSignedIn : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.RequiresPlatformAdmin : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
 ToolUp.Platform.SidebarVisibility+NavigationDenial.RequiresTeamOwnerAdmin : ToolUp.Platform.SidebarVisibility+NavigationDenial { get }
@@ -4314,6 +4316,7 @@ ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags (class)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.NoActiveTeam : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.NotAvailableToSubject : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.NotExposedToTeam : System.Int32 (literal)
+ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.NotInVisibilityProfile : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.NotSignedIn : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.RequiresPlatformAdmin : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility+NavigationDenial+Tags.RequiresTeamOwnerAdmin : System.Int32 (literal)
@@ -4324,7 +4327,7 @@ ToolUp.Platform.SidebarVisibility+SidebarModuleFacts.Id : System.String { get }
 ToolUp.Platform.SidebarVisibility+SidebarModuleFacts.NavRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole] { get }
 ToolUp.Platform.SidebarVisibility+SidebarModuleFacts.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs (class)
-ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.SubjectKind, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.SubjectKind, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution])
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.Accessibility : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse] { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.ActiveTeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
@@ -4333,6 +4336,7 @@ ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.NoActiveTeamLandingId 
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.ShowAllModules : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.SubjectKind : ToolUp.Platform.SubjectKind { get }
+ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.VisibilityProfile : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution] { get }
 ToolUp.Platform.SvgProp (class)
 ToolUp.Platform.SvgProp+svgProp (class)
 ToolUp.Platform.SvgProp+svgProp.alignmentBaseline(System.String) : Feliz.IReactProperty

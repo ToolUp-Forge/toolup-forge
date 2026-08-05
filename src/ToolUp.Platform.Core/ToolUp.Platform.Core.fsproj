@@ -194,6 +194,15 @@
         <Compile Include="Shared\EntityQueryTypes.fs" />
         <Compile Include="Shared\EntityQuery.fs" />
         <Compile Include="Shared\FeatureFlagTypes.fs" />
+        <!-- Phase 637 — server-authoritative module-visibility profiles
+             (ModuleVisibilityRule / Profile / Resolution + the pure
+             narrowing walk). After FeatureFlagTypes.fs (a profile is keyed
+             by FlagScope and resolved along the same scope walk); BEFORE
+             TeamTypes.fs, which carries the resolution on
+             AccessibleModulesResponse. Fable-safe (BCL primitives + list
+             folds) so the client fold runs the same function the server
+             does. -->
+        <Compile Include="Shared\Types\ModuleVisibilityTypes.fs" />
         <Compile Include="Shared\Types\RoleTypes.fs" />
         <Compile Include="Shared\Types\PermissionTypes.fs" />
         <!-- Phase 66 Stream A.1 — Subject / SurfaceProfile / SurfaceRequirement
@@ -244,6 +253,10 @@
         <Compile Include="Shared\Types\ModuleAITypes.fs" />
         <Compile Include="Shared\Types\ConversationTypes.fs" />
         <Compile Include="Shared\FeatureFlagApi.fs" />
+        <!-- Phase 637 — module-visibility admin contract. After
+             ModuleVisibilityTypes.fs (its payloads) and beside
+             FeatureFlagApi.fs, whose gating attributes it mirrors. -->
+        <Compile Include="Shared\ModuleVisibilityApi.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
         <Compile Include="Shared\Types\ConfigApi.fs" />

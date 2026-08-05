@@ -128,6 +128,20 @@ let buildRouteHandlers
     // registering unconditionally is zero-cost when unused.
     let featureFlagHandler = [ makeApi (FeatureFlagHandler.featureFlagApi config.FeatureFlags) ]
 
+    // Phase 637 — module-visibility admin API. Mounted only when the
+    // deployment opted in via `ServerConfig.ModuleVisibility`; the default
+    // `NoModuleVisibility` skips the route entirely, so no
+    // `IModuleVisibilityStore` is resolved and the surface returns 404 —
+    // which is also the honest answer, since nothing there could be
+    // configured (GP 13). The candidate list handed to the handler is
+    // `config.ModuleNames`, i.e. the composed module surface, so the
+    // editor can never drift from what the deployment actually registers.
+    let moduleVisibilityHandler: HttpHandler list =
+        match config.ModuleVisibility with
+        | NoModuleVisibility -> []
+        | SurfacingModuleVisibility
+        | EnforcedModuleVisibility -> [ makeApi (ModuleVisibilityApiHandler.moduleVisibilityApi config.ModuleNames) ]
+
     // Webhook admin API. Mounted only when the deployment opted in via
     // `ServerConfig.Webhooks = EnabledWebhooks`; the lightweight
     // `NoWebhooks` default skips the route entirely so the proxy
@@ -669,6 +683,7 @@ let buildRouteHandlers
             @ teamInvitationApiHandler
             @ configHandler
             @ featureFlagHandler
+            @ moduleVisibilityHandler
             @ webhookHandler
             @ userSchemaHandler
             @ presenceHandler

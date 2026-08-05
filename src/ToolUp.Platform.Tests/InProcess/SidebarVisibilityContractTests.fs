@@ -146,12 +146,16 @@ let private managed = [ "Sales"; "Marketing" ]
 let private exposed: AccessibleModulesResponse = {
     Managed = managed
     Accessible = managed
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 /// Phase 245 exposure — "Marketing" hidden from this team.
 let private hidden: AccessibleModulesResponse = {
     Managed = managed
     Accessible = [ "Sales" ]
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 // ─── Axes ─────────────────────────────────────────────────────────────
@@ -715,6 +719,8 @@ let navRoleTests =
             let response: AccessibleModulesResponse = {
                 Managed = [ "Ledger" ]
                 Accessible = []
+                // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+                VisibilityProfile = None
             }
 
             let admin = {
@@ -759,6 +765,8 @@ let orderingTests =
             let response: AccessibleModulesResponse = {
                 Managed = [ "AdminReports" ]
                 Accessible = []
+                // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+                VisibilityProfile = None
             }
 
             let inputs = {
@@ -778,6 +786,8 @@ let orderingTests =
             let response: AccessibleModulesResponse = {
                 Managed = [ "Sales" ]
                 Accessible = []
+                // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+                VisibilityProfile = None
             }
 
             let inputs = {

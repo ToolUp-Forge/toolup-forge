@@ -154,14 +154,26 @@ type SidebarVisibilityInputs = {
     /// id the no-team collapse targets, `None` when the deployment
     /// opted into neither landing path (the gate is then inert).
     NoActiveTeamLandingId: string option
+    /// Phase 637 — the server's resolved module-visibility profile, as
+    /// carried on `AccessibleModulesResponse.VisibilityProfile`. `None`
+    /// on a deployment that declares none (the default) and until the
+    /// accessible-modules fetch resolves, in which case stage 0 is a
+    /// no-op (GP 11).
+    ///
+    /// It rides the same response `Accessibility` comes from, so the two
+    /// arrive together and the sidebar never renders one without the
+    /// other. See that field's doc-comment for why it is carried
+    /// alongside rather than folded into `Accessible`.
+    VisibilityProfile: ModuleVisibilityResolution option
 }
 
 /// The inert shape: no RBAC response loaded, no platform role, no team
-/// scope, no landing gate. Stages 1, 2 and 4 are unconditional no-ops
-/// against it and stage 3 admits every module that declares no
-/// `Visibility`, so `visible defaults` returns a pre-B.3-shaped module
-/// list unchanged — the baseline callers customise with record-update
-/// syntax, and the fixture the contract pack builds its matrix from.
+/// scope, no landing gate, no visibility profile. Stages 0, 1, 2 and 4
+/// are unconditional no-ops against it and stage 3 admits every module
+/// that declares no `Visibility`, so `visible defaults` returns a
+/// pre-B.3-shaped module list unchanged — the baseline callers customise
+/// with record-update syntax, and the fixture the contract pack builds
+/// its matrix from.
 let defaults: SidebarVisibilityInputs = {
     Accessibility = None
     PlatformRole = None
@@ -171,12 +183,45 @@ let defaults: SidebarVisibilityInputs = {
     HasTeamScope = false
     ActiveTeamId = None
     NoActiveTeamLandingId = None
+    VisibilityProfile = None
 }
 
 // ─── The fold ─────────────────────────────────────────────────────────
 
 let private isPlatformAdmin (inputs: SidebarVisibilityInputs) : bool =
     inputs.PlatformRole = Some PlatformRole.PlatformAdmin
+
+/// Stage 0 — the server-authoritative visibility profile (Phase 637).
+///
+/// An operator's curated selection of which registered modules this
+/// deployment surfaces, resolved server-side along the
+/// `Platform → Team → User` narrowing walk and shipped to the client on
+/// `AccessibleModulesResponse.VisibilityProfile`.
+///
+/// **Why it runs FIRST, ahead of RBAC.** The stage order below is
+/// narrowest-authority-first, and a profile is the broadest authority
+/// there is here: it answers "is this module part of this deployment's
+/// surface at all", which is prior to "may this caller reach it". Running
+/// it first also means every later stage reasons about the curated set,
+/// so the denial a caller sees for an excluded module is the curation,
+/// not whichever downstream gate happened to refuse it too.
+///
+/// **`ShowAllModules` deliberately does NOT lift this.** Phase 245's
+/// admin escape short-circuits stage 1 because RBAC exposure is a
+/// per-team configuration a platform admin owns and routinely needs to
+/// see past. A visibility profile is a different kind of statement — the
+/// operator's own curation, which they change by editing the profile,
+/// not by toggling past it. Letting a debug toggle silently re-admit
+/// excluded modules would make the admin's sidebar disagree with every
+/// other caller's for a reason no UI explains.
+///
+/// Inert when no layer declared a profile and during the window before
+/// the accessible-modules fetch resolves, so an unconfigured deployment
+/// is byte-for-byte unchanged (GP 11). GP 12 — surfacing only; route
+/// hardening is the separate, opt-in
+/// `ServerConfig.ModuleVisibility = EnforcedModuleVisibility`.
+let private profileAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
+    ModuleVisibility.admitsModuleOpt inputs.VisibilityProfile f.Id
 
 /// Stage 1 — RBAC accessibility.
 ///
@@ -348,6 +393,14 @@ type NavigationDenial =
     /// the internet for no gain. A signed-in caller gets the precise
     /// reason below.
     | NotSignedIn
+    /// Phase 637 — the deployment's resolved module-visibility profile
+    /// excludes this module. Distinct from `NotExposedToTeam` on
+    /// purpose: that one is RBAC and the remedy is "ask an admin to
+    /// grant access"; this one is curation and the remedy is "ask an
+    /// operator to add the module to the profile" — or, more often,
+    /// "this module is not part of what this deployment does", which is
+    /// exactly what the operator meant to say.
+    | NotInVisibilityProfile
     /// The module declares `NavRole.PlatformAdminOnly` and the caller
     /// does not hold `PlatformRole.PlatformAdmin` — including the window
     /// before the boot-time role fetch resolves, which is exactly the
@@ -389,7 +442,9 @@ let decide (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (
     let f = facts m
 
     let reason =
-        if not (rbacAdmits inputs f) then
+        if not (profileAdmits inputs f) then
+            Some NavigationDenial.NotInVisibilityProfile
+        elif not (rbacAdmits inputs f) then
             Some NavigationDenial.NotExposedToTeam
         elif not (navRoleAdmits inputs f) then
             match effectiveNavRole f with
@@ -428,9 +483,32 @@ let canNavigateTo (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityIn
 /// unreachable by URL by construction rather than by two filters kept in
 /// agreement by hand.
 ///
+/// **This is THE visibility pipeline** (Phase 637). Four mechanisms
+/// answer four different questions about one module, and all four
+/// resolve here into one `visibleIds` result:
+///
+/// | Mechanism | Question | Where it is decided |
+/// |---|---|---|
+/// | Visibility profile (637) | is this module part of this deployment's surface? | server, `ModuleVisibilityResolver` |
+/// | `NavRole` (568) | may this ROLE see it? | this fold, stage 2 |
+/// | `NeedsData` | is there anything to show? | the shell, at render |
+/// | `UserSidebarPreferences` (572) | does this user want it on their rail? | client-local localStorage |
+///
+/// The first three are ACCESS-shaped and live in (or feed) this
+/// function; the fourth is a cosmetic overlay applied strictly AFTER it,
+/// by the rail builder, and never re-admits anything this function
+/// removed. `docs/platform/module-visibility.md` is the operator-facing
+/// version of the same table, including which one to reach for.
+///
 /// **Filter order is load-bearing, and this is why (570.C).** The stages
 /// compose narrowest-authority-first, each one only ever removing:
 ///
+/// 0. **The server's visibility profile** — the operator's curation of
+///    which modules this deployment surfaces at all. Broadest authority,
+///    so it runs before everything: later stages then reason about the
+///    curated set, and an excluded module reports the curation as its
+///    denial rather than whichever downstream gate also refused it.
+///    Inert when the deployment declares no profile (GP 11).
 /// 1. **RBAC accessibility** — the server's own answer to "may this
 ///    caller reach this module at all". It runs first so that every later
 ///    stage reasons about an already-authorised set, and so that Phase

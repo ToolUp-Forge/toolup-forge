@@ -480,6 +480,21 @@ let registerConfigQueryAndFlagStores
     services.AddSingleton<IFeatureFlagStore>(featureFlagStore).AddSingleton<FlagEvaluator.FlagEvaluator>(flagEvaluator)
     |> ignore
 
+    // Phase 637 — the module-visibility store is registered ONLY when the
+    // deployment opts in. Unlike the flag store (always registered, because
+    // an empty declared list still produces a working evaluator at no cost),
+    // a registered visibility store is not free: `computeAccessibleModules`
+    // would resolve a profile — up to three blob reads — on every
+    // accessible-modules call for a deployment that has no profiles at all.
+    // So the knob gates the registration, and the handler paths branch on
+    // the same knob (GP 11 + GP 13).
+    match config.ModuleVisibility with
+    | NoModuleVisibility -> ()
+    | SurfacingModuleVisibility
+    | EnforcedModuleVisibility ->
+        services.AddSingleton<IModuleVisibilityStore>(ModuleVisibilityStore.create resolvedBlobStorage)
+        |> ignore
+
 /// Phase 26 — register the Layer 3 deploy-plane substrate when
 /// `ServerConfig.DeployPlane = SingleNodeDeployPlane`. Wires three
 /// singletons (`IBuildOrchestrator` → `JobSchedulerBuildOrchestrator`,

@@ -273,6 +273,27 @@ let configurePipeline
     // route `SurfaceRequirement` from the composition-time registry,
     // then applies the 7-row response-code matrix (design §3.1).
     app.UseMiddleware<SurfaceEnforcementMiddleware>() |> ignore
+
+    // Phase 637 — opt-in module-visibility route hardening. Registered
+    // ONLY under `EnforcedModuleVisibility`, so the default and the
+    // surfacing-only mode pay not even a delegate hop (GP 13).
+    //
+    // Sits immediately AFTER `SurfaceEnforcementMiddleware` for the same
+    // reason the session-migration trigger below does: only a request that
+    // already cleared the authentication/authorisation gate reaches a
+    // curation decision. That ordering also keeps the response codes
+    // honest — an anonymous caller gets 401 from the gate above rather
+    // than a 404 that would imply the route does not exist for anyone.
+    // It must be after `ScopeResolutionMiddleware` besides, since the
+    // scoped `AccessContext` it resolves is built from that middleware's
+    // stashed items.
+    match config.ModuleVisibility with
+    | NoModuleVisibility
+    | SurfacingModuleVisibility -> ()
+    | EnforcedModuleVisibility ->
+        app.UseMiddleware<ModuleVisibilityRoutes.ModuleVisibilityRouteMiddleware>()
+        |> ignore
+
     // Phase 66 Stream C.1 (continuation) — anonymous→authenticated
     // session-migration trigger. Sits AFTER SurfaceEnforcementMiddleware
     // so only requests that pass the per-route surface gate can fire a

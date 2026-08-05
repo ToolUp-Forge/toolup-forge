@@ -128,6 +128,26 @@ type TeamCreationPolicy =
 type AccessibleModulesResponse = {
     Managed: string list
     Accessible: string list
+    /// Phase 637 — the resolved module-visibility profile for this
+    /// caller, or `None` when the deployment declares none (the default;
+    /// GP 11).
+    ///
+    /// **Why it rides THIS response rather than its own boot fetch.**
+    /// The shell already fetches accessible modules once at boot and
+    /// re-fetches on team switch, and the visibility profile changes on
+    /// exactly the same two events for exactly the same reason (it is
+    /// scope-resolved). A second prefetch key would double the boot
+    /// round-trips and add a window in which the sidebar has RBAC but
+    /// not curation — i.e. renders modules the operator excluded, then
+    /// removes them. Carrying both in one response makes that window
+    /// unrepresentable.
+    ///
+    /// It is NOT folded into `Accessible`, deliberately: exclusion by
+    /// profile and exclusion by RBAC are different facts with different
+    /// remedies (ask an admin to expose the module vs ask an admin to
+    /// re-curate), and the route guard renders a different denial for
+    /// each. Folding them would collapse both to "not exposed to team".
+    VisibilityProfile: ModuleVisibilityResolution option
 }
 
 /// Platform-level info: mode, auth posture. Always-on, no auth

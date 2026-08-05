@@ -92,11 +92,15 @@ let private managed = [ "Sales"; "Marketing" ]
 let private marketingHidden: AccessibleModulesResponse = {
     Managed = managed
     Accessible = [ "Sales" ]
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 let private allExposed: AccessibleModulesResponse = {
     Managed = managed
     Accessible = managed
+    // Phase 637 — this pack is about stages 1-4; the visibility profile is unconfigured, so stage 0 is inert.
+    VisibilityProfile = None
 }
 
 // ─── Subjects ─────────────────────────────────────────────────────────
