@@ -50,6 +50,13 @@ type ModelExecutionFitSubmission = {
     ProviderKind: string
     Seed: int64
     Gates: ModelExecutionGate list
+    /// Phase 451 (interface-plan decision D5) — who asked for this fit.
+    /// Declared by the submitter and used only by compute-budget policy,
+    /// which can gate agent-driven exploration harder than interactive
+    /// use. Forge never infers it and never acts on it beyond the budget
+    /// check, so a deployment with no budget composed is unaffected by
+    /// what it says.
+    SubmitterClass: SubmitterClass
 }
 
 /// An ordered batch of fit submissions under one caller-supplied
@@ -183,6 +190,13 @@ type ModelExecutionRefusal =
     | InvalidQuery of reason: string
     /// The scoring envelope refused, with the typed scoring reason.
     | ScoreRefused of ModelExecutionScoreRefusal
+    /// Phase 451 — the caller's scope has no compute budget left for this
+    /// submission, or the submission exceeds a per-class ceiling. Denied
+    /// before any work is enqueued; the payload names which ceiling, what
+    /// the quota is, and what has been spent, so a submitter (very often an
+    /// agent deciding whether to narrow its search) can act on the refusal
+    /// rather than merely observe it.
+    | BudgetDenied of ComputeBudgetDenial
     /// Underlying storage failure (diagnostic, not stable).
     | StorageFailure of reason: string
     /// An unmapped server-side exception, surfaced as data — the
@@ -203,6 +217,7 @@ module ModelExecutionRefusal =
         | ModelExecutionRefusal.NotFound w -> $"not found: {w}"
         | ModelExecutionRefusal.InvalidQuery r -> $"invalid query: {r}"
         | ModelExecutionRefusal.ScoreRefused _ -> "scoring refused (see typed reason)"
+        | ModelExecutionRefusal.BudgetDenied d -> ComputeBudgetDenial.describe d
         | ModelExecutionRefusal.StorageFailure r -> $"storage failure: {r}"
         | ModelExecutionRefusal.Unexpected m -> $"unexpected server failure: {m}"
 

@@ -1512,6 +1512,18 @@ let allTests =
         MemoizedComputeDispatcherTests.budgetCompositionTests
         MemoizedComputeDispatcherTests.durabilityTests
         MemoizedComputeDispatcherTests.evictionTests
+        // Phase 451 — compute-budget governance. The pure admission policy
+        // exhausted without infrastructure, then BOTH enforcement points:
+        // the IExternalComputeDispatcher decorator (concurrency cap with
+        // its raised-cap control, allowance exhaustion + period reset on an
+        // injected clock, per-class differential policy, the duration
+        // clamp, transparency under budget) and the fit-job enqueue —
+        // including the FEDERATED PEER path, which never touches Submit and
+        // which a decorator-only pack would report as covered while an
+        // agent walked straight past it. Plus the two audit rows, the Phase
+        // 9d metering integration, and the blob store's scope partitioning
+        // + its concurrent-admission race.
+        ComputeBudgetTests.tests
         // Phase 7c — data-object orphan-blob sweep. The orphan is produced
         // through the real Save path (metadata write refused, content
         // write already landed), so the sweep is exercised against the

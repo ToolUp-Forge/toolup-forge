@@ -7,6 +7,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.IDataExporter
 open ToolUp.Platform.Tracing
+open ToolUp.Platform.Usage
 
 // ─── compose phase: state stores ─────────────────────────────────────
 //
@@ -319,6 +320,92 @@ let registerExternalCompute (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<IExternalComputeDispatcher>(fun _ ->
             NoExternalComputeDispatcher() :> IExternalComputeDispatcher)
         |> ignore
+
+/// Phase 451 — register the compute-budget substrate when
+/// `ServerConfig.ComputeBudget = EnabledComputeBudget`.
+///
+/// Registers the blob-backed `IComputeBudgetStore` and the
+/// `ComputeBudgetGuard` both enforcement points share, then **replaces**
+/// the already-registered `IExternalComputeDispatcher` with the budget
+/// decorator wrapping it.
+///
+/// **Why replace-in-place rather than asking the consumer to compose the
+/// decorator.** The dispatcher registration is an
+/// `ImplementationInstance` by contract — `ComposeJobs.tryResolveExternalDispatcher`
+/// only sees instances, and a factory registration silently disables Phase
+/// 319's hand-off reconciliation. Wrapping here preserves that shape (the
+/// replacement is itself an instance) and means a deployment that opts into
+/// budgets gets them on every submission path without having to know the
+/// decorator exists. It runs before `registerJobScheduler`, so the
+/// scheduler's reconciliation polls go through the decorator too — which is
+/// what settles a reservation when a run reaches a terminal outcome.
+///
+/// `NoComputeBudget` (the default) registers nothing and replaces nothing,
+/// so the composed graph is byte-for-byte what it was (GP 11 + GP 13).
+///
+/// The cost model is `ComputeCostModel.perRun` — the only model that is
+/// correct without knowing the backend. A deployment with a metered backend
+/// composes its own guard ahead of this call and that registration wins.
+let registerComputeBudget
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (resolvedBlobStorage: IBlobStorage)
+    (resolvedLogger: ILogger)
+    (usageLog: IUsageLog)
+    : unit =
+    match config.ComputeBudget with
+    | NoComputeBudget -> ()
+    | EnabledComputeBudget ->
+        let store =
+            BlobComputeBudgetStore(resolvedBlobStorage, resolvedLogger) :> IComputeBudgetStore
+
+        services.TryAddSingleton<IComputeBudgetStore>(store) |> ignore
+
+        let guard =
+            ComputeBudgetGuard(
+                store,
+                // Phase 9d integration: a settled run meters its actual
+                // cost. Passed as the function rather than the interface
+                // so the guard does not have to compile after IUsageLog.fs
+                // — and so a deployment can meter elsewhere without
+                // implementing a store.
+                meter = usageLog.Record,
+                logger = resolvedLogger
+            )
+
+        services.TryAddSingleton<ComputeBudgetGuard>(guard) |> ignore
+
+        // Wrap whatever dispatcher instance is already registered. Absent
+        // (a consumer registering theirs by factory, which the Phase 319
+        // contract already warns about) means the external path is not
+        // decorated; the fit-enqueue path still is, and that is said out
+        // loud rather than failing silently.
+        let existing =
+            services
+            |> Seq.tryFind (fun d ->
+                d.ServiceType = typeof<IExternalComputeDispatcher>
+                && not (isNull d.ImplementationInstance))
+
+        match existing with
+        | Some descriptor ->
+            let inner = descriptor.ImplementationInstance :?> IExternalComputeDispatcher
+            services.Remove descriptor |> ignore
+
+            services.AddSingleton<IExternalComputeDispatcher>(
+                BudgetedComputeDispatcher(inner, guard) :> IExternalComputeDispatcher
+            )
+            |> ignore
+        | None ->
+            // `NoExternalCompute` registers its no-op dispatcher by
+            // factory, and budgeting a dispatcher whose every Submit is
+            // already a typed refusal buys nothing — so that combination
+            // is silent. A deployment that DID compose a backend and
+            // registered it by factory is the case worth naming.
+            match config.ExternalCompute with
+            | NoExternalCompute -> ()
+            | CustomExternalCompute ->
+                resolvedLogger.Warn
+                    "ServerConfig.ComputeBudget = EnabledComputeBudget, but no IExternalComputeDispatcher INSTANCE registration was found to wrap — external-compute submissions will NOT be budgeted (fit-job enqueue still is). Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(dispatcher)), not as a factory — the same requirement Phase 319's hand-off reconciliation already has."
 
 /// Register the `IColumnMappingStore` substrate when
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default

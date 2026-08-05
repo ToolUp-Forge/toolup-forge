@@ -60,6 +60,7 @@ let private request (scope: string) (seed: int64) (gates: GateSpec list) : FitRe
     ProviderKind = ReferenceModelFitProvider.Kind
     Seed = seed
     Gates = gates
+    SubmitterClass = SubmitterClass.Human
 }
 
 /// Only the model-fit payloads of the recorded trail, in order.
@@ -420,6 +421,7 @@ let opacityTests =
         ProviderKind = ReferenceModelFitProvider.Kind
         Seed = seed
         Gates = []
+        SubmitterClass = SubmitterClass.Human
     }
 
     testList "ModelFit — SpecHash opacity (Phase 603)" [

@@ -446,6 +446,7 @@ let private referenceSubmission: ModelExecutionPeerSubmission = {
             Direction = "AtLeast"
         }
     ]
+    SubmitterClass = "human"
 }
 
 let private expectRefusal (answer: Result<ModelExecutionPeerAnswer, PeerError>) (expected: string) (why: string) =

@@ -245,6 +245,15 @@
              memoizable, and a deployment that never constructs the
              decorator is unchanged (GP 13). -->
         <Compile Include="Server\MemoizedComputeDispatcher.fs" />
+        <!-- Phase 451 — compute-budget governance. The store seam + its
+             blob-backed default, then the shared admit/settle guard and the
+             IExternalComputeDispatcher decorator built on it. Before
+             ModelFitJobHandler.fs, because the fit-enqueue path is the
+             SECOND enforcement point and calls the same guard — a federated
+             peer's fit submission reaches only that one, never Submit. -->
+        <Compile Include="Server\IComputeBudgetStore.fs" />
+        <Compile Include="Server\ComputeBudgetStore.fs" />
+        <Compile Include="Server\BudgetedComputeDispatcher.fs" />
         <!-- Phase 320 — external-handle store: routing (handle to job
              run), authentication (the callback secret's hash) and the
              atomic MarkTerminal gate that makes callback-vs-poll

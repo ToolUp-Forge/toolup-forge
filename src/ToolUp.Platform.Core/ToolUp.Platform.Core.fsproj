@@ -331,6 +331,18 @@
              ServerConfig can carry an `ExternalCompute` field. Pure /
              Fable-safe (BCL primitives only — no backend SDK type), so a
              Client can hold an ExternalHandle opaquely. -->
+        <!-- Phase 451 — compute-budget value types (SubmitterClass /
+             ComputeBudget / ComputeBudgetDenial / ComputeBudgetUsage) + the
+             pure admission policy + the ComputeBudgetMode opt-in DU. BEFORE
+             ExternalCompute.fs, because ExternalWorkSpec carries a
+             SubmitterClass — which is also why the denial's projection onto
+             ExternalComputeError lives Server-side (precedence cannot be
+             mutual; see the file header). Before SDK.Shared.fs (ServerConfig
+             carries a `ComputeBudget` field), AuditTypes.fs (the denial rides
+             two audit payloads) and ModelExecutionWire.fs (it rides the typed
+             peer refusal, plan decision D6). Pure / Fable-safe — the cost
+             model and the store are Server-tier. -->
+        <Compile Include="Shared\ComputeBudget.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />

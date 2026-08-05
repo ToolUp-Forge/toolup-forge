@@ -38,6 +38,12 @@ let rec private defaultValue (t: Type) : obj =
         box 0L
     elif t = typeof<float> then
         box 0.0
+    elif t = typeof<decimal> then
+        // Phase 451 — the compute-budget payloads are the first audit
+        // payloads to carry a `decimal` (quotas and spend are `decimal`,
+        // not `float`, because an allowance that drifts by a float epsilon
+        // per run is one an operator cannot reconcile).
+        box 0M
     elif t = typeof<Guid> then
         box Guid.Empty
     elif t = typeof<DateTime> then

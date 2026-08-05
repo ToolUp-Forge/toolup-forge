@@ -609,6 +609,22 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> RateLimitRefused(fromAuditJson<RateLimitRefusedPayload> j)
     }
     {
+        EventType = "ComputeBudgetDenied"
+        TryEncode =
+            (function
+            | ComputeBudgetDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ComputeBudgetDenied(fromAuditJson<ComputeBudgetDeniedPayload> j)
+    }
+    {
+        EventType = "ComputeBudgetWarning"
+        TryEncode =
+            (function
+            | ComputeBudgetWarning p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ComputeBudgetWarning(fromAuditJson<ComputeBudgetWarningPayload> j)
+    }
+    {
         EventType = "DataSubjectRequest"
         TryEncode =
             (function

@@ -1656,6 +1656,17 @@
              zero-budget claim is measured through a counting pass-through
              standing in for Phase 451. -->
         <Compile Include="InProcess\MemoizedComputeDispatcherTests.fs" />
+        <!-- Phase 451 — compute-budget governance. The pure admission
+             policy exhausted without infrastructure, then both enforcement
+             points: the IExternalComputeDispatcher decorator (concurrency,
+             allowance + period reset, per-class differential policy, the
+             duration clamp, transparency under budget) and the fit-job
+             enqueue — including the FEDERATED PEER path, which never
+             touches Submit and which a decorator-only test would report as
+             covered while an agent walked straight past it. Plus the audit
+             rows, the Phase 9d metering integration, and the blob store's
+             scope partitioning + concurrent-admission race. -->
+        <Compile Include="InProcess\ComputeBudgetTests.fs" />
         <!-- Phase 7c — data-object orphan-blob sweep: a real Save severed
              between its content and metadata writes produces the orphan,
              then the grace window (deferred vs reclaimed, one stamp

@@ -659,6 +659,9 @@ let private referenceSubmission: ModelExecutionPeerSubmission = {
             Direction = "AtLeast"
         }
     ]
+    // Phase 451 — the declared submitter class rides the peer wire as a
+    // stable lowercase label (interface-plan decision D5).
+    SubmitterClass = "agent"
 }
 
 /// A registered outcome in the SUBMITTER surface's own shape, projected

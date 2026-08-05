@@ -323,6 +323,20 @@ type ExternalWorkSpec = {
     /// beside the spec would be a promise only the submitting call frame
     /// could keep.
     Profile: ExecutionProfile
+    /// Phase 451 — who asked for this work. Read only by compute-budget
+    /// policy, which can hold `AgentInitiated` submissions to a tighter
+    /// ceiling than `Human` ones without forge learning what an agent
+    /// exploration is.
+    ///
+    /// On the spec for exactly the reason `Profile` is, one field above:
+    /// the declaration travels with the work, so it survives being
+    /// persisted, re-read after a restart, and handed to a dispatcher by a
+    /// process that is not the one that authored it.
+    ///
+    /// `create` sets `SubmitterClass.Human`, so every pre-451 call site
+    /// builds the identical spec it always did, and a deployment that
+    /// composes no budget never reads the field at all (GP 11 + GP 13).
+    SubmitterClass: SubmitterClass
 }
 
 module ExternalWorkSpec =
@@ -339,6 +353,9 @@ module ExternalWorkSpec =
         Timeout = None
         Idempotency = None
         Profile = ExecutionProfile.Standard
+        // Phase 451 — the permissive class, so an existing call site is
+        // never silently reclassified as agent traffic by an upgrade.
+        SubmitterClass = SubmitterClass.Human
     }
 
     /// Add (or overwrite) one advisory resource hint.
@@ -361,6 +378,13 @@ module ExternalWorkSpec =
     let withProfile (profile: ExecutionProfile) (spec: ExternalWorkSpec) : ExternalWorkSpec = {
         spec with
             Profile = profile
+    }
+
+    /// Phase 451 — declare who asked for this work, so compute-budget
+    /// policy can gate it by class.
+    let withSubmitterClass (submitter: SubmitterClass) (spec: ExternalWorkSpec) : ExternalWorkSpec = {
+        spec with
+            SubmitterClass = submitter
     }
 
     /// Phase 478 — require a clean-room-grade worker: the submission is

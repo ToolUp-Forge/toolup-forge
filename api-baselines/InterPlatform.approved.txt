@@ -1029,12 +1029,13 @@ ToolUp.InterPlatform.ModelExecutionPeerRequest.Body : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerRequest.Operation : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerRequest.ProfileVersion : System.Int32 { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission (class)
-ToolUp.InterPlatform.ModelExecutionPeerSubmission..ctor(ToolUp.InterPlatform.ModelExecutionPeerVintage, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGate])
+ToolUp.InterPlatform.ModelExecutionPeerSubmission..ctor(ToolUp.InterPlatform.ModelExecutionPeerVintage, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGate], System.String)
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.Gates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ModelExecutionPeerGate] { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.ProviderKind : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.Seed : System.Int64 { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.SpecHash : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.SpecPayload : System.String { get }
+ToolUp.InterPlatform.ModelExecutionPeerSubmission.SubmitterClass : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerSubmission.Vintage : ToolUp.InterPlatform.ModelExecutionPeerVintage { get }
 ToolUp.InterPlatform.ModelExecutionPeerVintage (class)
 ToolUp.InterPlatform.ModelExecutionPeerVintage..ctor(System.String, System.Int32)

@@ -554,6 +554,8 @@ ToolUp.Platform.BlobBackedPublisherKeyStore (class)
 ToolUp.Platform.BlobBackedPublisherKeyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule (class)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IPublisherKeyStore
+ToolUp.Platform.BlobComputeBudgetStore (class)
+ToolUp.Platform.BlobComputeBudgetStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.BlobDatasetStore (class)
 ToolUp.Platform.BlobDatasetStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec)
 ToolUp.Platform.BlobDatasetStoreModule (class)
@@ -609,6 +611,8 @@ ToolUp.Platform.BootstrapTeam.initialTeamNameEnvVar : System.String (literal)
 ToolUp.Platform.BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BudgetedComputeDispatcher (class)
+ToolUp.Platform.BudgetedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ComputeBudgetGuard, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.BuildRouteHandlers (class)
 ToolUp.Platform.BuildRouteHandlers.buildRouteHandlers(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PersistentEventStore+PersistentEventStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]]) : ToolUp.Platform.BuildRouteHandlers+RouteHandlers
 ToolUp.Platform.BuildRouteHandlers+RouteHandlers (class)
@@ -971,6 +975,7 @@ ToolUp.Platform.ComposeStores (class)
 ToolUp.Platform.ComposeStores.buildDataObjectStoreAndCatalog(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.FileProcessor+DataType]]) : System.Tuple`2[ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDataCatalog]
 ToolUp.Platform.ComposeStores.buildOptionalStoreValues(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.IDataObjectStore) : System.Tuple`3[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]]
 ToolUp.Platform.ComposeStores.registerColumnMappingStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.ComposeStores.registerComputeBudget(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, ToolUp.Platform.Usage.IUsageLog) : System.Void
 ToolUp.Platform.ComposeStores.registerConfigQueryAndFlagStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IConfigStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : System.Void
 ToolUp.Platform.ComposeStores.registerConsentStateStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerDatasetStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -1315,6 +1320,43 @@ ToolUp.Platform.ComputeBackendStats.LastRefusal : Microsoft.FSharp.Core.FSharpOp
 ToolUp.Platform.ComputeBackendStats.Refused : System.Int64 { get }
 ToolUp.Platform.ComputeBackendStats.Submitted : System.Int64 { get }
 ToolUp.Platform.ComputeBackendStats.Succeeded : System.Int64 { get }
+ToolUp.Platform.ComputeBudgetGuard (class)
+ToolUp.Platform.ComputeBudgetGuard..ctor(ToolUp.Platform.IComputeBudgetStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeCostModel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Usage.UsageRecord, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.ComputeBudgetGuard.Admit(System.String, ToolUp.Platform.SubmitterClass, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.ComputeBudgetReservation, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]], ToolUp.Platform.ComputeBudgetDenial]]
+ToolUp.Platform.ComputeBudgetGuard.CostModel : ToolUp.Platform.ComputeCostModel { get }
+ToolUp.Platform.ComputeBudgetGuard.Release(ToolUp.Platform.ComputeBudgetReservation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.ComputeBudgetGuard.Settle(ToolUp.Platform.ComputeBudgetReservation, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.ComputeBudgetGuard.toComputeError(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Platform.ExternalComputeError
+ToolUp.Platform.ComputeBudgetJson (class)
+ToolUp.Platform.ComputeBudgetJson.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.ComputeBudgetJson.deserialiseBudget(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBudget]
+ToolUp.Platform.ComputeBudgetJson.deserialiseUsage(System.String, System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBudgetUsage]
+ToolUp.Platform.ComputeBudgetJson.serialiseBudget(ToolUp.Platform.ComputeBudget) : System.Byte[]
+ToolUp.Platform.ComputeBudgetJson.serialiseUsage(ToolUp.Platform.ComputeBudgetUsage) : System.Byte[]
+ToolUp.Platform.ComputeBudgetLayout (class)
+ToolUp.Platform.ComputeBudgetLayout.BlobPrefix : System.String (literal)
+ToolUp.Platform.ComputeBudgetLayout.DefaultContainer : System.String (literal)
+ToolUp.Platform.ComputeBudgetLayout.budgetBlob(System.String) : System.String
+ToolUp.Platform.ComputeBudgetLayout.scopePrefix(System.String) : System.String
+ToolUp.Platform.ComputeBudgetLayout.usageBlob(System.String, System.String) : System.String
+ToolUp.Platform.ComputeBudgetReservation (class)
+ToolUp.Platform.ComputeBudgetReservation..ctor(System.String, System.String, System.Decimal, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.DateTime)
+ToolUp.Platform.ComputeBudgetReservation.AdmittedAt : System.DateTime { get }
+ToolUp.Platform.ComputeBudgetReservation.Hints : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ComputeBudgetReservation.PeriodKey : System.String { get }
+ToolUp.Platform.ComputeBudgetReservation.ReservedCost : System.Decimal { get }
+ToolUp.Platform.ComputeBudgetReservation.ScopeId : System.String { get }
+ToolUp.Platform.ComputeBudgetSurface (class)
+ToolUp.Platform.ComputeBudgetSurface.ExternalCompute : System.String (literal)
+ToolUp.Platform.ComputeBudgetSurface.ModelFitEnqueue : System.String (literal)
+ToolUp.Platform.ComputeCostModel (class)
+ToolUp.Platform.ComputeCostModel..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Decimal], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, System.Decimal]])
+ToolUp.Platform.ComputeCostModel.Admit : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Decimal] { get }
+ToolUp.Platform.ComputeCostModel.Settle : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, System.Decimal]] { get }
+ToolUp.Platform.ComputeCostModelModule (class)
+ToolUp.Platform.ComputeCostModelModule.fromHint(System.String, System.Decimal) : ToolUp.Platform.ComputeCostModel
+ToolUp.Platform.ComputeCostModelModule.perMinute(System.Decimal) : ToolUp.Platform.ComputeCostModel
+ToolUp.Platform.ComputeCostModelModule.perRun : ToolUp.Platform.ComputeCostModel { get }
 ToolUp.Platform.ComputeFleetCompose (class)
 ToolUp.Platform.ComputeFleetCompose.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComputeBackendRegistration], ToolUp.Platform.Metrics.IMetricsSink) : ToolUp.Platform.RoutingComputeDispatcher
 ToolUp.Platform.ComputeFleetDiagnosticsContributor (class)
@@ -2893,15 +2935,19 @@ ToolUp.Platform.FileNameSanitiser (class)
 ToolUp.Platform.FileNameSanitiser.validate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.FitBatchError (class)
 ToolUp.Platform.FitBatchError.EmptyBatch : ToolUp.Platform.FitBatchError { get }
+ToolUp.Platform.FitBatchError.IsBudgetDenied : System.Boolean { get }
 ToolUp.Platform.FitBatchError.IsEmptyBatch : System.Boolean { get }
 ToolUp.Platform.FitBatchError.IsMissingBatchId : System.Boolean { get }
 ToolUp.Platform.FitBatchError.IsScopeMismatch : System.Boolean { get }
 ToolUp.Platform.FitBatchError.MissingBatchId : ToolUp.Platform.FitBatchError { get }
 ToolUp.Platform.FitBatchError.Tag : System.Int32 { get }
+ToolUp.Platform.FitBatchError+BudgetDenied (class)
+ToolUp.Platform.FitBatchError+BudgetDenied.Item : ToolUp.Platform.ComputeBudgetDenial { get }
 ToolUp.Platform.FitBatchError+ScopeMismatch (class)
 ToolUp.Platform.FitBatchError+ScopeMismatch.index : System.Int32 { get }
 ToolUp.Platform.FitBatchError+ScopeMismatch.itemScope : System.String { get }
 ToolUp.Platform.FitBatchError+Tags (class)
+ToolUp.Platform.FitBatchError+Tags.BudgetDenied : System.Int32 (literal)
 ToolUp.Platform.FitBatchError+Tags.EmptyBatch : System.Int32 (literal)
 ToolUp.Platform.FitBatchError+Tags.MissingBatchId : System.Int32 (literal)
 ToolUp.Platform.FitBatchError+Tags.ScopeMismatch : System.Int32 (literal)
@@ -2942,13 +2988,14 @@ ToolUp.Platform.FitOutcomeModule (class)
 ToolUp.Platform.FitOutcomeModule.failedGates(ToolUp.Platform.FitOutcome) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict]
 ToolUp.Platform.FitOutcomeModule.gatesPassed(ToolUp.Platform.FitOutcome) : System.Boolean
 ToolUp.Platform.FitRequest (class)
-ToolUp.Platform.FitRequest..ctor(System.String, ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.ModelSpecRef, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateSpec])
+ToolUp.Platform.FitRequest..ctor(System.String, ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.ModelSpecRef, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateSpec], ToolUp.Platform.SubmitterClass)
 ToolUp.Platform.FitRequest.DatasetVersion : ToolUp.Platform.DatasetVersionRef { get }
 ToolUp.Platform.FitRequest.Gates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateSpec] { get }
 ToolUp.Platform.FitRequest.ProviderKind : System.String { get }
 ToolUp.Platform.FitRequest.ScopeId : System.String { get }
 ToolUp.Platform.FitRequest.Seed : System.Int64 { get }
 ToolUp.Platform.FitRequest.SpecRef : ToolUp.Platform.ModelSpecRef { get }
+ToolUp.Platform.FitRequest.SubmitterClass : ToolUp.Platform.SubmitterClass { get }
 ToolUp.Platform.FitRequestBatch (class)
 ToolUp.Platform.FitRequestBatch..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FitRequest])
 ToolUp.Platform.FitRequestBatch.BatchId : System.String { get }
@@ -3224,6 +3271,12 @@ ToolUp.Platform.IBuildOrchestrator.GetQueueDepth() : Microsoft.FSharp.Control.FS
 ToolUp.Platform.IBuildOrchestrator.ListActiveBuilds(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
 ToolUp.Platform.ICompositionCapabilityGate (interface)
 ToolUp.Platform.ICompositionCapabilityGate.Check(ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability) : ToolUp.Platform.CapabilityGateDecision
+ToolUp.Platform.IComputeBudgetStore (interface)
+ToolUp.Platform.IComputeBudgetStore.Admit(System.String, System.String, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ComputeBudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBudgetUsage, ToolUp.Platform.ComputeBudgetDenial]]
+ToolUp.Platform.IComputeBudgetStore.GetBudget(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ComputeBudget]
+ToolUp.Platform.IComputeBudgetStore.ReadUsage(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ComputeBudgetUsage]
+ToolUp.Platform.IComputeBudgetStore.SetBudget(System.String, ToolUp.Platform.ComputeBudget) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IComputeBudgetStore.Settle(System.String, System.String, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IConfigStore (interface)
 ToolUp.Platform.IConfigStore.Clear(ToolUp.Platform.StorageScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IConfigStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
@@ -3917,6 +3970,8 @@ ToolUp.Platform.InMemoryAuditSink.Received : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.InMemoryAuditSink.ReceivedEvents : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]] { get }
 ToolUp.Platform.InMemoryAuditSink.StopFailing() : System.Void
 ToolUp.Platform.InMemoryAuditSink.TotalDelivered : System.Int32 { get }
+ToolUp.Platform.InMemoryComputeBudgetStore (class)
+ToolUp.Platform.InMemoryComputeBudgetStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryDataSource (class)
 ToolUp.Platform.InMemoryDataSource.create() : ToolUp.Platform.InMemoryDataSource+InMemoryDataSource
 ToolUp.Platform.InMemoryDataSource+InMemoryDataSource (class)
@@ -4558,6 +4613,7 @@ ToolUp.Platform.ModelFitBatch (class)
 ToolUp.Platform.ModelFitBatch.ItemHandlerName : System.String (literal)
 ToolUp.Platform.ModelFitBatch.serialiseItem(ToolUp.Platform.FitBatchItemPayload) : System.String
 ToolUp.Platform.ModelFitBatch.submit(ToolUp.Platform.IJobScheduler, ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.FitRequestBatch) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitBatchSubmission, ToolUp.Platform.FitBatchError]]
+ToolUp.Platform.ModelFitBatch.submitBudgeted(ToolUp.Platform.IJobScheduler, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBudgetGuard], System.String, ToolUp.Platform.FitRequestBatch) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitBatchSubmission, ToolUp.Platform.FitBatchError]]
 ToolUp.Platform.ModelFitBatch.tryParseItem(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitBatchItemPayload, System.String]
 ToolUp.Platform.ModelFitBatchItemJobHandler (class)
 ToolUp.Platform.ModelFitBatchItemJobHandler..ctor(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IModelRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)

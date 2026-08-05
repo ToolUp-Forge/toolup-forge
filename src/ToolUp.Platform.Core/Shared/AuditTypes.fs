@@ -1617,6 +1617,69 @@ type RateLimitRefusedPayload = {
     Reason: string
 }
 
+/// Phase 451 — a compute submission was refused by the scope's budget.
+/// Emitted by `ComputeBudgetGuard` on every denial, from both enforcement
+/// points (the `IExternalComputeDispatcher.Submit` decorator and the
+/// fit-job enqueue path), so an operator sees one uniform row whichever
+/// surface the submission arrived on.
+///
+/// **Always recorded, never sampled.** A budget refusal is material state
+/// — the work did NOT happen, someone is waiting for a result that will
+/// not arrive, and the reason is a policy decision the deployment made.
+/// That is the same argument that made `RateLimitRefused` unconditional
+/// while `RateLimitWaited` is threshold-gated.
+type ComputeBudgetDeniedPayload = {
+    /// The typed refusal, verbatim — the same value the caller received,
+    /// so the audit row and the client's error cannot disagree.
+    Denial: ComputeBudgetDenial
+    /// Which enforcement point refused: `"external-compute"` (the
+    /// dispatcher decorator) or `"model-fit-enqueue"`.
+    Surface: string
+    /// Work discriminator of the refused submission — `ExternalWorkSpec.Kind`
+    /// for an external submission, the batch id for a fit enqueue. Opaque
+    /// to the platform; recorded so an operator can tell which workload is
+    /// exhausting the budget.
+    Kind: string
+    /// Submitter identity, where the surface resolved one. Empty when the
+    /// seam carries no identity (`IExternalComputeDispatcher.Submit` takes
+    /// a scope, not a principal).
+    SubmittedBy: string
+    /// Wall-clock of the refusal (UTC).
+    RefusedAt: DateTime
+}
+
+/// Phase 451 — a compute submission was **admitted** while the scope's
+/// period allowance was at or past its warning threshold.
+///
+/// The event exists because a budget whose only signal is refusal tells an
+/// operator about the problem exactly once — at the moment work starts
+/// failing. This is the row that arrives before that, and it is emitted on
+/// the admitted path, so it is a leading indicator rather than a
+/// post-mortem.
+///
+/// Emitted only when the crossing is NEW (the submission took the scope
+/// from below the threshold to at-or-above it), never on every subsequent
+/// submission. A per-submission warning on an exhausted budget is a log
+/// flood that operators mute, which is the same as not having the signal.
+type ComputeBudgetWarningPayload = {
+    ScopeId: string
+    /// `SubmitterClass.label` of the submission that crossed the threshold.
+    SubmitterClass: string
+    /// `ComputeBudgetPeriod.key` of the accounting period.
+    PeriodKey: string
+    /// The configured period allowance, in abstract cost units.
+    Quota: decimal
+    /// Cost units consumed after admitting this submission.
+    Spent: decimal
+    /// The fraction of `Quota` that triggers the warning (e.g. `0.8M`).
+    Threshold: decimal
+    /// Which enforcement point admitted it — same vocabulary as
+    /// `ComputeBudgetDeniedPayload.Surface`.
+    Surface: string
+    /// Wall-clock of the crossing (UTC).
+    ObservedAt: DateTime
+}
+
 /// Phase 9h — data-subject-request lifecycle event. One payload shape
 /// across every transition emitted by `DataSubjectRequestApiHandler`
 /// (RequestStarted / PreviewCompleted / ErasureCompleted /
@@ -3393,6 +3456,14 @@ type AuditEvent =
     /// is hit and `Wait` returns `Refused`. Always recorded — refusals
     /// are material state (the upstream call did NOT happen).
     | RateLimitRefused of RateLimitRefusedPayload
+    /// Phase 451 — a compute submission was refused by the scope's
+    /// compute budget, at either enforcement point. Always recorded:
+    /// the work did not happen and the reason is a policy decision.
+    | ComputeBudgetDenied of ComputeBudgetDeniedPayload
+    /// Phase 451 — a compute submission was admitted while newly at or
+    /// past the period allowance's warning threshold. Emitted once per
+    /// crossing, not per submission.
+    | ComputeBudgetWarning of ComputeBudgetWarningPayload
     /// Phase 9h — data-subject-request lifecycle event. One DU case
     /// covers every transition emitted by `DataSubjectRequestApiHandler`
     /// (RequestStarted / PreviewCompleted / ErasureCompleted /
@@ -3845,6 +3916,8 @@ module AuditEvent =
         | DiagnosticBundleAccessed _ -> "DiagnosticBundleAccessed"
         | RateLimitWaited _ -> "RateLimitWaited"
         | RateLimitRefused _ -> "RateLimitRefused"
+        | ComputeBudgetDenied _ -> "ComputeBudgetDenied"
+        | ComputeBudgetWarning _ -> "ComputeBudgetWarning"
         | DataSubjectRequest _ -> "DataSubjectRequest"
         | ConversationStarted _ -> "ConversationStarted"
         | ConversationTurnAppended _ -> "ConversationTurnAppended"

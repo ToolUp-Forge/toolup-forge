@@ -194,7 +194,7 @@
       "profile": "participant-data-host",
       "kind": "round-trip",
       "file": "model-execution/submission.json",
-      "sha256": "07bcdfa33177838efc2f32b3440d0d624ba12222e7fbfb145f0857803c1405dd",
+      "sha256": "973ca2477eb2a742be978b0a0a9f3099309e869ee24fba84aaede37fd0454cf1",
       "description": "A fit submission in the profile's versioned envelope: the vintage named scope-relatively, the opaque provider spec beside the submitter-minted hash the host stores verbatim, and the requested gates in ordinal order."
     },
     {

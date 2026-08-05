@@ -233,6 +233,14 @@ type FitRequest = {
     Seed: int64
     /// Gates to evaluate against the provider's reported diagnostics.
     Gates: GateSpec list
+    /// Phase 451 (interface-plan decision D5) — who asked for this fit.
+    /// Read only by compute-budget policy, which can hold agent-initiated
+    /// exploration to a tighter ceiling than interactive use. Not part of
+    /// the fit's composite identity: the same spec fitted on the same
+    /// vintage with the same seed is the same model whoever asked for it,
+    /// and folding the submitter into the key would fragment the registry
+    /// and defeat memoization.
+    SubmitterClass: SubmitterClass
 }
 
 /// The outcome of a fit run: the artifact reference, the provider's
@@ -317,9 +325,8 @@ type FitRequestBatch = {
 }
 
 /// Typed refusal of a batch *submission* — checked before any item is
-/// enqueued (deny early, deny typed; the shape Phase 451's budget refusals
-/// will align with). Item-level fit failures are NOT here — they are
-/// per-item data reported after execution.
+/// enqueued (deny early, deny typed). Item-level fit failures are NOT here
+/// — they are per-item data reported after execution.
 [<RequireQualifiedAccess>]
 type FitBatchError =
     /// The batch carries no requests.
@@ -328,6 +335,13 @@ type FitBatchError =
     | MissingBatchId
     /// Item `index` declares a scope other than the batch's (GP 4).
     | ScopeMismatch of index: int * itemScope: string
+    /// Phase 451 — the scope's compute budget refused the batch. Denied
+    /// before any item is enqueued, so a refused batch costs nothing and
+    /// leaves no partially-scheduled residue: the alternative — enqueue
+    /// until the budget runs out mid-batch — would produce a wave whose
+    /// membership depended on how much allowance happened to be left,
+    /// which is not a result anybody can interpret.
+    | BudgetDenied of ComputeBudgetDenial
 
 module FitBatchError =
     let describe =
@@ -335,6 +349,7 @@ module FitBatchError =
         | FitBatchError.EmptyBatch -> "fit batch contains no requests"
         | FitBatchError.MissingBatchId -> "fit batch has no batch id"
         | FitBatchError.ScopeMismatch(i, s) -> sprintf "fit batch item %d declares scope '%s', not the batch scope" i s
+        | FitBatchError.BudgetDenied d -> ComputeBudgetDenial.describe d
 
 module FitRequestBatch =
     /// Registration-annotation key carrying the batch correlation id on

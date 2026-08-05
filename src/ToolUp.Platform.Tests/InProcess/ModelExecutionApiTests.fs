@@ -189,6 +189,7 @@ let private submission (seed: int64) : ModelExecutionFitSubmission = {
             Direction = "AtLeast"
         }
     ]
+    SubmitterClass = SubmitterClass.Human
 }
 
 /// Await the batch's outcomes landing in the registry —

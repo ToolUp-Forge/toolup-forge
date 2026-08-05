@@ -2289,6 +2289,15 @@ type ServerConfig = {
     /// a companion-registered dispatcher (an HTTP worker pool, a batch
     /// backend) in place.
     ExternalCompute: ExternalComputeMode
+    /// Phase 451 — compute-budget governance selection. Default:
+    /// `NoComputeBudget` — no `IComputeBudgetStore` is registered, the
+    /// composed dispatcher is not decorated, and the fit-enqueue path
+    /// consults nothing, so an existing deployment is byte-for-byte
+    /// unchanged (GP 11 + GP 13). `EnabledComputeBudget` registers the
+    /// blob-backed store, wraps the composed `IExternalComputeDispatcher`
+    /// in the budget decorator, and gates fit enqueue against the same
+    /// per-scope budget.
+    ComputeBudget: ComputeBudgetMode
     /// Phase 163 — end-user product-telemetry sink selection. Default:
     /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
     /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
@@ -3446,6 +3455,9 @@ module ServerConfig =
         // resolves to NoExternalComputeDispatcher and every Submit is a
         // typed not-configured refusal (GP 13).
         ExternalCompute = NoExternalCompute
+        // Phase 451 — no compute budgets; nothing is registered and no
+        // submission path consults a budget (GP 13).
+        ComputeBudget = NoComputeBudget
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint
@@ -4270,6 +4282,13 @@ module ServerConfig =
                         NoUsageMetering
                         EnabledUsageMetering
                         defaults.UsageMetering
+                ComputeBudget =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_COMPUTE_BUDGET"
+                        NoComputeBudget
+                        EnabledComputeBudget
+                        defaults.ComputeBudget
                 MetricsEndpoint =
                     parseEnabledDisabled
                         logger

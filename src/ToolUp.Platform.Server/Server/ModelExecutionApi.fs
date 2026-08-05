@@ -134,6 +134,9 @@ let private toFitRequest (scopeId: string) (s: ModelExecutionFitSubmission) : Re
                     match g with
                     | Ok v -> Some v
                     | Error _ -> None)
+            // Phase 451 (plan decision D5) — carried through verbatim from
+            // the submitter's declaration; forge never infers it.
+            SubmitterClass = s.SubmitterClass
         }
 
 /// Resolve an optional DI service (module-level because local bindings
@@ -244,7 +247,27 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
                                     | Error _ -> None)
                         }
 
-                        match! ModelFitBatch.submit scheduler audit submitter batch with
+                        // Phase 451 — the compute-budget guard, when the
+                        // deployment composed one. Resolved per request
+                        // like every other substrate here, so
+                        // `NoComputeBudget` (nothing registered) is a
+                        // `None` and one match (GP 13).
+                        //
+                        // This is where a FEDERATED peer's fit submission
+                        // is caught: the peer contract calls
+                        // `binding.Api.SubmitFit`, which is this handler,
+                        // so a peer never reaches the enqueue without
+                        // passing the same budget a local caller does.
+                        let budgetGuard = service<ComputeBudgetGuard> ctx
+
+                        match! ModelFitBatch.submitBudgeted scheduler audit budgetGuard submitter batch with
+                        | Error(FitBatchError.BudgetDenied denial) ->
+                            // Typed, enumerable, and NOT flattened into
+                            // `InvalidSubmission` (plan decision D6) — a
+                            // submitter that can read the quota and the
+                            // spend can decide whether to narrow its
+                            // search or wait for the period to roll.
+                            return Error(ModelExecutionRefusal.BudgetDenied denial)
                         | Error e -> return Error(ModelExecutionRefusal.InvalidSubmission(FitBatchError.describe e))
                         | Ok s ->
                             return

@@ -685,6 +685,16 @@ let compose
     let usageLogInstance =
         registerUsageMetering services config resolvedBlobStorage eventStore resolvedLogger quotaPolicyOverride
 
+    // Phase 451 — compute-budget governance. `NoComputeBudget` (default)
+    // registers nothing and wraps nothing. `EnabledComputeBudget` registers
+    // the blob-backed store + the shared guard and replaces the already-
+    // registered IExternalComputeDispatcher instance with the budget
+    // decorator. Deliberately AFTER registerUsageMetering (the guard meters
+    // settled cost through the resolved IUsageLog) and BEFORE
+    // registerJobScheduler, so the scheduler's Phase 319 reconciliation
+    // polls run through the decorator and settle their reservations.
+    registerComputeBudget services config resolvedBlobStorage resolvedLogger usageLogInstance
+
     // Phase 9e / 9l / 12a — metrics + activity sink + locale resolver
     // (extracted to `ComposeRuntimeServices.registerMetricsAndObservability`).
     // Returns the resolved `IMetricsSink` so the outbound rate

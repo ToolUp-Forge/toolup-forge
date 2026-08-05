@@ -122,6 +122,25 @@ type ModelExecutionPeerSubmission = {
     Seed: int64
     /// Sorted ordinally by `Name`.
     Gates: ModelExecutionPeerGate list
+    /// Phase 451 (interface-plan decision D5) — `SubmitterClass.label` of
+    /// whoever asked for this fit: `"human"` / `"scheduled"` / `"agent"`.
+    ///
+    /// A **string** rather than the DU, like every other field on this
+    /// contract: the peer wire is language-neutral JSON-RPC and the caller
+    /// is very often not an F# deployment, so a closed vocabulary of
+    /// stable lowercase labels is the shape a shell script can emit. An
+    /// unrecognised or absent value reads as `"human"`
+    /// (`SubmitterClass.ofLabelOrHuman`), so an older peer that predates
+    /// this field submits exactly as it always did.
+    ///
+    /// **It is the submitter's own claim, and the receiving deployment
+    /// treats it as one.** Forge never infers a class and never
+    /// cross-checks this against the peer's identity — a peer that wants
+    /// its agent traffic budgeted as agent traffic says so. A deployment
+    /// unwilling to take a given peer's word pins the class at its own
+    /// binding rather than trusting the field, which is the same posture
+    /// `ModelExecutionAdmission` already takes for declared operations.
+    SubmitterClass: string
 }
 
 /// One gate's verdict, as data.
@@ -547,6 +566,9 @@ module ModelExecutionPeerContract =
                 Threshold = g.Threshold
                 Direction = g.Direction
             })
+        // Phase 451 — the peer's own declaration, tolerant of an older
+        // peer that does not send the field.
+        SubmitterClass = SubmitterClass.ofLabelOrHuman s.SubmitterClass
     }
 
     // ── Admission ────────────────────────────────────────────────────

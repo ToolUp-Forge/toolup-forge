@@ -168,6 +168,7 @@ let private fitAndRegister (stack: Stack) (scope: string) (seed: int64) (vintage
         ProviderKind = ReferenceModelFitProvider.Kind
         Seed = seed
         Gates = []
+        SubmitterClass = SubmitterClass.Human
     }
 
     let! outcome = provider.Fit request

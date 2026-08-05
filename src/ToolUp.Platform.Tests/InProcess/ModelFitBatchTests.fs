@@ -98,6 +98,7 @@ let private fitRequest (scope: string) (seed: int64) : FitRequest = {
     ProviderKind = ReferenceModelFitProvider.Kind
     Seed = seed
     Gates = []
+    SubmitterClass = SubmitterClass.Human
 }
 
 let private batchOf (scope: string) (batchId: string) (seeds: int64 list) : FitRequestBatch = {

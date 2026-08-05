@@ -152,6 +152,20 @@ module ResourceKinds =
     [<Literal>]
     let apiRequests = "api.requests"
 
+    /// Phase 451 — abstract compute-cost units settled by
+    /// `ComputeBudgetGuard` when an external submission or a fit run
+    /// reaches a terminal outcome. The unit is deployment-defined (the
+    /// cost model decides what one unit means — a run, a GPU-minute, a
+    /// hint-declared weight); forge only counts them, so this kind is
+    /// never a currency (GP 1).
+    ///
+    /// Emitted on the SETTLE path rather than at admission, so the ledger
+    /// records what work actually consumed rather than what it reserved —
+    /// an admitted run that failed in three seconds should not meter as a
+    /// full-length one.
+    [<Literal>]
+    let computeUnits = "compute.units"
+
 /// Behaviour data for the `UsageBatchFlusher` `BackgroundService`.
 /// Expressed as a record (data, not callbacks) so it satisfies
 /// portability rule 3 — retry / batching as data, not framework
