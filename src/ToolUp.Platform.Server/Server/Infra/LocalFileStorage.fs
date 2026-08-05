@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open System.IO
 open System.Security.Cryptography
+open System.Threading
 open ToolUp.Platform.BlobStorage
 
 /// Local filesystem implementation of IBlobStorage.
@@ -66,18 +67,119 @@ type LocalFileStorage(baseDir: string) =
         with _ ->
             Result.Error "invalid container path"
 
+    // ─── Concurrent same-blob access ─────────────────────────────
+    //
+    // Every cloud backend tolerates a Download racing an Upload of
+    // the same blob: the reader observes the previous version or the
+    // new one — never an error, never a torn buffer. The naive local
+    // implementation (File.WriteAllBytes / File.ReadAllBytes)
+    // diverged: each side's handle blocked the other's open, so an
+    // overlapping pair surfaced as "the process cannot access the
+    // file … because it is being used by another process" — a
+    // works-in-production, fails-locally class first hit by the job
+    // store's external-compute callback ingress reading a run blob
+    // while the reconciliation poll rewrote the same blob (found
+    // building Phase 320). Pinned by the "Concurrent Upload and
+    // Download" case in the IBlobStorage contract pack. Three
+    // mechanisms close it:
+    //
+    //   • Writers never open the destination. Content lands in a
+    //     uniquely-named file under `<baseDir>/.tmp/` and reaches
+    //     the blob path via `File.Move(…, overwrite = true)` — an
+    //     atomic replace, so a reader observes the old blob or the
+    //     new one, never a partial write. (`.tmp` is thereby a
+    //     reserved top-level name; identity sanitisation at the auth
+    //     boundary never mints a dotted container segment.)
+    //   • Same-path operations that hold a file handle (the reads,
+    //     the replace, the delete) serialise on a per-path lock
+    //     WITHIN this process — the same striping (and the same
+    //     DevOnly single-process posture) the Phase 600 CAS already
+    //     declared. This is load-bearing, not belt-and-braces:
+    //     Windows' MoveFileEx(REPLACE_EXISTING) refuses to replace a
+    //     file with ANY open handle — ERROR_ACCESS_DENIED, even when
+    //     the handle shares Delete — so lock-free temp+rename alone
+    //     merely trades the reader-side sharing violation for a
+    //     writer-side one. (POSIX rename has no such refusal; this
+    //     is a Windows-specific constraint.)
+    //   • Readers open with `FileShare.ReadWrite ||| FileShare.Delete`,
+    //     so a CROSS-process writer's replace is at least not blocked
+    //     by this process's read handles, and a cross-process
+    //     reader's handle never blocks ours.
+    //
+    // A short bounded retry backstops the cross-process edge the lock
+    // cannot see: another process's transient handle on the same
+    // destination. Missing-file failures are NOT retried — a blob
+    // that isn't there is an answer, not contention.
+    let tempDir = Path.Combine(rootedBase, ".tmp")
+
+    let isRetryableIo (attempt: int) (ex: exn) =
+        attempt < 5
+        && (ex :? UnauthorizedAccessException
+            || (ex :? IOException
+                && not (ex :? FileNotFoundException)
+                && not (ex :? DirectoryNotFoundException)))
+
+    // The lock striping the mechanism-list above describes. Was the
+    // Phase 600 CAS lock (`casLocks`); the same stripes now also
+    // serialise plain writes, reads, range-reads and deletes of one
+    // path, so it lives here where every helper can reach it.
+    let pathLocks = ConcurrentDictionary<string, obj>()
+
+    let pathLockFor (path: string) =
+        pathLocks.GetOrAdd(path, fun _ -> obj ())
+
+    let writeAtomically (path: string) (content: byte[]) =
+        ensureDir path
+        Directory.CreateDirectory tempDir |> ignore
+        let temp = Path.Combine(tempDir, Guid.NewGuid().ToString "N" + ".tmp")
+        File.WriteAllBytes(temp, content)
+
+        let rec move attempt =
+            try
+                File.Move(temp, path, true)
+            with ex when isRetryableIo attempt ex ->
+                Thread.Sleep(5 <<< attempt)
+                move (attempt + 1)
+
+        try
+            lock (pathLockFor path) (fun () -> move 0)
+        finally
+            // A failed final attempt must not strand the temp file.
+            if File.Exists temp then
+                try
+                    File.Delete temp
+                with _ ->
+                    ()
+
+    let openSharedRead (path: string) =
+        let rec attemptOpen attempt =
+            try
+                new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite ||| FileShare.Delete)
+            with ex when isRetryableIo attempt ex ->
+                Thread.Sleep(5 <<< attempt)
+                attemptOpen (attempt + 1)
+
+        attemptOpen 0
+
+    /// Read a whole blob under the per-path lock. The handle is a
+    /// consistent snapshot: an atomic replace swaps the *name*, not
+    /// the file object already open.
+    let readAllBytesShared (path: string) =
+        lock (pathLockFor path) (fun () ->
+            use stream = openSharedRead path
+            let buffer = Array.zeroCreate<byte> (int stream.Length)
+            stream.ReadExactly(buffer, 0, buffer.Length)
+            buffer)
+
     // ─── Phase 600 — conditional writes ──────────────────────────
     //
     // ETag = SHA-256 of content (hex). Compare-and-swap runs under
-    // per-path lock striping, which serialises conditional writers
-    // WITHIN this process — matching the impl's DevOnly
+    // the per-path lock striping above, which serialises conditional
+    // writers WITHIN this process — matching the impl's DevOnly
     // single-process posture (the same boundary the in-process job
     // scheduler declares). Cross-process CAS needs a cloud backend.
-    let casLocks = ConcurrentDictionary<string, obj>()
-
-    let casLockFor (path: string) =
-        casLocks.GetOrAdd(path, fun _ -> obj ())
-
+    // Monitor is reentrant, so the CAS holding the lock across its
+    // read-compare-write while the inner helpers re-take it is fine.
     let etagOf (content: byte[]) =
         Convert.ToHexString(SHA256.HashData content).ToLowerInvariant()
 
@@ -88,7 +190,7 @@ type LocalFileStorage(baseDir: string) =
             | Result.Ok path ->
                 try
                     if File.Exists path then
-                        let bytes = File.ReadAllBytes path
+                        let bytes = readAllBytesShared path
                         return Ok(bytes, etagOf bytes)
                     else
                         return Error $"Blob not found: {container}/{blobName}"
@@ -101,11 +203,11 @@ type LocalFileStorage(baseDir: string) =
             | Result.Error reason -> return Error(ConditionalWriteFailure reason)
             | Result.Ok path ->
                 return
-                    lock (casLockFor path) (fun () ->
+                    lock (pathLockFor path) (fun () ->
                         try
                             let current =
                                 if File.Exists path then
-                                    Some(etagOf (File.ReadAllBytes path))
+                                    Some(etagOf (readAllBytesShared path))
                                 else
                                     None
 
@@ -117,8 +219,7 @@ type LocalFileStorage(baseDir: string) =
                                 | IfMatch _, None -> false
 
                             if permitted then
-                                ensureDir path
-                                File.WriteAllBytes(path, content)
+                                writeAtomically path content
                                 Ok(etagOf content)
                             else
                                 Error(ETagMismatch current)
@@ -140,8 +241,7 @@ type LocalFileStorage(baseDir: string) =
             | Result.Error reason -> return Error reason
             | Result.Ok path ->
                 try
-                    ensureDir path
-                    File.WriteAllBytes(path, content)
+                    writeAtomically path content
                     return Ok path
                 with ex ->
                     return Error ex.Message
@@ -153,7 +253,7 @@ type LocalFileStorage(baseDir: string) =
             | Result.Ok path ->
                 try
                     if File.Exists path then
-                        return Ok(File.ReadAllBytes path)
+                        return Ok(readAllBytesShared path)
                     else
                         return Error $"Blob not found: {container}/{blobName}"
                 with ex ->
@@ -170,19 +270,24 @@ type LocalFileStorage(baseDir: string) =
                 | Result.Error reason -> return Error reason
                 | Result.Ok path ->
                     try
-                        if not (File.Exists path) then
-                            return Error $"Blob not found: {container}/{blobName}"
-                        else
-                            use stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)
+                        // Whole range read under the per-path lock —
+                        // the handle must not outlive the lock or a
+                        // writer's replace could race it.
+                        return
+                            lock (pathLockFor path) (fun () ->
+                                if not (File.Exists path) then
+                                    Error $"Blob not found: {container}/{blobName}"
+                                else
+                                    use stream = openSharedRead path
 
-                            if offset >= stream.Length then
-                                return Ok Array.empty
-                            else
-                                stream.Seek(offset, SeekOrigin.Begin) |> ignore
-                                let count = min (int64 length) (stream.Length - offset) |> int
-                                let buffer = Array.zeroCreate<byte> count
-                                stream.ReadExactly(buffer, 0, count)
-                                return Ok buffer
+                                    if offset >= stream.Length then
+                                        Ok Array.empty
+                                    else
+                                        stream.Seek(offset, SeekOrigin.Begin) |> ignore
+                                        let count = min (int64 length) (stream.Length - offset) |> int
+                                        let buffer = Array.zeroCreate<byte> count
+                                        stream.ReadExactly(buffer, 0, count)
+                                        Ok buffer)
                     with ex ->
                         return Error ex.Message
         }
@@ -192,8 +297,9 @@ type LocalFileStorage(baseDir: string) =
             | Result.Error reason -> return Error reason
             | Result.Ok path ->
                 try
-                    if File.Exists path then
-                        File.Delete path
+                    lock (pathLockFor path) (fun () ->
+                        if File.Exists path then
+                            File.Delete path)
 
                     return Ok()
                 with ex ->

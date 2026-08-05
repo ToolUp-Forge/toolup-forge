@@ -300,4 +300,58 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             | Ok _ -> failtest "Expected Error for negative length"
             | Error _ -> ()
         }
+
+        // ── Concurrent same-blob access ──────────────────────────────
+        // Every cloud object store tolerates a Download racing an
+        // Upload of the same blob: the reader observes the previous
+        // version or the new one — never an error, never a torn
+        // buffer. A backend that takes an exclusive file handle for
+        // either side turns that race into "the process cannot access
+        // the file", a works-in-production-fails-locally divergence:
+        // the job store's external-compute callback ingress reading a
+        // run blob while the reconciliation poll rewrote the same blob
+        // reproduced it reliably against `LocalFileStorage` (found
+        // building Phase 320). Each version is a single repeated byte,
+        // so a torn read — bytes from two versions in one buffer — is
+        // detectable, not just an errored one.
+        testCaseAsync "Concurrent Upload and Download of the same blob: no errors, no torn reads"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let payloadFor (version: int) = Array.create 4096 (byte version)
+
+            // Seed first: this case pins overwrite-during-read; the
+            // missing-blob path is covered elsewhere and would make
+            // reader errors ambiguous here.
+            match! store.Upload(container, "contended.bin", payloadFor 0) with
+            | Error e -> failtestf "seed Upload failed: %s" e
+            | Ok _ -> ()
+
+            let iterations = 100
+
+            let writer = async {
+                for version in 1..iterations do
+                    match! store.Upload(container, "contended.bin", payloadFor version) with
+                    | Error e ->
+                        failtestf "Upload racing a Download of the same blob failed (iteration %d): %s" version e
+                    | Ok _ -> ()
+            }
+
+            let reader = async {
+                for iteration in 1..iterations do
+                    match! store.Download(container, "contended.bin") with
+                    | Error e ->
+                        failtestf "Download racing an Upload of the same blob failed (iteration %d): %s" iteration e
+                    | Ok bytes ->
+                        Expect.equal bytes.Length 4096 "a concurrent read never observes a partial blob"
+
+                        Expect.all
+                            bytes
+                            (fun b -> b = bytes[0])
+                            "a concurrent read never observes a torn blob mixing two versions"
+            }
+
+            let! _ = Async.Parallel [ writer; reader ]
+            return ()
+        }
     ]
