@@ -79,6 +79,7 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     VectorStore = None
     IndexLifecycle = None
     EventStore = None
+    EmbeddingProvider = None
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = createDefault ()

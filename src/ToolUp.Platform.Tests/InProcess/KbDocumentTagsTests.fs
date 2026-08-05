@@ -90,6 +90,7 @@ let private mkDeps
         VectorStore = None
         IndexLifecycle = Some(RecordingIndexLifecycle() :> IIndexLifecycle)
         EventStore = None
+        EmbeddingProvider = None
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
         OriginalResolver = createDefault ()

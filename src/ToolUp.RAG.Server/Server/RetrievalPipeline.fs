@@ -514,6 +514,73 @@ type RetrievalPipeline
 
     let needsHybridPool = sparse.IsSome || opts.Reranker.IsSome
 
+    // ─── Phase 14z — scope-keyed dense retrieval ──────────────────
+    //
+    // A TF-IDF-class embedder whose state is keyed per `VectorScope`
+    // produces a DIFFERENT vector space per scope: dimension `i` denotes
+    // `vocab[i]`, and a per-scope vocabulary makes `vocab[i]` a different
+    // term in each scope. One query vector searched across every
+    // authorised scope is therefore comparing coordinates that do not
+    // denote the same thing — which is exactly what Phase 4b's acceptance
+    // criterion ("a team-KB document and a Platform-KB document about the
+    // same topic both surface, ranked") rests on.
+    //
+    // **Option 1, the operator's resolution.** Embed the query once per
+    // authorised scope, search each scope with its own vector, and merge
+    // the per-scope results before the filter / rerank / MMR / topK
+    // stages — which then operate on the merged pool exactly as they
+    // operated on the multi-scope pool before.
+    //
+    // The N embeds are affordable only because the probe below fails on
+    // every stateless provider: OpenAI / Cohere / Anthropic embedders are
+    // not scope-keyed and cannot be, so they take the single-vector
+    // branch, byte-for-byte the pre-14z path (GP 11), and the per-scope
+    // cost lands on the in-process dev embedder alone.
+    let scopedEmbedderFactory = ScopedEmbedding.tryFactory embedder
+
+    /// Dense candidate retrieval. Single-vector when the embedder is not
+    /// scope-keyed; one embed + one search per authorised scope, merged,
+    /// when it is.
+    ///
+    /// **Merge order, and the caveat it carries.** Per-scope results are
+    /// merged by descending score with the pipeline's standard
+    /// `(Scope, ChunkId)` tie-break, so the merge is a pure function of
+    /// the data. Scores from two scopes are NOT strictly comparable —
+    /// each is a cosine in its own scope's space, and a small scope's
+    /// IDF weights differ from a large one's — so cross-scope ordering is
+    /// approximate. That is accepted deliberately rather than papered
+    /// over with a rank-fusion framework: the only provider that can take
+    /// this branch is the documented dev-only embedder, and a
+    /// deployment that needs defensible cross-tenant ranking wants a
+    /// stateless embedder, which takes the other branch and has no
+    /// incomparability to fuse. (RRF already fuses dense against sparse
+    /// downstream, and it is the right tool for genuinely incomparable
+    /// *retrievers*; applying it here would flatten the score signal the
+    /// boosts and MMR stages read.)
+    let denseSearch (query: string) (permitted: VectorScope list) (pool: int) : Async<VectorMatch list> =
+        match scopedEmbedderFactory with
+        | None -> async {
+            let! queryVector = embedder.GenerateEmbedding query
+            return! store.Search permitted queryVector pool
+          }
+        | Some factory -> async {
+            let! perScope =
+                permitted
+                |> List.map (fun scope -> async {
+                    let scopedEmbedder = factory.For scope
+                    let! queryVector = scopedEmbedder.GenerateEmbedding query
+                    return! store.Search [ scope ] queryVector pool
+                })
+                |> Async.Parallel
+
+            return
+                perScope
+                |> Array.toList
+                |> List.concat
+                |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+                |> List.truncate pool
+          }
+
     // Phase 14y — emit the `KnowledgeQueryRejected` audit for an over-length
     // query. Privacy contract matches `RetrievalTrace`: the plaintext query
     // is NEVER persisted — only its SHA256 hash + character count. Best-
@@ -795,8 +862,7 @@ type RetrievalPipeline
                         // reranker is wired, this is byte-equivalent to the
                         // pre-Phase-14e pipeline.
                         let denseSw = System.Diagnostics.Stopwatch.StartNew()
-                        let! queryVector = embedder.GenerateEmbedding effectiveQuery
-                        let! results = store.Search permitted queryVector pool
+                        let! results = denseSearch effectiveQuery permitted pool
                         denseSw.Stop()
                         timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
                         return results
@@ -810,8 +876,7 @@ type RetrievalPipeline
                         // keep `timings` single-threaded.
                         let denseAsync = async {
                             let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! queryVector = embedder.GenerateEmbedding effectiveQuery
-                            let! results = store.Search permitted queryVector pool
+                            let! results = denseSearch effectiveQuery permitted pool
                             sw.Stop()
                             return results, sw.Elapsed.TotalMilliseconds
                         }
@@ -1027,15 +1092,24 @@ type RetrievalPipeline
         }
 
         member _.Index chunkId chunk scope = async {
-            let! vector = embedder.GenerateEmbedding chunk.Content
+            // Phase 14z — the write side of the same geometry. A chunk
+            // must be embedded under the vocabulary the queries for its
+            // scope will be embedded under; indexing everything through
+            // one global embedder while retrieval queried per scope would
+            // put the two in different sparse spaces and break retrieval
+            // outright. `ScopedEmbedding.forScope` is the identity
+            // function on every stateless provider, so the byte-identical
+            // path is preserved here too (GP 11).
+            let scopeEmbedder = ScopedEmbedding.forScope embedder scope
+            let! vector = scopeEmbedder.GenerateEmbedding chunk.Content
 
             let stamped = {
                 chunk with
                     Metadata =
                         chunk.Metadata
-                        |> Map.add EmbeddingVersion.MetadataProviderKey embedder.ProviderId
-                        |> Map.add EmbeddingVersion.MetadataModelKey embedder.ModelId
-                        |> Map.add EmbeddingVersion.MetadataDimensionsKey (string embedder.Dimensions)
+                        |> Map.add EmbeddingVersion.MetadataProviderKey scopeEmbedder.ProviderId
+                        |> Map.add EmbeddingVersion.MetadataModelKey scopeEmbedder.ModelId
+                        |> Map.add EmbeddingVersion.MetadataDimensionsKey (string scopeEmbedder.Dimensions)
             }
 
             do! store.Upsert scope chunkId vector stamped

@@ -1,6 +1,7 @@
 module ToolUp.Platform.IEmbeddingProvider
 
 open System
+open ToolUp.Platform.VectorKnowledgeTypes
 
 /// Identity tuple for an embedding model. Stamped onto every chunk's
 /// metadata at upsert time (`_embedProvider` / `_embedModel` / `_embedDim`)
@@ -63,6 +64,105 @@ type IEmbeddingProvider =
     /// `"local-tfidf-v1"`, etc. Distinct values produce distinct cache keys
     /// and trigger background re-embedding when changed.
     abstract ModelId: string
+
+// ─── Phase 14z — the scope-keyed embedding capability ──────────────
+//
+// Optional capability interface for an embedding provider whose state —
+// and therefore whose vector geometry — is keyed per `VectorScope`. The
+// shipped implementation is the dev-only TF-IDF family
+// (`LocalEmbeddingProvider.ScopedLocalEmbeddingProviders`), where one IDF
+// dictionary per scope is what closes the cross-team embedding-quality
+// leak: a term one team embeds must not be observable, even
+// statistically, in another team's vectors.
+//
+// Deliberately NOT members on `IEmbeddingProvider`, for the same reason
+// as the Phase 108 `ISignedUrlBlobStorage` / Phase 600
+// `IConditionalBlobStorage` seams:
+//
+//   * every in-tree embedder plus every consumer-side one implements
+//     `IEmbeddingProvider`, so a new abstract member is a breaking sweep;
+//   * and — the sharper reason — scope-keying is *meaningless* for a
+//     stateless embedder. `text-embedding-3-small` returns the same
+//     vector for the same text regardless of tenant, and it should: an
+//     embedding from an API-backed provider is a pure function of
+//     (model, text). A capability the production providers can never
+//     satisfy, and must never appear to satisfy, belongs behind a probe.
+//
+//     match embedder with
+//     | :? IScopedEmbeddingProviderFactory as f -> // per-scope embedder
+//     | _ -> // ONE vector, the pre-14z path, byte-identical
+//
+// **The probe is what makes Option 1 affordable.** Cross-scope retrieval
+// under per-scope vocabularies needs one query embed per authorised scope
+// plus a merge (dimension `i` denotes a different term in each scope, so
+// a single vector is not comparable across them). N embeds per query
+// would be indefensible against a metered API provider — but the probe
+// fails on every one of them, so that cost lands only on the in-process
+// dev embedder, and the stateless path keeps exactly one query vector.
+
+/// A family of embedding providers keyed by `VectorScope`, each owning
+/// state the others cannot observe. Implemented *alongside*
+/// `IEmbeddingProvider` by a provider whose embedding function is
+/// scope-dependent.
+///
+/// **`For` must be stable and accumulating.** Two calls for the same
+/// scope return the same provider (hence the same evolving state); two
+/// calls for different scopes must share nothing that can carry a term
+/// from one scope into the other's vectors.
+///
+/// **Each per-scope provider must report a scope-distinct `ModelId`.**
+/// That is not cosmetic: `EmbeddingCacheKey` is `{ Version; TextHash }`
+/// with no tenant component, so two scopes reporting one `ModelId` would
+/// share cache entries and the first scope to embed a string would serve
+/// its vector to every other — silently re-creating, in the cache, the
+/// exact cross-scope coupling the per-scope state removed. The same
+/// identity rides `_embedModel` chunk metadata, so `ReembeddingService`
+/// compares a chunk against *its own scope's* embedder.
+type IScopedEmbeddingProviderFactory =
+    /// The provider for `scope`. Same instance — and the same accumulated
+    /// state — on every call for the same scope.
+    abstract For: scope: VectorScope -> IEmbeddingProvider
+
+    /// Drop `scope`'s accumulated state, in memory and in any backing
+    /// store, without touching a sibling scope. Idempotent: resetting a
+    /// scope that never embedded anything succeeds. Hung off
+    /// `KnowledgeApi.ResetIndex`, which wipes a scope's chunks — the
+    /// vocabulary those chunks built should go with them.
+    abstract ResetScope: scope: VectorScope -> Async<unit>
+
+/// Probe helpers for the Phase 14z scope-keyed capability. Every call
+/// site is a "scope-keyed if it can be, unchanged if it cannot" branch,
+/// so it is written once here rather than as a type test per caller.
+module ScopedEmbedding =
+
+    /// The capability, when `provider` has it.
+    let tryFactory (provider: IEmbeddingProvider) : IScopedEmbeddingProviderFactory option =
+        match provider with
+        | :? IScopedEmbeddingProviderFactory as factory -> Some factory
+        | _ -> None
+
+    /// `true` when `provider` keys its state per scope. The observation
+    /// `TeamModeLocalEmbedderValidator` needs: the cross-tenant leak it
+    /// warns about is closed exactly when this holds.
+    let isScopeKeyed (provider: IEmbeddingProvider) : bool =
+        provider :? IScopedEmbeddingProviderFactory
+
+    /// The embedder to use for `scope` — the scope's own when the
+    /// provider is scope-keyed, otherwise `provider` itself, unchanged.
+    let forScope (provider: IEmbeddingProvider) (scope: VectorScope) : IEmbeddingProvider =
+        match provider with
+        | :? IScopedEmbeddingProviderFactory as factory -> factory.For scope
+        | _ -> provider
+
+    /// Drop `scope`'s embedder state when the provider is scope-keyed.
+    /// A no-op otherwise — a stateless embedder has nothing per-scope to
+    /// drop, and the unscoped local provider's single global vocabulary
+    /// must NOT be wiped by one scope's reset (that would be a
+    /// cross-tenant side effect, the opposite of the intent).
+    let resetScope (provider: IEmbeddingProvider) (scope: VectorScope) : Async<unit> =
+        match provider with
+        | :? IScopedEmbeddingProviderFactory as factory -> factory.ResetScope scope
+        | _ -> async.Return()
 
 /// Helper for `IEmbeddingProvider` implementations that don't have a native
 /// batch endpoint. Fans the input sequence out to parallel single-text calls

@@ -10,6 +10,7 @@ LocalEmbeddingProvider.create() : ToolUp.Platform.IEmbeddingProvider+IEmbeddingP
 LocalEmbeddingProvider.createPersistent(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 LocalEmbeddingProvider.createScoped() : LocalEmbeddingProvider+ScopedLocalEmbeddingProviders
 LocalEmbeddingProvider.createScopedPersistent(ToolUp.Platform.BlobStorage+IBlobStorage) : LocalEmbeddingProvider+ScopedLocalEmbeddingProviders
+LocalEmbeddingProvider.scopedModelIdFor(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
 LocalEmbeddingProvider+ScopeKey (class)
 LocalEmbeddingProvider+ScopeKey.escapeSegment(System.String) : System.String
 LocalEmbeddingProvider+ScopeKey.ofScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String

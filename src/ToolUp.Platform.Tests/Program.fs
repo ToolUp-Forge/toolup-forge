@@ -244,6 +244,14 @@ let allTests =
         LocalEmbeddingScopeTests.resetTests
         LocalEmbeddingScopeTests.persistenceTests
         LocalEmbeddingScopeTests.backwardCompatibilityTests
+        // Phase 14z, Option 1 — the capability probe + its consequences:
+        // cross-scope retrieval (the Phase 4b acceptance criterion), the
+        // cache keying that stops a shared entry re-creating the leak one
+        // layer up, and the GP 11 cost guard that keeps a stateless
+        // provider on one query vector.
+        LocalEmbeddingScopeTests.capabilityProbeTests
+        LocalEmbeddingScopeTests.cacheKeyingTests
+        LocalEmbeddingScopeTests.crossScopeRetrievalTests
         // Phase 500 — the Tesseract IOcrProvider companion and the
         // "OCR unavailable" ingestion signal. Structural arm always on;
         // native arm Pending unless TOOLUP_TESSDATA is set.

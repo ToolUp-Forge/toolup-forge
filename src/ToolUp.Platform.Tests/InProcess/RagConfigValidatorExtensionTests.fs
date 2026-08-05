@@ -192,7 +192,7 @@ let private localEmbedderTests =
                 Ok
                 "this validator stands down on team shapes"
 
-            TeamModeLocalEmbedderValidator(cfg, localEmbedder)
+            TeamModeLocalEmbedderValidator(cfg, localEmbedder, false)
             |> run
             |> expectWarningNaming [ "IDF dictionary is shared across all teams" ]
         }
@@ -206,7 +206,51 @@ let private localEmbedderTests =
                     AcceptLocalEmbedderAtScale = true
             }
 
-            Expect.equal (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder))) Ok "same flag, team half"
+            Expect.equal (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, false))) Ok "same flag, team half"
+        }
+
+        // ── Phase 14z — the scope-keyed lift (red / green / gating) ──
+
+        test "RED — the unscoped local embedder in Team mode still warns, and names the scoped remedy" {
+            // The relaxation must not become a removal. A deployment on
+            // `LocalEmbeddingProvider.create ()` leaks term-frequency
+            // variance across tenants exactly as it did before Phase 14z,
+            // so the finding is still live and the message must now point
+            // at the cheaper fix (compose the scoped family) as well as
+            // the expensive one (swap embedder).
+            TeamModeLocalEmbedderValidator(configWith Surfaces.team, localEmbedder, false)
+            |> run
+            |> expectWarningNaming [ "IDF dictionary is shared across all teams"; "createScopedPersistent" ]
+        }
+
+        test "GREEN — a scope-keyed local embedder LIFTS the warning" {
+            // The premise the warning rests on — one IDF dictionary shared
+            // by every team in the process — no longer holds, so this is a
+            // lift, not a suppression: no escape hatch was set.
+            let cfg = configWith Surfaces.team
+            Expect.isFalse cfg.AcceptLocalEmbedderAtScale "the lift must not lean on the escape hatch"
+
+            Expect.equal
+                (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, true)))
+                Ok
+                "per-scope IDF state closes the leak structurally"
+        }
+
+        test "GATING — the lift is about the leak, not about the embedder being local" {
+            // A hosted embedder is silent whether or not it is scope-keyed
+            // (it never can be), and a scope-keyed local embedder outside
+            // Team mode was never this validator's concern either. Pins
+            // that the new argument narrowed exactly one condition and
+            // widened nothing.
+            Expect.equal
+                (run (TeamModeLocalEmbedderValidator(configWith Surfaces.team, hostedEmbedder, false)))
+                Ok
+                "a stateless embedder has no IDF dictionary to share"
+
+            Expect.equal
+                (run (TeamModeLocalEmbedderValidator(configWith Surfaces.individual, localEmbedder, false)))
+                Ok
+                "the non-team half belongs to LocalEmbeddingProviderInProductionModeValidator"
         }
     ]
 

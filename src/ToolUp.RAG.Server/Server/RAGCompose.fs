@@ -890,6 +890,25 @@ let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
     | Some composed -> not (composed :? InMemoryEmbeddingCache)
     | None -> false
 
+/// Phase 14z — does this app's composed `IEmbeddingProvider` key its
+/// state per `VectorScope`?
+///
+/// The predicate `composeWithRAG` feeds into
+/// `TeamModeLocalEmbedderValidator`, exposed for the same reason as
+/// `hasCrossReplicaEmbeddingCache` above: a deployment's own preflight
+/// (or a test) can assert the lift without standing up a whole
+/// composition.
+///
+/// Measured on the provider the deployment actually composed, not on the
+/// wrapped one the pipeline holds — the question is what the operator
+/// wired, and the caching decorator's answer is derived from it anyway.
+/// A stateless embedder returns `false` and can never return anything
+/// else: scope-keying is meaningless for a pure function of (model,
+/// text), which is exactly why the capability is a probe rather than a
+/// member on `IEmbeddingProvider`.
+let hasScopeKeyedEmbeddingProvider (app: RAGServerApp) : bool =
+    ScopedEmbedding.isScopeKeyed app.EmbeddingProvider
+
 // ─── composeRAG ───────────────────────────────────────────────────
 //
 // Phase 1h seam (RAG half). `composeRAG : RAGServerApp -> ServerApp`
@@ -1710,7 +1729,16 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let ragValidators: ConfigValidation.IConfigValidator list = [
         // Phase 4b commit 3 — IDF-leak warning when LocalEmbeddingProvider is
         // active in Team / MultiTeam mode.
-        ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(finalConfig, app.EmbeddingProvider)
+        // Phase 14z — the warning is lifted when the composed provider is
+        // SCOPE-KEYED: the premise it rests on (one IDF dictionary shared
+        // by every team in the process) no longer holds. Still fires for
+        // the unscoped `create ()` / `createPersistent`, which leak exactly
+        // as before.
+        ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(
+            finalConfig,
+            app.EmbeddingProvider,
+            hasScopeKeyedEmbeddingProvider app
+        )
         // Refuse (persistent) / warn (ephemeral) when RAG has no durable backing.
         ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(finalConfig, b.Storage.IsSome, app.VectorStore.IsSome)
         // Phase 9j follow-up — refuse the in-process ingestion queue under

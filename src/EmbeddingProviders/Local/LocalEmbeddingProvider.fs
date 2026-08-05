@@ -75,12 +75,16 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // vectors. The Platform-scope vocabulary is likewise its own dictionary,
 // so Platform Admin uploads do not shape team query embeddings.
 //
-// **Scope-aware providers report `ModelId = "local-tfidf-v2"`** because
-// the embedding function genuinely differs: vector geometry is a
-// function of the vocabulary, and a per-scope vocabulary is a different
-// vocabulary. `ReembeddingService` keys on `EmbeddingVersion` mismatch,
-// so a deployment swapping to the scoped factory re-embeds its corpus
-// once rather than silently mixing two sparse spaces.
+// **Each scope-keyed provider reports `ModelId =
+// "local-tfidf-v2#{scopeKey}"`** because the embedding function
+// genuinely differs per scope: vector geometry is a function of the
+// vocabulary, and a per-scope vocabulary is a different vocabulary. The
+// `local-tfidf-v2` half separates the family from the unscoped `v1`, so
+// `ReembeddingService` re-embeds once on the swap rather than silently
+// mixing two sparse spaces; the `#{scopeKey}` half keeps two scopes out
+// of one another's `IEmbeddingCache` entries and lets the reembed
+// staleness check measure a chunk against its OWN scope's embedder (see
+// `scopedModelIdFor`).
 //
 // **GP 11 — the unscoped factories are untouched.** `create ()` and
 // `createPersistent blob` keep their signatures, their single global
@@ -88,16 +92,17 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // existing deployment that does not opt in is byte-for-byte unchanged
 // and pays no reembed.
 //
-// **Known limitation (why the RAG pipeline is not yet wired to this).**
-// `IRetrievalPipeline` embeds one query vector and searches every
-// authorised scope with it (`store.Search permitted queryVector pool`).
-// Under per-scope vocabularies dimension `i` denotes a different term in
-// each scope, so a single query vector cannot be compared across scopes
-// — a cross-scope search would need one embed per scope plus a merge.
-// Threading scope through the pipeline is therefore blocked on that
-// design decision (and on the `IEmbeddingProvider` interface change),
-// not merely on plumbing. Until then the scoped factory is an explicit,
-// opt-in composition for deployments whose retrieval is single-scope.
+// **Cross-scope retrieval — resolved (Option 1).** A TF-IDF vector's
+// geometry is a function of its vocabulary, so under per-scope
+// vocabularies dimension `i` denotes a different term in each scope and
+// one query vector cannot be compared across scopes. `RetrievalPipeline`
+// therefore embeds the query ONCE PER AUTHORISED SCOPE and merges, gated
+// on the `IScopedEmbeddingProviderFactory` capability probe — so the N
+// embeds land only on this in-process dev provider, and every stateless
+// production embedder keeps exactly one query vector on a byte-identical
+// path. The family below implements that capability (and
+// `IEmbeddingProvider`, so it composes directly into
+// `RAGServerApp.create`).
 
 /// Tokenise a string into lower-cased words, stripping punctuation.
 let private tokenise (text: string) =
@@ -252,10 +257,12 @@ let private stateBlobName = "embeddings/_local-tfidf-state.json"
 [<Literal>]
 let GlobalModelId = "local-tfidf-v1"
 
-/// Model id reported by every scope-keyed provider. Distinct from
+/// Model-id FAMILY prefix for the scope-keyed providers. Distinct from
 /// `GlobalModelId` because a per-scope vocabulary is a different
 /// embedding function — `ReembeddingService` re-embeds once on the swap
-/// rather than mixing two sparse spaces in one index.
+/// rather than mixing two sparse spaces in one index. No provider
+/// reports this bare value: each reports `scopedModelIdFor` its own
+/// scope (see below).
 [<Literal>]
 let ScopedModelId = "local-tfidf-v2"
 
@@ -289,6 +296,26 @@ module ScopeKey =
 /// persistence path under the `_platform` container.
 let private scopedStateBlobName (scopeKey: string) =
     sprintf "embeddings/%s/_local-tfidf-state.json" scopeKey
+
+/// The model id a scope-keyed provider reports: the family prefix plus
+/// the canonical scope key, e.g. `local-tfidf-v2#team-acme`.
+///
+/// **The scope component is load-bearing, not decorative.**
+/// `EmbeddingCacheKey` (`ToolUp.Platform.IEmbeddingCache`) is
+/// `{ Version; TextHash }` where `Version` is
+/// `{ ProviderId; ModelId; Dimensions }` — there is no tenant component
+/// anywhere in it. Two scopes reporting one `ModelId` would therefore
+/// share cache entries, and the first scope to embed a string would
+/// serve ITS vector to every other scope asking for the same text: the
+/// cross-scope coupling this phase removed from the IDF state, silently
+/// re-created one layer up, and invisible because a cached vector is
+/// indistinguishable from a computed one.
+///
+/// The same id rides `_embedModel` chunk metadata, so `ReembeddingService`
+/// measures a chunk against its own scope's embedder rather than against
+/// whichever scope happened to be composed.
+let scopedModelIdFor (scope: VectorScope) : string =
+    ScopedModelId + "#" + ScopeKey.ofScope scope
 
 // ─── Persisted wire format ───────────────────────────────────────
 //
@@ -604,8 +631,12 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
     let providers = ConcurrentDictionary<string, Lazy<IEmbeddingProvider>>()
 
     let createFor (scopeKey: string) =
+        // `local-tfidf-v2#{scopeKey}` — see `scopedModelIdFor` for why the
+        // scope component has to reach the model id.
+        let scopedModelId = ScopedModelId + "#" + scopeKey
+
         match blobStorage with
-        | None -> LocalEmbeddingProviderImpl(None, None, ScopedModelId) :> IEmbeddingProvider
+        | None -> LocalEmbeddingProviderImpl(None, None, scopedModelId) :> IEmbeddingProvider
         | Some storage ->
             let blobName = scopedStateBlobName scopeKey
 
@@ -626,7 +657,7 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
                 return ()
             }
 
-            LocalEmbeddingProviderImpl(Some persister, initial, ScopedModelId) :> IEmbeddingProvider
+            LocalEmbeddingProviderImpl(Some persister, initial, scopedModelId) :> IEmbeddingProvider
 
     /// The provider for `scope`. Same instance (and same accumulated IDF
     /// state) on every call for the same scope.
@@ -664,6 +695,43 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
             let! _ = storage.Delete(platformContainer, scopedStateBlobName key)
             return ()
     }
+
+    // ─── The composable surfaces (Phase 14z, Option 1) ───────────
+    //
+    // The family is itself an `IEmbeddingProvider` so a deployment can
+    // hand it straight to `RAGServerApp.create`, and an
+    // `IScopedEmbeddingProviderFactory` so the RAG pipeline's capability
+    // probe finds the per-scope embedders behind it. Every caller that
+    // does NOT probe (a health check, a diagnostic, a consumer holding
+    // the DI singleton) still gets a working embedder rather than a
+    // throw.
+    //
+    // That fallback resolves to the `Deployment` scope deliberately:
+    // `Deployment` is the deployment-wide shared scope, so an unscoped
+    // call cannot land in some tenant's vocabulary — and the family
+    // reports exactly that scope's `ModelId`, so the identity it
+    // advertises is the identity of the vectors it produces. Reporting
+    // the bare `local-tfidf-v2` family prefix here would have been a
+    // quiet lie: the cache would then key an unscoped call and a
+    // `Deployment`-scoped call differently while both computed the same
+    // vector from the same state.
+
+    interface IEmbeddingProvider with
+        member _.Dimensions = dimensions
+        member _.ProviderId = "local"
+
+        member this.ModelId =
+            (this :> IScopedEmbeddingProviderFactory).For(VectorScope.Deployment).ModelId
+
+        member this.GenerateEmbedding(text: string) =
+            (this :> IScopedEmbeddingProviderFactory).For(VectorScope.Deployment).GenerateEmbedding text
+
+        member this.GenerateEmbeddings(texts: string seq) =
+            (this :> IScopedEmbeddingProviderFactory).For(VectorScope.Deployment).GenerateEmbeddings texts
+
+    interface IScopedEmbeddingProviderFactory with
+        member this.For(scope: VectorScope) = this.For scope
+        member this.ResetScope(scope: VectorScope) = this.ResetScope scope
 
 /// Create a memory-only scope-keyed provider family. Every scope starts
 /// empty and is wiped on restart — the shape tests and CI want.

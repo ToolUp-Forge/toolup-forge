@@ -100,6 +100,7 @@ let private mkDeps
         VectorStore = None
         IndexLifecycle = None
         EventStore = None
+        EmbeddingProvider = None
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
         OriginalResolver = resolver

@@ -561,6 +561,7 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     VectorStore = None
     IndexLifecycle = None
     EventStore = None
+    EmbeddingProvider = None
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = createDefault ()

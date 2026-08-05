@@ -96,7 +96,15 @@ type ReembeddingBackgroundService
         | Team teamId -> teamId
         | User userId -> $"user:{userId}"
 
-    let needsReembed (chunk: TextChunk) =
+    // Phase 14z — staleness is measured against the SCOPE'S embedder.
+    // `scanScope` already iterates by scope, and under a scope-keyed
+    // provider each scope reports its own `ModelId`, so comparing every
+    // scope's chunks against one composed embedder would mark every chunk
+    // outside that embedder's scope permanently stale and re-embed the
+    // whole corpus on a loop. Identity on every stateless provider, where
+    // there is exactly one embedder and this is the pre-14z comparison
+    // byte-for-byte (GP 11).
+    let needsReembed (scopeEmbedder: IEmbeddingProvider) (chunk: TextChunk) =
         let provider = chunk.Metadata |> Map.tryFind EmbeddingVersion.MetadataProviderKey
 
         let model = chunk.Metadata |> Map.tryFind EmbeddingVersion.MetadataModelKey
@@ -110,9 +118,9 @@ type ReembeddingBackgroundService
             // Pre-versioning chunk — re-embed to stamp current version.
             true
         | Some p, Some m, Some d ->
-            p <> embedder.ProviderId
-            || m <> embedder.ModelId
-            || d <> string embedder.Dimensions
+            p <> scopeEmbedder.ProviderId
+            || m <> scopeEmbedder.ModelId
+            || d <> string scopeEmbedder.Dimensions
 
     // Both emit helpers are best-effort swallow-and-log (same shape as
     // `IngestionBackgroundService`): `processOne` runs fire-and-forget via
@@ -178,7 +186,12 @@ type ReembeddingBackgroundService
     let scanScope (scope: VectorScope) (ct: CancellationToken) = async {
         try
             let! chunks = store.ListChunks scope false
-            let stale = chunks |> List.filter (fun (_, c) -> needsReembed c)
+
+            // Resolved once per scan, not once per chunk — `scanScope` is
+            // already the per-scope boundary.
+            let scopeEmbedder = ScopedEmbedding.forScope embedder scope
+
+            let stale = chunks |> List.filter (fun (_, c) -> needsReembed scopeEmbedder c)
 
             if not stale.IsEmpty then
                 logger.Info(

@@ -4,6 +4,7 @@ open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.VectorKnowledgeTypes
 
 /// SHA256 the input text and return a lowercase hex digest. Used as the
 /// `TextHash` portion of `EmbeddingCacheKey` so the cache never retains
@@ -117,9 +118,70 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
                 return results
         }
 
+/// Phase 14z — the caching decorator over a SCOPE-KEYED provider.
+///
+/// `CachingEmbeddingProvider` above is opaque: wrapping a scope-keyed
+/// family in it would hide the `IScopedEmbeddingProviderFactory`
+/// capability from every downstream probe, and the pipeline would fall
+/// back to one global query vector against per-scope vocabularies —
+/// silently the worst of both designs. This subtype forwards the
+/// capability, handing back a caching decorator over the *scope's*
+/// embedder so a per-scope embed is cached exactly like an unscoped one.
+///
+/// **Why a separate type rather than a second interface on the one
+/// above.** F# implements interfaces statically, so a single type
+/// carrying `IScopedEmbeddingProviderFactory` would answer the probe
+/// `true` even when wrapping `text-embedding-3-small` — and the pipeline
+/// would then spend one embed per authorised scope against a metered API
+/// for N identical vectors. `create` picks the shape from the inner
+/// provider, so a stateless embedder's wrapper cannot answer the probe at
+/// all.
+///
+/// The per-scope wrappers are memoised so a repeated `For` returns the
+/// same instance (the capability contract), and each keys the shared
+/// cache under its own scope-distinct `ModelId`.
+type ScopedCachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache) =
+
+    let unscoped = CachingEmbeddingProvider(inner, cache) :> IEmbeddingProvider
+
+    let scoped =
+        System.Collections.Concurrent.ConcurrentDictionary<VectorScope, IEmbeddingProvider>()
+
+    interface IEmbeddingProvider with
+        member _.Dimensions = unscoped.Dimensions
+        member _.ProviderId = unscoped.ProviderId
+        member _.ModelId = unscoped.ModelId
+        member _.GenerateEmbedding text = unscoped.GenerateEmbedding text
+        member _.GenerateEmbeddings texts = unscoped.GenerateEmbeddings texts
+
+    interface IScopedEmbeddingProviderFactory with
+        member _.For(scope: VectorScope) =
+            scoped.GetOrAdd(
+                scope,
+                fun s -> CachingEmbeddingProvider(ScopedEmbedding.forScope inner s, cache) :> IEmbeddingProvider
+            )
+
+        member _.ResetScope(scope: VectorScope) = async {
+            // Drop the memoised wrapper first so a subsequent `For` cannot
+            // hand back a decorator over the state that is about to be
+            // discarded, then reset the underlying scope. The cache itself
+            // is not swept: entries are keyed by the scope's `ModelId` and
+            // the scope's post-reset vocabulary is a different embedding
+            // function, so stale entries are unreachable rather than wrong.
+            scoped.TryRemove scope |> ignore
+            do! ScopedEmbedding.resetScope inner scope
+        }
+
 /// Wrap `inner` with `cache`. If you want a no-cache deployment, pass the
 /// inner provider directly to `composeWithRAG` without going through this
 /// decorator — there is no "no-op cache" type, missing the cache means
 /// missing the wrapper.
+///
+/// Phase 14z — a scope-keyed `inner` gets the capability-forwarding
+/// wrapper; everything else gets exactly the wrapper it got before, which
+/// cannot answer the scope probe (GP 11).
 let create (inner: IEmbeddingProvider) (cache: IEmbeddingCache) : IEmbeddingProvider =
-    CachingEmbeddingProvider(inner, cache) :> IEmbeddingProvider
+    if ScopedEmbedding.isScopeKeyed inner then
+        ScopedCachingEmbeddingProvider(inner, cache) :> IEmbeddingProvider
+    else
+        CachingEmbeddingProvider(inner, cache) :> IEmbeddingProvider

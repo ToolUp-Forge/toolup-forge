@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IOcrProvider
 open ToolUp.Platform.ITableExtractor
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -46,6 +47,18 @@ type KnowledgeApiDeps = {
     /// `composeWithRAG`).
     IndexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle option
     EventStore: IEventStore option
+    /// Phase 14z — the composed `IEmbeddingProvider`, carried solely so
+    /// `resetIndex` can drop the scope's embedder state alongside its
+    /// chunks. Read through `ScopedEmbedding.resetScope`, which is a
+    /// no-op unless the provider is scope-keyed
+    /// (`IScopedEmbeddingProviderFactory`), so a deployment on a
+    /// stateless embedder — or on the unscoped local one, whose single
+    /// global vocabulary must NOT be wiped by one tenant's reset — takes
+    /// exactly the pre-14z path (GP 11).
+    ///
+    /// `None` when no embedder is registered (KB composed without RAG,
+    /// test harnesses bypassing `composeWithRAG`).
+    EmbeddingProvider: IEmbeddingProvider option
     /// Optional `INarrativeStore` for cross-store reset coherence
     /// (Phase 4b commit 2). Resolved from DI per request; `None` when
     /// the SDK has not registered an `INarrativeStore` (test harnesses
@@ -316,6 +329,15 @@ module KnowledgeApiDeps =
             | :? IEventStore as e -> Some e
             | _ -> None
 
+        // Phase 14z — `composeWithRAG` registers the (cache-wrapped)
+        // embedder as an `IEmbeddingProvider` singleton; the wrapper
+        // forwards the scope-keyed capability, so probing the resolved
+        // singleton is equivalent to probing what the operator composed.
+        let embeddingProvider =
+            match ctx.RequestServices.GetService(typeof<IEmbeddingProvider>) with
+            | :? IEmbeddingProvider as e -> Some e
+            | _ -> None
+
         let narrativeStore =
             match ctx.RequestServices.GetService(typeof<INarrativeStore>) with
             | :? INarrativeStore as n -> Some n
@@ -509,6 +531,7 @@ module KnowledgeApiDeps =
             VectorStore = vectorStore
             IndexLifecycle = indexLifecycle
             EventStore = eventStore
+            EmbeddingProvider = embeddingProvider
             NarrativeStore = narrativeStore
             AccessContext = accessContext
             OriginalResolver = originalResolver

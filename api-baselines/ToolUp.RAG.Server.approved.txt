@@ -7,6 +7,8 @@ ToolUp.RAG.CachingEmbeddingProvider (class)
 ToolUp.RAG.CachingEmbeddingProvider.create(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.RAG.CachingEmbeddingProvider+CachingEmbeddingProvider (class)
 ToolUp.RAG.CachingEmbeddingProvider+CachingEmbeddingProvider..ctor(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache)
+ToolUp.RAG.CachingEmbeddingProvider+ScopedCachingEmbeddingProvider (class)
+ToolUp.RAG.CachingEmbeddingProvider+ScopedCachingEmbeddingProvider..ctor(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache)
 ToolUp.RAG.Chunking (class)
 ToolUp.RAG.Chunking.chunkSpreadsheet(ToolUp.RAG.Chunking+ChunkingConfig, ToolUp.RAG.Chunking+SheetData) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.RAG.Chunking.chunkSpreadsheetWithSpans(ToolUp.RAG.Chunking+ChunkingConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.Chunking+SpanContext], ToolUp.RAG.Chunking+SheetData) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.Chunking+ChunkPiece]
@@ -174,6 +176,7 @@ ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.Pl
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
 ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Boolean
+ToolUp.RAG.RAGCompose.hasScopeKeyedEmbeddingProvider(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Boolean
 ToolUp.RAG.RAGCompose.resolveFraming(ToolUp.RAG.RAGCompose+GroundingMode, System.String) : System.String
 ToolUp.RAG.RAGCompose.resolveFramingWithTools(ToolUp.RAG.RAGCompose+GroundingMode, System.String, ToolUp.RAG.RAGPromptBuilder+ToolFraming) : System.String
 ToolUp.RAG.RAGCompose.strictlyGroundedDirective : System.String { get }
@@ -342,7 +345,7 @@ ToolUp.RAG.RagConfigValidator+RagPersistenceValidator..ctor(ToolUp.Platform.Serv
 ToolUp.RAG.RagConfigValidator+RetrievalDefaultsValidator (class)
 ToolUp.RAG.RagConfigValidator+RetrievalDefaultsValidator..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator (class)
-ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator (class)
 ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator (class)

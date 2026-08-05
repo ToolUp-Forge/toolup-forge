@@ -664,9 +664,19 @@ type IngestionBackgroundService
             // subsequent `pipeline.Index` calls will rerun the same
             // embedding step and surface the same error per chunk —
             // observers see the failure on the unit they care about.
+            // Phase 14z — pre-warm through the DOCUMENT'S SCOPE's embedder.
+            // The warm-up only pays off if it populates the same cache
+            // entries `pipeline.Index` will probe, and under a scope-keyed
+            // provider those are keyed by the scope's own `ModelId`.
+            // Warming the unscoped entries instead would leave every
+            // per-chunk embed a cache miss — the batched round-trip
+            // amortisation this step exists for, silently lost. Identity
+            // on every stateless provider (GP 11).
+            let scopeEmbedder = ScopedEmbedding.forScope embedder doc.Scope
+
             try
                 let sw = System.Diagnostics.Stopwatch.StartNew()
-                let! _ = embedder.GenerateEmbeddings chunkTexts
+                let! _ = scopeEmbedder.GenerateEmbeddings chunkTexts
                 sw.Stop()
                 telemetry.RecordEmbedding(chunkTexts.Length, sw.ElapsedMilliseconds)
 
@@ -684,8 +694,8 @@ type IngestionBackgroundService
                             Origin = None
                             Metadata =
                                 Map.ofList [
-                                    "provider", embedder.ProviderId
-                                    "model", embedder.ModelId
+                                    "provider", scopeEmbedder.ProviderId
+                                    "model", scopeEmbedder.ModelId
                                     "documentId", doc.DocumentId
                                 ]
                             Timestamp = DateTime.UtcNow
@@ -701,7 +711,7 @@ type IngestionBackgroundService
                 // back to per-chunk embed" text, which sent operators
                 // chasing a per-chunk bug during a provider outage.
                 logger.Error(
-                    $"[IngestionBackgroundService] event=batched_embedding_failed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={embedder.ProviderId}/{embedder.ModelId}: the batched embedding call failed; the per-chunk Index path uses the same provider, so every chunk of this document will now fail the same way. This is almost always a provider-level problem (missing/invalid API key, rate limit, or network), not a per-chunk data issue — fix the embedding provider and re-ingest the document.",
+                    $"[IngestionBackgroundService] event=batched_embedding_failed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={scopeEmbedder.ProviderId}/{scopeEmbedder.ModelId}: the batched embedding call failed; the per-chunk Index path uses the same provider, so every chunk of this document will now fail the same way. This is almost always a provider-level problem (missing/invalid API key, rate limit, or network), not a per-chunk data issue — fix the embedding provider and re-ingest the document.",
                     Some ex
                 )
 

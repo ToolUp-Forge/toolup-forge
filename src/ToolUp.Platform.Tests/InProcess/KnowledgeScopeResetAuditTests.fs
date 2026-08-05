@@ -6,6 +6,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.ISparseIndex
 open ToolUp.RAG.IngestionTypes
@@ -101,6 +102,7 @@ let private mkDeps
         VectorStore = None
         IndexLifecycle = lifecycle
         EventStore = None
+        EmbeddingProvider = None
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
         OriginalResolver = createDefault ()
@@ -187,5 +189,69 @@ let tests =
 
             let! result = resetIndex deps
             Expect.isOk result "absent IAuditLog never fails the reset"
+        }
+
+        // ── Phase 14z — the embedder-state half of the wipe ──
+        //
+        // `ResetIndex` wipes a scope's blobs, its vector + sparse chunks
+        // and its narrative entries. Under a scope-keyed embedding
+        // provider the scope ALSO owns an IDF vocabulary built from
+        // exactly those documents; leaving it behind lets a deleted
+        // corpus keep shaping the scope's future query vectors. Same
+        // class of residue as the narrative entries, and it is wired at
+        // the same site.
+
+        testCaseAsync "resetIndex drops the scope's embedder state when the provider is scope-keyed"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let family = LocalEmbeddingProvider.createScoped ()
+
+            // Two scopes with live state — the sibling is the control.
+            let! _ = (family.For(Team "team-a")).GenerateEmbedding "quarterly revenue northern division"
+            let! _ = (family.For(Team "team-b")).GenerateEmbedding "greenhouse irrigation tomato beds"
+
+            Expect.equal (family.KnownScopes()) [ "team-team-a"; "team-team-b" ] "both scopes start with live state"
+
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
+
+            let deps = {
+                mkDeps storage None None "team-a" with
+                    VectorScope = Team "team-a"
+                    EmbeddingProvider = Some(family :> IEmbeddingProvider)
+            }
+
+            let! result = resetIndex deps
+            Expect.isOk result "reset must succeed"
+
+            Expect.equal
+                (family.KnownScopes())
+                [ "team-team-b" ]
+                "the reset scope's vocabulary is gone and the sibling's survives"
+        }
+
+        testCaseAsync "resetIndex leaves an UNSCOPED embedder's global vocabulary alone"
+        <| async {
+            // The guard on the guard. The unscoped provider holds ONE
+            // vocabulary shared by every tenant, so a scope reset that
+            // reached it would degrade every other tenant's retrieval —
+            // a cross-tenant side effect, the opposite of the intent.
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let shared = LocalEmbeddingProvider.create ()
+            let! _ = shared.GenerateEmbedding "quarterly revenue northern division"
+            let! before = shared.GenerateEmbedding "northern division revenue"
+
+            do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
+
+            let deps = {
+                mkDeps storage None None "team-a" with
+                    VectorScope = Team "team-a"
+                    EmbeddingProvider = Some shared
+            }
+
+            let! result = resetIndex deps
+            Expect.isOk result "reset must succeed"
+
+            let! after = shared.GenerateEmbedding "northern division revenue"
+            Expect.sequenceEqual after before "the shared global vocabulary is untouched"
         }
     ]

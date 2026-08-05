@@ -447,6 +447,36 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                         ex.Message
                 )
         | None -> ()
+
+        // Phase 14z — drop the scope's embedder state alongside its
+        // chunks. Under a scope-keyed embedding provider each scope owns
+        // an IDF dictionary built from exactly the documents just wiped;
+        // leaving it behind would keep a deleted corpus shaping this
+        // scope's future query vectors, which is the same class of
+        // residue as the narrative entries the block above clears.
+        //
+        // Inside the container lock, for the reason the lock exists: a
+        // chunk completing mid-reset must not rebuild the vocabulary
+        // after we have dropped it. Best-effort — a failed embedder reset
+        // degrades to a stale local vocabulary, never to a failed reset
+        // that leaves the caller's KB half-wiped.
+        //
+        // A no-op on every stateless embedder and on the UNSCOPED local
+        // provider, whose single global vocabulary is shared by every
+        // tenant and must not be wiped by one scope's reset (GP 4 in the
+        // other direction: a reset must not have cross-tenant effects).
+        match deps.EmbeddingProvider with
+        | Some embedder ->
+            try
+                do! ToolUp.Platform.IEmbeddingProvider.ScopedEmbedding.resetScope embedder deps.VectorScope
+            with ex ->
+                deps.Logger.Warn(
+                    sprintf
+                        "[KnowledgeBase] ResetIndex: embedder scope-state reset failed for %s — the scope's chunks are wiped but its IDF vocabulary survives (%s)"
+                        deps.Scope.ScopeId
+                        ex.Message
+                )
+        | None -> ()
     finally
         lock.Release() |> ignore
 

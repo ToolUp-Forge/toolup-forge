@@ -29,8 +29,7 @@ open ToolUp.Platform.IEmbeddingProvider
 /// deployments using the local embedder continue to start cleanly;
 /// operators get a clear preflight signal in the startup log + the
 /// `/dev/inspect` validators panel pointing at the actionable
-/// remediation. Phase 14z structurally closes the leak via per-team
-/// IDF dictionaries, at which point this validator can be removed.
+/// remediation.
 ///
 /// **Phase 9m.B** — honours `ServerConfig.AcceptLocalEmbedderAtScale`
 /// (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`), the escape hatch shared
@@ -39,7 +38,27 @@ open ToolUp.Platform.IEmbeddingProvider
 /// remedy (swap to a stateless embedder), so an operator who has
 /// accepted the trade-off silences the family with one flag rather
 /// than learning two.
-type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbeddingProvider, ?timeout: TimeSpan) =
+///
+/// **Phase 14z — the lift, and why it is a RELAXATION rather than a
+/// removal.** `scopeKeyedEmbedder` is the composed-provider observation
+/// the validator could not previously make (the Phase 509 / Phase 633
+/// precedent). Phase 14z closes the leak structurally — one IDF
+/// dictionary per `VectorScope`, sharing no term with any sibling — but
+/// only for a deployment that actually *composes* the scope-keyed
+/// family. A deployment still composing the unscoped
+/// `LocalEmbeddingProvider.create ()` in Team mode leaks exactly as it
+/// did before, so the warning is still true there and deleting the
+/// validator would have silenced a live finding. It now reads "warn
+/// about the local embedder in Team mode UNLESS its state is
+/// scope-keyed".
+///
+/// Keyed on the real property — the composed provider satisfying
+/// `IScopedEmbeddingProviderFactory` — not on a builder having been
+/// called, for the same reason `hasCrossReplicaEmbeddingCache` returns
+/// false for a hand-composed `InMemoryEmbeddingCache`: what lifts a
+/// warning must be the thing that removes its premise.
+type TeamModeLocalEmbedderValidator
+    (serverConfig: ServerConfig, embedder: IEmbeddingProvider, scopeKeyedEmbedder: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
     interface IConfigValidator with
@@ -52,6 +71,7 @@ type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbed
             if
                 isTeamMode
                 && embedder.ProviderId = "local"
+                && not scopeKeyedEmbedder
                 && not serverConfig.AcceptLocalEmbedderAtScale
             then
                 return
@@ -61,10 +81,14 @@ type TeamModeLocalEmbedderValidator(serverConfig: ServerConfig, embedder: IEmbed
                         + "term-frequency variance leak embedding-quality information across team boundaries "
                         + "(chunks themselves remain scope-isolated and never leak). This is acceptable for "
                         + "single-user dev / staging but should not run in multi-tenant production. "
-                        + "Wire in a stateless embedder (OpenAI / Cohere / Anthropic embeddings) via "
-                        + "RAGServerApp.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true "
+                        + "Compose the scope-keyed family instead — LocalEmbeddingProvider.createScopedPersistent "
+                        + "storage (or createScoped () for an ephemeral deployment) gives every scope its own IDF "
+                        + "dictionary and lifts this warning; retrieval then embeds the query once per authorised "
+                        + "scope, so cross-scope results still rank together. Otherwise wire in a stateless "
+                        + "embedder (OpenAI / Cohere / Anthropic embeddings) via RAGServerApp.create, or set "
+                        + "ServerConfig.AcceptLocalEmbedderAtScale = true "
                         + "(TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off explicitly. "
-                        + "Phase 14z addresses this structurally via per-team IDF."
+                        + "Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
                     )
             else
                 return Ok
