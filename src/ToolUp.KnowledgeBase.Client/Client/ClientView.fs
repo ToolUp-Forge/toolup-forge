@@ -353,6 +353,17 @@ let private deleteRowAction (dispatch: Msg -> unit) (doc: KnowledgeDocument) : R
             | FromNarrative _ -> Html.none
             | UploadedFile
             | Note _ -> TagEditor doc dispatch
+            // Phase 636 — the drawer trigger, present only where there
+            // is history to show. On a deployment that never composed
+            // `withDocumentVersioning` every document is version 1, so
+            // this action column is byte-for-byte what it was (GP 11).
+            if KnowledgeListView.hasVersionHistory doc then
+                Html.button [
+                    prop.className "text-xs text-gray-600 hover:text-gray-900 font-medium"
+                    prop.text "History"
+                    prop.title (sprintf "Version %d — show this document's version history" doc.Version)
+                    prop.onClick (fun _ -> dispatch (OpenVersionHistory(doc.Id, doc.FileName)))
+                ]
             Html.button [
                 prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
                 prop.text "Delete"
@@ -376,6 +387,176 @@ let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =
     }
 
     KnowledgeListView.KnowledgeListView config nonNote
+
+// ─── Version-history drawer (Phase 636) ───────────────────────────
+//
+// What Phase 510 put on the wire, rendered. A versioned re-upload
+// supersedes in place — same document id, incremented `Version` — so
+// without this the only visible evidence that a document HAS a history
+// was that its size or timestamp had quietly changed.
+//
+// Mounted only while `Model.VersionHistory` is `Some`, which only
+// happens after a click on the row's "History" action, which itself
+// only exists above version 1. A single-version or unversioned
+// deployment therefore never renders one byte of this (GP 11 / GP 13).
+
+/// Per-version original access.
+///
+/// **The current version is downloadable; a superseded one is not**, and
+/// that asymmetry is the wire's, not a UI shortcut.
+/// `KnowledgeApi.GetOriginalDelivery` addresses a *lineage*
+/// (`docId -> …`), so it resolves the live original; a superseded
+/// version's bytes are preserved at
+/// `KnowledgeDocumentVersion.OriginalBlobName` but no client-reachable
+/// method fetches them. Offering a button that could only ever return
+/// the wrong version's bytes would be worse than offering none, so the
+/// row says plainly what is kept and why it cannot be fetched yet.
+let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (version: KnowledgeDocumentVersion) =
+    let isCurrent = version.SupersededAt.IsNone
+    let isDownloading = state.Downloading = Some version.Version
+
+    Html.div [
+        prop.key (sprintf "%s:v%d" version.DocumentId version.Version)
+        prop.className "flex items-start justify-between gap-4 px-4 py-3 border-b border-gray-100 last:border-b-0"
+        prop.children [
+            Html.div [
+                prop.className "min-w-0 space-y-1"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center gap-2"
+                        prop.children [
+                            Html.span [
+                                prop.className "text-sm font-medium text-gray-900"
+                                prop.text (sprintf "v%d" version.Version)
+                            ]
+                            if isCurrent then
+                                Html.span [
+                                    prop.className
+                                        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
+                                    prop.text "Current"
+                                ]
+                            Html.span [ prop.className "text-xs text-gray-500 truncate"; prop.text version.FileName ]
+                        ]
+                    ]
+                    Html.p [
+                        prop.className "text-xs text-gray-500"
+                        prop.text (
+                            sprintf
+                                "%s · %s · %d chunk%s · by %s"
+                                (version.UploadedAt.ToString("yyyy-MM-dd HH:mm"))
+                                (KnowledgeListView.formatSize version.SizeBytes)
+                                version.ChunkCount
+                                (if version.ChunkCount = 1 then "" else "s")
+                                version.UploadedBy
+                        )
+                    ]
+                    match version.SupersededAt with
+                    | Some supersededAt ->
+                        Html.p [
+                            prop.className "text-xs text-gray-400"
+                            prop.text (sprintf "Superseded %s" (supersededAt.ToString("yyyy-MM-dd HH:mm")))
+                        ]
+                    | None -> Html.none
+                ]
+            ]
+            Html.div [
+                prop.className "shrink-0"
+                prop.children [
+                    if isCurrent then
+                        Html.button [
+                            prop.className
+                                "text-xs text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-300 disabled:cursor-not-allowed"
+                            prop.disabled (state.Downloading.IsSome)
+                            prop.text (if isDownloading then "Opening…" else "Open original")
+                            prop.title "Fetch this version's original document"
+                            prop.onClick (fun _ -> dispatch (DownloadVersionRequested version))
+                        ]
+                    else
+                        Html.span [
+                            prop.className "text-xs text-gray-400"
+                            prop.title
+                                "This version's original bytes are preserved, but the API addresses a document rather than a version — there is no per-version fetch yet."
+                            prop.text "Original preserved"
+                        ]
+                ]
+            ]
+        ]
+    ]
+
+[<ReactComponent>]
+let private VersionHistoryDrawer (state: VersionHistoryState) (dispatch: Msg -> unit) =
+    let body =
+        match state.LoadError, state.Versions with
+        | Some err, _ ->
+            Html.p [
+                prop.className "px-4 py-6 text-sm text-red-700"
+                prop.text (sprintf "Couldn't load the version history: %s" err)
+            ]
+        | None, None -> Html.p [ prop.className "px-4 py-6 text-sm text-gray-500"; prop.text "Loading…" ]
+        // An empty list is a real answer: the document is not visible in
+        // this scope (the server returns `[]` rather than an existence
+        // signal — GP 4). Say so in the same words either way.
+        | None, Some [] ->
+            Html.p [
+                prop.className "px-4 py-6 text-sm text-gray-500"
+                prop.text "No version history is available for this document."
+            ]
+        | None, Some versions ->
+            Html.div [
+                prop.className "divide-y divide-gray-100"
+                prop.children (versions |> List.map (versionRow state dispatch))
+            ]
+
+    Html.div [
+        prop.className "fixed inset-0 z-40 flex justify-end"
+        prop.children [
+            // Click-away backdrop. `aria-hidden` because the close
+            // affordance a keyboard user reaches is the button below.
+            Html.div [
+                prop.className "absolute inset-0 bg-gray-900/20"
+                prop.ariaHidden true
+                prop.onClick (fun _ -> dispatch CloseVersionHistory)
+            ]
+            Html.div [
+                prop.className
+                    "relative w-full max-w-md h-full bg-white border-l border-gray-200 shadow-xl overflow-y-auto"
+                prop.role "dialog"
+                prop.ariaLabel (sprintf "Version history for %s" state.FileName)
+                prop.children [
+                    Html.div [
+                        prop.className
+                            "sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-start justify-between gap-3"
+                        prop.children [
+                            Html.div [
+                                prop.className "min-w-0"
+                                prop.children [
+                                    Html.h3 [
+                                        prop.className "text-sm font-semibold text-gray-900"
+                                        prop.text "Version history"
+                                    ]
+                                    Html.p [ prop.className "text-xs text-gray-500 truncate"; prop.text state.FileName ]
+                                ]
+                            ]
+                            Html.button [
+                                prop.className "text-gray-400 hover:text-gray-600 text-lg leading-none"
+                                prop.ariaLabel "Close version history"
+                                prop.text "×"
+                                prop.onClick (fun _ -> dispatch CloseVersionHistory)
+                            ]
+                        ]
+                    ]
+                    match state.DownloadError with
+                    | Some err ->
+                        Html.p [
+                            prop.className "px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-100"
+                            prop.text err
+                        ]
+                    | None -> Html.none
+                    body
+                ]
+            ]
+        ]
+    ]
 
 // ─── Main view ────────────────────────────────────────────────────
 
@@ -477,6 +658,11 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
             bulkImportPanel model dispatch
             UploadZone model dispatch
             documentList model dispatch
+            // Phase 636 — absent unless a "History" action was clicked,
+            // which itself only exists above version 1.
+            match model.VersionHistory with
+            | Some state -> VersionHistoryDrawer state dispatch
+            | None -> Html.none
         ]
     ]
 

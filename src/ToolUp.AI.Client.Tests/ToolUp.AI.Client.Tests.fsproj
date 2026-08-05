@@ -150,6 +150,13 @@
              the half Phase 610 left open (it covered the shell rail only,
              and `AssertAccessible` still needed a hand-supplied render). -->
         <Compile Include="ModuleViewA11yTests.fs" />
+        <!-- Phase 636 — the KB version-history client surface: the GP 11
+             gate asserted over REAL mounted markup (a single-version row
+             must be byte-for-byte what it was) plus the drawer's MVU
+             arms. Same reason as every pack above — `ClientModel` holds a
+             module-level `Api.makeProxy`, so it cannot be touched from
+             the .NET harness at all. Must follow ViewMount.fs. -->
+        <Compile Include="KnowledgeVersionHistoryTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -158,6 +165,14 @@
              compiler — so AI.Client modules under test compile against
              the same source the SDK ships. -->
         <ProjectReference Include="..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
+        <!-- Phase 636 — the KB client tier, driven through Fable for the
+             same reason AI.Client is: its MVU code is unreachable from
+             .NET reflection. This is the estate's ONE Fable-tier test
+             harness (the project name predates that), so a KB client
+             pack belongs here rather than in a second harness that would
+             have to re-derive the loader, the jsdom mount and the
+             node:test facade. -->
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
     </ItemGroup>

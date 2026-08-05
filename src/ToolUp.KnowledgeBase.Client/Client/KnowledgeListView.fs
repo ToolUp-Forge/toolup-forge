@@ -7,6 +7,24 @@ open System
 open Feliz
 open SharedTypes
 
+// ─── Version gate (Phase 636) ──────────────────────────────────────
+
+/// Phase 636 — THE gate every version affordance in the client is
+/// derived from, stated once so the badge, the row action and the tests
+/// cannot drift apart: a document has history iff its lineage is past
+/// version 1.
+///
+/// Version 1 is not a special case that needs handling; it is the whole
+/// population of a deployment that never composed
+/// `withDocumentVersioning`, because a pre-510 index record carries no
+/// `Version` property at all and the store coerces `< 1` to `1` on load.
+/// So gating here is exactly what makes an unversioned deployment render
+/// byte-for-byte as it did before this phase (GP 11).
+let private versionHasHistory (version: int) = version > 1
+
+/// `versionHasHistory` over a document — the form the view layer wants.
+let hasVersionHistory (doc: KnowledgeDocument) = versionHasHistory doc.Version
+
 // ─── Badges ────────────────────────────────────────────────────────
 //
 // Extracted so the team Documents page, the team Platform Library page,
@@ -120,6 +138,26 @@ module Badges =
                 prop.text "Note"
             ]
 
+    /// Phase 636 — the version badge. Renders **nothing at all** below
+    /// version 2, so a single-version document produces byte-for-byte
+    /// the markup it produced before this phase; `Html.none` is a null
+    /// React element, not an empty node (GP 11).
+    ///
+    /// Informational only. The drawer that lists the versions is opened
+    /// from the row's action column, where a `dispatch` is in scope —
+    /// this component is shared with the read-only Platform Library and
+    /// Platform Admin surfaces, which have no KB dispatch to give it.
+    let versionBadge (version: int) =
+        if not (versionHasHistory version) then
+            Html.none
+        else
+            Html.span [
+                prop.className
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-50 text-violet-700"
+                prop.title (sprintf "Version %d — earlier versions are preserved" version)
+                prop.text (sprintf "v%d" version)
+            ]
+
     let fileTypeBadge (fileType: string) =
         let color =
             match fileType with
@@ -220,7 +258,11 @@ let private sizeRangeContains (range: SizeRange) (bytes: int64) =
     | OverTenMb -> bytes > 10L * oneMb
 
 /// Human-readable byte count for the Size column (B / KB / MB / GB).
-let private formatSize (bytes: int64) =
+/// Public since Phase 636 — the version-history drawer reports each
+/// version's size and must report it in the same words as the row above
+/// it; a second formatter is the drift that would make "1.4 MB" and
+/// "1434 KB" the same document.
+let formatSize (bytes: int64) =
     if bytes < 1024L then
         sprintf "%d B" bytes
     elif bytes < oneMb then
@@ -404,6 +446,11 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                         prop.className "px-4 py-3 text-sm font-medium text-gray-900"
                         prop.children [
                             Html.div [ prop.text doc.FileName ]
+                            // Phase 636 — version badge under the file
+                            // name, absent entirely below version 2 (see
+                            // `Badges.versionBadge`), so a single-version
+                            // corpus renders exactly as it did before.
+                            Badges.versionBadge doc.Version
                             // Phase 502.C — tags under the file name
                             // rather than in their own column: they are
                             // an unbounded set, and a column would either

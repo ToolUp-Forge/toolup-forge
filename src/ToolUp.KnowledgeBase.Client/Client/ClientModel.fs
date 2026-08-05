@@ -23,6 +23,33 @@ type NoteEditorTarget =
     | CreateNew
     | EditExisting of docId: string
 
+/// Phase 636 — the version-history drawer's state, held for exactly ONE
+/// document at a time.
+///
+/// `Model.VersionHistory = None` is the closed drawer, and that is where
+/// every session starts and where a deployment that never composed
+/// `withDocumentVersioning` stays forever: nothing is fetched until a
+/// drawer is opened, so rendering the document list costs precisely what
+/// it cost before this phase — no eager N+1 sweep over
+/// `GetDocumentVersions` (GP 11 / GP 13).
+type VersionHistoryState = {
+    /// The lineage id whose history this is.
+    DocId: string
+    /// The document's file name at open time, carried so the drawer
+    /// header reads correctly without looking the document back up (and
+    /// so it still reads correctly if a concurrent refresh reorders the
+    /// list underneath it).
+    FileName: string
+    /// `None` while the lazy fetch is in flight. `Some []` is a real
+    /// answer, not an error: the server returns `[]` for an id the
+    /// caller's scope cannot see rather than an existence signal (GP 4).
+    Versions: KnowledgeDocumentVersion list option
+    LoadError: string option
+    /// Version number whose original is currently being fetched.
+    Downloading: int option
+    DownloadError: string option
+}
+
 type Model = {
     Documents: KnowledgeDocument list
     Uploading: bool
@@ -79,6 +106,13 @@ type Model = {
     /// user cannot scroll back through.
     BulkReport: BulkImportReport option
     BulkImportError: string option
+
+    // ── Version history (Phase 636) ──
+    /// `None` = the drawer is closed and nothing has been fetched. This
+    /// is the only state a single-version / unversioned deployment ever
+    /// reaches, because the affordance that opens it is itself gated on
+    /// `KnowledgeDocument.Version > 1`.
+    VersionHistory: VersionHistoryState option
 }
 
 type Msg =
@@ -137,6 +171,21 @@ type Msg =
     | BulkImportFailed of string
     | DismissBulkReport
 
+    // ── Version history (Phase 636) ──
+    /// Open the drawer for one document AND start its history fetch.
+    /// The fetch is deliberately tied to the open rather than to the
+    /// list load: a corpus of N documents would otherwise cost N extra
+    /// round-trips on every render to populate an affordance almost
+    /// nobody clicks.
+    | OpenVersionHistory of docId: string * fileName: string
+    | VersionHistoryLoaded of docId: string * versions: KnowledgeDocumentVersion list
+    | VersionHistoryFailed of docId: string * reason: string
+    | CloseVersionHistory
+    /// Fetch and hand a version's preserved original to the browser
+    /// through the Phase 108 delivery path.
+    | DownloadVersionRequested of version: KnowledgeDocumentVersion
+    | DownloadVersionSettled of Result<unit, string>
+
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: Fable.Remoting's default JSON transport encodes byte
 // arrays as a JSON array of ints, which the byte[] converter cannot
@@ -181,6 +230,8 @@ let init () =
         BulkImporting = false
         BulkReport = None
         BulkImportError = None
+
+        VersionHistory = None
     },
     Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
 
@@ -206,6 +257,90 @@ let private hasNonTerminal (docs: KnowledgeDocument list) =
 /// once every doc reaches `Complete` / `Failed`.
 let private schedulePoll () =
     Cmd.OfAsync.perform (fun () -> Async.Sleep 2000) () (fun () -> PollStatuses)
+
+// ─── Original-bytes → browser (Phase 102–107 client tail) ──────────
+//
+// Fetches an original through a scope-gated API and hands it to the
+// browser: a new tab where the popup is allowed, a download anchor
+// where it is blocked. Honours a PDF page locator as a `#page=N` deep
+// link where present; other locator kinds have no portable in-document
+// anchor and degrade to opening at the top.
+//
+// Phase 636 relocated this block ABOVE `update` — unchanged — because
+// the version-history drawer's download arm is an `update` effect and
+// F# resolves in file order. `originalDocumentOpener` (the AI Sources
+// panel's bridge, at the foot of this file) still consumes it.
+
+[<Fable.Core.Emit("new Blob([new Uint8Array($0)], { type: $1 })")>]
+let private makeOriginalBlob (bytes: byte[]) (mime: string) : obj = jsNative
+
+[<Fable.Core.Emit("URL.createObjectURL($0)")>]
+let private createOriginalObjectUrl (blob: obj) : string = jsNative
+
+// Keep the object URL alive long enough for the new tab / download to
+// read it, then release it.
+[<Fable.Core.Emit("setTimeout(function () { URL.revokeObjectURL($0) }, 60000)")>]
+let private revokeOriginalUrlLater (url: string) : unit = jsNative
+
+// Returns the opened Window, or null when the browser blocked the popup.
+[<Fable.Core.Emit("window.open($0, '_blank')")>]
+let private openOriginalTab (url: string) : obj = jsNative
+
+/// PDF viewers honour a `#page=N` fragment; other locator kinds have no
+/// portable in-document anchor, so they degrade to opening at the top.
+let private pageFragment (location: VK.SourceLocator option) : string =
+    match location with
+    | Some(VK.SourceLocator.Page n) -> sprintf "#page=%d" n
+    | _ -> ""
+
+let private openOriginal (original: OriginalDocument) (location: VK.SourceLocator option) : unit =
+    let blob = makeOriginalBlob original.Content original.ContentType
+    let url = createOriginalObjectUrl blob
+    let win = openOriginalTab (url + pageFragment location)
+
+    if isNull win then
+        // Popup blocked — fall back to a download (loses the page deep
+        // link but still delivers the file to the user).
+        let a = Browser.Dom.document.createElement "a" :?> Browser.Types.HTMLAnchorElement
+
+        a.href <- url
+        a?download <- original.FileName
+        Browser.Dom.document.body.appendChild a |> ignore
+        a.click ()
+        Browser.Dom.document.body.removeChild a |> ignore
+
+    revokeOriginalUrlLater url
+
+/// Phase 636 — deliver a document's preserved original to the browser
+/// through the **existing** Phase 108 delivery path, rather than through
+/// a second byte route invented for the drawer.
+///
+/// `Inline` takes the blob-URL route above; a `SignedUrl` is opened
+/// directly, which is the entire point of that mode — a deployment that
+/// composed `withSignedOriginalUrls` keeps the bytes out of the API
+/// response, and re-streaming them here would quietly undo it. A
+/// deployment that composed nothing gets `Inline` every time and this
+/// arm never runs (GP 11).
+///
+/// Refusals are typed, not thrown (GP 9), and an out-of-scope id is
+/// reported in the same words as an absent one so the drawer cannot be
+/// used to probe for a document in another tenant's scope (GP 4).
+let private deliverOriginal (docId: string) : Async<Result<unit, string>> = async {
+    let! result = knowledgeApi.GetOriginalDelivery docId
+
+    match result with
+    | Ok(PreviewContent.Inline original) ->
+        openOriginal original None
+        return Ok()
+    | Ok(PreviewContent.SignedUrl(url, _)) ->
+        if isNull (openOriginalTab url) then
+            return Error "Your browser blocked the download window. Allow pop-ups for this site and try again."
+        else
+            return Ok()
+    | Error NotInScope -> return Error "This document isn't available."
+    | Error NoOriginalAvailable -> return Error "This version has no stored original to download."
+    | Error(OriginalRetrievalFailed _) -> return Error "Couldn't fetch the original. Please try again."
+}
 
 let update (msg: Msg) (model: Model) =
     match msg with
@@ -328,6 +463,93 @@ let update (msg: Msg) (model: Model) =
                 BulkImportError = None
         },
         Cmd.none
+
+    // ── Version history (Phase 636) ──
+
+    | OpenVersionHistory(docId, fileName) ->
+        {
+            model with
+                VersionHistory =
+                    Some {
+                        DocId = docId
+                        FileName = fileName
+                        Versions = None
+                        LoadError = None
+                        Downloading = None
+                        DownloadError = None
+                    }
+        },
+        Cmd.OfAsync.either
+            knowledgeApi.GetDocumentVersions
+            docId
+            (fun versions -> VersionHistoryLoaded(docId, versions))
+            (fun ex -> VersionHistoryFailed(docId, ex.Message))
+
+    // Both arrival arms are gated on the drawer still being open on the
+    // SAME document. Without it, closing the drawer and reopening it on
+    // another document during a slow fetch would land the first
+    // document's history under the second's heading — a wrong answer
+    // that looks exactly like a right one.
+    | VersionHistoryLoaded(docId, versions) ->
+        match model.VersionHistory with
+        | Some state when state.DocId = docId ->
+            {
+                model with
+                    VersionHistory =
+                        Some {
+                            state with
+                                Versions = Some(versions |> List.sortByDescending _.Version)
+                                LoadError = None
+                        }
+            },
+            Cmd.none
+        | _ -> model, Cmd.none
+
+    | VersionHistoryFailed(docId, reason) ->
+        match model.VersionHistory with
+        | Some state when state.DocId = docId ->
+            {
+                model with
+                    VersionHistory = Some { state with LoadError = Some reason }
+            },
+            Cmd.none
+        | _ -> model, Cmd.none
+
+    | CloseVersionHistory -> { model with VersionHistory = None }, Cmd.none
+
+    | DownloadVersionRequested version ->
+        match model.VersionHistory with
+        | Some state ->
+            {
+                model with
+                    VersionHistory =
+                        Some {
+                            state with
+                                Downloading = Some version.Version
+                                DownloadError = None
+                        }
+            },
+            Cmd.OfAsync.either deliverOriginal version.DocumentId DownloadVersionSettled (fun ex ->
+                DownloadVersionSettled(Error ex.Message))
+        | None -> model, Cmd.none
+
+    | DownloadVersionSettled result ->
+        match model.VersionHistory with
+        | Some state ->
+            {
+                model with
+                    VersionHistory =
+                        Some {
+                            state with
+                                Downloading = None
+                                DownloadError =
+                                    match result with
+                                    | Ok() -> None
+                                    | Error reason -> Some reason
+                        }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
 
     | DeleteRequested docId ->
         model,
@@ -655,58 +877,6 @@ let private submitNarrative
 /// KnowledgeBaseView.narrativeCommitHandler`) to enable
 /// `NarrativeRenderer`'s "Save to Knowledge Base" button.
 let narrativeCommitHandler: NarrativeCommitHandler = { Submit = submitNarrative }
-
-// ─── "View original" opener (Phase 102–107 client tail) ────────────
-//
-// Brokered to the AI Sources panel via
-// `ToolUp.Platform.OriginalDocumentBridge` (registered in
-// `KnowledgeBaseView.register`). Fetches the original bytes through the
-// scope-gated `GetOriginalDocument` API and opens them in a new tab,
-// honouring a PDF page locator as a `#page=N` deep link where present;
-// other locator kinds — and a popup-blocked tab — degrade to a plain
-// open / download. Absence and denial come back as benign inline
-// messages: an out-of-scope id is reported generically so the
-// affordance can't be used to probe for document existence (GP 4 / GP 9).
-
-[<Fable.Core.Emit("new Blob([new Uint8Array($0)], { type: $1 })")>]
-let private makeOriginalBlob (bytes: byte[]) (mime: string) : obj = jsNative
-
-[<Fable.Core.Emit("URL.createObjectURL($0)")>]
-let private createOriginalObjectUrl (blob: obj) : string = jsNative
-
-// Keep the object URL alive long enough for the new tab / download to
-// read it, then release it.
-[<Fable.Core.Emit("setTimeout(function () { URL.revokeObjectURL($0) }, 60000)")>]
-let private revokeOriginalUrlLater (url: string) : unit = jsNative
-
-// Returns the opened Window, or null when the browser blocked the popup.
-[<Fable.Core.Emit("window.open($0, '_blank')")>]
-let private openOriginalTab (url: string) : obj = jsNative
-
-/// PDF viewers honour a `#page=N` fragment; other locator kinds have no
-/// portable in-document anchor, so they degrade to opening at the top.
-let private pageFragment (location: VK.SourceLocator option) : string =
-    match location with
-    | Some(VK.SourceLocator.Page n) -> sprintf "#page=%d" n
-    | _ -> ""
-
-let private openOriginal (original: OriginalDocument) (location: VK.SourceLocator option) : unit =
-    let blob = makeOriginalBlob original.Content original.ContentType
-    let url = createOriginalObjectUrl blob
-    let win = openOriginalTab (url + pageFragment location)
-
-    if isNull win then
-        // Popup blocked — fall back to a download (loses the page deep
-        // link but still delivers the file to the user).
-        let a = Browser.Dom.document.createElement "a" :?> Browser.Types.HTMLAnchorElement
-
-        a.href <- url
-        a?download <- original.FileName
-        Browser.Dom.document.body.appendChild a |> ignore
-        a.click ()
-        Browser.Dom.document.body.removeChild a |> ignore
-
-    revokeOriginalUrlLater url
 
 /// Companion-exported "view original" opener. Registered into
 /// `ToolUp.Platform.OriginalDocumentBridge` by `KnowledgeBaseView.register`
