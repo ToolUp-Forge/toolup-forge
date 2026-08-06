@@ -1614,6 +1614,15 @@
              Program.fs. -->
         <Compile Include="InProcess\FederationWireCorpus.fs" />
         <Compile Include="InProcess\FederationWireConformanceTests.fs" />
+        <!-- Phase 602 — model-execution wire-spec conformance. Unlike the
+             federation corpus above, this one is EXTERNAL: it is neither
+             authored nor vendored here, it is resolved at test time and
+             pinned by digest, and it is canonical over this
+             implementation rather than emitted from it. Absent, the
+             family fails loudly — never skips. Corpus location:
+             TOOLUP_MODEL_EXECUTION_CORPUS, or a bounded search that
+             identifies a corpus by its own manifest. -->
+        <Compile Include="Conformance\ModelExecutionSpecConformance.fs" />
         <!-- Phase 189 — cross-runtime federation conformance. The Phase
              596 corpus above certifies the .NET emitters; this pair
              certifies the clients the SDK GENERATES, by running

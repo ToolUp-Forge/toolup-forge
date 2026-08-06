@@ -373,6 +373,77 @@ jobs:
       - name: Pre-pull the container-scheduler test image
         run: docker pull alpine:latest
 
+      # ─── The model-execution conformance corpus ────────────────────
+      #
+      # `ToolUp.Platform.Tests` carries a conformance family that
+      # certifies the model-execution wire face against an EXTERNAL,
+      # language-neutral corpus — a specification and fixture set that is
+      # canonical over this implementation rather than emitted from it,
+      # which is the whole reason it can find a defect no in-repo fixture
+      # would. It is not vendored here, so CI has to fetch it.
+      #
+      # Four things about the shape below are deliberate:
+      #
+      #   1. **The corpus repository is named by a repository VARIABLE,
+      #      not a literal.** The corpus lives in a private repository
+      #      whose name is not published here, and this workflow file is
+      #      public. A variable keeps the operational fact (where to
+      #      fetch from) in repository settings and out of the public
+      #      tree, at no cost to reproducibility.
+      #   2. **The revision IS a literal, and belongs in the tree.** The
+      #      pin is the reviewable artefact: a corpus commit must never
+      #      change what this build certifies without a reviewed commit
+      #      here. It is the same value the harness pins in code, and the
+      #      two are bumped together.
+      #   3. **A missing variable or secret FAILS this job.** The guard
+      #      step below runs first and says which one is unset. Without
+      #      it, `actions/checkout` with an empty `repository` silently
+      #      re-checks-out this repo, and the failure would arrive later
+      #      wearing the wrong reason. A conformance job that skips when
+      #      it cannot reach its corpus is worse than no job: it reports
+      #      green.
+      #   4. **A fork PR cannot read the secret, so this job fails on
+      #      one.** That is a real cost and is recorded rather than
+      #      worked around, because the alternative — degrading to a skip
+      #      — is the failure mode point 3 exists to prevent. It changes
+      #      if and when the corpus's home is made public.
+      #
+      # Operator setup: repository variable `MODEL_EXECUTION_SPEC_REPO`
+      # (`owner/name` of the corpus repository) and repository secret
+      # `MODEL_EXECUTION_SPEC_READ_TOKEN` (a PAT with read access to it).
+      - name: Check the conformance-corpus configuration is present
+        env:
+          CORPUS_REPO: ${{ vars.MODEL_EXECUTION_SPEC_REPO }}
+          CORPUS_TOKEN: ${{ secrets.MODEL_EXECUTION_SPEC_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${CORPUS_REPO}" ]; then
+            echo "::error::Repository variable MODEL_EXECUTION_SPEC_REPO is unset. It must hold the owner/name of the model-execution conformance corpus repository."
+            missing=1
+          fi
+          if [ -z "${CORPUS_TOKEN}" ]; then
+            echo "::error::Repository secret MODEL_EXECUTION_SPEC_READ_TOKEN is unset. It must hold a token with read access to that repository. (A pull request from a fork cannot read repository secrets; this job fails there by design rather than skipping.)"
+            missing=1
+          fi
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::The model-execution conformance family cannot run without its corpus, and a conformance run without its corpus certifies nothing."
+            exit 1
+          fi
+
+      - name: Check out the model-execution conformance corpus
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.MODEL_EXECUTION_SPEC_REPO }}
+          # Pinned. Bump this together with `Pin.commit` /
+          # `Pin.manifestDigest` in
+          # src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs,
+          # in one reviewed commit, after reading the corpus diff.
+          ref: b55833f18334d4fd846c2cd91514946e95ca1941
+          token: ${{ secrets.MODEL_EXECUTION_SPEC_READ_TOKEN }}
+          path: .model-execution-corpus
+          persist-credentials: false
+
       - name: Build the solution
         run: dotnet build ToolUp.Forge.sln --nologo
 
@@ -387,6 +458,11 @@ jobs:
       - name: Run every Expecto pack (VerifyAll)
         env:
           EXPECTED_PACKS: 12
+          # Named explicitly rather than left to the harness's own
+          # search: on a runner the search would work, but a wrong
+          # answer here should be a configuration error with a name on
+          # it, not a corpus quietly discovered somewhere unexpected.
+          TOOLUP_MODEL_EXECUTION_CORPUS: ${{ github.workspace }}/.model-execution-corpus/wire-fixtures
         run: |
           set -euo pipefail
           dotnet run --project Build.fsproj -- VerifyAll 2>&1 | tee verifyall.log

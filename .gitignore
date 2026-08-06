@@ -51,3 +51,8 @@ samples/*/data/
 # content. The project itself, its README and `known-drift.txt` ARE
 # tracked; only the extraction is not.
 docs-snippets/generated/
+
+# CI checks out the external model-execution conformance corpus here (a
+# separate repository, pinned by revision — see the `verify-all` job in
+# .github/workflows/checks.yml). Never content of this repo.
+.model-execution-corpus/
