@@ -3391,6 +3391,20 @@ module Client =
             | _, ConfiguredWebhookAdmin cfg -> [ WebhookAdminUI.create (Some cfg) ]
             | _, ExternalWebhookAdmin custom -> [ custom ]
 
+        // Module-visibility profile editor: same scope rule again — a
+        // profile is stored per admin scope, and an Anonymous-only
+        // deployment has none, so every read / write would fail. The
+        // server-side substrate is separately opt-in
+        // (`ServerConfig.ModuleVisibility`); when it is off the API 404s
+        // and this config is expected to stay `NoModuleVisibilityAdmin`.
+        let moduleVisibilityAdmin =
+            match ClientConfig.requiresAnyAuth config, config.ModuleVisibilityAdmin with
+            | false, _
+            | _, NoModuleVisibilityAdmin -> []
+            | _, DefaultModuleVisibilityAdmin -> [ ModuleVisibilityAdminUI.create None ]
+            | _, ConfiguredModuleVisibilityAdmin cfg -> [ ModuleVisibilityAdminUI.create (Some cfg) ]
+            | _, ExternalModuleVisibilityAdmin custom -> [ custom ]
+
         // Phase 4b — Platform Admin module. Mode-agnostic: registered
         // unconditionally and gated by the shell's sidebar filter
         // (commit 4f.2) on `PlatformRole.PlatformAdmin`. Anonymous-mode
@@ -3553,6 +3567,7 @@ module Client =
             @ teamManager
             @ teamConfig
             @ webhookAdmin
+            @ moduleVisibilityAdmin
             @ permissionsAdmin
             @ usageDashboard
             @ dataIngestionAdmin

@@ -70,6 +70,10 @@
              (TenantLifecycleAdminUI lives in Platform.Client, reached
              transitively; same Phase 110 precedent as the others). -->
         <Compile Include="TenantLifecycleAdminUITests.fs" />
+        <!-- Module-visibility profile editor MVU (ModuleVisibilityAdminUI
+             lives in Platform.Client, reached transitively; same precedent
+             as TenantLifecycleAdminUITests). -->
+        <Compile Include="ModuleVisibilityAdminUITests.fs" />
         <!-- Sidebar admin-group role gate — the 4f.2 platform-scoped
              vs team-scoped group split (Platform.Client tier). -->
         <Compile Include="SidebarAdminGroupGateTests.fs" />

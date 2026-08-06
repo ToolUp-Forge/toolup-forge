@@ -74,6 +74,11 @@ let allTests =
         // before the phase, asserted over mounted markup) and the
         // drawer's lazy-fetch MVU arms.
         KnowledgeVersionHistoryTests.tests
+        // The module-visibility profile editor: the identity-rule seed for
+        // an unconfigured scope, the exclusions round-trip the editor does
+        // not surface, and the resolved-vs-edited distinction the pane
+        // exists to make legible.
+        ModuleVisibilityAdminUITests.tests
     ]
 
 [<EntryPoint>]

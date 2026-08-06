@@ -300,6 +300,9 @@
         <Compile Include="Client\InviteAccept.fs" />
         <Compile Include="Client\TeamConfigUI.fs" />
         <Compile Include="Client\WebhookAdminUI.fs" />
+        <!-- Module-visibility profile editor — the admin surface over
+             IModuleVisibilityApi. Opt-in via ClientConfig.ModuleVisibilityAdmin. -->
+        <Compile Include="Client\ModuleVisibilityAdminUI.fs" />
         <Compile Include="Client\HealthMonitorUI.fs" />
         <Compile Include="Client\ServiceStatusBoardUI.fs" />
         <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />

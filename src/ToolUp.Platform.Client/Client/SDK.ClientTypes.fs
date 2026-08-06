@@ -1106,6 +1106,29 @@ type WebhookAdminMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalWebhookAdmin of ErasedModule
 
+/// Branding for the module-visibility profile editor.
+type ModuleVisibilityAdminConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the built-in module-visibility profile editor — the admin
+/// surface over `IModuleVisibilityApi`.
+///
+/// Default `NoModuleVisibilityAdmin`, and deliberately not inferable from
+/// anything the client already knows: the substrate is selected
+/// server-side by `ServerConfig.ModuleVisibility`, and on the default
+/// `NoModuleVisibility` the API's routes 404, so a client that mounted the
+/// editor speculatively would render a surface whose every call fails.
+/// Pair the two — `SurfacingModuleVisibility` (or `Enforced…`) server-side
+/// AND `DefaultModuleVisibilityAdmin` here (GP 13).
+type ModuleVisibilityAdminMode =
+    /// No module-visibility editor in the sidebar (default).
+    | NoModuleVisibilityAdmin
+    /// SDK built-in profile editor.
+    | DefaultModuleVisibilityAdmin
+    /// SDK built-in with custom name/icon.
+    | ConfiguredModuleVisibilityAdmin of ModuleVisibilityAdminConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalModuleVisibilityAdmin of ErasedModule
+
 /// Phase 12c — payload delivered to `ClientConfig.OnError` when a module's
 /// view tree throws. `ComponentStack` carries the React component-stack
 /// captured by the boundary's `componentDidCatch` (empty string when React
@@ -1432,6 +1455,12 @@ type ClientConfig = {
     /// this to `DefaultWebhookAdmin` (or one of the branded variants)
     /// to surface the admin UI.
     WebhookAdmin: WebhookAdminMode
+    /// Controls the module-visibility profile editor. Default:
+    /// `NoModuleVisibilityAdmin` — pair with a server-side
+    /// `ServerConfig.ModuleVisibility` other than `NoModuleVisibility`
+    /// and set this to `DefaultModuleVisibilityAdmin` (or one of the
+    /// branded variants) to surface the editor.
+    ModuleVisibilityAdmin: ModuleVisibilityAdminMode
     /// Controls the Platform Admin module (Phase 4b). Active in every
     /// non-Anonymous mode unless set to `NoPlatformAdmin`. The shell
     /// sidebar filter hides the module's "Platform Management" group
@@ -1849,6 +1878,9 @@ module ClientConfig =
         TeamManager = DefaultTeamManager
         TeamConfig = DefaultTeamConfig
         WebhookAdmin = NoWebhookAdmin
+        // Opt-in (GP 11/13) — the server-side substrate is itself opt-in,
+        // and the editor's API 404s until it is enabled.
+        ModuleVisibilityAdmin = NoModuleVisibilityAdmin
         PlatformAdmin = DefaultPlatformAdmin
         PermissionsAdmin = DefaultPermissionsAdmin
         HealthMonitor = DefaultHealthMonitor
