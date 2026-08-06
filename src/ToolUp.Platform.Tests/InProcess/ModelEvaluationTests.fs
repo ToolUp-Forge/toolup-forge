@@ -5,6 +5,8 @@ module ToolUp.Platform.Tests.InProcess.ModelEvaluationTests
 
 open System
 open System.IO
+open System.Text
+open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -206,6 +208,299 @@ let private evaluateOk (stack: Stack) (scope: string) (keyHash: string) (holdout
     | Error e -> return failwithf "evaluation failed: %s" (EvaluationError.describe e)
 }
 
+// ─── Phase 641 — a provider that RESOLVES its artifact through the context ──
+//
+// The reference provider deliberately resolves nothing: its predictions are
+// a pure function of the artifact's content hash. That proves the envelope,
+// but it cannot prove the thing Phase 641 exists for — that a provider
+// composed *outside* forge can find the model it is being asked to score.
+// This provider is written the way a real one is: it persists its fitted
+// parameters and its specification at `Fit` time, and at `Predict` time it
+// resolves both back through the `ScoreContext` alone — the caller's scope,
+// the artifact reference, the resolved spec, and the training vintage
+// recovered from the composite key. Nothing reaches it by a side channel.
+
+[<Literal>]
+let private ResolvingKind = "resolving"
+
+[<Literal>]
+let private ResolvingVersion = "1.0.0"
+
+/// The object id a fitted-parameter blob lands under, within the fit's scope.
+let private paramsObjectId (specHash: string) (seed: int64) =
+    sprintf "resolving-params-%s-%d" specHash seed
+
+/// The object id the provider's specification lands under.
+let private specObjectId (specHash: string) = "resolving-spec-" + specHash
+
+/// `IModelSpecStore` backed by the same data-object store the provider wrote
+/// its specification to — so the spec the context carries is the spec the fit
+/// actually read, recovered by content hash rather than remembered by a test.
+type private ResolvingSpecStore(dataObjects: IDataObjectStore) =
+    interface IModelSpecStore with
+        member _.TryGet(scopeId, specHash) = async {
+            match! dataObjects.Get(scopeId, specObjectId specHash) with
+            | Ok(_, bytes) -> return Some(ModelSpecRef.ofPayload (Encoding.UTF8.GetString bytes))
+            | Error _ -> return None
+        }
+
+/// A provider family that fits, scores and evaluates one `Kind` — the shape
+/// a consumer application ships. It holds only substrate handed to it at
+/// construction (the companion convention); everything per-call arrives as
+/// values.
+type private ResolvingProvider(dataObjects: IDataObjectStore) =
+
+    /// The coefficient a seed fits to — deterministic, and emphatically not
+    /// statistics: the point is that the *stored* value is what `Predict`
+    /// later recovers, not how it was chosen.
+    static member CoefficientOf(seed: int64) : float = 1.5 + float seed
+
+    /// Index of a named column, or `None`.
+    static member private ColumnIndex (schema: DatasetSchema) (name: string) =
+        schema.Columns |> List.tryFindIndex (fun c -> c.Name = name)
+
+    static member private FloatAt (row: DatasetRow) (index: int) =
+        match List.item index row.Cells with
+        | DatasetValue.Float f -> Some f
+        | _ -> None
+
+    interface IModelFitProvider with
+        member _.Kind = ResolvingKind
+        member _.ProviderVersion = ResolvingVersion
+        member _.DeclareGates() = []
+
+        member _.Fit(request: FitRequest) = async {
+            let coefficient = ResolvingProvider.CoefficientOf request.Seed
+            let payload = sprintf "coefficient=%.6f" coefficient
+            let bytes = Encoding.UTF8.GetBytes payload
+
+            let contentHash = SHA256.HashData bytes |> Convert.ToHexStringLower
+
+            let artifactId = paramsObjectId request.SpecRef.SpecHash request.Seed
+
+            // A real provider persists its fitted parameters and returns a
+            // reference to them. Both land in the fit's own scope.
+            let! saved =
+                dataObjects.Save(
+                    request.ScopeId,
+                    artifactId,
+                    bytes,
+                    "test.resolving.params",
+                    "fit",
+                    Map.empty,
+                    Versioned
+                )
+
+            match saved with
+            | Error e -> return failwithf "the test provider could not persist its parameters: %A" e
+            | Ok _ ->
+                let! specSaved =
+                    dataObjects.Save(
+                        request.ScopeId,
+                        specObjectId request.SpecRef.SpecHash,
+                        Encoding.UTF8.GetBytes request.SpecRef.Payload,
+                        "test.resolving.spec",
+                        "fit",
+                        Map.empty,
+                        Versioned
+                    )
+
+                match specSaved with
+                | Error e -> return failwithf "the test provider could not persist its specification: %A" e
+                | Ok _ ->
+                    return {
+                        CompositeKey =
+                            FitCompositeKey.compute
+                                request.SpecRef.SpecHash
+                                (DatasetVersionRef.key request.DatasetVersion)
+                                request.Seed
+                                ResolvingKind
+                                ResolvingVersion
+                        ArtifactRef = {
+                            ArtifactId = artifactId
+                            ContentHash = contentHash
+                            ByteLength = int64 bytes.Length
+                        }
+                        Diagnostics = Map [ "coefficient", coefficient ]
+                        GateVerdicts = []
+                        DurationMs = 0L
+                        CostUnits = 0.0
+                    }
+        }
+
+    interface IModelScoreProvider with
+        member _.Kind = ResolvingKind
+        member _.ProviderVersion = ResolvingVersion
+        member _.RequiredInputColumns() = [ "spend" ]
+
+        member _.Predict(context: ScoreContext, schema: DatasetSchema, rows: DatasetRow list) = async {
+            // 1. The specification the fit read — resolvable only because the
+            //    context carries it (or the scope to find it under).
+            match context.Spec with
+            | None ->
+                return
+                    Error(
+                        ScoreError.ProviderFailed(ResolvingKind, "no specification was resolvable through the context")
+                    )
+            | Some spec ->
+                // 2. The training vintage, recovered from the composite key —
+                //    no hand-rolled parser.
+                match ScoreContext.trainingVintage context with
+                | None ->
+                    return
+                        Error(ScoreError.ProviderFailed(ResolvingKind, "the composite key names no training vintage"))
+                | Some _training ->
+                    // 3. The fitted parameters, read under the CALLER's scope
+                    //    with the artifact reference the context carries. This
+                    //    is the read that was impossible before Phase 641.
+                    match! dataObjects.Get(context.ScopeId, context.Artifact.ArtifactId) with
+                    | Error _ ->
+                        return
+                            Error(
+                                ScoreError.ProviderFailed(
+                                    ResolvingKind,
+                                    sprintf
+                                        "fitted parameters '%s' are not resolvable in scope '%s'"
+                                        context.Artifact.ArtifactId
+                                        context.ScopeId
+                                )
+                            )
+                    | Ok(_, bytes) ->
+                        let stored = Encoding.UTF8.GetString bytes
+
+                        let coefficient =
+                            Double.Parse(
+                                stored.Substring("coefficient=".Length),
+                                Globalization.CultureInfo.InvariantCulture
+                            )
+
+                        // The spec is genuinely the one that was fitted.
+                        if spec.SpecHash <> context.CompositeKey.SpecHash then
+                            return
+                                Error(
+                                    ScoreError.ProviderFailed(
+                                        ResolvingKind,
+                                        "the resolved specification does not match the artifact's identity"
+                                    )
+                                )
+                        else
+                            match ResolvingProvider.ColumnIndex schema "spend" with
+                            | None ->
+                                return Error(ScoreError.InputSchemaMismatch "the input frame carries no 'spend' column")
+                            | Some spendIndex ->
+                                let keyColumns =
+                                    schema.Columns
+                                    |> List.filter (fun c ->
+                                        c.Role = DatasetColumnRole.PanelUnit || c.Role = DatasetColumnRole.PanelPeriod)
+
+                                let keyIndexes =
+                                    keyColumns
+                                    |> List.map (fun c -> schema.Columns |> List.findIndex (fun x -> x.Name = c.Name))
+
+                                let outputSchema: DatasetSchema = {
+                                    Columns =
+                                        keyColumns
+                                        @ [
+                                            {
+                                                Name = "prediction"
+                                                DType = DatasetDType.Float
+                                                Nullable = false
+                                                Role = DatasetColumnRole.Target
+                                            }
+                                        ]
+                                }
+
+                                let outputRows =
+                                    rows
+                                    |> List.map (fun r ->
+                                        let keyCells = keyIndexes |> List.map (fun i -> List.item i r.Cells)
+
+                                        let predicted =
+                                            match ResolvingProvider.FloatAt r spendIndex with
+                                            | Some spend -> coefficient * spend
+                                            | None -> 0.0
+
+                                        {
+                                            Cells = keyCells @ [ DatasetValue.Float predicted ]
+                                        })
+
+                                return
+                                    Ok {
+                                        Schema = outputSchema
+                                        Rows = outputRows
+                                    }
+        }
+
+    interface IModelEvaluationMetrics with
+        member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) = async {
+            match
+                ResolvingProvider.ColumnIndex predictionsSchema "prediction",
+                ResolvingProvider.ColumnIndex actualsSchema "sales"
+            with
+            | Some predictionIndex, Some salesIndex ->
+                let paired =
+                    List.zip predictions actuals
+                    |> List.choose (fun (p, a) ->
+                        match ResolvingProvider.FloatAt p predictionIndex, ResolvingProvider.FloatAt a salesIndex with
+                        | Some pv, Some av -> Some(abs (pv - av))
+                        | _ -> None)
+
+                return
+                    Ok(
+                        Map [
+                            "n_scored", float (List.length predictions)
+                            "n_actuals", float (List.length actuals)
+                            "mean_abs_error", (if List.isEmpty paired then 0.0 else List.average paired)
+                        ]
+                    )
+            | _ -> return Error "the frames lack a 'prediction' / 'sales' column pair"
+        }
+
+/// The full default modelling stack composed around the resolving provider,
+/// with an `IModelSpecStore` so `ScoreContext.Spec` is populated.
+type private ResolvingStack = {
+    Datasets: IDatasetStore
+    DataObjects: IDataObjectStore
+    Registry: IModelRegistry
+    Runner: IModelEvaluationRunner
+    Provider: ResolvingProvider
+}
+
+let private freshResolvingStack () : ResolvingStack =
+    let tempDir =
+        Path.Combine(Path.GetTempPath(), "toolup-eval-resolve-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory tempDir |> ignore
+    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let dataObjects = DataObjectStore(blob) :> IDataObjectStore
+    let datasets = BlobDatasetStore.create dataObjects
+    let audit = RecordingAuditLog()
+    let registry = BlobModelRegistry.create dataObjects audit
+    let provider = ResolvingProvider(dataObjects)
+
+    let scorer =
+        ModelScorer.createWithSpecStore
+            (ModelScoreProviderRegistry [ provider ])
+            datasets
+            audit
+            ModelScorePolicy.permissive
+            (ResolvingSpecStore dataObjects)
+
+    {
+        Datasets = datasets
+        DataObjects = dataObjects
+        Registry = registry
+        Runner =
+            ModelEvaluationRunner.create
+                (ModelFitProviderRegistry [ provider ])
+                registry
+                scorer
+                datasets
+                dataObjects
+                audit
+        Provider = provider
+    }
+
 /// A job context carrying `payload` (the scorer-contract idiom).
 let private jobCtx (payload: string) : JobContext = {
     JobId = Guid.NewGuid()
@@ -264,6 +559,177 @@ let tests =
             Expect.equal evaluated.[0].CompositeKeyHash artifact.CompositeKey.Hash "audit names the artifact"
             Expect.equal evaluated.[0].HoldoutVersion (DatasetVersionRef.key holdout) "audit names the holdout"
             Expect.equal evaluated.[0].MetricCount (Map.count run.Metrics) "audit carries cardinality only"
+        }
+
+        // ── Phase 641 — the runner path, end to end, for a resolving provider ──
+
+        testCaseAsync
+            "Phase 641 — a provider that resolves its artifact through the score context runs the whole evaluation path, predictions landing as a vintage"
+        <| async {
+            let stack = freshResolvingStack ()
+            let scope = "team-1"
+            let seed = 3L
+
+            let! training = seedVintage stack.Datasets scope "training" 0.0
+            let! holdout = seedVintage stack.Datasets scope "holdout" 5.0
+
+            let specPayload = "an opaque provider specification the fit read"
+
+            let fitRequest: FitRequest = {
+                ScopeId = scope
+                DatasetVersion = training
+                SpecRef = ModelSpecRef.ofPayload specPayload
+                ProviderKind = ResolvingKind
+                Seed = seed
+                Gates = []
+                SubmitterClass = SubmitterClass.Human
+            }
+
+            let! outcome = (stack.Provider :> IModelFitProvider).Fit fitRequest
+
+            let! registered = stack.Registry.Register(scope, outcome, "u1", Map.empty, "")
+
+            let artifact =
+                match registered with
+                | Ok a -> a
+                | Error e -> failwithf "register failed: %s" (ModelRegistryError.describe e)
+
+            // The whole point: the runner's own path — score the holdout
+            // through the Phase 454 seam into a predictions VINTAGE, then
+            // hand predictions + actuals to the provider for metrics.
+            let request: EvaluationRequest = {
+                ScopeId = scope
+                ArtifactKeyHash = artifact.CompositeKey.Hash
+                Holdout = holdout
+                EvaluatedBy = "u1"
+            }
+
+            match! stack.Runner.Evaluate request with
+            | Error e ->
+                failtestf "the runner must now complete for a resolving provider; got %s" (EvaluationError.describe e)
+            | Ok run ->
+                Expect.equal run.ProviderId ResolvingKind "the run names the resolving provider"
+
+                // 454's own law: predictions land as a dataset version. The
+                // consumer that bypassed the runner skipped exactly this.
+                let! predictionsVersion =
+                    stack.Datasets.GetVersion(
+                        run.Predictions.ScopeId,
+                        run.Predictions.DatasetId,
+                        run.Predictions.Version
+                    )
+
+                match predictionsVersion with
+                | Error e -> failtestf "the predictions vintage must be readable: %s" (DatasetError.describe e)
+                | Ok version ->
+                    Expect.equal version.ScopeId scope "the predictions vintage lands in the caller's scope"
+                    Expect.equal version.RowCount 3L "one prediction row per holdout row"
+
+                    Expect.equal
+                        (version.Schema.Columns |> List.map _.Name)
+                        [ "region"; "week"; "prediction" ]
+                        "panel keys carried forward + the prediction column"
+
+                    // Provenance names the artifact + the holdout it read.
+                    Expect.equal
+                        (Map.tryFind ScoreProvenance.ScoredByKey version.Metadata)
+                        (Some artifact.CompositeKey.Hash)
+                        "the predictions vintage names the artifact that produced it"
+
+                    Expect.equal
+                        (Map.tryFind ScoreProvenance.InputVersionKey version.Metadata)
+                        (Some(DatasetVersionRef.key holdout))
+                        "the predictions vintage names the holdout it scored"
+
+                // The predictions are the RESOLVED coefficient applied to the
+                // holdout's spend — proof the provider really read its stored
+                // parameters through the context, rather than producing a
+                // number from the reference alone.
+                let! page =
+                    stack.Datasets.ReadPage(
+                        run.Predictions.ScopeId,
+                        run.Predictions.DatasetId,
+                        run.Predictions.Version,
+                        DatasetPageQuery.firstPage 100
+                    )
+
+                let coefficient = ResolvingProvider.CoefficientOf seed
+
+                match page with
+                | Error e -> failtestf "predictions unreadable: %s" (DatasetError.describe e)
+                | Ok p ->
+                    let predicted =
+                        p.Rows
+                        |> List.map (fun r ->
+                            match List.last r.Cells with
+                            | DatasetValue.Float f -> f
+                            | other -> failwithf "expected a float prediction; got %A" other)
+
+                    // seedVintage salt 5.0 ⇒ spend of 105 / 125 / 85.
+                    Expect.equal
+                        predicted
+                        [ coefficient * 105.0; coefficient * 125.0; coefficient * 85.0 ]
+                        "predictions are the stored coefficient applied to the holdout's spend"
+
+                // Provider-computed metrics, stored verbatim (plan D10).
+                Expect.equal (Map.find "n_scored" run.Metrics) 3.0 "the provider reports its own cardinality"
+                Expect.isTrue (Map.containsKey "mean_abs_error" run.Metrics) "the provider's own metric is stored"
+
+                // …and the run is queryable back out as an ordinary track record.
+                let! trackRecord = stack.Runner.GetTrackRecord(scope, artifact.CompositeKey.Hash)
+                Expect.equal (List.length trackRecord) 1 "the run is in the artifact's track record"
+        }
+
+        testCaseAsync
+            "Phase 641 — without a resolvable artifact the same provider refuses typed, and the runner surfaces it (no silent fallback)"
+        <| async {
+            let stack = freshResolvingStack ()
+            let scope = "team-1"
+            let! holdout = seedVintage stack.Datasets scope "holdout" 5.0
+
+            // An artifact registered from an outcome the provider never fit —
+            // so nothing was persisted for it to resolve.
+            let unresolvable: FitOutcome = {
+                CompositeKey =
+                    FitCompositeKey.compute
+                        (ModelSpecRef.ofPayload "never fitted").SpecHash
+                        (DatasetVersionRef.key holdout)
+                        99L
+                        ResolvingKind
+                        ResolvingVersion
+                ArtifactRef = {
+                    ArtifactId = "resolving-params-missing"
+                    ContentHash = "none"
+                    ByteLength = 0L
+                }
+                Diagnostics = Map.empty
+                GateVerdicts = []
+                DurationMs = 0L
+                CostUnits = 0.0
+            }
+
+            let! registered = stack.Registry.Register(scope, unresolvable, "u1", Map.empty, "")
+
+            let artifact =
+                match registered with
+                | Ok a -> a
+                | Error e -> failwithf "register failed: %s" (ModelRegistryError.describe e)
+
+            let request: EvaluationRequest = {
+                ScopeId = scope
+                ArtifactKeyHash = artifact.CompositeKey.Hash
+                Holdout = holdout
+                EvaluatedBy = "u1"
+            }
+
+            match! stack.Runner.Evaluate request with
+            | Error(EvaluationError.ScoreFailed(ScoreError.ProviderFailed(kind, _))) ->
+                Expect.equal kind ResolvingKind "the refusing provider is named"
+            | other -> failtestf "expected a typed provider refusal; got %A" other
+
+            // No predictions vintage was written for a refused score.
+            let! any = stack.Runner.GetTrackRecord(scope, artifact.CompositeKey.Hash)
+            Expect.isEmpty any "a refused evaluation stores no run"
         }
 
         testCaseAsync "re-evaluating the same (artifact, vintage) is idempotent — the track record does not grow"

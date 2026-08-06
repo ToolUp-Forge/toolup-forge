@@ -61,7 +61,7 @@ module ReferenceModelScoreProvider =
 
     let private predict
         (requiredColumns: string list)
-        (artifact: ArtifactRef)
+        (context: ScoreContext)
         (schema: DatasetSchema)
         (rows: DatasetRow list)
         : Async<Result<ScorePrediction, ScoreError>> =
@@ -106,7 +106,12 @@ module ReferenceModelScoreProvider =
 
                         // Deterministic prediction — NOT a real fit. Seeded by
                         // the fitted artifact's content hash + the row ordinal.
-                        let value = deterministicUnit (sprintf "%s|%d" artifact.ContentHash i)
+                        // Phase 641 — the reference scorer reads the same
+                        // reference it always did, now from the context; it
+                        // resolves nothing, deliberately (a production
+                        // provider resolves its parameters through
+                        // `context.ScopeId` + `context.Artifact.ArtifactId`).
+                        let value = deterministicUnit (sprintf "%s|%d" context.Artifact.ContentHash i)
 
                         {
                             Cells = keyCells @ [ DatasetValue.Float value ]
@@ -128,8 +133,8 @@ module ReferenceModelScoreProvider =
             member _.ProviderVersion = Version
             member _.RequiredInputColumns() = requiredColumns
 
-            member _.Predict(artifact, schema, rows) =
-                predict requiredColumns artifact schema rows
+            member _.Predict(context, schema, rows) =
+                predict requiredColumns context schema rows
         }
 
     /// The reference scorer as an `IModelScoreProvider` with no structural

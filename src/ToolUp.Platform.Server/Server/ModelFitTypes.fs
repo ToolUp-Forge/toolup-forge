@@ -74,6 +74,31 @@ module DatasetVersionRef =
     let key (r: DatasetVersionRef) : string =
         sprintf "%s/%s@v%d" r.ScopeId r.DatasetId r.Version
 
+    /// Phase 641 — the inverse of `key`. `None` when the token is not a
+    /// dataset-version key. The composite key stores the training vintage as
+    /// this token, so a consumer holding an artifact can recover the vintage
+    /// it was fitted against without a side channel — which is why the
+    /// inverse belongs beside `key` rather than being re-derived (and
+    /// re-tested) in every consumer.
+    ///
+    /// A dataset id may itself contain `/` and `@`, so the parse anchors on
+    /// the LAST `@v` and the FIRST `/` — the exact positions `key` writes.
+    let tryParseKey (token: string) : DatasetVersionRef option =
+        match token.LastIndexOf "@v" with
+        | -1 -> None
+        | at ->
+            let head = token.Substring(0, at)
+            let versionText = token.Substring(at + 2)
+
+            match Int32.TryParse versionText, head.IndexOf '/' with
+            | (true, version), slash when slash > 0 ->
+                Some {
+                    ScopeId = head.Substring(0, slash)
+                    DatasetId = head.Substring(slash + 1)
+                    Version = version
+                }
+            | _ -> None
+
 /// Direction of a diagnostic gate's threshold comparison. A gate is a
 /// pure float comparison forge evaluates — never a judgement of model
 /// quality (plan D10).

@@ -1951,6 +1951,7 @@ ToolUp.Platform.DatasetVersionRef.ScopeId : System.String { get }
 ToolUp.Platform.DatasetVersionRef.Version : System.Int32 { get }
 ToolUp.Platform.DatasetVersionRefModule (class)
 ToolUp.Platform.DatasetVersionRefModule.key(ToolUp.Platform.DatasetVersionRef) : System.String
+ToolUp.Platform.DatasetVersionRefModule.tryParseKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetVersionRef]
 ToolUp.Platform.DeadTopic (class)
 ToolUp.Platform.DeadTopic..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.DeadTopic.EmittedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
@@ -3651,11 +3652,13 @@ ToolUp.Platform.IModelRegistry.Register(System.String, ToolUp.Platform.FitOutcom
 ToolUp.Platform.IModelRegistry.TransitionStatus(System.String, System.String, ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelScoreProvider (interface)
 ToolUp.Platform.IModelScoreProvider.Kind : System.String { get }
-ToolUp.Platform.IModelScoreProvider.Predict(ToolUp.Platform.ArtifactRef, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScorePrediction, ToolUp.Platform.ScoreError]]
+ToolUp.Platform.IModelScoreProvider.Predict(ToolUp.Platform.ScoreContext, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScorePrediction, ToolUp.Platform.ScoreError]]
 ToolUp.Platform.IModelScoreProvider.ProviderVersion : System.String { get }
 ToolUp.Platform.IModelScoreProvider.RequiredInputColumns() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.IModelScorer (interface)
 ToolUp.Platform.IModelScorer.Score(ToolUp.Platform.ScoreRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.ScoreError]]
+ToolUp.Platform.IModelSpecStore (interface)
+ToolUp.Platform.IModelSpecStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef]]
 ToolUp.Platform.IModuleVisibilityStore (interface)
 ToolUp.Platform.IModuleVisibilityStore.ClearProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IModuleVisibilityStore.GetProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile]]
@@ -4698,8 +4701,10 @@ ToolUp.Platform.ModelScoreProviderRegistry.Providers : Microsoft.FSharp.Collecti
 ToolUp.Platform.ModelScoreProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelScoreProvider]
 ToolUp.Platform.ModelScorer (class)
 ToolUp.Platform.ModelScorer..ctor(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy)
+ToolUp.Platform.ModelScorer..ctor(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelSpecStore])
 ToolUp.Platform.ModelScorerModule (class)
 ToolUp.Platform.ModelScorerModule.create(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy) : ToolUp.Platform.IModelScorer
+ToolUp.Platform.ModelScorerModule.createWithSpecStore(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy, ToolUp.Platform.IModelSpecStore) : ToolUp.Platform.IModelScorer
 ToolUp.Platform.ModelScoringEnvelope (class)
 ToolUp.Platform.ModelScoringEnvelope.serialiseRequest(ToolUp.Platform.ScoreJobRequest) : System.String
 ToolUp.Platform.ModelScoringEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScoreJobRequest, System.String]
@@ -5841,6 +5846,17 @@ ToolUp.Platform.ScopeAtCapacity..ctor(System.String, System.Int32, System.Int32)
 ToolUp.Platform.ScopeAtCapacity.Cap : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.CurrentCount : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.ScopeId : System.String { get }
+ToolUp.Platform.ScoreContext (class)
+ToolUp.Platform.ScoreContext..ctor(System.String, ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.DatasetVersionRef)
+ToolUp.Platform.ScoreContext.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ScoreContext.Artifact : ToolUp.Platform.ArtifactRef { get }
+ToolUp.Platform.ScoreContext.CompositeKey : ToolUp.Platform.FitCompositeKey { get }
+ToolUp.Platform.ScoreContext.Input : ToolUp.Platform.DatasetVersionRef { get }
+ToolUp.Platform.ScoreContext.ScopeId : System.String { get }
+ToolUp.Platform.ScoreContext.Spec : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef] { get }
+ToolUp.Platform.ScoreContext.Status : ToolUp.Platform.ModelArtifactStatus { get }
+ToolUp.Platform.ScoreContextModule (class)
+ToolUp.Platform.ScoreContextModule.trainingVintage(ToolUp.Platform.ScoreContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetVersionRef]
 ToolUp.Platform.ScoreError (class)
 ToolUp.Platform.ScoreError.IsInputSchemaMismatch : System.Boolean { get }
 ToolUp.Platform.ScoreError.IsInputUnavailable : System.Boolean { get }

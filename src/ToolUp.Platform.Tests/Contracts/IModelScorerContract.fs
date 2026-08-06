@@ -157,6 +157,61 @@ let private artifactOf (providerId: string) (status: ModelArtifactStatus) : Mode
         Version = 1
     }
 
+/// The same artifact with a *foreign* record scope — used to prove the
+/// Phase 641 context takes its `ScopeId` from the caller's request, never
+/// from the artifact record (GP 4).
+let private artifactInScope (recordScope: string) (status: ModelArtifactStatus) : ModelArtifact = {
+    artifactOf ReferenceModelScoreProvider.Kind status with
+        ScopeId = recordScope
+}
+
+/// Phase 641 — captures the `ScoreContext` the envelope hands a provider, so
+/// a test can assert exactly what a provider outside forge receives. The
+/// predictions themselves are a constant column; the frame is not what these
+/// cases are about.
+type private CapturingScoreProvider() =
+    let mutable captured: ScoreContext option = None
+
+    /// The context of the most recent `Predict` call, if any.
+    member _.Captured = captured
+
+    interface IModelScoreProvider with
+        member _.Kind = ReferenceModelScoreProvider.Kind
+        member _.ProviderVersion = ReferenceModelScoreProvider.Version
+        member _.RequiredInputColumns() = []
+
+        member _.Predict(context, _, rows) = async {
+            captured <- Some context
+
+            let schema: DatasetSchema = {
+                Columns = [
+                    {
+                        Name = "prediction"
+                        DType = DatasetDType.Float
+                        Nullable = false
+                        Role = DatasetColumnRole.Target
+                    }
+                ]
+            }
+
+            return
+                Ok {
+                    Schema = schema
+                    Rows = rows |> List.map (fun _ -> { Cells = [ DatasetValue.Float 1.0 ] })
+                }
+        }
+
+/// Phase 641 — an `IModelSpecStore` holding exactly the `(scope, specHash)`
+/// entries it was seeded with. Deliberately scope-keyed so a test can prove
+/// the envelope looks a spec up under the CALLER's scope.
+type private StubSpecStore(entries: (string * string * ModelSpecRef) list) =
+    interface IModelSpecStore with
+        member _.TryGet(scopeId, specHash) = async {
+            return
+                entries
+                |> List.tryPick (fun (s, h, spec) -> if s = scopeId && h = specHash then Some spec else None)
+        }
+
 /// Seed an input vintage under `scope` and return its ref.
 let private seedInput (store: IDatasetStore) (scope: string) : Async<DatasetVersionRef> = async {
     let! created = store.Create(scope, "input", panelSchema, sampleRows, "u1", Map.empty, Versioned)
@@ -450,6 +505,161 @@ let tests =
             match there with
             | Error DatasetError.NotFound -> ()
             | other -> failtestf "the scored vintage must not leak across scopes; got %A" other
+        }
+
+        // ── Phase 641 — the scoped resolution context ─────────────────
+
+        testCaseAsync
+            "the predict context carries the artifact's full identity, its input vintage, and no spec by default"
+        <| async {
+            let store = freshStore ()
+            let capturing = CapturingScoreProvider()
+            let registry = ModelScoreProviderRegistry [ capturing ]
+
+            let scorer =
+                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+
+            let! input = seedInput store "team-1"
+
+            let artifact =
+                artifactOf ReferenceModelScoreProvider.Kind ModelArtifactStatus.Fitted
+
+            let request: ScoreRequest = {
+                ScopeId = "team-1"
+                Artifact = artifact
+                Input = input
+                OutputDatasetId = "input-scored"
+                ScoredBy = "u1"
+            }
+
+            match! scorer.Score request with
+            | Error e -> failtestf "expected a scored output; got %s" (ScoreError.describe e)
+            | Ok _ ->
+                match capturing.Captured with
+                | None -> failtest "the provider was never handed a context"
+                | Some context ->
+                    Expect.equal context.ScopeId "team-1" "the context carries the requesting scope"
+
+                    Expect.equal
+                        context.CompositeKey
+                        artifact.CompositeKey
+                        "the context carries the artifact's full composite identity, not just a bare reference"
+
+                    Expect.equal
+                        context.Artifact
+                        artifact.ArtifactRef
+                        "the opaque artifact reference is carried through"
+
+                    Expect.equal context.Status ModelArtifactStatus.Fitted "the lifecycle status is carried"
+                    Expect.equal context.Input input "the input vintage is named by value"
+
+                    Expect.isNone
+                        context.Spec
+                        "no spec store composed ⇒ no spec — an unconfigured deployment is unchanged (GP 11/13)"
+
+                    // The composite key's vintage token is the training
+                    // vintage, recoverable without a hand-rolled parser.
+                    Expect.equal
+                        (ScoreContext.trainingVintage context)
+                        (Some {
+                            ScopeId = "team-1"
+                            DatasetId = "input"
+                            Version = 1
+                        })
+                        "the training vintage is recoverable from the composite key"
+        }
+
+        testCaseAsync
+            "the predict context NEVER widens the caller's scope: a foreign artifact record cannot reach across (GP 4)"
+        <| async {
+            let store = freshStore ()
+            let capturing = CapturingScoreProvider()
+            let registry = ModelScoreProviderRegistry [ capturing ]
+
+            let foreignSpec = ModelSpecRef.ofPayload "the other tenant's spec"
+
+            // The spec store holds this spec hash ONLY under team-2. If the
+            // envelope resolved by the artifact record's own scope, the
+            // provider would be handed another tenant's specification.
+            let specs =
+                StubSpecStore [ "team-2", foreignSpec.SpecHash, foreignSpec ] :> IModelSpecStore
+
+            let scorer =
+                ModelScorer.createWithSpecStore registry store (RecordingAuditLog()) ModelScorePolicy.permissive specs
+
+            let! input = seedInput store "team-1"
+
+            // An artifact record whose own ScopeId names a different tenant.
+            let foreign = artifactInScope "team-2" ModelArtifactStatus.Fitted
+
+            let request: ScoreRequest = {
+                ScopeId = "team-1"
+                Artifact = foreign
+                Input = input
+                OutputDatasetId = "input-scored"
+                ScoredBy = "u1"
+            }
+
+            match! scorer.Score request with
+            | Error e -> failtestf "expected a scored output; got %s" (ScoreError.describe e)
+            | Ok outputRef ->
+                match capturing.Captured with
+                | None -> failtest "the provider was never handed a context"
+                | Some context ->
+                    Expect.equal
+                        context.ScopeId
+                        "team-1"
+                        "the context carries the CALLER's scope, never the artifact record's own"
+
+                    Expect.notEqual
+                        context.ScopeId
+                        foreign.ScopeId
+                        "the artifact record's scope does not leak into the context"
+
+                    Expect.isNone
+                        context.Spec
+                        "a spec held only in another scope is not resolvable through the context (GP 4)"
+
+                Expect.equal outputRef.ScopeId "team-1" "the predictions land in the caller's scope"
+        }
+
+        testCaseAsync "a composed spec store fills the context's spec, scoped to the caller"
+        <| async {
+            let store = freshStore ()
+            let capturing = CapturingScoreProvider()
+            let registry = ModelScoreProviderRegistry [ capturing ]
+
+            let artifact =
+                artifactOf ReferenceModelScoreProvider.Kind ModelArtifactStatus.Fitted
+
+            let spec = ModelSpecRef.ofPayload "an opaque provider specification"
+
+            // Seeded under the artifact's composite spec hash so the lookup
+            // is a real resolution, not a single-entry store returning
+            // whatever it holds.
+            let specs =
+                StubSpecStore [ "team-1", artifact.CompositeKey.SpecHash, spec ] :> IModelSpecStore
+
+            let scorer =
+                ModelScorer.createWithSpecStore registry store (RecordingAuditLog()) ModelScorePolicy.permissive specs
+
+            let! input = seedInput store "team-1"
+
+            let request: ScoreRequest = {
+                ScopeId = "team-1"
+                Artifact = artifact
+                Input = input
+                OutputDatasetId = "input-scored"
+                ScoredBy = "u1"
+            }
+
+            match! scorer.Score request with
+            | Error e -> failtestf "expected a scored output; got %s" (ScoreError.describe e)
+            | Ok _ ->
+                match capturing.Captured with
+                | Some context ->
+                    Expect.equal context.Spec (Some spec) "the composed spec store fills the context's spec"
+                | None -> failtest "the provider was never handed a context"
         }
 
         test "a duplicate provider kind is rejected at registry construction" {

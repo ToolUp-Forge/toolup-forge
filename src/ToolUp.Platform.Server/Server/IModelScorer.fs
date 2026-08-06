@@ -85,6 +85,97 @@ type ScorePrediction = {
     Rows: DatasetRow list
 }
 
+/// Phase 641 — an optional source for the opaque model specification a fit
+/// read, keyed by its content hash. Forge never parses the payload (GP 1);
+/// it hands the stored bytes back to the provider family that wrote them, so
+/// a provider whose `Predict` needs the model's *definition* (not just its
+/// fitted parameters) does not need a side channel to find it.
+///
+/// **Optional by construction (GP 11 / GP 13).** A deployment that composes
+/// no spec store gets `ScoreContext.Spec = None` and is byte-for-byte
+/// unchanged; nothing in the scoring envelope requires one. It is a separate
+/// seam rather than a method on `IModelRegistry` because a spec payload is
+/// not part of a governed artifact's record — the registry stores the spec
+/// *hash* as identity (plan D5), and a deployment may deliberately keep the
+/// payload elsewhere, or nowhere.
+type IModelSpecStore =
+    /// The spec whose content hash is `specHash`, within `scopeId` (GP 4 —
+    /// the lookup is scoped like every other read). `None` when the store
+    /// holds no spec for that hash; a storage fault is the implementation's
+    /// to log, and reads as `None` here rather than failing a score that may
+    /// not need the spec at all.
+    abstract TryGet: scopeId: string * specHash: string -> Async<ModelSpecRef option>
+
+/// Phase 641 — the scoped resolution context a score provider receives with
+/// every `Predict` call: everything needed to *resolve the model being asked
+/// for*, as values.
+///
+/// **Why this record exists.** Until Phase 641, `Predict` received a bare
+/// `ArtifactRef` — an id + content hash + byte length — with no scope and no
+/// specification. `ArtifactRef` is deliberately opaque to forge (GP 1), but
+/// it is opaque to the *provider* too unless the provider can say which
+/// tenant's store to read it from; a provider composed once and shared
+/// across scopes therefore could not fetch its own fitted parameters. The
+/// asymmetry with the fit side made it plain: `IModelFitProvider.Fit`
+/// receives a whole `FitRequest` (scope + spec + vintage + seed), while
+/// `IModelScoreProvider.Predict` received three loose arguments, one of them
+/// a naked reference. This record restores the symmetry.
+///
+/// **Values only — no live handle (GP 12 rules 1 + 4).** The context carries
+/// no store, no registry, and no callback. Forge *resolves* what a provider
+/// might need and passes the results by value; substrate a provider needs to
+/// read its own artifact bytes arrives at `create` time, per the
+/// companion-authoring convention. A live handle here would be exactly the
+/// violation the six portability rules exist to prevent — a distributed
+/// score worker cannot be handed one.
+///
+/// **Scope is the caller's, always (GP 4).** `ScopeId` is taken from the
+/// `ScoreRequest`, never from the artifact record's own `ScopeId`. The
+/// context therefore cannot widen the scope its caller was operating in: a
+/// provider handed an artifact record belonging to another tenant still sees
+/// only the requesting scope, and a read it attempts under that scope
+/// fails-closed rather than reaching across.
+type ScoreContext = {
+    /// The scope the score runs under — the caller's own (GP 4). Every read
+    /// a provider performs to resolve this model is scoped by this value.
+    ScopeId: string
+    /// The artifact's full composite identity (plan D5): spec hash, training
+    /// vintage token, seed, provider id + version, and the addressable
+    /// `Hash`. `Hash` is the artifact's id within `ScopeId`, which is what a
+    /// provider keys its own stored fit results on.
+    CompositeKey: FitCompositeKey
+    /// The opaque fitted-parameter reference — what `Predict` received
+    /// alone before Phase 641. Still opaque to forge (GP 1).
+    Artifact: ArtifactRef
+    /// The artifact's lifecycle status at score time (Phase 453). The
+    /// envelope has already applied the approved-only policy; this is here
+    /// so a provider can *report* what it scored with, not re-gate it.
+    Status: ModelArtifactStatus
+    /// The opaque model specification the fit read, when the deployment
+    /// composed an `IModelSpecStore` that holds it. `None` otherwise — a
+    /// provider that needs the spec and finds `None` refuses with
+    /// `ScoreError.ProviderFailed` rather than guessing, and a provider that
+    /// stores its own spec keyed on `CompositeKey.Hash` never needs it.
+    Spec: ModelSpecRef option
+    /// The registrar's structured annotations (Phase 453), carried verbatim.
+    /// Forge assigns no meaning to them; a provider family that stamped its
+    /// own coordinates at registration reads them back here.
+    Annotations: Map<string, string>
+    /// The input vintage being scored, by value — so a provider can record
+    /// what it scored against without the envelope's `ScoreRequest` leaking
+    /// across the seam.
+    Input: DatasetVersionRef
+}
+
+module ScoreContext =
+    /// The training vintage this artifact was fitted against, recovered from
+    /// the composite key's vintage token. `None` when the token is not a
+    /// dataset-version key (an artifact minted outside the Phase 449
+    /// envelope). This is the read that made a provider hand-roll a parser
+    /// before Phase 641.
+    let trainingVintage (context: ScoreContext) : DatasetVersionRef option =
+        DatasetVersionRef.tryParseKey context.CompositeKey.DatasetVersion
+
 /// A model-score provider — the execution binding that turns a fitted
 /// artifact + a new vintage into predictions (plan Stage 5). Symmetric with
 /// `IModelFitProvider` (Phase 449): implemented by the same companion family
@@ -110,14 +201,24 @@ type IModelScoreProvider =
     abstract RequiredInputColumns: unit -> string list
 
     /// Produce predictions for the decoded input frame using the fitted
-    /// artifact. `artifact` is the opaque fitted-parameter reference (Phase
-    /// 449); `schema` + `rows` are the input vintage's decoded content.
-    /// `Error` is a typed refusal (e.g. the artifact is incompatible with the
-    /// frame). **Determinism (plan D4).** A deterministic provider MUST return
-    /// identical predictions for an identical `(artifact, schema, rows)` — no
+    /// artifact. `context` is the Phase 641 scoped resolution context —
+    /// scope, the full composite identity, the opaque artifact reference,
+    /// lifecycle status, annotations, the resolved spec (when a spec store is
+    /// composed) and the input vintage; `schema` + `rows` are that vintage's
+    /// decoded content. `Error` is a typed refusal (e.g. the artifact is
+    /// incompatible with the frame, or its parameters could not be resolved).
+    ///
+    /// **Determinism (plan D4).** A deterministic provider MUST return
+    /// identical predictions for an identical `(context, schema, rows)` — no
     /// wall-clock, no RNG. The reference provider is fully deterministic.
+    ///
+    /// **Phase 641 changed this signature** from `artifact: ArtifactRef` to
+    /// `context: ScoreContext`, which carries that reference as
+    /// `context.Artifact`. See `docs/migrations/641-scope-carrying-predict.md`
+    /// — a provider migrates by taking `context.Artifact` where it took
+    /// `artifact`, and gains everything it previously had no way to obtain.
     abstract Predict:
-        artifact: ArtifactRef * schema: DatasetSchema * rows: DatasetRow list ->
+        context: ScoreContext * schema: DatasetSchema * rows: DatasetRow list ->
             Async<Result<ScorePrediction, ScoreError>>
 
 /// Compose-time index of registered score providers, keyed by `Kind`. Two
@@ -244,7 +345,13 @@ type IModelScorer =
 /// `ModelScoringJobHandler` fuses the same envelope onto `IJobScheduler` for
 /// batch scoring.
 type ModelScorer
-    (registry: ModelScoreProviderRegistry, datasets: IDatasetStore, audit: IAuditLog, policy: ModelScorePolicy) =
+    (
+        registry: ModelScoreProviderRegistry,
+        datasets: IDatasetStore,
+        audit: IAuditLog,
+        policy: ModelScorePolicy,
+        specs: IModelSpecStore option
+    ) =
 
     /// Read every row of an input vintage, paging in fixed windows until the
     /// page's `TotalRows` is reached. `Error` lifts a `DatasetError` to a
@@ -292,6 +399,34 @@ type ModelScorer
         return Error error
     }
 
+    /// Phase 641 — the scoped resolution context handed to the provider.
+    /// **`ScopeId` is `request.ScopeId`**, the caller's own scope, never
+    /// `request.Artifact.ScopeId`: an artifact record naming another tenant
+    /// cannot widen the scope a provider then reads under (GP 4). The spec
+    /// lookup is scoped by the same value for the same reason.
+    let contextFor (request: ScoreRequest) : Async<ScoreContext> = async {
+        let! spec =
+            match specs with
+            | None -> async { return None }
+            | Some store -> store.TryGet(request.ScopeId, request.Artifact.CompositeKey.SpecHash)
+
+        return {
+            ScopeId = request.ScopeId
+            CompositeKey = request.Artifact.CompositeKey
+            Artifact = request.Artifact.ArtifactRef
+            Status = request.Artifact.Status
+            Spec = spec
+            Annotations = request.Artifact.Annotations
+            Input = request.Input
+        }
+    }
+
+    /// Phase 641 — the pre-641 construction shape, preserved so a deployment
+    /// that composes no spec store keeps its exact call site (GP 11).
+    /// Equivalent to passing `None`.
+    new(registry: ModelScoreProviderRegistry, datasets: IDatasetStore, audit: IAuditLog, policy: ModelScorePolicy) =
+        ModelScorer(registry, datasets, audit, policy, None)
+
     interface IModelScorer with
         member _.Score(request: ScoreRequest) : Async<Result<DatasetVersionRef, ScoreError>> = async {
             let providerId = request.Artifact.CompositeKey.ProviderId
@@ -334,11 +469,15 @@ type ModelScorer
                             match! readAllRows request.Input with
                             | Error e -> return! refuse request e
                             | Ok rows ->
+                                // Phase 641 — the provider is handed the
+                                // scoped resolution context, not a naked
+                                // `ArtifactRef`, so it can resolve the model
+                                // it is being asked to score.
+                                let! context = contextFor request
+
                                 let! predicted = async {
                                     try
-                                        let! r =
-                                            provider.Predict(request.Artifact.ArtifactRef, inputVersion.Schema, rows)
-
+                                        let! r = provider.Predict(context, inputVersion.Schema, rows)
                                         return r
                                     with ex ->
                                         return Error(ScoreError.ProviderFailed(providerId, ex.Message))
@@ -402,7 +541,8 @@ type ModelScorer
 module ModelScorer =
     /// Construct the default scorer over a provider registry, dataset store,
     /// audit log, and governance policy. Pass `ModelScorePolicy.permissive`
-    /// for the ungoverned default (GP 13).
+    /// for the ungoverned default (GP 13). No spec store is composed, so
+    /// `ScoreContext.Spec` is `None` — unchanged from before Phase 641.
     let create
         (registry: ModelScoreProviderRegistry)
         (datasets: IDatasetStore)
@@ -410,3 +550,17 @@ module ModelScorer =
         (policy: ModelScorePolicy)
         : IModelScorer =
         ModelScorer(registry, datasets, audit, policy) :> IModelScorer
+
+    /// Phase 641 — the same scorer with a composed `IModelSpecStore`, so
+    /// every `Predict` receives the artifact's opaque specification as
+    /// `ScoreContext.Spec` alongside its scope + composite identity. Additive:
+    /// deployments that do not hold specs keep `create` and pay nothing
+    /// (GP 13).
+    let createWithSpecStore
+        (registry: ModelScoreProviderRegistry)
+        (datasets: IDatasetStore)
+        (audit: IAuditLog)
+        (policy: ModelScorePolicy)
+        (specs: IModelSpecStore)
+        : IModelScorer =
+        ModelScorer(registry, datasets, audit, policy, Some specs) :> IModelScorer
