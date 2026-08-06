@@ -674,8 +674,12 @@ let private referenceOutcome: ModelExecutionOutcome = {
     Seed = referenceSubmission.Seed
     ProviderId = "reference-regression"
     ProviderVersion = "1.4.0"
-    ArtifactId = "artifact-8821"
-    ArtifactContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+    Artifact =
+        Some {
+            ArtifactId = "artifact-8821"
+            ContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+            Format = None
+        }
     Diagnostics = Map.ofList [ "aic", 812.5; "holdout-r2", 0.71; "vif-max", 3.25 ]
     GateVerdicts = [
         {
@@ -695,6 +699,16 @@ let private referenceOutcome: ModelExecutionOutcome = {
     ]
     Status = "Approved"
     Annotations = Map.ofList [ "batch", "wave-3" ]
+    // Phase 640 — the outcome carries timing and cost. Neither rides the
+    // federation profile at this version, so they are set here only to
+    // build the submitter-shaped value the projection reads from.
+    Timing = {
+        SubmittedAt = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+        StartedAt = None
+        CompletedAt = None
+        DurationMs = None
+    }
+    Cost = None
     RegisteredAt = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
 }
 

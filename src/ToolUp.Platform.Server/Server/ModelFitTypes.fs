@@ -43,6 +43,21 @@ type ModelSpecRef = {
     /// Lowercase SHA-256 hex of `Payload` (UTF-8). Part of the composite
     /// identity; two specs with identical bytes share a hash.
     SpecHash: string
+    /// Phase 640 — the identifier of the minting rule that produced
+    /// `SpecHash`, where the submitter named one. **Stored verbatim and
+    /// never acted on**: forge does not re-derive the hash under it, does
+    /// not validate the name, and does not refuse an unrecognised one (the
+    /// Phase 603 opacity posture, unchanged by carrying the field).
+    ///
+    /// It is deliberately **not** part of `FitCompositeKey`. Identity is
+    /// the hash, not the rule that produced it; folding the rule into the
+    /// key would make the same fit under a renamed-but-identical rule a
+    /// different fit, and split the registry for a change that altered
+    /// nothing.
+    ///
+    /// Empty for a locally-minted ref (`ofPayload`) and for a submitter
+    /// that stated no rule — the two are the same claim, namely none.
+    SpecHashAlgorithm: string
 }
 
 module ModelSpecRef =
@@ -52,9 +67,16 @@ module ModelSpecRef =
 
     /// Wrap an opaque payload, computing its `SpecHash`. The canonical
     /// constructor — callers never set `SpecHash` by hand.
+    ///
+    /// `SpecHashAlgorithm` is empty here on purpose. This mints a bare
+    /// content hash over the payload's bytes, which is not a *canonical*
+    /// rendering rule and must not be advertised as one: a submitter
+    /// joining on the strength of a named rule would be joining on
+    /// something forge never promised.
     let ofPayload (payload: string) : ModelSpecRef = {
         Payload = payload
         SpecHash = hashOf payload
+        SpecHashAlgorithm = ""
     }
 
 /// Value reference to an immutable dataset vintage a fit reads against
@@ -375,6 +397,42 @@ module FitBatchError =
         | FitBatchError.MissingBatchId -> "fit batch has no batch id"
         | FitBatchError.ScopeMismatch(i, s) -> sprintf "fit batch item %d declares scope '%s', not the batch scope" i s
         | FitBatchError.BudgetDenied d -> ComputeBudgetDenial.describe d
+
+/// Phase 640 — why one item of an accepted batch did not reach the queue.
+///
+/// Typed rather than a diagnostic string, because this is the per-item
+/// denial a submitter most needs to act on programmatically: it arrives on
+/// a receipt that otherwise says the batch was taken, and "which of my two
+/// hundred fits did not start, and can I retry them?" is a question a
+/// string cannot answer without a caller parsing prose forge never
+/// promised to keep stable.
+///
+/// The two cases are the two ways the scheduler can decline an item, and
+/// they are kept apart because their remedies differ: a refused
+/// *registration* is a property of the request or the deployment and will
+/// refuse again identically, whereas a refused *trigger* means the job
+/// exists and only its immediate start failed.
+[<RequireQualifiedAccess>]
+type FitEnqueueRefusal =
+    /// `IJobScheduler.Schedule` refused the registration, with its own
+    /// typed reason.
+    | ScheduleRefused of ScheduleError
+    /// The item registered but `TriggerOnce` declined to start it. The
+    /// reason is the scheduler's own message — diagnostic, not stable.
+    | TriggerRefused of reason: string
+
+module FitEnqueueRefusal =
+    /// Human-readable one-line description for logs + job-result messages.
+    /// The case, not this string, is the contract.
+    let describe =
+        function
+        | FitEnqueueRefusal.ScheduleRefused e ->
+            match e with
+            | InvalidCron(expr, reason) -> sprintf "invalid cron '%s': %s" expr reason
+            | HandlerNotRegistered name -> sprintf "handler '%s' is not registered" name
+            | PrecisionUnsupported(supplied, _) -> sprintf "precision %A unsupported" supplied
+            | ScheduleError.StorageFailure m -> sprintf "schedule storage failure: %s" m
+        | FitEnqueueRefusal.TriggerRefused reason -> sprintf "trigger failed: %s" reason
 
 module FitRequestBatch =
     /// Registration-annotation key carrying the batch correlation id on

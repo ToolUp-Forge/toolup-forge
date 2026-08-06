@@ -66,8 +66,12 @@ let private outcomeFor (specHash: string) (seed: int64) : ModelExecutionOutcome 
     Seed = seed
     ProviderId = "reference-regression"
     ProviderVersion = "1.4.0"
-    ArtifactId = "artifact-8821"
-    ArtifactContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+    Artifact =
+        Some {
+            ArtifactId = "artifact-8821"
+            ContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+            Format = None
+        }
     Diagnostics = Map.ofList [ "holdout-r2", 0.71 ]
     GateVerdicts = [
         {
@@ -80,6 +84,16 @@ let private outcomeFor (specHash: string) (seed: int64) : ModelExecutionOutcome 
     ]
     Status = "Approved"
     Annotations = Map.empty
+    // Phase 640 — the outcome carries timing and cost. Neither rides the
+    // federation profile at this version, so they are set here only to
+    // build the submitter-shaped value the projection reads from.
+    Timing = {
+        SubmittedAt = registeredAt
+        StartedAt = None
+        CompletedAt = None
+        DurationMs = None
+    }
+    Cost = None
     RegisteredAt = registeredAt
 }
 
@@ -113,7 +127,15 @@ type private ReferenceDataHost() =
                     Ok {
                         BatchId = $"single/{submission.SpecHash}"
                         ItemCount = 1
-                        Jobs = [ { Index = 0; JobId = Guid.NewGuid() } ]
+                        Jobs = [
+                            {
+                                Index = 0
+                                // Phase 640 — an opaque handle on this
+                                // face. Rendered from a `Guid` here only
+                                // because that is what a stub has to hand.
+                                JobId = string (Guid.NewGuid())
+                            }
+                        ]
                         EnqueueFailures = []
                     }
             }
@@ -834,5 +856,102 @@ let private scopeTests =
         }
     ]
 
+/// Phase 640 — the seam's refusals read in the submitter face's own closed
+/// vocabulary.
+///
+/// This is where two of that vocabulary's classes are actually produced. The
+/// in-deployment remoting face is typed end to end, so neither an envelope
+/// version nor an unknown document kind can arise there; across a peer
+/// boundary both are ordinary, which is why the projection lives here and
+/// not as a decorative mapping beside the DU.
+let private submitterVocabularyTests =
+    testList "seam refusals read in the submitter vocabulary" [
+        test "an unread profile version projects to EnvelopeVersionMismatch, enumerating what IS read" {
+            let admission = ModelExecutionAdmission.create Set.empty
+            let known = Set.union admission.Operations admission.Diagnostics |> Set.toList
+
+            let projected =
+                ModelExecutionPeerRefusal.ProfileVersionUnsupported(9, 1)
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal known
+
+            match projected with
+            | ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted) ->
+                Expect.equal received 9 "the version that arrived is carried"
+
+                // Enumerated, not reported as a ceiling: the caller's
+                // question is which version it may send, not how high this
+                // deployment can count.
+                Expect.equal accepted [ 1 ] "the accepted versions are enumerated"
+            | other -> failtestf "expected EnvelopeVersionMismatch; got %A" other
+        }
+
+        test "a row probe and an undeclared operation both project to UnknownDocumentKind, naming what is served" {
+            let admission = ModelExecutionAdmission.create Set.empty
+            let known = Set.union admission.Operations admission.Diagnostics |> Set.toList
+
+            let project = ModelExecutionPeerRefusal.toSubmitterRefusal known
+
+            // The seam keeps these apart for the refusal LOG, so an operator
+            // can tell a probe from a typo. A submitter's remedy is the same
+            // either way, so the wire does not manufacture a distinction it
+            // would have to handle for nothing.
+            for refusal in
+                [
+                    ModelExecutionPeerRefusal.RowAccessRefused "ReadPage"
+                    ModelExecutionPeerRefusal.UndeclaredDiagnostic "ReadPage"
+                ] do
+                match project refusal with
+                | ModelExecutionRefusal.UnknownDocumentKind(kind, served) ->
+                    Expect.equal kind "ReadPage" "the operation asked for is named"
+                    Expect.contains served "GetOutcome" "the served operations are offered back"
+                    Expect.equal served (List.sort served) "the served set is ordered"
+                    Expect.isFalse (List.contains "ReadPage" served) "a row read is not among them"
+                | other -> failtestf "expected UnknownDocumentKind; got %A" other
+        }
+
+        test "a scope-widening assertion is a policy refusal, not a role refusal" {
+            // The distinction is real rather than taxonomic: `Forbidden` says
+            // YOU may not, and invites the caller to seek permission. Nothing
+            // about this request is permitted from any caller, because the
+            // binding decides the scope — so it is refused as a rule.
+            match
+                ModelExecutionPeerRefusal.ScopeWideningRefused "someone-elses-scope"
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal []
+            with
+            | ModelExecutionRefusal.PolicyRefused rule ->
+                Expect.equal rule "model-execution.scope-widening" "the rule identifier is the stable part"
+            | other -> failtestf "expected PolicyRefused; got %A" other
+
+            // The asserted scope is deliberately absent from the refusal: it
+            // is the caller's own claim, and echoing an unresolved scope
+            // identifier back across the seam is the one thing §6.2 exists to
+            // prevent.
+            let described =
+                ModelExecutionPeerRefusal.ScopeWideningRefused "someone-elses-scope"
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal []
+                |> ModelExecutionRefusal.describe
+
+            Expect.isFalse
+                (described.Contains "someone-elses-scope")
+                "an asserted scope is never echoed back in the submitter-facing refusal"
+        }
+
+        test "a refusal already in the submitter vocabulary is carried through unchanged" {
+            let inner = ModelExecutionRefusal.UnknownProvider "regression"
+
+            Expect.equal
+                (ModelExecutionPeerRefusal.SubmitterRefused inner
+                 |> ModelExecutionPeerRefusal.toSubmitterRefusal [])
+                inner
+                "the projection is the identity on classes that already belong to this face"
+        }
+    ]
+
 let tests =
-    testList "Phase 638 — federated model execution" [ roundTripTests; noRowSurfaceTests; diagnosticsTests; scopeTests ]
+    testList "Phase 638 — federated model execution" [
+        roundTripTests
+        noRowSurfaceTests
+        diagnosticsTests
+        scopeTests
+        submitterVocabularyTests
+    ]

@@ -2960,12 +2960,12 @@ ToolUp.Platform.FitBatchItemPayload.BatchId : System.String { get }
 ToolUp.Platform.FitBatchItemPayload.Index : System.Int32 { get }
 ToolUp.Platform.FitBatchItemPayload.Request : ToolUp.Platform.FitRequest { get }
 ToolUp.Platform.FitBatchSubmission (class)
-ToolUp.Platform.FitBatchSubmission..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]])
 ToolUp.Platform.FitBatchSubmission.BatchId : System.String { get }
 ToolUp.Platform.FitBatchSubmission.ItemCount : System.Int32 { get }
-ToolUp.Platform.FitBatchSubmission.ScheduleFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]] { get }
 ToolUp.Platform.FitBatchSubmission.ScheduledJobs : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]] { get }
 ToolUp.Platform.FitBatchSubmission.ScopeId : System.String { get }
+ToolUp.Platform.FitBatchSubmission..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]])
+ToolUp.Platform.FitBatchSubmission.ScheduleFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]] { get }
 ToolUp.Platform.FitCompositeKey (class)
 ToolUp.Platform.FitCompositeKey..ctor(System.String, System.String, System.Int64, System.String, System.String, System.String)
 ToolUp.Platform.FitCompositeKey.DatasetVersion : System.String { get }
@@ -2977,6 +2977,19 @@ ToolUp.Platform.FitCompositeKey.SpecHash : System.String { get }
 ToolUp.Platform.FitCompositeKeyModule (class)
 ToolUp.Platform.FitCompositeKeyModule.canonical(System.String, System.String, System.Int64, System.String, System.String) : System.String
 ToolUp.Platform.FitCompositeKeyModule.compute(System.String, System.String, System.Int64, System.String, System.String) : ToolUp.Platform.FitCompositeKey
+ToolUp.Platform.FitEnqueueRefusal (class)
+ToolUp.Platform.FitEnqueueRefusal+ScheduleRefused (class)
+ToolUp.Platform.FitEnqueueRefusal+ScheduleRefused.Item : ToolUp.Platform.ScheduleError { get }
+ToolUp.Platform.FitEnqueueRefusal+Tags (class)
+ToolUp.Platform.FitEnqueueRefusal+Tags.ScheduleRefused : System.Int32 (literal)
+ToolUp.Platform.FitEnqueueRefusal+Tags.TriggerRefused : System.Int32 (literal)
+ToolUp.Platform.FitEnqueueRefusal+TriggerRefused (class)
+ToolUp.Platform.FitEnqueueRefusal+TriggerRefused.reason : System.String { get }
+ToolUp.Platform.FitEnqueueRefusal.IsScheduleRefused : System.Boolean { get }
+ToolUp.Platform.FitEnqueueRefusal.IsTriggerRefused : System.Boolean { get }
+ToolUp.Platform.FitEnqueueRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.FitEnqueueRefusalModule (class)
+ToolUp.Platform.FitEnqueueRefusalModule.describe(ToolUp.Platform.FitEnqueueRefusal) : System.String
 ToolUp.Platform.FitOutcome (class)
 ToolUp.Platform.FitOutcome..ctor(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], System.Int64, System.Double)
 ToolUp.Platform.FitOutcome.ArtifactRef : ToolUp.Platform.ArtifactRef { get }
@@ -4714,12 +4727,13 @@ ToolUp.Platform.ModelScoringJobHandlerModule (class)
 ToolUp.Platform.ModelScoringJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.ModelScoringJobHandlerModule.create(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ModelSpecRef (class)
-ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String)
 ToolUp.Platform.ModelSpecRef.Payload : System.String { get }
 ToolUp.Platform.ModelSpecRef.SpecHash : System.String { get }
 ToolUp.Platform.ModelSpecRefModule (class)
 ToolUp.Platform.ModelSpecRefModule.hashOf(System.String) : System.String
 ToolUp.Platform.ModelSpecRefModule.ofPayload(System.String) : ToolUp.Platform.ModelSpecRef
+ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModelSpecRef.SpecHashAlgorithm : System.String { get }
 ToolUp.Platform.ModuleApiContext (class)
 ToolUp.Platform.ModuleApiContext..ctor(Microsoft.AspNetCore.Http.HttpContext, System.String)
 ToolUp.Platform.ModuleApiContext.FromFile`2(Microsoft.FSharp.Core.FSharpFunc`2[Req, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Req, Res]]) : Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Res]]

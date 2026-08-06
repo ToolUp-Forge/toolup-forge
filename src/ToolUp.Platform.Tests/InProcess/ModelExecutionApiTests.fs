@@ -180,6 +180,10 @@ let private submission (seed: int64) : ModelExecutionFitSubmission = {
     DatasetVersion = 1
     SpecPayload = """{"opaque":"provider-spec"}"""
     SpecHash = $"submitter-minted-hash-{seed}"
+    // Phase 640 — a rule identifier forge stores and never acts on. Named
+    // deliberately alongside a hash that is NOT its minting, so a receiver
+    // that started validating the pair would fail these tests.
+    SpecHashAlgorithm = "canonical-json-sha256-v1"
     ProviderKind = ReferenceModelFitProvider.Kind
     Seed = seed
     Gates = [
@@ -191,6 +195,53 @@ let private submission (seed: int64) : ModelExecutionFitSubmission = {
     ]
     SubmitterClass = SubmitterClass.Human
 }
+
+/// A submission whose single gate cannot pass — the reference provider
+/// reports a finite `mean`, and nothing clears a threshold of 1e9. Used to
+/// register an artifact that FAILED its declared gates, which is a
+/// perfectly ordinary registered outcome (a failure is evidence) and the
+/// precondition of the Phase 640 gate policy.
+let private gateFailingSubmission (seed: int64) : ModelExecutionFitSubmission = {
+    submission seed with
+        SpecHash = $"gate-fail-hash-{seed}"
+        Gates = [
+            {
+                Name = "mean"
+                Threshold = 1e9
+                Direction = "AtLeast"
+            }
+        ]
+}
+
+/// `ctxFor` with the Phase 640 executor policy registered — the opt-in a
+/// governed deployment makes. Everything else is identical, so a test pair
+/// over the two contexts isolates the policy and nothing else.
+let private ctxWithGatePolicy (fixture: Fixture) (userId: string) : HttpContext =
+    let services = ServiceCollection()
+
+    services.AddSingleton<IJobScheduler>(fixture.Scheduler) |> ignore
+    services.AddSingleton<IModelRegistry>(fixture.Registry) |> ignore
+    services.AddSingleton<IDatasetStore>(fixture.Datasets) |> ignore
+    services.AddSingleton<IAuditLog>(fixture.Audit :> IAuditLog) |> ignore
+    services.AddSingleton<ModelFitProviderRegistry>(fixture.Providers) |> ignore
+
+    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    |> ignore
+
+    let scoreProviders =
+        ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
+
+    services.AddSingleton<IModelScorer>(
+        ModelScorer.create scoreProviders fixture.Datasets (fixture.Audit :> IAuditLog) ModelScorePolicy.permissive
+    )
+    |> ignore
+
+    services.AddSingleton<ModelExecutionPolicy>(ModelExecutionPolicy.refuseGateFailures)
+    |> ignore
+
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- services.BuildServiceProvider()
+    ctx
 
 /// Await the batch's outcomes landing in the registry —
 /// `ModelFitBatch.submit`'s `TriggerOnce` dispatches each item job on a
@@ -489,5 +540,111 @@ let tests =
             match! api.GetOutcome "k" with
             | Error ModelExecutionRefusal.ScopeUnavailable -> ()
             | other -> failtestf "expected ScopeUnavailable; got %A" other
+        }
+        // ── Phase 640 — the closed carry gaps, at the API tier ────────
+
+        testCaseAsync "the receipt's job handle is opaque, and the minting rule is stored unvalidated"
+        <| async {
+            let fixture = freshFixture ()
+            let api = ModelExecutionApiHandler.modelExecutionApi (ctxFor fixture "op-640" false)
+            let! _ = seedInput fixture "op-640"
+
+            let! receipt = api.SubmitFit(submission 11L)
+            let r = okv "submit" receipt
+            let handle = (List.exactlyOne r.Jobs).JobId
+
+            Expect.isFalse (String.IsNullOrWhiteSpace handle) "the handle is present"
+
+            do! awaitOutcomes fixture "op-640" "single/submitter-minted-hash-11/11" 1
+
+            let query: ModelExecutionOutcomeQuery = {
+                SpecHashes = [ "submitter-minted-hash-11" ]
+                DatasetVersions = []
+                Statuses = []
+                BatchId = None
+            }
+
+            let! page = api.QueryOutcomes(query, None, 10)
+            let outcome = (okv "query" page).Outcomes |> List.exactlyOne
+
+            // The submission named a minting rule whose minting its hash is
+            // NOT. Forge stored the pair without comparing them — a receiver
+            // that had started validating would have refused this submission
+            // outright rather than registering an outcome for it.
+            Expect.equal outcome.SpecHash "submitter-minted-hash-11" "the hash is stored exactly as handed"
+
+            // The artifact is expressible as absent now; this one is
+            // present, and carries no format because forge declares none for
+            // bytes it never opens.
+            match outcome.Artifact with
+            | Some artifact ->
+                Expect.isFalse (String.IsNullOrWhiteSpace artifact.ArtifactId) "a retained artifact names itself"
+                Expect.isNone artifact.Format "forge declares no format for an opaque artifact"
+            | None -> failtest "the reference provider retains an artifact"
+
+            Expect.equal outcome.Timing.SubmittedAt outcome.RegisteredAt "timing carries what the registry retains"
+            Expect.isNone outcome.Timing.DurationMs "an unretained duration is absent, never fabricated"
+            Expect.isNone outcome.Cost "this deployment does not account for cost"
+        }
+
+        testCaseAsync "a gate-failed artifact scores by default and is refused with GateFailed under the policy"
+        <| async {
+            // The pair is the point. Registering a gate-failed outcome is
+            // unchanged behaviour, and so is scoring it — the policy is what
+            // moves, and only for a deployment that asked for it.
+            let fixture = freshFixture ()
+            let! _ = seedInput fixture "op-641"
+
+            let permissive =
+                ModelExecutionApiHandler.modelExecutionApi (ctxFor fixture "op-641" true)
+
+            let! receipt = permissive.SubmitFit(gateFailingSubmission 21L)
+            let r = okv "submit" receipt
+            Expect.isEmpty r.EnqueueFailures "a gate that will fail is not an enqueue refusal"
+
+            do! awaitOutcomes fixture "op-641" "single/gate-fail-hash-21/21" 1
+
+            let query: ModelExecutionOutcomeQuery = {
+                SpecHashes = [ "gate-fail-hash-21" ]
+                DatasetVersions = []
+                Statuses = []
+                BatchId = None
+            }
+
+            let! page = permissive.QueryOutcomes(query, None, 10)
+            let outcome = (okv "query" page).Outcomes |> List.exactlyOne
+
+            Expect.isTrue
+                (outcome.GateVerdicts |> List.exists (fun v -> not v.Passed))
+                "the fit registered despite failing its gate — a failed gate is evidence, not an error"
+
+            let scoreRequest = {
+                ArtifactKeyHash = outcome.CompositeKeyHash
+                InputDatasetId = "input"
+                InputVersion = 1
+                OutputDatasetId = "predictions-permissive"
+            }
+
+            match! permissive.RequestScore scoreRequest with
+            | Ok _ -> ()
+            | Error e -> failtestf "an unconfigured deployment must score exactly as before: %A" e
+
+            // Same artifact, same request, one registered policy.
+            let governed =
+                ModelExecutionApiHandler.modelExecutionApi (ctxWithGatePolicy fixture "op-641")
+
+            match!
+                governed.RequestScore {
+                    scoreRequest with
+                        OutputDatasetId = "predictions-governed"
+                }
+            with
+            | Error(ModelExecutionRefusal.GateFailed verdicts) ->
+                Expect.isNonEmpty verdicts "the refusal carries the verdicts, so no re-query is needed"
+
+                Expect.isTrue
+                    (verdicts |> List.exists (fun v -> v.Name = "mean" && not v.Passed))
+                    "the failing gate is named in the refusal"
+            | other -> failtestf "expected GateFailed under the policy; got %A" other
         }
     ]

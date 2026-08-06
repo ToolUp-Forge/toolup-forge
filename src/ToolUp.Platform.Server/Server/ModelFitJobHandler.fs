@@ -196,8 +196,10 @@ type FitBatchSubmission = {
     ItemCount: int
     /// `(index, jobId)` per successfully enqueued item, in batch order.
     ScheduledJobs: (int * JobId) list
-    /// `(index, reason)` per item whose enqueue failed, in batch order.
-    ScheduleFailures: (int * string) list
+    /// `(index, refusal)` per item whose enqueue failed, in batch order.
+    /// Typed since Phase 640 — see `FitEnqueueRefusal` for why a string
+    /// was the wrong shape for the one denial a caller has to branch on.
+    ScheduleFailures: (int * FitEnqueueRefusal) list
 }
 
 module ModelFitBatch =
@@ -218,13 +220,6 @@ module ModelFitBatch =
             Ok(JsonSerializer.Deserialize<FitBatchItemPayload>(payload, jsonOptions))
         with ex ->
             Error ex.Message
-
-    let private describeScheduleError (e: ScheduleError) : string =
-        match e with
-        | InvalidCron(expr, reason) -> $"invalid cron '{expr}': {reason}"
-        | HandlerNotRegistered name -> $"handler '{name}' is not registered"
-        | PrecisionUnsupported(supplied, _) -> $"precision {supplied} unsupported"
-        | ScheduleError.StorageFailure m -> $"schedule storage failure: {m}"
 
     /// Phase 451 — take one budget reservation per item, releasing every
     /// reservation already taken if any item is refused. `Ok` carries the
@@ -345,7 +340,7 @@ module ModelFitBatch =
                         )
 
                     let scheduled = ResizeArray<int * JobId>()
-                    let failures = ResizeArray<int * string>()
+                    let failures = ResizeArray<int * FitEnqueueRefusal>()
 
                     for index, request in List.indexed batch.Requests do
                         let payload =
@@ -373,11 +368,11 @@ module ModelFitBatch =
                         }
 
                         match! scheduler.Schedule registration with
-                        | Error e -> failures.Add(index, describeScheduleError e)
+                        | Error e -> failures.Add(index, FitEnqueueRefusal.ScheduleRefused e)
                         | Ok jobId ->
                             match! scheduler.TriggerOnce(batch.ScopeId, jobId, submittedBy) with
                             | Ok() -> scheduled.Add(index, jobId)
-                            | Error reason -> failures.Add(index, $"trigger failed: {reason}")
+                            | Error reason -> failures.Add(index, FitEnqueueRefusal.TriggerRefused reason)
 
                     // Release the concurrency slots now the items are
                     // queued — the scheduler owns their concurrency from

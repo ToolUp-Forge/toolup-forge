@@ -5508,10 +5508,19 @@ ToolUp.Platform.ModelExecutionApiMode.Tag : System.Int32 { get }
 ToolUp.Platform.ModelExecutionApiMode+Tags (class)
 ToolUp.Platform.ModelExecutionApiMode+Tags.EnabledModelExecutionApi : System.Int32 (literal)
 ToolUp.Platform.ModelExecutionApiMode+Tags.NoModelExecutionApi : System.Int32 (literal)
+ToolUp.Platform.ModelExecutionArtifactRef (class)
+ToolUp.Platform.ModelExecutionArtifactRef..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ModelExecutionArtifactRef.ArtifactId : System.String { get }
+ToolUp.Platform.ModelExecutionArtifactRef.ContentHash : System.String { get }
+ToolUp.Platform.ModelExecutionArtifactRef.Format : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ModelExecutionBatchSubmission (class)
 ToolUp.Platform.ModelExecutionBatchSubmission..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionFitSubmission])
 ToolUp.Platform.ModelExecutionBatchSubmission.BatchId : System.String { get }
 ToolUp.Platform.ModelExecutionBatchSubmission.Items : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionFitSubmission] { get }
+ToolUp.Platform.ModelExecutionCost (class)
+ToolUp.Platform.ModelExecutionCost..ctor(System.String, System.Double)
+ToolUp.Platform.ModelExecutionCost.Amount : System.Double { get }
+ToolUp.Platform.ModelExecutionCost.Unit : System.String { get }
 ToolUp.Platform.ModelExecutionDatasetVersion (class)
 ToolUp.Platform.ModelExecutionDatasetVersion..ctor(System.String, System.Int32, System.Int64, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.ModelExecutionDatasetVersion.ContentHash : System.String { get }
@@ -5521,7 +5530,6 @@ ToolUp.Platform.ModelExecutionDatasetVersion.Format : System.String { get }
 ToolUp.Platform.ModelExecutionDatasetVersion.RowCount : System.Int64 { get }
 ToolUp.Platform.ModelExecutionDatasetVersion.Version : System.Int32 { get }
 ToolUp.Platform.ModelExecutionFitSubmission (class)
-ToolUp.Platform.ModelExecutionFitSubmission..ctor(System.String, System.Int32, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGate], ToolUp.Platform.SubmitterClass)
 ToolUp.Platform.ModelExecutionFitSubmission.DatasetId : System.String { get }
 ToolUp.Platform.ModelExecutionFitSubmission.DatasetVersion : System.Int32 { get }
 ToolUp.Platform.ModelExecutionFitSubmission.Gates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGate] { get }
@@ -5530,6 +5538,8 @@ ToolUp.Platform.ModelExecutionFitSubmission.Seed : System.Int64 { get }
 ToolUp.Platform.ModelExecutionFitSubmission.SpecHash : System.String { get }
 ToolUp.Platform.ModelExecutionFitSubmission.SpecPayload : System.String { get }
 ToolUp.Platform.ModelExecutionFitSubmission.SubmitterClass : ToolUp.Platform.SubmitterClass { get }
+ToolUp.Platform.ModelExecutionFitSubmission..ctor(System.String, System.Int32, System.String, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGate], ToolUp.Platform.SubmitterClass)
+ToolUp.Platform.ModelExecutionFitSubmission.SpecHashAlgorithm : System.String { get }
 ToolUp.Platform.ModelExecutionGate (class)
 ToolUp.Platform.ModelExecutionGate..ctor(System.String, System.Double, System.String)
 ToolUp.Platform.ModelExecutionGate.Direction : System.String { get }
@@ -5543,14 +5553,11 @@ ToolUp.Platform.ModelExecutionGateVerdict.Observed : System.Double { get }
 ToolUp.Platform.ModelExecutionGateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.ModelExecutionGateVerdict.Threshold : System.Double { get }
 ToolUp.Platform.ModelExecutionJobRef (class)
-ToolUp.Platform.ModelExecutionJobRef..ctor(System.Int32, System.Guid)
 ToolUp.Platform.ModelExecutionJobRef.Index : System.Int32 { get }
-ToolUp.Platform.ModelExecutionJobRef.JobId : System.Guid { get }
+ToolUp.Platform.ModelExecutionJobRef..ctor(System.Int32, System.String)
+ToolUp.Platform.ModelExecutionJobRef.JobId : System.String { get }
 ToolUp.Platform.ModelExecutionOutcome (class)
-ToolUp.Platform.ModelExecutionOutcome..ctor(System.String, System.String, System.String, System.Int64, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGateVerdict], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.DateTimeOffset)
 ToolUp.Platform.ModelExecutionOutcome.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
-ToolUp.Platform.ModelExecutionOutcome.ArtifactContentHash : System.String { get }
-ToolUp.Platform.ModelExecutionOutcome.ArtifactId : System.String { get }
 ToolUp.Platform.ModelExecutionOutcome.CompositeKeyHash : System.String { get }
 ToolUp.Platform.ModelExecutionOutcome.DatasetVersion : System.String { get }
 ToolUp.Platform.ModelExecutionOutcome.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
@@ -5571,12 +5578,22 @@ ToolUp.Platform.ModelExecutionOutcomeQuery.BatchId : Microsoft.FSharp.Core.FShar
 ToolUp.Platform.ModelExecutionOutcomeQuery.DatasetVersions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModelExecutionOutcomeQuery.SpecHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModelExecutionOutcomeQuery.Statuses : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelExecutionOutcome..ctor(System.String, System.String, System.String, System.Int64, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelExecutionArtifactRef], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGateVerdict], System.String, ToolUp.Platform.ModelExecutionTiming, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelExecutionCost], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.DateTimeOffset)
+ToolUp.Platform.ModelExecutionOutcome.Artifact : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelExecutionArtifactRef] { get }
+ToolUp.Platform.ModelExecutionOutcome.Cost : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelExecutionCost] { get }
+ToolUp.Platform.ModelExecutionOutcome.Timing : ToolUp.Platform.ModelExecutionTiming { get }
+ToolUp.Platform.ModelExecutionPolicy (class)
+ToolUp.Platform.ModelExecutionPolicy..ctor(System.Boolean)
+ToolUp.Platform.ModelExecutionPolicy.RefuseGateFailedArtifacts : System.Boolean { get }
+ToolUp.Platform.ModelExecutionPolicyModule (class)
+ToolUp.Platform.ModelExecutionPolicyModule.permissive : ToolUp.Platform.ModelExecutionPolicy { get }
+ToolUp.Platform.ModelExecutionPolicyModule.refuseGateFailures : ToolUp.Platform.ModelExecutionPolicy { get }
 ToolUp.Platform.ModelExecutionReceipt (class)
-ToolUp.Platform.ModelExecutionReceipt..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionJobRef], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]])
 ToolUp.Platform.ModelExecutionReceipt.BatchId : System.String { get }
-ToolUp.Platform.ModelExecutionReceipt.EnqueueFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]] { get }
 ToolUp.Platform.ModelExecutionReceipt.ItemCount : System.Int32 { get }
 ToolUp.Platform.ModelExecutionReceipt.Jobs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionJobRef] { get }
+ToolUp.Platform.ModelExecutionReceipt..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionJobRef], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.ModelExecutionRefusal]])
+ToolUp.Platform.ModelExecutionReceipt.EnqueueFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.ModelExecutionRefusal]] { get }
 ToolUp.Platform.ModelExecutionRefusal (class)
 ToolUp.Platform.ModelExecutionRefusal.IsBudgetDenied : System.Boolean { get }
 ToolUp.Platform.ModelExecutionRefusal.IsForbidden : System.Boolean { get }
@@ -5619,12 +5636,30 @@ ToolUp.Platform.ModelExecutionRefusal+Tags.StorageFailure : System.Int32 (litera
 ToolUp.Platform.ModelExecutionRefusal+Tags.SubstrateDisabled : System.Int32 (literal)
 ToolUp.Platform.ModelExecutionRefusal+Tags.Unexpected : System.Int32 (literal)
 ToolUp.Platform.ModelExecutionRefusal+Tags.UnknownProvider : System.Int32 (literal)
+ToolUp.Platform.ModelExecutionRefusal+Tags.EnvelopeVersionMismatch : System.Int32 (literal)
+ToolUp.Platform.ModelExecutionRefusal+Tags.GateFailed : System.Int32 (literal)
+ToolUp.Platform.ModelExecutionRefusal+Tags.PolicyRefused : System.Int32 (literal)
+ToolUp.Platform.ModelExecutionRefusal+Tags.UnknownDocumentKind : System.Int32 (literal)
 ToolUp.Platform.ModelExecutionRefusal+Unexpected (class)
 ToolUp.Platform.ModelExecutionRefusal+Unexpected.message : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+UnknownProvider (class)
 ToolUp.Platform.ModelExecutionRefusal+UnknownProvider.kind : System.String { get }
 ToolUp.Platform.ModelExecutionRefusalModule (class)
 ToolUp.Platform.ModelExecutionRefusalModule.describe(ToolUp.Platform.ModelExecutionRefusal) : System.String
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch (class)
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.accepted : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.received : System.Int32 { get }
+ToolUp.Platform.ModelExecutionRefusal+GateFailed (class)
+ToolUp.Platform.ModelExecutionRefusal+GateFailed.verdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGateVerdict] { get }
+ToolUp.Platform.ModelExecutionRefusal+PolicyRefused (class)
+ToolUp.Platform.ModelExecutionRefusal+PolicyRefused.rule : System.String { get }
+ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind (class)
+ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind.kind : System.String { get }
+ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind.known : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelExecutionRefusal.IsEnvelopeVersionMismatch : System.Boolean { get }
+ToolUp.Platform.ModelExecutionRefusal.IsGateFailed : System.Boolean { get }
+ToolUp.Platform.ModelExecutionRefusal.IsPolicyRefused : System.Boolean { get }
+ToolUp.Platform.ModelExecutionRefusal.IsUnknownDocumentKind : System.Boolean { get }
 ToolUp.Platform.ModelExecutionScoreRefusal (class)
 ToolUp.Platform.ModelExecutionScoreRefusal.IsInputSchemaMismatch : System.Boolean { get }
 ToolUp.Platform.ModelExecutionScoreRefusal.IsInputUnavailable : System.Boolean { get }
@@ -5659,6 +5694,12 @@ ToolUp.Platform.ModelExecutionScoreRequest.ArtifactKeyHash : System.String { get
 ToolUp.Platform.ModelExecutionScoreRequest.InputDatasetId : System.String { get }
 ToolUp.Platform.ModelExecutionScoreRequest.InputVersion : System.Int32 { get }
 ToolUp.Platform.ModelExecutionScoreRequest.OutputDatasetId : System.String { get }
+ToolUp.Platform.ModelExecutionTiming (class)
+ToolUp.Platform.ModelExecutionTiming..ctor(System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.Int64])
+ToolUp.Platform.ModelExecutionTiming.CompletedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.ModelExecutionTiming.DurationMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ModelExecutionTiming.StartedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.ModelExecutionTiming.SubmittedAt : System.DateTimeOffset { get }
 ToolUp.Platform.ModelFitBatchSubmittedPayload (class)
 ToolUp.Platform.ModelFitBatchSubmittedPayload..ctor(System.String, System.Int32, System.String, System.String)
 ToolUp.Platform.ModelFitBatchSubmittedPayload.BatchId : System.String { get }

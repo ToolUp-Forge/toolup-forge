@@ -48,7 +48,51 @@ let private mapScoreError (e: ScoreError) : ModelExecutionScoreRefusal =
     | ScoreError.ProviderFailed(k, m) -> ModelExecutionScoreRefusal.ProviderFailed(k, m)
     | ScoreError.StorageFailure r -> ModelExecutionScoreRefusal.StorageFailure r
 
+/// Total refusal mapping for a per-item enqueue failure (Phase 640).
+///
+/// Each arm is chosen so the class a caller branches on tells it what to
+/// *do*, which is the only reason to type a denial at all:
+///   * a missing handler is a capability this deployment does not offer,
+///     not a thing that is merely absent — `SubstrateDisabled`, the same
+///     class every uncomposed substrate on this face reports;
+///   * an unsupported precision is a named, stable scheduler rule
+///     declining the registration, and carries no quota to arithmetic
+///     against — `PolicyRefused`, not `BudgetDenied` and not `Invalid…`,
+///     because the submitter supplied no precision and blaming the
+///     submission would send them looking for a defect in their own
+///     document;
+///   * a storage or trigger failure is diagnostic and may not recur.
+let private mapEnqueueRefusal (e: FitEnqueueRefusal) : ModelExecutionRefusal =
+    match e with
+    | FitEnqueueRefusal.ScheduleRefused(HandlerNotRegistered name) ->
+        ModelExecutionRefusal.SubstrateDisabled $"job handler '{name}'"
+    | FitEnqueueRefusal.ScheduleRefused(PrecisionUnsupported _) ->
+        ModelExecutionRefusal.PolicyRefused "job.precision-unsupported"
+    | FitEnqueueRefusal.ScheduleRefused(InvalidCron(expr, reason)) ->
+        ModelExecutionRefusal.InvalidSubmission $"invalid cron '{expr}': {reason}"
+    | FitEnqueueRefusal.ScheduleRefused(ScheduleError.StorageFailure m) ->
+        ModelExecutionRefusal.StorageFailure $"schedule storage failure: {m}"
+    | FitEnqueueRefusal.TriggerRefused reason -> ModelExecutionRefusal.StorageFailure $"trigger failed: {reason}"
+
+/// The wire projection of one gate verdict (Phase 449 → wire).
+let private toWireGateVerdict (v: GateVerdict) : ModelExecutionGateVerdict = {
+    Name = v.Name
+    Threshold = v.Threshold
+    Direction = GateDirection.name v.Direction
+    Observed = v.Observed
+    Passed = v.Passed
+}
+
 /// The wire projection of a registered artifact (Phase 453 → wire).
+///
+/// **Timing and cost carry what the registry retains, and nothing
+/// invented.** A registered artifact records when it was registered; the
+/// fit's own start, completion and provider-reported duration/cost are not
+/// stored on it today, so `StartedAt` / `CompletedAt` / `DurationMs` /
+/// `Cost` are honestly absent rather than back-filled from `RegisteredAt`.
+/// Fabricating them would be worse than omitting them: a consumer cannot
+/// tell an invented timestamp from a measured one, and every downstream
+/// duration computed from it would be wrong in a way nothing detects.
 let private toWireOutcome (a: ModelArtifact) : ModelExecutionOutcome = {
     CompositeKeyHash = a.CompositeKey.Hash
     SpecHash = a.CompositeKey.SpecHash
@@ -56,18 +100,24 @@ let private toWireOutcome (a: ModelArtifact) : ModelExecutionOutcome = {
     Seed = a.CompositeKey.Seed
     ProviderId = a.CompositeKey.ProviderId
     ProviderVersion = a.CompositeKey.ProviderVersion
-    ArtifactId = a.ArtifactRef.ArtifactId
-    ArtifactContentHash = a.ArtifactRef.ContentHash
+    Artifact =
+        Some {
+            ArtifactId = a.ArtifactRef.ArtifactId
+            ContentHash = a.ArtifactRef.ContentHash
+            // Forge's `ArtifactRef` carries a byte length, not a format
+            // identifier: the artifact bytes are the provider's, and forge
+            // declares nothing about a container it never opens (GP 1).
+            Format = None
+        }
+    Timing = {
+        SubmittedAt = a.RegisteredAt
+        StartedAt = None
+        CompletedAt = None
+        DurationMs = None
+    }
+    Cost = None
     Diagnostics = a.Diagnostics
-    GateVerdicts =
-        a.GateVerdicts
-        |> List.map (fun v -> {
-            Name = v.Name
-            Threshold = v.Threshold
-            Direction = GateDirection.name v.Direction
-            Observed = v.Observed
-            Passed = v.Passed
-        })
+    GateVerdicts = a.GateVerdicts |> List.map toWireGateVerdict
     Status = ModelArtifactStatus.name a.Status
     Annotations = a.Annotations
     RegisteredAt = a.RegisteredAt
@@ -125,6 +175,12 @@ let private toFitRequest (scopeId: string) (s: ModelExecutionFitSubmission) : Re
                 Payload = s.SpecPayload
                 // Submitter-minted, opaque — stored verbatim (D4/603).
                 SpecHash = s.SpecHash
+                // Phase 640 — the rule the submitter says it minted under,
+                // carried through untouched. Never parsed, never checked
+                // against a registry, never used to re-derive the hash: a
+                // receiver that validated it would have re-acquired exactly
+                // the judgement the opacity posture exists to refuse.
+                SpecHashAlgorithm = s.SpecHashAlgorithm
             }
             ProviderKind = s.ProviderKind
             Seed = s.Seed
@@ -164,6 +220,15 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
 
     /// The submitter identity + class stamped into the audit trail (GP 6).
     let submitter = accessContext.UserId
+
+    /// Phase 640 — the deployment's opt-in executor policy. Resolved like
+    /// every other substrate here, so an unconfigured deployment gets the
+    /// permissive value and behaves exactly as it did before this existed
+    /// (GP 11 + GP 13).
+    let policy =
+        match service<ModelExecutionPolicy> ctx with
+        | Some p -> p
+        | None -> ModelExecutionPolicy.permissive
 
     /// Owner/Admin write gate in Team/MultiTeam mode — the
     /// `JobApiHandler.ensureWriteAllowed` policy verbatim.
@@ -274,8 +339,22 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
                                 Ok {
                                     BatchId = s.BatchId
                                     ItemCount = s.ItemCount
-                                    Jobs = s.ScheduledJobs |> List.map (fun (i, jobId) -> { Index = i; JobId = jobId })
-                                    EnqueueFailures = s.ScheduleFailures
+                                    Jobs =
+                                        s.ScheduledJobs
+                                        |> List.map (fun (i, jobId) -> {
+                                            Index = i
+                                            // Rendered, not relayed as a
+                                            // `Guid`: the handle is opaque
+                                            // on this face (Phase 640), and
+                                            // the scheduler's choice of
+                                            // identity type is an
+                                            // implementation detail that
+                                            // stops here.
+                                            JobId = string jobId
+                                        })
+                                    EnqueueFailures =
+                                        s.ScheduleFailures
+                                        |> List.map (fun (i, refusal) -> i, mapEnqueueRefusal refusal)
                                 }
     }
 
@@ -417,6 +496,28 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
                                                     Error(
                                                         ModelExecutionRefusal.StorageFailure(
                                                             ModelRegistryError.describe e
+                                                        )
+                                                    )
+                                            | Ok artifact when
+                                                policy.RefuseGateFailedArtifacts
+                                                && artifact.GateVerdicts |> List.exists (fun v -> not v.Passed)
+                                                ->
+                                                // Phase 640 — the one place
+                                                // on this face where the
+                                                // gate verdicts a fit
+                                                // already produced govern
+                                                // what happens next. The
+                                                // whole verdict list rides
+                                                // the refusal, not just the
+                                                // failures: a caller
+                                                // deciding whether to
+                                                // re-fit needs the margins
+                                                // it cleared as much as the
+                                                // ones it did not.
+                                                return
+                                                    Error(
+                                                        ModelExecutionRefusal.GateFailed(
+                                                            artifact.GateVerdicts |> List.map toWireGateVerdict
                                                         )
                                                     )
                                             | Ok artifact ->

@@ -417,6 +417,10 @@ let opacityTests =
         SpecRef = {
             Payload = payload
             SpecHash = declaredHash
+            // Phase 640 — the rule the submitter claims. Stated here so
+            // the opacity assertions below cover a ref that names one:
+            // forge must still not re-derive the hash under it.
+            SpecHashAlgorithm = "canonical-json-sha256-v1"
         }
         ProviderKind = ReferenceModelFitProvider.Kind
         Seed = seed

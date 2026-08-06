@@ -284,6 +284,55 @@ module ModelExecutionPeerRefusal =
             $"the model-execution request could not be read: {reason}"
         | ModelExecutionPeerRefusal.SubmitterRefused refusal -> ModelExecutionRefusal.describe refusal
 
+    /// Phase 640 — the seam's refusal read in the **submitter** face's own
+    /// closed vocabulary, given the operation names this deployment serves.
+    ///
+    /// A modeller talking to a data host over this seam is a submitter, and
+    /// it should not have to hold two refusal vocabularies to find out what
+    /// happened: one for denials that originated in the submitter surface
+    /// and a second for denials the seam raised in front of it. This is the
+    /// projection that collapses them — and it is where two of the
+    /// submitter face's refusal classes are actually produced, because the
+    /// seam is where a *version* and a *document kind* exist at all. The
+    /// in-deployment remoting face is typed end to end, so neither
+    /// condition can arise there; across a peer boundary both are ordinary.
+    ///
+    /// The mapping is total by construction and each arm is a claim:
+    ///   * an unread profile version is exactly `EnvelopeVersionMismatch`,
+    ///     and `accepted` is enumerated (`1 .. supported`) rather than
+    ///     reported as a ceiling, because the caller's question is "which
+    ///     one may I send", not "how high can you count";
+    ///   * a row-level probe and an undeclared operation are both
+    ///     `UnknownDocumentKind` — the caller named something this
+    ///     participant does not implement. That the seam keeps them apart
+    ///     internally is for the refusal LOG, so an operator can tell a
+    ///     probe from a typo; a submitter's remedy is the same either way,
+    ///     and inventing a distinction on the wire it cannot act on would
+    ///     be a class it must handle for nothing;
+    ///   * a scope-widening assertion is `PolicyRefused` under a stable
+    ///     rule id, not `Forbidden`. The distinction is real: `Forbidden`
+    ///     says *you* may not, and invites the caller to seek permission,
+    ///     whereas nothing about this request is ever permitted from any
+    ///     caller — the binding decides the scope, so asserting a different
+    ///     one is refused as a rule, not as a role;
+    ///   * an unbound peer IS `Forbidden`, for the mirror-image reason.
+    let toSubmitterRefusal (known: string list) (r: ModelExecutionPeerRefusal) : ModelExecutionRefusal =
+        match r with
+        | ModelExecutionPeerRefusal.ProfileVersionUnsupported(requested, supported) ->
+            ModelExecutionRefusal.EnvelopeVersionMismatch(requested, [ 1..supported ])
+        | ModelExecutionPeerRefusal.RowAccessRefused operation
+        | ModelExecutionPeerRefusal.UndeclaredDiagnostic operation ->
+            ModelExecutionRefusal.UnknownDocumentKind(operation, List.sort known)
+        | ModelExecutionPeerRefusal.ScopeWideningRefused _ ->
+            ModelExecutionRefusal.PolicyRefused "model-execution.scope-widening"
+        | ModelExecutionPeerRefusal.PeerUnbound peerId ->
+            ModelExecutionRefusal.Forbidden $"peer '{peerId}' has no model-execution binding here"
+        | ModelExecutionPeerRefusal.RequestUnreadable reason -> ModelExecutionRefusal.InvalidSubmission reason
+        // Already in the submitter vocabulary — carried through rather than
+        // re-wrapped, which is what makes this projection idempotent over
+        // the class a submitter actually cares about.
+        | ModelExecutionPeerRefusal.SubmitterRefused refusal -> refusal
+
 /// The versioned envelope every model-execution request rides in.
 ///
 /// `Body` is an **embedded** document (§3.1 rule 12) — a string whose
@@ -526,8 +575,15 @@ module ModelExecutionPeerContract =
         Seed = o.Seed
         ProviderId = o.ProviderId
         ProviderVersion = o.ProviderVersion
-        ArtifactId = o.ArtifactId
-        ArtifactContentHash = o.ArtifactContentHash
+        // The federation profile's outcome shape carries the artifact
+        // reference flat and non-optional at this version, so an outcome
+        // with no retained artifact projects as empty identifiers. The
+        // submitter face distinguishes the two cases since Phase 640; this
+        // wire does not, and widening it is a profile-version change, not a
+        // projection detail — so the loss is recorded here rather than
+        // papered over.
+        ArtifactId = o.Artifact |> Option.map _.ArtifactId |> Option.defaultValue ""
+        ArtifactContentHash = o.Artifact |> Option.map _.ContentHash |> Option.defaultValue ""
         Diagnostics = o.Diagnostics
         GateVerdicts =
             o.GateVerdicts
@@ -557,6 +613,14 @@ module ModelExecutionPeerContract =
         DatasetVersion = s.Vintage.Version
         SpecPayload = s.SpecPayload
         SpecHash = s.SpecHash
+        // Phase 640 — the submitter face carries the minting rule; the
+        // federation wire at this profile version does not, so a peer
+        // states none. Deliberately NOT defaulted to the registered rule:
+        // asserting on a peer's behalf that its hash was minted a
+        // particular way is the one claim this seam has no standing to
+        // make, and it would be indistinguishable downstream from the peer
+        // having said so itself.
+        SpecHashAlgorithm = ""
         ProviderKind = s.ProviderKind
         Seed = s.Seed
         Gates =
@@ -693,6 +757,27 @@ module ModelExecutionPeerContract =
         match answer with
         | ModelExecutionPeerAnswer.Answered body -> Ok(JsonRpc.deserialize<'T> body)
         | ModelExecutionPeerAnswer.Refused refusal -> Error refusal
+
+    /// Phase 640 — `answerBody`, with any refusal read in the **submitter**
+    /// face's closed vocabulary rather than the seam's.
+    ///
+    /// This is the reader a modelling client wants, and the reason both
+    /// exist: `answerBody` is right for an operator surface, which cares
+    /// that a probe was a probe; this one is right for a submitter, which
+    /// cares what it may now do. `admission` supplies the operation names
+    /// the deployment serves, so an `UnknownDocumentKind` can tell the
+    /// caller what it *could* have asked for instead of merely that it
+    /// asked wrongly.
+    let submitterAnswerBody<'T>
+        (admission: ModelExecutionAdmission)
+        (answer: ModelExecutionPeerAnswer)
+        : Result<'T, ModelExecutionRefusal> =
+        match answerBody<'T> answer with
+        | Ok body -> Ok body
+        | Error refusal ->
+            let known = Set.union admission.Operations admission.Diagnostics |> Set.toList
+
+            Error(ModelExecutionPeerRefusal.toSubmitterRefusal known refusal)
 
     let private answered (body: 'T) =
         ModelExecutionPeerAnswer.Answered(JsonRpc.serialize body)

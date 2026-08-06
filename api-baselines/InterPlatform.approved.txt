@@ -939,6 +939,7 @@ ToolUp.InterPlatform.ModelExecutionPeerContract.request`1(System.String, T) : To
 ToolUp.InterPlatform.ModelExecutionPeerContract.submissionRequest(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerContract.toWireOutcome(ToolUp.Platform.ModelExecutionOutcome) : ToolUp.InterPlatform.ModelExecutionPeerOutcome
 ToolUp.InterPlatform.ModelExecutionPeerContract.toWireVintage(ToolUp.Platform.ModelExecutionDatasetVersion) : ToolUp.InterPlatform.ModelExecutionPeerVintageInfo
+ToolUp.InterPlatform.ModelExecutionPeerContract.submitterAnswerBody`1(ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionPeerAnswer) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.ModelExecutionRefusal]
 ToolUp.InterPlatform.ModelExecutionPeerDeps (class)
 ToolUp.InterPlatform.ModelExecutionPeerDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]], ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionFitPollPolicy)
 ToolUp.InterPlatform.ModelExecutionPeerDeps.Admission : ToolUp.InterPlatform.ModelExecutionAdmission { get }
@@ -1022,6 +1023,7 @@ ToolUp.InterPlatform.ModelExecutionPeerRefusal+UndeclaredDiagnostic.operation : 
 ToolUp.InterPlatform.ModelExecutionPeerRefusalModule (class)
 ToolUp.InterPlatform.ModelExecutionPeerRefusalModule.className(ToolUp.InterPlatform.ModelExecutionPeerRefusal) : System.String
 ToolUp.InterPlatform.ModelExecutionPeerRefusalModule.describe(ToolUp.InterPlatform.ModelExecutionPeerRefusal) : System.String
+ToolUp.InterPlatform.ModelExecutionPeerRefusalModule.toSubmitterRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.ModelExecutionPeerRefusal) : ToolUp.Platform.ModelExecutionRefusal
 ToolUp.InterPlatform.ModelExecutionPeerRequest (class)
 ToolUp.InterPlatform.ModelExecutionPeerRequest..ctor(System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.InterPlatform.ModelExecutionPeerRequest.AssertedScope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

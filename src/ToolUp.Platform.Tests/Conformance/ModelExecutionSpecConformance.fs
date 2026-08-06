@@ -1384,14 +1384,28 @@ module Manifest =
 // which is what makes the residue an honest inventory rather than a
 // disclaimer: anything omitted from it fails the test.
 
+/// Residue for a refusal: the members the platform's DU case does not
+/// carry.
+///
+/// Declared ahead of the shape residues because the receipt's rejected
+/// items carry refusals, and since Phase 640 they carry them *as
+/// refusals* rather than as flattened class names — so the receipt's
+/// residue is now expressed in terms of this one.
+type RefusalResidue = {
+    UnknownProviderKnown: string list
+    BudgetUnit: string
+    NotFoundId: string
+    ScoreReason: string
+}
+
 /// Members of a `fitSubmission` the platform's submission record does
 /// not carry.
+///
+/// _(Phase 640 removed `SpecHashAlgorithm`: the submission record now
+/// carries the minting rule verbatim. The opacity posture is unchanged —
+/// forge still never re-derives the hash — but a rotation is now visible
+/// on this face instead of silent.)_
 type SubmissionResidue = {
-    /// The minting rule's identifier (§7.4). Not carried, which is
-    /// consistent with §4.2 rule 2 — a receiver that stores the hash
-    /// opaquely has no use for the algorithm that produced it — but it
-    /// means a rotation is invisible on this face.
-    SpecHashAlgorithm: string
     /// A submitter-resolved content ref on the pinned vintage. The
     /// submission record pins by `(datasetId, version)` alone, which
     /// §5.2 declares fully conformant.
@@ -1400,30 +1414,29 @@ type SubmissionResidue = {
 
 /// Members of a `submissionReceipt` the platform's receipt record does
 /// not carry.
+///
+/// _(Phase 640 removed `AcceptedJobIds` — the handle is an opaque string
+/// on both sides now, so nothing is lost inbound — and reduced
+/// `RejectedRefusals` to `RejectedResidues`: the receipt carries the
+/// typed refusal itself, and what remains is only the refusal family's
+/// own residue, inventoried once below rather than a second time here.)_
 type ReceiptResidue = {
-    /// The specification's job handle is an opaque string; the receipt
-    /// record's is a `Guid`. Every `Guid` is a valid handle, but not
-    /// every handle is a `Guid`, so the direction that loses is inbound.
-    AcceptedJobIds: (int * string) list
-    /// The receipt record carries an enqueue failure as a diagnostic
-    /// string; the specification carries a typed refusal a program can
-    /// branch on.
-    RejectedRefusals: (int * SpecRefusal) list
+    /// Per rejected index, the residue of that item's refusal.
+    RejectedResidues: (int * RefusalResidue) list
 }
 
 /// Members of a `fitOutcome` the platform's outcome record does not
 /// carry.
+///
+/// _(Phase 640 removed `ArtifactAbsent`, `ArtifactFormat`, `Timing` and
+/// `Cost`: the outcome record carries an optional artifact reference with
+/// its format, plus timing and cost. What forge's own registry retains
+/// for a given outcome is a separate question from what this face can
+/// express — the residue was only ever about the latter.)_
 type OutcomeResidue = {
     /// The outcome record keys the vintage as a composed string, which
     /// cannot express a content ref.
     VintageContentRef: SpecContentRef option
-    /// The outcome record's artifact fields are not optional, so "no
-    /// retained artifact" and "an artifact with empty identifiers" are
-    /// the same value on this face.
-    ArtifactAbsent: bool
-    ArtifactFormat: string option
-    Timing: SpecTiming
-    Cost: SpecCost option
 }
 
 type QueryResidue = {
@@ -1493,6 +1506,153 @@ module Bridge =
         | -1 -> failwithf "not a dataset-version key: '%s'" key
         | i -> key.Substring(0, i), Int32.Parse(key.Substring(i + 2), CultureInfo.InvariantCulture)
 
+    // ── refusal ──────────────────────────────────────────────────────
+    //
+    // Kept ahead of the shape families because a receipt's rejected items
+    // carry refusals, and since Phase 640 they carry them as refusals.
+
+    /// The refusal classes the platform's closed refusal DU has no case
+    /// for. Pinned as a set rather than described in prose: if a case is
+    /// added, this pin fails and its author decides deliberately whether
+    /// the gap is closed.
+    ///
+    /// **Empty since Phase 640**, which added the four that were missing
+    /// (`envelopeVersionMismatch`, `unknownDocumentKind`, `gateFailed`,
+    /// `policyRefused`). Kept rather than deleted, and kept as a list
+    /// rather than folded into a boolean: the next class registered
+    /// against the specification lands here first, and a named, empty
+    /// inventory is the thing that makes its arrival a decision instead of
+    /// an omission.
+    let unmappedRefusalClasses: string list = []
+
+    let emptyRefusalResidue = {
+        UnknownProviderKnown = []
+        BudgetUnit = ""
+        NotFoundId = ""
+        ScoreReason = ""
+    }
+
+    let toRefusal (r: SpecRefusal) : (ModelExecutionRefusal * RefusalResidue) option =
+        match r with
+        | InvalidSubmission reason -> Some(ModelExecutionRefusal.InvalidSubmission reason, emptyRefusalResidue)
+        | InvalidQuery reason -> Some(ModelExecutionRefusal.InvalidQuery reason, emptyRefusalResidue)
+        | UnknownProvider(kind, known) ->
+            Some(
+                ModelExecutionRefusal.UnknownProvider kind,
+                {
+                    emptyRefusalResidue with
+                        UnknownProviderKnown = known
+                }
+            )
+        | BudgetDenied(quota, spent, unit) ->
+            Some(
+                ModelExecutionRefusal.BudgetDenied {
+                    ScopeId = ""
+                    SubmitterClass = ""
+                    Dimension = ""
+                    Quota = decimal quota
+                    Spent = decimal spent
+                    Requested = 0m
+                    PeriodKey = ""
+                },
+                {
+                    emptyRefusalResidue with
+                        BudgetUnit = unit
+                }
+            )
+        | ScopeUnavailable -> Some(ModelExecutionRefusal.ScopeUnavailable, emptyRefusalResidue)
+        | Forbidden reason -> Some(ModelExecutionRefusal.Forbidden reason, emptyRefusalResidue)
+        | NotFound(what, id) ->
+            Some(
+                ModelExecutionRefusal.NotFound what,
+                {
+                    emptyRefusalResidue with
+                        NotFoundId = id
+                }
+            )
+        | SubstrateUnavailable surface -> Some(ModelExecutionRefusal.SubstrateDisabled surface, emptyRefusalResidue)
+        | ScoreRefused(reason, detail) ->
+            let scoring =
+                match reason with
+                | "provider-not-found" -> ModelExecutionScoreRefusal.ProviderNotFound detail
+                | "not-approved" -> ModelExecutionScoreRefusal.NotApproved detail
+                | "input-schema-mismatch" -> ModelExecutionScoreRefusal.InputSchemaMismatch detail
+                | "input-unavailable" -> ModelExecutionScoreRefusal.InputUnavailable detail
+                | "provider-failed" -> ModelExecutionScoreRefusal.ProviderFailed("", detail)
+                | _ -> ModelExecutionScoreRefusal.StorageFailure detail
+
+            Some(
+                ModelExecutionRefusal.ScoreRefused scoring,
+                {
+                    emptyRefusalResidue with
+                        ScoreReason = reason
+                }
+            )
+        | StorageFailure reason -> Some(ModelExecutionRefusal.StorageFailure reason, emptyRefusalResidue)
+        | Unspecified message -> Some(ModelExecutionRefusal.Unexpected message, emptyRefusalResidue)
+        | EnvelopeVersionMismatch(received, accepted) ->
+            Some(ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted), emptyRefusalResidue)
+        | UnknownDocumentKind(kind, known) ->
+            Some(ModelExecutionRefusal.UnknownDocumentKind(kind, known), emptyRefusalResidue)
+        | GateFailed verdicts ->
+            Some(
+                ModelExecutionRefusal.GateFailed(
+                    verdicts
+                    |> List.map (fun v -> {
+                        Name = v.Name
+                        Threshold = v.Threshold
+                        Direction = ofWireDirection v.Direction
+                        Observed = v.Observed
+                        Passed = v.Passed
+                    })
+                ),
+                emptyRefusalResidue
+            )
+        | PolicyRefused rule -> Some(ModelExecutionRefusal.PolicyRefused rule, emptyRefusalResidue)
+        // The one case that stays unmapped, and stays unmapped on purpose:
+        // §5.7.2 rule 2 says a reader treats an unregistered class AS
+        // `unspecified`, so the platform's DU is right not to have a case
+        // for it. It is not a carry gap — it is the extension rule working.
+        | UnrecognisedClass _ -> None
+
+    let ofRefusal (f: ModelExecutionRefusal) (r: RefusalResidue) : SpecRefusal =
+        match f with
+        | ModelExecutionRefusal.InvalidSubmission reason -> InvalidSubmission reason
+        | ModelExecutionRefusal.InvalidQuery reason -> InvalidQuery reason
+        | ModelExecutionRefusal.UnknownProvider kind -> UnknownProvider(kind, r.UnknownProviderKnown)
+        | ModelExecutionRefusal.BudgetDenied d -> BudgetDenied(float d.Quota, float d.Spent, r.BudgetUnit)
+        | ModelExecutionRefusal.ScopeUnavailable -> ScopeUnavailable
+        | ModelExecutionRefusal.Forbidden reason -> Forbidden reason
+        | ModelExecutionRefusal.NotFound what -> NotFound(what, r.NotFoundId)
+        | ModelExecutionRefusal.SubstrateDisabled surface -> SubstrateUnavailable surface
+        | ModelExecutionRefusal.ScoreRefused scoring ->
+            let detail =
+                match scoring with
+                | ModelExecutionScoreRefusal.ProviderNotFound d
+                | ModelExecutionScoreRefusal.NotApproved d
+                | ModelExecutionScoreRefusal.InputSchemaMismatch d
+                | ModelExecutionScoreRefusal.InputUnavailable d
+                | ModelExecutionScoreRefusal.StorageFailure d -> d
+                | ModelExecutionScoreRefusal.ProviderFailed(_, d) -> d
+
+            ScoreRefused(r.ScoreReason, detail)
+        | ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted) ->
+            EnvelopeVersionMismatch(received, accepted)
+        | ModelExecutionRefusal.UnknownDocumentKind(kind, known) -> UnknownDocumentKind(kind, known)
+        | ModelExecutionRefusal.GateFailed verdicts ->
+            GateFailed(
+                verdicts
+                |> List.map (fun v -> {
+                    Name = v.Name
+                    Threshold = v.Threshold
+                    Direction = toWireDirection v.Direction
+                    Observed = v.Observed
+                    Passed = v.Passed
+                })
+            )
+        | ModelExecutionRefusal.PolicyRefused rule -> PolicyRefused rule
+        | ModelExecutionRefusal.StorageFailure reason -> StorageFailure reason
+        | ModelExecutionRefusal.Unexpected message -> Unspecified message
     // ── fit submission ───────────────────────────────────────────────
 
     let toSubmission (s: SpecFitSubmission) : ModelExecutionFitSubmission * SubmissionResidue =
@@ -1502,6 +1662,11 @@ module Bridge =
             SpecPayload = s.SpecPayload
             // Stored exactly as handed. Never re-derived — §4.2 rule 2.
             SpecHash = s.SpecHash
+            // Carried since Phase 640, and carrying it changes nothing
+            // about rule 2: the platform stores the identifier without
+            // acting on it, which is what makes a rotation visible without
+            // making the hash checkable.
+            SpecHashAlgorithm = s.SpecHashAlgorithm
             ProviderKind = s.ProviderKind
             Seed = s.Seed
             Gates =
@@ -1517,8 +1682,11 @@ module Bridge =
                 | None -> failwithf "submitter class '%s' is not one the platform models" s.SubmitterClass
         }
 
-        let residue = {
-            SpecHashAlgorithm = s.SpecHashAlgorithm
+        // Annotated because `OutcomeResidue` now has the same single
+        // member, and unannotated record inference takes the last one
+        // declared. Two residues converging on one field is a sign the
+        // inventory shrank, not that either is redundant.
+        let residue: SubmissionResidue = {
             VintageContentRef = s.Vintage.ContentRef
         }
 
@@ -1532,7 +1700,7 @@ module Bridge =
         }
         SpecPayload = f.SpecPayload
         SpecHash = f.SpecHash
-        SpecHashAlgorithm = r.SpecHashAlgorithm
+        SpecHashAlgorithm = f.SpecHashAlgorithm
         ProviderKind = f.ProviderKind
         Seed = f.Seed
         Gates =
@@ -1563,54 +1731,48 @@ module Bridge =
 
     // ── receipt ──────────────────────────────────────────────────────
 
-    /// A deterministic stand-in `Guid` for a handle the specification
-    /// leaves opaque. It is derived from the handle's own bytes so the
-    /// mapping is a function rather than a fresh identity per run.
-    let private handleGuid (jobId: string) =
-        Guid(SHA256.HashData(Encoding.UTF8.GetBytes jobId)[..15])
+    // The `handleGuid` stand-in this section used until Phase 640 is gone
+    // with the gap that required it: the receipt's handle is a string on
+    // both sides now, so there is nothing to derive and nothing to invert.
 
     let toReceipt (r: SpecSubmissionReceipt) : ModelExecutionReceipt * ReceiptResidue =
+        let rejected =
+            r.Rejected
+            |> List.map (fun x ->
+                match toRefusal x.Reason with
+                | Some(forgeRefusal, refusalResidue) -> x.Index, forgeRefusal, refusalResidue
+                | None ->
+                    // Only `UnrecognisedClass` returns `None`, and a
+                    // corpus receipt never carries one — a fixture that
+                    // did would be asserting the extension rule, not a
+                    // receipt. Loud rather than silently dropped.
+                    failwithf "receipt item %d carries a refusal class the platform cannot model" x.Index)
+
         let forge = {
             BatchId = r.BatchId
             ItemCount = r.ItemCount
-            Jobs =
-                r.Accepted
-                |> List.map (fun a -> {
-                    Index = a.Index
-                    JobId = handleGuid a.JobId
-                })
-            // The receipt record's failure is a diagnostic string. The
-            // typed refusal it stands in for is in the residue, because
-            // a consumer that has to string-match a denial cannot branch
-            // on it.
-            EnqueueFailures = r.Rejected |> List.map (fun x -> x.Index, refusalClassName x.Reason)
+            Jobs = r.Accepted |> List.map (fun a -> { Index = a.Index; JobId = a.JobId })
+            EnqueueFailures = rejected |> List.map (fun (index, refusal, _) -> index, refusal)
         }
 
         let residue = {
-            AcceptedJobIds = r.Accepted |> List.map (fun a -> a.Index, a.JobId)
-            RejectedRefusals = r.Rejected |> List.map (fun x -> x.Index, x.Reason)
+            RejectedResidues = rejected |> List.map (fun (index, _, res) -> index, res)
         }
 
         forge, residue
 
     let ofReceipt (f: ModelExecutionReceipt) (r: ReceiptResidue) : SpecSubmissionReceipt =
-        let jobIds = dict r.AcceptedJobIds
-        let refusals = dict r.RejectedRefusals
+        let residues = dict r.RejectedResidues
 
         {
             BatchId = f.BatchId
             ItemCount = f.ItemCount
-            Accepted =
-                f.Jobs
-                |> List.map (fun j -> {
-                    Index = j.Index
-                    JobId = jobIds[j.Index]
-                })
+            Accepted = f.Jobs |> List.map (fun j -> { Index = j.Index; JobId = j.JobId })
             Rejected =
                 f.EnqueueFailures
-                |> List.map (fun (index, _) -> {
+                |> List.map (fun (index, refusal) -> {
                     Index = index
-                    Reason = refusals[index]
+                    Reason = ofRefusal refusal residues[index]
                 })
         }
 
@@ -1624,14 +1786,20 @@ module Bridge =
             Seed = o.CompositeKey.Seed
             ProviderId = o.CompositeKey.ProviderId
             ProviderVersion = o.CompositeKey.ProviderVersion
-            ArtifactId =
-                match o.ArtifactRef with
-                | Some a -> a.ArtifactId
-                | None -> ""
-            ArtifactContentHash =
-                match o.ArtifactRef with
-                | Some a -> a.ContentHash
-                | None -> ""
+            Artifact =
+                o.ArtifactRef
+                |> Option.map (fun a -> {
+                    ArtifactId = a.ArtifactId
+                    ContentHash = a.ContentHash
+                    Format = a.Format
+                })
+            Timing = {
+                SubmittedAt = o.Timing.SubmittedAt
+                StartedAt = o.Timing.StartedAt
+                CompletedAt = o.Timing.CompletedAt
+                DurationMs = o.Timing.DurationMs
+            }
+            Cost = o.Cost |> Option.map (fun c -> { Unit = c.Unit; Amount = c.Amount })
             Diagnostics = Map.ofList o.Diagnostics
             GateVerdicts =
                 o.GateVerdicts
@@ -1647,12 +1815,8 @@ module Bridge =
             RegisteredAt = o.RegisteredAt
         }
 
-        let residue = {
+        let residue: OutcomeResidue = {
             VintageContentRef = o.CompositeKey.Vintage.ContentRef
-            ArtifactAbsent = Option.isNone o.ArtifactRef
-            ArtifactFormat = o.ArtifactRef |> Option.bind _.Format
-            Timing = o.Timing
-            Cost = o.Cost
         }
 
         forge, residue
@@ -1674,14 +1838,12 @@ module Bridge =
                 ProviderVersion = f.ProviderVersion
             }
             ArtifactRef =
-                if r.ArtifactAbsent then
-                    None
-                else
-                    Some {
-                        ArtifactId = f.ArtifactId
-                        ContentHash = f.ArtifactContentHash
-                        Format = r.ArtifactFormat
-                    }
+                f.Artifact
+                |> Option.map (fun a -> {
+                    ArtifactId = a.ArtifactId
+                    ContentHash = a.ContentHash
+                    Format = a.Format
+                })
             // A map's keys are data and the encoder sorts them, so the
             // list order recovered here is not load-bearing.
             Diagnostics = f.Diagnostics |> Map.toList
@@ -1695,8 +1857,13 @@ module Bridge =
                     Passed = v.Passed
                 })
             Status = f.Status
-            Timing = r.Timing
-            Cost = r.Cost
+            Timing = {
+                SubmittedAt = f.Timing.SubmittedAt
+                StartedAt = f.Timing.StartedAt
+                CompletedAt = f.Timing.CompletedAt
+                DurationMs = f.Timing.DurationMs
+            }
+            Cost = f.Cost |> Option.map (fun c -> { Unit = c.Unit; Amount = c.Amount })
             Annotations = f.Annotations |> Map.toList
             RegisteredAt = f.RegisteredAt
         }
@@ -1812,122 +1979,6 @@ module Bridge =
         IsLatest = r.IsLatest
     }
 
-    // ── refusal ──────────────────────────────────────────────────────
-
-    /// The four refusal classes the platform's closed refusal DU has no
-    /// case for. Pinned as a set rather than described in prose: if a
-    /// case is added, this pin fails and its author decides deliberately
-    /// whether the gap is closed.
-    let unmappedRefusalClasses = [
-        "envelopeVersionMismatch"
-        "gateFailed"
-        "policyRefused"
-        "unknownDocumentKind"
-    ]
-
-    /// Residue for a refusal: the members the platform's DU case does
-    /// not carry.
-    type RefusalResidue = {
-        UnknownProviderKnown: string list
-        BudgetUnit: string
-        NotFoundId: string
-        ScoreReason: string
-    }
-
-    let emptyRefusalResidue = {
-        UnknownProviderKnown = []
-        BudgetUnit = ""
-        NotFoundId = ""
-        ScoreReason = ""
-    }
-
-    let toRefusal (r: SpecRefusal) : (ModelExecutionRefusal * RefusalResidue) option =
-        match r with
-        | InvalidSubmission reason -> Some(ModelExecutionRefusal.InvalidSubmission reason, emptyRefusalResidue)
-        | InvalidQuery reason -> Some(ModelExecutionRefusal.InvalidQuery reason, emptyRefusalResidue)
-        | UnknownProvider(kind, known) ->
-            Some(
-                ModelExecutionRefusal.UnknownProvider kind,
-                {
-                    emptyRefusalResidue with
-                        UnknownProviderKnown = known
-                }
-            )
-        | BudgetDenied(quota, spent, unit) ->
-            Some(
-                ModelExecutionRefusal.BudgetDenied {
-                    ScopeId = ""
-                    SubmitterClass = ""
-                    Dimension = ""
-                    Quota = decimal quota
-                    Spent = decimal spent
-                    Requested = 0m
-                    PeriodKey = ""
-                },
-                {
-                    emptyRefusalResidue with
-                        BudgetUnit = unit
-                }
-            )
-        | ScopeUnavailable -> Some(ModelExecutionRefusal.ScopeUnavailable, emptyRefusalResidue)
-        | Forbidden reason -> Some(ModelExecutionRefusal.Forbidden reason, emptyRefusalResidue)
-        | NotFound(what, id) ->
-            Some(
-                ModelExecutionRefusal.NotFound what,
-                {
-                    emptyRefusalResidue with
-                        NotFoundId = id
-                }
-            )
-        | SubstrateUnavailable surface -> Some(ModelExecutionRefusal.SubstrateDisabled surface, emptyRefusalResidue)
-        | ScoreRefused(reason, detail) ->
-            let scoring =
-                match reason with
-                | "provider-not-found" -> ModelExecutionScoreRefusal.ProviderNotFound detail
-                | "not-approved" -> ModelExecutionScoreRefusal.NotApproved detail
-                | "input-schema-mismatch" -> ModelExecutionScoreRefusal.InputSchemaMismatch detail
-                | "input-unavailable" -> ModelExecutionScoreRefusal.InputUnavailable detail
-                | "provider-failed" -> ModelExecutionScoreRefusal.ProviderFailed("", detail)
-                | _ -> ModelExecutionScoreRefusal.StorageFailure detail
-
-            Some(
-                ModelExecutionRefusal.ScoreRefused scoring,
-                {
-                    emptyRefusalResidue with
-                        ScoreReason = reason
-                }
-            )
-        | StorageFailure reason -> Some(ModelExecutionRefusal.StorageFailure reason, emptyRefusalResidue)
-        | Unspecified message -> Some(ModelExecutionRefusal.Unexpected message, emptyRefusalResidue)
-        | EnvelopeVersionMismatch _
-        | UnknownDocumentKind _
-        | GateFailed _
-        | PolicyRefused _
-        | UnrecognisedClass _ -> None
-
-    let ofRefusal (f: ModelExecutionRefusal) (r: RefusalResidue) : SpecRefusal =
-        match f with
-        | ModelExecutionRefusal.InvalidSubmission reason -> InvalidSubmission reason
-        | ModelExecutionRefusal.InvalidQuery reason -> InvalidQuery reason
-        | ModelExecutionRefusal.UnknownProvider kind -> UnknownProvider(kind, r.UnknownProviderKnown)
-        | ModelExecutionRefusal.BudgetDenied d -> BudgetDenied(float d.Quota, float d.Spent, r.BudgetUnit)
-        | ModelExecutionRefusal.ScopeUnavailable -> ScopeUnavailable
-        | ModelExecutionRefusal.Forbidden reason -> Forbidden reason
-        | ModelExecutionRefusal.NotFound what -> NotFound(what, r.NotFoundId)
-        | ModelExecutionRefusal.SubstrateDisabled surface -> SubstrateUnavailable surface
-        | ModelExecutionRefusal.ScoreRefused scoring ->
-            let detail =
-                match scoring with
-                | ModelExecutionScoreRefusal.ProviderNotFound d
-                | ModelExecutionScoreRefusal.NotApproved d
-                | ModelExecutionScoreRefusal.InputSchemaMismatch d
-                | ModelExecutionScoreRefusal.InputUnavailable d
-                | ModelExecutionScoreRefusal.StorageFailure d -> d
-                | ModelExecutionScoreRefusal.ProviderFailed(_, d) -> d
-
-            ScoreRefused(r.ScoreReason, detail)
-        | ModelExecutionRefusal.StorageFailure reason -> StorageFailure reason
-        | ModelExecutionRefusal.Unexpected message -> Unspecified message
 
 // ─── Tests ───────────────────────────────────────────────────────────
 
@@ -2501,6 +2552,7 @@ let private carryGapTests =
                     "DatasetVersion"
                     "SpecPayload"
                     "SpecHash"
+                    "SpecHashAlgorithm"
                     "ProviderKind"
                     "Seed"
                     "Gates"
@@ -2519,15 +2571,33 @@ let private carryGapTests =
                     "Seed"
                     "ProviderId"
                     "ProviderVersion"
-                    "ArtifactId"
-                    "ArtifactContentHash"
+                    "Artifact"
                     "Diagnostics"
                     "GateVerdicts"
                     "Status"
+                    "Timing"
+                    "Cost"
                     "Annotations"
                     "RegisteredAt"
                 ]
                 "the outcome record moved — re-derive OutcomeResidue against the specification's fitOutcome"
+
+            // Phase 640 added three records to this face; each is pinned
+            // for exactly the reason the ones above are. An optional
+            // artifact whose reference silently grew a member, or a timing
+            // that quietly lost one, would otherwise change what this
+            // harness certifies without changing anything it checks.
+            Expect.equal
+                (recordFieldNames<ModelExecutionArtifactRef> ())
+                [ "ArtifactId"; "ContentHash"; "Format" ]
+                "the artifact-ref record moved"
+
+            Expect.equal
+                (recordFieldNames<ModelExecutionTiming> ())
+                [ "SubmittedAt"; "StartedAt"; "CompletedAt"; "DurationMs" ]
+                "the timing record moved"
+
+            Expect.equal (recordFieldNames<ModelExecutionCost> ()) [ "Unit"; "Amount" ] "the cost record moved"
         }
 
         test "the receipt, query, page, score-request and dataset-version records are the ones the bridge maps" {
@@ -2557,7 +2627,7 @@ let private carryGapTests =
                 "the dataset-version record moved"
         }
 
-        test "the refusal classes with no case in the platform's DU are exactly the declared four" {
+        test "the refusal DU has a case for every class in the closed vocabulary" {
             let cases =
                 FSharpType.GetUnionCases typeof<ModelExecutionRefusal>
                 |> Array.map _.Name
@@ -2575,20 +2645,53 @@ let private carryGapTests =
                     "InvalidQuery"
                     "ScoreRefused"
                     "BudgetDenied"
+                    "EnvelopeVersionMismatch"
+                    "UnknownDocumentKind"
+                    "GateFailed"
+                    "PolicyRefused"
                     "StorageFailure"
                     "Unexpected"
                 ])
                 "the refusal DU moved — re-derive Bridge.unmappedRefusalClasses against §5.7.1"
 
-            Expect.equal
-                (List.sort Bridge.unmappedRefusalClasses)
-                [
-                    "envelopeVersionMismatch"
-                    "gateFailed"
-                    "policyRefused"
-                    "unknownDocumentKind"
-                ]
-                "the declared gap must be exactly the classes the DU has no case for"
+            Expect.isEmpty
+                Bridge.unmappedRefusalClasses
+                "Phase 640 closed the last of them; a re-appearance is a class the DU stopped covering"
+        }
+
+        test "every class the specification registers is one the platform's DU can express" {
+            // The pin above is over the DU's own case names, which are the
+            // platform's words. This one is over the SPECIFICATION's, via
+            // the bridge — so a class registered against §5.7.1 that the
+            // platform has no case for fails here by name, rather than
+            // being noticed only when a corpus vector happens to carry it.
+            //
+            // `UnrecognisedClass` is excluded because it is not a
+            // registered class at all: it is the reader's synthesis for one
+            // that is not registered (§5.7.2 rule 2), and having no case
+            // for it is the rule being obeyed, not a gap.
+            let registered: SpecRefusal list = [
+                EnvelopeVersionMismatch(1, [ 1 ])
+                UnknownDocumentKind("x", [])
+                InvalidSubmission "r"
+                InvalidQuery "r"
+                UnknownProvider("k", [])
+                BudgetDenied(1.0, 0.0, "u")
+                GateFailed []
+                PolicyRefused "r"
+                ScopeUnavailable
+                Forbidden "r"
+                NotFound("outcome", "id")
+                SubstrateUnavailable "s"
+                ScoreRefused("not-approved", "d")
+                StorageFailure "r"
+                Unspecified "m"
+            ]
+
+            for r in registered do
+                Expect.isSome
+                    (Bridge.toRefusal r)
+                    $"'{Bridge.refusalClassName r}' is registered by §5.7.1 and the platform's DU cannot express it"
         }
     ]
 
