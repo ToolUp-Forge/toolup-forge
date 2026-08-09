@@ -3190,6 +3190,31 @@ type ModelArtifactSupersededPayload = {
     ScopeId: string
 }
 
+/// Phase 651 — a registration observer raised, and the failure was isolated.
+///
+/// **The row exists because the isolation is otherwise invisible.** An
+/// observer runs after the artifact is durably registered, so its failure
+/// changes nothing the registrar can see: the registration returns `Ok`, the
+/// caller carries on, and whatever the observer existed to do — apply a
+/// promotion policy, notify a downstream — silently did not happen. Swallowing
+/// that quietly would make "observe, don't gate" indistinguishable from
+/// "observers sometimes do not run". Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelRegistrationObserverFailedPayload = {
+    /// SHA-256 hex of the registered artifact's composite identity (plan D5).
+    /// The registration itself stands — this row is about the observer.
+    CompositeKeyHash: string
+    /// `IModelRegistrationObserver.Name` of the observer that raised. Naming
+    /// it is the whole value of the row: "an observer failed" is not
+    /// actionable when several are composed.
+    Observer: string
+    /// The exception's message, one line. Type + message only — no stack, no
+    /// payload values.
+    Reason: string
+    /// Scope the registration was made under.
+    ScopeId: string
+}
+
 // --- Phase 482 / 487 — dataset provenance & virtual-spill audit payloads --
 //
 // Emitted under `_platform.audit`. Identity + cardinality only — no dataset
@@ -4034,6 +4059,9 @@ type AuditEvent =
     /// Phase 645 — an auto-promotion displaced a previously promoted
     /// artifact, with the deltas that justified it.
     | ModelArtifactSuperseded of ModelArtifactSupersededPayload
+    /// Phase 651 — a registration observer raised and the failure was
+    /// isolated; the registration itself stands.
+    | ModelRegistrationObserverFailed of ModelRegistrationObserverFailedPayload
     /// Phase 487 — a virtual dataset version was materialised to a
     /// retention-bounded scratch blob for compute handoff.
     | DatasetSpillCreated of DatasetSpillCreatedPayload
@@ -4221,6 +4249,7 @@ module AuditEvent =
         | ModelEvaluated _ -> "ModelEvaluated"
         | ModelPromotionPolicyEvaluated _ -> "ModelPromotionPolicyEvaluated"
         | ModelArtifactSuperseded _ -> "ModelArtifactSuperseded"
+        | ModelRegistrationObserverFailed _ -> "ModelRegistrationObserverFailed"
         | DatasetSpillCreated _ -> "DatasetSpillCreated"
         | DatasetSpillDeleted _ -> "DatasetSpillDeleted"
         | DatasetDeclassified _ -> "DatasetDeclassified"

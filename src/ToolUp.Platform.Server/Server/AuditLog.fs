@@ -1413,6 +1413,17 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelArtifactSuperseded(fromAuditJson<ModelArtifactSupersededPayload> j)
     }
+    // Phase 651 — an isolated registration-observer failure. The
+    // registration stands; without this row the observer's absence would
+    // be indistinguishable from it having nothing to do.
+    {
+        EventType = "ModelRegistrationObserverFailed"
+        TryEncode =
+            (function
+            | ModelRegistrationObserverFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelRegistrationObserverFailed(fromAuditJson<ModelRegistrationObserverFailedPayload> j)
+    }
     // Phase 482 / 487 — dataset provenance & virtual-spill audit rows (append-only registration).
     {
         EventType = "DatasetSpillCreated"

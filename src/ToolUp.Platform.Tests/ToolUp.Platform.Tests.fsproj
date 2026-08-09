@@ -334,6 +334,10 @@
              (reference provider family over the blob-backed default stack). -->
         <Compile Include="InProcess\ModelEvaluationTests.fs" />
         <Compile Include="InProcess\ModelPromotionPolicyTests.fs" />
+        <!-- Phase 651 — the registration observer seam (replay discipline,
+             failure isolation, and the promotion policy composed as the
+             first observer binding). -->
+        <Compile Include="InProcess\ModelRegistrationObserverTests.fs" />
         <Compile Include="InProcess\ModelPromotionTransferTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />

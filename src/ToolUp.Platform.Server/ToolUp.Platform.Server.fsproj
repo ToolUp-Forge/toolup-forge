@@ -357,6 +357,17 @@
         <Compile Include="Server\ModelRegistryTypes.fs" />
         <Compile Include="Server\IModelRegistry.fs" />
         <Compile Include="Server\BlobModelRegistry.fs" />
+        <!-- Phase 651 — the registration observer seam: an IModelRegistry
+             decorator that invokes declared observers on each successful,
+             NON-REPLAY registration, so "a new artifact exists" is a seam
+             rather than a moment each consumer has to remember. Compiles
+             after BlobModelRegistry.fs because it type-tests the novelty
+             capability the default registry declares (a registry that does
+             not falls back to a documented pre-read probe). Nothing
+             composes it: `decorate` with no observers returns the registry
+             it was given, so an un-composed deployment is unchanged
+             (GP 11) and allocates nothing (GP 13). -->
+        <Compile Include="Server\ModelRegistrationObservers.fs" />
         <!-- Phase 644 — the author-agnostic model-transition seam: one
              entry point serving local UI actions, peer invocations and
              (Phase 645) policy verdicts, so the lifecycle graph, the

@@ -3664,6 +3664,11 @@ ToolUp.Platform.IModelFitProvider.DeclareGates() : Microsoft.FSharp.Collections.
 ToolUp.Platform.IModelFitProvider.Fit(ToolUp.Platform.FitRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.FitOutcome]
 ToolUp.Platform.IModelFitProvider.Kind : System.String { get }
 ToolUp.Platform.IModelFitProvider.ProviderVersion : System.String { get }
+ToolUp.Platform.IModelRegistrationNovelty (interface)
+ToolUp.Platform.IModelRegistrationNovelty.RegisterReporting(System.String, ToolUp.Platform.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelRegistration, ToolUp.Platform.ModelRegistryError]]
+ToolUp.Platform.IModelRegistrationObserver (interface)
+ToolUp.Platform.IModelRegistrationObserver.Name : System.String { get }
+ToolUp.Platform.IModelRegistrationObserver.OnRegistered(System.String, ToolUp.Platform.ModelArtifact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IModelRegistry (interface)
 ToolUp.Platform.IModelRegistry.AttachProvenance(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelRegistry.AttachmentLimits : ToolUp.Platform.ProvenanceAttachmentLimits { get }
@@ -4716,6 +4721,12 @@ ToolUp.Platform.ModelPromotionPolicyEvaluator.GetDecision(System.String, System.
 ToolUp.Platform.ModelPromotionPolicyEvaluator.ListQueuedForCuration(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionQueueEntry]]
 ToolUp.Platform.ModelPromotionPolicyEvaluatorModule (class)
 ToolUp.Platform.ModelPromotionPolicyEvaluatorModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps) : ToolUp.Platform.ModelPromotionPolicyEvaluator
+ToolUp.Platform.ModelPromotionPolicyObserver (class)
+ToolUp.Platform.ModelPromotionPolicyObserver..ctor(ToolUp.Platform.ModelPromotionPolicyEvaluator)
+ToolUp.Platform.ModelPromotionPolicyObserver.ObserverName : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyObserverModule (class)
+ToolUp.Platform.ModelPromotionPolicyObserverModule.compose(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps, ToolUp.Platform.ILogger) : System.Tuple`2[ToolUp.Platform.IModelRegistry, ToolUp.Platform.ModelPromotionPolicyEvaluator]
+ToolUp.Platform.ModelPromotionPolicyObserverModule.create(ToolUp.Platform.ModelPromotionPolicyEvaluator) : ToolUp.Platform.IModelRegistrationObserver
 ToolUp.Platform.ModelPromotionRecord (class)
 ToolUp.Platform.ModelPromotionRecord..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature], System.String, System.String, System.String, System.Boolean, System.DateTimeOffset, System.Int32)
 ToolUp.Platform.ModelPromotionRecord.ArtifactKey : System.String { get }
@@ -4755,6 +4766,25 @@ ToolUp.Platform.ModelPromotionRefusalModule.describe(ToolUp.Platform.ModelPromot
 ToolUp.Platform.ModelPromotionSigningInput (class)
 ToolUp.Platform.ModelPromotionSigningInput.bytes(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.Byte[]
 ToolUp.Platform.ModelPromotionSigningInput.canonical(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.String
+ToolUp.Platform.ModelRegistration (class)
+ToolUp.Platform.ModelRegistration..ctor(ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistrationNovelty)
+ToolUp.Platform.ModelRegistration.Artifact : ToolUp.Platform.ModelArtifact { get }
+ToolUp.Platform.ModelRegistration.Novelty : ToolUp.Platform.ModelRegistrationNovelty { get }
+ToolUp.Platform.ModelRegistrationNovelty (class)
+ToolUp.Platform.ModelRegistrationNovelty.Created : ToolUp.Platform.ModelRegistrationNovelty { get }
+ToolUp.Platform.ModelRegistrationNovelty.IsCreated : System.Boolean { get }
+ToolUp.Platform.ModelRegistrationNovelty.IsReplayed : System.Boolean { get }
+ToolUp.Platform.ModelRegistrationNovelty.Replayed : ToolUp.Platform.ModelRegistrationNovelty { get }
+ToolUp.Platform.ModelRegistrationNovelty.Tag : System.Int32 { get }
+ToolUp.Platform.ModelRegistrationNovelty+Tags (class)
+ToolUp.Platform.ModelRegistrationNovelty+Tags.Created : System.Int32 (literal)
+ToolUp.Platform.ModelRegistrationNovelty+Tags.Replayed : System.Int32 (literal)
+ToolUp.Platform.ModelRegistrationObserverDeps (class)
+ToolUp.Platform.ModelRegistrationObserverDeps..ctor(ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.ModelRegistrationObserverDeps.Audit : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.ModelRegistrationObserverDeps.Logger : ToolUp.Platform.ILogger { get }
+ToolUp.Platform.ModelRegistrationObservers (class)
+ToolUp.Platform.ModelRegistrationObservers.decorate(ToolUp.Platform.ModelRegistrationObserverDeps, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelRegistrationObserver], ToolUp.Platform.IModelRegistry) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.ModelRegistryError (class)
 ToolUp.Platform.ModelRegistryError.IsAttachmentRefused : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsForbidden : System.Boolean { get }
@@ -5292,6 +5322,8 @@ ToolUp.Platform.OAuthStateCleanupService.ExecuteAsync(System.Threading.Cancellat
 ToolUp.Platform.OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IOAuthStateStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.ObservedModelRegistry (class)
+ToolUp.Platform.ObservedModelRegistry..ctor(ToolUp.Platform.IModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelRegistrationObserver], ToolUp.Platform.ModelRegistrationObserverDeps)
 ToolUp.Platform.ObservingEventStore (class)
 ToolUp.Platform.ObservingEventStore..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.EventTopologyObserver)
 ToolUp.Platform.ObservingEventStore..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.EventTopologyObserver, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.ComponentId])

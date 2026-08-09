@@ -210,3 +210,81 @@ type IModelRegistry =
     /// only learn by exceeding it is a bound that turns every large
     /// transfer into a round trip and a refusal.
     abstract AttachmentLimits: ProvenanceAttachmentLimits
+
+// ─── Phase 651 — the "a new artifact exists" moment, as a seam ──────────
+//
+// `Register` is idempotent (above): registering a composite key the scope
+// already holds returns the existing artifact and appends nothing. That is
+// the right contract, and it is exactly what makes "an artifact arrived"
+// unobservable from the result alone — a `ModelArtifact` returned by a
+// create and one returned by a replay are the same value.
+//
+// So the novelty is reported by the REGISTRY, at the point it decides its
+// own idempotency, rather than reconstructed by a caller from a second
+// read. A caller-side "does it exist yet?" probe would be a fresh race
+// bolted onto the registry's existing one: two concurrent registrations of
+// one key would both observe "absent" and both read as new. Deciding it
+// where the idempotency is decided means at most one call can ever be the
+// creating call.
+
+/// Phase 651 — whether a `Register` call CREATED the artifact or returned
+/// one the scope already held.
+///
+/// Two values, closed. `Replayed` is not a failure — it is the ordinary
+/// result of the idempotent contract, and the whole reason the distinction
+/// has to be carried explicitly.
+[<RequireQualifiedAccess>]
+type ModelRegistrationNovelty =
+    /// This call minted the artifact record. Exactly one call per composite
+    /// key can report this.
+    | Created
+    /// The scope already held this composite key; nothing was appended.
+    | Replayed
+
+/// Phase 651 — one registration, carrying the novelty the registry decided
+/// alongside the artifact `Register` would have returned.
+type ModelRegistration = {
+    /// The stored artifact record — identical to what `Register` returns.
+    Artifact: ModelArtifact
+    /// Whether this call created it.
+    Novelty: ModelRegistrationNovelty
+}
+
+/// Phase 651 — the additive capability a registry declares when it can
+/// report registration novelty exactly.
+///
+/// **A separate interface rather than a member on `IModelRegistry`**,
+/// because `IModelRegistry` is a portability seam with a published contract
+/// pack that outside implementations are held to: a required member would
+/// break every one of them for a capability most do not need. A registry
+/// that declares this one is observed exactly; a registry that does not is
+/// still observable, on the weaker terms `ModelRegistrationObservers`
+/// documents.
+type IModelRegistrationNovelty =
+    /// Register exactly as `IModelRegistry.Register` does — same effects,
+    /// same errors, same idempotency — additionally reporting whether this
+    /// call was the one that created the artifact.
+    abstract RegisterReporting:
+        scopeId: string * outcome: FitOutcome * registeredBy: string * annotations: Map<string, string> * notes: string ->
+            Async<Result<ModelRegistration, ModelRegistryError>>
+
+/// Phase 651 — an observer of the "a new artifact exists" moment.
+///
+/// **Observe, don't gate.** An observer's failure never fails, rolls back or
+/// alters a registration: the artifact is already durably written by the
+/// time observers run, so a decorator that let one of them change the
+/// caller's result would be reporting a failure for work that succeeded.
+/// Failures are isolated and audited instead.
+///
+/// GP 12: identity by value (the observer receives the stored artifact
+/// record and its scope, never a live registry handle), async at the
+/// boundary, and stateless between invocations — an observer is handed
+/// everything it judges.
+type IModelRegistrationObserver =
+    /// Stable name, recorded on the isolation audit row so an operator can
+    /// tell WHICH observer failed rather than that one did.
+    abstract Name: string
+
+    /// Called once per successful, non-replay registration, with the
+    /// artifact record as stored.
+    abstract OnRegistered: scopeId: string * artifact: ModelArtifact -> Async<unit>

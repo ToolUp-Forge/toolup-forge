@@ -259,8 +259,17 @@ type BlobModelRegistry
         return List.ofSeq results
     }
 
-    interface IModelRegistry with
-        member _.Register(scopeId, outcome, registeredBy, annotations, notes) = async {
+    /// The whole of registration, reporting the novelty it decided (Phase
+    /// 651). `IModelRegistry.Register` is this with the novelty dropped, so
+    /// there is one registration path rather than two that could drift.
+    let register
+        (scopeId: string)
+        (outcome: FitOutcome)
+        (registeredBy: string)
+        (annotations: Map<string, string>)
+        (notes: string)
+        : Async<Result<ModelRegistration, ModelRegistryError>> =
+        async {
             let objectId = outcome.CompositeKey.Hash
 
             // Idempotency (plan D5 / acceptance): an existing composite key
@@ -270,7 +279,13 @@ type BlobModelRegistry
 
             if not (List.isEmpty existing) then
                 match! dataObjects.Get(scopeId, objectId) with
-                | Ok(dobj, bytes) -> return toArtifact dobj bytes
+                | Ok(dobj, bytes) ->
+                    return
+                        toArtifact dobj bytes
+                        |> Result.map (fun artifact -> {
+                            Artifact = artifact
+                            Novelty = ModelRegistrationNovelty.Replayed
+                        })
                 | Error e -> return Error(mapDataObjectError e)
             else
                 let status = ModelArtifactStatus.initial
@@ -313,7 +328,44 @@ type BlobModelRegistry
                             }
                         )
 
-                    return Ok artifact
+                    // Phase 651 — the novelty, decided from the version the
+                    // store MINTED rather than from the emptiness check
+                    // above.
+                    //
+                    // The check and the save are two operations over a blob
+                    // store with no compare-and-set, so two concurrent
+                    // registrations of one key can both find no versions and
+                    // both save. `StrictlyVersioned` still hands them
+                    // DISTINCT version numbers, and only one of those can be
+                    // v1 — so reading novelty off the minted version makes
+                    // "created" single-winner even where the emptiness check
+                    // was not. A racing second writer reports `Replayed`,
+                    // which is what it functionally was.
+                    //
+                    // The lineage edge and the audit row above are
+                    // deliberately NOT gated on this: they are Phase 453's
+                    // behaviour and stay byte-for-byte what they were (GP
+                    // 11). This adds a report, not a branch.
+                    return
+                        Ok {
+                            Artifact = artifact
+                            Novelty =
+                                if artifact.Version = 1 then
+                                    ModelRegistrationNovelty.Created
+                                else
+                                    ModelRegistrationNovelty.Replayed
+                        }
+        }
+
+    interface IModelRegistrationNovelty with
+        member _.RegisterReporting(scopeId, outcome, registeredBy, annotations, notes) =
+            register scopeId outcome registeredBy annotations notes
+
+    interface IModelRegistry with
+        member _.Register(scopeId, outcome, registeredBy, annotations, notes) = async {
+            match! register scopeId outcome registeredBy annotations notes with
+            | Ok registration -> return Ok registration.Artifact
+            | Error e -> return Error e
         }
 
         member _.Get(scopeId, keyHash) = async {

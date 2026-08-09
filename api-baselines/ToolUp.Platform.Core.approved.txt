@@ -763,6 +763,7 @@ ToolUp.Platform.AuditEvent.IsModelFitCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitGateFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitStarted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelPromotionPolicyEvaluated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelRegistrationObserverFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScoreRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModuleArtefactRejected : System.Boolean { get }
@@ -1002,6 +1003,8 @@ ToolUp.Platform.AuditEvent+ModelFitStarted (class)
 ToolUp.Platform.AuditEvent+ModelFitStarted.Item : ToolUp.Platform.ModelFitStartedPayload { get }
 ToolUp.Platform.AuditEvent+ModelPromotionPolicyEvaluated (class)
 ToolUp.Platform.AuditEvent+ModelPromotionPolicyEvaluated.Item : ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload { get }
+ToolUp.Platform.AuditEvent+ModelRegistrationObserverFailed (class)
+ToolUp.Platform.AuditEvent+ModelRegistrationObserverFailed.Item : ToolUp.Platform.ModelRegistrationObserverFailedPayload { get }
 ToolUp.Platform.AuditEvent+ModelScoreRefused (class)
 ToolUp.Platform.AuditEvent+ModelScoreRefused.Item : ToolUp.Platform.ModelScoreRefusedPayload { get }
 ToolUp.Platform.AuditEvent+ModelScored (class)
@@ -1180,6 +1183,7 @@ ToolUp.Platform.AuditEvent+Tags.ModelFitCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitGateFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitStarted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelPromotionPolicyEvaluated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelRegistrationObserverFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScoreRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModuleArtefactRejected : System.Int32 (literal)
@@ -5820,6 +5824,12 @@ ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.ScopeId : System.String { g
 ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.ToleranceCount : System.Int32 { get }
 ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.TransitionApplied : System.Boolean { get }
 ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.Verdict : System.String { get }
+ToolUp.Platform.ModelRegistrationObserverFailedPayload (class)
+ToolUp.Platform.ModelRegistrationObserverFailedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.ModelRegistrationObserverFailedPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelRegistrationObserverFailedPayload.Observer : System.String { get }
+ToolUp.Platform.ModelRegistrationObserverFailedPayload.Reason : System.String { get }
+ToolUp.Platform.ModelRegistrationObserverFailedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModelScoreRefusedPayload (class)
 ToolUp.Platform.ModelScoreRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModelScoreRefusedPayload.CompositeKeyHash : System.String { get }

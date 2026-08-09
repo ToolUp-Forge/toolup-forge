@@ -58,6 +58,10 @@ let allTests =
         // Phase 645 — registry promotion policies (tolerance-gated
         // auto-promotion through the Phase 644 transition seam).
         ModelPromotionPolicyTests.tests
+        // Phase 651 — the registration observer seam: the "a new artifact
+        // exists" moment as a decorator, with the replay path firing
+        // nothing and the promotion policy as its first binding.
+        ModelRegistrationObserverTests.tests
         // Phase 646 — promotion-time provenance transfer: the opaque
         // attachment slot, the signed acceptance, and the Phase 524 walk
         // that resolves it all with the builder gone.

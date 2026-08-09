@@ -1117,6 +1117,82 @@ module ModelPromotionPolicyEvaluator =
     let create (policies: PromotionPolicy list) (deps: PromotionPolicyDeps) : ModelPromotionPolicyEvaluator =
         ModelPromotionPolicyEvaluator(policies, deps)
 
+// ─── Phase 651 — the policy as a registration observer ──────────────────
+//
+// The evaluator above answers "a new artifact exists, decide what happens
+// to it", and until Phase 651 the *first half of that sentence* was the
+// consumer's job to notice. This binding closes it: composing promotion
+// policies over a registry means every successful, non-replay registration
+// is evaluated and its verdict executed, with no per-deployment glue.
+
+/// Phase 651 — the promotion evaluator, as an observer of registration.
+///
+/// **What "fails" here, and what does not.** Every uncertainty INSIDE a
+/// judgment — an unevaluable tolerance, an absent incumbent, a metric
+/// source that raised, no declared policy at all — is already a recorded
+/// `QueueForCuration` decision rather than an error (Phase 645's fail-safe
+/// rule), so it never reaches this observer as a failure and the artifact
+/// is left exactly where the lifecycle holds an uncurated fit. What DOES
+/// raise is the envelope failing outright: no artifact, an unreadable
+/// registry, or a decision that could not be persisted — cases where there
+/// is no decision recorded anywhere. Raising surfaces those on the
+/// isolation audit row instead of dropping them, and the registration still
+/// stands.
+type ModelPromotionPolicyObserver(evaluator: ModelPromotionPolicyEvaluator) =
+    /// Stable observer name, recorded on the isolation audit row. Reserved
+    /// `_platform.` prefix, like every other platform-owned registration.
+    static member ObserverName = "_platform.modelpromotion.observer"
+
+    interface IModelRegistrationObserver with
+        member _.Name = ModelPromotionPolicyObserver.ObserverName
+
+        member _.OnRegistered(scopeId: string, artifact: ModelArtifact) : Async<unit> = async {
+            match! evaluator.Evaluate(scopeId, artifact.CompositeKey.Hash) with
+            | Ok _ -> ()
+            | Error error -> return failwith (PromotionPolicyError.describe error)
+        }
+
+[<RequireQualifiedAccess>]
+module ModelPromotionPolicyObserver =
+
+    /// The evaluator as an observer, for a deployment assembling its own
+    /// observer list.
+    let create (evaluator: ModelPromotionPolicyEvaluator) : IModelRegistrationObserver =
+        ModelPromotionPolicyObserver(evaluator) :> IModelRegistrationObserver
+
+    /// Phase 651 — compose declared promotion policies over a registry in
+    /// one call: register → evaluate → verdict-as-transition, end to end.
+    ///
+    /// Returns the registry a deployment should hand out **and** the
+    /// evaluator, because the evaluator is also the read surface — a
+    /// curation queue is `ListQueuedForCuration`, and a deployment that got
+    /// back only a registry would have to construct a second evaluator over
+    /// the same policies to ask.
+    ///
+    /// `deps.Registry` is the registry BENEATH the decoration and stays
+    /// that way: the evaluator reads and transitions, never registers, so
+    /// pointing it at the decorated registry would buy nothing and would
+    /// put a decorator in the path of every read the judgment makes.
+    ///
+    /// Declaring no policies is still a legitimate composition — every
+    /// artifact is recorded as queued, which is the fail-safe answer and an
+    /// honest one. A deployment that wants NO observation composes nothing
+    /// and calls `BlobModelRegistry.create` as before (GP 11).
+    let compose
+        (policies: PromotionPolicy list)
+        (deps: PromotionPolicyDeps)
+        (logger: ILogger)
+        : IModelRegistry * ModelPromotionPolicyEvaluator =
+        let evaluator = ModelPromotionPolicyEvaluator.create policies deps
+
+        let observed =
+            ModelRegistrationObservers.decorate
+                { Audit = deps.Audit; Logger = logger }
+                [ create evaluator ]
+                deps.Registry
+
+        observed, evaluator
+
 /// The persisted payload of a `_platform.modelpromotion.evaluate` job — the
 /// schedulable form of "a new artifact exists, apply the policy".
 ///
