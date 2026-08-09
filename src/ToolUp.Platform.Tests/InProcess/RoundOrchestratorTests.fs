@@ -119,6 +119,45 @@ let private roundOf (payload: string) =
     let parts = payload.Split ':'
     parts[0]
 
+// ─── Synchronisation, not timing ──────────────────────────────────────
+//
+// One rule governs every deadline in this file: a deadline is either
+// UNREACHABLE BY CONSTRUCTION (the straggler cannot answer at all) or
+// generous enough that only a genuine failure ever spends it. A deadline
+// chosen to be "long enough on my machine" is a bet against the load on
+// the machine that runs it next, and this file lost that bet in forge CI.
+
+/// Wait for a signal the assertion below it depends on. The timeout is a
+/// FAILURE PATH, not a schedule: a green run never spends any of it, so
+/// making it generous costs nothing, and a run that exhausts it has
+/// genuinely lost the signal rather than merely been slow.
+let private awaitSignal (label: string) (signal: SemaphoreSlim) = async {
+    let! signalled = signal.WaitAsync(TimeSpan.FromSeconds 60.0) |> Async.AwaitTask
+
+    if not signalled then
+        failtestf "timed out waiting for %s" label
+}
+
+/// A participant delay no round in this file can outlast: the straggler's
+/// answer is not "late", it never arrives. That is what makes a dropout
+/// deterministic — the round deadline never has to be short to produce
+/// one. The length costs no wall-clock, because the fan-out abandons the
+/// sleeping call when it cancels its own token at the barrier.
+let private neverAnswers = TimeSpan.FromMinutes 5.0
+
+/// The deadline given to a round whose assertion turns on WHICH
+/// participant was classified as dropped. Deliberately generous: the
+/// responder must never be misclassified merely because a loaded runner
+/// was slow to schedule it, and with `neverAnswers` above supplying the
+/// dropout, nothing is lost by waiting. A round that drops someone spends
+/// this in full, so it stays bounded.
+let private classifyingDeadline = TimeSpan.FromSeconds 2.0
+
+/// The deadline for a round that halts whichever participants answer —
+/// every `AbortRun` / unmet-quorum arm below reports the same halt if the
+/// responder is slow too, so a short deadline here is a cost, not a bet.
+let private haltingDeadline = TimeSpan.FromMilliseconds 100.0
+
 let private pair = [ target "a"; target "b" ]
 
 /// The plain, unobserved orchestrator over the supplied store.
@@ -214,12 +253,12 @@ let tests =
 
         testCaseAsync "AbortRun halts the run when a participant misses the round deadline"
         <| async {
-            let call, _ = recordingCall [ "b" ] (TimeSpan.FromSeconds 2.0)
+            let call, _ = recordingCall [ "b" ] neverAnswers
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let plan =
                 planFor "run-abort" 3
-                |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 100.0)
+                |> RoundRunPlan.withRoundTimeout haltingDeadline
                 |> RoundRunPlan.withDropout AbortRun
 
             let! result = run (orchestratorWith store) plan sumStep call
@@ -233,12 +272,15 @@ let tests =
 
         testCaseAsync "ContinueWithout proceeds on the responders and drops the non-responder for good"
         <| async {
-            let call, seen = recordingCall [ "b" ] (TimeSpan.FromSeconds 2.0)
+            // `a` must be classified as a RESPONDER here, so the deadline is
+            // the generous one: a 100ms bound would misclassify it under
+            // load and collapse the run to an unmet quorum.
+            let call, seen = recordingCall [ "b" ] neverAnswers
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let plan =
                 planFor "run-continue" 3
-                |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 100.0)
+                |> RoundRunPlan.withRoundTimeout classifyingDeadline
                 |> RoundRunPlan.withDropout (ContinueWithout 1)
 
             let! result = run (orchestratorWith store) plan sumStep call
@@ -258,12 +300,12 @@ let tests =
 
         testCaseAsync "ContinueWithout halts when too few participants respond"
         <| async {
-            let call, _ = recordingCall [ "b" ] (TimeSpan.FromSeconds 2.0)
+            let call, _ = recordingCall [ "b" ] neverAnswers
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let plan =
                 planFor "run-quorum" 3
-                |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 100.0)
+                |> RoundRunPlan.withRoundTimeout haltingDeadline
                 |> RoundRunPlan.withDropout (ContinueWithout 2)
 
             let! result = run (orchestratorWith store) plan sumStep call
@@ -276,13 +318,18 @@ let tests =
 
         testCaseAsync "WaitUntil extends the deadline once and the straggler still counts"
         <| async {
+            // The straggler must ANSWER inside the grace, so the grace is a
+            // failure path, not a schedule: the round completes the instant
+            // both answer, and 30 seconds is only ever spent by a genuine
+            // regression. The 5-second window this replaced was the same
+            // shape of bet as the cancellation test's polled deadline.
             let call, seen = recordingCall [ "b" ] (TimeSpan.FromMilliseconds 300.0)
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let plan =
                 planFor "run-wait" 2
                 |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 50.0)
-                |> RoundRunPlan.withDropout (WaitUntil(TimeSpan.FromSeconds 5.0))
+                |> RoundRunPlan.withDropout (WaitUntil(TimeSpan.FromSeconds 30.0))
 
             let! result = run (orchestratorWith store) plan sumStep call
 
@@ -300,7 +347,7 @@ let tests =
 
         testCaseAsync "WaitUntil still halts when the straggler misses the extended deadline"
         <| async {
-            let call, _ = recordingCall [ "b" ] (TimeSpan.FromSeconds 3.0)
+            let call, _ = recordingCall [ "b" ] neverAnswers
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let plan =
@@ -404,25 +451,42 @@ let tests =
             let store = InMemoryRoundStateStore() :> IRoundStateStore
             let cancelledCalls = ref 0
             let entered = new SemaphoreSlim(0)
+            let observed = new SemaphoreSlim(0)
 
-            // F# async cancellation does NOT surface through `with` — the
-            // cancellation continuation bypasses exception handlers — so
-            // the probe is a `finally` that fires only when the sleep did
-            // not run to completion. Remove the orchestrator's
-            // token-threading and this counter stays at 0 while the calls
-            // sleep out their full ten seconds: the assertion below is
-            // exactly the propagation it claims to measure.
+            // The probe is ARMED BEFORE entry is signalled, and that
+            // ordering is the whole of this test's determinism.
+            // `Async.OnCancel` registers on the call's ambient token — the
+            // RUN's token, which the orchestrator threads into each
+            // participant call — so by the time `entered` is released the
+            // handler is provably registered and no cancellation can slip
+            // past it.
+            //
+            // The reverse order is what made this the estate's
+            // best-documented flake. Signalling first and arming a
+            // `try/finally` afterwards leaves a window, and FSharp.Core's
+            // `TryFinally` opens with a cancellation check that skips the
+            // protected block outright when the token is already set — so a
+            // cancel landing in that window never installs the
+            // compensation at all. Both participants sit in that same
+            // window, because the test cancels once BOTH have signalled,
+            // which is why the failure was 2-expected-0-observed rather
+            // than a partial count: on a loaded CI runner, and identically
+            // under a 50ms preemption injected between the release and the
+            // `try`.
+            //
+            // Falsifiability is unchanged: remove the orchestrator's
+            // token-threading and `call` runs under the FAN-OUT's token
+            // instead of the run's, this handler never fires, and the
+            // assertion below goes red — which is exactly the propagation
+            // it claims to measure.
             let call (_: TargetPeer) (_: string) = async {
-                entered.Release() |> ignore
-                let finished = ref false
-
-                try
-                    do! Async.Sleep 10_000
-                    finished.Value <- true
-                finally
-                    if not finished.Value then
+                use! _armed =
+                    Async.OnCancel(fun () ->
                         Interlocked.Increment(&cancelledCalls.contents) |> ignore
+                        observed.Release() |> ignore)
 
+                entered.Release() |> ignore
+                do! Async.Sleep 10_000
                 return Ok "1"
             }
 
@@ -434,9 +498,10 @@ let tests =
                     cancellationToken = cts.Token
                 )
 
-            // Both participants are genuinely on the wire before we cancel.
-            do! entered.WaitAsync() |> Async.AwaitTask
-            do! entered.WaitAsync() |> Async.AwaitTask
+            // Both participants are genuinely on the wire, with their
+            // probes armed, before we cancel.
+            do! awaitSignal "the first participant call to enter" entered
+            do! awaitSignal "the second participant call to enter" entered
             cts.Cancel()
 
             let! outcome = Async.Catch(Async.AwaitTask runTask)
@@ -451,11 +516,12 @@ let tests =
                     (sprintf "the run completes as cancelled, got %A" ex)
 
             // The point of the phase: the calls already on the wire were
-            // cancelled, not orphaned to run their full ten seconds.
-            let deadline = DateTime.UtcNow.AddSeconds 5.0
-
-            while cancelledCalls.Value < 2 && DateTime.UtcNow < deadline do
-                do! Async.Sleep 20
+            // cancelled, not orphaned to run their full ten seconds. Awaited
+            // as signals — the polled 5-second window this replaced was a
+            // second timing bet stacked on the first, and the one CI spent
+            // in full before reporting 0.
+            do! awaitSignal "the first participant call to observe cancellation" observed
+            do! awaitSignal "the second participant call to observe cancellation" observed
 
             Expect.equal cancelledCalls.Value 2 "both in-flight participant calls observed the cancellation"
 
@@ -475,11 +541,14 @@ let tests =
                 DefaultRoundOrchestrator(PeerFanout.create (), store, RoundObserver.create auditLog channel)
                 :> IRoundOrchestrator
 
-            let call, _ = recordingCall [ "b" ] (TimeSpan.FromSeconds 2.0)
+            // Same classification bet as "ContinueWithout proceeds …": the
+            // assertions below count exactly one responder and exactly one
+            // dropout, so `a` must not be misclassified under load.
+            let call, _ = recordingCall [ "b" ] neverAnswers
 
             let plan =
                 planFor "run-audit" 2
-                |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 100.0)
+                |> RoundRunPlan.withRoundTimeout classifyingDeadline
                 |> RoundRunPlan.withDropout (ContinueWithout 1)
 
             let! _ = run orchestrator plan sumStep call
@@ -540,11 +609,11 @@ let tests =
                 DefaultRoundOrchestrator(PeerFanout.create (), store, RoundObserver.auditOnly auditLog)
                 :> IRoundOrchestrator
 
-            let call, _ = recordingCall [ "b" ] (TimeSpan.FromSeconds 2.0)
+            let call, _ = recordingCall [ "b" ] neverAnswers
 
             let plan =
                 planFor "run-aborted-audit" 2
-                |> RoundRunPlan.withRoundTimeout (TimeSpan.FromMilliseconds 100.0)
+                |> RoundRunPlan.withRoundTimeout haltingDeadline
                 |> RoundRunPlan.withDropout AbortRun
 
             let! _ = run orchestrator plan sumStep call
