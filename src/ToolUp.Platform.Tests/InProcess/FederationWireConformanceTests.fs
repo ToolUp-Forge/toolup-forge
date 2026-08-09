@@ -120,12 +120,14 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
         JsonRpc.serialize (JsonRpc.deserialize<PeerJobStatus<string> list> document)
     | "host-envelope", "host-envelope/stamp" -> JsonRpc.serialize (JsonRpc.deserialize<HostEnvelopeStamp> document)
     | "host-envelope", _ -> HostEnvelope.toJson (JsonRpc.deserialize<HostEnvelope> document)
-    | "model-execution", "model-execution/submission" ->
+    | "model-execution", "model-execution/submission"
+    | "model-execution", "model-execution/view-request" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerRequest> document)
     | "model-execution", "model-execution/outcome" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer> document)
     | "model-execution", "model-execution/diagnostics"
-    | "model-execution", "model-execution/refusals" ->
+    | "model-execution", "model-execution/refusals"
+    | "model-execution", "model-execution/view" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer list> document)
     | family, id -> failwithf "no specified shape is bound to corpus family '%s' (vector '%s')" family id
 
@@ -234,11 +236,29 @@ let private verifyInvocationRejection (entry: ManifestEntry) (document: string) 
 /// different reason under a narrowing. `admissionFor` maps a vector id
 /// to its grant; every pre-642 vector maps to the reference admission
 /// and reads as it always did.
+///
+/// Phase 643 — a bounded-view vector is refused by a SECOND reader, and
+/// the harness has to run both in order. `read` admits the envelope (it
+/// is well-formed, declared, in-scope and granted — deliberately, so the
+/// vector tests the bound and nothing else) and `PeerView.validate` then
+/// judges the body against the deployment's declarations. A harness that
+/// stopped at the envelope would report these two as ACCEPTED, which is
+/// the failure the two-stage branch below exists to make impossible.
 let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
     let outcome =
         ModelExecutionPeerContract.read (admissionFor entry.Id) modelExecutionBoundScope document
 
     match outcome with
+    | Ok request when reason.StartsWith "model-execution-view-" ->
+        let view = JsonRpc.deserialize<PeerViewRequest> request.Body
+
+        match PeerView.validate referenceViewDeclarations view with
+        | Ok _ -> failtestf "'%s' must be refused by the view's declared bounds, and it was answered" entry.Id
+        | Error refusal ->
+            Expect.equal
+                (PeerViewRefusal.className refusal)
+                reason
+                $"'{entry.Id}' must be refused as '{reason}'; the view reader said: {PeerViewRefusal.describe refusal}"
     | Ok _ -> failtestf "'%s' must be refused, and was accepted" entry.Id
     | Error refusal ->
         Expect.equal

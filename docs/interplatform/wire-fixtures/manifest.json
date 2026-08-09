@@ -230,8 +230,26 @@
       "profile": "participant-modeller",
       "kind": "round-trip",
       "file": "model-execution/refusals.json",
-      "sha256": "68cdac17f1093db2ce711b9ad346cf4eb6b9121a82481f76d245358967c718fa",
+      "sha256": "8e795745ec475c0706ddf55f6682ee01848ec220f30a09785e666ebafea0678f",
       "description": "One answer per refusal class the profile defines, including the submitter surface's own typed refusal carried through unchanged — so a modeller's mapping is pinned by the corpus rather than inferred from the classes it happened to trip."
+    },
+    {
+      "id": "model-execution/view-request",
+      "family": "model-execution",
+      "profile": "participant-modeller",
+      "kind": "round-trip",
+      "file": "model-execution/view-request.json",
+      "sha256": "1f8b232f962cf207fe55021f8822e68c11a287b87613bffb8c0ddd99b61a1267",
+      "description": "A bounded-view render request: the view (which binds the dataset, so the request cannot name one), the pinned version, the series in ordinal order, the window and the resolution. Every member is inside a bound the data host published, which is the only shape that gets answered."
+    },
+    {
+      "id": "model-execution/view",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "round-trip",
+      "file": "model-execution/view.json",
+      "sha256": "00d57c15d199acb74b50eed8efe549be82e154f15ed9bc5b128e6113beb12ec1",
+      "description": "The three answers of the bounded-view surface: the declared offer with its bounds, one view's declaration, and a rendered artifact. The artifact carries base64 bytes under a declared media type and a hash over them — there is no member a row, a series or a point could ride in, which is what makes a view not an export route."
     },
     {
       "id": "model-execution/reject-row-read",
@@ -302,6 +320,26 @@
       "sha256": "f826cecb1ac8fae6990aa6a9dc1f5f91bf51a014a58e5f616e79507daa82e5d4",
       "reject": "model-execution-authority-narrowed",
       "description": "The identical bounded-view document against a peer whose CEILING admits it and whose team-scope narrowing does not. Read closely: nothing in the document distinguishes it from a request that would be answered, and the refusal names the narrowing layer — a ceiling refusal is a question for the two organisations, a narrowing refusal is a question for one deployment's own configuration."
+    },
+    {
+      "id": "model-execution/reject-view-over-bound-window",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-view-over-bound-window.json",
+      "sha256": "2b9fd1d7ca0829b52d75cf6a3a09df822097811e887b9b7abca6bdfd4b5ce3f9",
+      "reject": "model-execution-view-window-budget",
+      "description": "A render request covering a wider window than the view declares. Well-formed, granted, and refused on the one thing wrong with it — the class names the bound and the description carries the declared limit, so a modeller narrows and re-sends rather than guessing."
+    },
+    {
+      "id": "model-execution/reject-view-undeclared-series",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-view-undeclared-series.json",
+      "sha256": "9fb3263301e7be3c741d588b012c7afa532d95af83e2787c9322bc7c6a5464a5",
+      "reject": "model-execution-view-series-undeclared",
+      "description": "A render request naming a series the view does not carry. Refused before anything is read: the declaration is the whole offer, so a series absent from it is one nobody agreed to render — and the refusal names only what the caller itself sent."
     }
   ]
 }

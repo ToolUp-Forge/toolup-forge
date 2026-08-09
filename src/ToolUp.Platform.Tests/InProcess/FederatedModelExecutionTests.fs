@@ -354,6 +354,10 @@ let private dataHost (bindings: Map<string, string>) =
         ResolveBinding = resolveBinding
         Admission = ModelExecutionAdmission.create declaredDiagnostics
         FitPoll = ModelExecutionFitPollPolicy.immediate
+        // Phase 643 — no declared views, which is what every case above
+        // this section is evidence for: a deployment that upgrades and
+        // declares nothing behaves byte-for-byte as it did (GP 11).
+        Views = None
     }
 
     let fusion: PeerJobFusion = {
@@ -1006,6 +1010,10 @@ let private dataHostGranting
         ResolveBinding = resolveBinding
         Admission = ModelExecutionAdmission.create declaredDiagnostics
         FitPoll = ModelExecutionFitPollPolicy.immediate
+        // Phase 643 — no declared views, which is what every case above
+        // this section is evidence for: a deployment that upgrades and
+        // declares nothing behaves byte-for-byte as it did (GP 11).
+        Views = None
     }
 
     let fusion: PeerJobFusion = {
@@ -1324,6 +1332,14 @@ let private federatedEgressTests =
                     Claim = fun purpose -> claimed.Value <- purpose
                 }
                 References = fun _ -> [ "fact-1" ]
+                // Phase 643 — no view is rendered on any of these paths,
+                // so the view-keyed door is never reached. Stated rather
+                // than shared with `References`: a route that answered
+                // the same set at both doors would make a render
+                // indistinguishable from the metadata call beside it,
+                // which is the confusion the second function exists to
+                // prevent.
+                ViewReferences = fun _ _ -> []
             }
 
             let instance =
@@ -1368,6 +1384,14 @@ let private federatedEgressTests =
                     Claim = fun purpose -> claimed.Value <- purpose
                 }
                 References = fun _ -> [ "fact-1" ]
+                // Phase 643 — no view is rendered on any of these paths,
+                // so the view-keyed door is never reached. Stated rather
+                // than shared with `References`: a route that answered
+                // the same set at both doors would make a render
+                // indistinguishable from the metadata call beside it,
+                // which is the confusion the second function exists to
+                // prevent.
+                ViewReferences = fun _ _ -> []
             }
 
             let instance =
@@ -1412,6 +1436,7 @@ let private federatedEgressTests =
                     Claim = fun purpose -> claimed.Value <- purpose
                 }
                 References = fun _ -> [ "fact-from-another-scope" ]
+                ViewReferences = fun _ _ -> []
             }
 
             let instance =
@@ -1441,6 +1466,14 @@ let private federatedEgressTests =
                     Claim = fun purpose -> claimed.Value <- purpose
                 }
                 References = fun _ -> [ "fact-1" ]
+                // Phase 643 — no view is rendered on any of these paths,
+                // so the view-keyed door is never reached. Stated rather
+                // than shared with `References`: a route that answered
+                // the same set at both doors would make a render
+                // indistinguishable from the metadata call beside it,
+                // which is the confusion the second function exists to
+                // prevent.
+                ViewReferences = fun _ _ -> []
             }
 
             let instance =
@@ -1576,6 +1609,640 @@ let private declaredSurfaceTests =
         }
     ]
 
+// ─── Phase 643 — `ViewOnly`: server-rendered bounded views ───────────
+//
+// The level named in Phase 642 now does something: a granted peer sees
+// RENDERED artifacts of declared series, bounded and audited, and there
+// is still no shape that carries a row. Five properties, each asserted
+// on its own because each can fail without the others noticing — the
+// response is an artifact, the bounds are the declaration's, the budget
+// is spent per peer, the render goes through the deployment's OWN chart
+// grammar, and every render leaves a record naming the series.
+
+// These two opens are declared HERE rather than at the top of the file
+// because they are needed only by this section, and an `open` at the
+// head would put a second `Component` / `RenderView` in scope for 1,600
+// lines of cases that have no use for either.
+open System.Text
+open Giraffe.ViewEngine
+open ToolUp.Platform.Narrative
+open ToolUp.PublicRendering
+
+let private renderClock = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+
+/// The declared offer. `MaxPointsPerSeries` is deliberately BELOW the
+/// number of points the reader below returns, so the clamp is exercised
+/// by the ordinary path rather than by a case constructed for it.
+let private spendView: PeerViewDeclaration = {
+    ViewId = "spend-vs-response"
+    DatasetId = "weekly-panel"
+    Title = "Weekly spend against response"
+    Kind = "line"
+    Series = [ "promo-spend"; "search-clicks" ]
+    Resolutions = [ "day"; "week" ]
+    MaxWindowDays = 90
+    MaxSeriesPerRequest = 2
+    MaxPointsPerSeries = 3
+    MaxRendersPerWindow = 2
+    RenderWindowSeconds = 60
+}
+
+let private point (label: string) (value: float) : PeerViewPoint = { Label = label; Value = value }
+
+let private readSeries: PeerViewSeries list = [
+    {
+        Name = "promo-spend"
+        Points = [
+            point "w1" 10.0
+            point "w2" 20.0
+            point "w3" 15.0
+            point "w4" 40.0
+            point "w5" 5.0
+        ]
+    }
+    {
+        Name = "search-clicks"
+        Points = [ point "w1" 1.5; point "w2" 2.5 ]
+    }
+]
+
+/// The deployment's OWN chart grammar, wired the way a composition wires
+/// it: the shipped deterministic renderer, reached through the prop bag
+/// this substrate builds. Not a stand-in — the point of the case is that
+/// a federated view and a published page come out of one renderer.
+let private grammarRenderer: PeerViewRenderer = {
+    MediaType = "image/svg+xml"
+    Render =
+        fun bags ->
+            bags
+            |> List.map (NarrativeCharts.renderChart >> RenderView.AsString.htmlNode)
+            |> String.concat ""
+            |> Encoding.UTF8.GetBytes
+}
+
+let private viewDepsWith (now: unit -> DateTimeOffset) (declarations: PeerViewDeclaration list) : PeerViewDeps = {
+    Declarations = fun _ -> async { return declarations }
+    ReadSeries = fun _ _ -> async { return readSeries }
+    Renderer = grammarRenderer
+    Rate = PeerViewRateGuard.inProcess now
+}
+
+/// A FUNCTION, not a value: `PeerViewRateGuard.inProcess` holds its
+/// counters, so a shared value would let one case spend another's
+/// budget — and the failure would look like a bug in whichever case
+/// happened to run third.
+let private viewDeps () =
+    viewDepsWith (fun () -> renderClock) [ spendView ]
+
+/// A data host that declares views. A fourth constructor rather than a
+/// parameter on `dataHostGranting`, for the reason that one is separate
+/// from `dataHost`: every case above must keep running against a
+/// deployment that declares none, because "an upgrade changes nothing
+/// until you opt in" is the claim those cases are the evidence for.
+let private dataHostRendering
+    (visibility: PeerVisibilityBinding)
+    (egress: PeerEgressRoute option)
+    (views: PeerViewDeps option)
+    (bindings: Map<string, string>)
+    =
+    let backend = ReferenceDataHost()
+    let scheduler = DeferredScheduler()
+    let results = MemoryJobResultStore() :> IPeerJobResultStore
+
+    let resolveBinding (peerId: string) = async {
+        match Map.tryFind peerId bindings with
+        | None -> return None
+        | Some scope ->
+            return
+                Some {
+                    PeerId = peerId
+                    ScopeId = scope
+                    Api = backend.Api
+                    Visibility = visibility
+                    Egress = egress
+                }
+    }
+
+    let deps: ModelExecutionPeerDeps = {
+        ResolveBinding = resolveBinding
+        Admission =
+            // Declaring the views and granting the level are two acts,
+            // and the cases below turn each off independently.
+            match views with
+            | Some _ ->
+                ModelExecutionAdmission.create declaredDiagnostics
+                |> ModelExecutionAdmission.withViews
+            | None -> ModelExecutionAdmission.create declaredDiagnostics
+        FitPoll = ModelExecutionFitPollPolicy.immediate
+        Views = views
+    }
+
+    let fusion: PeerJobFusion = {
+        Scheduler = scheduler
+        ResultStore = results
+        AuditLog = None
+    }
+
+    let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
+    let host = ModelExecutionPeerContract.host deps (Some fusion)
+    peer.RegisterContract host.Registration
+
+    for handlerName, handler in host.JobHandlers do
+        (scheduler :> IJobScheduler).RegisterHandler(handlerName, handler)
+
+    {
+        Peer = peer
+        Scheduler = scheduler
+        Results = results
+        Backend = backend
+        Decisions = ResizeArray<PeerCleanRoomDecisionPayload>()
+    }
+
+let private viewOnly =
+    PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.ViewOnly
+
+let private referenceWindow: PeerViewWindow = {
+    From = DateTimeOffset(2026, 4, 20, 0, 0, 0, TimeSpan.Zero)
+    To = DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+}
+
+let private renderRequest: PeerViewRequest = {
+    ViewId = spendView.ViewId
+    DatasetVersion = 7
+    Series = [ "promo-spend"; "search-clicks" ]
+    Window = referenceWindow
+    Resolution = "week"
+}
+
+/// Dispatch a render and decode the artifact, failing loudly on a
+/// refusal — the shape a case that is ABOUT the happy path wants.
+let private renderThrough (instance: DataHostInstance) (request: PeerViewRequest) = async {
+    let! answer = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest request)
+
+    match answer with
+    | Ok(ModelExecutionPeerAnswer.Answered body) -> return JsonRpc.deserialize<PeerViewArtifact> body
+    | other -> return failtestf "the render was expected to be answered; got %A" other
+}
+
+let private viewContractTests =
+    testList "a granted peer sees a rendered artifact and nothing row-shaped" [
+        testCaseAsync "a render inside every bound answers with the artifact"
+        <| async {
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+            let! artifact = renderThrough instance renderRequest
+
+            Expect.equal artifact.ViewId spendView.ViewId "the artifact names the view it renders"
+            Expect.equal artifact.MediaType "image/svg+xml" "the media type the deployment's renderer declares"
+            Expect.equal artifact.Series [ "promo-spend"; "search-clicks" ] "the series it covered, ordinally"
+            Expect.equal artifact.Resolution "week" "the resolution it was asked for"
+            Expect.equal artifact.Window referenceWindow "the window it was asked for"
+
+            // 3 of promo-spend's 5 points and both of search-clicks': the
+            // clamp is against the DECLARATION, not against the reader's
+            // good behaviour, so a reader returning more cannot widen
+            // what crosses.
+            Expect.equal artifact.RenderedPoints 5 "points clamped to the declared ceiling per series"
+        }
+
+        test "no member of the answer shape could carry a row" {
+            // The structural half of "a view is not an export route". The
+            // dispatch cannot leak a series because there is nowhere to
+            // put one — asserted over the type rather than over one
+            // answer, so a field added later fails here rather than in
+            // whatever case happens to notice.
+            let permitted =
+                Set.ofList [
+                    typeof<string>.FullName
+                    typeof<int>.FullName
+                    typeof<PeerViewWindow>.FullName
+                ]
+
+            for field in FSharp.Reflection.FSharpType.GetRecordFields typeof<PeerViewArtifact> do
+                let t = field.PropertyType
+
+                let ok =
+                    Set.contains t.FullName permitted
+                    // `Series` is a list of NAMES the caller itself sent.
+                    || (t.IsGenericType
+                        && t.GetGenericTypeDefinition() = typedefof<list<_>>
+                        && t.GetGenericArguments().[0] = typeof<string>)
+
+                Expect.isTrue ok $"'{field.Name}' is a {t.Name}, which is a shape a series could ride in"
+        }
+
+        testCaseAsync "the offer and one view's declaration are answerable, ordinally"
+        <| async {
+            let second = {
+                spendView with
+                    ViewId = "coverage-by-week"
+            }
+
+            let instance =
+                dataHostRendering
+                    viewOnly
+                    None
+                    (Some(viewDepsWith (fun () -> renderClock) [ spendView; second ]))
+                    boundOnly
+
+            let! listed = call instance modellerPeerId (ModelExecutionPeerContract.request "ListViews" "")
+
+            match listed with
+            | Ok(ModelExecutionPeerAnswer.Answered body) ->
+                let declared = JsonRpc.deserialize<PeerViewDeclaration list> body
+
+                Expect.equal
+                    (declared |> List.map _.ViewId)
+                    [ "coverage-by-week"; "spend-vs-response" ]
+                    "the offer is ordinally sorted, whatever order it was declared in"
+            | other -> failtestf "ListViews is a declared view operation; got %A" other
+
+            let! described =
+                call instance modellerPeerId (ModelExecutionPeerContract.request "DescribeView" spendView.ViewId)
+
+            match described with
+            | Ok(ModelExecutionPeerAnswer.Answered body) ->
+                Expect.equal
+                    (JsonRpc.deserialize<PeerViewDeclaration> body).MaxWindowDays
+                    spendView.MaxWindowDays
+                    "the declaration a caller reads is the one the receiver enforces"
+            | other -> failtestf "DescribeView is a declared view operation; got %A" other
+
+            let! missing =
+                call instance modellerPeerId (ModelExecutionPeerContract.request "DescribeView" "no-such-view")
+
+            expectRefusal
+                missing
+                "model-execution-view-undeclared"
+                "'there is no such view' and 'the view is empty' are different facts"
+        }
+    ]
+
+let private viewGrammarTests =
+    testList "views render through the deployment's own chart grammar" [
+        test "the prop bag is the one the grammar's own projector emits" {
+            // The single check that keeps this from becoming a second
+            // grammar. Both sides are built from the same series,
+            // including a label carrying the encoding's own separators —
+            // the case where two implementations of "the same" encoding
+            // quietly disagree.
+            let series: PeerViewSeries = {
+                Name = "promo-spend"
+                Points = [ point "w1;a" 10.0; point "w2=b" 20.5 ]
+            }
+
+            let projected =
+                NarrativeFromData.chart
+                    NarrativeFromData.Line
+                    (Some series.Name)
+                    (series.Points |> List.map (fun p -> p.Label, p.Value))
+
+            match projected with
+            | Component(name, props) ->
+                Expect.equal name NarrativeCharts.ComponentName "the same component the grammar registers"
+
+                Expect.equal
+                    (PeerView.chartProps "line" series)
+                    props
+                    "the federated leg speaks the grammar's prop format, key for key and byte for byte"
+            | other -> failtestf "expected the grammar's chart component; got %A" other
+        }
+
+        testCaseAsync "the artifact's bytes ARE that renderer's output, and the hash is over them"
+        <| async {
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+            let! artifact = renderThrough instance renderRequest
+
+            let bytes = Convert.FromBase64String artifact.Content
+            let markup = Encoding.UTF8.GetString bytes
+
+            Expect.stringContains markup "<svg" "the artifact is the grammar's inline SVG, not a re-implementation"
+
+            Expect.stringContains
+                markup
+                "tu-chart__svg--line"
+                "rendered at the kind the DECLARATION names — the host decides how its data is drawn"
+
+            let expected =
+                "sha256:"
+                + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData bytes).ToLowerInvariant()
+
+            Expect.equal artifact.ContentHash expected "the hash pins the bytes a modeller was shown"
+        }
+    ]
+
+let private viewBoundsTests =
+    testList "an over-bound request is refused typed, naming the bound" [
+        testCaseAsync "each bound has its own class"
+        <| async {
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+
+            let cases = [
+                {
+                    renderRequest with
+                        ViewId = "spend-by-region"
+                },
+                "model-execution-view-undeclared"
+                {
+                    renderRequest with
+                        Series = [ "margin-per-unit" ]
+                },
+                "model-execution-view-series-undeclared"
+                { renderRequest with Series = [] }, "model-execution-view-no-series"
+                {
+                    renderRequest with
+                        Window = {
+                            referenceWindow with
+                                From = DateTimeOffset(2025, 7, 13, 0, 0, 0, TimeSpan.Zero)
+                        }
+                },
+                "model-execution-view-window-budget"
+                {
+                    renderRequest with
+                        Window = {
+                            From = referenceWindow.To
+                            To = referenceWindow.From
+                        }
+                },
+                "model-execution-view-window-unordered"
+                {
+                    renderRequest with
+                        Resolution = "hour"
+                },
+                "model-execution-view-resolution-undeclared"
+            ]
+
+            for request, expected in cases do
+                let! answer = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest request)
+                expectRefusal answer expected $"the refusal must name the bound that was left ({expected})"
+        }
+
+        test "the series budget is refused as its own class, above the declared count" {
+            // Kept out of the dispatch loop above because it needs a view
+            // whose series list is longer than its per-request budget —
+            // the shape a deployment reaches for when it publishes many
+            // series and renders few at a time.
+            let wide = {
+                spendView with
+                    Series = [ "a"; "b"; "c" ]
+                    MaxSeriesPerRequest = 2
+            }
+
+            let request = {
+                renderRequest with
+                    Series = [ "a"; "b"; "c" ]
+            }
+
+            match PeerView.validate [ wide ] request with
+            | Error(PeerViewRefusal.SeriesBudgetExceeded(_, requested, limit)) ->
+                Expect.equal (requested, limit) (3, 2) "the refusal carries what was asked and what is allowed"
+            | other -> failtestf "expected a series-budget refusal; got %A" other
+        }
+
+        test "membership is judged before the count" {
+            // Two things are wrong with this request; the refusal names
+            // the one whose fix is different. A caller told 'too many'
+            // would drop a series it was entitled to and still fail.
+            let request = {
+                renderRequest with
+                    Series = [ "promo-spend"; "search-clicks"; "margin-per-unit" ]
+            }
+
+            match PeerView.validate [ spendView ] request with
+            | Error(PeerViewRefusal.UndeclaredSeries(_, series)) ->
+                Expect.equal series "margin-per-unit" "the series this view does not carry"
+            | other -> failtestf "membership precedes the count; got %A" other
+        }
+    ]
+
+let private viewRateTests =
+    testList "the render budget is enforced data-side, per peer" [
+        testCaseAsync "exhaustion is a typed refusal, not a timeout"
+        <| async {
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+
+            // The declaration admits two per window.
+            for _ in 1..2 do
+                let! _ = renderThrough instance renderRequest
+                ()
+
+            let! third = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest renderRequest)
+
+            expectRefusal
+                third
+                "model-execution-view-render-budget"
+                "a spent budget is a decision the receiver took, so it is reported as one"
+
+            match third with
+            | Ok(ModelExecutionPeerAnswer.Refused refusal) ->
+                let described = ModelExecutionPeerRefusal.describe refusal
+
+                // A caller that knows the limit and the window can
+                // schedule; one left on a timeout can only retry into the
+                // same wall.
+                Expect.stringContains described "2" "the refusal carries the limit"
+                Expect.stringContains described "60" "and the window"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        test "the window resets, and one peer's spend is not another's" {
+            let clock = ref renderClock
+            let guard = PeerViewRateGuard.inProcess (fun () -> clock.Value)
+
+            let reserve (peerId: string) =
+                guard.Reserve peerId spendView |> Async.RunSynchronously
+
+            Expect.isTrue (reserve modellerPeerId).Admitted "the first render of the window"
+            Expect.isTrue (reserve modellerPeerId).Admitted "the second, which is the declared limit"
+            Expect.isFalse (reserve modellerPeerId).Admitted "the third is over it"
+
+            // A budget shared between counterparties would let a busy
+            // peer deny a quiet one, which is not a bound anybody agreed
+            // to.
+            Expect.isTrue (reserve strangerPeerId).Admitted "a different peer has its own budget"
+
+            clock.Value <- renderClock.AddSeconds 61.0
+            Expect.isTrue (reserve modellerPeerId).Admitted "a new window admits again"
+        }
+
+        testCaseAsync "a refused request does not spend a slot"
+        <| async {
+            // Validation runs before reservation, so a malformed request
+            // cannot exhaust a peer's budget — otherwise a caller could
+            // lock itself out with typos, and a hostile one could lock
+            // out a peer it shares a binding with.
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+
+            for _ in 1..5 do
+                let! answer =
+                    call
+                        instance
+                        modellerPeerId
+                        (ModelExecutionPeerContract.viewRequest {
+                            renderRequest with
+                                Resolution = "hour"
+                        })
+
+                expectRefusal answer "model-execution-view-resolution-undeclared" "refused on the bound"
+
+            let! artifact = renderThrough instance renderRequest
+            Expect.equal artifact.ViewId spendView.ViewId "the budget was never touched"
+        }
+    ]
+
+let private viewAuthorityTests =
+    testList "the level and the declaration are two gates, and both answer differently" [
+        testCaseAsync "a declared view is still refused as an authority question at AggregatesOnly"
+        <| async {
+            // The ordering claim of §5.7.9, tested where it bites: this
+            // deployment IMPLEMENTS the view and has not granted it, so
+            // the remedy is a conversation and the refusal must say so.
+            let instance =
+                dataHostRendering PeerVisibilityBinding.default' None (Some(viewDeps ())) boundOnly
+
+            let! answer = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest renderRequest)
+
+            expectRefusal
+                answer
+                "model-execution-authority-level-exceeded"
+                "'we do that, and not for you' — not 'we do not do that'"
+        }
+
+        testCaseAsync "a granted peer is refused as UNDECLARED when the deployment renders no views"
+        <| async {
+            let instance = dataHostRendering viewOnly None None boundOnly
+            let! answer = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest renderRequest)
+
+            expectRefusal
+                answer
+                "model-execution-undeclared-diagnostic"
+                "the mirror image: granted the level, offered no view"
+        }
+
+        testCaseAsync "the raw-series vocabulary is still refused at ViewOnly"
+        <| async {
+            // The level is a rung, not a door: granting views does not
+            // grant series, and the profile serves none at any level.
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ReadVintageSeries" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-authority-level-exceeded"
+                "a ViewOnly grant does not reach a Full requirement"
+        }
+    ]
+
+let private viewAuditTests =
+    testList "every render is recorded through the disclosure plane" [
+        testCaseAsync "the gate is asked once, at the federation door, with the SERIES as its references"
+        <| async {
+            let claimed = ref ""
+
+            let gate =
+                RecordingGate(
+                    Map.ofList [
+                        "fact:spend-vs-response:promo-spend", FactDisclosable
+                        "fact:spend-vs-response:search-clicks", FactDisclosable
+                    ],
+                    claimed
+                )
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                // Deliberately distinct from the view-keyed set: if the
+                // render took the operation-keyed door, this id would
+                // appear and the assertion below would fail.
+                References = fun _ -> [ "fact:operation-keyed" ]
+                ViewReferences = fun viewId series -> series |> List.map (fun s -> $"fact:{viewId}:{s}")
+            }
+
+            let instance = dataHostRendering viewOnly (Some route) (Some(viewDeps ())) boundOnly
+            let! artifact = renderThrough instance renderRequest
+
+            let scopeId, surface, factIds, purposeAtCall = gate.Calls |> Seq.exactlyOne
+
+            Expect.equal scopeId hostScope "the binding's scope, never one from the wire"
+            Expect.equal surface FactPeerEgress "the shipped Phase 525 door, at the federation surface"
+
+            // This is the query the level was sold on: which peer viewed
+            // WHICH SERIES when. Keyed on the operation alone every
+            // render would leave the same row.
+            Expect.equal
+                factIds
+                [ "fact:spend-vs-response:promo-spend"; "fact:spend-vs-response:search-clicks" ]
+                "the references name the series the artifact covered"
+
+            Expect.equal
+                purposeAtCall
+                "federated-modelling"
+                "the Phase 592 purpose was claimed before the gate was asked"
+
+            // One crossing, one door, one row: the generic route is not
+            // also taken, which `Seq.exactlyOne` above already asserts
+            // and this makes explicit.
+            Expect.equal
+                artifact.Series
+                [ "promo-spend"; "search-clicks" ]
+                "the artifact and the audit record name the same series"
+        }
+
+        testCaseAsync "a withheld series refuses the render, naming the operation and nothing else"
+        <| async {
+            let claimed = ref ""
+
+            let gate =
+                RecordingGate(
+                    Map.ofList [
+                        "fact:spend-vs-response:promo-spend", FactDisclosable
+                        "fact:spend-vs-response:search-clicks", FactNotDisclosable "licensed-third-party"
+                    ],
+                    claimed
+                )
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                References = fun _ -> []
+                ViewReferences = fun viewId series -> series |> List.map (fun s -> $"fact:{viewId}:{s}")
+            }
+
+            let instance = dataHostRendering viewOnly (Some route) (Some(viewDeps ())) boundOnly
+            let! answer = call instance modellerPeerId (ModelExecutionPeerContract.viewRequest renderRequest)
+
+            expectRefusal
+                answer
+                "model-execution-egress-withheld"
+                "refused whole rather than partially redacted — a view with a series quietly missing is a lie"
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Refused refusal) ->
+                let described = ModelExecutionPeerRefusal.describe refusal
+
+                Expect.isFalse (described.Contains "licensed-third-party") "the policy is never named across the seam"
+                Expect.isFalse (described.Contains "search-clicks") "nor is the series that was withheld"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        testCaseAsync "a deployment with no route renders and consults nothing"
+        <| async {
+            let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly
+            let! artifact = renderThrough instance renderRequest
+            Expect.equal artifact.ViewId spendView.ViewId "no fact substrate composed, nothing routed (GP 13)"
+        }
+    ]
+
 let tests =
     testList "Phase 638 — federated model execution" [
         roundTripTests
@@ -1590,4 +2257,11 @@ let tests =
         federatedEgressTests
         authorityVocabularyTests
         declaredSurfaceTests
+        // Phase 643 — the machinery the `ViewOnly` level names.
+        viewContractTests
+        viewGrammarTests
+        viewBoundsTests
+        viewRateTests
+        viewAuthorityTests
+        viewAuditTests
     ]

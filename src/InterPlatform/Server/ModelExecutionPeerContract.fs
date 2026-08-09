@@ -291,6 +291,16 @@ type ModelExecutionPeerRefusal =
     /// the data has the full record: every withhold is audited by the
     /// gate in the same `_facts` trail every other egress door writes to.
     | EgressWithheld of operation: string
+    /// Phase 643 — the authority admitted the view request, and the
+    /// request left the bounds the view DECLARES.
+    ///
+    /// Carried through with the view vocabulary's own class rather than
+    /// flattened to one seam class — the posture `SubmitterRefused` takes,
+    /// for a sharper reason. Every one of these says "narrow this and ask
+    /// again", and which bound to narrow is the only useful part; a caller
+    /// told merely that a view request was refused would have to guess
+    /// between the window, the series set and its rate budget.
+    | ViewRefused of refusal: PeerViewRefusal
 
 [<RequireQualifiedAccess>]
 module ModelExecutionPeerRefusal =
@@ -310,6 +320,13 @@ module ModelExecutionPeerRefusal =
         | ModelExecutionPeerRefusal.AuthorityLevelExceeded _ -> "model-execution-authority-level-exceeded"
         | ModelExecutionPeerRefusal.AuthorityNarrowingRefused _ -> "model-execution-authority-narrowed"
         | ModelExecutionPeerRefusal.EgressWithheld _ -> "model-execution-egress-withheld"
+        // Phase 643 — the INNER class, unlike `SubmitterRefused` above,
+        // which collapses to one. The difference is whose vocabulary it
+        // is: a submitter refusal belongs to another surface, so this
+        // profile names the passthrough and stops; a view refusal belongs
+        // to this profile, so its own classes are the ones a corpus
+        // vector and a refusal log should carry.
+        | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.className refusal
 
     /// Human-readable one-line description (logs + operator display; the
     /// case, not this string, is the contract).
@@ -334,6 +351,7 @@ module ModelExecutionPeerRefusal =
             $"'{operation}' requires data-visibility authority '{required}'; the peer ceiling admits it but '{narrowedBy}' narrows this caller to '{effective}'"
         | ModelExecutionPeerRefusal.EgressWithheld operation ->
             $"the answer to '{operation}' references data this deployment's disclosure plane withheld at the federated-egress door"
+        | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.describe refusal
 
     /// Phase 640 — the seam's refusal read in the **submitter** face's own
     /// closed vocabulary, given the operation names this deployment serves.
@@ -401,6 +419,15 @@ module ModelExecutionPeerRefusal =
         // naming the policy across this seam would be the disclosure.
         | ModelExecutionPeerRefusal.EgressWithheld _ ->
             ModelExecutionRefusal.PolicyRefused "model-execution.egress-withheld"
+        // Phase 643 — a bounds refusal is `InvalidSubmission`, not
+        // `Forbidden` and not `PolicyRefused`. Nothing about the caller
+        // or the grant is wrong: the request itself is outside the
+        // published bounds, and the description names which one, so the
+        // remedy is to narrow and re-send. Mapping it to a policy rule
+        // would hand a submitter an identifier it can only log, in place
+        // of the one sentence that tells it what to change.
+        | ModelExecutionPeerRefusal.ViewRefused refusal ->
+            ModelExecutionRefusal.InvalidSubmission(PeerViewRefusal.describe refusal)
 
 /// The versioned envelope every model-execution request rides in.
 ///
@@ -503,8 +530,20 @@ module ModelExecutionProfile =
     /// rather than as an unrecognised string it would read as a typo. It
     /// also fixes the classification before any implementation can be
     /// tempted to serve one below the level it belongs to.
+    /// Phase 643 — the three view operation names as literals, so the
+    /// dispatch, the classification set and the egress carve-out below
+    /// cannot drift into three spellings of the same word.
+    [<Literal>]
+    let ListViewsOperation = "ListViews"
+
+    [<Literal>]
+    let DescribeViewOperation = "DescribeView"
+
+    [<Literal>]
+    let RenderViewOperation = "RenderView"
+
     let viewOperations: Set<string> =
-        Set.ofList [ "DescribeView"; "ListViews"; "RenderView" ]
+        Set.ofList [ DescribeViewOperation; ListViewsOperation; RenderViewOperation ]
 
     /// Phase 642 — operations that require `Full`: raw data, for
     /// co-located or otherwise fully-trusted deployments.
@@ -620,6 +659,26 @@ module ModelExecutionAdmission =
             Authority = authority
     }
 
+    /// Phase 643 — admit the bounded-view operations.
+    ///
+    /// **Declaring the views is a separate act from granting the level,
+    /// and both are required.** The level says what a peer may see; this
+    /// says what the deployment implements. A deployment that grants
+    /// `ViewOnly` and declares no views refuses a view request as
+    /// undeclared — "we do not do that" — while one that declares views
+    /// and grants `AggregatesOnly` refuses it as an authority question.
+    /// Two different remedies, kept distinguishable by keeping the two
+    /// declarations apart (§5.7.9's admission order is what makes the
+    /// authority answer win when both are true).
+    ///
+    /// Not called ⇒ the view names stay off the admitted set and a
+    /// pre-643 composition admits byte-for-byte what it always did
+    /// (GP 11).
+    let withViews (admission: ModelExecutionAdmission) = {
+        admission with
+            Operations = Set.union admission.Operations ModelExecutionProfile.viewOperations
+    }
+
     /// A data host that answers no governed diagnostics: the submitter
     /// operations and nothing else. This is the default a deployment
     /// gets by not declaring, and it is the honest one — a diagnostic
@@ -708,6 +767,18 @@ type ModelExecutionPeerDeps = {
     ResolveBinding: string -> Async<ModelExecutionPeerBinding option>
     Admission: ModelExecutionAdmission
     FitPoll: ModelExecutionFitPollPolicy
+    /// Phase 643 — the bounded-view substrate. `None` on a deployment
+    /// that declares no views, which is every pre-643 deployment: the
+    /// view operations are then not on the admitted set either (see
+    /// `ModelExecutionAdmission.withViews`), so nothing reaches the
+    /// dispatch arms below and nothing is constructed (GP 13).
+    ///
+    /// Beside `Admission` rather than on the binding because the views a
+    /// deployment renders are a property of the DEPLOYMENT; which of them
+    /// a given peer may reach is the level on its binding, and holding
+    /// the two apart is what lets one offer be published to many
+    /// counterparties without restating it per binding.
+    Views: PeerViewDeps option
 }
 
 /// The substrate the governed-diagnostics contract runs over.
@@ -952,6 +1023,17 @@ module ModelExecutionPeerContract =
                 Gates = submission.Gates |> List.sortWith (byOrdinal _.Name)
         }
 
+    /// Phase 643 — a `RenderView` request envelope, with the requested
+    /// series in ordinal order. **The emitter owns the sort**, for the
+    /// same reason it owns the gate and term sorts: two modellers asking
+    /// for the same series in different orders must produce the same
+    /// document, or the envelope is not canonical in the sense §3 means.
+    let viewRequest (view: PeerViewRequest) : ModelExecutionPeerRequest =
+        request ModelExecutionProfile.RenderViewOperation {
+            view with
+                Series = view.Series |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+        }
+
     /// A governed-diagnostic request envelope for `diagnostic`, with the
     /// terms in ordinal order for the same reason.
     let diagnosticRequest
@@ -1112,6 +1194,87 @@ module ModelExecutionPeerContract =
                 | Error e -> return submitterRefused e
                 | Ok resolved -> return answered (toWireVintage resolved)
 
+            // ── Phase 643 — the bounded views ────────────────────────
+            //
+            // Reached only when this deployment DECLARED views (else the
+            // names are off the admitted set) and the peer's binding
+            // grants `ViewOnly` or above (else `admit` refused the
+            // request as an authority question). Both gates are above
+            // this arm and neither is re-checked here: a check written
+            // twice is a check that can come to disagree with itself.
+            //
+            // The `None` arms are unreachable for the same reason, and
+            // are written rather than assumed — `withViews` and `Views`
+            // are two declarations a composition could get half right,
+            // and the honest answer to "you admitted an operation you
+            // cannot serve" is the undeclared class, not an exception in
+            // a request path.
+            | ModelExecutionProfile.ListViewsOperation ->
+                match deps.Views with
+                | None ->
+                    return
+                        ModelExecutionPeerAnswer.Refused(
+                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                        )
+                | Some views ->
+                    let! declared = PeerView.list views binding.ScopeId
+                    return answered declared
+
+            | ModelExecutionProfile.DescribeViewOperation ->
+                match deps.Views with
+                | None ->
+                    return
+                        ModelExecutionPeerAnswer.Refused(
+                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                        )
+                | Some views ->
+                    let viewId = JsonRpc.deserialize<string> request.Body
+
+                    match! PeerView.describe views binding.ScopeId viewId with
+                    | Error refusal ->
+                        return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.ViewRefused refusal)
+                    | Ok declaration -> return answered declaration
+
+            | ModelExecutionProfile.RenderViewOperation ->
+                match deps.Views with
+                | None ->
+                    return
+                        ModelExecutionPeerAnswer.Refused(
+                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                        )
+                | Some views ->
+                    let view = JsonRpc.deserialize<PeerViewRequest> request.Body
+
+                    match! PeerView.render views binding.ScopeId binding.PeerId view with
+                    | Error refusal ->
+                        return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.ViewRefused refusal)
+                    | Ok artifact ->
+                        // The render takes the federated-egress door HERE
+                        // rather than in `runGoverned`, and takes it
+                        // exactly once (that function's carve-out is the
+                        // other half of this). The reason is the audit
+                        // the level is sold on: keyed by operation alone
+                        // every render produces the same record, and
+                        // "which peer viewed which series when" is
+                        // answerable only if the reference set names the
+                        // series the artifact actually covers.
+                        let! decision =
+                            PeerVisibilityEgress.routeView
+                                binding.Egress
+                                binding.ScopeId
+                                binding.PeerId
+                                request.Operation
+                                artifact.ViewId
+                                artifact.Series
+
+                        if PeerEgressDecision.cleared decision then
+                            return answered artifact
+                        else
+                            return
+                                ModelExecutionPeerAnswer.Refused(
+                                    ModelExecutionPeerRefusal.EgressWithheld request.Operation
+                                )
+
             // Unreachable: `admit` has already refused anything outside
             // the admitted operation set. Kept total rather than assumed
             // — a surface whose default branch is an exception is one
@@ -1178,6 +1341,12 @@ module ModelExecutionPeerContract =
 
             match answer with
             | ModelExecutionPeerAnswer.Refused _ -> return answer
+            // Phase 643 — a render has ALREADY taken the door, with a
+            // reference set naming the series it covered. Routing it
+            // again here would spend a second gate check and write a
+            // second, less informative audit row for one crossing.
+            | ModelExecutionPeerAnswer.Answered _ when request.Operation = ModelExecutionProfile.RenderViewOperation ->
+                return answer
             | ModelExecutionPeerAnswer.Answered _ ->
                 let! decision =
                     PeerVisibilityEgress.route binding.Egress binding.ScopeId binding.PeerId request.Operation

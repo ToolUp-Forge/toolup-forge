@@ -698,6 +698,15 @@ let admissionFor (vectorId: string) : ModelExecutionAdmission =
     | "model-execution/reject-view-at-aggregates" -> admissionAt PeerDataVisibilityLevel.AggregatesOnly
     | "model-execution/reject-full-at-view" -> admissionAt PeerDataVisibilityLevel.ViewOnly
     | "model-execution/reject-narrowed" -> narrowedAdmission
+    // Phase 643 — the bound vectors are read at `ViewOnly` and with the
+    // view operations DECLARED, because both are preconditions of
+    // reaching a bounds check at all. Read at the reference admission
+    // they would be refused one check earlier, for a reason that has
+    // nothing to do with what they are vectors for.
+    | "model-execution/reject-view-over-bound-window"
+    | "model-execution/reject-view-undeclared-series" ->
+        admissionAt PeerDataVisibilityLevel.ViewOnly
+        |> ModelExecutionAdmission.withViews
     | _ -> referenceAdmission
 
 let private referenceVintage: ModelExecutionPeerVintage = {
@@ -825,6 +834,108 @@ let private referenceDiagnostics: CohortResult list = [
     }
 ]
 
+// ─── Reference values — Phase 643 bounded views ──────────────────────
+
+/// The reference deployment's declared views.
+///
+/// Two of them, declared OUT of ordinal order, so the fixture pins the
+/// sort `PeerView.list` applies rather than the order somebody happened
+/// to type. Their bounds are the whole offer: a request outside any of
+/// them is refused with the class that names which one it left.
+let referenceViewDeclarations: PeerViewDeclaration list = [
+    {
+        ViewId = "spend-vs-response"
+        DatasetId = "weekly-panel"
+        Title = "Weekly spend against response"
+        Kind = "line"
+        Series = [ "promo-spend"; "search-clicks" ]
+        Resolutions = [ "day"; "week" ]
+        MaxWindowDays = 90
+        MaxSeriesPerRequest = 2
+        MaxPointsPerSeries = 26
+        MaxRendersPerWindow = 20
+        RenderWindowSeconds = 3600
+    }
+    {
+        ViewId = "coverage-by-week"
+        DatasetId = "weekly-panel"
+        Title = "Observed coverage by week"
+        Kind = "bar"
+        Series = [ "observed-weeks" ]
+        Resolutions = [ "week" ]
+        MaxWindowDays = 365
+        MaxSeriesPerRequest = 1
+        MaxPointsPerSeries = 52
+        MaxRendersPerWindow = 5
+        RenderWindowSeconds = 3600
+    }
+]
+
+let private referenceViewWindow: PeerViewWindow = {
+    From = DateTimeOffset(2026, 4, 20, 0, 0, 0, TimeSpan.Zero)
+    To = DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+}
+
+/// A render request inside every declared bound. Series named out of
+/// ordinal order on purpose — the emitter owns the sort.
+let referenceViewRequest: PeerViewRequest = {
+    ViewId = "spend-vs-response"
+    DatasetVersion = 7
+    Series = [ "search-clicks"; "promo-spend" ]
+    Window = referenceViewWindow
+    Resolution = "week"
+}
+
+/// The reference deployment's rendered artifact, as a VALUE.
+///
+/// **Not the output of a live renderer, and that is the same judgement
+/// the host-envelope family records above.** What a deployment's chart
+/// grammar draws is its own business — §5.6's posture, and §5.7.10 says
+/// so explicitly — while the wire contract is the document the artifact
+/// rides in: a declared media type, base64 content, a hash over the
+/// bytes, and the metadata naming what was shown. Pinning a live render
+/// would make this fixture go red on a cosmetic change to an SVG
+/// attribute, which is a gate nobody would keep, and it would pin
+/// nothing the specification actually states.
+///
+/// The ENCODING rules are still triangulated: `emit.mjs` derives the
+/// base64 and the hash from the same reference bytes by its own route.
+[<Literal>]
+let private referenceArtifactSvg =
+    "<svg viewBox=\"0 0 320.0 160.0\" role=\"img\"></svg>"
+
+let private referenceArtifactBytes = Encoding.UTF8.GetBytes referenceArtifactSvg
+
+let private referenceArtifact: PeerViewArtifact = {
+    ViewId = referenceViewRequest.ViewId
+    MediaType = "image/svg+xml"
+    Content = Convert.ToBase64String referenceArtifactBytes
+    ContentHash = "sha256:" + sha256Hex referenceArtifactBytes
+    Series = [ "promo-spend"; "search-clicks" ]
+    Window = referenceViewWindow
+    Resolution = referenceViewRequest.Resolution
+    RenderedPoints = 26
+}
+
+/// A request whose window is wider than the view declares. Well-formed,
+/// names a declared view, declared series and a declared resolution —
+/// the ONE thing wrong with it is the bound, which is what makes it a
+/// test of the bound rather than of the parser.
+let private overBoundWindowRequest: PeerViewRequest = {
+    referenceViewRequest with
+        Window = {
+            referenceViewWindow with
+                From = DateTimeOffset(2025, 7, 13, 0, 0, 0, TimeSpan.Zero)
+        }
+}
+
+/// A request naming a series this view does not carry. Also well-formed,
+/// and also refused for exactly one reason.
+let private undeclaredSeriesRequest: PeerViewRequest = {
+    referenceViewRequest with
+        Series = [ "promo-spend"; "margin-per-unit" ]
+}
+
 /// One refusal per class the profile defines — so a modeller's mapping
 /// is pinned by the corpus rather than inferred from the two classes it
 /// happened to trip.
@@ -850,6 +961,20 @@ let private referenceRefusals: ModelExecutionPeerAnswer list =
             "team:north-analysts"
         )
         ModelExecutionPeerRefusal.EgressWithheld "Coverage"
+        // Phase 643 — the bounded-view family, carried through with its
+        // own vocabulary nested inside the seam's passthrough case. All
+        // eight are here for the reason the authority three are: the
+        // vector's contract is one answer per class the profile defines,
+        // and a class this list omits is one nobody's mapping was pinned
+        // against.
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.UndeclaredView "spend-by-region")
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.UndeclaredSeries("spend-vs-response", "margin-per-unit"))
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.NoSeriesRequested "spend-vs-response")
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.SeriesBudgetExceeded("spend-vs-response", 3, 2))
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.WindowUnordered "spend-vs-response")
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.WindowBudgetExceeded("spend-vs-response", 365, 90))
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.UndeclaredResolution("spend-vs-response", "hour"))
+        ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.RenderBudgetExhausted("spend-vs-response", 20, 3600))
     ]
     |> List.map ModelExecutionPeerAnswer.Refused
 
@@ -890,6 +1015,40 @@ let private scopeWideningRequest () =
 /// authority question rather than as an unknown operation.
 let private viewRequest () =
     ModelExecutionPeerContract.request "RenderView" referenceVintage
+
+/// Phase 643 — the `RenderView` request envelope, built through the live
+/// constructor so the ordinal series sort and the profile version cannot
+/// drift out of the corpus.
+let private renderViewRequest () =
+    ModelExecutionPeerContract.viewRequest referenceViewRequest
+
+/// Phase 643 — the three view answers a data host gives, in the order a
+/// modeller meets them: the declared offer, one view's declaration, and
+/// the rendered artifact.
+///
+/// `ListViews` goes through the live `PeerView.list`, so the fixture pins
+/// the ordinal sort as well as the encoding. The deps it needs a reader
+/// and a renderer for are stubs that are never reached — listing an offer
+/// touches neither — and the render itself is a reference VALUE for the
+/// reason stated beside it.
+let private viewAnswers () =
+    let deps: PeerViewDeps = {
+        Declarations = fun _ -> async { return referenceViewDeclarations }
+        ReadSeries = fun _ _ -> async { return [] }
+        Renderer = {
+            MediaType = "image/svg+xml"
+            Render = fun _ -> Array.empty
+        }
+        Rate = PeerViewRateGuard.inProcess (fun () -> DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero))
+    }
+
+    let listed = PeerView.list deps "consortium-north" |> Async.RunSynchronously
+
+    [
+        ModelExecutionPeerAnswer.Answered(JsonRpc.serialize listed)
+        ModelExecutionPeerAnswer.Answered(JsonRpc.serialize referenceViewDeclarations.Head)
+        ModelExecutionPeerAnswer.Answered(JsonRpc.serialize referenceArtifact)
+    ]
 
 /// Phase 642 — a raw-series request, refused at `ViewOnly`. Deliberately
 /// NOT one of the row-access probe names: those are refused identically
@@ -1156,6 +1315,24 @@ let vectors () : WireVector list =
             "model-execution/refusals.json"
             (JsonRpc.serialize referenceRefusals)
 
+        vector
+            "model-execution/view-request"
+            "model-execution"
+            Modeller
+            RoundTrip
+            "A bounded-view render request: the view (which binds the dataset, so the request cannot name one), the pinned version, the series in ordinal order, the window and the resolution. Every member is inside a bound the data host published, which is the only shape that gets answered."
+            "model-execution/view-request.json"
+            (JsonRpc.serialize (renderViewRequest ()))
+
+        vector
+            "model-execution/view"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The three answers of the bounded-view surface: the declared offer with its bounds, one view's declaration, and a rendered artifact. The artifact carries base64 bytes under a declared media type and a hash over them — there is no member a row, a series or a point could ride in, which is what makes a view not an export route."
+            "model-execution/view.json"
+            (JsonRpc.serialize (viewAnswers ()))
+
         {
             vector
                 "model-execution/reject-row-read"
@@ -1238,6 +1415,38 @@ let vectors () : WireVector list =
                 "model-execution/reject-narrowed.json"
                 (JsonRpc.serialize (viewRequest ())) with
                 Reject = Some "model-execution-authority-narrowed"
+        }
+
+        // Phase 643 — the two bound vectors. Both are admitted by every
+        // check the authority vectors above test: the profile version is
+        // current, the operation is declared, the scope is not asserted,
+        // and the peer is granted `ViewOnly`. They are refused by the
+        // VIEW's own declared bounds, which is a different reader — the
+        // one a data host must run after admission and before it reads
+        // anything. A harness that stopped at the envelope certifies the
+        // three above and neither of these.
+        {
+            vector
+                "model-execution/reject-view-over-bound-window"
+                "model-execution"
+                DataHost
+                Reject
+                "A render request covering a wider window than the view declares. Well-formed, granted, and refused on the one thing wrong with it — the class names the bound and the description carries the declared limit, so a modeller narrows and re-sends rather than guessing."
+                "model-execution/reject-view-over-bound-window.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.viewRequest overBoundWindowRequest)) with
+                Reject = Some "model-execution-view-window-budget"
+        }
+
+        {
+            vector
+                "model-execution/reject-view-undeclared-series"
+                "model-execution"
+                DataHost
+                Reject
+                "A render request naming a series the view does not carry. Refused before anything is read: the declaration is the whole offer, so a series absent from it is one nobody agreed to render — and the refusal names only what the caller itself sent."
+                "model-execution/reject-view-undeclared-series.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.viewRequest undeclaredSeriesRequest)) with
+                Reject = Some "model-execution-view-series-undeclared"
         }
     ]
 

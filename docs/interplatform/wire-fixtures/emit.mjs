@@ -906,6 +906,127 @@ const governedDiagnostics = [
   },
 ];
 
+// ── Phase 643 — bounded views ────────────────────────────────────────
+//
+// A view DECLARATION is the whole offer: which series, which
+// resolutions, and the numeric bounds the data host enforces. It crosses
+// the seam, so it carries nothing internal.
+
+const viewDeclaration = (d) =>
+  obj([
+    ["ViewId", str(d.viewId)],
+    ["DatasetId", str(d.datasetId)],
+    ["Title", str(d.title)],
+    ["Kind", str(d.kind)],
+    ["Series", arr([...d.series].sort(ordinal).map(str))],
+    ["Resolutions", arr([...d.resolutions].sort(ordinal).map(str))],
+    ["MaxWindowDays", num(d.maxWindowDays)],
+    ["MaxSeriesPerRequest", num(d.maxSeriesPerRequest)],
+    ["MaxPointsPerSeries", num(d.maxPointsPerSeries)],
+    ["MaxRendersPerWindow", num(d.maxRendersPerWindow)],
+    ["RenderWindowSeconds", num(d.renderWindowSeconds)],
+  ]);
+
+const viewWindow = (w) =>
+  obj([
+    ["From", str(w.from)],
+    ["To", str(w.to)],
+  ]);
+
+// The request names a VIEW and a version, and no dataset: the
+// declaration binds the dataset, so a peer cannot point a view at data
+// it does not cover. Series sorted by the EMITTER, as gates and terms
+// are.
+const viewRequestBody = (r) =>
+  obj([
+    ["ViewId", str(r.viewId)],
+    ["DatasetVersion", num(r.datasetVersion)],
+    ["Series", arr([...r.series].sort(ordinal).map(str))],
+    ["Window", viewWindow(r.window)],
+    ["Resolution", str(r.resolution)],
+  ]);
+
+// The artifact. Content is base64 of the rendered bytes and the hash is
+// over those same bytes — both derived here rather than copied, which is
+// the whole point of a second emitter: the base64 alphabet, the padding,
+// the UTF-8 of the source bytes and the `sha256:` prefix are four places
+// an independent implementation can diverge silently.
+const viewArtifact = (a) => {
+  const bytes = Buffer.from(a.svg, "utf8");
+
+  return obj([
+    ["ViewId", str(a.viewId)],
+    ["MediaType", str(a.mediaType)],
+    ["Content", str(bytes.toString("base64"))],
+    ["ContentHash", str("sha256:" + createHash("sha256").update(bytes).digest("hex"))],
+    ["Series", arr([...a.series].sort(ordinal).map(str))],
+    ["Window", viewWindow(a.window)],
+    ["Resolution", str(a.resolution)],
+    ["RenderedPoints", num(a.renderedPoints)],
+  ]);
+};
+
+// Declared out of ordinal order on purpose — the list a data host
+// answers is sorted by the emitter, not by whoever typed it.
+const viewDeclarations = [
+  {
+    viewId: "spend-vs-response",
+    datasetId: "weekly-panel",
+    title: "Weekly spend against response",
+    kind: "line",
+    series: ["promo-spend", "search-clicks"],
+    resolutions: ["day", "week"],
+    maxWindowDays: 90,
+    maxSeriesPerRequest: 2,
+    maxPointsPerSeries: 26,
+    maxRendersPerWindow: 20,
+    renderWindowSeconds: 3600,
+  },
+  {
+    viewId: "coverage-by-week",
+    datasetId: "weekly-panel",
+    title: "Observed coverage by week",
+    kind: "bar",
+    series: ["observed-weeks"],
+    resolutions: ["week"],
+    maxWindowDays: 365,
+    maxSeriesPerRequest: 1,
+    maxPointsPerSeries: 52,
+    maxRendersPerWindow: 5,
+    renderWindowSeconds: 3600,
+  },
+];
+
+const referenceViewWindow = { from: "2026-04-20T00:00:00+00:00", to: "2026-07-13T00:00:00+00:00" };
+
+const viewRequest = {
+  viewId: "spend-vs-response",
+  datasetVersion: 7,
+  series: ["search-clicks", "promo-spend"],
+  window: referenceViewWindow,
+  resolution: "week",
+};
+
+// The rendered bytes are a reference VALUE, not a live render: what a
+// deployment's chart grammar draws is its own business (§5.7.10), and
+// the wire contract is the document the artifact rides in.
+const renderedArtifact = {
+  viewId: "spend-vs-response",
+  mediaType: "image/svg+xml",
+  svg: '<svg viewBox="0 0 320.0 160.0" role="img"></svg>',
+  series: ["promo-spend", "search-clicks"],
+  window: referenceViewWindow,
+  resolution: "week",
+  renderedPoints: 26,
+};
+
+const viewAnswers = () =>
+  arr([
+    answered(arr([...viewDeclarations].sort((a, b) => ordinal(a.viewId, b.viewId)).map(viewDeclaration))),
+    answered(viewDeclaration(viewDeclarations[0])),
+    answered(viewArtifact(renderedArtifact)),
+  ]);
+
 const modelExecutionRefusals = () =>
   arr([
     // A multi-payload union case rides as an ARRAY of its payloads in
@@ -931,6 +1052,25 @@ const modelExecutionRefusals = () =>
       ),
     ),
     refused(caseOf("EgressWithheld", str("Coverage"))),
+    // Phase 643 — the bounded-view family, nested inside the seam's
+    // passthrough case exactly as a submitter refusal is. Note the
+    // single-payload arms and the multi-payload arms side by side: the
+    // encoding rule (§3.1 rule 11) differs between them, and this family
+    // is the corpus's densest sample of both.
+    refused(caseOf("ViewRefused", caseOf("UndeclaredView", str("spend-by-region")))),
+    refused(
+      caseOf("ViewRefused", caseOf("UndeclaredSeries", arr([str("spend-vs-response"), str("margin-per-unit")]))),
+    ),
+    refused(caseOf("ViewRefused", caseOf("NoSeriesRequested", str("spend-vs-response")))),
+    refused(caseOf("ViewRefused", caseOf("SeriesBudgetExceeded", arr([str("spend-vs-response"), num(3), num(2)])))),
+    refused(caseOf("ViewRefused", caseOf("WindowUnordered", str("spend-vs-response")))),
+    refused(
+      caseOf("ViewRefused", caseOf("WindowBudgetExceeded", arr([str("spend-vs-response"), num(365), num(90)]))),
+    ),
+    refused(caseOf("ViewRefused", caseOf("UndeclaredResolution", arr([str("spend-vs-response"), str("hour")])))),
+    refused(
+      caseOf("ViewRefused", caseOf("RenderBudgetExhausted", arr([str("spend-vs-response"), num(20), num(3600)]))),
+    ),
   ]);
 
 // ── run ──────────────────────────────────────────────────────────────
@@ -967,6 +1107,8 @@ const documents = () => {
     "model-execution/outcome.json": answered(outcomeBody(outcome)),
     "model-execution/diagnostics.json": arr(governedDiagnostics.map((a) => answered(aggregate(a)))),
     "model-execution/refusals.json": modelExecutionRefusals(),
+    "model-execution/view-request.json": requestEnvelope("RenderView", null, viewRequestBody(viewRequest)),
+    "model-execution/view.json": viewAnswers(),
   };
 };
 

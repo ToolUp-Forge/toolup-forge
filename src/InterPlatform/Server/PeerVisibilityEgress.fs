@@ -89,6 +89,22 @@ type PeerEgressRoute = {
     /// and pays for nothing. Inventing a derivation would produce a
     /// route that looked enforced and checked nothing.
     References: string -> string list
+    /// Phase 643 — the fact references a RENDERED VIEW carries, given the
+    /// view id and the series the artifact actually covers.
+    ///
+    /// **A second function rather than a reuse of `References`, because
+    /// the operation name cannot distinguish two renders.** Every
+    /// `RenderView` call names the same operation, and the whole point of
+    /// the audit the `ViewOnly` level buys is that a data owner can ask
+    /// which peer viewed WHICH SERIES when. Keying the reference set on
+    /// the operation alone would produce one indistinguishable record per
+    /// render, which is the shape of an audit trail that answers nothing.
+    ///
+    /// Supplied rather than inferred for the same reason `References` is:
+    /// no shape in the view contract carries a fact id, so a deployment
+    /// whose series are classified facts says which, and one whose series
+    /// are not returns `[]` and pays for nothing.
+    ViewReferences: string -> string list -> string list
 }
 
 /// What one crossing decided — recorded as data so an operator surface,
@@ -140,6 +156,53 @@ module PeerVisibilityEgress =
     /// empty reference set short-circuits without claiming or consulting
     /// anything: a crossing that discloses no classified fact has nothing
     /// for a purpose to justify.
+    /// The shared tail of every crossing: claim the purpose, ask the
+    /// gate, and split the references by what it affirmatively permitted.
+    ///
+    /// Factored out when Phase 643 added the view-keyed route rather than
+    /// copied, because "which verdicts count as permission" is the one
+    /// decision in this file that must not be able to differ between two
+    /// doors.
+    let private judge
+        (r: PeerEgressRoute)
+        (scopeId: string)
+        (principal: string)
+        (operation: string)
+        (references: string list)
+        : Async<PeerEgressDecision> =
+        async {
+            match references with
+            | [] ->
+                return {
+                    PeerEgressDecision.unrouted operation with
+                        Purpose = r.Purpose.PurposeId
+                }
+            | references ->
+                r.Purpose.Claim r.Purpose.PurposeId
+
+                let! verdicts = r.Gate.Check(scopeId, principal, FactPeerEgress, references)
+
+                let permitted =
+                    references
+                    |> List.filter (fun id ->
+                        match verdicts.TryFind id with
+                        | Some FactDisclosable -> true
+                        // Fail-closed on all three of denied, unknown
+                        // and unresolvable-in-scope. A reference the
+                        // gate did not affirmatively permit is one
+                        // nothing said may cross.
+                        | Some(FactNotDisclosable _)
+                        | None -> false)
+
+                return {
+                    Operation = operation
+                    Surface = FactEgressSurface.toString FactPeerEgress
+                    Purpose = r.Purpose.PurposeId
+                    Permitted = permitted
+                    Withheld = references |> List.filter (fun id -> not (List.contains id permitted))
+                }
+        }
+
     let route
         (routeOf: PeerEgressRoute option)
         (scopeId: string)
@@ -149,35 +212,27 @@ module PeerVisibilityEgress =
         async {
             match routeOf with
             | None -> return PeerEgressDecision.unrouted operation
-            | Some r ->
-                match r.References operation with
-                | [] ->
-                    return {
-                        PeerEgressDecision.unrouted operation with
-                            Purpose = r.Purpose.PurposeId
-                    }
-                | references ->
-                    r.Purpose.Claim r.Purpose.PurposeId
+            | Some r -> return! judge r scopeId principal operation (r.References operation)
+        }
 
-                    let! verdicts = r.Gate.Check(scopeId, principal, FactPeerEgress, references)
-
-                    let permitted =
-                        references
-                        |> List.filter (fun id ->
-                            match verdicts.TryFind id with
-                            | Some FactDisclosable -> true
-                            // Fail-closed on all three of denied, unknown
-                            // and unresolvable-in-scope. A reference the
-                            // gate did not affirmatively permit is one
-                            // nothing said may cross.
-                            | Some(FactNotDisclosable _)
-                            | None -> false)
-
-                    return {
-                        Operation = operation
-                        Surface = FactEgressSurface.toString FactPeerEgress
-                        Purpose = r.Purpose.PurposeId
-                        Permitted = permitted
-                        Withheld = references |> List.filter (fun id -> not (List.contains id permitted))
-                    }
+    /// Phase 643 — the same door for a rendered view, with the reference
+    /// set keyed by the view and the series the artifact covers.
+    ///
+    /// A render takes THIS route and not `route`, and takes it exactly
+    /// once: one crossing, one gate check, one audit row. The operation
+    /// recorded is still the operation, so a data owner reading the
+    /// `_facts` trail sees a `RenderView` crossing whose references name
+    /// the series — which is the query the `ViewOnly` level was sold on.
+    let routeView
+        (routeOf: PeerEgressRoute option)
+        (scopeId: string)
+        (principal: string)
+        (operation: string)
+        (viewId: string)
+        (series: string list)
+        : Async<PeerEgressDecision> =
+        async {
+            match routeOf with
+            | None -> return PeerEgressDecision.unrouted operation
+            | Some r -> return! judge r scopeId principal operation (r.ViewReferences viewId series)
         }

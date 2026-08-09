@@ -254,6 +254,17 @@
          InterPlatform, only on the platform's own gate seam. A binding
          with no route allocates nothing (GP 13). -->
     <Compile Include="Server\PeerVisibilityEgress.fs" />
+    <!-- Phase 643 — the `ViewOnly` machinery: the declared view contract,
+         its bounds validation, the per-peer render budget, and the
+         composition-supplied chart-grammar renderer. Compiles BEFORE
+         ModelExecutionPeerContract.fs because that file's refusal
+         vocabulary carries this one's (`ViewRefused`) and its deps record
+         holds `PeerViewDeps`. Depends on nothing in InterPlatform — only
+         the BCL — which is why it can sit this early; it is deliberately
+         expressed without naming any model-execution type, so the
+         dependency runs one way. Nothing composes it: a deployment that
+         declares no views constructs none of it (GP 13). -->
+    <Compile Include="Server\PeerViewContract.fs" />
     <Compile Include="Server\ModelExecutionPeerContract.fs" />
   </ItemGroup>
   <ItemGroup>

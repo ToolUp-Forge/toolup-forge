@@ -633,6 +633,11 @@ Served by the data host, under contract id `toolup.model-execution` at `Contract
 | `QueryOutcomes` | `ModelExecutionQuery` | `ModelExecutionPage` | immediate |
 | `ResolveVintage` | `ModelExecutionVintage` | `ModelExecutionVintageInfo` | immediate |
 
+Three further operations — `ListViews`, `DescribeView` and `RenderView` — are served on this same
+contract by a data host that declares bounded views. They are specified in §5.7.10 rather than here
+because they require a higher authority level (§5.7.9) and a deployment that declares none serves
+none.
+
 `SubmitFit` is long-running because a fit is: it returns a job id and the caller polls
 `GET /peer/v1/{contractId}/jobs/{jobId}` for the terminal answer, with all three job states
 distinguishable per §5.5.6. A data host with no job substrate answers the submission with a typed
@@ -724,6 +729,7 @@ expressible, because that is the shape in which a refusal gets mistaken for an e
 | `model-execution-authority-level-exceeded` | `AuthorityLevelExceeded` (operation, required, declared) | The operation requires a data-visibility authority level (§5.7.9) above the one the peer's binding declares. |
 | `model-execution-authority-narrowed` | `AuthorityNarrowingRefused` (operation, required, effective, narrowedBy) | The peer's ceiling admits the operation; a narrowing declared beneath it does not. `narrowedBy` names the layer. |
 | `model-execution-egress-withheld` | `EgressWithheld` (operation) | The level admitted the request, and the receiver's disclosure controls withheld something the answer carries. **Names the operation and nothing else** — naming the withheld reference or the policy would tell the caller that data it may not see exists, which is itself the disclosure. |
+| the `model-execution-view-*` family (§5.7.10) | `ViewRefused` (refusal) | A bounded-view request left the bounds the view declares. The inner refusal carries the view vocabulary's own class, so a caller learns **which** bound to narrow. |
 
 The last one is the load-bearing one for a modeller. Carrying the inner refusal through rather than
 flattening it to a message is what lets a caller distinguish "no such provider" from "not
@@ -804,6 +810,8 @@ MUST refuse with the class named:
 | `model-execution/reject-view-at-aggregates.json` | `model-execution-authority-level-exceeded` |
 | `model-execution/reject-full-at-view.json` | `model-execution-authority-level-exceeded` |
 | `model-execution/reject-narrowed.json` | `model-execution-authority-narrowed` |
+| `model-execution/reject-view-over-bound-window.json` | `model-execution-view-window-budget` |
+| `model-execution/reject-view-undeclared-series.json` | `model-execution-view-series-undeclared` |
 
 The scope-widening vector is the one to read closely: it is **well-formed**, names a real
 operation, and would be answered without complaint by an implementation that treated
@@ -822,6 +830,12 @@ Read each against the grant §5.7.9 names for it:
 | `reject-view-at-aggregates.json` | `AggregatesOnly` | none |
 | `reject-full-at-view.json` | `ViewOnly` | none |
 | `reject-narrowed.json` | `ViewOnly` | one layer at `AggregatesOnly` |
+
+**The two bound vectors are refused by a SECOND reader, and a harness has to run both.** Read them at
+a `ViewOnly` ceiling with the view operations declared: the envelope check ACCEPTS them — deliberately,
+since they are well-formed, declared, in-scope and granted — and §5.7.10's bounds check is what refuses
+them. A harness that stops at the envelope reports both as accepted and certifies neither. Both are
+read against the declarations `model-execution/view.json` publishes.
 
 #### 5.7.8 Deployment: the two roles are configuration, not code
 
@@ -930,6 +944,130 @@ re-publishing what it was legitimately shown, and none is claimed. The protectio
 and useful thing, and is not the same thing as a guarantee. An implementation MUST NOT describe it as
 one.
 
+#### 5.7.10 Bounded views (level: `ViewOnly`)
+
+The machinery the `ViewOnly` level names. A modeller granted it may **look at** declared series
+without any route that carries one: the data is rendered where it lives, and the **rendering** is
+what crosses.
+
+Three operations, all requiring `ViewOnly` (§7.3), served on the submitter contract:
+
+| Operation | Body | Answer body | Leg |
+|---|---|---|---|
+| `ListViews` | ignored | `ViewDeclaration[]`, sorted ordinally by `ViewId` | immediate |
+| `DescribeView` | a view id (a JSON string) | `ViewDeclaration` | immediate |
+| `RenderView` | `ViewRequest` | `ViewArtifact` | immediate |
+
+A deployment declares the view operations separately from granting the level, and the two refusals
+differ: a deployment that grants `ViewOnly` and declares no views answers
+`model-execution-undeclared-diagnostic` ("we do not do that"), while one that declares views and
+grants `AggregatesOnly` answers `model-execution-authority-level-exceeded` ("we do that, and not for
+you"). §5.7.9's admission order is what makes the authority answer win when both are true.
+
+**`ViewDeclaration`** — the offer, and the whole offer. It crosses the seam, so it carries nothing
+internal to the receiver.
+
+| Member | Type | Notes |
+|---|---|---|
+| `ViewId` | string | What a request names. |
+| `DatasetId` | string | **Scope-relative**, and declared HERE rather than on the request — see the request table. |
+| `Title` | string | The artifact's caption. |
+| `Kind` | string | How the host draws it (`"line"` \| `"bar"` \| `"area"`). **The host's choice, not the caller's**: a bounded view is not a plotting API. |
+| `Series` | string[] | The series a peer may name. Sorted ordinally. |
+| `Resolutions` | string[] | The resolutions this view renders at. Sorted ordinally. A per-view vocabulary, not a profile-wide one: what resolutions are meaningful is a property of the data. |
+| `MaxWindowDays` | int32 | The widest window one request may cover. |
+| `MaxSeriesPerRequest` | int32 | |
+| `MaxPointsPerSeries` | int32 | A ceiling on the **artifact**: the window and resolution bound what a caller asked for, and this bounds what the receiver's own reader hands back. |
+| `MaxRendersPerWindow` | int32 | The rate budget, **per peer**. |
+| `RenderWindowSeconds` | int32 | The rate window. |
+
+**`ViewWindow`**: `From` (instant), `To` (instant).
+
+**`ViewRequest`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `ViewId` | string | |
+| `DatasetVersion` | int32 | The pinned vintage of the view's declared dataset. A view names a version, never "latest", for the reason a fit does. |
+| `Series` | string[] | Sorted ordinally — **the emitter owns the sort**. |
+| `Window` | `ViewWindow` | |
+| `Resolution` | string | |
+
+**The request carries no dataset member and no scope member, and both absences are the same
+argument.** The declaration binds the dataset and the peer binding binds the scope, so neither can be
+widened by anything a caller sends — a peer selects a view, never data (GP 4, and §5.7's scope rule).
+
+**`ViewArtifact`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `ViewId` | string | |
+| `MediaType` | string | What the bytes are — `"image/svg+xml"` for a vector rendering. |
+| `Content` | string | **Base64 of the rendered bytes.** Base64 rather than markup inline: it is media-type-agnostic, and it makes the member obviously an opaque artifact rather than a document a caller is invited to walk. |
+| `ContentHash` | string | `sha256:<hex>` over the rendered bytes. What a modeller pins when it cites what it was shown. |
+| `Series` | string[] | What the artifact covers, sorted ordinally. |
+| `Window` | `ViewWindow` | |
+| `Resolution` | string | |
+| `RenderedPoints` | int32 | A **count**, which is not a point — the distinction `ModelExecutionVintageInfo.RowCount` already makes. |
+
+**Every member is the artifact or metadata about it.** As with §5.7.4's outcome table, that is the
+design and not an observation about one example: there is no member a row, a series or a point could
+ride in, so a receiver cannot leak one through this shape even by accident, and a reviewer can
+establish it by reading the table.
+
+**What the rendering itself looks like is the receiver's own business**, exactly as a host's envelope
+derivation is (§5.6). This clause fixes the document the artifact rides in; it does not specify a
+chart grammar, and an implementation SHOULD render through whatever deterministic grammar it already
+operates rather than growing a second one for this seam.
+
+**Bounds and refusals.** A receiver MUST validate a request against the declaration before it reads
+anything, and MUST refuse rather than silently narrowing: truncating a wide window would answer a
+question the caller did not ask and would leave it unable to tell a narrow dataset from a narrowed
+request. Each bound has its own class, because which bound was left is the only useful part of the
+answer:
+
+| Class | Union case | Condition |
+|---|---|---|
+| `model-execution-view-undeclared` | `UndeclaredView` (viewId) | No such view is declared for this peer. |
+| `model-execution-view-series-undeclared` | `UndeclaredSeries` (viewId, series) | A series this view does not carry. Checked **before** the count. |
+| `model-execution-view-no-series` | `NoSeriesRequested` (viewId) | No series named at all. |
+| `model-execution-view-series-budget` | `SeriesBudgetExceeded` (viewId, requested, limit) | More series than `MaxSeriesPerRequest`. |
+| `model-execution-view-window-unordered` | `WindowUnordered` (viewId) | The window does not end after it starts. |
+| `model-execution-view-window-budget` | `WindowBudgetExceeded` (viewId, requestedDays, limitDays) | Wider than `MaxWindowDays`. |
+| `model-execution-view-resolution-undeclared` | `UndeclaredResolution` (viewId, resolution) | A resolution this view does not render at. |
+| `model-execution-view-render-budget` | `RenderBudgetExhausted` (viewId, limit, windowSeconds) | The peer's render budget for the current window is spent. |
+
+They reach the caller nested inside the seam's own `ViewRefused` passthrough case, the way §5.7.5's
+`SubmitterRefused` carries the submitter surface's vocabulary. **Every payload is something the
+caller already sent or the receiver already published**, so refusing discloses nothing.
+
+**Exhaustion is a refusal, not a wait.** A receiver MUST answer an exhausted budget with
+`model-execution-view-render-budget`, naming the limit and the window, and MUST NOT express it as a
+delay, a stall or a dropped connection. A caller told the numbers can schedule; a caller left on a
+timeout learns nothing and retries into the same wall.
+
+**Order of enforcement.** Validation precedes the rate reservation, which precedes the read, which
+precedes the render. A malformed request must not spend a peer's budget — otherwise a caller could
+lock itself out with a typo — and a request that will not be answered must not read data.
+
+**Audit.** A receiver operating egress controls (§5.7.9) SHOULD route a render through them with a
+reference set naming the **series the artifact covers**, not merely the operation: every `RenderView`
+call names the same operation, so an operation-keyed record answers none of the questions this level
+exists to make answerable. Refuse the whole render with `model-execution-egress-withheld` when
+anything is withheld — a view with a series quietly missing is a lie, and it is one the caller cannot
+detect.
+
+**The honesty boundary, restated here because this is the clause a reader reaches for.** A rendered
+artifact contains the values it renders, and a counterparty can read them off the screen or out of
+the SVG. `ViewOnly` prevents **bulk programmatic egress** and provides **audit**: there is no shape
+here a peer can loop over to pull a series, every render is bounded and rate-limited, and every one
+leaves a record. **It does not prevent human capture of a rendered screen**, and no implementation,
+document or sales material may describe it as if it did — the wording of §5.7.9's honesty boundary is
+the one this inherits, not the reverse.
+
+Corpus: `model-execution/view-request.json`, `model-execution/view.json`, and the two bound reject
+vectors in §5.7.7.
+
 ---
 
 ## 6. Labels are assertions
@@ -993,6 +1131,14 @@ another language will and should word it differently.
 | `model-execution-authority-level-exceeded` | model execution | The operation requires an authority level above the peer's declared one (§5.7.9). |
 | `model-execution-authority-narrowed` | model execution | The ceiling admits the operation; a narrowing beneath it does not. |
 | `model-execution-egress-withheld` | model execution | The receiver's disclosure controls withheld something the answer carries. |
+| `model-execution-view-undeclared` | model execution | No such bounded view is declared for this peer (§5.7.10). |
+| `model-execution-view-series-undeclared` | model execution | The render named a series the view does not carry. |
+| `model-execution-view-no-series` | model execution | The render named no series at all. |
+| `model-execution-view-series-budget` | model execution | More series than the view admits per request. |
+| `model-execution-view-window-unordered` | model execution | The window does not end after it starts. |
+| `model-execution-view-window-budget` | model execution | A wider window than the view admits. |
+| `model-execution-view-resolution-undeclared` | model execution | A resolution the view does not render at. |
+| `model-execution-view-render-budget` | model execution | The peer's render budget for the current window is spent. |
 
 ### 7.3 Model-execution constants
 
@@ -1026,7 +1172,7 @@ compared as members of it, never as strings:
 AggregatesOnly  ViewOnly  Full
 ```
 
-**Operations requiring `ViewOnly`** — the server-rendered bounded views:
+**Operations requiring `ViewOnly`** — the server-rendered bounded views (§5.7.10):
 
 ```
 DescribeView  ListViews  RenderView
