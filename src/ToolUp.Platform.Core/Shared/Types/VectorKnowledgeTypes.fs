@@ -473,6 +473,15 @@ type FactEgressSurface =
     /// exists, so the emitter is born consulting the gate; see
     /// `FactWebhookEgress` for the pinned contract).
     | FactWebhook
+    /// An answer leaving the deployment across a federation seam to a
+    /// remote peer (Phase 642 — the same contract-first posture
+    /// `FactWebhook` took: the door lands with the level machinery that
+    /// routes through it). A peer sits outside this deployment's trust
+    /// boundary exactly as a webhook subscriber does, so the door is its
+    /// own rather than borrowed: an operator narrowing what may cross a
+    /// federation edge must not have to also narrow what may reach a
+    /// webhook, and an audit row must say which one it was.
+    | FactPeerEgress
 
 module FactEgressSurface =
     /// Canonical string form, shared by audit events and diagnostics.
@@ -483,6 +492,7 @@ module FactEgressSurface =
         | FactNarrativePublication -> "NarrativePublication"
         | FactExport -> "Export"
         | FactWebhook -> "Webhook"
+        | FactPeerEgress -> "PeerEgress"
 
 /// Per-fact outcome of the disclosure predicate at one egress surface.
 type FactDisclosureVerdict =

@@ -217,10 +217,18 @@ type ModelExecutionPeerDiagnosticRequest = {
 /// Three of these classes exist because the profile is closed rather
 /// than merely narrow, and each names a different way a caller can try
 /// to widen it: asking for rows, asking for an undeclared projection,
-/// and asking under someone else's scope. The fourth carries the
+/// and asking under someone else's scope. A fourth carries the
 /// submitter surface's own typed refusal through unchanged, so a
 /// modeller enumerates what happened data-side without string-matching a
 /// message.
+///
+/// Phase 642 adds three more, and they answer a question the original
+/// set could not: the ones above say what this deployment SERVES, and
+/// these say what it has GRANTED. A closed profile needs only the first;
+/// a profile with declared authority levels needs both, because "we do
+/// not do that" and "we do that, and not for you" have different
+/// remedies and a caller that cannot tell them apart will pursue the
+/// wrong one.
 [<RequireQualifiedAccess>]
 type ModelExecutionPeerRefusal =
     /// The envelope declares a profile version this deployment cannot
@@ -249,6 +257,40 @@ type ModelExecutionPeerRefusal =
     /// The submitter surface refused, and its typed reason is carried
     /// through verbatim.
     | SubmitterRefused of ModelExecutionRefusal
+    /// Phase 642 — the operation requires a data-visibility authority
+    /// level above the one this peer's binding DECLARES.
+    ///
+    /// A distinct class from `UndeclaredDiagnostic`, and the distinction
+    /// is what a counterparty acts on: an undeclared operation is one
+    /// this deployment does not implement, and the remedy is to stop
+    /// asking; an authority refusal is one it implements and has not
+    /// GRANTED to this peer, and the remedy is to negotiate a wider
+    /// grant. Collapsing them would tell a modeller to abandon a call
+    /// that a phone call could enable.
+    | AuthorityLevelExceeded of operation: string * required: string * declared: string
+    /// Phase 642 — the peer's ceiling would have admitted the operation;
+    /// a narrowing declared beneath it does not.
+    ///
+    /// Separate from `AuthorityLevelExceeded` for the reason the profile
+    /// keeps `RowAccessRefused` and `UndeclaredDiagnostic` apart: the
+    /// remedies differ and an operator reading a refusal log wants to see
+    /// which one happened. A ceiling refusal is a question for the two
+    /// organisations; a narrowing refusal is a question for one
+    /// deployment's own configuration, and `narrowedBy` names the layer
+    /// to look at.
+    | AuthorityNarrowingRefused of operation: string * required: string * effective: string * narrowedBy: string
+    /// Phase 642 — the answer cleared the authority level, and the
+    /// disclosure plane withheld a reference it carries.
+    ///
+    /// **Names the operation and nothing else, deliberately.** At a door
+    /// inside the trust boundary a withhold names the policy, because
+    /// telling an operator which control fired is the control
+    /// demonstrably working. Across a federation edge the same wording
+    /// would tell a counterparty that a fact it may not see EXISTS, and
+    /// that existence is itself the disclosure. The deployment that owns
+    /// the data has the full record: every withhold is audited by the
+    /// gate in the same `_facts` trail every other egress door writes to.
+    | EgressWithheld of operation: string
 
 [<RequireQualifiedAccess>]
 module ModelExecutionPeerRefusal =
@@ -265,6 +307,9 @@ module ModelExecutionPeerRefusal =
         | ModelExecutionPeerRefusal.PeerUnbound _ -> "model-execution-peer-unbound"
         | ModelExecutionPeerRefusal.RequestUnreadable _ -> "model-execution-request-unreadable"
         | ModelExecutionPeerRefusal.SubmitterRefused _ -> "model-execution-submitter-refused"
+        | ModelExecutionPeerRefusal.AuthorityLevelExceeded _ -> "model-execution-authority-level-exceeded"
+        | ModelExecutionPeerRefusal.AuthorityNarrowingRefused _ -> "model-execution-authority-narrowed"
+        | ModelExecutionPeerRefusal.EgressWithheld _ -> "model-execution-egress-withheld"
 
     /// Human-readable one-line description (logs + operator display; the
     /// case, not this string, is the contract).
@@ -283,6 +328,12 @@ module ModelExecutionPeerRefusal =
         | ModelExecutionPeerRefusal.RequestUnreadable reason ->
             $"the model-execution request could not be read: {reason}"
         | ModelExecutionPeerRefusal.SubmitterRefused refusal -> ModelExecutionRefusal.describe refusal
+        | ModelExecutionPeerRefusal.AuthorityLevelExceeded(operation, required, declared) ->
+            $"'{operation}' requires data-visibility authority '{required}'; this peer's binding declares '{declared}'"
+        | ModelExecutionPeerRefusal.AuthorityNarrowingRefused(operation, required, effective, narrowedBy) ->
+            $"'{operation}' requires data-visibility authority '{required}'; the peer ceiling admits it but '{narrowedBy}' narrows this caller to '{effective}'"
+        | ModelExecutionPeerRefusal.EgressWithheld operation ->
+            $"the answer to '{operation}' references data this deployment's disclosure plane withheld at the federated-egress door"
 
     /// Phase 640 — the seam's refusal read in the **submitter** face's own
     /// closed vocabulary, given the operation names this deployment serves.
@@ -332,6 +383,24 @@ module ModelExecutionPeerRefusal =
         // re-wrapped, which is what makes this projection idempotent over
         // the class a submitter actually cares about.
         | ModelExecutionPeerRefusal.SubmitterRefused refusal -> refusal
+        // Phase 642 — a ceiling refusal IS `Forbidden`: it says *you* may
+        // not, and it invites the caller to seek permission, which is
+        // precisely the right invitation because a wider grant is a
+        // decision the two organisations can take.
+        | ModelExecutionPeerRefusal.AuthorityLevelExceeded(operation, required, declared) ->
+            ModelExecutionRefusal.Forbidden
+                $"'{operation}' requires data-visibility authority '{required}'; this binding grants '{declared}'"
+        // A narrowing refusal is `PolicyRefused` under a stable rule id,
+        // for the mirror-image reason `ScopeWideningRefused` is: no
+        // caller under that narrowing is ever permitted this operation,
+        // so it is refused as a rule and not as a role.
+        | ModelExecutionPeerRefusal.AuthorityNarrowingRefused _ ->
+            ModelExecutionRefusal.PolicyRefused "model-execution.authority-narrowing"
+        // A disclosure withhold is likewise a rule, and the rule id is
+        // all a counterparty learns — see the case's own comment for why
+        // naming the policy across this seam would be the disclosure.
+        | ModelExecutionPeerRefusal.EgressWithheld _ ->
+            ModelExecutionRefusal.PolicyRefused "model-execution.egress-withheld"
 
 /// The versioned envelope every model-execution request rides in.
 ///
@@ -423,6 +492,58 @@ module ModelExecutionProfile =
             "StreamRows"
         ]
 
+    /// Phase 642 — operations that require `ViewOnly`: the
+    /// server-rendered bounded views, where the RENDERING crosses the
+    /// seam and the series does not.
+    ///
+    /// **Classified before the machinery exists, on purpose.** The views
+    /// themselves are a later phase; naming them here means a deployment
+    /// at `AggregatesOnly` refuses a view request as an AUTHORITY
+    /// question from the first day — the answer a modeller can act on —
+    /// rather than as an unrecognised string it would read as a typo. It
+    /// also fixes the classification before any implementation can be
+    /// tempted to serve one below the level it belongs to.
+    let viewOperations: Set<string> =
+        Set.ofList [ "DescribeView"; "ListViews"; "RenderView" ]
+
+    /// Phase 642 — operations that require `Full`: raw data, for
+    /// co-located or otherwise fully-trusted deployments.
+    ///
+    /// **The profile implements none of them, and this level does not add
+    /// one.** They are named so that asking is refused as an authority
+    /// question, and so that a deployment which one day serves one cannot
+    /// serve it below `Full`.
+    ///
+    /// Disjoint from `rowAccessOperations` by construction (a
+    /// conformance test pins it), because the two lists answer different
+    /// questions and a name on both would be ambiguous. That list
+    /// enumerates what a caller REACHES FOR when it wants rows through a
+    /// surface that does not exist — refused identically at every level,
+    /// because the absence is structural rather than granted. This one
+    /// enumerates operations the profile RESERVES to its highest level.
+    let fullOperations: Set<string> =
+        Set.ofList [ "ExportVintageSeries"; "ReadVintageSeries" ]
+
+    /// The authority level an operation requires.
+    ///
+    /// Everything the profile serves today is metadata or a governed
+    /// aggregate, so it requires `AggregatesOnly` — which is why a
+    /// deployment upgrading into Phase 642 enforces exactly what it
+    /// already enforced (GP 11).
+    ///
+    /// **An unrecognised name requires `AggregatesOnly`, not more**, and
+    /// that is deliberate rather than lax: the authority check must never
+    /// be the thing that refuses a typo. A name nobody declared is
+    /// refused by the declaration check, with the class that tells a
+    /// caller it named something this deployment does not implement.
+    let requiredAuthority (operation: string) : PeerDataVisibilityLevel =
+        if Set.contains operation fullOperations then
+            PeerDataVisibilityLevel.Full
+        elif Set.contains operation viewOperations then
+            PeerDataVisibilityLevel.ViewOnly
+        else
+            PeerDataVisibilityLevel.AggregatesOnly
+
     /// The clean-room template that DECLARES a deployment's governed
     /// diagnostics. `AllowedMethods` is the declaration — the gate's
     /// surface invariant refuses anything off it before the projection
@@ -451,6 +572,27 @@ type ModelExecutionAdmission = {
     ProfileVersion: int
     Operations: Set<string>
     Diagnostics: Set<string>
+    /// Phase 642 — the resolved data-visibility authority for the CALLER
+    /// this admission is being evaluated for: the peer's declared
+    /// ceiling, the level after the team/user narrowing walk, and where
+    /// each came from.
+    ///
+    /// **The one per-caller member of an otherwise deployment-wide
+    /// record, and it sits here rather than as another parameter of
+    /// `admit` for a reason worth stating.** `admit` and `read` are the
+    /// functions an implementation certifies the profile's reject vectors
+    /// against; every argument added to them is a re-encoding every
+    /// conformance harness in every language has to mirror. Folding the
+    /// per-call resolution into the admission value keeps the reader's
+    /// shape fixed and makes the whole admission decision one value that
+    /// can be logged, shown on an admin surface, and compared — which is
+    /// what "policy as data" (GP 12 rule 3) was already buying for the
+    /// other three members.
+    ///
+    /// `PeerVisibility.unresolved` (the default ceiling, no narrowing) on
+    /// a deployment that declares nothing, so the admission of a pre-642
+    /// composition is byte-for-byte its old one (GP 11).
+    Authority: PeerVisibilityResolution
 }
 
 [<RequireQualifiedAccess>]
@@ -464,6 +606,18 @@ module ModelExecutionAdmission =
         ProfileVersion = ModelExecutionProfile.Version
         Operations = ModelExecutionProfile.operations
         Diagnostics = Set.intersect declared ModelExecutionProfile.diagnostics
+        // Phase 642 — no caller yet, so the narrowest grant. `governed`
+        // replaces this per call, from the resolved binding.
+        Authority = PeerVisibility.unresolved ""
+    }
+
+    /// Phase 642 — the same admission, evaluated for one caller's
+    /// resolved authority. What the dispatch prologue folds in once the
+    /// binding is known, so the reader's signature never has to carry a
+    /// second per-call argument.
+    let withAuthority (authority: PeerVisibilityResolution) (admission: ModelExecutionAdmission) = {
+        admission with
+            Authority = authority
     }
 
     /// A data host that answers no governed diagnostics: the submitter
@@ -486,6 +640,27 @@ type ModelExecutionPeerBinding = {
     PeerId: string
     ScopeId: string
     Api: ModelExecutionApi
+    /// Phase 642 — what THIS peer may see: the declared ceiling plus any
+    /// team / user narrowing beneath it.
+    ///
+    /// On the binding for the same reason the scope is: the binding is
+    /// the receiver's own declaration about one counterparty, nothing on
+    /// the wire contributes to it, and the execution side of a
+    /// long-running fit re-resolves it from the same place the request
+    /// side did (GP 12 rules 1 and 4).
+    ///
+    /// `PeerVisibilityBinding.default'` for a peer nobody granted
+    /// anything: the narrowest level, no narrowing — the pre-642
+    /// behaviour exactly (GP 11).
+    Visibility: PeerVisibilityBinding
+    /// Phase 642 — the disclosure-plane route this binding's level-gated
+    /// answers take before they cross the seam.
+    ///
+    /// `None` on a deployment with no fact substrate (or one that
+    /// composes no route): nothing is routed, nothing is consulted,
+    /// nothing is allocated (GP 13). A composed route is what makes the
+    /// federated egress door a real door rather than a claim.
+    Egress: PeerEgressRoute option
 }
 
 /// How long the fit job waits for its outcome to appear in the registry.
@@ -647,15 +822,53 @@ module ModelExecutionPeerContract =
     /// that a probe is named as a probe even at an unadmitted version;
     /// and the scope assertion is checked last, on a request already
     /// known to be one this deployment serves.
+    ///
+    /// **Phase 642 puts the authority checks between row access and
+    /// declaration, and both halves of that placement are load-bearing.**
+    /// After row access, because the row vocabulary is a structural
+    /// absence rather than a grant — the profile serves no row surface at
+    /// ANY level, so re-reporting a `ReadPage` probe as an authority
+    /// question would tell a caller that a wider grant might get it one,
+    /// which is false. Before declaration, because an operation this
+    /// deployment implements but has not GRANTED should say so: refusing
+    /// `RenderView` as "undeclared" on a deployment at `AggregatesOnly`
+    /// would send a modeller to argue about the wrong thing.
+    ///
+    /// The ceiling is checked before the narrowing so that the two
+    /// refusals stay distinguishable in a log: a ceiling that does not
+    /// reach the operation is a question for the two organisations, and a
+    /// narrowing that does not is a question for one deployment's own
+    /// configuration.
     let admit
         (admission: ModelExecutionAdmission)
         (boundScope: string)
         (request: ModelExecutionPeerRequest)
         : Result<unit, ModelExecutionPeerRefusal> =
+        let required = ModelExecutionProfile.requiredAuthority request.Operation
+
         if request.ProfileVersion > admission.ProfileVersion then
             Error(ModelExecutionPeerRefusal.ProfileVersionUnsupported(request.ProfileVersion, admission.ProfileVersion))
         elif Set.contains request.Operation ModelExecutionProfile.rowAccessOperations then
             Error(ModelExecutionPeerRefusal.RowAccessRefused request.Operation)
+        elif not (PeerDataVisibilityLevel.admits admission.Authority.Ceiling required) then
+            Error(
+                ModelExecutionPeerRefusal.AuthorityLevelExceeded(
+                    request.Operation,
+                    PeerDataVisibilityLevel.label required,
+                    PeerDataVisibilityLevel.label admission.Authority.Ceiling
+                )
+            )
+        elif not (PeerDataVisibilityLevel.admits admission.Authority.Effective required) then
+            Error(
+                ModelExecutionPeerRefusal.AuthorityNarrowingRefused(
+                    request.Operation,
+                    PeerDataVisibilityLevel.label required,
+                    PeerDataVisibilityLevel.label admission.Authority.Effective,
+                    admission.Authority.NarrowedBy
+                    |> Option.map PeerVisibilityScope.toString
+                    |> Option.defaultValue ""
+                )
+            )
         elif
             not (
                 Set.contains request.Operation admission.Operations
@@ -923,9 +1136,56 @@ module ModelExecutionPeerContract =
                 match soleArgument argsJson with
                 | Error refusal -> return ModelExecutionPeerAnswer.Refused refusal
                 | Ok document ->
+                    // Phase 642 — the scope walk runs HERE, once, on the
+                    // one path every dispatch takes. Resolving it inside
+                    // `run` would put it after the handler has been
+                    // chosen; resolving it per operation would let a path
+                    // be given a slightly weaker one, which is the whole
+                    // reason this prologue is written once.
+                    let admission =
+                        admission
+                        |> ModelExecutionAdmission.withAuthority (
+                            PeerVisibility.resolve binding.Visibility binding.PeerId
+                        )
+
                     match read admission binding.ScopeId document with
                     | Error refusal -> return ModelExecutionPeerAnswer.Refused refusal
                     | Ok request -> return! run binding request
+        }
+
+    /// Phase 642 — run an admitted operation and take its answer through
+    /// the federated-egress door before it crosses the seam.
+    ///
+    /// The level admitted the REQUEST; this decides whether what the
+    /// answer CARRIES may leave (see `PeerVisibilityEgress` for why those
+    /// are different questions). It wraps `runOperation` rather than
+    /// sitting inside `governed` for one reason: `governed` is also the
+    /// pre-schedule admission check on the long-running leg, whose "run"
+    /// answers nothing at all, and routing that empty answer would spend
+    /// a gate check — and write an audit row — for a crossing that is not
+    /// happening yet. The real answer still routes, on the execution
+    /// side, where it exists.
+    ///
+    /// A refusal never rides the door either: there is nothing in it to
+    /// disclose.
+    let private runGoverned
+        (deps: ModelExecutionPeerDeps)
+        (binding: ModelExecutionPeerBinding)
+        (request: ModelExecutionPeerRequest)
+        : Async<ModelExecutionPeerAnswer> =
+        async {
+            let! answer = runOperation deps binding request
+
+            match answer with
+            | ModelExecutionPeerAnswer.Refused _ -> return answer
+            | ModelExecutionPeerAnswer.Answered _ ->
+                let! decision =
+                    PeerVisibilityEgress.route binding.Egress binding.ScopeId binding.PeerId request.Operation
+
+                if PeerEgressDecision.cleared decision then
+                    return answer
+                else
+                    return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.EgressWithheld request.Operation)
         }
 
     /// The long-running leg's job handler. It re-resolves the binding
@@ -952,7 +1212,7 @@ module ModelExecutionPeerContract =
                         deps.Admission
                         envelope.OwnerPeerId
                         envelope.ArgsJson
-                        (runOperation deps)
+                        (runGoverned deps)
 
                 do!
                     resultStore.SaveResult(
@@ -1048,7 +1308,7 @@ module ModelExecutionPeerContract =
                                         )
                                 }
                             else
-                                runOperation deps binding request)
+                                runGoverned deps binding request)
 
                     return Ok(JsonRpc.serialize answer)
             }
@@ -1099,6 +1359,15 @@ module ModelExecutionPeerContract =
                             ProfileVersion = ModelExecutionProfile.Version
                             Operations = Set.empty
                             Diagnostics = ModelExecutionProfile.diagnostics
+                            // Phase 642 — resolved from the same binding
+                            // the submitter seam resolves from. Every
+                            // governed diagnostic requires
+                            // `AggregatesOnly`, so this admits whatever
+                            // the gate is about to judge; carrying it
+                            // anyway is what stops the two seams drifting
+                            // when a later projection is classified
+                            // higher.
+                            Authority = PeerVisibility.resolve binding.Visibility binding.PeerId
                         }
 
                         match read admission binding.ScopeId document with

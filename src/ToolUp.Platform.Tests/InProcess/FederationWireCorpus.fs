@@ -242,6 +242,20 @@ let private referenceInstance () =
 let private instanceSurface () =
     PeerSurface.describe (referenceInstance ())
 
+/// Phase 642 — the same reference deployment, declaring a
+/// data-visibility authority level other than the default.
+///
+/// A separate vector rather than a change to the one above, because the
+/// two pin different things and both are worth pinning: the instance
+/// vector shows what a deployment that declares nothing publishes (the
+/// fail-closed `"AggregatesOnly"`, present rather than omitted), and this
+/// one shows a declared grant. An implementation that hard-coded the
+/// default would pass the first and fail this.
+let private authoritySurface () =
+    referenceInstance ()
+    |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+    |> PeerSurface.describe
+
 // ─── Reference values — aggregate surface (gateway profile) ──────────
 
 /// A member surface authored as a value rather than described from a
@@ -276,6 +290,14 @@ let private memberSurface
                 LongRunningEnabled = true
             }
         PinnedVocabulary = pins
+        // Phase 642 — every reference member grants the default, so the
+        // aggregate's authority floor collapses to it. The floor's
+        // behaviour under DIVERGENCE is pinned by the unit tests rather
+        // than here: a divergent member would move the group fixture's
+        // bytes for a reason unrelated to what that fixture is about
+        // (posture `mixed:` markers and pin unanimity), and a fixture
+        // that pins two unrelated rules at once is one nobody can read.
+        DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default'
     }
 
 let private sharedPin: VocabularyPackPin = {
@@ -634,6 +656,50 @@ let modelExecutionBoundScope = "consortium-north"
 let referenceAdmission =
     ModelExecutionAdmission.create ModelExecutionProfile.diagnostics
 
+/// Phase 642 — the reference data host's peer id, used as the outermost
+/// scope of every authority walk below.
+[<Literal>]
+let modelExecutionPeerId = "buyer-acme"
+
+/// Phase 642 — an admission at a declared ceiling with no narrowing.
+let private admissionAt (ceiling: PeerDataVisibilityLevel) =
+    referenceAdmission
+    |> ModelExecutionAdmission.withAuthority (
+        PeerVisibility.resolve (PeerVisibilityBinding.ofCeiling ceiling) modelExecutionPeerId
+    )
+
+/// Phase 642 — a `ViewOnly` ceiling with a team layer narrowing back to
+/// `AggregatesOnly`. The binding the narrowing reject vector is read
+/// against: the ceiling WOULD have admitted the request, and the layer
+/// beneath it does not.
+let private narrowedAdmission =
+    referenceAdmission
+    |> ModelExecutionAdmission.withAuthority (
+        PeerVisibility.resolve
+            (PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.ViewOnly
+             |> PeerVisibilityBinding.withNarrowing
+                 (TeamNarrowing "north-analysts")
+                 PeerDataVisibilityLevel.AggregatesOnly)
+            modelExecutionPeerId
+    )
+
+/// The admission a given reject vector is read against.
+///
+/// **Per-vector rather than one shared value, because an authority
+/// refusal is a statement about a GRANT and a grant is per-peer.** A
+/// corpus that read every model-execution vector against one admission
+/// could pin the row-read and scope-widening classes (which no grant
+/// changes) and could not pin these three at all: the same document is
+/// answered at one level and refused at another, which is the whole
+/// property the family exists to hold. The mapping lives here so the
+/// harness reads it rather than reconstructing it.
+let admissionFor (vectorId: string) : ModelExecutionAdmission =
+    match vectorId with
+    | "model-execution/reject-view-at-aggregates" -> admissionAt PeerDataVisibilityLevel.AggregatesOnly
+    | "model-execution/reject-full-at-view" -> admissionAt PeerDataVisibilityLevel.ViewOnly
+    | "model-execution/reject-narrowed" -> narrowedAdmission
+    | _ -> referenceAdmission
+
 let private referenceVintage: ModelExecutionPeerVintage = {
     DatasetId = "weekly-panel"
     Version = 7
@@ -771,6 +837,19 @@ let private referenceRefusals: ModelExecutionPeerAnswer list =
         ModelExecutionPeerRefusal.PeerUnbound "buyer-acme"
         ModelExecutionPeerRefusal.RequestUnreadable "unexpected end of JSON input"
         ModelExecutionPeerRefusal.SubmitterRefused(ModelExecutionRefusal.UnknownProvider "reference-regression")
+        // Phase 642 — the authority family. Included here rather than in
+        // a fixture of their own because this vector's contract is "one
+        // answer per refusal class the profile defines", and a class
+        // added to the profile that is not added here is a class a
+        // modeller's mapping was never pinned against.
+        ModelExecutionPeerRefusal.AuthorityLevelExceeded("RenderView", "ViewOnly", "AggregatesOnly")
+        ModelExecutionPeerRefusal.AuthorityNarrowingRefused(
+            "RenderView",
+            "ViewOnly",
+            "AggregatesOnly",
+            "team:north-analysts"
+        )
+        ModelExecutionPeerRefusal.EgressWithheld "Coverage"
     ]
     |> List.map ModelExecutionPeerAnswer.Refused
 
@@ -805,6 +884,19 @@ let private undeclaredDiagnosticRequest () =
 /// peer binding addresses.
 let private scopeWideningRequest () =
     ModelExecutionPeerContract.requestAsserting "other-tenant" "GetOutcome" referenceOutcome.CompositeKeyHash
+
+/// Phase 642 — a bounded-view request. Well-formed, names an operation
+/// the profile CLASSIFIES, and is refused at `AggregatesOnly` as an
+/// authority question rather than as an unknown operation.
+let private viewRequest () =
+    ModelExecutionPeerContract.request "RenderView" referenceVintage
+
+/// Phase 642 — a raw-series request, refused at `ViewOnly`. Deliberately
+/// NOT one of the row-access probe names: those are refused identically
+/// at every level because the profile serves no row surface at all,
+/// whereas this names an operation the profile reserves to `Full`.
+let private fullOnlyRequest () =
+    ModelExecutionPeerContract.request "ReadVintageSeries" referenceVintage
 
 // ─── The corpus ──────────────────────────────────────────────────────
 
@@ -846,6 +938,15 @@ let vectors () : WireVector list =
             "A deployment with no federation surface at all — the honest empty label, which is a conformant document and not an error."
             "peer-surface/empty.json"
             (PeerSurface.exportJson PeerSurface.empty)
+
+        vector
+            "peer-surface/authority-declared"
+            "peer-surface"
+            Participant
+            Hash
+            "The same deployment declaring a data-visibility authority level other than the default — the grant a counterparty pins before it calls. The instance vector above publishes the fail-closed `AggregatesOnly` because it declares nothing; this one shows a declared `ViewOnly`, so an implementation that hard-coded the default passes that vector and fails this."
+            "peer-surface/authority-declared.json"
+            (PeerSurface.exportJson (authoritySurface ()))
 
         // ── aggregate surface ─────────────────────────────────────────
         vector
@@ -1101,6 +1202,42 @@ let vectors () : WireVector list =
                 "model-execution/reject-malformed.json"
                 "{\"ProfileVersion\":1,\"Operation\":\"GetOutcome\"," with
                 Reject = Some "model-execution-request-unreadable"
+        }
+
+        {
+            vector
+                "model-execution/reject-view-at-aggregates"
+                "model-execution"
+                DataHost
+                Reject
+                "A bounded-view request against a peer granted aggregates only. Refused as an AUTHORITY question, not as an unknown operation: the deployment implements the classification, it has not granted it, and the two have different remedies — one is a phone call, the other is abandoning the call."
+                "model-execution/reject-view-at-aggregates.json"
+                (JsonRpc.serialize (viewRequest ())) with
+                Reject = Some "model-execution-authority-level-exceeded"
+        }
+
+        {
+            vector
+                "model-execution/reject-full-at-view"
+                "model-execution"
+                DataHost
+                Reject
+                "A raw-series request against a peer granted bounded views. The same refusal class one level up, which is what makes the levels a ladder rather than a pair of special cases — and the vector is deliberately not a row-access probe, because those are refused identically at every level."
+                "model-execution/reject-full-at-view.json"
+                (JsonRpc.serialize (fullOnlyRequest ())) with
+                Reject = Some "model-execution-authority-level-exceeded"
+        }
+
+        {
+            vector
+                "model-execution/reject-narrowed"
+                "model-execution"
+                DataHost
+                Reject
+                "The identical bounded-view document against a peer whose CEILING admits it and whose team-scope narrowing does not. Read closely: nothing in the document distinguishes it from a request that would be answered, and the refusal names the narrowing layer — a ceiling refusal is a question for the two organisations, a narrowing refusal is a question for one deployment's own configuration."
+                "model-execution/reject-narrowed.json"
+                (JsonRpc.serialize (viewRequest ())) with
+                Reject = Some "model-execution-authority-narrowed"
         }
     ]
 

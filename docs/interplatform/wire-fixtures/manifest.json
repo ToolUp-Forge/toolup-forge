@@ -24,7 +24,7 @@
       "profile": "participant",
       "kind": "hash",
       "file": "peer-surface/instance.json",
-      "sha256": "465131b67e8000aff97760acd4183c0b2240fbc4166d81a5c392f18e642a44f7",
+      "sha256": "77a4e649b641194f36be2aaa30dab48b4b967a3ef062873784f1d926671f065e",
       "description": "A federating deployment's hash-stamped export: two served contracts (one carrying a long-running routine), one consumed contract, trust posture and cascade budget."
     },
     {
@@ -33,8 +33,17 @@
       "profile": "participant",
       "kind": "hash",
       "file": "peer-surface/empty.json",
-      "sha256": "f9e5e5153f729101a9cd18e853e84d318d6c9e0e5ac20027ffc9e20c1ebbac49",
+      "sha256": "92a961738830cf5b8fc2e7b801784326842edee776cbc82bf095e396603b1ff9",
       "description": "A deployment with no federation surface at all — the honest empty label, which is a conformant document and not an error."
+    },
+    {
+      "id": "peer-surface/authority-declared",
+      "family": "peer-surface",
+      "profile": "participant",
+      "kind": "hash",
+      "file": "peer-surface/authority-declared.json",
+      "sha256": "6eb505571bd487272172f69cc6000fae2fae55cde14ce18cfccecf4ba3837a45",
+      "description": "The same deployment declaring a data-visibility authority level other than the default — the grant a counterparty pins before it calls. The instance vector above publishes the fail-closed `AggregatesOnly` because it declares nothing; this one shows a declared `ViewOnly`, so an implementation that hard-coded the default passes that vector and fails this."
     },
     {
       "id": "aggregate-surface/group",
@@ -42,7 +51,7 @@
       "profile": "gateway",
       "kind": "hash",
       "file": "aggregate-surface/group.json",
-      "sha256": "a07e83651a460cd957041265a4f81f2d4bb10c949e8ffc2d8e5178a11cd90c22",
+      "sha256": "9d3c51e824811d49c6c2645145c2503a40778f7912a2f719aa9f136e9009d6ab",
       "description": "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing, and `LongRunningEnabled` floored across the exposing members (Phase 630 — every exposing member here dispatches long-running work, so the group does)."
     },
     {
@@ -51,7 +60,7 @@
       "profile": "gateway",
       "kind": "hash",
       "file": "aggregate-surface/solo.json",
-      "sha256": "7cb0d027501e0f9e31f6cbad297ed30f767abb3f280fab712f5fd9e1406a3dd0",
+      "sha256": "260c09b8ec742b7ec9ee6e4a0ef19b30c13a15c4b6f9beb2e89b805c1abaa921",
       "description": "A group with one exposing member that agrees with the gateway edge on every facet — the control that separates a floor which collapsed to unanimity from a floor that was never applied, and the case where every pack the member pins does carry."
     },
     {
@@ -60,7 +69,7 @@
       "profile": "participant",
       "kind": "round-trip",
       "file": "pinned-exchange/pin.json",
-      "sha256": "7acd096a27da367ebfd647e6d78d76a3c0f2e17dec448ff56f38d21b2de78821",
+      "sha256": "bfc840a16f33edc1708d2c325f87b6f1095c01662c9b6bcf8267e1bb7a330df8",
       "description": "The projection a consumer holds of a counterparty's published export: what it claimed to serve, its posture as name/value facets, and the stamp both sides quote."
     },
     {
@@ -69,7 +78,7 @@
       "profile": "participant",
       "kind": "reject",
       "file": "pinned-exchange/reject-stamp-mismatch.json",
-      "sha256": "59386a8d64ba8e6c7392d10fdfcaef03890bf63a96c640b275f1fc5da6ab3f29",
+      "sha256": "21ebfb6e19fe2d040d91768e8287e5e320b280c7718b9821309f0fd9d5a1c40a",
       "reject": "pin-stamp-mismatch",
       "description": "An export whose stamp does not match a recomputation over its own surface. Corrupt or edited after stamping — refused at pinning time, never held as a stale pin."
     },
@@ -79,7 +88,7 @@
       "profile": "participant",
       "kind": "reject",
       "file": "pinned-exchange/reject-format-version.json",
-      "sha256": "b843408cb2d5d26a3afdfcd1083497f641018db4b0dc3d6e55ca923d8a21cfef",
+      "sha256": "775a9517135d6834dae84fab371e3459936c609eed55a1ce0dcf524ed6fec807",
       "reject": "pin-format-version-unreadable",
       "description": "An export declaring a format version the reader cannot interpret. A half-read label would satisfy a trust requirement by omission, so it is refused rather than truncated."
     },
@@ -99,7 +108,7 @@
       "profile": "participant",
       "kind": "reject",
       "file": "pinned-exchange/reject-unagreed-hash.json",
-      "sha256": "465131b67e8000aff97760acd4183c0b2240fbc4166d81a5c392f18e642a44f7",
+      "sha256": "77a4e649b641194f36be2aaa30dab48b4b967a3ef062873784f1d926671f065e",
       "reject": "pin-hash-not-agreed",
       "agreedHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "description": "An internally consistent export whose stamp is not the one agreed out of band — which a substituted document also is. Internal consistency is not provenance."
@@ -221,7 +230,7 @@
       "profile": "participant-modeller",
       "kind": "round-trip",
       "file": "model-execution/refusals.json",
-      "sha256": "1bc5862f0b7a18c83afca9679640e9dd3b5e715fd675cac4c51c14c94d448632",
+      "sha256": "68cdac17f1093db2ce711b9ad346cf4eb6b9121a82481f76d245358967c718fa",
       "description": "One answer per refusal class the profile defines, including the submitter surface's own typed refusal carried through unchanged — so a modeller's mapping is pinned by the corpus rather than inferred from the classes it happened to trip."
     },
     {
@@ -263,6 +272,36 @@
       "sha256": "0336f453735ea45025309a4517cf6de39ce73ffc755ea1f038a48231e735fd10",
       "reject": "model-execution-request-unreadable",
       "description": "A truncated request envelope. It is refused whole rather than read as far as it parses — a member the reader has no value for would satisfy an admission check by omission."
+    },
+    {
+      "id": "model-execution/reject-view-at-aggregates",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-view-at-aggregates.json",
+      "sha256": "f826cecb1ac8fae6990aa6a9dc1f5f91bf51a014a58e5f616e79507daa82e5d4",
+      "reject": "model-execution-authority-level-exceeded",
+      "description": "A bounded-view request against a peer granted aggregates only. Refused as an AUTHORITY question, not as an unknown operation: the deployment implements the classification, it has not granted it, and the two have different remedies — one is a phone call, the other is abandoning the call."
+    },
+    {
+      "id": "model-execution/reject-full-at-view",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-full-at-view.json",
+      "sha256": "9828dee58564429f009759e40a3e315d1029d05698394b25bfa8a10a64937ccd",
+      "reject": "model-execution-authority-level-exceeded",
+      "description": "A raw-series request against a peer granted bounded views. The same refusal class one level up, which is what makes the levels a ladder rather than a pair of special cases — and the vector is deliberately not a row-access probe, because those are refused identically at every level."
+    },
+    {
+      "id": "model-execution/reject-narrowed",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-narrowed.json",
+      "sha256": "f826cecb1ac8fae6990aa6a9dc1f5f91bf51a014a58e5f616e79507daa82e5d4",
+      "reject": "model-execution-authority-narrowed",
+      "description": "The identical bounded-view document against a peer whose CEILING admits it and whose team-scope narrowing does not. Read closely: nothing in the document distinguishes it from a request that would be answered, and the refusal names the narrowing layer — a ceiling refusal is a question for the two organisations, a narrowing refusal is a question for one deployment's own configuration."
     }
   ]
 }

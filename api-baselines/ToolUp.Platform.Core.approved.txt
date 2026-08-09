@@ -9117,11 +9117,13 @@ ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdictModule.refusalText(Sys
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactExport : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactNarrativePublication : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactPeerEgress : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactRetrieval : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactToolResult : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactWebhook : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactExport : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactNarrativePublication : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactPeerEgress : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactRetrieval : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactToolResult : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactWebhook : System.Boolean { get }
@@ -9129,6 +9131,7 @@ ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.Tag : System.Int32 { get 
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactExport : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactNarrativePublication : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactPeerEgress : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactRetrieval : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactToolResult : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactWebhook : System.Int32 (literal)

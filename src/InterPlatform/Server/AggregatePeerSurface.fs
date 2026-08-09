@@ -428,6 +428,30 @@ module AggregatePeerSurface =
                         LongRunningEnabled = longRunningFloor (exposing |> List.map _.Surface)
                     }
                 PinnedVocabulary = unanimousPins (exposing |> List.map _.Surface)
+                // Phase 642 — the authority floor across the gateway edge
+                // and every exposing member. A call routed through the
+                // group lands on one of them and the caller cannot choose
+                // which, so the group may honestly grant only what its
+                // narrowest participant grants.
+                //
+                // **No `mixed:` marker here, and that is not an
+                // inconsistency.** The opaque posture facets take one
+                // because their values are unordered — the only honest
+                // report of a divergence is that there was one. Authority
+                // levels are TOTALLY ORDERED, so a divergence has a
+                // computable floor, and reporting it as `mixed:` would
+                // discard the one property this facet has that those do
+                // not. A group whose members grant `Full` and
+                // `AggregatesOnly` grants `AggregatesOnly` — a claim a
+                // counterparty can act on, rather than one it must treat
+                // as satisfying nothing.
+                DataVisibility =
+                    PeerDataVisibilityLevel.label (
+                        PeerDataVisibilityLevel.floor (
+                            PeerSurface.dataVisibility edge
+                            :: (exposing |> List.map (fun m -> PeerSurface.dataVisibility m.Surface))
+                        )
+                    )
             })
 
 /// Composes a deployment that presents an aggregate group as one peer:

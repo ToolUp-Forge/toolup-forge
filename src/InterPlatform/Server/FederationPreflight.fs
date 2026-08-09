@@ -30,7 +30,7 @@ open ToolUp.Platform.ConfigValidation
 // sides already publish and the only surface a federation can honestly
 // hold each other to.
 //
-// **Three rule families, stable codes, exported as data:**
+// **Four rule families, stable codes, exported as data:**
 //
 // * `peer-contract-unsatisfied` (Error) — a consumed contract that no
 //   pinned counterparty serves, or that one serves at no version this
@@ -42,6 +42,15 @@ open ToolUp.Platform.ConfigValidation
 // * `peer-trust-mismatch` (Error) — a trust facet this deployment
 //   REQUIRES of the counterparties it calls, which a pinned label does
 //   not declare, or declares at a different value.
+// * `peer-visibility-insufficient` (Error, Phase 642) — a pinned
+//   counterparty this deployment calls whose declared data-visibility
+//   AUTHORITY LEVEL does not reach what this deployment requires. Refuses
+//   for the same reason the two above do: every request over the declared
+//   level is refused data-side with a typed authority refusal, so the
+//   calls this deployment federates on cannot succeed. A label published
+//   before the facet existed declares nothing and reads as the narrowest
+//   level — silence is not a grant — so a counterparty that narrowed its
+//   grant and one that never stated it are treated alike, deliberately.
 // * `peer-surface-stale` (Warning) — a pin older than the declared
 //   maximum age. A warning and not an error deliberately: an aged pin is
 //   not evidence that anything drifted, it is the ABSENCE of fresh
@@ -137,6 +146,19 @@ type PinnedPeerSurface = {
     /// when the label carries none (a non-federating counterparty — a
     /// pin worth holding only to record that fact).
     TrustFacets: PinnedTrustFacet list
+    /// Phase 642 — the authority level the counterparty's label declares:
+    /// what this deployment may see of ITS data.
+    ///
+    /// **Typed here, a raw string on the surface, and the asymmetry is
+    /// the point.** `PeerSurface.DataVisibility` carries whatever a
+    /// counterparty published, including nothing at all; a PIN is a
+    /// document this deployment has already read and normalised, so by
+    /// the time it becomes one the fail-closed reading has happened
+    /// (`PeerSurface.dataVisibility`) and the level is a fact rather than
+    /// a claim to re-interpret at every preflight. A label published
+    /// before this member existed therefore pins as `AggregatesOnly` —
+    /// silence is not a grant.
+    DataVisibility: PeerDataVisibilityLevel
 }
 
 /// One trust facet this deployment REQUIRES of every pinned counterparty
@@ -223,6 +245,14 @@ type FederationPinStore = {
     /// actually consumes from. Empty leaves `peer-trust-mismatch`
     /// dormant.
     RequiredTrust: PeerTrustRequirement list
+    /// Phase 642 — the authority level required of every pinned
+    /// counterparty this deployment consumes from. `None` — the default —
+    /// leaves `peer-visibility-insufficient` dormant, which is the honest
+    /// default: a deployment that never asks a counterparty for more than
+    /// governed aggregates has no requirement to state, and inventing one
+    /// would refuse every federation that upgraded into this phase
+    /// (GP 11).
+    RequiredDataVisibility: PeerDataVisibilityLevel option
 }
 
 [<RequireQualifiedAccess>]
@@ -235,6 +265,7 @@ module FederationPinStore =
         Pins = []
         MaxPinAge = None
         RequiredTrust = []
+        RequiredDataVisibility = None
     }
 
     /// Add a pinned counterparty label. Re-pinning the same counterparty
@@ -259,6 +290,15 @@ module FederationPinStore =
     let withRequiredTrust (requirement: PeerTrustRequirement) (store: FederationPinStore) : FederationPinStore = {
         store with
             RequiredTrust = store.RequiredTrust @ [ requirement ]
+    }
+
+    /// Phase 642 — declare the authority level required of every pinned
+    /// counterparty this deployment consumes from. Last call wins: a
+    /// requirement is a single floor, not an accumulating set, and two
+    /// floors would only ever mean the higher one.
+    let withRequiredDataVisibility (level: PeerDataVisibilityLevel) (store: FederationPinStore) : FederationPinStore = {
+        store with
+            RequiredDataVisibility = Some level
     }
 
 /// The composed facts the federation-graph rules read — derived from the
@@ -455,6 +495,45 @@ module FederationPreflight =
                                 pin.Source
                         )))
 
+    /// Phase 642 — a pinned counterparty this deployment calls whose
+    /// declared authority level does not reach what this deployment
+    /// requires.
+    ///
+    /// **This is the drift check, and it refuses rather than reports.**
+    /// The other two error rules name a call that cannot succeed; so does
+    /// this one. A modeller that requires bounded views and pins a data
+    /// host granting aggregates only will have every view request refused
+    /// at the seam with `model-execution-authority-level-exceeded` — the
+    /// same verdict, discovered after the app is serving traffic instead
+    /// of before it starts. A counterparty that NARROWED its grant since
+    /// the pin was taken presents identically, which is the case the
+    /// requirement exists for: a level that drifted beneath what this
+    /// deployment federates on is a preflight failure, not a runtime
+    /// surprise.
+    ///
+    /// Scoped to counterparties this deployment actually consumes from,
+    /// exactly as `evalTrustMismatch` is and for the same reason: a pin
+    /// held for a counterparty nothing calls is a record, not an edge.
+    let private evalVisibilityInsufficient (input: FederationPreflightInput) : string list =
+        match input.Pins.RequiredDataVisibility with
+        | None -> []
+        | Some required ->
+            let consumedIds = input.Consumes |> List.map _.ContractId |> Set.ofList
+
+            input.Pins.Pins
+            |> List.filter (fun pin -> pin.Serves |> List.exists (fun c -> Set.contains c.ContractId consumedIds))
+            |> List.filter (fun pin -> not (PeerDataVisibilityLevel.admits pin.DataVisibility required))
+            |> List.map (fun pin ->
+                sprintf
+                    "Pinned counterparty '%s' declares data-visibility authority '%s', and this deployment requires at least '%s'. Every request above the declared level is refused data-side with a typed authority refusal, so the calls this deployment federates on cannot succeed against this counterparty. A label that predates the authority-level facet declares nothing and therefore reads as '%s' — silence is not a grant. The label (%s, taken %s from %s) is the only statement of a counterparty's grant a federation has. Take a fresher pin if the counterparty has since widened its grant, lower the requirement with PeerServerApp.withRequiredPeerDataVisibility, or stop consuming this counterparty's contracts."
+                    pin.CounterpartyId
+                    (PeerDataVisibilityLevel.label pin.DataVisibility)
+                    (PeerDataVisibilityLevel.label required)
+                    (PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default')
+                    pin.SurfaceHash
+                    (pin.PinnedAt.ToString "u")
+                    pin.Source)
+
     /// A pin older than the declared maximum age. Dormant unless
     /// `MaxPinAge` is declared — an undeclared deployment evaluates one
     /// `match` and yields nothing (GP 13).
@@ -494,6 +573,13 @@ module FederationPreflight =
             Description =
                 "Every trust facet a deployment requires of its counterparties must be declared, at the required value, on the pinned label of each counterparty it consumes from."
             Evaluate = evalTrustMismatch
+        }
+        {
+            Code = "peer-visibility-insufficient"
+            Severity = DefectError
+            Description =
+                "Every pinned counterparty a deployment consumes from must declare a data-visibility authority level reaching the level the deployment requires; a label that declares none reads as the narrowest."
+            Evaluate = evalVisibilityInsufficient
         }
         {
             Code = "peer-surface-stale"

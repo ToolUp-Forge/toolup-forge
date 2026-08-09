@@ -93,6 +93,15 @@ module FederationPin =
                 })
                 |> List.sortBy _.ContractId
             TrustFacets = export.Surface.TrustPosture |> Option.map trustFacets |> Option.defaultValue []
+            // Phase 642 — read fail-closed at PINNING time, not at every
+            // preflight. `PeerSurface.dataVisibility` reads an absent,
+            // empty or unrecognised declaration as `AggregatesOnly`, so a
+            // label published before the facet existed pins as the
+            // narrowest level and a label naming a level this build
+            // cannot enforce pins as one it can. Normalising once, here,
+            // is what lets `PinnedPeerSurface.DataVisibility` be a typed
+            // fact rather than a claim every rule re-interprets.
+            DataVisibility = PeerSurface.dataVisibility export.Surface
         }
 
     /// Pin a surface value directly — stamps it through

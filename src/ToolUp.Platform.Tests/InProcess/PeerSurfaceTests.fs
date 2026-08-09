@@ -429,6 +429,13 @@ let tests =
                 // gateway is the only thing that knows both halves, so the
                 // gateway is where the two are joined.
                 "GroupJobMap"
+                // Phase 642 — the data-visibility authority level, read by
+                // `describe` and published verbatim as `DataVisibility`.
+                // It belongs in the face on §8's inclusion test: a
+                // counterparty acts differently on it, because a modeller
+                // needing bounded views cannot use a data host that grants
+                // aggregates only.
+                "DataVisibility"
             ]
 
             let actual =

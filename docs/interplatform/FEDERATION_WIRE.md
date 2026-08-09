@@ -227,6 +227,18 @@ counterparty may rely on without seeing inside.
 | `TrustPosture` | object, opt | `null` exactly when `Enabled` is `false`. |
 | `Budgets` | object, opt | `null` exactly when `Enabled` is `false`. |
 | `PinnedVocabulary` | `VocabularyPin[]` | Data-vocabulary packs this deployment pins. |
+| `DataVisibility` | string | The **data-visibility authority level** this deployment grants a remote peer over its data: `"AggregatesOnly"` \| `"ViewOnly"` \| `"Full"` (§5.7.9). |
+
+**`DataVisibility` is read fail-closed, and a reader MUST implement that rather than assume it.** A
+member that is absent, empty, or names a level the reader does not know MUST read as
+`"AggregatesOnly"` — the narrowest. Each case is the same rule from a different direction: a
+counterparty's silence is not a grant, and neither is a word the reader cannot enforce. Every label
+published before this member existed therefore reads as `"AggregatesOnly"`, which is exactly what
+those deployments served.
+
+An emitter MUST nonetheless **write** the member, at its declared level or at `"AggregatesOnly"`.
+Absent and narrowest mean the same thing to a reader, but only one of them is a document whose stamp
+another party can reproduce.
 
 **`PeerSurfaceExport`** — the publishable envelope.
 
@@ -284,6 +296,14 @@ selection**: an allow-list of `(ContractId, Owner?)` pairs. The rules are:
    the leg is offered at all.
    A gateway that does not translate handles publishes `LongRunningEnabled: false` — the honest
    report of a group whose poll route cannot read a member's own store.
+
+8. **The data-visibility authority level floors to the MINIMUM**, over the gateway edge and the
+   exposing members — not to a `mixed:` marker. That is not an exception to rule 4 but a consequence
+   of a property those facets lack: the levels are **totally ordered** (§5.7.9), so a divergence has
+   a computable floor, and publishing it gives a counterparty a claim it can act on. `mixed:` exists
+   precisely where no floor is computable. A group whose members grant `Full` and `AggregatesOnly`
+   grants `AggregatesOnly`, for the same reason every other floor holds: a call routed through the
+   group lands on one member and the caller cannot choose which.
 
 Corpus: `aggregate-surface/group.json` (divergent posture, unanimous and non-unanimous pins, an
 unexposed member) and `aggregate-surface/solo.json` (the unanimous control).
@@ -641,6 +661,7 @@ fits" and "something broke" have different remedies.
 | `ProviderKind` | string | Which fitter the host is being asked for. |
 | `Seed` | int64 (§3.1 rule 7) | Reproducibility seed. |
 | `Gates` | `ModelExecutionGate[]` | Sorted ordinally by `Name`. **The emitter owns the sort**, not the caller: two modellers asking for the same gates in different orders must produce the same document. |
+| `SubmitterClass` | string | Who asked for this fit: `"human"` \| `"scheduled"` \| `"agent"`. **The submitter's own claim**, which the receiver records and never infers or cross-checks against the caller's identity — a peer that wants its agent traffic budgeted as agent traffic says so, and a receiver unwilling to take a given peer's word pins the class at its own binding instead. An absent or unrecognised value reads as `"human"`, so a caller that predates the member submits exactly as it always did. |
 
 #### 5.7.4 Outcomes
 
@@ -700,6 +721,9 @@ expressible, because that is the shape in which a refusal gets mistaken for an e
 | `model-execution-peer-unbound` | `PeerUnbound` (peerId) | The validated caller has no binding here, so it addresses no scope. Fail-closed: never defaulted. |
 | `model-execution-request-unreadable` | `RequestUnreadable` (reason) | The document is not a request envelope. |
 | `model-execution-submitter-refused` | `SubmitterRefused` (refusal) | The deployment's own model-execution surface refused, and its typed reason is carried through **unchanged**. |
+| `model-execution-authority-level-exceeded` | `AuthorityLevelExceeded` (operation, required, declared) | The operation requires a data-visibility authority level (§5.7.9) above the one the peer's binding declares. |
+| `model-execution-authority-narrowed` | `AuthorityNarrowingRefused` (operation, required, effective, narrowedBy) | The peer's ceiling admits the operation; a narrowing declared beneath it does not. `narrowedBy` names the layer. |
+| `model-execution-egress-withheld` | `EgressWithheld` (operation) | The level admitted the request, and the receiver's disclosure controls withheld something the answer carries. **Names the operation and nothing else** — naming the withheld reference or the policy would tell the caller that data it may not see exists, which is itself the disclosure. |
 
 The last one is the load-bearing one for a modeller. Carrying the inner refusal through rather than
 flattening it to a message is what lets a caller distinguish "no such provider" from "not
@@ -777,11 +801,27 @@ MUST refuse with the class named:
 | `model-execution/reject-undeclared-diagnostic.json` | `model-execution-undeclared-diagnostic` |
 | `model-execution/reject-scope-widening.json` | `model-execution-scope-widening` |
 | `model-execution/reject-malformed.json` | `model-execution-request-unreadable` |
+| `model-execution/reject-view-at-aggregates.json` | `model-execution-authority-level-exceeded` |
+| `model-execution/reject-full-at-view.json` | `model-execution-authority-level-exceeded` |
+| `model-execution/reject-narrowed.json` | `model-execution-authority-narrowed` |
 
 The scope-widening vector is the one to read closely: it is **well-formed**, names a real
 operation, and would be answered without complaint by an implementation that treated
 `AssertedScope` as an addressing member. Refusing it is the difference between a diagnostic aid and
 an impersonation vector, and nothing about the document itself tells you which one you built.
+
+**The three authority vectors are refused against a GRANT, not against the document.** Two of them
+are byte-identical (`reject-view-at-aggregates` and `reject-narrowed` are the same request), and the
+manifest still names different classes for them, because the refusal depends on what the receiver
+granted the calling peer — the ceiling in one case, a narrowing beneath an admitting ceiling in the
+other. A harness that reads every vector in this family against one binding cannot certify them.
+Read each against the grant §5.7.9 names for it:
+
+| Vector | Ceiling | Narrowing beneath it |
+|---|---|---|
+| `reject-view-at-aggregates.json` | `AggregatesOnly` | none |
+| `reject-full-at-view.json` | `ViewOnly` | none |
+| `reject-narrowed.json` | `ViewOnly` | one layer at `AggregatesOnly` |
 
 #### 5.7.8 Deployment: the two roles are configuration, not code
 
@@ -805,6 +845,90 @@ Two consequences follow, and both are the reason to say this out loud rather tha
 A deployment that starts single and later federates changes **no application code** — the fits it
 was already running are the fits a peer now submits. And a deployment that stops federating drops a
 binding; it does not unwind a data pipeline, because there was never one to unwind.
+
+#### 5.7.9 Data-visibility authority levels
+
+The profile above is closed against row egress: no shape it specifies can carry one. That posture is
+correct and it is also **unnamed** — a counterparty reading §5.7.2 learns what it may ask for, not
+what the data host has AGREED it may see, and a deployment willing to offer more has no vocabulary
+to say so in. This clause gives both sides the word.
+
+A participant declares one **authority level** in its published surface
+(§5.1 `DataVisibility`). The levels are **totally ordered**:
+
+| Level | What the peer may see | Notes |
+|---|---|---|
+| `AggregatesOnly` | governed diagnostics (§5.7.6) and the metadata of §5.7.2 | **The default**, and what an absent or unrecognised declaration reads as. |
+| `ViewOnly` | server-rendered bounded views | The data is rendered where it lives and the RENDERING crosses the seam; the series does not. |
+| `Full` | raw data | Co-located or otherwise fully-trusted deployments. **A declaration, not a surface** — nothing specified here serves a row at any level, and this level adds nothing. |
+
+`AggregatesOnly` < `ViewOnly` < `Full`. Every comparison an implementation makes is over this order;
+comparing the labels as strings is wrong in a way that is easy to miss, because it puts `Full` below
+`ViewOnly`.
+
+**Classification and refusal.** Each operation requires a level. Everything in §5.7.2 and §5.7.6
+requires `AggregatesOnly`; the view and raw-series vocabularies of §7.3 require `ViewOnly` and `Full`
+respectively; **an operation the reader does not recognise requires `AggregatesOnly`**, so the
+authority check never becomes the thing that refuses a typo — that is the declaration check's job,
+and its class tells a caller what it named. A request whose required level exceeds the peer's
+declared one MUST be refused with `model-execution-authority-level-exceeded`.
+
+**Where the check sits in the admission order matters, and both sides of its position are
+normative.** It runs AFTER the row-access refusal of §7.3 and BEFORE the declared-operation check:
+
+- After row access, because that vocabulary is a **structural absence rather than a grant**. The
+  profile serves no row surface at any level, so reporting a `ReadPage` probe as an authority
+  question would tell a caller that a wider grant might get it one. It would not.
+- Before declaration, because an operation the deployment implements and has not GRANTED must say
+  so. "We do not do that" and "we do that, and not for you" have different remedies — one is
+  abandoning the call, the other is a conversation — and a caller that cannot tell them apart will
+  pursue the wrong one.
+
+**Narrowing beneath the ceiling.** The declared level is a **ceiling**. A receiver MAY narrow it
+further per team and per user; the walk is outermost-first and **every layer may only lower**. A
+layer declaring a level above what it inherited MUST be clamped to the inherited level, never
+honoured — otherwise the innermost and least authoritative scope could re-admit data the bilateral
+agreement excluded. An implementation SHOULD record a clamped layer rather than silently ignoring
+it: a mis-declared narrowing that does nothing is a configuration defect somebody has to be able to
+find.
+
+A request the ceiling admits and a narrowing does not is refused with
+`model-execution-authority-narrowed`, naming the layer. The separate class is deliberate: a ceiling
+refusal is a question for the two organisations, a narrowing refusal is a question for one
+deployment's own configuration, and an operator reading a refusal log wants to see which happened.
+
+**Preflight, not runtime.** A consumer pins its counterparty's declared level with the rest of the
+label (§5.3) and checks it before traffic. A counterparty that grants less than the consumer
+federates on is a **composition failure**, not a call that fails later — and because an absent
+declaration reads as the narrowest level, a counterparty that narrowed its grant and one that never
+stated it are treated alike, deliberately.
+
+**Egress remains the receiver's own concern.** The level says what a peer MAY see; it does not say
+what a particular answer CARRIES. A receiver can grant `AggregatesOnly` honestly and still compose an
+aggregate over data its own disclosure policy will not release. Implementations SHOULD therefore
+route a level-gated answer through whatever egress controls they already operate before it crosses
+the seam, and MUST refuse rather than partially redact when something is withheld
+(`model-execution-egress-withheld`). Nothing about those controls is on the wire — this specification
+does not describe a receiver's internal policy, and a counterparty could not verify one if it did.
+
+#### The honesty boundary
+
+Stated here rather than left to be inferred, because a control that is believed to do more than it
+does is worse than an absent one.
+
+**What a level buys.** The bulk path is closed by construction at the lower two levels — there is no
+shape below `Full` that carries a series, so a peer cannot pull one however many times it asks. The
+grant is **declared in a document both sides pin and quote**, so a party that publishes one level and
+serves another has left a signed record of the discrepancy (§6). And a receiver operating egress
+controls has a per-crossing record of what was released to whom.
+
+**What it does not buy.** This is not cryptographic non-exportability. A peer granted `ViewOnly` sees
+rendered values and can transcribe what it sees; a peer granted `Full` has the data outright. There
+is no technical measure here that prevents a counterparty from retaining, re-deriving or
+re-publishing what it was legitimately shown, and none is claimed. The protection is
+**bulk-egress prevention plus audit**, resting on a declared and pinned agreement — which is a real
+and useful thing, and is not the same thing as a guarantee. An implementation MUST NOT describe it as
+one.
 
 ---
 
@@ -866,6 +990,9 @@ another language will and should word it differently.
 | `model-execution-peer-unbound` | model execution | The validated caller has no binding on this deployment. |
 | `model-execution-request-unreadable` | model execution | Not a well-formed request envelope. |
 | `model-execution-submitter-refused` | model execution | The deployment's own model-execution surface refused; the typed reason is carried through. |
+| `model-execution-authority-level-exceeded` | model execution | The operation requires an authority level above the peer's declared one (§5.7.9). |
+| `model-execution-authority-narrowed` | model execution | The ceiling admits the operation; a narrowing beneath it does not. |
+| `model-execution-egress-withheld` | model execution | The receiver's disclosure controls withheld something the answer carries. |
 
 ### 7.3 Model-execution constants
 
@@ -891,6 +1018,30 @@ The list is deliberately generous — it names the shapes a row surface actually
 obvious synonyms a caller would reach for. It costs nothing to extend and its only job is to make a
 refusal log legible: an operator wants to see that somebody asked for rows, not that somebody sent
 a string nobody recognised.
+
+**Data-visibility authority levels** (§5.7.9), weakest first. The order is normative; the labels are
+compared as members of it, never as strings:
+
+```
+AggregatesOnly  ViewOnly  Full
+```
+
+**Operations requiring `ViewOnly`** — the server-rendered bounded views:
+
+```
+DescribeView  ListViews  RenderView
+```
+
+**Operations requiring `Full`** — raw series, which this profile version implements none of:
+
+```
+ExportVintageSeries  ReadVintageSeries
+```
+
+These two lists are **disjoint from the row-access vocabulary above**, and must stay so: that list
+enumerates what a caller reaches for when it wants rows through a surface that does not exist, and is
+refused identically at every level; these enumerate operations the profile reserves to a level. A
+name on both would be ambiguous about which refusal it earns.
 
 ---
 
@@ -987,6 +1138,16 @@ Ordered by how often each one is the thing that is wrong.
 - [ ] Map keys sorted **ordinally** — the one member order that is not the declaration order.
 - [ ] A model-execution `AssertedScope` is **checked and refused**, never routed on.
 - [ ] A submitter-minted `SpecHash` is stored and keyed **verbatim**, never re-derived.
+- [ ] `DataVisibility` is **written** by every emitter and read **fail-closed** — absent, empty and
+      unrecognised all mean `AggregatesOnly`.
+- [ ] Authority levels are compared by their declared ORDER, never as strings (`Full` sorts below
+      `ViewOnly` alphabetically, which is backwards).
+- [ ] The authority check sits **after** the row-access refusal and **before** the
+      declared-operation check.
+- [ ] A narrowing layer can only lower; one declaring more than it inherited is clamped, not
+      honoured.
+- [ ] An aggregate's authority level is the **minimum** over its exposing members — never a `mixed:`
+      marker.
 
 ---
 

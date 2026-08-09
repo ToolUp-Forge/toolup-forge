@@ -253,6 +253,23 @@ type PeerServerApp = {
     /// `LongRunningEnabled`, and the composed app is the only thing that
     /// knows which of the two shapes was built.
     GroupJobMap: IPeerGroupJobMap option
+    /// Phase 642 — what a remote peer may see of this deployment's data:
+    /// the authority level published in the `PeerSurface` descriptor and
+    /// enforced data-side by the seams that carry data.
+    ///
+    /// `PeerDataVisibilityLevel.AggregatesOnly` unless a composition
+    /// calls `withDataVisibility`, which is the shipped posture named
+    /// rather than changed: the federated model-execution profile can
+    /// carry no row at any level, so a deployment that upgrades into this
+    /// phase publishes the level it already had and enforces exactly what
+    /// it already enforced (GP 11).
+    ///
+    /// **Declared once, read twice.** `PeerSurface.describe` publishes it
+    /// and the model-execution seam admits against it, so the label a
+    /// counterparty pins and the ceiling the receiver enforces are the
+    /// same value by construction — not two settings an operator has to
+    /// keep in step.
+    DataVisibility: PeerDataVisibilityLevel
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -329,6 +346,7 @@ module PeerServerApp =
         RoundOrchestration = false
         TokenPolicy = PeerTokenPolicy.unscoped
         GroupJobMap = None
+        DataVisibility = PeerDataVisibilityLevel.default'
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -902,6 +920,37 @@ module PeerServerApp =
     let withRequiredPeerTrust (requirement: PeerTrustRequirement) (app: PeerServerApp) : PeerServerApp = {
         app with
             FederationPins = FederationPinStore.withRequiredTrust requirement app.FederationPins
+    }
+
+    /// Phase 642 — declare what a remote peer may see of THIS
+    /// deployment's data.
+    ///
+    ///     app |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+    ///
+    /// Published in the `PeerSurface` descriptor, so a counterparty pins
+    /// the grant before it calls, and enforced data-side by the seams
+    /// that carry data — one declaration, both readers. Undeclared is
+    /// `AggregatesOnly`, which is the shipped posture named rather than
+    /// changed (GP 11).
+    let withDataVisibility (level: PeerDataVisibilityLevel) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            DataVisibility = level
+    }
+
+    /// Phase 642 — require an authority level of every pinned
+    /// counterparty this deployment consumes contracts from.
+    ///
+    ///     app |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+    ///
+    /// A counterparty whose pinned label grants LESS than this refuses
+    /// the composition at preflight (`peer-visibility-insufficient`),
+    /// which is the whole point: a modeller that needs bounded views and
+    /// pins a data host granting aggregates only would otherwise discover
+    /// it on its first view request, with traffic already flowing.
+    /// Undeclared leaves the rule dormant (GP 13).
+    let withRequiredPeerDataVisibility (level: PeerDataVisibilityLevel) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            FederationPins = FederationPinStore.withRequiredDataVisibility level app.FederationPins
     }
 
     /// Phase 316, composed by Phase 629 — bound how long the parked

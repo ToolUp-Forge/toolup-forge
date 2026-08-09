@@ -144,6 +144,27 @@ type PeerSurface = {
     /// no pack surfaces `[]`; sorted by pack id then version for a
     /// registration-order-independent hash.
     PinnedVocabulary: VocabularyPackPin list
+    /// Phase 642 — what a remote peer may see of this deployment's data,
+    /// as the stable label of a `PeerDataVisibilityLevel`
+    /// (`"AggregatesOnly"` | `"ViewOnly"` | `"Full"`).
+    ///
+    /// **It belongs in the stamped surface on the §8 inclusion test:** a
+    /// counterparty acts differently on it. A modeller that needs bounded
+    /// views cannot use a data host that grants aggregates only, and the
+    /// difference is exactly the kind of thing a pin should invalidate —
+    /// which is why it is here and not in the local operational policy
+    /// the surface deliberately excludes.
+    ///
+    /// **A string rather than the DU, deliberately.** A published label
+    /// is somebody else's document: it may omit this member (every label
+    /// published before Phase 642 does) or name a level a later version
+    /// invented, and a typed member would turn either into a parse
+    /// failure that refuses the whole label. Carrying the raw declaration
+    /// and reading it through `PeerSurface.dataVisibility` — which reads
+    /// absent, empty and unrecognised alike as `AggregatesOnly` — makes
+    /// the fail-closed default a property of the READER, where a
+    /// counterparty cannot affect it.
+    DataVisibility: string
 }
 
 /// The pinnable export envelope: the surface plus a format version and a
@@ -249,7 +270,24 @@ module PeerSurface =
         TrustPosture = None
         Budgets = None
         PinnedVocabulary = []
+        // Phase 642 — a deployment with no wire face grants nothing, and
+        // the narrowest level is how "nothing" is spelled. Stated rather
+        // than left empty: an empty string would read as the default
+        // anyway, and saying so is what makes the empty label's own
+        // answer to "what may I see" legible instead of inferred.
+        DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default'
     }
+
+    /// **The fail-closed read of a surface's declared authority level**,
+    /// and the only route any consumer should take to it.
+    ///
+    /// A label that omits the member (every label published before Phase
+    /// 642), carries an empty value, or names a level this build cannot
+    /// enforce all read as `AggregatesOnly`. Each arm is the same claim
+    /// from a different direction: a counterparty's silence is not a
+    /// grant, and a word this deployment cannot act on is not one either.
+    let dataVisibility (surface: PeerSurface) : PeerDataVisibilityLevel =
+        PeerDataVisibilityLevel.ofLabelOrDefault surface.DataVisibility
 
     /// Typed consumed-contract declaration for
     /// `PeerServerApp.withConsumedContract`: ties the declaration to a
@@ -366,6 +404,14 @@ module PeerSurface =
                     app.Base.Config.PinnedVocabularyPacks
                     |> List.map DataVocabulary.pin
                     |> List.sortBy (fun p -> p.PackId, p.Version.Major, p.Version.Minor)
+                // Phase 642 — the composed declaration
+                // (`withDataVisibility`), which defaults to
+                // `AggregatesOnly`. Derived from the composition like
+                // every other member of this descriptor: a deployment
+                // states its grant once, at compose time, and the
+                // published label cannot disagree with what the seam
+                // enforces because both read this one value.
+                DataVisibility = PeerDataVisibilityLevel.label app.DataVisibility
             }
 
     /// Canonical JSON of a surface: the universal `FableConverters` set,

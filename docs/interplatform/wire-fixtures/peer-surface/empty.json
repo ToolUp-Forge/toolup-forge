@@ -1,1 +1,1 @@
-{"FormatVersion":1,"SurfaceHash":"ff17860c3d43e464e1c1e818b8091572db91374fc3ecd0f2de56f6d6dff92827","Surface":{"Enabled":false,"LocalPeerId":null,"Serves":{"Contracts":[],"Endpoints":[]},"Consumes":[],"TrustPosture":null,"Budgets":null,"PinnedVocabulary":[]}}
+{"FormatVersion":1,"SurfaceHash":"4cc2224421141efa6bc095c2e2519de7c22409baf0c6cbea4f201853c601db35","Surface":{"Enabled":false,"LocalPeerId":null,"Serves":{"Contracts":[],"Endpoints":[]},"Consumes":[],"TrustPosture":null,"Budgets":null,"PinnedVocabulary":[],"DataVisibility":"AggregatesOnly"}}

@@ -469,7 +469,15 @@ let tests =
 
             Expect.equal
                 codes
-                [ "peer-contract-unsatisfied"; "peer-trust-mismatch"; "peer-surface-stale" ]
+                [
+                    "peer-contract-unsatisfied"
+                    "peer-trust-mismatch"
+                    // Phase 642 — declared beside the other two errors and
+                    // before the warning, so the manifest reads
+                    // severity-ordered.
+                    "peer-visibility-insufficient"
+                    "peer-surface-stale"
+                ]
                 "the exported manifest must carry exactly the shipped rule codes, in declaration order"
 
             Expect.equal
@@ -585,5 +593,103 @@ let tests =
             match FederationPin.ofExportJson sellerId sellerSource stamp pinnedAt "{\"not\":\"a surface\"}" with
             | Result.Ok _ -> failtest "an unparseable document must be refused"
             | Result.Error message -> Expect.stringContains message sellerId "the refusal must name the counterparty"
+        }
+
+        // ── Phase 642 — the authority-level requirement ───────────────
+
+        test "a counterparty granting less than this deployment requires refuses the composition" {
+            // The drift check. Without it the same verdict arrives at the
+            // first call, with traffic already flowing — the exact class
+            // of surprise this preflight family exists to move earlier.
+            let app =
+                conformantApp ()
+                |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+
+            let defects = defectsOf app
+
+            Expect.contains
+                (codesOf defects)
+                "peer-visibility-insufficient"
+                "a pinned counterparty granting aggregates only cannot serve a deployment that requires bounded views"
+
+            let message =
+                messagesFor "peer-visibility-insufficient" defects
+                |> List.tryHead
+                |> Option.defaultValue ""
+
+            Expect.stringContains message "AggregatesOnly" "the message names what the counterparty granted"
+            Expect.stringContains message "ViewOnly" "and what this deployment requires"
+
+            Expect.stringContains
+                message
+                "silence is not a grant"
+                "and says why a label that predates the facet reads as the narrowest level"
+        }
+
+        test "a counterparty granting at least the required level passes" {
+            // The control that separates a rule which fires from one that
+            // refuses every composition that declares a requirement.
+            let grantingSeller =
+                sellerSurface [ v1; v11 ] true
+                |> fun surface -> {
+                    surface with
+                        DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.Full
+                }
+
+            let app =
+                consumerApp [ sellerPin grantingSeller; hubPin (hubSurface ()) ] []
+                |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+
+            // The hub grants nothing, and this deployment consumes from
+            // it — so the rule must still fire for the hub and not for the
+            // seller. Checking both halves is what distinguishes a rule
+            // that reads the pin from one that reads the requirement only.
+            let messages = messagesFor "peer-visibility-insufficient" (defectsOf app)
+
+            Expect.hasLength messages 1 "exactly the counterparty that grants too little is reported"
+            Expect.stringContains (List.head messages) hubId "and it is the hub, not the seller"
+        }
+
+        test "a requirement never reaches a counterparty this deployment does not call" {
+            // A pin held for a counterparty nothing consumes from is a
+            // record, not an edge. Gating a boot on the grant of a
+            // deployment we never address would refuse compositions that
+            // are correct today and punish an operator for keeping a
+            // complete registry.
+            let unrelated =
+                PeerServerApp.create ()
+                |> PeerServerApp.withConfig enabledConfig
+                |> PeerServerApp.withLocalPeer {
+                    PeerId = "observer"
+                    DisplayName = "Observer"
+                }
+                |> PeerSurface.describe
+
+            let app =
+                consumerApp [
+                    sellerPin (sellerSurface [ v1; v11 ] true)
+                    hubPin (hubSurface ())
+                    FederationPin.ofSurface "observer" "peers/observer.surface.json" pinnedAt unrelated
+                ] []
+
+            Expect.isEmpty
+                (messagesFor "peer-visibility-insufficient" (defectsOf app))
+                "with no requirement declared the rule is dormant, whoever is pinned"
+        }
+
+        test "the rule is declared in both manifests, as a structural error" {
+            let descriptor =
+                FederationPreflight.classifiedRuleManifest
+                |> List.tryFind (fun rule -> rule.Code = "peer-visibility-insufficient")
+
+            let rule =
+                Expect.wantSome descriptor "the rule must appear in the introspectable manifest, not only in the check"
+
+            Expect.equal rule.Severity DefectError "a call that cannot succeed refuses rather than reports"
+
+            Expect.equal
+                rule.Class
+                StructuralRule
+                "a pure sweep over declared data already in memory, so SkipPreflight must not bypass it"
         }
     ]

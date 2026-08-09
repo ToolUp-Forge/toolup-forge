@@ -4,7 +4,12 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+// Phase 642 — the disclosure plane's own vocabulary (`IFactDisclosureGate`,
+// `FactEgressSurface`, `FactDisclosureVerdict`), which the federated-egress
+// cases stub, and the compose record the descriptor cases build.
+open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.InterPlatform
+open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 638 — the federated model-execution profile ───────────────
 //
@@ -334,6 +339,14 @@ let private dataHost (bindings: Map<string, string>) =
                     PeerId = peerId
                     ScopeId = scope
                     Api = backend.Api
+                    // Phase 642 — the default grant: `AggregatesOnly`,
+                    // no narrowing, no egress route. Every case in this
+                    // module predates the authority levels and must keep
+                    // behaving exactly as it did (GP 11), so the shared
+                    // host declares the shipped posture; the authority
+                    // cases build their own bindings.
+                    Visibility = PeerVisibilityBinding.default'
+                    Egress = None
                 }
     }
 
@@ -382,6 +395,8 @@ let private withDiagnostics
                     PeerId = peerId
                     ScopeId = scope
                     Api = instance.Backend.Api
+                    Visibility = PeerVisibilityBinding.default'
+                    Egress = None
                 }
     }
 
@@ -947,6 +962,620 @@ let private submitterVocabularyTests =
         }
     ]
 
+// ─── Phase 642 — declared data-visibility authority levels ───────────
+//
+// The profile shipped closed against row egress; these cases are about
+// what a deployment has AGREED a peer may see, which is a different
+// question. Three properties carry the whole family and each is asserted
+// on its own: the levels are ORDERED (so "narrower" is computable and a
+// floor is a value rather than a disagreement), narrowing only ever
+// LOWERS (so the innermost, least authoritative layer cannot re-admit
+// what the agreement excluded), and the refusals are DISTINGUISHABLE (so
+// a caller pursues the remedy that exists).
+
+/// A data host whose binding declares a level and, optionally, an egress
+/// route. Deliberately a separate constructor from `dataHost` rather than
+/// an extra parameter on it: every pre-642 case in this module must keep
+/// running against a binding that declares nothing, because "a
+/// deployment that upgrades is byte-for-byte unchanged" is the claim
+/// those cases are the evidence for.
+let private dataHostGranting
+    (visibility: PeerVisibilityBinding)
+    (egress: PeerEgressRoute option)
+    (bindings: Map<string, string>)
+    =
+    let backend = ReferenceDataHost()
+    let scheduler = DeferredScheduler()
+    let results = MemoryJobResultStore() :> IPeerJobResultStore
+
+    let resolveBinding (peerId: string) = async {
+        match Map.tryFind peerId bindings with
+        | None -> return None
+        | Some scope ->
+            return
+                Some {
+                    PeerId = peerId
+                    ScopeId = scope
+                    Api = backend.Api
+                    Visibility = visibility
+                    Egress = egress
+                }
+    }
+
+    let deps: ModelExecutionPeerDeps = {
+        ResolveBinding = resolveBinding
+        Admission = ModelExecutionAdmission.create declaredDiagnostics
+        FitPoll = ModelExecutionFitPollPolicy.immediate
+    }
+
+    let fusion: PeerJobFusion = {
+        Scheduler = scheduler
+        ResultStore = results
+        AuditLog = None
+    }
+
+    let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
+    let host = ModelExecutionPeerContract.host deps (Some fusion)
+    peer.RegisterContract host.Registration
+
+    for handlerName, handler in host.JobHandlers do
+        (scheduler :> IJobScheduler).RegisterHandler(handlerName, handler)
+
+    {
+        Peer = peer
+        Scheduler = scheduler
+        Results = results
+        Backend = backend
+        Decisions = ResizeArray<PeerCleanRoomDecisionPayload>()
+    }
+
+/// A gate that answers from a fixed verdict map and records what it was
+/// asked, including the ambient purpose claimed at the moment of the
+/// call — which is the only way to assert that the claim was installed
+/// BEFORE the gate was consulted rather than after.
+type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed: string ref) =
+    member val Calls = ResizeArray<string * FactEgressSurface * string list * string>() with get
+
+    interface IFactDisclosureGate with
+        member this.Check(scopeId, principal, surface, factIds) = async {
+            this.Calls.Add(scopeId, surface, factIds, claimed.Value)
+            ignore principal
+
+            return
+                factIds
+                |> List.map (fun id ->
+                    id, verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
+                |> Map.ofList
+        }
+
+let private authorityLevelTests =
+    testList "the levels are ordered and read fail-closed" [
+        test "the order is AggregatesOnly < ViewOnly < Full" {
+            Expect.equal
+                (PeerDataVisibilityLevel.all |> List.map PeerDataVisibilityLevel.rank)
+                [ 0; 1; 2 ]
+                "the enumeration is weakest-first and the ranks agree with it"
+
+            Expect.isTrue
+                (PeerDataVisibilityLevel.admits PeerDataVisibilityLevel.Full PeerDataVisibilityLevel.ViewOnly)
+                "a Full grant reaches a ViewOnly requirement"
+
+            Expect.isFalse
+                (PeerDataVisibilityLevel.admits PeerDataVisibilityLevel.ViewOnly PeerDataVisibilityLevel.Full)
+                "a ViewOnly grant does not reach a Full requirement"
+        }
+
+        test "an absent, empty or unrecognised declaration reads as the narrowest level" {
+            // The three arms are one claim from three directions: a
+            // counterparty's silence is not a grant, and neither is a word
+            // this build cannot enforce. `null` is the pre-642 case — a
+            // label published before the member existed.
+            for declared in [ null; ""; "Everything"; "aggregatesonly" ] do
+                Expect.equal
+                    (PeerDataVisibilityLevel.ofLabelOrDefault declared)
+                    PeerDataVisibilityLevel.AggregatesOnly
+                    $"'{declared}' is not a grant"
+
+            // The control that separates a reader which fails closed from
+            // one that always returns the default.
+            Expect.equal
+                (PeerDataVisibilityLevel.ofLabelOrDefault "ViewOnly")
+                PeerDataVisibilityLevel.ViewOnly
+                "a declared level IS read"
+        }
+
+        test "the floor over a set is its minimum, never a disagreement marker" {
+            Expect.equal
+                (PeerDataVisibilityLevel.floor [
+                    PeerDataVisibilityLevel.Full
+                    PeerDataVisibilityLevel.AggregatesOnly
+                    PeerDataVisibilityLevel.ViewOnly
+                ])
+                PeerDataVisibilityLevel.AggregatesOnly
+                "a group grants what its narrowest participant grants"
+
+            Expect.equal
+                (PeerDataVisibilityLevel.floor [])
+                PeerDataVisibilityLevel.AggregatesOnly
+                "nothing declared is the narrowest level, not the broadest"
+        }
+
+        test "the Full vocabulary and the row-access probe list are disjoint" {
+            // They answer different questions and a name on both would be
+            // ambiguous: the probe list is a structural absence refused at
+            // every level, the Full list is a grant.
+            Expect.isEmpty
+                (Set.intersect ModelExecutionProfile.fullOperations ModelExecutionProfile.rowAccessOperations
+                 |> Set.toList)
+                "no operation is both a row-access probe and a Full-reserved operation"
+        }
+    ]
+
+let private narrowingTests =
+    testList "narrowing may only lower" [
+        test "each layer narrows the one before it, outermost-first" {
+            let binding =
+                PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.Full
+                |> PeerVisibilityBinding.withNarrowing (TeamNarrowing "north") PeerDataVisibilityLevel.ViewOnly
+                |> PeerVisibilityBinding.withNarrowing (UserNarrowing "ana") PeerDataVisibilityLevel.AggregatesOnly
+
+            let resolved = PeerVisibility.resolve binding "buyer-acme"
+
+            Expect.equal resolved.Ceiling PeerDataVisibilityLevel.Full "the ceiling is the peer's grant"
+
+            Expect.equal
+                resolved.Effective
+                PeerDataVisibilityLevel.AggregatesOnly
+                "the innermost layer's narrowing is what a caller gets"
+
+            Expect.equal
+                resolved.ContributingScopes
+                [ PeerCeiling "buyer-acme"; TeamNarrowing "north"; UserNarrowing "ana" ]
+                "the walk records where each layer came from, outermost-first"
+
+            Expect.equal resolved.NarrowedBy (Some(UserNarrowing "ana")) "the innermost layer that lowered is named"
+        }
+
+        test "a layer declaring MORE than it inherited is clamped and recorded, never honoured" {
+            // The whole safety property. If an inner layer could widen,
+            // the least authoritative scope in the walk could re-admit
+            // data the bilateral agreement excluded.
+            let binding =
+                PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.AggregatesOnly
+                |> PeerVisibilityBinding.withNarrowing (TeamNarrowing "north") PeerDataVisibilityLevel.Full
+
+            let resolved = PeerVisibility.resolve binding "buyer-acme"
+
+            Expect.equal
+                resolved.Effective
+                PeerDataVisibilityLevel.AggregatesOnly
+                "the ceiling holds; the layer did not raise it"
+
+            Expect.equal
+                resolved.ClampedScopes
+                [ TeamNarrowing "north" ]
+                "a mis-declared layer is NAMED rather than silently doing nothing — an operator has to be able to find it"
+
+            Expect.isNone resolved.NarrowedBy "clamping is not narrowing; nothing was lowered"
+        }
+
+        test "a binding that declares nothing resolves to the narrowest level with no narrowing" {
+            let resolved = PeerVisibility.resolve PeerVisibilityBinding.default' "buyer-acme"
+
+            Expect.equal resolved.Effective PeerDataVisibilityLevel.AggregatesOnly "the pre-642 posture, named"
+            Expect.isEmpty resolved.ClampedScopes "nothing to clamp"
+            Expect.isEmpty (List.tail resolved.ContributingScopes) "only the ceiling contributed"
+        }
+    ]
+
+let private authorityAdmissionTests =
+    testList "requests are classified by the level they require" [
+        test "the profile's own operations require only the narrowest level" {
+            // Which is why a deployment upgrading into this phase enforces
+            // exactly what it already enforced.
+            for operation in Set.union ModelExecutionProfile.operations ModelExecutionProfile.diagnostics do
+                Expect.equal
+                    (ModelExecutionProfile.requiredAuthority operation)
+                    PeerDataVisibilityLevel.AggregatesOnly
+                    $"'{operation}' is metadata or a governed aggregate"
+        }
+
+        test "an unrecognised operation requires the narrowest level, so the authority check never refuses a typo" {
+            Expect.equal
+                (ModelExecutionProfile.requiredAuthority "Colinearity")
+                PeerDataVisibilityLevel.AggregatesOnly
+                "a misspelling is refused by the DECLARATION check, with the class that tells a caller what it named"
+        }
+
+        testCaseAsync "a bounded-view request against an aggregates-only grant is refused as an AUTHORITY question"
+        <| async {
+            let instance = dataHostGranting PeerVisibilityBinding.default' None boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "RenderView" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-authority-level-exceeded"
+                "the deployment implements the classification and has not granted it — 'we do not do that' and 'not for you' have different remedies"
+        }
+
+        testCaseAsync "the identical request against a ViewOnly grant is no longer an authority question"
+        <| async {
+            let instance =
+                dataHostGranting (PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.ViewOnly) None boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "RenderView" referenceSubmission.Vintage)
+
+            // The control that separates an authority check which fires
+            // from one that refuses everything: the grant admits it, and
+            // what refuses now is the declaration check, because the view
+            // machinery is a later phase.
+            expectRefusal
+                answer
+                "model-execution-undeclared-diagnostic"
+                "the grant reaches it; this deployment does not implement it yet"
+        }
+
+        testCaseAsync "a Full-reserved request against a ViewOnly grant is refused at the next rung"
+        <| async {
+            let instance =
+                dataHostGranting (PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.ViewOnly) None boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ReadVintageSeries" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-authority-level-exceeded"
+                "the levels are a ladder, not a pair of special cases"
+        }
+
+        testCaseAsync "a narrowing beneath an admitting ceiling refuses with its OWN class, naming the layer"
+        <| async {
+            let instance =
+                dataHostGranting
+                    (PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.ViewOnly
+                     |> PeerVisibilityBinding.withNarrowing
+                         (TeamNarrowing "north-analysts")
+                         PeerDataVisibilityLevel.AggregatesOnly)
+                    None
+                    boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "RenderView" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-authority-narrowed"
+                "a ceiling refusal is a question for the two organisations; a narrowing refusal is one for this deployment's own configuration"
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Refused refusal) ->
+                Expect.stringContains
+                    (ModelExecutionPeerRefusal.describe refusal)
+                    "team:north-analysts"
+                    "the refusal names the layer to look at"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        testCaseAsync "a row-access probe is still refused as a row read at EVERY level"
+        <| async {
+            // The ordering claim: the row vocabulary is a structural
+            // absence, not a grant, so re-reporting a probe as an
+            // authority question would tell a caller that a wider grant
+            // might get it one. It would not.
+            for ceiling in PeerDataVisibilityLevel.all do
+                let instance =
+                    dataHostGranting (PeerVisibilityBinding.ofCeiling ceiling) None boundOnly
+
+                let! answer =
+                    call
+                        instance
+                        modellerPeerId
+                        (ModelExecutionPeerContract.request "ReadPage" referenceSubmission.Vintage)
+
+                expectRefusal
+                    answer
+                    "model-execution-row-read-refused"
+                    $"a probe at '{PeerDataVisibilityLevel.label ceiling}' is a probe, not an authority question"
+        }
+    ]
+
+let private federatedEgressTests =
+    testList "level-gated egress rides the disclosure plane" [
+        testCaseAsync "no route composed answers exactly as before, consulting nothing"
+        <| async {
+            let instance = dataHostGranting PeerVisibilityBinding.default' None boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ResolveVintage" referenceSubmission.Vintage)
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Answered _) -> ()
+            | other -> failtestf "a deployment with no fact substrate pays nothing and answers unchanged; got %A" other
+        }
+
+        testCaseAsync "a permitted reference crosses, and the gate was asked at the federated-egress door"
+        <| async {
+            let claimed = ref ""
+            let gate = RecordingGate(Map.ofList [ "fact-1", FactDisclosable ], claimed)
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                References = fun _ -> [ "fact-1" ]
+            }
+
+            let instance =
+                dataHostGranting PeerVisibilityBinding.default' (Some route) boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ResolveVintage" referenceSubmission.Vintage)
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Answered _) -> ()
+            | other -> failtestf "a permitted reference crosses; got %A" other
+
+            let scopeId, surface, factIds, purposeAtCall = gate.Calls |> Seq.exactlyOne
+
+            Expect.equal scopeId hostScope "the binding's scope, never one from the wire"
+            Expect.equal surface FactPeerEgress "judged at the federation door, not at some other surface's"
+            Expect.equal factIds [ "fact-1" ] "the answer's declared references"
+
+            // The Phase 592 facet is only bound if the claim is installed
+            // BEFORE the gate reads it; asserting the claim afterwards
+            // would pass against a route that claimed nothing at all.
+            Expect.equal
+                purposeAtCall
+                "federated-modelling"
+                "the purpose was claimed before the gate was consulted, not after"
+        }
+
+        testCaseAsync "a withheld reference refuses the answer, naming the operation and nothing else"
+        <| async {
+            let claimed = ref ""
+
+            let gate =
+                RecordingGate(Map.ofList [ "fact-1", FactNotDisclosable "licensed-third-party" ], claimed)
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                References = fun _ -> [ "fact-1" ]
+            }
+
+            let instance =
+                dataHostGranting PeerVisibilityBinding.default' (Some route) boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ResolveVintage" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-egress-withheld"
+                "the level admitted the request; the disclosure plane withheld what the answer carries"
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Refused refusal) ->
+                let described = ModelExecutionPeerRefusal.describe refusal
+
+                // Naming the policy is right at a door inside the trust
+                // boundary and wrong across a federation edge: it would
+                // tell a counterparty that a fact it may not see EXISTS.
+                Expect.isFalse (described.Contains "licensed-third-party") "the policy is never named across the seam"
+
+                Expect.isFalse (described.Contains "fact-1") "nor is the reference"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        testCaseAsync "an unresolvable reference is withheld, exactly as a denied one is"
+        <| async {
+            // Fail-closed across all three of denied, unknown and
+            // unresolvable-in-scope: a reference the gate did not
+            // affirmatively permit is one nothing said may cross.
+            let claimed = ref ""
+            let gate = RecordingGate(Map.empty, claimed)
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                References = fun _ -> [ "fact-from-another-scope" ]
+            }
+
+            let instance =
+                dataHostGranting PeerVisibilityBinding.default' (Some route) boundOnly
+
+            let! answer =
+                call
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.request "ResolveVintage" referenceSubmission.Vintage)
+
+            expectRefusal
+                answer
+                "model-execution-egress-withheld"
+                "an id the gate cannot resolve is not permitted by omission"
+        }
+
+        testCaseAsync "a refusal never rides the door"
+        <| async {
+            let claimed = ref ""
+            let gate = RecordingGate(Map.empty, claimed)
+
+            let route: PeerEgressRoute = {
+                Gate = gate
+                Purpose = {
+                    PurposeId = "federated-modelling"
+                    Claim = fun purpose -> claimed.Value <- purpose
+                }
+                References = fun _ -> [ "fact-1" ]
+            }
+
+            let instance =
+                dataHostGranting PeerVisibilityBinding.default' (Some route) boundOnly
+
+            let! answer =
+                call instance modellerPeerId (ModelExecutionPeerContract.request "ReadPage" referenceSubmission.Vintage)
+
+            expectRefusal answer "model-execution-row-read-refused" "the probe refusal stands"
+
+            Expect.isEmpty
+                (List.ofSeq gate.Calls)
+                "there is nothing in a refusal to disclose, so routing one would spend a gate check and an audit row to learn that"
+        }
+    ]
+
+let private authorityVocabularyTests =
+    testList "the authority refusals read in the submitter vocabulary" [
+        test "a ceiling refusal is Forbidden — it invites the caller to seek permission" {
+            match
+                ModelExecutionPeerRefusal.AuthorityLevelExceeded("RenderView", "ViewOnly", "AggregatesOnly")
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal []
+            with
+            | ModelExecutionRefusal.Forbidden message ->
+                Expect.stringContains
+                    message
+                    "ViewOnly"
+                    "the level the operation needs is named, so the ask is actionable"
+            | other -> failtestf "expected Forbidden; got %A" other
+        }
+
+        test "a narrowing refusal is a policy refusal under a stable rule id" {
+            match
+                ModelExecutionPeerRefusal.AuthorityNarrowingRefused(
+                    "RenderView",
+                    "ViewOnly",
+                    "AggregatesOnly",
+                    "team:north"
+                )
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal []
+            with
+            | ModelExecutionRefusal.PolicyRefused rule ->
+                Expect.equal rule "model-execution.authority-narrowing" "the rule identifier is the stable part"
+            | other -> failtestf "expected PolicyRefused; got %A" other
+        }
+
+        test "an egress withhold reaches the submitter as a rule, carrying nothing about the data" {
+            let projected =
+                ModelExecutionPeerRefusal.EgressWithheld "Coverage"
+                |> ModelExecutionPeerRefusal.toSubmitterRefusal []
+
+            match projected with
+            | ModelExecutionRefusal.PolicyRefused rule ->
+                Expect.equal rule "model-execution.egress-withheld" "the rule identifier is all a counterparty learns"
+            | other -> failtestf "expected PolicyRefused; got %A" other
+        }
+
+        test "every refusal class the profile defines has a distinct stable name" {
+            let classes =
+                [
+                    ModelExecutionPeerRefusal.ProfileVersionUnsupported(2, 1)
+                    ModelExecutionPeerRefusal.RowAccessRefused "ReadPage"
+                    ModelExecutionPeerRefusal.UndeclaredDiagnostic "Leverage"
+                    ModelExecutionPeerRefusal.ScopeWideningRefused "other"
+                    ModelExecutionPeerRefusal.PeerUnbound "peer"
+                    ModelExecutionPeerRefusal.RequestUnreadable "truncated"
+                    ModelExecutionPeerRefusal.SubmitterRefused(ModelExecutionRefusal.NotFound "x")
+                    ModelExecutionPeerRefusal.AuthorityLevelExceeded("RenderView", "ViewOnly", "AggregatesOnly")
+                    ModelExecutionPeerRefusal.AuthorityNarrowingRefused(
+                        "RenderView",
+                        "ViewOnly",
+                        "AggregatesOnly",
+                        "team:n"
+                    )
+                    ModelExecutionPeerRefusal.EgressWithheld "Coverage"
+                ]
+                |> List.map ModelExecutionPeerRefusal.className
+
+            Expect.equal
+                (List.distinct classes |> List.length)
+                classes.Length
+                "a class shared by two conditions is a class a caller cannot act on"
+        }
+    ]
+
+let private declaredSurfaceTests =
+    testList "the grant is declared once and published in the descriptor" [
+        test "a composed declaration is what the surface publishes" {
+            let surface =
+                PeerServerApp.create ()
+                |> PeerServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PeerSubstrate = EnabledPeerSubstrate
+                }
+                |> PeerServerApp.withLocalPeer {
+                    PeerId = "data-host"
+                    DisplayName = "Data host"
+                }
+                |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+                |> PeerSurface.describe
+
+            Expect.equal surface.DataVisibility "ViewOnly" "the label a counterparty pins"
+
+            Expect.equal
+                (PeerSurface.dataVisibility surface)
+                PeerDataVisibilityLevel.ViewOnly
+                "and the level the seam enforces — one declaration, two readers"
+        }
+
+        test "a composition that declares nothing publishes the narrowest level, present rather than omitted" {
+            let surface =
+                PeerServerApp.create ()
+                |> PeerServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PeerSubstrate = EnabledPeerSubstrate
+                }
+                |> PeerSurface.describe
+
+            Expect.equal surface.DataVisibility "AggregatesOnly" "the shipped posture, named rather than changed"
+        }
+
+        test "a label that omits the member reads as the narrowest level" {
+            // The pre-642 counterparty. `null` is what deserialising a
+            // label without the member produces, and the honest reading of
+            // "said nothing" is never the broadest grant.
+            Expect.equal
+                (PeerSurface.dataVisibility {
+                    PeerSurface.empty with
+                        DataVisibility = null
+                })
+                PeerDataVisibilityLevel.AggregatesOnly
+                "silence is not a grant"
+        }
+    ]
+
 let tests =
     testList "Phase 638 — federated model execution" [
         roundTripTests
@@ -954,4 +1583,11 @@ let tests =
         diagnosticsTests
         scopeTests
         submitterVocabularyTests
+        // Phase 642 — declared authority levels over the same seam.
+        authorityLevelTests
+        narrowingTests
+        authorityAdmissionTests
+        federatedEgressTests
+        authorityVocabularyTests
+        declaredSurfaceTests
     ]

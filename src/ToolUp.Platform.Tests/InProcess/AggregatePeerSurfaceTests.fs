@@ -174,6 +174,12 @@ let private gammaMember () : AggregateMember = {
                 LongRunningEnabled = false
             }
         PinnedVocabulary = []
+        // Phase 642 — a hand-authored label that names a level rather
+        // than omitting it. `Full` is the interesting choice here: the
+        // group's floor must still come out at the narrowest level any
+        // participant grants, so a member claiming the MOST cannot raise
+        // the group's claim.
+        DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.Full
     }
 }
 
@@ -761,6 +767,45 @@ let tests =
                     errors
                     [ ExposureUnserved "example.absent" ]
                     "the composition failure carries the derivation error verbatim"
+        }
+
+        test "the data-visibility authority floors to the narrowest exposing member's, with no mixed marker" {
+            // Phase 642. The contrast with the posture facets above is the
+            // point: those report a divergence as `mixed:` because their
+            // values are unordered and no floor is computable. Authority
+            // levels ARE ordered, so a divergence has a minimum, and
+            // publishing that minimum gives a counterparty something it can
+            // act on instead of a marker that satisfies nothing.
+            //
+            // gamma's hand-authored label claims `Full` — the MOST any
+            // member claims — and the group must still come out at the
+            // narrowest, because a call routed through the group lands on
+            // some member and the caller cannot choose which.
+            let mixed =
+                deriveOk (referenceMembers () @ [ gammaMember () ]) {
+                    referenceExposure with
+                        Contracts = expose reportsId :: referenceExposure.Contracts
+                }
+
+            Expect.equal
+                mixed.DataVisibility
+                (PeerDataVisibilityLevel.label PeerDataVisibilityLevel.AggregatesOnly)
+                "a member claiming the most cannot raise the group's claim"
+
+            Expect.isFalse
+                (mixed.DataVisibility.StartsWith AggregatePeerSurface.mixedPrefix)
+                "an ordered facet has a floor, so it is never reported as a disagreement"
+
+            // The control: gamma unexposed contributes nothing here
+            // either, so the group is unchanged rather than accidentally
+            // floored by a member nothing reaches.
+            let unexposed =
+                deriveOk (referenceMembers () @ [ gammaMember () ]) referenceExposure
+
+            Expect.equal
+                unexposed.DataVisibility
+                (PeerDataVisibilityLevel.label PeerDataVisibilityLevel.AggregatesOnly)
+                "an unexposed member's grant is internal and floors nothing"
         }
 
         test "a non-grouped deployment is unchanged (GP 11 / GP 13)" {

@@ -12,6 +12,14 @@
        between a server and a Fable client. -->
   <ItemGroup>
     <Compile Include="Shared\PeerTypes.fs" />
+    <!-- Phase 642 — the federated data-visibility authority levels: the
+         ordered level vocabulary, its fail-closed label reader, and the
+         peer → team → user narrowing walk. Earliest possible position:
+         it depends on nothing but the BCL, and everything that carries a
+         level depends on it — the `PeerSurface` descriptor member, the
+         Phase 591 pin + preflight rule, the aggregate floor, and the
+         model-execution seam's admission. -->
+    <Compile Include="Shared\PeerDataVisibility.fs" />
     <Compile Include="Shared\PeerJobHandle.fs" />
     <Compile Include="Shared\JsonRpcEnvelope.fs" />
     <Compile Include="Shared\PeerAuditTransparency.fs" />
@@ -237,6 +245,15 @@
          not composed by `PeerServerApp.run`, so a deployment that never
          calls `host` or `governedDiagnostics` constructs none of it
          (GP 13). -->
+    <!-- Phase 642 — the disclosure-plane route a level-gated federated
+         answer takes: the shipped Phase 525 gate at the new
+         `FactPeerEgress` surface, under a Phase 592 purpose claim the
+         composition supplies as a function (so this substrate keeps no
+         dependency on the fact companion, GP 1). Compiles immediately
+         before its only in-tree caller; depends on nothing in
+         InterPlatform, only on the platform's own gate seam. A binding
+         with no route allocates nothing (GP 13). -->
+    <Compile Include="Server\PeerVisibilityEgress.fs" />
     <Compile Include="Server\ModelExecutionPeerContract.fs" />
   </ItemGroup>
   <ItemGroup>

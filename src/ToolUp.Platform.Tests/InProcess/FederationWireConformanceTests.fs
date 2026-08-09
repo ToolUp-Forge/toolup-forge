@@ -226,9 +226,17 @@ let private verifyInvocationRejection (entry: ManifestEntry) (document: string) 
 /// dispatch runs, not a test-local re-implementation of it, so a
 /// certification that passes here is a statement about what the
 /// deployment does rather than about what the harness believes.
+/// Phase 642 — the admission is per-vector, because an authority
+/// refusal is a statement about a GRANT. Three vectors share one
+/// document and differ only in the grant they are read against, which is
+/// exactly the property the levels have to hold: the same request is
+/// answered at one level, refused at another, and refused for a
+/// different reason under a narrowing. `admissionFor` maps a vector id
+/// to its grant; every pre-642 vector maps to the reference admission
+/// and reads as it always did.
 let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
     let outcome =
-        ModelExecutionPeerContract.read referenceAdmission modelExecutionBoundScope document
+        ModelExecutionPeerContract.read (admissionFor entry.Id) modelExecutionBoundScope document
 
     match outcome with
     | Ok _ -> failtestf "'%s' must be refused, and was accepted" entry.Id

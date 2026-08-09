@@ -109,6 +109,20 @@ const budgets = (b) =>
     ["LongRunningEnabled", bool(b.longRunningEnabled)],
   ]);
 
+// Phase 642 — the data-visibility authority levels, weakest first. The
+// ORDER is the specification's, not an accident of declaration: the
+// aggregate floor below is a minimum over it, and an emitter that sorted
+// these alphabetically would put `Full` below `ViewOnly`.
+const authorityLevels = ["AggregatesOnly", "ViewOnly", "Full"];
+
+/**
+ * The fail-closed read of a surface's declared level: an absent member,
+ * an empty value, or a level this reader does not know all read as the
+ * narrowest. Silence is not a grant, and a word a reader cannot enforce
+ * is not one either.
+ */
+const dataVisibility = (s) => (authorityLevels.includes(s.dataVisibility) ? s.dataVisibility : "AggregatesOnly");
+
 const vocabularyPin = (p) =>
   obj([
     ["PackId", str(p.packId)],
@@ -134,6 +148,7 @@ const peerSurface = (s) =>
     ["TrustPosture", opt(s.trustPosture, trustPosture)],
     ["Budgets", opt(s.budgets, budgets)],
     ["PinnedVocabulary", arr([...s.pinnedVocabulary].sort(comparePin).map(vocabularyPin))],
+    ["DataVisibility", str(dataVisibility(s))],
   ]);
 
 /** The export envelope: format version + a stamp over the surface. */
@@ -191,7 +206,18 @@ const instanceSurface = {
   trustPosture: referencePosture("deployment-managed"),
   budgets: { cascadeGuard, longRunningEnabled: true },
   pinnedVocabulary: [],
+  // Declares nothing, so the member is present at the fail-closed
+  // default rather than omitted — an omitted member and a declared
+  // narrowest level mean the same thing to a READER, and only one of
+  // them is a document a stamp can be reproduced from.
+  dataVisibility: "AggregatesOnly",
 };
+
+// Phase 642 — the same deployment with a declared grant. Separate from
+// the instance surface so an emitter that hard-coded the default is
+// caught: it would reproduce the instance vector exactly and this one
+// not at all.
+const authoritySurface = { ...instanceSurface, dataVisibility: "ViewOnly" };
 
 const emptySurface = {
   enabled: false,
@@ -201,6 +227,7 @@ const emptySurface = {
   trustPosture: null,
   budgets: null,
   pinnedVocabulary: [],
+  dataVisibility: "AggregatesOnly",
 };
 
 const sharedPin = {
@@ -235,6 +262,7 @@ const members = [
       trustPosture: referencePosture("deployment-managed"),
       budgets: { cascadeGuard, longRunningEnabled: true },
       pinnedVocabulary: [sharedPin, divergentPin],
+      dataVisibility: "AggregatesOnly",
     },
   },
   {
@@ -250,6 +278,7 @@ const members = [
       trustPosture: referencePosture("tls-required"),
       budgets: { cascadeGuard, longRunningEnabled: true },
       pinnedVocabulary: [sharedPin],
+      dataVisibility: "AggregatesOnly",
     },
   },
   {
@@ -265,6 +294,7 @@ const members = [
       trustPosture: referencePosture("deployment-managed"),
       budgets: { cascadeGuard, longRunningEnabled: true },
       pinnedVocabulary: [],
+      dataVisibility: "AggregatesOnly",
     },
   },
 ];
@@ -336,6 +366,18 @@ const deriveAggregate = (groupPeerId, exposure) => {
       longRunningEnabled: exposing.every((m) => m.surface.budgets.longRunningEnabled),
     },
     pinnedVocabulary: pins,
+    // Phase 642 — the authority floor: the NARROWEST level the gateway
+    // edge and every exposing member grants. A minimum rather than a
+    // `mixed:` marker, because the levels are ordered and a floor over an
+    // ordered set is a value a counterparty can act on; `mixed:` exists
+    // only where a divergence has no computable floor.
+    dataVisibility: authorityLevels[
+      Math.min(
+        ...[{ dataVisibility: "AggregatesOnly" }, ...exposing.map((m) => m.surface)].map((s) =>
+          authorityLevels.indexOf(dataVisibility(s)),
+        ),
+      )
+    ],
   };
 };
 
@@ -384,6 +426,10 @@ const pinnedSurface = (counterpartyId, source, pinnedAt, surface) => {
         ),
       ),
     ],
+    // Phase 642 — normalised at PINNING time: a pin is a document the
+    // consumer has already read, so the fail-closed reading happens once
+    // here rather than at every later check.
+    ["DataVisibility", str(dataVisibility(surface))],
   ]);
 };
 
@@ -771,6 +817,10 @@ const submission = {
     { name: "vif-max", threshold: 5.0, direction: "AtMost" },
     { name: "holdout-r2", threshold: 0.6, direction: "AtLeast" },
   ],
+  // The submitter's own declared class. A closed vocabulary of stable
+  // lowercase labels, so a caller that is not an F# deployment can emit
+  // one; an absent or unrecognised value reads as "human".
+  submitterClass: "agent",
 };
 
 const submissionBody = (s) =>
@@ -782,6 +832,7 @@ const submissionBody = (s) =>
     ["ProviderKind", str(s.providerKind)],
     ["Seed", int64(s.seed)],
     ["Gates", arr([...s.gates].sort((a, b) => ordinal(a.name, b.name)).map(gateRequest))],
+    ["SubmitterClass", str(s.submitterClass)],
   ]);
 
 const outcome = {
@@ -868,6 +919,18 @@ const modelExecutionRefusals = () =>
     refused(caseOf("RequestUnreadable", str("unexpected end of JSON input"))),
     // The submitter surface's own typed refusal, nested unchanged.
     refused(caseOf("SubmitterRefused", caseOf("UnknownProvider", str("reference-regression")))),
+    // Phase 642 — the authority family. The first two are the ladder's
+    // two rungs; the third is a disclosure withhold, which names the
+    // operation and nothing else because naming the policy across a
+    // federation edge would itself be the disclosure.
+    refused(caseOf("AuthorityLevelExceeded", arr([str("RenderView"), str("ViewOnly"), str("AggregatesOnly")]))),
+    refused(
+      caseOf(
+        "AuthorityNarrowingRefused",
+        arr([str("RenderView"), str("ViewOnly"), str("AggregatesOnly"), str("team:north-analysts")]),
+      ),
+    ),
+    refused(caseOf("EgressWithheld", str("Coverage"))),
   ]);
 
 // ── run ──────────────────────────────────────────────────────────────
@@ -883,6 +946,7 @@ const documents = () => {
   return {
     "peer-surface/instance.json": peerSurfaceExport(instanceSurface),
     "peer-surface/empty.json": peerSurfaceExport(emptySurface),
+    "peer-surface/authority-declared.json": peerSurfaceExport(authoritySurface),
     "aggregate-surface/group.json": peerSurfaceExport(groupSurface),
     "aggregate-surface/solo.json": peerSurfaceExport(soloSurface),
     "pinned-exchange/pin.json": pinnedSurface(
