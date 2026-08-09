@@ -350,6 +350,17 @@
         <Compile Include="Server\ModelRegistryTypes.fs" />
         <Compile Include="Server\IModelRegistry.fs" />
         <Compile Include="Server\BlobModelRegistry.fs" />
+        <!-- Phase 644 — the author-agnostic model-transition seam: one
+             entry point serving local UI actions, peer invocations and
+             (Phase 645) policy verdicts, so the lifecycle graph, the
+             declared-authority check and the attributed record are written
+             once. Compiles AFTER IModelRegistry.fs (it wraps that seam) and
+             is deliberately independent of the blob default beneath it — it
+             judges over the interface, so any registry implementation gets
+             the same judgment. Nothing composes it: a deployment that never
+             calls `ModelTransition.invoke` keeps the pre-644 path exactly
+             (GP 11) and constructs none of this (GP 13). -->
+        <Compile Include="Server\ModelTransitionSeam.fs" />
         <!-- Phase 599 — batch item execution: the `_platform.modelfit.batchitem`
              IJobHandler (fit envelope + batch-annotated registry registration).
              Consumer-wired like the Phase 454 scoring handler. -->

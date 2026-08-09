@@ -1337,6 +1337,17 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j)
     }
+    // Phase 644 — the attributed transition row the author-agnostic seam
+    // writes, carrying the channel and author the registry's own two rows
+    // structurally cannot know.
+    {
+        EventType = "ModelArtifactTransitionAttributed"
+        TryEncode =
+            (function
+            | ModelArtifactTransitionAttributed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactTransitionAttributed(fromAuditJson<ModelArtifactTransitionAttributedPayload> j)
+    }
     // Phase 454 — model-scoring lifecycle audit rows (append-only registration).
     {
         EventType = "ModelScored"

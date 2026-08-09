@@ -751,6 +751,7 @@ ToolUp.Platform.AuditEvent.IsMemberAdded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRoleChanged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactRegistered : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelArtifactTransitionAttributed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactTransitionDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactTransitioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelEvaluated : System.Boolean { get }
@@ -973,6 +974,8 @@ ToolUp.Platform.AuditEvent+MemberRoleChanged (class)
 ToolUp.Platform.AuditEvent+MemberRoleChanged.Item : ToolUp.Platform.MemberRoleChangedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered (class)
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered.Item : ToolUp.Platform.ModelArtifactRegisteredPayload { get }
+ToolUp.Platform.AuditEvent+ModelArtifactTransitionAttributed (class)
+ToolUp.Platform.AuditEvent+ModelArtifactTransitionAttributed.Item : ToolUp.Platform.ModelArtifactTransitionAttributedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactTransitionDenied (class)
 ToolUp.Platform.AuditEvent+ModelArtifactTransitionDenied.Item : ToolUp.Platform.ModelArtifactTransitionDeniedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactTransitioned (class)
@@ -1153,6 +1156,7 @@ ToolUp.Platform.AuditEvent+Tags.MemberAdded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRoleChanged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactRegistered : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitionAttributed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitionDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelEvaluated : System.Int32 (literal)
@@ -5467,6 +5471,18 @@ ToolUp.Platform.ModelArtifactRegisteredPayload.RegisteredBy : System.String { ge
 ToolUp.Platform.ModelArtifactRegisteredPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModelArtifactRegisteredPayload.SpecHash : System.String { get }
 ToolUp.Platform.ModelArtifactRegisteredPayload.Status : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload (class)
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Boolean, System.String, System.String)
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Admitted : System.Boolean { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.AuthorId : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.AuthorKind : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Channel : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.FromStatus : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Rationale : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Refusal : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionAttributedPayload.ToStatus : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload (class)
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload.ActorUserId : System.String { get }

@@ -123,6 +123,21 @@ const authorityLevels = ["AggregatesOnly", "ViewOnly", "Full"];
  */
 const dataVisibility = (s) => (authorityLevels.includes(s.dataVisibility) ? s.dataVisibility : "AggregatesOnly");
 
+/**
+ * Phase 644 — the fail-closed read of a surface's declared TRANSITION
+ * grant. A member that is absent, not an array, or names a status this
+ * reader does not know yields the empty grant or a grant without that
+ * entry; duplicates collapse and the result is ordinally sorted. Same
+ * claim as the level above, on the other authority axis: silence is not
+ * a grant, and a word a reader cannot enforce is not one either.
+ */
+const lifecycleStatuses = ["Draft", "Fitted", "Approved", "Retired"];
+
+const transitionAuthority = (s) =>
+  Array.isArray(s.transitionAuthority)
+    ? [...new Set(s.transitionAuthority.filter((t) => lifecycleStatuses.includes(t)))].sort(ordinal)
+    : [];
+
 const vocabularyPin = (p) =>
   obj([
     ["PackId", str(p.packId)],
@@ -149,6 +164,7 @@ const peerSurface = (s) =>
     ["Budgets", opt(s.budgets, budgets)],
     ["PinnedVocabulary", arr([...s.pinnedVocabulary].sort(comparePin).map(vocabularyPin))],
     ["DataVisibility", str(dataVisibility(s))],
+    ["TransitionAuthority", arr(transitionAuthority(s).map(str))],
   ]);
 
 /** The export envelope: format version + a stamp over the surface. */
@@ -219,6 +235,12 @@ const instanceSurface = {
 // not at all.
 const authoritySurface = { ...instanceSurface, dataVisibility: "ViewOnly" };
 
+// Phase 644 — the OTHER authority axis, declared alone. The level stays
+// at the default here on purpose: an emitter that fused the two would
+// have to raise it, and this vector is what catches that.  The grant is
+// listed out of ordinal order — the emitter owns the sort.
+const transitionGrantSurface = { ...instanceSurface, transitionAuthority: ["Retired", "Approved"] };
+
 const emptySurface = {
   enabled: false,
   localPeerId: null,
@@ -228,6 +250,7 @@ const emptySurface = {
   budgets: null,
   pinnedVocabulary: [],
   dataVisibility: "AggregatesOnly",
+  transitionAuthority: [],
 };
 
 const sharedPin = {
@@ -378,6 +401,17 @@ const deriveAggregate = (groupPeerId, exposure) => {
         ),
       )
     ],
+    // Phase 644 — the transition floor: the INTERSECTION over the
+    // gateway edge and every exposing member. Same argument as the level
+    // above by a different operator — a call routed through the group
+    // lands on one member and the caller cannot choose which — but a set
+    // is unordered, so its honest floor is what they all share rather
+    // than a minimum. The edge declares nothing, so the group does too
+    // unless the edge is later granted something.
+    transitionAuthority: [{ transitionAuthority: [] }, ...exposing.map((m) => m.surface)]
+      .map((s) => transitionAuthority(s))
+      .reduce((a, b) => a.filter((t) => b.includes(t)))
+      .sort(ordinal),
   };
 };
 
@@ -430,6 +464,8 @@ const pinnedSurface = (counterpartyId, source, pinnedAt, surface) => {
     // consumer has already read, so the fail-closed reading happens once
     // here rather than at every later check.
     ["DataVisibility", str(dataVisibility(surface))],
+    // Phase 644 — normalised at pinning time for the same reason.
+    ["TransitionAuthority", arr(transitionAuthority(surface).map(str))],
   ]);
 };
 
@@ -1027,6 +1063,60 @@ const viewAnswers = () =>
     answered(viewArtifact(renderedArtifact)),
   ]);
 
+// ── Phase 644 — registry lifecycle transitions ───────────────────────
+//
+// An invocation names an artifact, a target status and the CALLING
+// deployment's own actor claim. It carries no scope member (the binding
+// decides it) and no role member (the receiver's declared grant decides
+// the authority), so neither can be widened by anything a caller sends.
+
+const transitionInvocationBody = (i) =>
+  obj([
+    ["ArtifactKey", str(i.artifactKey)],
+    ["Target", str(i.target)],
+    ["ActorId", str(i.actorId)],
+    ["Rationale", opt(i.rationale, str)],
+  ]);
+
+// The answer: metadata about a state change the data host already
+// committed. There is no member an artifact's parameters or a dataset
+// row could ride in.
+const transitionRecordBody = (r) =>
+  obj([
+    ["ArtifactKey", str(r.artifactKey)],
+    ["FromStatus", str(r.fromStatus)],
+    ["ToStatus", str(r.toStatus)],
+    ["Channel", str(r.channel)],
+    ["AuthorKind", str(r.authorKind)],
+    ["AuthorId", str(r.authorId)],
+    ["Rationale", opt(r.rationale, str)],
+    ["RecordedAt", str(r.recordedAt)],
+    ["Version", num(r.version)],
+  ]);
+
+const referenceArtifactKey = "4d0f2b8c9e7a5613f8c2a94d0e1b7635c8f4a209d3e6b1758c0a2f9d4e63b7a1";
+
+const transitionInvocation = {
+  artifactKey: referenceArtifactKey,
+  target: "Approved",
+  actorId: "r.okafor",
+  rationale: "holdout MAPE within tolerance on three vintages",
+};
+
+const transitionRecord = {
+  artifactKey: referenceArtifactKey,
+  fromStatus: "Fitted",
+  toStatus: "Approved",
+  channel: "peer",
+  authorKind: "peer",
+  // Both identities, because either alone is ambiguous across a
+  // federation: two peers can name the same actor id.
+  authorId: "consortium-north/r.okafor",
+  rationale: transitionInvocation.rationale,
+  recordedAt: "2026-07-16T10:15:00+00:00",
+  version: 2,
+};
+
 const modelExecutionRefusals = () =>
   arr([
     // A multi-payload union case rides as an ARRAY of its payloads in
@@ -1071,6 +1161,32 @@ const modelExecutionRefusals = () =>
     refused(
       caseOf("ViewRefused", caseOf("RenderBudgetExhausted", arr([str("spend-vs-response"), num(20), num(3600)]))),
     ),
+    // Phase 644 — the transition family, nested the same way. The inner
+    // type is the PLATFORM's own judgment vocabulary rather than this
+    // profile's, which is invisible on the wire and is the point: a
+    // local action and a policy verdict are refused by the identical
+    // function with the identical cases.
+    refused(
+      caseOf(
+        "TransitionRefused",
+        caseOf("UnknownArtifact", str("0000000000000000000000000000000000000000000000000000000000000000")),
+      ),
+    ),
+    refused(
+      caseOf(
+        "TransitionRefused",
+        caseOf("InvalidTransition", arr([str(referenceArtifactKey), str("Retired"), str("Fitted")])),
+      ),
+    ),
+    refused(
+      caseOf(
+        "TransitionRefused",
+        caseOf(
+          "InsufficientAuthority",
+          arr([str(referenceArtifactKey), str("Retired"), str("consortium-north/r.okafor")]),
+        ),
+      ),
+    ),
   ]);
 
 // ── run ──────────────────────────────────────────────────────────────
@@ -1087,6 +1203,7 @@ const documents = () => {
     "peer-surface/instance.json": peerSurfaceExport(instanceSurface),
     "peer-surface/empty.json": peerSurfaceExport(emptySurface),
     "peer-surface/authority-declared.json": peerSurfaceExport(authoritySurface),
+    "peer-surface/transition-grant.json": peerSurfaceExport(transitionGrantSurface),
     "aggregate-surface/group.json": peerSurfaceExport(groupSurface),
     "aggregate-surface/solo.json": peerSurfaceExport(soloSurface),
     "pinned-exchange/pin.json": pinnedSurface(
@@ -1109,6 +1226,12 @@ const documents = () => {
     "model-execution/refusals.json": modelExecutionRefusals(),
     "model-execution/view-request.json": requestEnvelope("RenderView", null, viewRequestBody(viewRequest)),
     "model-execution/view.json": viewAnswers(),
+    "model-execution/transition-request.json": requestEnvelope(
+      "InvokeTransition",
+      null,
+      transitionInvocationBody(transitionInvocation),
+    ),
+    "model-execution/transition.json": answered(transitionRecordBody(transitionRecord)),
   };
 };
 

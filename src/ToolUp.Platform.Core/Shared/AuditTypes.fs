@@ -2915,6 +2915,53 @@ type ModelArtifactTransitionDeniedPayload = {
     ScopeId: string
 }
 
+/// Phase 644 — a lifecycle transition JUDGED at the author-agnostic seam,
+/// with the author and the channel it arrived on. Reserved
+/// `SourceModule = "_platform.audit"`.
+///
+/// **Why this is a third row and not two more fields on the two above.**
+/// Those two are written by the registry, which knows the actor id it was
+/// handed and nothing else: it has no way to learn whether the call came
+/// from a local admin screen, from a peer deployment across a federation
+/// edge, or from a promotion policy, because none of that is in its
+/// signature and widening the signature would break every
+/// `IModelRegistry` implementation. This row is written by the seam, which
+/// is the only place all three are known — so the attribution is recorded
+/// where it EXISTS rather than inferred where it does not.
+///
+/// It is written for an admitted transition **and for a refused one**, so
+/// the attributed trail is complete on its own: "which peer tried to
+/// approve what, and was told no" is answerable from this event type
+/// alone, without joining it to a refusal the registry never saw (a
+/// transition refused at the seam never reaches the registry at all).
+type ModelArtifactTransitionAttributedPayload = {
+    CompositeKeyHash: string
+    /// Status the artifact held when the seam judged. Present even on a
+    /// refusal, except an `UnknownArtifact` one where there is no
+    /// artifact to have a status — `""` there.
+    FromStatus: string
+    /// Status the author asked the artifact to enter.
+    ToStatus: string
+    /// Where the invocation entered this deployment: `"local"` or
+    /// `"peer"`. A closed two-value vocabulary — a policy verdict is
+    /// authored data-side, so it arrives on the local channel and is
+    /// distinguished by `AuthorKind`, not by a third channel.
+    Channel: string
+    /// What kind of author judged: `"user"` / `"peer"` / `"policy"`.
+    AuthorKind: string
+    /// The author's identity, in the form its kind implies — a user id, a
+    /// `{peerId}/{actorId}` pair, or a policy id.
+    AuthorId: string
+    /// The author's stated reason. `""` when none was given; a rationale
+    /// is optional on the wire and this trail does not invent one.
+    Rationale: string
+    /// Did the transition land? `false` carries `Refusal`.
+    Admitted: bool
+    /// The seam's refusal, described. `""` on an admitted transition.
+    Refusal: string
+    ScopeId: string
+}
+
 // ─── Phase 454 — model-scoring audit payloads ──────────────────────────
 //
 // A scoring run applies a governed artifact (Phase 453) to a new dataset
@@ -3816,6 +3863,9 @@ type AuditEvent =
     | ModelArtifactTransitioned of ModelArtifactTransitionedPayload
     /// Phase 453 — a model artifact lifecycle transition was refused (GP 4).
     | ModelArtifactTransitionDenied of ModelArtifactTransitionDeniedPayload
+    /// Phase 644 — a lifecycle transition judged at the author-agnostic
+    /// seam, carrying the author and the channel it arrived on.
+    | ModelArtifactTransitionAttributed of ModelArtifactTransitionAttributedPayload
     /// Phase 454 — a scoring run produced predictions as a new dataset
     /// version (provenance names the artifact + input vintage).
     | ModelScored of ModelScoredPayload
@@ -4005,6 +4055,7 @@ module AuditEvent =
         | ModelArtifactRegistered _ -> "ModelArtifactRegistered"
         | ModelArtifactTransitioned _ -> "ModelArtifactTransitioned"
         | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"
+        | ModelArtifactTransitionAttributed _ -> "ModelArtifactTransitionAttributed"
         | ModelScored _ -> "ModelScored"
         | ModelScoreRefused _ -> "ModelScoreRefused"
         | ModelEvaluated _ -> "ModelEvaluated"

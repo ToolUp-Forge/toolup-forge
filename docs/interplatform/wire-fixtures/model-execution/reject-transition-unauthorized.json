@@ -1,0 +1,1 @@
+{"ProfileVersion":1,"Operation":"InvokeTransition","AssertedScope":null,"Body":"{\"ArtifactKey\":\"4d0f2b8c9e7a5613f8c2a94d0e1b7635c8f4a209d3e6b1758c0a2f9d4e63b7a1\",\"Target\":\"Retired\",\"ActorId\":\"r.okafor\",\"Rationale\":\"holdout MAPE within tolerance on three vintages\"}"}

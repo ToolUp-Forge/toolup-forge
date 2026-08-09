@@ -347,6 +347,11 @@ let private dataHost (bindings: Map<string, string>) =
                     // cases build their own bindings.
                     Visibility = PeerVisibilityBinding.default'
                     Egress = None
+                    // Phase 644 — no transition granted, which is the
+                    // fail-closed default and the pre-644 behaviour: an
+                    // invocation is refused whether or not the operation
+                    // is declared.
+                    TransitionAuthority = ModelTransitionAuthority.none
                 }
     }
 
@@ -358,6 +363,9 @@ let private dataHost (bindings: Map<string, string>) =
         // this section is evidence for: a deployment that upgrades and
         // declares nothing behaves byte-for-byte as it did (GP 11).
         Views = None
+        // Phase 644 — likewise: no transition substrate, so the
+        // operation is neither declared nor servable.
+        Transitions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -401,6 +409,11 @@ let private withDiagnostics
                     Api = instance.Backend.Api
                     Visibility = PeerVisibilityBinding.default'
                     Egress = None
+                    // Phase 644 — no transition granted, which is the
+                    // fail-closed default and the pre-644 behaviour: an
+                    // invocation is refused whether or not the operation
+                    // is declared.
+                    TransitionAuthority = ModelTransitionAuthority.none
                 }
     }
 
@@ -1003,6 +1016,7 @@ let private dataHostGranting
                     Api = backend.Api
                     Visibility = visibility
                     Egress = egress
+                    TransitionAuthority = ModelTransitionAuthority.none
                 }
     }
 
@@ -1014,6 +1028,9 @@ let private dataHostGranting
         // this section is evidence for: a deployment that upgrades and
         // declares nothing behaves byte-for-byte as it did (GP 11).
         Views = None
+        // Phase 644 — likewise: no transition substrate, so the
+        // operation is neither declared nor servable.
+        Transitions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -1720,6 +1737,7 @@ let private dataHostRendering
                     Api = backend.Api
                     Visibility = visibility
                     Egress = egress
+                    TransitionAuthority = ModelTransitionAuthority.none
                 }
     }
 
@@ -1735,6 +1753,7 @@ let private dataHostRendering
             | None -> ModelExecutionAdmission.create declaredDiagnostics
         FitPoll = ModelExecutionFitPollPolicy.immediate
         Views = views
+        Transitions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -2243,6 +2262,543 @@ let private viewAuditTests =
         }
     ]
 
+// ─── Phase 644 — registry lifecycle transitions over the seam ────────
+
+/// A registry holding one artifact per key, whose status advances in
+/// place. Enough to exercise the seam and nothing more: the seam's whole
+/// contract with a registry is `Get` then `TransitionStatus`, and a
+/// stub that implemented the rest would be asserting `BlobModelRegistry`
+/// rather than this phase.
+type private MemoryModelRegistry(initial: (string * ModelArtifactStatus) list) =
+    let artifacts = ConcurrentDictionary<string, ModelArtifactStatus * int>()
+
+    do
+        for key, status in initial do
+            artifacts[key] <- (status, 1)
+
+    let artifactOf (key: string) (status: ModelArtifactStatus) (version: int) : ModelArtifact = {
+        CompositeKey = {
+            SpecHash = "sha256:spec"
+            DatasetVersion = "consortium-north/weekly-panel@v7"
+            Seed = 1L
+            ProviderId = "reference-regression"
+            ProviderVersion = "1.4.0"
+            Hash = key
+        }
+        ScopeId = hostScope
+        ArtifactRef = {
+            ArtifactId = "artifact-8821"
+            ContentHash = "sha256:artifact"
+            ByteLength = 1L
+        }
+        Diagnostics = Map.empty
+        GateVerdicts = []
+        Status = status
+        Annotations = Map.empty
+        Notes = ""
+        RegisteredBy = "fitter"
+        RegisteredAt = DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero)
+        Version = version
+    }
+
+    interface IModelRegistry with
+        member _.Get(_scopeId, keyHash) = async {
+            match artifacts.TryGetValue keyHash with
+            | true, (status, version) -> return Ok(artifactOf keyHash status version)
+            | _ -> return Error ModelRegistryError.NotFound
+        }
+
+        member _.TransitionStatus(_scopeId, keyHash, target, callerRole, _actorUserId) = async {
+            match artifacts.TryGetValue keyHash with
+            | false, _ -> return Error ModelRegistryError.NotFound
+            | true, (from, version) ->
+                if not (ModelArtifactStatus.canTransition from target) then
+                    return Error(ModelRegistryError.IllegalTransition(from, target))
+                elif
+                    ModelArtifactStatus.requiresElevatedRole target
+                    && not (TeamRoles.canWriteTeamConfig callerRole)
+                then
+                    return Error(ModelRegistryError.Forbidden "approving a model artifact requires Owner/Admin")
+                else
+                    artifacts[keyHash] <- (target, version + 1)
+                    return Ok(artifactOf keyHash target (version + 1))
+        }
+
+        member _.Register(_, _, _, _, _) = failwith "not used"
+        member _.QueryBySpecHash(_, _) = failwith "not used"
+        member _.QueryByDatasetVersion(_, _) = failwith "not used"
+        member _.QueryByStatus(_, _) = failwith "not used"
+        member _.QueryPage(_, _, _, _) = failwith "not used"
+
+/// An audit log that keeps what it was handed, so an attributed row can
+/// be asserted as a recorded fact rather than inferred from an answer.
+type private CapturingAuditLog() =
+    let events = ResizeArray<AuditEvent>()
+
+    member _.Events = List.ofSeq events
+
+    member this.Attributed =
+        this.Events
+        |> List.choose (function
+            | ModelArtifactTransitionAttributed p -> Some p
+            | _ -> None)
+
+    member this.JobCompletions =
+        this.Events
+        |> List.choose (function
+            | PeerJobCompleted p -> Some p
+            | _ -> None)
+
+    interface IAuditLog with
+        member _.Record(_scopeId, audit) = async { lock events (fun () -> events.Add audit) }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
+[<Literal>]
+let private transitionKey = "sha256:artifact-key"
+
+let private transitionDeps (registry: IModelRegistry) (audit: IAuditLog) : ModelTransitionDeps = {
+    Registry = registry
+    Audit = audit
+    Now = fun () -> DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+}
+
+/// A data host that admits transitions, with one artifact in `Fitted`
+/// and one peer holding `grant`.
+let private dataHostTransitioning (grant: ModelTransitionAuthority) =
+    let backend = ReferenceDataHost()
+    let scheduler = DeferredScheduler()
+    let results = MemoryJobResultStore() :> IPeerJobResultStore
+    let audit = CapturingAuditLog()
+
+    let registry =
+        MemoryModelRegistry [ transitionKey, ModelArtifactStatus.Fitted ] :> IModelRegistry
+
+    let resolveBinding (peerId: string) = async {
+        if peerId <> modellerPeerId then
+            return None
+        else
+            return
+                Some {
+                    PeerId = peerId
+                    ScopeId = hostScope
+                    Api = backend.Api
+                    Visibility = PeerVisibilityBinding.default'
+                    Egress = None
+                    TransitionAuthority = grant
+                }
+    }
+
+    let deps: ModelExecutionPeerDeps = {
+        ResolveBinding = resolveBinding
+        Admission =
+            ModelExecutionAdmission.create declaredDiagnostics
+            |> ModelExecutionAdmission.withTransitions
+        FitPoll = ModelExecutionFitPollPolicy.immediate
+        Views = None
+        Transitions = Some(transitionDeps registry (audit :> IAuditLog))
+    }
+
+    let fusion: PeerJobFusion = {
+        Scheduler = scheduler
+        ResultStore = results
+        AuditLog = Some(audit :> IAuditLog)
+    }
+
+    let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
+    let host = ModelExecutionPeerContract.host deps (Some fusion)
+    peer.RegisterContract host.Registration
+
+    for handlerName, handler in host.JobHandlers do
+        (scheduler :> IJobScheduler).RegisterHandler(handlerName, handler)
+
+    let instance = {
+        Peer = peer
+        Scheduler = scheduler
+        Results = results
+        Backend = backend
+        Decisions = ResizeArray<PeerCleanRoomDecisionPayload>()
+    }
+
+    instance, registry, audit
+
+let private approveGrant = ModelTransitionAuthority.ofTargets [ "Approved" ]
+
+let private invocation (target: string) : PeerTransitionInvocation = {
+    ArtifactKey = transitionKey
+    Target = target
+    ActorId = "r.okafor"
+    Rationale = Some "holdout MAPE within tolerance on three vintages"
+}
+
+/// Invoke a transition and run the queued job, returning the parked
+/// answer — the whole modeller-side round trip, since a transition rides
+/// the queued leg exactly as a fit does.
+let private transitionThrough (instance: DataHostInstance) (invoked: PeerTransitionInvocation) = async {
+    let! accepted = dispatch instance modellerPeerId (ModelExecutionPeerContract.transitionRequest invoked)
+
+    match accepted with
+    | Error e -> return failtestf "the invocation must be accepted onto the queue; got %A" e
+    | Ok json ->
+        // The queued leg answers with a JOB ID. A transition is a
+        // judgment, and a data host is entitled to take time over one.
+        match JsonRpc.deserialize<obj> json with
+        | _ ->
+            do! instance.Scheduler.RunPending()
+            let jobId = JsonRpc.deserialize<Guid> json
+
+            match! instance.Results.TryGetResult(PeerJob.Scope, jobId) with
+            | Some record ->
+                match record.Status with
+                | PeerJobStatus.Completed body -> return JsonRpc.deserialize<ModelExecutionPeerAnswer> body
+                | other -> return failtestf "the queued transition must complete; got %A" other
+            | None -> return failtestf "the queued transition parked no result"
+}
+
+let private transitionSeamTests =
+    testList "one state machine, three authors" [
+        test "the pure judge refuses an impossible edge BEFORE an insufficient grant" {
+            // A retired artifact cannot become fitted again at any grant.
+            // Judged with a FULL grant, so what is under test is the
+            // order and not the grant: reporting this as an authority
+            // question would send an author to negotiate for something no
+            // agreement can provide.
+            let request: ModelTransitionRequest = {
+                ArtifactKey = transitionKey
+                Target = ModelArtifactStatus.Fitted
+                Author = PeerActor(modellerPeerId, "r.okafor")
+                Rationale = None
+            }
+
+            match ModelTransition.judge (Some ModelArtifactStatus.Retired) ModelTransitionAuthority.full request with
+            | Error(ModelTransitionRefusal.InvalidTransition(_, from, target)) ->
+                Expect.equal from "Retired" "the status it actually held"
+                Expect.equal target "Fitted" "the status it was asked to enter"
+            | other -> failtestf "expected an invalid-transition refusal; got %A" other
+
+            // The same request under NO grant is still the invalid-edge
+            // refusal, which is the whole of the ordering claim.
+            match ModelTransition.judge (Some ModelArtifactStatus.Retired) ModelTransitionAuthority.none request with
+            | Error(ModelTransitionRefusal.InvalidTransition _) -> ()
+            | other -> failtestf "the edge is judged before the grant; got %A" other
+        }
+
+        test "an undeclared grant admits nothing — not even the obvious transitions" {
+            let request: ModelTransitionRequest = {
+                ArtifactKey = transitionKey
+                Target = ModelArtifactStatus.Approved
+                Author = PeerActor(modellerPeerId, "r.okafor")
+                Rationale = None
+            }
+
+            match ModelTransition.judge (Some ModelArtifactStatus.Fitted) ModelTransitionAuthority.none request with
+            | Error(ModelTransitionRefusal.InsufficientAuthority(_, target, author)) ->
+                Expect.equal target "Approved" "the refusal names what was asked for"
+                Expect.equal author $"{modellerPeerId}/r.okafor" "and who asked, both identities"
+            | other -> failtestf "fail closed: an undeclared grant admits nothing; got %A" other
+        }
+
+        test "a grant naming a status this build does not know carries nothing" {
+            let grant = ModelTransitionAuthority.ofTargets [ "Approved"; "Blessed" ]
+
+            Expect.equal
+                (ModelTransitionAuthority.labels grant)
+                [ "Approved" ]
+                "the unknown label is dropped, not carried"
+        }
+
+        testCaseAsync "the same entry point serves a local user, a peer and a policy"
+        <| async {
+            // The author-agnostic claim, asserted rather than described:
+            // three authors, one `invoke`, three attributed rows that
+            // differ only in the two fields that are ABOUT the author.
+            let registry =
+                MemoryModelRegistry [
+                    "a", ModelArtifactStatus.Fitted
+                    "b", ModelArtifactStatus.Fitted
+                    "c", ModelArtifactStatus.Fitted
+                ]
+                :> IModelRegistry
+
+            let audit = CapturingAuditLog()
+            let deps = transitionDeps registry (audit :> IAuditLog)
+
+            let request key author : ModelTransitionRequest = {
+                ArtifactKey = key
+                Target = ModelArtifactStatus.Approved
+                Author = author
+                Rationale = None
+            }
+
+            let! _ = ModelTransition.invoke deps hostScope approveGrant (request "a" (LocalUser("alice", Owner)))
+
+            let! _ =
+                ModelTransition.invoke
+                    deps
+                    hostScope
+                    approveGrant
+                    (request "b" (PeerActor("consortium-north", "r.okafor")))
+
+            let! _ =
+                ModelTransition.invoke deps hostScope approveGrant (request "c" (PolicyVerdict "promote-on-holdout"))
+
+            let rows =
+                audit.Attributed
+                |> List.map (fun p -> p.CompositeKeyHash, p.Channel, p.AuthorKind, p.AuthorId)
+
+            Expect.containsAll
+                rows
+                [
+                    "a", "local", "user", "alice"
+                    // A peer's row carries BOTH identities, because either
+                    // alone is ambiguous across a federation.
+                    "b", "peer", "peer", "consortium-north/r.okafor"
+                    // A policy is authored data-side, so it arrives on the
+                    // local channel and is told apart by its KIND — one
+                    // axis for how it reached us, another for who decided.
+                    "c", "local", "policy", "promote-on-holdout"
+                ]
+                "one entry point, three authors, three attributed rows"
+
+            Expect.all audit.Attributed _.Admitted "all three were admitted"
+        }
+
+        testCaseAsync "a refusal is recorded too, so the attributed trail stands alone"
+        <| async {
+            // A transition refused at the seam never reaches the
+            // registry, so the registry's own rows cannot answer "who
+            // tried what". This one can.
+            let registry =
+                MemoryModelRegistry [ transitionKey, ModelArtifactStatus.Fitted ] :> IModelRegistry
+
+            let audit = CapturingAuditLog()
+            let deps = transitionDeps registry (audit :> IAuditLog)
+
+            let! outcome =
+                ModelTransition.invoke deps hostScope ModelTransitionAuthority.none {
+                    ArtifactKey = transitionKey
+                    Target = ModelArtifactStatus.Approved
+                    Author = PeerActor(modellerPeerId, "r.okafor")
+                    Rationale = Some "please"
+                }
+
+            Expect.isError outcome "an ungranted author is refused"
+
+            match audit.Attributed with
+            | [ row ] ->
+                Expect.isFalse row.Admitted "the row records the refusal"
+                Expect.equal row.FromStatus "Fitted" "and the status the artifact held while it was refused"
+                Expect.equal row.Rationale "please" "the author's stated reason rides the trail"
+                Expect.stringContains row.Refusal "not granted" "with the seam's own description"
+            | other -> failtestf "expected exactly one attributed row; got %i" (List.length other)
+        }
+    ]
+
+let private transitionPeerTests =
+    testList "a granted peer moves an artifact through its lifecycle" [
+        testCaseAsync "an invocation inside the grant records the transition with its channel and author"
+        <| async {
+            let instance, registry, _ = dataHostTransitioning approveGrant
+            let! answer = transitionThrough instance (invocation "Approved")
+
+            match ModelExecutionPeerContract.answerBody<PeerTransitionRecord> answer with
+            | Error refusal -> failtestf "the invocation must be admitted; got %A" refusal
+            | Ok record ->
+                Expect.equal record.FromStatus "Fitted" "the status it moved from, echoed rather than assumed"
+                Expect.equal record.ToStatus "Approved" "and the one it entered"
+                Expect.equal record.Channel "peer" "the channel it arrived on"
+                Expect.equal record.AuthorKind "peer" "the kind of author that took it"
+                Expect.equal record.AuthorId $"{modellerPeerId}/r.okafor" "peer and actor, both"
+                Expect.equal record.Version 2 "a transition appends a version, never mutates one (GP 5)"
+
+            // The durable record landed data-side, which is the topology
+            // the phase exists for: judgment there, record here.
+            match! registry.Get(hostScope, transitionKey) with
+            | Ok artifact ->
+                Expect.equal artifact.Status ModelArtifactStatus.Approved "the data host holds the new status"
+            | Error e -> failtestf "the artifact must still be readable; got %A" e
+        }
+
+        testCaseAsync "a peer granted something else is refused with the authority class"
+        <| async {
+            let instance, registry, _ =
+                dataHostTransitioning (ModelTransitionAuthority.ofTargets [ "Retired" ])
+
+            let! answer = transitionThrough instance (invocation "Approved")
+
+            match answer with
+            | ModelExecutionPeerAnswer.Refused refusal ->
+                Expect.equal
+                    (ModelExecutionPeerRefusal.className refusal)
+                    PeerTransition.InsufficientAuthorityClass
+                    "granted something is not granted everything"
+            | other -> failtestf "expected a refusal; got %A" other
+
+            match! registry.Get(hostScope, transitionKey) with
+            | Ok artifact -> Expect.equal artifact.Status ModelArtifactStatus.Fitted "and nothing moved"
+            | Error e -> failtestf "the artifact must still be readable; got %A" e
+        }
+
+        testCaseAsync "an unknown artifact is refused before the graph is consulted"
+        <| async {
+            let instance, _, _ = dataHostTransitioning approveGrant
+
+            let! answer =
+                transitionThrough instance {
+                    invocation "Approved" with
+                        ArtifactKey = "sha256:nothing-here"
+                }
+
+            match answer with
+            | ModelExecutionPeerAnswer.Refused refusal ->
+                Expect.equal
+                    (ModelExecutionPeerRefusal.className refusal)
+                    PeerTransition.UnknownArtifactClass
+                    "no artifact, nothing to judge"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        testCaseAsync "a target naming no lifecycle status is unreadable, not an illegal edge"
+        <| async {
+            let instance, _, _ = dataHostTransitioning ModelTransitionAuthority.full
+            let! answer = transitionThrough instance (invocation "Blessed")
+
+            match answer with
+            | ModelExecutionPeerAnswer.Refused refusal ->
+                Expect.equal
+                    (ModelExecutionPeerRefusal.className refusal)
+                    "model-execution-request-unreadable"
+                    "a word that names no state is not an edge the graph forbids"
+            | other -> failtestf "expected a refusal; got %A" other
+        }
+
+        testCaseAsync "a deployment that declares no transitions refuses as undeclared"
+        <| async {
+            // The pre-644 posture, which is what every case in the
+            // sections above is evidence for (GP 11). The shared
+            // `dataHost` harness declares nothing.
+            let instance = dataHost boundOnly
+
+            let! answer =
+                call instance modellerPeerId (ModelExecutionPeerContract.transitionRequest (invocation "Approved"))
+
+            match answer with
+            | Ok(ModelExecutionPeerAnswer.Refused refusal) ->
+                Expect.equal
+                    (ModelExecutionPeerRefusal.className refusal)
+                    "model-execution-undeclared-diagnostic"
+                    "'we do not do that' — a different remedy from 'not for you'"
+            | other -> failtestf "expected an undeclared refusal; got %A" other
+        }
+
+        testCaseAsync "the terminal outcome of a queued transition is audited"
+        <| async {
+            // Phase 310's contract, which this profile's hand-built job
+            // handler did not honour before this phase: the receiver's
+            // trail stopped at DISPATCH, so every queued call was logged
+            // as scheduled and never as completed.
+            let instance, _, audit = dataHostTransitioning approveGrant
+            let! _ = transitionThrough instance (invocation "Approved")
+
+            match audit.JobCompletions with
+            | [ completion ] ->
+                Expect.equal completion.MethodName "InvokeTransition" "the terminal row names the method"
+                Expect.equal completion.CallerPeerId modellerPeerId "and the peer that scheduled it"
+                Expect.isTrue completion.Succeeded "this one succeeded"
+                Expect.equal completion.Outcome "ok" "with the terminal outcome, not the schedule"
+            | other -> failtestf "expected exactly one terminal row; got %i" (List.length other)
+        }
+
+        testCaseAsync "a refused queued transition's terminal row carries the refusal CLASS"
+        <| async {
+            let instance, _, audit =
+                dataHostTransitioning (ModelTransitionAuthority.ofTargets [ "Retired" ])
+
+            let! _ = transitionThrough instance (invocation "Approved")
+
+            match audit.JobCompletions with
+            | [ completion ] ->
+                Expect.isFalse completion.Succeeded "the queued judgment refused"
+
+                Expect.equal
+                    completion.Outcome
+                    PeerTransition.InsufficientAuthorityClass
+                    "the class, not a generic error name — the two refusal reasons an operator is trying to tell apart"
+            | other -> failtestf "expected exactly one terminal row; got %i" (List.length other)
+        }
+    ]
+
+let private transitionDeclarationTests =
+    testList "the grant is declared, published and pinnable" [
+        test "a deployment's composed grant is what its descriptor publishes" {
+            let surface =
+                PeerServerApp.create ()
+                // The descriptor is the empty label unless the peer
+                // substrate is on — a deployment with no wire face
+                // publishes no grant, which is itself the fail-closed
+                // shape and would make this assertion vacuously pass.
+                |> PeerServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PeerSubstrate = EnabledPeerSubstrate
+                }
+                |> PeerServerApp.withPeerTransitionAuthority (
+                    ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ]
+                )
+                |> PeerSurface.describe
+
+            // Ordinally sorted regardless of declaration order, so two
+            // deployments declaring the same grant publish the same bytes.
+            Expect.equal surface.TransitionAuthority [ "Approved"; "Retired" ] "one value, published sorted"
+        }
+
+        test "an undeclared or unreadable declaration grants nothing" {
+            let unreadable = {
+                PeerSurface.empty with
+                    TransitionAuthority = [ "Approved"; "Blessed"; Unchecked.defaultof<string> ]
+            }
+
+            Expect.equal
+                (PeerSurface.transitionAuthority unreadable)
+                [ "Approved" ]
+                "a word this build cannot enforce is not a grant"
+
+            Expect.equal (PeerSurface.transitionAuthority PeerSurface.empty) [] "and silence is not one either"
+
+            Expect.equal
+                (PeerSurface.transitionAuthority {
+                    PeerSurface.empty with
+                        TransitionAuthority = Unchecked.defaultof<string list>
+                })
+                []
+                "including the label published before the member existed"
+        }
+
+        test "the two authority axes are independent" {
+            // The arrangement the phase exists to make expressible: a
+            // counterparty that may approve models and must never see a
+            // row. If the grant were a rung on the visibility ladder,
+            // this composition could not be written.
+            let surface =
+                PeerServerApp.create ()
+                // The descriptor is the empty label unless the peer
+                // substrate is on — a deployment with no wire face
+                // publishes no grant, which is itself the fail-closed
+                // shape and would make this assertion vacuously pass.
+                |> PeerServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PeerSubstrate = EnabledPeerSubstrate
+                }
+                |> PeerServerApp.withPeerTransitionAuthority approveGrant
+                |> PeerSurface.describe
+
+            Expect.equal
+                (PeerSurface.dataVisibility surface)
+                PeerDataVisibilityLevel.AggregatesOnly
+                "the narrowest visibility"
+
+            Expect.equal surface.TransitionAuthority [ "Approved" ] "beside a real transition grant"
+        }
+    ]
+
 let tests =
     testList "Phase 638 — federated model execution" [
         roundTripTests
@@ -2264,4 +2820,9 @@ let tests =
         viewRateTests
         viewAuthorityTests
         viewAuditTests
+        // Phase 644 — lifecycle judgment across the seam, on the other
+        // authority axis.
+        transitionSeamTests
+        transitionPeerTests
+        transitionDeclarationTests
     ]

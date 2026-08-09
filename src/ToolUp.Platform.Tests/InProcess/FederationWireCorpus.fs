@@ -256,6 +256,24 @@ let private authoritySurface () =
     |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
     |> PeerSurface.describe
 
+/// Phase 644 — the same reference deployment declaring a TRANSITION
+/// grant, and nothing else.
+///
+/// A third surface vector rather than a fourth member on the second,
+/// because the two declarations are on different axes and pinning them
+/// together would let an implementation that fused them into one ladder
+/// pass. This one publishes the default visibility level beside a
+/// non-empty grant, which is the arrangement the phase exists to make
+/// expressible: a counterparty that may approve models and must never
+/// see a row.
+///
+/// The grant is declared out of ordinal order on purpose — the emitter
+/// owns the sort, not whoever typed the list.
+let private transitionGrantSurface () =
+    referenceInstance ()
+    |> PeerServerApp.withPeerTransitionAuthority (ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ])
+    |> PeerSurface.describe
+
 // ─── Reference values — aggregate surface (gateway profile) ──────────
 
 /// A member surface authored as a value rather than described from a
@@ -298,6 +316,14 @@ let private memberSurface
         // (posture `mixed:` markers and pin unanimity), and a fixture
         // that pins two unrelated rules at once is one nobody can read.
         DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default'
+        // Phase 644 — a member declaring no transition grant, for the
+        // reason it declares the default level: the aggregate fixture is
+        // about posture floors and pin unanimity, and a member declaring
+        // a grant here would drag a second, unrelated derivation into a
+        // vector nobody could then read. The intersection floor is
+        // asserted in `AggregatePeerSurfaceTests` instead, where it is
+        // the only thing under test.
+        TransitionAuthority = []
     }
 
 let private sharedPin: VocabularyPackPin = {
@@ -707,6 +733,15 @@ let admissionFor (vectorId: string) : ModelExecutionAdmission =
     | "model-execution/reject-view-undeclared-series" ->
         admissionAt PeerDataVisibilityLevel.ViewOnly
         |> ModelExecutionAdmission.withViews
+    // Phase 644 — the transition vectors are read with the operation
+    // DECLARED and at the reference level, which is `AggregatesOnly`. The
+    // second half of that is the claim: a transition carries no data, so
+    // it needs no level above the floor, and a vector read at a raised
+    // level would let an implementation that fused the two authority axes
+    // pass.
+    | "model-execution/reject-transition-unknown-artifact"
+    | "model-execution/reject-transition-invalid"
+    | "model-execution/reject-transition-unauthorized" -> referenceAdmission |> ModelExecutionAdmission.withTransitions
     | _ -> referenceAdmission
 
 let private referenceVintage: ModelExecutionPeerVintage = {
@@ -936,6 +971,90 @@ let private undeclaredSeriesRequest: PeerViewRequest = {
         Series = [ "promo-spend"; "margin-per-unit" ]
 }
 
+// ─── Reference values — Phase 644 lifecycle transitions ──────────────
+
+/// The reference peer's declared grant: it may approve, and it may not
+/// retire. Deliberately a PROPER SUBSET of the lifecycle rather than
+/// none, so an unauthorized-transition vector is refused by a peer that
+/// holds a grant — the case that separates "checked the grant" from
+/// "checked whether a grant exists".
+let referenceTransitionGrant = ModelTransitionAuthority.ofTargets [ "Approved" ]
+
+/// The artifact the reference invocation names, and the status it holds.
+[<Literal>]
+let private referenceArtifactKey =
+    "4d0f2b8c9e7a5613f8c2a94d0e1b7635c8f4a209d3e6b1758c0a2f9d4e63b7a1"
+
+/// A well-formed invocation inside the grant: promote a fitted artifact,
+/// with a stated reason.
+let referenceTransitionInvocation: PeerTransitionInvocation = {
+    ArtifactKey = referenceArtifactKey
+    Target = "Approved"
+    ActorId = "r.okafor"
+    Rationale = Some "holdout MAPE within tolerance on three vintages"
+}
+
+/// The attributed record the admitted invocation produced.
+///
+/// A reference VALUE rather than the output of a live `invoke`, for the
+/// reason the rendered artifact above is one: the wire contract is the
+/// document, and standing up a registry, an audit log and a clock inside
+/// the corpus would pin this deployment's storage arrangements rather
+/// than the shape the specification states. The FIELDS are still derived
+/// from the live projection — `PeerTransition.toWireRecord` renders it —
+/// so a member added to the seam's record fails here rather than
+/// wherever it is next noticed.
+let private referenceTransitionRecord: PeerTransitionRecord =
+    PeerTransition.toWireRecord {
+        ArtifactKey = referenceArtifactKey
+        FromStatus = "Fitted"
+        ToStatus = "Approved"
+        Channel = "peer"
+        AuthorKind = "peer"
+        AuthorId = "consortium-north/r.okafor"
+        Rationale = referenceTransitionInvocation.Rationale
+        RecordedAt = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+        Version = 2
+    }
+
+/// An invocation naming an artifact this scope does not hold.
+let private unknownArtifactInvocation: PeerTransitionInvocation = {
+    referenceTransitionInvocation with
+        ArtifactKey = "0000000000000000000000000000000000000000000000000000000000000000"
+}
+
+/// An invocation asking for an edge the lifecycle graph forbids —
+/// `Retired` is terminal, so nothing leaves it. Well-formed, granted
+/// (the reject state below hands this one a full grant), and refused on
+/// the single thing wrong with it.
+let private invalidTransitionInvocation: PeerTransitionInvocation = {
+    referenceTransitionInvocation with
+        Target = "Fitted"
+}
+
+/// An invocation for a legal edge this peer's grant does not admit. The
+/// grant is real and admits `Approved`; it does not admit `Retired`.
+let private unauthorizedTransitionInvocation: PeerTransitionInvocation = {
+    referenceTransitionInvocation with
+        Target = "Retired"
+}
+
+/// The artifact status and grant each transition reject vector is judged
+/// against — the transition family's `admissionFor`.
+///
+/// The state has to be supplied because `ModelTransition.judge` is pure:
+/// there is no store for the harness to read a status out of, which is
+/// exactly the property that lets it certify against the shipped
+/// function. A vector's state is part of the vector.
+let transitionStateFor (vectorId: string) : ModelArtifactStatus option * ModelTransitionAuthority =
+    match vectorId with
+    | "model-execution/reject-transition-unknown-artifact" -> None, referenceTransitionGrant
+    // A FULL grant, so the refusal cannot be mistaken for an authority
+    // one: this vector's whole content is that no grant makes a
+    // terminal state leavable.
+    | "model-execution/reject-transition-invalid" -> Some ModelArtifactStatus.Retired, ModelTransitionAuthority.full
+    | _ -> Some ModelArtifactStatus.Fitted, referenceTransitionGrant
+
 /// One refusal per class the profile defines — so a modeller's mapping
 /// is pinned by the corpus rather than inferred from the two classes it
 /// happened to trip.
@@ -975,6 +1094,18 @@ let private referenceRefusals: ModelExecutionPeerAnswer list =
         ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.WindowBudgetExceeded("spend-vs-response", 365, 90))
         ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.UndeclaredResolution("spend-vs-response", "hour"))
         ModelExecutionPeerRefusal.ViewRefused(PeerViewRefusal.RenderBudgetExhausted("spend-vs-response", 20, 3600))
+        // Phase 644 — the transition family. Three, and all three, for
+        // the reason the eight above are all here: the vector's contract
+        // is one answer per class the profile defines.
+        ModelExecutionPeerRefusal.TransitionRefused(
+            ModelTransitionRefusal.UnknownArtifact "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+        ModelExecutionPeerRefusal.TransitionRefused(
+            ModelTransitionRefusal.InvalidTransition(referenceArtifactKey, "Retired", "Fitted")
+        )
+        ModelExecutionPeerRefusal.TransitionRefused(
+            ModelTransitionRefusal.InsufficientAuthority(referenceArtifactKey, "Retired", "consortium-north/r.okafor")
+        )
     ]
     |> List.map ModelExecutionPeerAnswer.Refused
 
@@ -1106,6 +1237,15 @@ let vectors () : WireVector list =
             "The same deployment declaring a data-visibility authority level other than the default — the grant a counterparty pins before it calls. The instance vector above publishes the fail-closed `AggregatesOnly` because it declares nothing; this one shows a declared `ViewOnly`, so an implementation that hard-coded the default passes that vector and fails this."
             "peer-surface/authority-declared.json"
             (PeerSurface.exportJson (authoritySurface ()))
+
+        vector
+            "peer-surface/transition-grant"
+            "peer-surface"
+            Participant
+            Hash
+            "The same deployment declaring which registry lifecycle transitions it admits from a peer, at the DEFAULT data-visibility level. Two authority axes, and this vector is what separates them: an implementation that folded the transition grant into the visibility ladder would have to publish a raised level here, and does not. The grant is declared out of ordinal order and published sorted."
+            "peer-surface/transition-grant.json"
+            (PeerSurface.exportJson (transitionGrantSurface ()))
 
         // ── aggregate surface ─────────────────────────────────────────
         vector
@@ -1332,6 +1472,68 @@ let vectors () : WireVector list =
             "The three answers of the bounded-view surface: the declared offer with its bounds, one view's declaration, and a rendered artifact. The artifact carries base64 bytes under a declared media type and a hash over them — there is no member a row, a series or a point could ride in, which is what makes a view not an export route."
             "model-execution/view.json"
             (JsonRpc.serialize (viewAnswers ()))
+
+        vector
+            "model-execution/transition-request"
+            "model-execution"
+            Modeller
+            RoundTrip
+            "A registry lifecycle transition invoked across the seam: the artifact key, the target status as its stable label, the calling deployment's own actor claim, and an optional rationale. No scope member and no role member — the binding decides the scope and the receiver's declared grant decides the authority, so neither can be widened by anything the caller sends."
+            "model-execution/transition-request.json"
+            (JsonRpc.serialize (ModelExecutionPeerContract.transitionRequest referenceTransitionInvocation))
+
+        vector
+            "model-execution/transition"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The attributed record an admitted transition produced: the edge it took, the channel it arrived on, the author that took it, and the artifact version it minted. Every member is metadata about a state change the data host has already committed — there is no member an artifact's parameters or any dataset row could ride in, which is why a transition needs no visibility level above the floor."
+            "model-execution/transition.json"
+            (JsonRpc.serialize (ModelExecutionPeerAnswer.Answered(JsonRpc.serialize referenceTransitionRecord)))
+
+        // Phase 644 — the three transition reject vectors. Like the two
+        // bound vectors below them, each is admitted by every envelope
+        // check: current profile version, declared operation, no asserted
+        // scope, and a granted `AggregatesOnly` (a transition needs no
+        // more). They are refused by `ModelTransition.judge`, the pure
+        // author-agnostic judge — a THIRD reader in the corpus, and the
+        // one that decides identically for a local action and a policy
+        // verdict.
+        {
+            vector
+                "model-execution/reject-transition-unknown-artifact"
+                "model-execution"
+                DataHost
+                Reject
+                "An invocation naming an artifact this scope does not hold. Refused before the lifecycle graph is consulted at all: with no artifact there is no current status, and every later check needs one."
+                "model-execution/reject-transition-unknown-artifact.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.transitionRequest unknownArtifactInvocation)) with
+                Reject = Some PeerTransition.UnknownArtifactClass
+        }
+
+        {
+            vector
+                "model-execution/reject-transition-invalid"
+                "model-execution"
+                DataHost
+                Reject
+                "An invocation asking a retired artifact to become fitted again. Judged against a FULL grant on purpose: no grant makes a terminal state leavable, so refusing this as an authority question would send the caller to negotiate for something no agreement can provide. Legality is judged before authority for exactly that reason."
+                "model-execution/reject-transition-invalid.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.transitionRequest invalidTransitionInvocation)) with
+                Reject = Some PeerTransition.InvalidTransitionClass
+        }
+
+        {
+            vector
+                "model-execution/reject-transition-unauthorized"
+                "model-execution"
+                DataHost
+                Reject
+                "An invocation for a legal edge this peer's grant does not admit. The peer HOLDS a grant — it may approve — and this is the case that separates checking what a grant admits from checking whether one exists. The one refusal in the family whose remedy is a conversation between the two organisations, which is why it maps to `Forbidden` in the submitter face."
+                "model-execution/reject-transition-unauthorized.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.transitionRequest unauthorizedTransitionInvocation)) with
+                Reject = Some PeerTransition.InsufficientAuthorityClass
+        }
 
         {
             vector

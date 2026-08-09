@@ -180,6 +180,9 @@ let private gammaMember () : AggregateMember = {
         // participant grants, so a member claiming the MOST cannot raise
         // the group's claim.
         DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.Full
+        // Phase 644 — this member admits both, so the group's floor is
+        // decided by whatever the others admit rather than by this one.
+        TransitionAuthority = [ "Approved"; "Retired" ]
     }
 }
 
@@ -806,6 +809,23 @@ let tests =
                 unexposed.DataVisibility
                 (PeerDataVisibilityLevel.label PeerDataVisibilityLevel.AggregatesOnly)
                 "an unexposed member's grant is internal and floors nothing"
+        }
+
+        test "the transition grant floors by intersection across the exposing members" {
+            // Phase 644 — the same argument as the level above, by a
+            // different operator. A set is unordered, so its honest floor
+            // is what every participant shares rather than a minimum;
+            // gamma admits both `Approved` and `Retired` and the other
+            // members admit neither, so the group admits neither.
+            let exposed =
+                deriveOk (referenceMembers () @ [ gammaMember () ]) {
+                    referenceExposure with
+                        Contracts = expose reportsId :: referenceExposure.Contracts
+                }
+
+            Expect.isEmpty
+                exposed.TransitionAuthority
+                "a member admitting the most cannot make the group admit anything the others do not"
         }
 
         test "a non-grouped deployment is unchanged (GP 11 / GP 13)" {

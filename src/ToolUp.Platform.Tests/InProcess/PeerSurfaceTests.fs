@@ -436,6 +436,15 @@ let tests =
                 // needing bounded views cannot use a data host that grants
                 // aggregates only.
                 "DataVisibility"
+                // Phase 644 — the registry lifecycle-transition grant,
+                // read by `describe` and published verbatim as
+                // `TransitionAuthority`. In the face on the same §8 test,
+                // and a SEPARATE axis from the level above rather than a
+                // rung on it: a modelling deployment whose workflow ends
+                // in a cross-peer approval cannot use a data host that
+                // admits none, and it needs to learn that before it fits
+                // a model it then cannot promote.
+                "TransitionAuthority"
             ]
 
             let actual =

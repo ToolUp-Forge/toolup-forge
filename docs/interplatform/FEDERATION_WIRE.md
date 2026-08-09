@@ -228,6 +228,7 @@ counterparty may rely on without seeing inside.
 | `Budgets` | object, opt | `null` exactly when `Enabled` is `false`. |
 | `PinnedVocabulary` | `VocabularyPin[]` | Data-vocabulary packs this deployment pins. |
 | `DataVisibility` | string | The **data-visibility authority level** this deployment grants a remote peer over its data: `"AggregatesOnly"` \| `"ViewOnly"` \| `"Full"` (§5.7.9). |
+| `TransitionAuthority` | string[] | The **registry lifecycle transitions** this deployment admits from a peer, as target-status labels, sorted ordinally (§5.7.11). `[]` admits none. |
 
 **`DataVisibility` is read fail-closed, and a reader MUST implement that rather than assume it.** A
 member that is absent, empty, or names a level the reader does not know MUST read as
@@ -239,6 +240,13 @@ those deployments served.
 An emitter MUST nonetheless **write** the member, at its declared level or at `"AggregatesOnly"`.
 Absent and narrowest mean the same thing to a reader, but only one of them is a document whose stamp
 another party can reproduce.
+
+**`TransitionAuthority` is read fail-closed on the same terms**, and it is a **separate authority
+axis rather than a rung on that ladder** — the level says what a peer may SEE, this says what it may
+DO. A member that is absent, `null`, or contains a label naming no lifecycle status the reader knows
+MUST yield the empty grant, or a grant without that entry. An emitter MUST write the member, `[]`
+when it admits none, for the reason above: only a written member is part of a stamp somebody else can
+reproduce.
 
 **`PeerSurfaceExport`** — the publishable envelope.
 
@@ -636,7 +644,8 @@ Served by the data host, under contract id `toolup.model-execution` at `Contract
 Three further operations — `ListViews`, `DescribeView` and `RenderView` — are served on this same
 contract by a data host that declares bounded views. They are specified in §5.7.10 rather than here
 because they require a higher authority level (§5.7.9) and a deployment that declares none serves
-none.
+none. A fourth, `InvokeTransition`, is specified in §5.7.11: it needs no level above the floor and a
+separate grant entirely, which is why it is stated there rather than in this table.
 
 `SubmitFit` is long-running because a fit is: it returns a job id and the caller polls
 `GET /peer/v1/{contractId}/jobs/{jobId}` for the terminal answer, with all three job states
@@ -730,6 +739,7 @@ expressible, because that is the shape in which a refusal gets mistaken for an e
 | `model-execution-authority-narrowed` | `AuthorityNarrowingRefused` (operation, required, effective, narrowedBy) | The peer's ceiling admits the operation; a narrowing declared beneath it does not. `narrowedBy` names the layer. |
 | `model-execution-egress-withheld` | `EgressWithheld` (operation) | The level admitted the request, and the receiver's disclosure controls withheld something the answer carries. **Names the operation and nothing else** — naming the withheld reference or the policy would tell the caller that data it may not see exists, which is itself the disclosure. |
 | the `model-execution-view-*` family (§5.7.10) | `ViewRefused` (refusal) | A bounded-view request left the bounds the view declares. The inner refusal carries the view vocabulary's own class, so a caller learns **which** bound to narrow. |
+| the `model-execution-transition-*` family (§5.7.11) | `TransitionRefused` (refusal) | A registry lifecycle invocation was refused. The inner refusal names which of the three things the caller would have to change: the artifact, the edge, or the grant. |
 
 The last one is the load-bearing one for a modeller. Carrying the inner refusal through rather than
 flattening it to a message is what lets a caller distinguish "no such provider" from "not
@@ -812,6 +822,9 @@ MUST refuse with the class named:
 | `model-execution/reject-narrowed.json` | `model-execution-authority-narrowed` |
 | `model-execution/reject-view-over-bound-window.json` | `model-execution-view-window-budget` |
 | `model-execution/reject-view-undeclared-series.json` | `model-execution-view-series-undeclared` |
+| `model-execution/reject-transition-unknown-artifact.json` | `model-execution-transition-unknown-artifact` |
+| `model-execution/reject-transition-invalid.json` | `model-execution-transition-invalid` |
+| `model-execution/reject-transition-unauthorized.json` | `model-execution-transition-authority` |
 
 The scope-widening vector is the one to read closely: it is **well-formed**, names a real
 operation, and would be answered without complaint by an implementation that treated
@@ -836,6 +849,23 @@ a `ViewOnly` ceiling with the view operations declared: the envelope check ACCEP
 since they are well-formed, declared, in-scope and granted — and §5.7.10's bounds check is what refuses
 them. A harness that stops at the envelope reports both as accepted and certifies neither. Both are
 read against the declarations `model-execution/view.json` publishes.
+
+**The three transition vectors are refused by a THIRD reader, and each carries its own state.** The
+envelope check accepts all three — they are well-formed, declared, in-scope, and a transition needs no
+level above the floor — and §5.7.11's judgment is what refuses them. Because that judgment is a
+function of the artifact's current status and the peer's grant, neither of which is in the document,
+the state is part of the vector:
+
+| Vector | Artifact status | Peer's grant |
+|---|---|---|
+| `reject-transition-unknown-artifact.json` | no such artifact | `Approved` |
+| `reject-transition-invalid.json` | `Retired` | every status |
+| `reject-transition-unauthorized.json` | `Fitted` | `Approved` only |
+
+The middle one is judged against a **full** grant on purpose: no grant makes a terminal state
+leavable, so an implementation that refused it on authority would be refusing for a reason no
+agreement could fix. The last is judged against a grant the peer **holds** — `Approved`, asked for
+`Retired` — which is what separates checking what a grant admits from checking whether one exists.
 
 #### 5.7.8 Deployment: the two roles are configuration, not code
 
@@ -1093,6 +1123,124 @@ about how the protocol is to be read, and it has three consequences.
 The security boundary therefore sits at the credential and the signature, not at the label. A label
 tells you what to expect and gives you something to hold someone to; it is not an entitlement.
 
+#### 5.7.11 Registry lifecycle transitions
+
+§5.7.2's registry surface is **query-shaped**: a modeller across the seam reads what a data host has
+registered and writes nothing into it. That default forecloses a topology this profile exists to
+serve — the one where the modelling judgment and the durable record live in different deployments. A
+consortium's analyst approves a model; the consortium's data host is where "approved" has to mean
+something.
+
+One operation, served on the submitter contract:
+
+| Operation | Body | Answer body | Leg |
+|---|---|---|---|
+| `InvokeTransition` | `TransitionInvocation` | `TransitionRecord` | **queued** (§5.5.6) |
+
+**Queued, and this is normative rather than an implementation choice.** A lifecycle judgment across a
+trust boundary is exactly the kind of act a data host may not answer synchronously — a promotion
+policy, a second signature or a human reviewer may have to weigh it — and a seam that answered it
+immediately would have to grow a second shape to defer it later. The caller collects the outcome at
+`GET /peer/v1/{contractId}/jobs/{jobId}` exactly as it does a fit's. A data host with no job
+substrate answers with a typed refusal naming the absent substrate, as `SubmitFit` does.
+
+**`TransitionInvocation`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `ArtifactKey` | string | The artifact's composite-key hash — the id every registry read in §5.7.4 already keys on. |
+| `Target` | string | The status the artifact is asked to enter, as a stable label (`"Draft"` \| `"Fitted"` \| `"Approved"` \| `"Retired"`). A label naming no status this profile defines is refused as `model-execution-request-unreadable`, **not** as an illegal transition: "that is not a state" and "that is not an edge" are different facts, and only one of them is fixed by asking for a different edge. |
+| `ActorId` | string | Who, at the CALLING deployment, is asking. |
+| `Rationale` | string, opt | The author's stated reason. `null` asserts nothing and is ordinary — a rationale is evidence, not a gate. |
+
+**The invocation carries no scope member and no role member, and the second absence is the sharper
+one.** The peer binding decides the scope, as everywhere else in §5.7. A role is absent because a
+peer's actor holds no membership in the receiving deployment's teams: a role it asserted would be a
+claim about somebody else's directory, which the receiver cannot check and has no reason to act on.
+What decides is the **grant** the receiver declared for that peer.
+
+`ActorId` is likewise a **claim, and the receiver treats it as one**. It is not cross-checked against
+anything and it decides nothing. What it buys is attribution: "peer `consortium-north` approved this
+artifact" is a weaker record than "…and says `r.okafor` asked", and the second is the one an
+investigation can act on. Same posture as `SubmitterClass` in §5.7.3.
+
+**`TransitionRecord`** — what an admitted invocation produced.
+
+| Member | Type | Notes |
+|---|---|---|
+| `ArtifactKey` | string | |
+| `FromStatus` | string | The status the artifact held. Echoed rather than assumed, so a caller that invoked on a stale read learns what actually moved. |
+| `ToStatus` | string | |
+| `Channel` | string | Where the invocation entered the data host: `"local"` \| `"peer"`. Always `"peer"` here, and carried anyway — the record the modeller holds and the record the data host's own trail holds are then the same document. |
+| `AuthorKind` | string | `"user"` \| `"peer"` \| `"policy"`. Always `"peer"` on this seam. |
+| `AuthorId` | string | `{peerId}/{actorId}` — **both** identities, because either alone is ambiguous across a federation: two peers can name the same actor id, and one peer's actor set is not the receiver's user set. |
+| `Rationale` | string, opt | |
+| `RecordedAt` | instant | |
+| `Version` | int32 | The artifact version the transition minted. A transition appends a version, never mutates one. |
+
+Every member is metadata about a state change the data host has already committed. **There is no
+member an artifact's parameters, its diagnostics or any dataset row could ride in** — the §5.7.4
+argument, one level over — which is why a transition needs no authority level above the floor.
+
+**Two authority axes, and they are independent.** §5.7.9's level governs what a peer may **see**; the
+transition grant governs what it may **do**. `InvokeTransition` therefore requires only
+`AggregatesOnly` on the visibility axis and an explicit grant on this one. Folding the two into one
+ladder would make the ordinary arrangement inexpressible: a counterparty that may approve models and
+must never see a row.
+
+A participant declares its grant in its published surface (§5.1 `TransitionAuthority`) as the
+ordinally-sorted set of target statuses it admits from a peer. **An absent, `null` or unrecognised
+declaration admits nothing**, and a receiver MUST read it that way — silence is not a grant, and a
+status label a reader cannot enforce is not one either. The published set is what the deployment
+offers in general; which of them a GIVEN peer holds is the receiver's per-peer binding, and the
+published offer never widens it.
+
+**The order of judgment is normative**, and each step is refused before the next is asked:
+
+1. **The artifact.** No artifact, nothing to judge — every later check needs its current status.
+2. **The edge.** An edge the lifecycle graph forbids (including a self-transition) is refused
+   **regardless of grant**. No grant makes an impossible edge possible, and refusing this as an
+   authority question would send an author to negotiate for something no agreement can provide.
+3. **The grant.** The edge is legal and this author is not granted it. The only refusal in the
+   family whose remedy is a conversation between the two organisations.
+
+| Class | Union case | Condition |
+|---|---|---|
+| `model-execution-transition-unknown-artifact` | `UnknownArtifact` (artifactKey) | No artifact with that key exists in the peer's scope. |
+| `model-execution-transition-invalid` | `InvalidTransition` (artifactKey, from, target) | An edge the lifecycle graph forbids. |
+| `model-execution-transition-authority` | `InsufficientAuthority` (artifactKey, target, author) | The author's declared grant does not admit the target. |
+
+They reach the caller nested inside a `TransitionRefused` passthrough case, the way §5.7.5's
+`SubmitterRefused` and `ViewRefused` carry theirs. Every payload is something the caller already sent
+or the receiver already published, so refusing discloses nothing.
+
+**One judge, three authors.** The judgment above is not a peer-specific state machine. A receiver
+MUST apply the identical graph, the identical order and the identical refusal vocabulary to a
+lifecycle action authored locally and to one authored by a policy; a peer invocation is a third
+author of one judgment, and `Channel` + `AuthorKind` are how a recorded transition says which. An
+implementation with a second state machine behind this operation will drift from its own local one,
+and the resulting disagreement is invisible from the wire.
+
+**The recorded transition is attributed and append-only.** A receiver MUST record every judgment —
+admitted **and refused** — with the channel, the author kind and the author id, and MUST NOT make
+that record conditional on the transition having landed: a transition refused at this seam never
+reaches the registry at all, so a trail that recorded only successful writes could not answer which
+peer tried what.
+
+**The answer does not pass a disclosure gate.** A `TransitionRecord` is the receipt of a write the
+receiver has already committed, not data leaving it. Withholding it would leave the caller unable to
+learn the outcome of a change that happened, and would report it under a class
+(`model-execution-egress-withheld`) that says the answer references withheld data — which would be
+false. The attributed record above is the audit, and it is a stronger one.
+
+**Terminal outcome.** Because the leg is queued, a receiver MUST record the transition's terminal
+outcome when the job completes, correlated to the schedule-time record by the call's correlation id
+(§5.5.6). A trail that stops at dispatch reports every queued transition as having succeeded,
+whatever the judgment went on to be.
+
+Corpus: `model-execution/transition-request.json`, `model-execution/transition.json`, the three
+`reject-transition-*` vectors, and the three classes in `model-execution/refusals.json`.
+
 ---
 
 ## 7. Constants
@@ -1139,6 +1287,9 @@ another language will and should word it differently.
 | `model-execution-view-window-budget` | model execution | A wider window than the view admits. |
 | `model-execution-view-resolution-undeclared` | model execution | A resolution the view does not render at. |
 | `model-execution-view-render-budget` | model execution | The peer's render budget for the current window is spent. |
+| `model-execution-transition-unknown-artifact` | model execution | No artifact with that key exists in the peer's scope (§5.7.11). |
+| `model-execution-transition-invalid` | model execution | An edge the lifecycle graph forbids. Refused regardless of grant. |
+| `model-execution-transition-authority` | model execution | The author's declared grant does not admit the target status. |
 
 ### 7.3 Model-execution constants
 
@@ -1150,6 +1301,26 @@ toolup.model-execution.diagnostics     the governed projections (§5.7.6)
 ```
 
 Operations (§5.7.2): `SubmitFit`, `GetOutcome`, `QueryOutcomes`, `ResolveVintage`.
+
+**Queued operations** — those served on the long-running leg (§5.5.6) rather than immediately:
+
+```
+SubmitFit  InvokeTransition
+```
+
+**Lifecycle statuses** (§5.7.11), and the edges between them. A self-transition is never legal;
+`Retired` is terminal:
+
+```
+Draft     ->  Fitted | Retired
+Fitted    ->  Approved | Retired
+Approved  ->  Retired
+Retired   ->  (terminal)
+```
+
+A transition grant is declared as a set of TARGET statuses drawn from this list, never as a set of
+edges: authority attaches to the decision, not to the state the artifact happened to be in when it
+was taken. Which edges exist is the graph's business and is judged one step earlier.
 
 Declared diagnostics (§5.7.6): `Collinearity`, `Coverage`, `TransformPreview`.
 
@@ -1294,6 +1465,16 @@ Ordered by how often each one is the thing that is wrong.
       honoured.
 - [ ] An aggregate's authority level is the **minimum** over its exposing members — never a `mixed:`
       marker.
+- [ ] `TransitionAuthority` is **written** by every emitter, read fail-closed, and treated as a
+      SEPARATE axis from the visibility level — never folded into it.
+- [ ] A lifecycle transition is judged artifact → edge → grant, in that order, and an illegal edge is
+      refused **regardless of grant**.
+- [ ] A recorded transition carries its channel and author, and is recorded for a REFUSAL as well as
+      an admission.
+- [ ] A queued transition's terminal outcome is recorded when the job completes, not when it is
+      scheduled.
+- [ ] An aggregate's transition grant is the **intersection** over its exposing members — an
+      unordered set has no minimum.
 
 ---
 

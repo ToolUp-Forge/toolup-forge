@@ -270,6 +270,24 @@ type PeerServerApp = {
     /// same value by construction — not two settings an operator has to
     /// keep in step.
     DataVisibility: PeerDataVisibilityLevel
+    /// Phase 644 — the registry lifecycle transitions this deployment
+    /// admits from a peer: published in the `PeerSurface` descriptor and
+    /// enforced data-side by the model-execution seam's transition arm.
+    ///
+    /// `ModelTransitionAuthority.none` unless a composition calls
+    /// `withPeerTransitionAuthority`. **Undeclared admits nothing, not
+    /// "the harmless ones"** — there is no harmless lifecycle transition
+    /// across a trust boundary, since `Retired` withdraws an evidence base
+    /// other work may be citing and `Approved` is the governance gate
+    /// itself. A deployment that upgrades into this phase refuses every
+    /// peer invocation, which is what it did before the operation existed
+    /// (GP 11).
+    ///
+    /// **Declared once, read twice**, exactly as `DataVisibility` is:
+    /// `PeerSurface.describe` publishes the labels and the seam admits
+    /// against the same value, so the grant a counterparty pins and the
+    /// grant the receiver enforces cannot drift apart.
+    TransitionAuthority: ModelTransitionAuthority
 }
 
 /// Phase 309 — a composition's audience-binding posture, classified at
@@ -347,6 +365,7 @@ module PeerServerApp =
         TokenPolicy = PeerTokenPolicy.unscoped
         GroupJobMap = None
         DataVisibility = PeerDataVisibilityLevel.default'
+        TransitionAuthority = ModelTransitionAuthority.none
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -951,6 +970,43 @@ module PeerServerApp =
     let withRequiredPeerDataVisibility (level: PeerDataVisibilityLevel) (app: PeerServerApp) : PeerServerApp = {
         app with
             FederationPins = FederationPinStore.withRequiredDataVisibility level app.FederationPins
+    }
+
+    /// Phase 644 — declare which registry lifecycle transitions THIS
+    /// deployment admits from a peer.
+    ///
+    ///     app
+    ///     |> PeerServerApp.withPeerTransitionAuthority (
+    ///         ModelTransitionAuthority.ofTargets [ "Approved"; "Retired" ])
+    ///
+    /// Published in the `PeerSurface` descriptor, so a counterparty pins
+    /// the grant before it calls, and enforced data-side by the seam's
+    /// transition arm — one declaration, both readers. Undeclared admits
+    /// nothing (GP 11): a grant nobody stated is one nobody agreed to.
+    ///
+    /// Last call wins. A grant is a single statement of what this
+    /// deployment accepts, and accumulating two would make widening it by
+    /// accident easier than narrowing it on purpose.
+    let withPeerTransitionAuthority (authority: ModelTransitionAuthority) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            TransitionAuthority = authority
+    }
+
+    /// Phase 644 — require a transition grant of every pinned
+    /// counterparty this deployment consumes contracts from.
+    ///
+    ///     app |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+    ///
+    /// A counterparty whose pinned label admits less refuses the
+    /// composition at preflight (`peer-transition-authority-insufficient`).
+    /// The argument is the one `withRequiredPeerDataVisibility` makes: a
+    /// modelling deployment whose workflow ends in a cross-peer approval,
+    /// pinned against a data host that admits none, would otherwise
+    /// discover it with a fitted model and no way to promote it.
+    /// Undeclared leaves the rule dormant (GP 13).
+    let withRequiredPeerTransitionAuthority (targets: string list) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            FederationPins = FederationPinStore.withRequiredTransitionAuthority targets app.FederationPins
     }
 
     /// Phase 316, composed by Phase 629 — bound how long the parked

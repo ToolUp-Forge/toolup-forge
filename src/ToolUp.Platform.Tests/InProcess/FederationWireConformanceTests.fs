@@ -121,9 +121,11 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
     | "host-envelope", "host-envelope/stamp" -> JsonRpc.serialize (JsonRpc.deserialize<HostEnvelopeStamp> document)
     | "host-envelope", _ -> HostEnvelope.toJson (JsonRpc.deserialize<HostEnvelope> document)
     | "model-execution", "model-execution/submission"
-    | "model-execution", "model-execution/view-request" ->
+    | "model-execution", "model-execution/view-request"
+    | "model-execution", "model-execution/transition-request" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerRequest> document)
-    | "model-execution", "model-execution/outcome" ->
+    | "model-execution", "model-execution/outcome"
+    | "model-execution", "model-execution/transition" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer> document)
     | "model-execution", "model-execution/diagnostics"
     | "model-execution", "model-execution/refusals"
@@ -259,6 +261,28 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
                 (PeerViewRefusal.className refusal)
                 reason
                 $"'{entry.Id}' must be refused as '{reason}'; the view reader said: {PeerViewRefusal.describe refusal}"
+    // Phase 644 — a THIRD reader, and the harness runs it in order for
+    // the same reason it runs the view's. The envelope check accepts a
+    // transition invocation deliberately (it is well-formed, declared,
+    // in-scope and needs no level above the floor), and
+    // `ModelTransition.judge` — the pure author-agnostic judge a local
+    // action and a policy verdict also go through — is what refuses.
+    | Ok request when reason.StartsWith "model-execution-transition-" ->
+        let invocation = JsonRpc.deserialize<PeerTransitionInvocation> request.Body
+        let current, grant = transitionStateFor entry.Id
+
+        match PeerTransition.target invocation with
+        | None -> failtestf "'%s' must name a lifecycle status the profile defines" entry.Id
+        | Some target ->
+            let seamRequest = PeerTransition.toRequest "consortium-north" target invocation
+
+            match ModelTransition.judge current grant seamRequest with
+            | Ok _ -> failtestf "'%s' must be refused by the transition seam, and it was admitted" entry.Id
+            | Error refusal ->
+                Expect.equal
+                    (PeerTransition.className refusal)
+                    reason
+                    $"'{entry.Id}' must be refused as '{reason}'; the seam said: {ModelTransitionRefusal.describe refusal}"
     | Ok _ -> failtestf "'%s' must be refused, and was accepted" entry.Id
     | Error refusal ->
         Expect.equal

@@ -452,6 +452,23 @@ module AggregatePeerSurface =
                             :: (exposing |> List.map (fun m -> PeerSurface.dataVisibility m.Surface))
                         )
                     )
+                // Phase 644 — the transition grant floors by INTERSECTION
+                // across the gateway edge and every exposing member. Same
+                // argument as the level above and the same conclusion by a
+                // different operator: a call routed through the group
+                // lands on one member and the caller cannot choose which,
+                // so the group may honestly admit only a transition every
+                // participant admits. A set has no order, so the floor is
+                // an intersection rather than a minimum — and where the
+                // ordered level can report a computable floor, an
+                // unordered set's honest floor is what they all share.
+                TransitionAuthority =
+                    (PeerSurface.transitionAuthority edge
+                     :: (exposing |> List.map (fun m -> PeerSurface.transitionAuthority m.Surface)))
+                    |> List.map Set.ofList
+                    |> List.reduce Set.intersect
+                    |> Set.toList
+                    |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
             })
 
 /// Composes a deployment that presents an aggregate group as one peer:

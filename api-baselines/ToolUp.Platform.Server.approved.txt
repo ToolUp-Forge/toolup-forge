@@ -4734,6 +4734,94 @@ ToolUp.Platform.ModelSpecRefModule.hashOf(System.String) : System.String
 ToolUp.Platform.ModelSpecRefModule.ofPayload(System.String) : ToolUp.Platform.ModelSpecRef
 ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String, System.String)
 ToolUp.Platform.ModelSpecRef.SpecHashAlgorithm : System.String { get }
+ToolUp.Platform.ModelTransition (class)
+ToolUp.Platform.ModelTransition.invoke(ToolUp.Platform.ModelTransitionDeps, System.String, ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.ModelTransitionRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelTransitionRecord, ToolUp.Platform.ModelTransitionRefusal]]
+ToolUp.Platform.ModelTransition.judge(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus], ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.ModelTransitionRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionRefusal]
+ToolUp.Platform.ModelTransitionAuthor (class)
+ToolUp.Platform.ModelTransitionAuthor.IsLocalUser : System.Boolean { get }
+ToolUp.Platform.ModelTransitionAuthor.IsPeerActor : System.Boolean { get }
+ToolUp.Platform.ModelTransitionAuthor.IsPolicyVerdict : System.Boolean { get }
+ToolUp.Platform.ModelTransitionAuthor.Tag : System.Int32 { get }
+ToolUp.Platform.ModelTransitionAuthor+LocalUser (class)
+ToolUp.Platform.ModelTransitionAuthor+LocalUser.role : ToolUp.Platform.TeamRole { get }
+ToolUp.Platform.ModelTransitionAuthor+LocalUser.userId : System.String { get }
+ToolUp.Platform.ModelTransitionAuthor+PeerActor (class)
+ToolUp.Platform.ModelTransitionAuthor+PeerActor.actorId : System.String { get }
+ToolUp.Platform.ModelTransitionAuthor+PeerActor.peerId : System.String { get }
+ToolUp.Platform.ModelTransitionAuthor+PolicyVerdict (class)
+ToolUp.Platform.ModelTransitionAuthor+PolicyVerdict.policyId : System.String { get }
+ToolUp.Platform.ModelTransitionAuthor+Tags (class)
+ToolUp.Platform.ModelTransitionAuthor+Tags.LocalUser : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionAuthor+Tags.PeerActor : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionAuthor+Tags.PolicyVerdict : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionAuthorModule (class)
+ToolUp.Platform.ModelTransitionAuthorModule.channel(ToolUp.Platform.ModelTransitionAuthor) : ToolUp.Platform.ModelTransitionChannel
+ToolUp.Platform.ModelTransitionAuthorModule.id(ToolUp.Platform.ModelTransitionAuthor) : System.String
+ToolUp.Platform.ModelTransitionAuthorModule.kind(ToolUp.Platform.ModelTransitionAuthor) : System.String
+ToolUp.Platform.ModelTransitionAuthorModule.registryRole(ToolUp.Platform.ModelTransitionAuthor) : ToolUp.Platform.TeamRole
+ToolUp.Platform.ModelTransitionAuthority (class)
+ToolUp.Platform.ModelTransitionAuthority..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Platform.ModelTransitionAuthority.Targets : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ModelTransitionAuthorityModule (class)
+ToolUp.Platform.ModelTransitionAuthorityModule.admits(ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionAuthority) : System.Boolean
+ToolUp.Platform.ModelTransitionAuthorityModule.full : ToolUp.Platform.ModelTransitionAuthority { get }
+ToolUp.Platform.ModelTransitionAuthorityModule.labels(ToolUp.Platform.ModelTransitionAuthority) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.ModelTransitionAuthorityModule.none : ToolUp.Platform.ModelTransitionAuthority { get }
+ToolUp.Platform.ModelTransitionAuthorityModule.ofTargets(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.ModelTransitionAuthority
+ToolUp.Platform.ModelTransitionChannel (class)
+ToolUp.Platform.ModelTransitionChannel.IsLocal : System.Boolean { get }
+ToolUp.Platform.ModelTransitionChannel.IsPeer : System.Boolean { get }
+ToolUp.Platform.ModelTransitionChannel.Local : ToolUp.Platform.ModelTransitionChannel { get }
+ToolUp.Platform.ModelTransitionChannel.Peer : ToolUp.Platform.ModelTransitionChannel { get }
+ToolUp.Platform.ModelTransitionChannel.Tag : System.Int32 { get }
+ToolUp.Platform.ModelTransitionChannel+Tags (class)
+ToolUp.Platform.ModelTransitionChannel+Tags.Local : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionChannel+Tags.Peer : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionChannelModule (class)
+ToolUp.Platform.ModelTransitionChannelModule.label(ToolUp.Platform.ModelTransitionChannel) : System.String
+ToolUp.Platform.ModelTransitionDeps (class)
+ToolUp.Platform.ModelTransitionDeps..ctor(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.ModelTransitionDeps.Audit : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.ModelTransitionDeps.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.ModelTransitionDeps.Registry : ToolUp.Platform.IModelRegistry { get }
+ToolUp.Platform.ModelTransitionRecord (class)
+ToolUp.Platform.ModelTransitionRecord..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset, System.Int32)
+ToolUp.Platform.ModelTransitionRecord.ArtifactKey : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.AuthorId : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.AuthorKind : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.Channel : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.FromStatus : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.Rationale : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModelTransitionRecord.RecordedAt : System.DateTimeOffset { get }
+ToolUp.Platform.ModelTransitionRecord.ToStatus : System.String { get }
+ToolUp.Platform.ModelTransitionRecord.Version : System.Int32 { get }
+ToolUp.Platform.ModelTransitionRefusal (class)
+ToolUp.Platform.ModelTransitionRefusal.IsInsufficientAuthority : System.Boolean { get }
+ToolUp.Platform.ModelTransitionRefusal.IsInvalidTransition : System.Boolean { get }
+ToolUp.Platform.ModelTransitionRefusal.IsUnknownArtifact : System.Boolean { get }
+ToolUp.Platform.ModelTransitionRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.ModelTransitionRefusal+InsufficientAuthority (class)
+ToolUp.Platform.ModelTransitionRefusal+InsufficientAuthority.artifactKey : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+InsufficientAuthority.author : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+InsufficientAuthority.target : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+InvalidTransition (class)
+ToolUp.Platform.ModelTransitionRefusal+InvalidTransition.artifactKey : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+InvalidTransition.from : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+InvalidTransition.target : System.String { get }
+ToolUp.Platform.ModelTransitionRefusal+Tags (class)
+ToolUp.Platform.ModelTransitionRefusal+Tags.InsufficientAuthority : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionRefusal+Tags.InvalidTransition : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionRefusal+Tags.UnknownArtifact : System.Int32 (literal)
+ToolUp.Platform.ModelTransitionRefusal+UnknownArtifact (class)
+ToolUp.Platform.ModelTransitionRefusal+UnknownArtifact.artifactKey : System.String { get }
+ToolUp.Platform.ModelTransitionRefusalModule (class)
+ToolUp.Platform.ModelTransitionRefusalModule.describe(ToolUp.Platform.ModelTransitionRefusal) : System.String
+ToolUp.Platform.ModelTransitionRequest (class)
+ToolUp.Platform.ModelTransitionRequest..ctor(System.String, ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionAuthor, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ModelTransitionRequest.ArtifactKey : System.String { get }
+ToolUp.Platform.ModelTransitionRequest.Author : ToolUp.Platform.ModelTransitionAuthor { get }
+ToolUp.Platform.ModelTransitionRequest.Rationale : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModelTransitionRequest.Target : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.ModuleApiContext (class)
 ToolUp.Platform.ModuleApiContext..ctor(Microsoft.AspNetCore.Http.HttpContext, System.String)
 ToolUp.Platform.ModuleApiContext.FromFile`2(Microsoft.FSharp.Core.FSharpFunc`2[Req, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Req, Res]]) : Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Res]]

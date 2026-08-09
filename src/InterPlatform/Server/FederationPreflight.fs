@@ -30,7 +30,7 @@ open ToolUp.Platform.ConfigValidation
 // sides already publish and the only surface a federation can honestly
 // hold each other to.
 //
-// **Four rule families, stable codes, exported as data:**
+// **Five rule families, stable codes, exported as data:**
 //
 // * `peer-contract-unsatisfied` (Error) — a consumed contract that no
 //   pinned counterparty serves, or that one serves at no version this
@@ -51,6 +51,12 @@ open ToolUp.Platform.ConfigValidation
 //   before the facet existed declares nothing and reads as the narrowest
 //   level — silence is not a grant — so a counterparty that narrowed its
 //   grant and one that never stated it are treated alike, deliberately.
+// * `peer-transition-authority-insufficient` (Error, Phase 644) — a
+//   pinned counterparty this deployment calls whose declared transition
+//   grant does not admit a lifecycle transition this deployment requires.
+//   The visibility rule's sibling on the other axis: that one is about
+//   what may be SEEN, this one about what may be DONE, and a counterparty
+//   can satisfy either while failing the other.
 // * `peer-surface-stale` (Warning) — a pin older than the declared
 //   maximum age. A warning and not an error deliberately: an aged pin is
 //   not evidence that anything drifted, it is the ABSENCE of fresh
@@ -159,6 +165,16 @@ type PinnedPeerSurface = {
     /// before this member existed therefore pins as `AggregatesOnly` —
     /// silence is not a grant.
     DataVisibility: PeerDataVisibilityLevel
+    /// Phase 644 — the registry lifecycle transitions the counterparty's
+    /// label admits from a peer, ordinally sorted.
+    ///
+    /// Normalised at PINNING time by `PeerSurface.transitionAuthority`,
+    /// exactly as the level above is: a label published before this member
+    /// existed, or one naming a status this build does not know, pins as
+    /// the grant it can actually be held to. `[]` is a counterparty that
+    /// admits no cross-peer transition — including every counterparty
+    /// pinned before this phase, because silence is not a grant.
+    TransitionAuthority: string list
 }
 
 /// One trust facet this deployment REQUIRES of every pinned counterparty
@@ -253,6 +269,12 @@ type FederationPinStore = {
     /// would refuse every federation that upgraded into this phase
     /// (GP 11).
     RequiredDataVisibility: PeerDataVisibilityLevel option
+    /// Phase 644 — the lifecycle transitions required of every pinned
+    /// counterparty this deployment consumes from. `[]` — the default —
+    /// leaves `peer-transition-authority-insufficient` dormant, which is
+    /// the honest default: a deployment that never invokes a cross-peer
+    /// transition has no requirement to state (GP 11 / GP 13).
+    RequiredTransitionAuthority: string list
 }
 
 [<RequireQualifiedAccess>]
@@ -266,6 +288,7 @@ module FederationPinStore =
         MaxPinAge = None
         RequiredTrust = []
         RequiredDataVisibility = None
+        RequiredTransitionAuthority = []
     }
 
     /// Add a pinned counterparty label. Re-pinning the same counterparty
@@ -299,6 +322,20 @@ module FederationPinStore =
     let withRequiredDataVisibility (level: PeerDataVisibilityLevel) (store: FederationPinStore) : FederationPinStore = {
         store with
             RequiredDataVisibility = Some level
+    }
+
+    /// Phase 644 — declare the lifecycle transitions required of every
+    /// pinned counterparty this deployment consumes from. Last call wins,
+    /// for the reason the visibility floor does: a requirement is one
+    /// statement of what this deployment's workflow needs, and two would
+    /// only ever mean their union stated confusingly.
+    ///
+    /// Normalised through the same fail-closed reader the surface takes,
+    /// so a requirement naming a status this build does not know is
+    /// dropped rather than made permanently unsatisfiable.
+    let withRequiredTransitionAuthority (targets: string list) (store: FederationPinStore) : FederationPinStore = {
+        store with
+            RequiredTransitionAuthority = PeerTransition.readDeclaration targets
     }
 
 /// The composed facts the federation-graph rules read — derived from the
@@ -534,6 +571,39 @@ module FederationPreflight =
                     (pin.PinnedAt.ToString "u")
                     pin.Source)
 
+    /// Phase 644 — a pinned counterparty this deployment calls whose
+    /// declared transition grant does not admit a transition this
+    /// deployment requires.
+    ///
+    /// The visibility rule's sibling, and separate from it for the reason
+    /// the two declarations are separate: one is about what may be SEEN
+    /// and the other about what may be DONE, and a counterparty can
+    /// perfectly well satisfy either while failing the other. Reported per
+    /// missing target rather than as one line naming the set, because a
+    /// grant that admits `Retired` and not `Approved` is a specific
+    /// conversation to have and not a general one.
+    let private evalTransitionAuthorityInsufficient (input: FederationPreflightInput) : string list =
+        match input.Pins.RequiredTransitionAuthority with
+        | [] -> []
+        | required ->
+            let consumedIds = input.Consumes |> List.map _.ContractId |> Set.ofList
+
+            input.Pins.Pins
+            |> List.filter (fun pin -> pin.Serves |> List.exists (fun c -> Set.contains c.ContractId consumedIds))
+            |> List.collect (fun pin ->
+                required
+                |> List.filter (fun target -> not (List.contains target pin.TransitionAuthority))
+                |> List.map (fun target ->
+                    sprintf
+                        "Pinned counterparty '%s' does not admit the '%s' lifecycle transition from a peer, and this deployment requires it. Its label admits [%s]. Every invocation of an unadmitted transition is refused data-side with '%s', so the workflow this deployment federates on cannot complete against this counterparty — a fitted model with no way to promote it. A label that predates the transition-authority facet admits nothing: silence is not a grant. Take a fresher pin if the counterparty has since widened its grant, drop the requirement with PeerServerApp.withRequiredPeerTransitionAuthority, or stop consuming this counterparty's contracts. (Label %s, taken %s from %s.)"
+                        pin.CounterpartyId
+                        target
+                        (String.Join(", ", pin.TransitionAuthority))
+                        PeerTransition.InsufficientAuthorityClass
+                        pin.SurfaceHash
+                        (pin.PinnedAt.ToString "u")
+                        pin.Source))
+
     /// A pin older than the declared maximum age. Dormant unless
     /// `MaxPinAge` is declared — an undeclared deployment evaluates one
     /// `match` and yields nothing (GP 13).
@@ -580,6 +650,13 @@ module FederationPreflight =
             Description =
                 "Every pinned counterparty a deployment consumes from must declare a data-visibility authority level reaching the level the deployment requires; a label that declares none reads as the narrowest."
             Evaluate = evalVisibilityInsufficient
+        }
+        {
+            Code = "peer-transition-authority-insufficient"
+            Severity = DefectError
+            Description =
+                "Every pinned counterparty a deployment consumes from must admit each registry lifecycle transition the deployment requires of it; a label that declares none admits none."
+            Evaluate = evalTransitionAuthorityInsufficient
         }
         {
             Code = "peer-surface-stale"

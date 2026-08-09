@@ -161,6 +161,16 @@
          PeerSurface itself. Taking a pin FROM a published PeerSurface
          export is the later `FederationPin.fs`. Dormant with zero pinned
          surfaces (GP 13). -->
+    <!-- Phase 644 — the registry-lifecycle transition seam's wire half:
+         the invocation a peer sends, the attributed record it gets back,
+         the three refusal classes, and the fail-closed read of a
+         counterparty's declared grant. Compiles HERE — before
+         PeerCompose.fs, PeerSurface.fs, FederationPin.fs and
+         ModelExecutionPeerContract.fs — because all four carry or read the
+         declaration, and it depends on nothing in InterPlatform: only the
+         platform's own author-agnostic seam (`ModelTransition`), which is
+         where the judgment lives. Nothing composes it (GP 13). -->
+    <Compile Include="Server\PeerTransitionContract.fs" />
     <Compile Include="Server\FederationPreflight.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,

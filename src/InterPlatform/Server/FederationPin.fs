@@ -102,6 +102,11 @@ module FederationPin =
             // is what lets `PinnedPeerSurface.DataVisibility` be a typed
             // fact rather than a claim every rule re-interprets.
             DataVisibility = PeerSurface.dataVisibility export.Surface
+            // Phase 644 — normalised at PINNING time for the same reason,
+            // through the same fail-closed reader: a label that omits the
+            // member, carries `null`, or names a status this build does
+            // not know pins as the grant it can actually be held to.
+            TransitionAuthority = PeerSurface.transitionAuthority export.Surface
         }
 
     /// Pin a surface value directly — stamps it through

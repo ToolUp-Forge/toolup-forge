@@ -165,6 +165,27 @@ type PeerSurface = {
     /// the fail-closed default a property of the READER, where a
     /// counterparty cannot affect it.
     DataVisibility: string
+    /// Phase 644 — the registry lifecycle transitions this deployment
+    /// admits from a peer, as stable `ModelArtifactStatus` labels, sorted
+    /// ordinally. `[]` — the default — admits none.
+    ///
+    /// **A second declaration beside `DataVisibility`, not a rung on it.**
+    /// That one says what a peer may SEE; this says what it may DO, and a
+    /// deployment will routinely want them at different settings — a
+    /// consortium partner that may approve models and must never see a row
+    /// is an ordinary arrangement, and one ladder could not express it.
+    ///
+    /// **In the stamped surface on the §8 inclusion test**, for the reason
+    /// the level is: a counterparty acts on it. A modelling deployment
+    /// whose whole workflow ends in a cross-peer approval cannot use a data
+    /// host that admits none, and finding that out at the first approval
+    /// means finding out with a fitted model and no way to promote it.
+    ///
+    /// Labels rather than a typed set, for the reason the level is a
+    /// string: a published declaration is somebody else's document, and it
+    /// may omit the member or name a status a later version invented.
+    /// `PeerSurface.transitionAuthority` is the fail-closed read.
+    TransitionAuthority: string list
 }
 
 /// The pinnable export envelope: the surface plus a format version and a
@@ -276,6 +297,11 @@ module PeerSurface =
         // anyway, and saying so is what makes the empty label's own
         // answer to "what may I see" legible instead of inferred.
         DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default'
+        // Phase 644 — a deployment with no wire face admits no
+        // transition. The empty list is the grant of nothing, and it is
+        // what an undeclared deployment publishes too: silence is not a
+        // grant, so there is nothing to distinguish here.
+        TransitionAuthority = []
     }
 
     /// **The fail-closed read of a surface's declared authority level**,
@@ -288,6 +314,18 @@ module PeerSurface =
     /// grant, and a word this deployment cannot act on is not one either.
     let dataVisibility (surface: PeerSurface) : PeerDataVisibilityLevel =
         PeerDataVisibilityLevel.ofLabelOrDefault surface.DataVisibility
+
+    /// Phase 644 — **the fail-closed read of a surface's declared
+    /// transition grant**, and the only route any consumer should take
+    /// to it.
+    ///
+    /// A label that omits the member (every label published before this
+    /// phase), carries `null`, or names a status this build does not know
+    /// yields the empty grant or a grant without that entry. Duplicates
+    /// collapse and the result is ordinally sorted, so two readers of one
+    /// label agree on the bytes as well as on the set.
+    let transitionAuthority (surface: PeerSurface) : string list =
+        PeerTransition.readDeclaration surface.TransitionAuthority
 
     /// Typed consumed-contract declaration for
     /// `PeerServerApp.withConsumedContract`: ties the declaration to a
@@ -412,6 +450,13 @@ module PeerSurface =
                 // published label cannot disagree with what the seam
                 // enforces because both read this one value.
                 DataVisibility = PeerDataVisibilityLevel.label app.DataVisibility
+                // Phase 644 — the composed grant
+                // (`withPeerTransitionAuthority`), which defaults to
+                // nothing. Derived from the composition like every other
+                // member, so the labels a counterparty pins and the
+                // targets the seam admits cannot disagree — both read
+                // this one value.
+                TransitionAuthority = ModelTransitionAuthority.labels app.TransitionAuthority
             }
 
     /// Canonical JSON of a surface: the universal `FableConverters` set,

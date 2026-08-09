@@ -476,6 +476,9 @@ let tests =
                     // before the warning, so the manifest reads
                     // severity-ordered.
                     "peer-visibility-insufficient"
+                    // Phase 644 — the same axis-sibling, likewise before
+                    // the warning.
+                    "peer-transition-authority-insufficient"
                     "peer-surface-stale"
                 ]
                 "the exported manifest must carry exactly the shipped rule codes, in declaration order"
@@ -686,6 +689,78 @@ let tests =
                 Expect.wantSome descriptor "the rule must appear in the introspectable manifest, not only in the check"
 
             Expect.equal rule.Severity DefectError "a call that cannot succeed refuses rather than reports"
+
+            Expect.equal
+                rule.Class
+                StructuralRule
+                "a pure sweep over declared data already in memory, so SkipPreflight must not bypass it"
+        }
+
+        // ── Phase 644 — the transition-grant requirement ──────────────
+
+        test "a counterparty that does not admit a required transition refuses the composition" {
+            // The visibility rule's sibling on the OTHER authority axis.
+            // Without it, a modelling deployment whose workflow ends in a
+            // cross-peer approval discovers the refusal with a fitted
+            // model and no way to promote it.
+            let app =
+                conformantApp ()
+                |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+
+            let defects = defectsOf app
+
+            Expect.contains
+                (codesOf defects)
+                "peer-transition-authority-insufficient"
+                "a counterparty whose label admits no transition cannot serve a deployment that requires one"
+
+            let message =
+                messagesFor "peer-transition-authority-insufficient" defects
+                |> List.tryHead
+                |> Option.defaultValue ""
+
+            Expect.stringContains message "Approved" "the message names the transition that is required"
+
+            Expect.stringContains
+                message
+                "silence is not a grant"
+                "and says why a label predating the facet admits nothing"
+        }
+
+        test "a counterparty admitting the required transition passes, and one admitting a different one does not" {
+            // The control that separates a rule which reads the PIN from
+            // one that fires on the requirement alone — and, because a
+            // grant is a set rather than a level, the case that separates
+            // "holds a grant" from "holds this grant".
+            let grantingSeller = {
+                sellerSurface [ v1; v11 ] true with
+                    TransitionAuthority = [ "Approved"; "Retired" ]
+            }
+
+            let partialHub = {
+                hubSurface () with
+                    TransitionAuthority = [ "Retired" ]
+            }
+
+            let app =
+                consumerApp [ sellerPin grantingSeller; hubPin partialHub ] []
+                |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+
+            let messages = messagesFor "peer-transition-authority-insufficient" (defectsOf app)
+
+            Expect.hasLength messages 1 "exactly the counterparty missing the required transition is reported"
+            Expect.stringContains (List.head messages) hubId "and it is the hub, which admits a different one"
+        }
+
+        test "the transition rule is declared in both manifests, as a structural error" {
+            let descriptor =
+                FederationPreflight.classifiedRuleManifest
+                |> List.tryFind (fun rule -> rule.Code = "peer-transition-authority-insufficient")
+
+            let rule =
+                Expect.wantSome descriptor "the rule must appear in the introspectable manifest, not only in the check"
+
+            Expect.equal rule.Severity DefectError "a workflow that cannot complete refuses rather than reports"
 
             Expect.equal
                 rule.Class

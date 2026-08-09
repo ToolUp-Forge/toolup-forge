@@ -301,6 +301,23 @@ type ModelExecutionPeerRefusal =
     /// told merely that a view request was refused would have to guess
     /// between the window, the series set and its rate budget.
     | ViewRefused of refusal: PeerViewRefusal
+    /// Phase 644 — the author-agnostic transition seam judged, and
+    /// refused.
+    ///
+    /// Carried with the seam's own vocabulary nested, the posture
+    /// `ViewRefused` takes, and for the same reason: the three classes
+    /// name three different things the caller would have to change — the
+    /// artifact it named, the edge it asked for, or the grant it holds —
+    /// and a caller told merely that a transition was refused would have
+    /// to guess which.
+    ///
+    /// The nested type belongs to `ToolUp.Platform`, not to this profile,
+    /// because the judgment does: a local admin screen and a promotion
+    /// policy are refused by the identical function with the identical
+    /// vocabulary. What this profile owns is the wire CLASS of each case
+    /// (`PeerTransition.className`) — a wire word is a federation
+    /// artefact, and the platform seam has no business minting one.
+    | TransitionRefused of refusal: ModelTransitionRefusal
 
 [<RequireQualifiedAccess>]
 module ModelExecutionPeerRefusal =
@@ -327,6 +344,11 @@ module ModelExecutionPeerRefusal =
         // to this profile, so its own classes are the ones a corpus
         // vector and a refusal log should carry.
         | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.className refusal
+        // Phase 644 — the INNER class again. The seam's refusal type is a
+        // platform type, so the class strings live in
+        // `PeerTransitionContract.fs` beside the wire shapes rather than
+        // on the platform seam, which has no wire.
+        | ModelExecutionPeerRefusal.TransitionRefused refusal -> PeerTransition.className refusal
 
     /// Human-readable one-line description (logs + operator display; the
     /// case, not this string, is the contract).
@@ -352,6 +374,7 @@ module ModelExecutionPeerRefusal =
         | ModelExecutionPeerRefusal.EgressWithheld operation ->
             $"the answer to '{operation}' references data this deployment's disclosure plane withheld at the federated-egress door"
         | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.describe refusal
+        | ModelExecutionPeerRefusal.TransitionRefused refusal -> ModelTransitionRefusal.describe refusal
 
     /// Phase 640 — the seam's refusal read in the **submitter** face's own
     /// closed vocabulary, given the operation names this deployment serves.
@@ -428,6 +451,22 @@ module ModelExecutionPeerRefusal =
         // of the one sentence that tells it what to change.
         | ModelExecutionPeerRefusal.ViewRefused refusal ->
             ModelExecutionRefusal.InvalidSubmission(PeerViewRefusal.describe refusal)
+        // Phase 644 — the transition family maps case by case rather than
+        // collapsing, because the three do not share a remedy. An unknown
+        // artifact is `NotFound`, which is the fact and not a judgment. An
+        // invalid edge is `InvalidSubmission`: nothing about the caller or
+        // its grant is wrong, the request is, and the description names
+        // the edge so it can send a different one. An insufficient grant
+        // is `Forbidden` — the one case that says *you* may not, and the
+        // one whose remedy is a conversation between the two
+        // organisations, which is exactly the invitation `Forbidden`
+        // extends.
+        | ModelExecutionPeerRefusal.TransitionRefused(ModelTransitionRefusal.UnknownArtifact artifactKey) ->
+            ModelExecutionRefusal.NotFound artifactKey
+        | ModelExecutionPeerRefusal.TransitionRefused(ModelTransitionRefusal.InvalidTransition _ as refusal) ->
+            ModelExecutionRefusal.InvalidSubmission(ModelTransitionRefusal.describe refusal)
+        | ModelExecutionPeerRefusal.TransitionRefused(ModelTransitionRefusal.InsufficientAuthority _ as refusal) ->
+            ModelExecutionRefusal.Forbidden(ModelTransitionRefusal.describe refusal)
 
 /// The versioned envelope every model-execution request rides in.
 ///
@@ -545,6 +584,16 @@ module ModelExecutionProfile =
     let viewOperations: Set<string> =
         Set.ofList [ DescribeViewOperation; ListViewsOperation; RenderViewOperation ]
 
+    /// Phase 644 — the registry lifecycle-transition invocation.
+    ///
+    /// One operation carrying a requested TARGET, not one operation per
+    /// target. The set of statuses is the lifecycle's business and moves
+    /// with it; an operation vocabulary that mirrored it would have to be
+    /// re-declared on both sides every time the graph gained a state, and
+    /// the grant is expressed over targets anyway.
+    [<Literal>]
+    let InvokeTransitionOperation = "InvokeTransition"
+
     /// Phase 642 — operations that require `Full`: raw data, for
     /// co-located or otherwise fully-trusted deployments.
     ///
@@ -569,6 +618,16 @@ module ModelExecutionProfile =
     /// aggregate, so it requires `AggregatesOnly` — which is why a
     /// deployment upgrading into Phase 642 enforces exactly what it
     /// already enforced (GP 11).
+    ///
+    /// **Phase 644's transition invocation requires `AggregatesOnly`
+    /// too, and that is a claim rather than an oversight.** It carries no
+    /// data in either direction — a composite-key hash and a status label
+    /// out, an attributed record back — so there is nothing for a
+    /// visibility level to govern. What governs it is the DECLARED
+    /// TRANSITION GRANT on the peer's binding, a separate axis checked at
+    /// the seam. Folding the two together would make the ordinary
+    /// arrangement — a partner that may approve models and must never see
+    /// a row — inexpressible.
     ///
     /// **An unrecognised name requires `AggregatesOnly`, not more**, and
     /// that is deliberate rather than lax: the authority check must never
@@ -679,6 +738,25 @@ module ModelExecutionAdmission =
             Operations = Set.union admission.Operations ModelExecutionProfile.viewOperations
     }
 
+    /// Phase 644 — admit the registry lifecycle-transition invocation.
+    ///
+    /// **Declaring the operation is a separate act from granting a
+    /// transition, and both are required**, exactly as `withViews` is
+    /// separate from granting `ViewOnly`. This says the deployment
+    /// implements cross-peer transitions at all; the grant on each peer's
+    /// binding says which of them that peer may invoke. A deployment that
+    /// implements them and grants none refuses with the authority class —
+    /// "we do that, and not for you" — while one that implements none
+    /// refuses as undeclared. Two remedies, kept distinguishable by
+    /// keeping the two declarations apart.
+    ///
+    /// Not called ⇒ the operation stays off the admitted set and a pre-644
+    /// composition admits byte-for-byte what it always did (GP 11).
+    let withTransitions (admission: ModelExecutionAdmission) = {
+        admission with
+            Operations = Set.add ModelExecutionProfile.InvokeTransitionOperation admission.Operations
+    }
+
     /// A data host that answers no governed diagnostics: the submitter
     /// operations and nothing else. This is the default a deployment
     /// gets by not declaring, and it is the honest one — a diagnostic
@@ -720,6 +798,23 @@ type ModelExecutionPeerBinding = {
     /// nothing is allocated (GP 13). A composed route is what makes the
     /// federated egress door a real door rather than a claim.
     Egress: PeerEgressRoute option
+    /// Phase 644 — which registry lifecycle transitions THIS peer may
+    /// invoke. `ModelTransitionAuthority.none` for a peer nobody granted
+    /// anything, which admits nothing (GP 11).
+    ///
+    /// On the binding for the reasons the scope and the visibility are:
+    /// it is the receiver's own declaration about one counterparty,
+    /// nothing on the wire contributes to it, and the execution side of a
+    /// queued transition re-resolves it from the same place the request
+    /// side did (GP 12 rules 1 and 4).
+    ///
+    /// **Per-peer, not deployment-wide, and the difference is the whole
+    /// point.** `PeerServerApp.withPeerTransitionAuthority` publishes what
+    /// the deployment is willing to admit in general — the offer a
+    /// counterparty pins — while this is what one counterparty was
+    /// actually granted. A deployment publishing `Approved` has said it
+    /// does cross-peer approval; it has not said every peer may.
+    TransitionAuthority: ModelTransitionAuthority
 }
 
 /// How long the fit job waits for its outcome to appear in the registry.
@@ -779,6 +874,18 @@ type ModelExecutionPeerDeps = {
     /// the two apart is what lets one offer be published to many
     /// counterparties without restating it per binding.
     Views: PeerViewDeps option
+    /// Phase 644 — the author-agnostic transition seam's substrate.
+    /// `None` on a deployment that admits no cross-peer transition, which
+    /// is every pre-644 deployment: the operation is then off the admitted
+    /// set too (see `ModelExecutionAdmission.withTransitions`), so nothing
+    /// reaches the dispatch arm and nothing is constructed (GP 13).
+    ///
+    /// Beside `Admission` rather than on the binding for the reason
+    /// `Views` is: the registry a deployment transitions IN is a property
+    /// of the deployment, while which transitions a given peer may invoke
+    /// is the grant on its binding. Holding the two apart is what lets one
+    /// registry serve many counterparties at different grants.
+    Transitions: ModelTransitionDeps option
 }
 
 /// The substrate the governed-diagnostics contract runs over.
@@ -1034,6 +1141,15 @@ module ModelExecutionPeerContract =
                 Series = view.Series |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
         }
 
+    /// Phase 644 — an `InvokeTransition` request envelope.
+    ///
+    /// No sort to own here: the invocation carries no list. It still goes
+    /// through a named constructor rather than `request` directly, so a
+    /// caller cannot spell the operation name differently from the one
+    /// the profile dispatches on.
+    let transitionRequest (invocation: PeerTransitionInvocation) : ModelExecutionPeerRequest =
+        request ModelExecutionProfile.InvokeTransitionOperation invocation
+
     /// A governed-diagnostic request envelope for `diagnostic`, with the
     /// terms in ordinal order for the same reason.
     let diagnosticRequest
@@ -1275,6 +1391,55 @@ module ModelExecutionPeerContract =
                                     ModelExecutionPeerRefusal.EgressWithheld request.Operation
                                 )
 
+            // ── Phase 644 — the lifecycle transition ─────────────────
+            //
+            // Reached only when this deployment DECLARED transitions
+            // (else the name is off the admitted set). The peer's own
+            // GRANT is not checked here and is not checked by `admit`
+            // either: it is checked inside `ModelTransition.invoke`,
+            // which is the author-agnostic seam, and putting it there
+            // rather than in the seam's prologue is deliberate. A local
+            // admin screen and a promotion policy must be judged by the
+            // same function against the same graph; a grant check
+            // hoisted into this file would be one that only peers are
+            // subject to, and the phase's whole claim is that there is
+            // one state machine with three authors.
+            | ModelExecutionProfile.InvokeTransitionOperation ->
+                match deps.Transitions with
+                | None ->
+                    return
+                        ModelExecutionPeerAnswer.Refused(
+                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                        )
+                | Some transitions ->
+                    let invocation = JsonRpc.deserialize<PeerTransitionInvocation> request.Body
+
+                    match PeerTransition.target invocation with
+                    // A target label naming no status this profile
+                    // defines is refused as an UNREADABLE REQUEST, not as
+                    // an illegal transition. The lifecycle graph has
+                    // nothing to say about a word that names no state,
+                    // and reporting one as a forbidden edge would send a
+                    // caller looking for a different edge when what it
+                    // needs is a different word. This is also what keeps
+                    // the transition vocabulary at exactly three classes,
+                    // each of them a judgment.
+                    | None ->
+                        return
+                            ModelExecutionPeerAnswer.Refused(
+                                ModelExecutionPeerRefusal.RequestUnreadable
+                                    $"'{invocation.Target}' names no model-artifact lifecycle status"
+                            )
+                    | Some target ->
+                        let seamRequest = PeerTransition.toRequest binding.PeerId target invocation
+
+                        match!
+                            ModelTransition.invoke transitions binding.ScopeId binding.TransitionAuthority seamRequest
+                        with
+                        | Error refusal ->
+                            return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.TransitionRefused refusal)
+                        | Ok recorded -> return answered (PeerTransition.toWireRecord recorded)
+
             // Unreachable: `admit` has already refused anything outside
             // the admitted operation set. Kept total rather than assumed
             // — a surface whose default branch is an exception is one
@@ -1347,6 +1512,29 @@ module ModelExecutionPeerContract =
             // second, less informative audit row for one crossing.
             | ModelExecutionPeerAnswer.Answered _ when request.Operation = ModelExecutionProfile.RenderViewOperation ->
                 return answer
+            // Phase 644 — a transition answer does not take the
+            // disclosure door, and this is the one carve-out on this
+            // function that is about the ANSWER rather than about
+            // avoiding a second crossing.
+            //
+            // The door asks "may this data leave". The answer to a
+            // transition is not data leaving; it is the RECEIPT of a
+            // write this deployment has already committed. Withholding it
+            // would leave the caller unable to learn the outcome of a
+            // change that happened — the worst of both, since the state
+            // moved and the mover was told nothing — and it would arrive
+            // as `EgressWithheld`, a class that says the answer
+            // references data the disclosure plane held back, which would
+            // be false. Every member of the record is metadata about the
+            // caller's own request.
+            //
+            // The transition is not therefore unaudited: it is recorded
+            // on the attributed trail by the seam itself, admitted or
+            // refused, which is a stronger record than an egress row.
+            | ModelExecutionPeerAnswer.Answered _ when
+                request.Operation = ModelExecutionProfile.InvokeTransitionOperation
+                ->
+                return answer
             | ModelExecutionPeerAnswer.Answered _ ->
                 let! decision =
                     PeerVisibilityEgress.route binding.Egress binding.ScopeId binding.PeerId request.Operation
@@ -1357,12 +1545,62 @@ module ModelExecutionPeerContract =
                     return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.EgressWithheld request.Operation)
         }
 
-    /// The long-running leg's job handler. It re-resolves the binding
-    /// from the owner peer id carried on the payload, because the
-    /// execution side has no request and no principal — the same reason
+    /// The queued leg's job handler. It re-resolves the binding from the
+    /// owner peer id carried on the payload, because the execution side
+    /// has no request and no principal — the same reason
     /// `PeerJobHandler` takes its owner from the payload rather than
     /// from an ambient context (GP 12 rules 1 and 4).
-    type private FitJobHandler(deps: ModelExecutionPeerDeps, resultStore: IPeerJobResultStore) =
+    ///
+    /// **Phase 644 — one handler, parameterised by method, and it
+    /// records the terminal outcome.** Two things changed here and both
+    /// are the same argument. The handler is no longer fit-specific
+    /// because the lifecycle transition rides the identical shape
+    /// (schedule, park, poll) and a second copy would be a second place
+    /// for the admission prologue to drift. And it now emits the Phase
+    /// 310 `PeerJobCompleted` row, which this file's hand-built handler
+    /// never did: Phase 310 gave every REFLECTED long-running method a
+    /// terminal row, and a contract that builds its own dispatch closure
+    /// — which is exactly what this one does, for the reasons in the
+    /// header — silently opted out of it. So every long-running call on
+    /// this profile was logged at DISPATCH and never at completion, and
+    /// the transparency contract reported the schedule as the outcome.
+    ///
+    /// The `Outcome` string is the profile's own refusal CLASS rather
+    /// than a generic error name, because a queued transition that was
+    /// refused for want of authority and one refused for an illegal edge
+    /// are the two rows an operator is actually trying to tell apart.
+    type private PeerOperationJobHandler(deps: ModelExecutionPeerDeps, fusion: PeerJobFusion, methodName: string) =
+
+        /// Record the terminal outcome, best-effort. A flaky audit store
+        /// must never change the outcome of a job whose result is already
+        /// durably parked — so this runs AFTER `SaveResult` and swallows
+        /// its own failures, exactly as `PeerJobHandler` does.
+        let recordTerminalOutcome (envelope: PeerJobPayload) (jobId: PeerJobId) (answer: ModelExecutionPeerAnswer) = async {
+            match fusion.AuditLog with
+            | None -> ()
+            | Some log ->
+                try
+                    let payload: PeerJobCompletedPayload = {
+                        ContractId = ModelExecutionProfile.ContractId
+                        MethodName = methodName
+                        CallerPeerId = envelope.OwnerPeerId
+                        RootRequestId = envelope.RootRequestId
+                        JobId = jobId
+                        Succeeded =
+                            match answer with
+                            | ModelExecutionPeerAnswer.Answered _ -> true
+                            | ModelExecutionPeerAnswer.Refused _ -> false
+                        Outcome =
+                            match answer with
+                            | ModelExecutionPeerAnswer.Answered _ -> "ok"
+                            | ModelExecutionPeerAnswer.Refused refusal -> ModelExecutionPeerRefusal.className refusal
+                        OccurredAt = DateTimeOffset.UtcNow
+                    }
+
+                    do! log.Record(PeerJob.Scope, PeerJobCompleted payload)
+                with _ ->
+                    ()
+        }
 
         interface IJobHandler with
             member _.Execute(ctx: JobContext) = async {
@@ -1375,6 +1613,19 @@ module ModelExecutionPeerContract =
                         RootRequestId = ""
                     }
 
+                // A job scheduled before the correlation id rode the
+                // payload parses cleanly and leaves it null — a missing
+                // field is absence, not a parse failure — so normalise
+                // rather than trusting the shape.
+                let envelope = {
+                    envelope with
+                        RootRequestId =
+                            if isNull (box envelope.RootRequestId) then
+                                ""
+                            else
+                                envelope.RootRequestId
+                }
+
                 let! answer =
                     governed
                         deps.ResolveBinding
@@ -1384,23 +1635,25 @@ module ModelExecutionPeerContract =
                         (runGoverned deps)
 
                 do!
-                    resultStore.SaveResult(
+                    fusion.ResultStore.SaveResult(
                         ctx.ScopeId,
                         ctx.JobId,
                         envelope.OwnerPeerId,
                         PeerJobStatus.Completed(JsonRpc.serialize answer)
                     )
 
+                do! recordTerminalOutcome envelope ctx.JobId answer
                 return Success
             }
 
-    /// Schedule the long-running fit and answer with its job id, which
-    /// the caller polls at `GET /peer/v1/{contractId}/jobs/{jobId}`
+    /// Schedule a queued operation and answer with its job id, which the
+    /// caller polls at `GET /peer/v1/{contractId}/jobs/{jobId}`
     /// (§5.5.6). The validated caller's peer id and the receiver-derived
     /// correlation id ride the payload, so the parked result is owned by
     /// the peer that scheduled it and the terminal row joins the
     /// schedule-time one.
-    let private scheduleFit
+    let private scheduleOperation
+        (methodName: string)
         (fusion: PeerJobFusion)
         (context: PeerCallContext)
         (argsJson: string)
@@ -1414,7 +1667,7 @@ module ModelExecutionPeerContract =
 
             let registration: JobRegistration = {
                 ScopeId = PeerJob.Scope
-                Handler = PeerJob.handlerName ModelExecutionProfile.ContractId "SubmitFit"
+                Handler = PeerJob.handlerName ModelExecutionProfile.ContractId methodName
                 Payload = JsonRpc.serialize payload
                 Trigger = Manual
                 Idempotency = None
@@ -1426,25 +1679,42 @@ module ModelExecutionPeerContract =
             }
 
             match! fusion.Scheduler.Schedule registration with
-            | Error _ -> return Error(PeerHandler "failed to schedule the federated fit")
+            | Error _ -> return Error(PeerHandler $"failed to schedule the federated '{methodName}' call")
             | Ok jobId ->
                 match! fusion.Scheduler.TriggerOnce(PeerJob.Scope, jobId, PeerJob.SourceModule) with
-                | Error message -> return Error(PeerHandler $"failed to trigger the federated fit: {message}")
+                | Error message ->
+                    return Error(PeerHandler $"failed to trigger the federated '{methodName}' call: {message}")
                 | Ok() -> return Ok(JsonRpc.serialize jobId)
         }
+
+    /// The operations this profile serves on the QUEUED leg.
+    ///
+    /// `SubmitFit` because a fit takes as long as it takes. Phase 644's
+    /// `InvokeTransition` because a lifecycle judgment across a trust
+    /// boundary is exactly the kind of act a data host may not want to
+    /// answer synchronously: an approval that a promotion policy
+    /// (Phase 645), a second signature or a human reviewer has to weigh
+    /// is not a request-scoped computation, and a seam that answered it
+    /// immediately today would have to grow a second shape to defer it
+    /// tomorrow. One shape, from the first day — and the poll leg the
+    /// specification already describes (§5.5.6) is where the caller
+    /// collects it.
+    let private queuedOperations: Set<string> =
+        Set.ofList [ "SubmitFit"; ModelExecutionProfile.InvokeTransitionOperation ]
 
     /// The submitter contract's registration.
     ///
     /// `fusion` is `None` on a deployment with no job substrate. The
-    /// immediate operations are unaffected; `SubmitFit` refuses with a
-    /// typed `SubstrateDisabled` carried through the profile's own
+    /// immediate operations are unaffected; a queued operation refuses
+    /// with a typed `SubstrateDisabled` carried through the profile's own
     /// passthrough class, so a modeller learns that this data host
-    /// cannot run fits rather than that something broke.
+    /// cannot run fits (or record transitions) rather than that something
+    /// broke.
     let registration (deps: ModelExecutionPeerDeps) (fusion: PeerJobFusion option) : PeerContractRegistration =
         let dispatch: PeerDispatch =
             fun context methodName argsJson -> async {
-                match methodName, fusion with
-                | "SubmitFit", Some f ->
+                match Set.contains methodName queuedOperations, fusion with
+                | true, Some f ->
                     // Admission runs BEFORE the job is scheduled: an
                     // unbound peer, a row-read probe or a scope-widening
                     // assertion must not become a queued job that a
@@ -1456,9 +1726,9 @@ module ModelExecutionPeerContract =
 
                     match precheck with
                     | ModelExecutionPeerAnswer.Refused _ -> return Ok(JsonRpc.serialize precheck)
-                    | ModelExecutionPeerAnswer.Answered _ -> return! scheduleFit f context argsJson
+                    | ModelExecutionPeerAnswer.Answered _ -> return! scheduleOperation methodName f context argsJson
 
-                | "SubmitFit", None ->
+                | true, None ->
                     return
                         Ok(
                             JsonRpc.serialize (
@@ -1466,7 +1736,7 @@ module ModelExecutionPeerContract =
                             )
                         )
 
-                | _ ->
+                | false, _ ->
                     let! answer =
                         governed deps.ResolveBinding deps.Admission context.Peer.PeerId argsJson (fun binding request ->
                             if request.Operation <> methodName then
@@ -1488,17 +1758,23 @@ module ModelExecutionPeerContract =
             Dispatch = dispatch
         }
 
-    /// The submitter contract plus the job handler its long-running leg
-    /// needs — the shape `PeerServerApp.withContract` consumes.
+    /// The submitter contract plus the job handlers its queued leg needs
+    /// — the shape `PeerServerApp.withContract` consumes.
+    ///
+    /// One handler per queued operation, registered under the name the
+    /// dispatch side schedules against, so the two halves cannot come to
+    /// disagree about which handler runs a call.
     let host (deps: ModelExecutionPeerDeps) (fusion: PeerJobFusion option) : PeerContractHost = {
         Registration = registration deps fusion
         JobHandlers =
             match fusion with
             | None -> []
-            | Some f -> [
-                PeerJob.handlerName ModelExecutionProfile.ContractId "SubmitFit",
-                FitJobHandler(deps, f.ResultStore) :> IJobHandler
-              ]
+            | Some f ->
+                queuedOperations
+                |> Set.toList
+                |> List.map (fun methodName ->
+                    PeerJob.handlerName ModelExecutionProfile.ContractId methodName,
+                    PeerOperationJobHandler(deps, f, methodName) :> IJobHandler)
     }
 
     // ── The governed-diagnostics contract ────────────────────────────
