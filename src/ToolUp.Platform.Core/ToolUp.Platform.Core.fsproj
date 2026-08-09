@@ -149,6 +149,14 @@
         <Compile Include="Shared\TimeManagement.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
         <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
+        <!-- Phase 648 — the provenance walk's read-only wire contract: the
+             Fable-safe mirrors of the server-tier node / edge / ref records,
+             the chain-page + withheld-marker shapes, the declared caps, and
+             IProvenanceQueryApi over them. After AuthAttributes.fs (the API
+             record's auth markers) and beside VectorKnowledgeTypes.fs, whose
+             IFactDisclosureGate is the door the handler routes fact nodes
+             through. Depends on neither — Fable-safe (values + BCL only). -->
+        <Compile Include="Shared\Types\ProvenanceWireTypes.fs" />
         <Compile Include="Shared\Types\VectorisationTypes.fs" />
         <Compile Include="Shared\Interfaces\IAuthProvider.fs" />
         <Compile Include="Shared\Types\AuthConfig.fs" />

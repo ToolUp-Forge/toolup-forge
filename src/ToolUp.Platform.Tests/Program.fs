@@ -116,6 +116,11 @@ let allTests =
         // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
         // message chain walks both directions; disclosure carried; scope isolation.
         ProvenanceGraphTests.tests
+        // Phase 648 — the walk as a typed read-only wire contract: mirror
+        // conformance against the server records, the read-only shape pin,
+        // chain round-trip, cap refusal (never truncation), and the
+        // withheld-marker vs absent distinction at the export door.
+        ProvenanceGraphWireTests.tests
         // Grounding-plane wiring follow-ups: FactsCompose DI registration,
         // FactStoreEvidenceSource adapter, ConfigDriftDetector grounding parity.
         GroundingWiringTests.tests

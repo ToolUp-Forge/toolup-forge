@@ -5762,6 +5762,9 @@ ToolUp.Platform.PromotionVerdict+Tags.NoChampion : System.Int32 (literal)
 ToolUp.Platform.PromotionVerdictModule (class)
 ToolUp.Platform.PromotionVerdictModule.describe(ToolUp.Platform.PromotionVerdict) : System.String
 ToolUp.Platform.PromotionVerdictModule.permitsPromotion(ToolUp.Platform.PromotionVerdict) : System.Boolean
+ToolUp.Platform.ProvenanceApiHandler (class)
+ToolUp.Platform.ProvenanceApiHandler.create(ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, System.String) : ToolUp.Platform.IProvenanceQueryApi
+ToolUp.Platform.ProvenanceApiHandler.createWithDisclosureGate(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, System.String) : ToolUp.Platform.IProvenanceQueryApi
 ToolUp.Platform.ProvenanceAttachment (class)
 ToolUp.Platform.ProvenanceAttachment..ctor(System.String, System.String, System.Byte[])
 ToolUp.Platform.ProvenanceAttachment.Bytes : System.Byte[] { get }

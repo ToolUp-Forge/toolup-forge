@@ -262,6 +262,10 @@
         <Compile Include="InProcess\CoherenceCheckTests.fs" />
         <!-- Phase 524 — provenance chain traversal. -->
         <Compile Include="InProcess\ProvenanceGraphTests.fs" />
+        <!-- Phase 648 — the walk's read-only wire contract: mirror
+             conformance against the server records, the read-only shape pin,
+             chain round-trip, cap refusal, withheld-vs-absent. -->
+        <Compile Include="InProcess\ProvenanceGraphWireTests.fs" />
         <!-- Grounding-plane wiring follow-ups: fact-store compose root, evidence adapter, drift parity. -->
         <Compile Include="InProcess\GroundingWiringTests.fs" />
         <Compile Include="InProcess\JobStoreTests.fs" />

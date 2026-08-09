@@ -21,6 +21,9 @@ costs nothing until a caller asks (GP 13).
 | `FactNode` | fact id | `IFactStore` (via the seam below) |
 | `NarrativeDocument` | document id | KB |
 | `ConversationMessage` | message id | conversation store |
+| `AnswerPlanNode` | answer-plan id | the recorded question-to-triples resolution a grounded answer was produced from |
+| `ModelArtifactNode` | composite-key hash | `IModelRegistry` (via the artifact seam) |
+| `ProvenanceAttachmentNode` | attachment content hash | an opaque attachment on a model artifact — **cited, never interpreted** |
 
 Edges are directed **child → source** (the derived node is `From`), so an
 upstream walk follows `From → To`:
@@ -31,6 +34,8 @@ upstream walk follows `From → To`:
 | `EvidenceFor` | a fact is evidenced by the result it was computed from |
 | `CitesFact` | a message/narrative cites a fact |
 | `Supersedes` | a fact supersedes its lineage predecessor |
+| `PlannedBy` | a grounded answer was produced from its recorded answer plan |
+| `HasAttachment` | a model artifact carries an opaque provenance attachment as evidence |
 
 Fact nodes carry the fact's **disclosure class** (`Surfaceable` /
 `Internal` / `Restricted(policy)`), so a future egress-side renderer can
@@ -79,6 +84,116 @@ Walk the other direction — "what was built on this data?":
 let! downstream = graph.GetChain(scopeId, DataObjectRef "obj-1", Downstream, depth = 5)
 // obj-1 ◀──DerivedFrom── res-1 ◀──EvidenceFor── fact-2
 ```
+
+## Out-of-process consumers — the read-only wire contract
+
+`IProvenanceGraph` is a **server-tier** view. A consumer running in
+another process — a document-emission tier binding governed results, an
+audit tool, a publication surface citing artifacts — cannot reach it, and
+before the contract below every such deployment hand-rolled an endpoint.
+Each hand-rolled endpoint is a second place the disclosure rules get
+decided, which is precisely what the one-gate design exists to prevent.
+
+**`IProvenanceQueryApi`** (`ToolUp.Platform.Core`) is the shipped surface.
+Four methods, all queries:
+
+| Method | Answers |
+|---|---|
+| `GetCaps` | the depth + node bounds this deployment declares |
+| `GetNode` | one node by ref — `Found`, `Withheld`, or `Absent` |
+| `GetEdges` | the edges incident on a ref, split `Outgoing` / `Incoming` |
+| `GetChain` | a bounded walk from a starting ref |
+
+Its records are **Fable-safe mirrors** of the server records above —
+`WireProvenanceNode` / `WireProvenanceEdge` / `WireProvenanceRef` /
+`WireProvenanceDirection`, case-for-case and field-for-field. The server
+types stay the source; the mirror is a pinned snapshot, and a conformance
+test fails the build the moment a case is added on one side only. The
+mirrored unions carry `[<RequireQualifiedAccess>]` because their case
+names are deliberately identical to the server union's and both live in
+the `ToolUp.Platform` namespace.
+
+### Wiring it
+
+Consumer-wired, like `IReportApi` — nothing composes it for you, so a
+deployment that does not want an out-of-process provenance surface builds
+none of it (GP 13). Mount the handler in your composition root, per
+resolved scope:
+
+```fsharp skip=fragment
+// No fact tier: every node the walk reaches crosses as it stands.
+let api = ProvenanceApiHandler.create graph WireProvenanceCaps.defaults scopeId
+
+// With the fact tier: fact nodes are checked at the FactExport door,
+// and `principal` is the caller the gate audits denies against.
+let api =
+    ProvenanceApiHandler.createWithDisclosureGate gate principal graph WireProvenanceCaps.defaults scopeId
+```
+
+Every method carries `[<RequiresClaim "scope">]` — the gate for a
+scope-owned surface that is never anonymous, the same one `IConfigApi`
+and `IReportApi` apply. That a caller can only see *its own* scope is
+structural upstream (GP 4): the handler is built per resolved scope, so a
+ref from another tenant is unresolvable and reads as `Absent`.
+
+### Read-only by construction
+
+There is no write member, and no member answers with `unit` — a `unit`
+answer is the shape a mutation takes. That is asserted by a reflection
+test over the contract's fields rather than left to review, so a
+provenance write path cannot be added by accident.
+
+### Bounded, and refused rather than truncated
+
+Depth is checked before the walk and node count after it, both against
+the declared `WireProvenanceCaps`. A request that exceeds either is
+refused with a typed `ProvenanceQueryError` naming both the request and
+the cap:
+
+```fsharp skip=fragment
+match! api.GetChain { Root = WireProvenanceRef.FactRef factId
+                      Direction = WireProvenanceDirection.Upstream
+                      Depth = 5 } with
+| Ok page -> render page          // complete by construction
+| Error e -> report (ProvenanceQueryError.describe e)
+```
+
+There is no cursor and no `HasMore`. The alternative to refusing an
+over-cap walk is handing back a partial chain — and a caller cannot tell
+a shortened chain from a complete one, so a partial provenance answer
+does not degrade its conclusion, it falsifies it.
+
+### A withheld node is not an absent one
+
+Fact nodes route through the one shipped `IFactDisclosureGate` at the
+**`FactExport`** surface — the same door a rendered export takes, never a
+second predicate. The grounding-certificate path already materialises a
+chain and filters it at that surface; this is the same act answered live
+rather than signed.
+
+A refused node crosses as a `WireWithheldNode` carrying its **id, its
+kind and the policy ref** — never its label or its value — and its edges
+stay in the chain. Chain *shape* is not a disclosure; the node's content
+is. So a consumer can say "this number's provenance includes something I
+may not read, refused under policy X" instead of reporting a hole.
+
+That is the export door's posture rather than the federation seam's,
+which suppresses a denied reference outright. The difference is the trust
+boundary: a consumer of this contract sits inside the deployment's, so
+naming the refusal shows an operator the control working, where telling a
+counterparty that an invisible fact *exists* would itself be the
+disclosure.
+
+`Absent` is reserved for the genuinely different answer — an unknown id,
+an id belonging to another scope, or a ref with nothing recorded about
+it. Collapsing the two would turn a working control into apparent missing
+data.
+
+Every deny is audited by the gate itself (GP 6), in the trail the
+retrieval, tool-result, publication, export and webhook doors already
+write to. This surface adds a door; it adds no bookkeeper. A deployment
+with no fact tier composes no gate, so its answers carry no withheld
+markers — nothing classified them (GP 11 / GP 13).
 
 ## Guarantees
 

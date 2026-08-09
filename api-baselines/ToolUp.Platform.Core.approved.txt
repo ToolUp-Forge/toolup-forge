@@ -4659,6 +4659,12 @@ ToolUp.Platform.IPresenceChannel.Heartbeat(System.String, System.String) : Micro
 ToolUp.Platform.IPresenceChannel.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceChannel.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceChannel.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]
+ToolUp.Platform.IProvenanceQueryApi (class)
+ToolUp.Platform.IProvenanceQueryApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceCaps]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceNodeAnswer]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceEdgeSet]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceChainRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceChainPage, ToolUp.Platform.ProvenanceQueryError]]])
+ToolUp.Platform.IProvenanceQueryApi.GetCaps : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceCaps]] { get }
+ToolUp.Platform.IProvenanceQueryApi.GetChain : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceChainRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceChainPage, ToolUp.Platform.ProvenanceQueryError]]] { get }
+ToolUp.Platform.IProvenanceQueryApi.GetEdges : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceEdgeSet]] { get }
+ToolUp.Platform.IProvenanceQueryApi.GetNode : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceNodeAnswer]] { get }
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
 ToolUp.Platform.IServiceStatusBoardApi (class)
@@ -7240,6 +7246,27 @@ ToolUp.Platform.ProgressCoalescePolicyModule.defaults : ToolUp.Platform.Progress
 ToolUp.Platform.ProgressCoalescePolicyModule.unlimited : ToolUp.Platform.ProgressCoalescePolicy { get }
 ToolUp.Platform.ProgressCoalescer (class)
 ToolUp.Platform.ProgressCoalescer.shouldPublish(ToolUp.Platform.ProgressCoalescePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.ProgressCheckpoint) : System.Boolean
+ToolUp.Platform.ProvenanceQueryApi (class)
+ToolUp.Platform.ProvenanceQueryApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.ProvenanceQueryError (class)
+ToolUp.Platform.ProvenanceQueryError+ProvenanceChainExceedsNodeCap (class)
+ToolUp.Platform.ProvenanceQueryError+ProvenanceChainExceedsNodeCap.cap : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryError+ProvenanceChainExceedsNodeCap.nodes : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryError+ProvenanceDepthExceedsCap (class)
+ToolUp.Platform.ProvenanceQueryError+ProvenanceDepthExceedsCap.cap : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryError+ProvenanceDepthExceedsCap.requested : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryError+ProvenanceDepthInvalid (class)
+ToolUp.Platform.ProvenanceQueryError+ProvenanceDepthInvalid.requested : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryError+Tags (class)
+ToolUp.Platform.ProvenanceQueryError+Tags.ProvenanceChainExceedsNodeCap : System.Int32 (literal)
+ToolUp.Platform.ProvenanceQueryError+Tags.ProvenanceDepthExceedsCap : System.Int32 (literal)
+ToolUp.Platform.ProvenanceQueryError+Tags.ProvenanceDepthInvalid : System.Int32 (literal)
+ToolUp.Platform.ProvenanceQueryError.IsProvenanceChainExceedsNodeCap : System.Boolean { get }
+ToolUp.Platform.ProvenanceQueryError.IsProvenanceDepthExceedsCap : System.Boolean { get }
+ToolUp.Platform.ProvenanceQueryError.IsProvenanceDepthInvalid : System.Boolean { get }
+ToolUp.Platform.ProvenanceQueryError.Tag : System.Int32 { get }
+ToolUp.Platform.ProvenanceQueryErrorModule (class)
+ToolUp.Platform.ProvenanceQueryErrorModule.describe(ToolUp.Platform.ProvenanceQueryError) : System.String
 ToolUp.Platform.ProviderEntry (class)
 ToolUp.Platform.ProviderEntry..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CredentialOrigin, ToolUp.Platform.ProviderHealth, System.DateTime)
 ToolUp.Platform.ProviderEntry.Health : ToolUp.Platform.ProviderHealth { get }
@@ -9558,6 +9585,141 @@ ToolUp.Platform.WebhookTestResult.DeliveryId : System.Guid { get }
 ToolUp.Platform.WebhookTestResult.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.WebhookTestResult.LatencyMs : System.Int64 { get }
 ToolUp.Platform.WebhookTestResult.StatusCode : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.WireProvenanceCaps (class)
+ToolUp.Platform.WireProvenanceCaps..ctor(System.Int32, System.Int32)
+ToolUp.Platform.WireProvenanceCaps.MaxDepth : System.Int32 { get }
+ToolUp.Platform.WireProvenanceCaps.MaxNodes : System.Int32 { get }
+ToolUp.Platform.WireProvenanceCapsModule (class)
+ToolUp.Platform.WireProvenanceCapsModule.defaults : ToolUp.Platform.WireProvenanceCaps { get }
+ToolUp.Platform.WireProvenanceChainPage (class)
+ToolUp.Platform.WireProvenanceChainPage..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceNode], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireWithheldNode], System.Int32)
+ToolUp.Platform.WireProvenanceChainPage.Depth : System.Int32 { get }
+ToolUp.Platform.WireProvenanceChainPage.Edges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge] { get }
+ToolUp.Platform.WireProvenanceChainPage.Nodes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceNode] { get }
+ToolUp.Platform.WireProvenanceChainPage.Root : System.String { get }
+ToolUp.Platform.WireProvenanceChainPage.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireWithheldNode] { get }
+ToolUp.Platform.WireProvenanceChainRequest (class)
+ToolUp.Platform.WireProvenanceChainRequest..ctor(ToolUp.Platform.WireProvenanceRef, ToolUp.Platform.WireProvenanceDirection, System.Int32)
+ToolUp.Platform.WireProvenanceChainRequest.Depth : System.Int32 { get }
+ToolUp.Platform.WireProvenanceChainRequest.Direction : ToolUp.Platform.WireProvenanceDirection { get }
+ToolUp.Platform.WireProvenanceChainRequest.Root : ToolUp.Platform.WireProvenanceRef { get }
+ToolUp.Platform.WireProvenanceDirection (class)
+ToolUp.Platform.WireProvenanceDirection+Tags (class)
+ToolUp.Platform.WireProvenanceDirection+Tags.Downstream : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceDirection+Tags.Upstream : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceDirection.Downstream : ToolUp.Platform.WireProvenanceDirection { get }
+ToolUp.Platform.WireProvenanceDirection.IsDownstream : System.Boolean { get }
+ToolUp.Platform.WireProvenanceDirection.IsUpstream : System.Boolean { get }
+ToolUp.Platform.WireProvenanceDirection.Tag : System.Int32 { get }
+ToolUp.Platform.WireProvenanceDirection.Upstream : ToolUp.Platform.WireProvenanceDirection { get }
+ToolUp.Platform.WireProvenanceEdge (class)
+ToolUp.Platform.WireProvenanceEdge..ctor(System.String, System.String, ToolUp.Platform.WireProvenanceEdgeKind)
+ToolUp.Platform.WireProvenanceEdge.From : System.String { get }
+ToolUp.Platform.WireProvenanceEdge.Kind : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdge.To : System.String { get }
+ToolUp.Platform.WireProvenanceEdgeKind (class)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags (class)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.CitesFact : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.DerivedFrom : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.EvidenceFor : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.HasAttachment : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.PlannedBy : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind+Tags.Supersedes : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceEdgeKind.CitesFact : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.DerivedFrom : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.EvidenceFor : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.HasAttachment : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsCitesFact : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsDerivedFrom : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsEvidenceFor : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsHasAttachment : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsPlannedBy : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.IsSupersedes : System.Boolean { get }
+ToolUp.Platform.WireProvenanceEdgeKind.PlannedBy : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.Supersedes : ToolUp.Platform.WireProvenanceEdgeKind { get }
+ToolUp.Platform.WireProvenanceEdgeKind.Tag : System.Int32 { get }
+ToolUp.Platform.WireProvenanceEdgeSet (class)
+ToolUp.Platform.WireProvenanceEdgeSet..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge])
+ToolUp.Platform.WireProvenanceEdgeSet.Incoming : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge] { get }
+ToolUp.Platform.WireProvenanceEdgeSet.Outgoing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WireProvenanceEdge] { get }
+ToolUp.Platform.WireProvenanceEdgeSet.Ref : System.String { get }
+ToolUp.Platform.WireProvenanceNode (class)
+ToolUp.Platform.WireProvenanceNode..ctor(System.String, ToolUp.Platform.WireProvenanceNodeKind, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.WireProvenanceNode.Disclosure : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WireProvenanceNode.Id : System.String { get }
+ToolUp.Platform.WireProvenanceNode.Kind : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNode.Label : System.String { get }
+ToolUp.Platform.WireProvenanceNodeAnswer (class)
+ToolUp.Platform.WireProvenanceNodeAnswer+Found (class)
+ToolUp.Platform.WireProvenanceNodeAnswer+Found.Item : ToolUp.Platform.WireProvenanceNode { get }
+ToolUp.Platform.WireProvenanceNodeAnswer+Tags (class)
+ToolUp.Platform.WireProvenanceNodeAnswer+Tags.Absent : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeAnswer+Tags.Found : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeAnswer+Tags.Withheld : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeAnswer+Withheld (class)
+ToolUp.Platform.WireProvenanceNodeAnswer+Withheld.Item : ToolUp.Platform.WireWithheldNode { get }
+ToolUp.Platform.WireProvenanceNodeAnswer.Absent : ToolUp.Platform.WireProvenanceNodeAnswer { get }
+ToolUp.Platform.WireProvenanceNodeAnswer.IsAbsent : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeAnswer.IsFound : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeAnswer.IsWithheld : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeAnswer.Tag : System.Int32 { get }
+ToolUp.Platform.WireProvenanceNodeKind (class)
+ToolUp.Platform.WireProvenanceNodeKind+Tags (class)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.AnalysisResult : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.AnswerPlanNode : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.ConversationMessage : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.DataObjectVersion : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.FactNode : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.ModelArtifactNode : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.NarrativeDocument : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind+Tags.ProvenanceAttachmentNode : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceNodeKind.AnalysisResult : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.AnswerPlanNode : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.ConversationMessage : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.DataObjectVersion : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.FactNode : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsAnalysisResult : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsAnswerPlanNode : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsConversationMessage : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsDataObjectVersion : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsFactNode : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsModelArtifactNode : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsNarrativeDocument : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.IsProvenanceAttachmentNode : System.Boolean { get }
+ToolUp.Platform.WireProvenanceNodeKind.ModelArtifactNode : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.NarrativeDocument : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.ProvenanceAttachmentNode : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireProvenanceNodeKind.Tag : System.Int32 { get }
+ToolUp.Platform.WireProvenanceRef (class)
+ToolUp.Platform.WireProvenanceRef+DataObjectRef (class)
+ToolUp.Platform.WireProvenanceRef+DataObjectRef.Item : System.String { get }
+ToolUp.Platform.WireProvenanceRef+FactRef (class)
+ToolUp.Platform.WireProvenanceRef+FactRef.Item : System.String { get }
+ToolUp.Platform.WireProvenanceRef+MessageRef (class)
+ToolUp.Platform.WireProvenanceRef+MessageRef.Item : System.String { get }
+ToolUp.Platform.WireProvenanceRef+ModelArtifactRef (class)
+ToolUp.Platform.WireProvenanceRef+ModelArtifactRef.Item : System.String { get }
+ToolUp.Platform.WireProvenanceRef+ResultRef (class)
+ToolUp.Platform.WireProvenanceRef+ResultRef.Item : System.String { get }
+ToolUp.Platform.WireProvenanceRef+Tags (class)
+ToolUp.Platform.WireProvenanceRef+Tags.DataObjectRef : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceRef+Tags.FactRef : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceRef+Tags.MessageRef : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceRef+Tags.ModelArtifactRef : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceRef+Tags.ResultRef : System.Int32 (literal)
+ToolUp.Platform.WireProvenanceRef.IsDataObjectRef : System.Boolean { get }
+ToolUp.Platform.WireProvenanceRef.IsFactRef : System.Boolean { get }
+ToolUp.Platform.WireProvenanceRef.IsMessageRef : System.Boolean { get }
+ToolUp.Platform.WireProvenanceRef.IsModelArtifactRef : System.Boolean { get }
+ToolUp.Platform.WireProvenanceRef.IsResultRef : System.Boolean { get }
+ToolUp.Platform.WireProvenanceRef.Tag : System.Int32 { get }
+ToolUp.Platform.WireProvenanceRefModule (class)
+ToolUp.Platform.WireProvenanceRefModule.id(ToolUp.Platform.WireProvenanceRef) : System.String
+ToolUp.Platform.WireWithheldNode (class)
+ToolUp.Platform.WireWithheldNode..ctor(System.String, ToolUp.Platform.WireProvenanceNodeKind, System.String)
+ToolUp.Platform.WireWithheldNode.Id : System.String { get }
+ToolUp.Platform.WireWithheldNode.Kind : ToolUp.Platform.WireProvenanceNodeKind { get }
+ToolUp.Platform.WireWithheldNode.PolicyRef : System.String { get }
 ToolUp.Platform.WorkerKeyAlgorithm (class)
 ToolUp.Platform.WorkerKeyAlgorithm.Ed25519 : ToolUp.Platform.WorkerKeyAlgorithm { get }
 ToolUp.Platform.WorkerKeyAlgorithm.Es256 : ToolUp.Platform.WorkerKeyAlgorithm { get }

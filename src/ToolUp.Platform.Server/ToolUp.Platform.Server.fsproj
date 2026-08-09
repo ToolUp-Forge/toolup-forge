@@ -300,6 +300,13 @@
         <!-- Phase 524 — read-only provenance chain traversal (grounding ledger v0). -->
         <Compile Include="Server\IProvenanceGraph.fs" />
         <Compile Include="Server\ProvenanceGraph.fs" />
+        <!-- Phase 648 — the walk's read-only remoting handler: projects a
+             chain onto the Core-tier wire mirrors, routes fact nodes through
+             the shipped IFactDisclosureGate at the FactExport surface, and
+             refuses an over-cap request rather than truncating it. Directly
+             after ProvenanceGraph.fs (its only server-tier dependency);
+             consumer-wired, so nothing below composes it. -->
+        <Compile Include="Server\ProvenanceApiHandler.fs" />
         <!-- Phase 9i — SDK-wide cross-instance lease primitive
              (IDistributedLock + Lease + the in-process default). Sits
              before every consumer: the job scheduler's per-JobId dispatch

@@ -66,7 +66,8 @@ takes no dependency on the renderer stack:
 |---|---|---|
 | Narrative | `NarrativeDocument` (`ToolUp.Platform.Core`) | the prose, sections, tables and `Metric` spans; crosses the client/server boundary already |
 | Fact refs | `InlineSpan.Metric(label, value, factRef)` | an opaque fact id per quoted number — see [facts.md](facts.md) |
-| Provenance | `IProvenanceGraph` | the walkable `narrative -> fact -> result -> data object` chain, with each fact node's disclosure class — see [provenance-chain.md](provenance-chain.md) |
+| Provenance (in-process) | `IProvenanceGraph` | the walkable `narrative -> fact -> result -> data object` chain, with each fact node's disclosure class — see [provenance-chain.md](provenance-chain.md) |
+| Provenance (out-of-process) | `IProvenanceQueryApi` | the same chain as a typed read-only remoting contract, disclosure-filtered and cap-bounded, for a tier that does not compile the server assembly — see [provenance-chain.md](provenance-chain.md#out-of-process-consumers--the-read-only-wire-contract) |
 | Egress policy | `IFactDisclosureGate` at `FactExport` | the one gate deciding which values may leave as a document |
 | Charts | `ChartArtifact` (below) | deterministic, provenance-stamped rendered bytes |
 
