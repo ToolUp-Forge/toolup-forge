@@ -71,6 +71,28 @@ let private unboundSpec: ChartArtifactSpec = {
         }
 }
 
+// ── Phase 649 — the same three bindings, said in both vocabularies ───
+//
+// The two surfaces reproduce the grammar rather than share a type (GP 1),
+// so a conformance case has to state each binding twice — which is the
+// point: if the halves ever disagree about what a binding IS, the pairing
+// below is where it shows.
+
+let private keyOnlyBinding: ChartBinding = {
+    ArtifactKey = Some "result-8f2c"
+    DatasetVintage = None
+}
+
+let private projectorBound: NarrativeFromData.ChartBinding = {
+    ArtifactKey = Some "result-8f2c"
+    DatasetVintage = Some "dataset-v17"
+}
+
+let private projectorKeyOnly: NarrativeFromData.ChartBinding = {
+    ArtifactKey = Some "result-8f2c"
+    DatasetVintage = None
+}
+
 // ── a template store carrying exactly one template ───────────────────
 
 let private storeWith (template: ReportTemplate) =
@@ -206,27 +228,63 @@ let tests =
             // grammar's prop keys and point encoding (companion isolation
             // — GP 1); this asserts the reproduction rather than trusting
             // the comment that says so.
-            let cases = [
+            //
+            // Phase 649 widened it across the binding axis, because the
+            // binding props are exactly where two reproductions of one
+            // grammar drift: a half binding, or an empty prop standing in
+            // for an absent one, agrees on the unbound case and disagrees
+            // on every real document.
+            let kinds = [
                 "line", NarrativeFromData.Line, Some "Revenue"
                 "bar", NarrativeFromData.Bar, Some "Revenue"
                 "area", NarrativeFromData.Area, None
             ]
 
-            for token, kind, title in cases do
-                let spec = {
-                    boundSpec with
-                        Kind = token
-                        Title = title
-                }
+            let bindings = [
+                "bound", boundSpec.Binding, projectorBound
+                "key-only", keyOnlyBinding, projectorKeyOnly
+                "unbound", unboundSpec.Binding, NarrativeFromData.noBinding
+            ]
 
-                let mine = ChartArtifact.props spec
+            for token, kind, title in kinds do
+                for label, mineBinding, grammarBinding in bindings do
+                    let spec = {
+                        boundSpec with
+                            Kind = token
+                            Title = title
+                            Binding = mineBinding
+                    }
 
-                let grammar =
-                    match NarrativeFromData.chart kind title (series |> List.map (fun p -> p.Label, p.Value)) with
-                    | ToolUp.Platform.Narrative.Component("chart", props) -> props
-                    | other -> failtestf "expected a chart Component, got %A" other
+                    let mine = ChartArtifact.props spec
 
-                Expect.equal mine grammar (sprintf "prop bags agree for %s" token)
+                    let grammar =
+                        match
+                            NarrativeFromData.chartWith
+                                grammarBinding
+                                kind
+                                title
+                                (series |> List.map (fun p -> p.Label, p.Value))
+                        with
+                        | ToolUp.Platform.Narrative.Component("chart", props) -> props
+                        | other -> failtestf "expected a chart Component, got %A" other
+
+                    Expect.equal mine grammar (sprintf "prop bags agree for %s / %s" token label)
+
+                    Expect.equal
+                        (ChartArtifact.bindingOf mine)
+                        spec.Binding
+                        (sprintf "the artifact side reads its own props back for %s / %s" token label)
+        }
+
+        test "an unbound spec's props are byte-identical to the pre-binding bag" {
+            // GP 11 from the artifact side: a consumer that never fills a
+            // binding hands the renderer exactly the bag it handed before.
+            let props = ChartArtifact.props unboundSpec
+
+            Expect.equal
+                (props |> Map.toList |> List.map fst)
+                [ ChartArtifact.KindProp; ChartArtifact.PointsProp; ChartArtifact.TitleProp ]
+                "three keys, exactly as before Phase 649"
         }
 
         test "a chart renders deterministically — same spec, byte-identical artifact" {

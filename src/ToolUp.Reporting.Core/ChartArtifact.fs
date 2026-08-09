@@ -62,6 +62,13 @@
 /// filled with a plausible-looking value would be worse than an absent
 /// one. `ChartArtifact.isBound` is the predicate an export tier gates on
 /// when its own policy requires a binding.
+///
+/// Since Phase 649 the binding is also part of the PROP grammar, not only
+/// of the metadata: `props` emits the two binding keys when they are
+/// present, the narrative chart projector emits the same two, and
+/// `bindingOf` reads them back. So a tier holding a chart block from a
+/// document and a tier holding a spec of its own recover the identical
+/// pair, and a chart declares what it is a claim about exactly once.
 namespace ToolUp.Reporting
 
 open System
@@ -166,6 +173,16 @@ module ChartArtifact =
     [<Literal>]
     let PointsProp = "chart.points"
 
+    /// The binding props (Phase 649). A chart block in a narrative
+    /// declares its governed binding through these same two keys, so an
+    /// export tier that reads a document and one that renders a spec
+    /// recover the identical pair — see `bindingOf`.
+    [<Literal>]
+    let ArtifactKeyProp = "chart.artifactKey"
+
+    [<Literal>]
+    let DatasetVintageProp = "chart.datasetVintage"
+
     /// The grammar's point encoding: `"label=value;…"`, values in the
     /// invariant culture, separators sanitised out of labels.
     ///
@@ -184,16 +201,31 @@ module ChartArtifact =
     ///
     /// `chart.title` is OMITTED rather than emitted empty when there is
     /// no caption, because that is what the grammar's projector does and
-    /// an absent key and an empty one render differently.
+    /// an absent key and an empty one render differently. The two binding
+    /// props follow the same rule for the stronger reason: an absent prop
+    /// says "not bound", and an empty one would say "bound to nothing".
     let props (spec: ChartArtifactSpec) : Map<string, string> =
-        let bag = [ KindProp, spec.Kind; PointsProp, encodePoints spec.Points ]
+        let optional key value =
+            match value with
+            | Some v -> [ key, v ]
+            | None -> []
 
-        let withTitle =
-            match spec.Title with
-            | Some title -> bag @ [ TitleProp, title ]
-            | None -> bag
+        [ KindProp, spec.Kind; PointsProp, encodePoints spec.Points ]
+        @ optional TitleProp spec.Title
+        @ optional ArtifactKeyProp spec.Binding.ArtifactKey
+        @ optional DatasetVintageProp spec.Binding.DatasetVintage
+        |> Map.ofList
 
-        Map.ofList withTitle
+    /// Recover the binding a chart prop bag declares — the read half of
+    /// `props`, for a tier holding a chart block from a narrative document
+    /// rather than a spec of its own.
+    ///
+    /// Total: neither prop present yields an empty binding, which is the
+    /// honest reading — "this chart declares no binding", never "unknown".
+    let bindingOf (props: Map<string, string>) : ChartBinding = {
+        ArtifactKey = props.TryFind ArtifactKeyProp
+        DatasetVintage = props.TryFind DatasetVintageProp
+    }
 
     /// The metadata a spec yields, independent of rendering — so a
     /// consumer can inspect what an artifact WOULD carry before paying

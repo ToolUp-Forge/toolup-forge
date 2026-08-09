@@ -344,9 +344,13 @@ ToolUp.PublicRendering.NarrativeFeedHandler.handler(ToolUp.PublicRendering.Narra
 ToolUp.PublicRendering.NarrativeFeedHandler.selectEntries(ToolUp.PublicRendering.NarrativeFeedConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.PublicRendering.NarrativeFeedHandler.selectEntriesAt(System.DateTimeOffset, ToolUp.PublicRendering.NarrativeFeedConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.PublicRendering.NarrativeFromData (class)
+ToolUp.PublicRendering.NarrativeFromData.ArtifactKeyProp : System.String (literal)
+ToolUp.PublicRendering.NarrativeFromData.DatasetVintageProp : System.String (literal)
 ToolUp.PublicRendering.NarrativeFromData.annotate(ToolUp.Platform.Narrative.Severity, System.String) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.chart(ToolUp.PublicRendering.NarrativeFromData+ChartKind, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : ToolUp.Platform.Narrative.NarrativeElement
+ToolUp.PublicRendering.NarrativeFromData.chartBinding(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.PublicRendering.NarrativeFromData+ChartBinding
 ToolUp.PublicRendering.NarrativeFromData.chartTable(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : ToolUp.Platform.Narrative.NarrativeElement
+ToolUp.PublicRendering.NarrativeFromData.chartWith(ToolUp.PublicRendering.NarrativeFromData+ChartBinding, ToolUp.PublicRendering.NarrativeFromData+ChartKind, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.factMetric(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.Narrative.InlineSpan
 ToolUp.PublicRendering.NarrativeFromData.formatCell(ToolUp.PublicRendering.FormatOptions, ToolUp.PublicRendering.Cell) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]
 ToolUp.PublicRendering.NarrativeFromData.fromFileSnapshot(ProcessedDataTypes+FileListSnapshot) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]
@@ -356,6 +360,7 @@ ToolUp.PublicRendering.NarrativeFromData.metricGrid(Microsoft.FSharp.Collections
 ToolUp.PublicRendering.NarrativeFromData.metricGridWith(ToolUp.PublicRendering.FormatOptions, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double]]]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.metricGridWithFacts(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.String]]]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.metricGridWithFactsWith(ToolUp.PublicRendering.FormatOptions, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.String]]]) : ToolUp.Platform.Narrative.NarrativeElement
+ToolUp.PublicRendering.NarrativeFromData.noBinding : ToolUp.PublicRendering.NarrativeFromData+ChartBinding { get }
 ToolUp.PublicRendering.NarrativeFromData.severityFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Threshold], System.Double) : ToolUp.Platform.Narrative.Severity
 ToolUp.PublicRendering.NarrativeFromData.sparkline(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.PublicRendering.NarrativeFromData.spendThresholds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Threshold] { get }
@@ -365,6 +370,10 @@ ToolUp.PublicRendering.NarrativeFromData.thresholdCallout(Microsoft.FSharp.Colle
 ToolUp.PublicRendering.NarrativeFromData.withSynthesis(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeElement]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]
 ToolUp.PublicRendering.NarrativeFromData.withSynthesisAsync(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeElement]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]
 ToolUp.PublicRendering.NarrativeFromData.withoutSynthesis(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeElement]
+ToolUp.PublicRendering.NarrativeFromData+ChartBinding (class)
+ToolUp.PublicRendering.NarrativeFromData+ChartBinding..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.PublicRendering.NarrativeFromData+ChartBinding.ArtifactKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.PublicRendering.NarrativeFromData+ChartBinding.DatasetVintage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.PublicRendering.NarrativeFromData+ChartKind (class)
 ToolUp.PublicRendering.NarrativeFromData+ChartKind.Area : ToolUp.PublicRendering.NarrativeFromData+ChartKind { get }
 ToolUp.PublicRendering.NarrativeFromData+ChartKind.Bar : ToolUp.PublicRendering.NarrativeFromData+ChartKind { get }

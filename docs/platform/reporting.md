@@ -138,6 +138,37 @@ Determinism is a property of the grammar, not a promise added here: the
 same spec through the same renderer produces byte-identical content and an
 identical hash.
 
+### The binding rides the chart block
+
+A chart in a narrative document declares its own binding, so an export
+tier reading that document recovers the same two identifiers without a
+side channel — and a chart says what it is a claim about exactly once,
+whether it reaches a reader as a document block or as a rendered artifact.
+`NarrativeFromData.chartWith` takes the binding and emits it as declared
+props alongside the grammar's existing ones; `NarrativeFromData.chartBinding`
+(narrative side) and `ChartArtifact.bindingOf` (artifact side) read it back
+from any prop bag, and `ChartArtifact.props` emits the identical pair from a
+spec's `Binding` — the conformance test pins the two halves against each
+other across bound, half-bound and unbound cases.
+
+| Prop | Carries |
+|---|---|
+| `chart.kind` | the grammar's kind token (`line` / `bar` / `area`) |
+| `chart.title` | optional visible caption |
+| `chart.points` | the series, `label=value;…`, invariant culture |
+| `chart.artifactKey` | optional — which stored result the series came from |
+| `chart.datasetVintage` | optional — the vintage of the dataset underneath it |
+
+An absent member emits **no prop at all** rather than an empty one, so an
+unbound chart's prop bag is byte-identical to the pre-binding form (GP 11)
+and an absent prop reads as "declares no binding" rather than "bound to
+nothing". A declared binding also changes no drawn byte: the chart renderer
+reads the three grammar props and draws from those, because a binding is a
+claim a reader resolves rather than a mark on the canvas. Half a binding is
+a legitimate thing to declare — whether it is *sufficient* is the consuming
+tier's policy, and `ChartArtifact.isBound` is the predicate that demands
+both.
+
 ## See also
 
 - [facts.md](facts.md) — the fact store, disclosure classes, and the

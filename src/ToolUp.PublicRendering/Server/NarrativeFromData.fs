@@ -484,13 +484,53 @@ module NarrativeFromData =
     // gives a data-fidelity `Table` fallback for feeds / exports / print.
     //
     // The prop wire format mirrors `NarrativeCharts` exactly:
-    //   "chart.kind" / "chart.title" / "chart.points" ("label=value;…").
+    //   "chart.kind" / "chart.title" / "chart.points" ("label=value;…"),
+    //   plus the optional binding props below.
 
     /// Chart kind. `Line` (default) / `Bar` / `Area`.
     type ChartKind =
         | Line
         | Bar
         | Area
+
+    /// Where a chart binds governed results.
+    ///
+    /// A chart in a governed document is not decoration; it is a claim
+    /// about data, and a reader is entitled to ask which data. These are
+    /// the two answers that make the question decidable — which stored
+    /// result the series came from, and which vintage of the dataset
+    /// underneath it ("would this redraw the same today?").
+    ///
+    /// Both members are opaque identifiers this projector never
+    /// interprets: a reader resolves them against the stores that issued
+    /// them. Both are OPTIONAL and neither is invented — a chart over an
+    /// ad-hoc series honestly has no binding, and a prop filled with a
+    /// plausible-looking value would be worse than an absent one.
+    type ChartBinding = {
+        /// The stored artifact the rendered series came from.
+        ArtifactKey: string option
+        /// The vintage of the dataset that artifact was computed over.
+        DatasetVintage: string option
+    }
+
+    /// The binding an unbound chart declares: neither prop is emitted, so
+    /// a chart projected without one is byte-identical to the pre-binding
+    /// form (GP 11).
+    let noBinding: ChartBinding = {
+        ArtifactKey = None
+        DatasetVintage = None
+    }
+
+    /// The binding props' keys. Named rather than inlined so the two
+    /// surfaces that speak this grammar — the projector here and the
+    /// artifact handoff a document-emission tier renders through — pin
+    /// against constants a conformance test can compare, not two strings
+    /// that happen to match today.
+    [<Literal>]
+    let ArtifactKeyProp = "chart.artifactKey"
+
+    [<Literal>]
+    let DatasetVintageProp = "chart.datasetVintage"
 
     let private chartKindToken =
         function
@@ -506,20 +546,56 @@ module NarrativeFromData =
             sprintf "%s=%s" safe (v.ToString(inv)))
         |> String.concat ";"
 
+    /// Project a labelled numeric series into a chart `Component` block,
+    /// declaring where it binds governed results.
+    ///
+    /// The binding rides the block as declared props, so a reader that
+    /// holds the document — a document-emission tier, a published page, any
+    /// wire consumer — recovers it with `chartBinding` and needs no side
+    /// channel to learn what the chart is a claim about. An absent member
+    /// emits no prop at all, so `chartWith noBinding` is byte-identical to
+    /// `chart` (GP 11), and an absent prop reads as "not bound" rather than
+    /// as an empty identifier.
+    let chartWith
+        (binding: ChartBinding)
+        (kind: ChartKind)
+        (title: string option)
+        (points: (string * float) list)
+        : NarrativeElement =
+        let optional key value =
+            match value with
+            | Some v -> [ key, v ]
+            | None -> []
+
+        let props =
+            [ "chart.kind", chartKindToken kind; "chart.points", encodePoints points ]
+            @ optional "chart.title" title
+            @ optional ArtifactKeyProp binding.ArtifactKey
+            @ optional DatasetVintageProp binding.DatasetVintage
+            |> Map.ofList
+
+        Component("chart", props)
+
     /// Project a labelled numeric series into a chart `Component` block.
     /// `kind` selects line / bar / area; `title` is an optional caption.
     /// Renders to inline SVG in HTML (via `NarrativeCharts.registry`),
     /// degrades to a placeholder in Markdown / plaintext (pair with
     /// `chartTable` for a data fallback).
+    ///
+    /// Unbound — use `chartWith` when the series comes from governed
+    /// results and the document should say so.
     let chart (kind: ChartKind) (title: string option) (points: (string * float) list) : NarrativeElement =
-        let props =
-            [ "chart.kind", chartKindToken kind; "chart.points", encodePoints points ]
-            @ (match title with
-               | Some t -> [ "chart.title", t ]
-               | None -> [])
-            |> Map.ofList
+        chartWith noBinding kind title points
 
-        Component("chart", props)
+    /// Recover the binding a chart block declares, from its props.
+    ///
+    /// Total: a block with neither prop yields `noBinding`, which is the
+    /// honest reading — "this chart declares no binding", never "the
+    /// binding is unknown".
+    let chartBinding (props: Map<string, string>) : ChartBinding = {
+        ArtifactKey = props.TryFind ArtifactKeyProp
+        DatasetVintage = props.TryFind DatasetVintageProp
+    }
 
     /// A compact inline `Line` chart with no caption — the metric-row
     /// sparkline shape.

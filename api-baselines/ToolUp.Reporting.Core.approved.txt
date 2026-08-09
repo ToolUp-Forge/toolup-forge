@@ -19,11 +19,14 @@ ToolUp.Reporting.ChartArtifactMetadata.Kind : System.String { get }
 ToolUp.Reporting.ChartArtifactMetadata.PointCount : System.Int32 { get }
 ToolUp.Reporting.ChartArtifactMetadata.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Reporting.ChartArtifactModule (class)
+ToolUp.Reporting.ChartArtifactModule.ArtifactKeyProp : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.DatasetVintageProp : System.String (literal)
 ToolUp.Reporting.ChartArtifactModule.Grammar : System.String (literal)
 ToolUp.Reporting.ChartArtifactModule.GrammarVersion : System.String (literal)
 ToolUp.Reporting.ChartArtifactModule.KindProp : System.String (literal)
 ToolUp.Reporting.ChartArtifactModule.PointsProp : System.String (literal)
 ToolUp.Reporting.ChartArtifactModule.TitleProp : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.bindingOf(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Reporting.ChartBinding
 ToolUp.Reporting.ChartArtifactModule.contentHash(System.Byte[]) : System.String
 ToolUp.Reporting.ChartArtifactModule.isBound(ToolUp.Reporting.ChartArtifactMetadata) : System.Boolean
 ToolUp.Reporting.ChartArtifactModule.metadata(ToolUp.Reporting.ChartArtifactSpec) : ToolUp.Reporting.ChartArtifactMetadata

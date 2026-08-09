@@ -135,6 +135,8 @@ let html = NarrativeLayout.renderBodyWith Set.empty NarrativeCharts.registry pag
 
 Charts carry `tu-chart__*` BrandKit class hooks (style with your own CSS); no charting-vendor dependency ships in core (GP 2). Markdown / plaintext degrade to the standard `[component: chart]` placeholder — pair with `NarrativeFromData.chartTable "Month" "Revenue" series` for a real `Table` fallback in feeds / exports / print.
 
+A chart over governed results can declare **which** results, with `NarrativeFromData.chartWith` (a `ChartBinding` of an optional artifact key + dataset vintage): the pair rides the block as two further props that any reader recovers via `NarrativeFromData.chartBinding`, the drawn SVG is unchanged, and an unbound chart emits exactly the three props above. See [reporting.md](reporting.md#the-binding-rides-the-chart-block).
+
 ### Projecting a module's `ProcessedData` by type
 
 When the body comes from a module's processed-data payload, register one projector per `TypeName` and route through `fromProcessed`. An unknown type degrades to a graceful callout (never an exception); a throwing projector is contained as a `Critical` callout, so one bad payload can't 500 the page.

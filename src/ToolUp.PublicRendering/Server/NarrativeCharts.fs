@@ -28,6 +28,13 @@
 ///   - `"chart.points"` — `"label=value;label=value;…"`, value parsed as
 ///                        an `InvariantCulture` float; malformed points
 ///                        are skipped. Labels must not contain `;` or `=`.
+///
+/// A block may declare further props — the optional binding props
+/// (`"chart.artifactKey"` / `"chart.datasetVintage"`, Phase 649) are the
+/// shipped case. This renderer reads only the three keys above and draws
+/// nothing from the rest, deliberately: a binding is a claim a reader
+/// resolves, not a mark on the canvas, so declaring one leaves the SVG
+/// byte-identical.
 namespace ToolUp.PublicRendering
 
 open System
