@@ -385,6 +385,17 @@
              handlers. Nothing composed by default (GP 13). -->
         <Compile Include="Server\ModelEvaluationTypes.fs" />
         <Compile Include="Server\ModelEvaluationRunner.fs" />
+        <!-- Phase 645 — declared promotion policies: tolerance predicates
+             over score / comparison output decide auto-promote vs queue for
+             curation vs reject, and every verdict that moves an artifact is
+             executed through the Phase 644 transition seam as
+             `PolicyVerdict` (no second state machine). Compiles AFTER
+             ModelEvaluationRunner.fs (it reads the Phase 456 track record as
+             one of its two metric sources) and after ModelTransitionSeam.fs
+             (it drives that seam). Nothing composes it: a deployment that
+             never constructs the evaluator keeps the pre-645 path exactly
+             (GP 11) and pays nothing (GP 13). -->
+        <Compile Include="Server\ModelPromotionPolicy.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
         <!-- Phase 598 — persisted per-scope OnEvent trigger cursor; before the

@@ -4665,6 +4665,18 @@ ToolUp.Platform.ModelFitProviderRegistry..ctor(Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.ModelFitProviderRegistry.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModelFitProviderRegistry.Providers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelFitProvider] { get }
 ToolUp.Platform.ModelFitProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelFitProvider]
+ToolUp.Platform.ModelPromotionJobHandler (class)
+ToolUp.Platform.ModelPromotionJobHandler..ctor(ToolUp.Platform.ModelPromotionPolicyEvaluator, ToolUp.Platform.ILogger)
+ToolUp.Platform.ModelPromotionJobHandlerModule (class)
+ToolUp.Platform.ModelPromotionJobHandlerModule.HandlerName : System.String (literal)
+ToolUp.Platform.ModelPromotionJobHandlerModule.create(ToolUp.Platform.ModelPromotionPolicyEvaluator, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.ModelPromotionPolicyEvaluator (class)
+ToolUp.Platform.ModelPromotionPolicyEvaluator..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps)
+ToolUp.Platform.ModelPromotionPolicyEvaluator.Evaluate(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PromotionDecision, ToolUp.Platform.PromotionPolicyError]]
+ToolUp.Platform.ModelPromotionPolicyEvaluator.GetDecision(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PromotionDecision]]
+ToolUp.Platform.ModelPromotionPolicyEvaluator.ListQueuedForCuration(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionQueueEntry]]
+ToolUp.Platform.ModelPromotionPolicyEvaluatorModule (class)
+ToolUp.Platform.ModelPromotionPolicyEvaluatorModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps) : ToolUp.Platform.ModelPromotionPolicyEvaluator
 ToolUp.Platform.ModelRegistryError (class)
 ToolUp.Platform.ModelRegistryError.IsForbidden : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsIllegalTransition : System.Boolean { get }
@@ -5459,6 +5471,55 @@ ToolUp.Platform.PrincipalRegistry.listPrincipalsWith(ToolUp.Platform.BlobStorage
 ToolUp.Platform.ProcessProfileGate (class)
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
+ToolUp.Platform.PromotionComparator (class)
+ToolUp.Platform.PromotionComparator.IsAtLeast : System.Boolean { get }
+ToolUp.Platform.PromotionComparator.IsAtMost : System.Boolean { get }
+ToolUp.Platform.PromotionComparator.IsImprovesOnIncumbentBy : System.Boolean { get }
+ToolUp.Platform.PromotionComparator.IsNoWorseThanIncumbentBy : System.Boolean { get }
+ToolUp.Platform.PromotionComparator.IsWithinFractionOfIncumbent : System.Boolean { get }
+ToolUp.Platform.PromotionComparator.Tag : System.Int32 { get }
+ToolUp.Platform.PromotionComparator+AtLeast (class)
+ToolUp.Platform.PromotionComparator+AtLeast.threshold : System.Double { get }
+ToolUp.Platform.PromotionComparator+AtMost (class)
+ToolUp.Platform.PromotionComparator+AtMost.threshold : System.Double { get }
+ToolUp.Platform.PromotionComparator+ImprovesOnIncumbentBy (class)
+ToolUp.Platform.PromotionComparator+ImprovesOnIncumbentBy.margin : System.Double { get }
+ToolUp.Platform.PromotionComparator+NoWorseThanIncumbentBy (class)
+ToolUp.Platform.PromotionComparator+NoWorseThanIncumbentBy.tolerance : System.Double { get }
+ToolUp.Platform.PromotionComparator+Tags (class)
+ToolUp.Platform.PromotionComparator+Tags.AtLeast : System.Int32 (literal)
+ToolUp.Platform.PromotionComparator+Tags.AtMost : System.Int32 (literal)
+ToolUp.Platform.PromotionComparator+Tags.ImprovesOnIncumbentBy : System.Int32 (literal)
+ToolUp.Platform.PromotionComparator+Tags.NoWorseThanIncumbentBy : System.Int32 (literal)
+ToolUp.Platform.PromotionComparator+Tags.WithinFractionOfIncumbent : System.Int32 (literal)
+ToolUp.Platform.PromotionComparator+WithinFractionOfIncumbent (class)
+ToolUp.Platform.PromotionComparator+WithinFractionOfIncumbent.fraction : System.Double { get }
+ToolUp.Platform.PromotionComparatorModule (class)
+ToolUp.Platform.PromotionComparatorModule.bound(ToolUp.Platform.PromotionComparator) : System.Double
+ToolUp.Platform.PromotionComparatorModule.label(ToolUp.Platform.PromotionComparator) : System.String
+ToolUp.Platform.PromotionComparatorModule.requiresIncumbent(ToolUp.Platform.PromotionComparator) : System.Boolean
+ToolUp.Platform.PromotionDecision (class)
+ToolUp.Platform.PromotionDecision..ctor(System.String, System.String, System.String, System.String, System.Int32, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionToleranceCheck], System.Boolean, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.PromotionDecision.ArtifactKeyHash : System.String { get }
+ToolUp.Platform.PromotionDecision.Checks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionToleranceCheck] { get }
+ToolUp.Platform.PromotionDecision.DecidedAt : System.DateTimeOffset { get }
+ToolUp.Platform.PromotionDecision.DecisionId : System.String { get }
+ToolUp.Platform.PromotionDecision.IncumbentKeyHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PromotionDecision.MetricSource : System.String { get }
+ToolUp.Platform.PromotionDecision.PolicyId : System.String { get }
+ToolUp.Platform.PromotionDecision.PolicyVersion : System.Int32 { get }
+ToolUp.Platform.PromotionDecision.Reason : System.String { get }
+ToolUp.Platform.PromotionDecision.ScopeId : System.String { get }
+ToolUp.Platform.PromotionDecision.SupersededKeyHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PromotionDecision.SupersessionRefusal : System.String { get }
+ToolUp.Platform.PromotionDecision.TransitionApplied : System.Boolean { get }
+ToolUp.Platform.PromotionDecision.TransitionRefusal : System.String { get }
+ToolUp.Platform.PromotionDecision.Verdict : System.String { get }
+ToolUp.Platform.PromotionDecisionModule (class)
+ToolUp.Platform.PromotionDecisionModule.canonical(System.String, System.String) : System.String
+ToolUp.Platform.PromotionDecisionModule.describeDeltas(ToolUp.Platform.PromotionDecision) : System.String
+ToolUp.Platform.PromotionDecisionModule.id(System.String, System.String) : System.String
+ToolUp.Platform.PromotionDecisionModule.supersessionDeltas(ToolUp.Platform.PromotionDecision) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.Double, System.Double, System.Double]]
 ToolUp.Platform.PromotionError (class)
 ToolUp.Platform.PromotionError.ComparisonNotFound : ToolUp.Platform.PromotionError { get }
 ToolUp.Platform.PromotionError.IsComparisonNotFound : System.Boolean { get }
@@ -5483,8 +5544,103 @@ ToolUp.Platform.PromotionError+TransitionFailed (class)
 ToolUp.Platform.PromotionError+TransitionFailed.Item : ToolUp.Platform.ModelRegistryError { get }
 ToolUp.Platform.PromotionErrorModule (class)
 ToolUp.Platform.PromotionErrorModule.describe(ToolUp.Platform.PromotionError) : System.String
+ToolUp.Platform.PromotionEvaluationEnvelope (class)
+ToolUp.Platform.PromotionEvaluationEnvelope.isTerminal(ToolUp.Platform.PromotionPolicyError) : System.Boolean
+ToolUp.Platform.PromotionEvaluationEnvelope.serialiseRequest(ToolUp.Platform.PromotionEvaluationRequest) : System.String
+ToolUp.Platform.PromotionEvaluationEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PromotionEvaluationRequest, System.String]
+ToolUp.Platform.PromotionEvaluationRequest (class)
+ToolUp.Platform.PromotionEvaluationRequest..ctor(System.String, System.String)
+ToolUp.Platform.PromotionEvaluationRequest.ArtifactKeyHash : System.String { get }
+ToolUp.Platform.PromotionEvaluationRequest.ScopeId : System.String { get }
 ToolUp.Platform.PromotionGate (class)
 ToolUp.Platform.PromotionGate.check(ToolUp.Platform.ChampionChallengerPolicy, ToolUp.Platform.ModelComparison, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.PromotionVerdict
+ToolUp.Platform.PromotionJudge (class)
+ToolUp.Platform.PromotionJudge.check(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double]], ToolUp.Platform.PromotionTolerance) : ToolUp.Platform.PromotionToleranceCheck
+ToolUp.Platform.PromotionJudge.judge(ToolUp.Platform.PromotionPolicy, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double]]) : System.Tuple`3[ToolUp.Platform.PromotionPolicyVerdict, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionToleranceCheck], System.String]
+ToolUp.Platform.PromotionMetricSource (class)
+ToolUp.Platform.PromotionMetricSource.Diagnostics : ToolUp.Platform.PromotionMetricSource { get }
+ToolUp.Platform.PromotionMetricSource.IsDiagnostics : System.Boolean { get }
+ToolUp.Platform.PromotionMetricSource.IsLatestEvaluation : System.Boolean { get }
+ToolUp.Platform.PromotionMetricSource.LatestEvaluation : ToolUp.Platform.PromotionMetricSource { get }
+ToolUp.Platform.PromotionMetricSource.Tag : System.Int32 { get }
+ToolUp.Platform.PromotionMetricSource+Tags (class)
+ToolUp.Platform.PromotionMetricSource+Tags.Diagnostics : System.Int32 (literal)
+ToolUp.Platform.PromotionMetricSource+Tags.LatestEvaluation : System.Int32 (literal)
+ToolUp.Platform.PromotionMetricSourceModule (class)
+ToolUp.Platform.PromotionMetricSourceModule.label(ToolUp.Platform.PromotionMetricSource) : System.String
+ToolUp.Platform.PromotionPolicy (class)
+ToolUp.Platform.PromotionPolicy..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.PromotionMetricSource, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionTolerance], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionTolerance], ToolUp.Platform.ModelTransitionAuthority)
+ToolUp.Platform.PromotionPolicy.Grant : ToolUp.Platform.ModelTransitionAuthority { get }
+ToolUp.Platform.PromotionPolicy.PolicyId : System.String { get }
+ToolUp.Platform.PromotionPolicy.PromoteWhen : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionTolerance] { get }
+ToolUp.Platform.PromotionPolicy.RejectUnless : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionTolerance] { get }
+ToolUp.Platform.PromotionPolicy.Source : ToolUp.Platform.PromotionMetricSource { get }
+ToolUp.Platform.PromotionPolicy.SpecHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PromotionPolicy.Version : System.Int32 { get }
+ToolUp.Platform.PromotionPolicyDeps (class)
+ToolUp.Platform.PromotionPolicyDeps..ctor(ToolUp.Platform.IModelRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelEvaluationRunner], ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.PromotionPolicyDeps.Audit : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.PromotionPolicyDeps.DataObjects : ToolUp.Platform.IDataObjectStore { get }
+ToolUp.Platform.PromotionPolicyDeps.Evaluations : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelEvaluationRunner] { get }
+ToolUp.Platform.PromotionPolicyDeps.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.PromotionPolicyDeps.Registry : ToolUp.Platform.IModelRegistry { get }
+ToolUp.Platform.PromotionPolicyError (class)
+ToolUp.Platform.PromotionPolicyError.ArtifactNotFound : ToolUp.Platform.PromotionPolicyError { get }
+ToolUp.Platform.PromotionPolicyError.IsArtifactNotFound : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyError.IsRegistryFailure : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyError.IsStorageFailure : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyError.Tag : System.Int32 { get }
+ToolUp.Platform.PromotionPolicyError+RegistryFailure (class)
+ToolUp.Platform.PromotionPolicyError+RegistryFailure.reason : System.String { get }
+ToolUp.Platform.PromotionPolicyError+StorageFailure (class)
+ToolUp.Platform.PromotionPolicyError+StorageFailure.reason : System.String { get }
+ToolUp.Platform.PromotionPolicyError+Tags (class)
+ToolUp.Platform.PromotionPolicyError+Tags.ArtifactNotFound : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyError+Tags.RegistryFailure : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyErrorModule (class)
+ToolUp.Platform.PromotionPolicyErrorModule.describe(ToolUp.Platform.PromotionPolicyError) : System.String
+ToolUp.Platform.PromotionPolicyModule (class)
+ToolUp.Platform.PromotionPolicyModule.create(System.String) : ToolUp.Platform.PromotionPolicy
+ToolUp.Platform.PromotionPolicyModule.governs(ToolUp.Platform.ModelArtifact, ToolUp.Platform.PromotionPolicy) : System.Boolean
+ToolUp.Platform.PromotionPolicyModule.promotionGrant : ToolUp.Platform.ModelTransitionAuthority { get }
+ToolUp.Platform.PromotionPolicyModule.resolve(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.ModelArtifact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PromotionPolicy]
+ToolUp.Platform.PromotionPolicyVerdict (class)
+ToolUp.Platform.PromotionPolicyVerdict.AutoPromote : ToolUp.Platform.PromotionPolicyVerdict { get }
+ToolUp.Platform.PromotionPolicyVerdict.IsAutoPromote : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyVerdict.IsQueueForCuration : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyVerdict.IsReject : System.Boolean { get }
+ToolUp.Platform.PromotionPolicyVerdict.QueueForCuration : ToolUp.Platform.PromotionPolicyVerdict { get }
+ToolUp.Platform.PromotionPolicyVerdict.Reject : ToolUp.Platform.PromotionPolicyVerdict { get }
+ToolUp.Platform.PromotionPolicyVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.PromotionPolicyVerdict+Tags (class)
+ToolUp.Platform.PromotionPolicyVerdict+Tags.AutoPromote : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyVerdict+Tags.QueueForCuration : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyVerdict+Tags.Reject : System.Int32 (literal)
+ToolUp.Platform.PromotionPolicyVerdictModule (class)
+ToolUp.Platform.PromotionPolicyVerdictModule.name(ToolUp.Platform.PromotionPolicyVerdict) : System.String
+ToolUp.Platform.PromotionPolicyVerdictModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PromotionPolicyVerdict]
+ToolUp.Platform.PromotionPolicyVerdictModule.target(ToolUp.Platform.PromotionPolicyVerdict) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus]
+ToolUp.Platform.PromotionQueueEntry (class)
+ToolUp.Platform.PromotionQueueEntry..ctor(ToolUp.Platform.ModelArtifact, ToolUp.Platform.PromotionDecision)
+ToolUp.Platform.PromotionQueueEntry.Artifact : ToolUp.Platform.ModelArtifact { get }
+ToolUp.Platform.PromotionQueueEntry.Decision : ToolUp.Platform.PromotionDecision { get }
+ToolUp.Platform.PromotionTolerance (class)
+ToolUp.Platform.PromotionTolerance..ctor(System.String, ToolUp.Platform.MetricDirection, ToolUp.Platform.PromotionComparator)
+ToolUp.Platform.PromotionTolerance.Comparator : ToolUp.Platform.PromotionComparator { get }
+ToolUp.Platform.PromotionTolerance.Direction : ToolUp.Platform.MetricDirection { get }
+ToolUp.Platform.PromotionTolerance.Metric : System.String { get }
+ToolUp.Platform.PromotionToleranceCheck (class)
+ToolUp.Platform.PromotionToleranceCheck..ctor(System.String, System.String, System.String, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Boolean, System.Boolean, System.String)
+ToolUp.Platform.PromotionToleranceCheck.Bound : System.Double { get }
+ToolUp.Platform.PromotionToleranceCheck.Comparator : System.String { get }
+ToolUp.Platform.PromotionToleranceCheck.Detail : System.String { get }
+ToolUp.Platform.PromotionToleranceCheck.Direction : System.String { get }
+ToolUp.Platform.PromotionToleranceCheck.Evaluable : System.Boolean { get }
+ToolUp.Platform.PromotionToleranceCheck.Incumbent : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.PromotionToleranceCheck.Metric : System.String { get }
+ToolUp.Platform.PromotionToleranceCheck.Observed : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.PromotionToleranceCheck.Satisfied : System.Boolean { get }
 ToolUp.Platform.PromotionVerdict (class)
 ToolUp.Platform.PromotionVerdict.ChallengerMetricMissing : ToolUp.Platform.PromotionVerdict { get }
 ToolUp.Platform.PromotionVerdict.ChallengerNotCompared : ToolUp.Platform.PromotionVerdict { get }

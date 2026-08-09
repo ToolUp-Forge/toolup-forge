@@ -830,6 +830,8 @@ ToolUp.Platform.AuditEvent.IsUserLoggedIn : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowActionExecuted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowTransitioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.Tag : System.Int32 { get }
+ToolUp.Platform.AuditEvent.IsModelArtifactSuperseded : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelPromotionPolicyEvaluated : System.Boolean { get }
 ToolUp.Platform.AuditEvent+AdClickRecorded (class)
 ToolUp.Platform.AuditEvent+AdClickRecorded.Item : ToolUp.Platform.AdClick { get }
 ToolUp.Platform.AuditEvent+AdImpressionRecorded (class)
@@ -974,6 +976,8 @@ ToolUp.Platform.AuditEvent+MemberRoleChanged (class)
 ToolUp.Platform.AuditEvent+MemberRoleChanged.Item : ToolUp.Platform.MemberRoleChangedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered (class)
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered.Item : ToolUp.Platform.ModelArtifactRegisteredPayload { get }
+ToolUp.Platform.AuditEvent+ModelArtifactSuperseded (class)
+ToolUp.Platform.AuditEvent+ModelArtifactSuperseded.Item : ToolUp.Platform.ModelArtifactSupersededPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactTransitionAttributed (class)
 ToolUp.Platform.AuditEvent+ModelArtifactTransitionAttributed.Item : ToolUp.Platform.ModelArtifactTransitionAttributedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactTransitionDenied (class)
@@ -990,6 +994,8 @@ ToolUp.Platform.AuditEvent+ModelFitGateFailed (class)
 ToolUp.Platform.AuditEvent+ModelFitGateFailed.Item : ToolUp.Platform.ModelFitGateFailedPayload { get }
 ToolUp.Platform.AuditEvent+ModelFitStarted (class)
 ToolUp.Platform.AuditEvent+ModelFitStarted.Item : ToolUp.Platform.ModelFitStartedPayload { get }
+ToolUp.Platform.AuditEvent+ModelPromotionPolicyEvaluated (class)
+ToolUp.Platform.AuditEvent+ModelPromotionPolicyEvaluated.Item : ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload { get }
 ToolUp.Platform.AuditEvent+ModelScoreRefused (class)
 ToolUp.Platform.AuditEvent+ModelScoreRefused.Item : ToolUp.Platform.ModelScoreRefusedPayload { get }
 ToolUp.Platform.AuditEvent+ModelScored (class)
@@ -1234,6 +1240,8 @@ ToolUp.Platform.AuditEvent+Tags.TenantProvisioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.UserLoggedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowActionExecuted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowTransitioned : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelArtifactSuperseded : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelPromotionPolicyEvaluated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+TeamArchived (class)
 ToolUp.Platform.AuditEvent+TeamArchived.Item : ToolUp.Platform.TeamArchivedPayload { get }
 ToolUp.Platform.AuditEvent+TeamCreated (class)
@@ -5471,6 +5479,14 @@ ToolUp.Platform.ModelArtifactRegisteredPayload.RegisteredBy : System.String { ge
 ToolUp.Platform.ModelArtifactRegisteredPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModelArtifactRegisteredPayload.SpecHash : System.String { get }
 ToolUp.Platform.ModelArtifactRegisteredPayload.Status : System.String { get }
+ToolUp.Platform.ModelArtifactSupersededPayload (class)
+ToolUp.Platform.ModelArtifactSupersededPayload..ctor(System.String, System.String, System.String, System.Int32, System.Boolean, System.String)
+ToolUp.Platform.ModelArtifactSupersededPayload.MetricCount : System.Int32 { get }
+ToolUp.Platform.ModelArtifactSupersededPayload.PolicyId : System.String { get }
+ToolUp.Platform.ModelArtifactSupersededPayload.Retired : System.Boolean { get }
+ToolUp.Platform.ModelArtifactSupersededPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelArtifactSupersededPayload.SupersededKeyHash : System.String { get }
+ToolUp.Platform.ModelArtifactSupersededPayload.SupersedingKeyHash : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionAttributedPayload (class)
 ToolUp.Platform.ModelArtifactTransitionAttributedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Boolean, System.String, System.String)
 ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Admitted : System.Boolean { get }
@@ -5756,6 +5772,18 @@ ToolUp.Platform.ModelFittingMode.Tag : System.Int32 { get }
 ToolUp.Platform.ModelFittingMode+Tags (class)
 ToolUp.Platform.ModelFittingMode+Tags.EnabledModelFitting : System.Int32 (literal)
 ToolUp.Platform.ModelFittingMode+Tags.NoModelFitting : System.Int32 (literal)
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload (class)
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, System.Int32, System.Boolean, System.String)
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.IncumbentKeyHash : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.MetricSource : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.PolicyId : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.PolicyVersion : System.Int32 { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.Reason : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.ToleranceCount : System.Int32 { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.TransitionApplied : System.Boolean { get }
+ToolUp.Platform.ModelPromotionPolicyEvaluatedPayload.Verdict : System.String { get }
 ToolUp.Platform.ModelScoreRefusedPayload (class)
 ToolUp.Platform.ModelScoreRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModelScoreRefusedPayload.CompositeKeyHash : System.String { get }

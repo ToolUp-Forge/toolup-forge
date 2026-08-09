@@ -55,6 +55,9 @@ let allTests =
         IExternalHandleStoreContract.selfTests
         // Phase 456 — model evaluation & champion-challenger harness.
         ModelEvaluationTests.tests
+        // Phase 645 — registry promotion policies (tolerance-gated
+        // auto-promotion through the Phase 644 transition seam).
+        ModelPromotionPolicyTests.tests
         // Phase 599 — batch fit submission + bulk outcome/registry retrieval.
         ModelFitBatchTests.tests
         // Phase 600 — model-execution submitter API (wire surface + typed refusals).

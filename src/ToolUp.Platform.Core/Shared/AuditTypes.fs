@@ -3044,6 +3044,78 @@ type ModelEvaluatedPayload = {
     ScopeId: string
 }
 
+// ─── Phase 645 — promotion-policy audit payloads ───────────────────────
+//
+// A declared promotion policy judged a newly registered artifact and either
+// promoted it, held it for human curation, or refused it. Both rows are
+// emitted under `_platform.audit` (GP 6) and together they ARE the
+// subscription surface for promotion events — a consumer that wants to
+// react attaches an `IAuditSink` rather than a bespoke pub/sub.
+//
+// PII-free, and metric-value-free: identity, the verdict, and cardinality
+// only. The per-metric numbers a verdict rested on live in the stored
+// `PromotionDecision`, exactly as `ModelEvaluated`'s live in the stored
+// `EvaluationRun` — an audit row names the judgment, it never re-states
+// provider numbers.
+
+/// Phase 645 — a promotion policy reached a verdict for a model artifact.
+/// Written for EVERY verdict, including a queue (which moves nothing and so
+/// leaves no transition row of its own) and including the fail-safe "no
+/// policy governed this artifact" case. Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelPromotionPolicyEvaluatedPayload = {
+    /// SHA-256 hex of the judged artifact's composite identity (plan D5).
+    CompositeKeyHash: string
+    /// The policy that judged. `""` when no declared policy governed the
+    /// artifact — the honest value, rather than a policy id it never had.
+    PolicyId: string
+    /// The judging policy's declared version. `0` when none governed.
+    PolicyVersion: int
+    /// Where the judged metrics came from: `"diagnostics"` /
+    /// `"latest-evaluation"`, or `""` when no policy governed.
+    MetricSource: string
+    /// `"AutoPromote"` / `"QueueForCuration"` / `"Reject"`.
+    Verdict: string
+    /// One-line reason, always populated.
+    Reason: string
+    /// The currently-approved artifact the candidate was judged against.
+    /// `""` when there was no incumbent.
+    IncumbentKeyHash: string
+    /// How many declared tolerances were evaluated. Cardinality only — the
+    /// per-tolerance evidence lives in the stored decision record.
+    ToleranceCount: int
+    /// Did the verdict's transition land? `false` for a queue (which drives
+    /// none) and for one the transition seam refused.
+    TransitionApplied: bool
+    /// Scope the decision was made under.
+    ScopeId: string
+}
+
+/// Phase 645 — an auto-promotion displaced a previously promoted artifact.
+///
+/// **A separate row because supersession is a separate fact.** The promotion
+/// itself is already an attributed transition (Phase 644) and the retirement
+/// is another, but neither says the two are the same act — and "no refresh
+/// ever silently changes what a consumer resolves" is a claim about exactly
+/// that link. Reserved `SourceModule = "_platform.audit"`.
+type ModelArtifactSupersededPayload = {
+    /// The newly promoted artifact's composite-key hash.
+    SupersedingKeyHash: string
+    /// The artifact it displaced.
+    SupersededKeyHash: string
+    /// The policy whose verdict justified the supersession.
+    PolicyId: string
+    /// How many metrics had both an observed and an incumbent value — the
+    /// deltas that justified it. Cardinality only; the values live in the
+    /// stored decision record.
+    MetricCount: int
+    /// Did the displaced artifact actually retire? `false` when the
+    /// retirement was refused, which leaves two approved artifacts and is
+    /// precisely the state an operator must be told about.
+    Retired: bool
+    ScopeId: string
+}
+
 // --- Phase 482 / 487 — dataset provenance & virtual-spill audit payloads --
 //
 // Emitted under `_platform.audit`. Identity + cardinality only — no dataset
@@ -3876,6 +3948,12 @@ type AuditEvent =
     /// Phase 456 — a holdout-evaluation run stored a provider-computed
     /// metric map against a model artifact (out-of-time track record).
     | ModelEvaluated of ModelEvaluatedPayload
+    /// Phase 645 — a declared promotion policy reached a verdict for a
+    /// model artifact (auto-promote / queue for curation / reject).
+    | ModelPromotionPolicyEvaluated of ModelPromotionPolicyEvaluatedPayload
+    /// Phase 645 — an auto-promotion displaced a previously promoted
+    /// artifact, with the deltas that justified it.
+    | ModelArtifactSuperseded of ModelArtifactSupersededPayload
     /// Phase 487 — a virtual dataset version was materialised to a
     /// retention-bounded scratch blob for compute handoff.
     | DatasetSpillCreated of DatasetSpillCreatedPayload
@@ -4059,6 +4137,8 @@ module AuditEvent =
         | ModelScored _ -> "ModelScored"
         | ModelScoreRefused _ -> "ModelScoreRefused"
         | ModelEvaluated _ -> "ModelEvaluated"
+        | ModelPromotionPolicyEvaluated _ -> "ModelPromotionPolicyEvaluated"
+        | ModelArtifactSuperseded _ -> "ModelArtifactSuperseded"
         | DatasetSpillCreated _ -> "DatasetSpillCreated"
         | DatasetSpillDeleted _ -> "DatasetSpillDeleted"
         | DatasetDeclassified _ -> "DatasetDeclassified"

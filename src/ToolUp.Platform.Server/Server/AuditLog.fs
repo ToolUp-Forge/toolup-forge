@@ -1374,6 +1374,25 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelEvaluated(fromAuditJson<ModelEvaluatedPayload> j)
     }
+    // Phase 645 — promotion-policy verdicts + explicit supersession. The
+    // two rows are the subscription surface for promotion events: a
+    // consumer attaches an IAuditSink rather than a bespoke pub/sub.
+    {
+        EventType = "ModelPromotionPolicyEvaluated"
+        TryEncode =
+            (function
+            | ModelPromotionPolicyEvaluated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelPromotionPolicyEvaluated(fromAuditJson<ModelPromotionPolicyEvaluatedPayload> j)
+    }
+    {
+        EventType = "ModelArtifactSuperseded"
+        TryEncode =
+            (function
+            | ModelArtifactSuperseded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactSuperseded(fromAuditJson<ModelArtifactSupersededPayload> j)
+    }
     // Phase 482 / 487 — dataset provenance & virtual-spill audit rows (append-only registration).
     {
         EventType = "DatasetSpillCreated"
