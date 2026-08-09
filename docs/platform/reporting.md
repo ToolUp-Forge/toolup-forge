@@ -70,10 +70,13 @@ takes no dependency on the renderer stack:
 | Provenance (out-of-process) | `IProvenanceQueryApi` | the same chain as a typed read-only remoting contract, disclosure-filtered and cap-bounded, for a tier that does not compile the server assembly — see [provenance-chain.md](provenance-chain.md#out-of-process-consumers--the-read-only-wire-contract) |
 | Egress policy | `IFactDisclosureGate` at `FactExport` | the one gate deciding which values may leave as a document |
 | Charts | `ChartArtifact` (below) | deterministic, provenance-stamped rendered bytes |
+| All of the above, paired | `ChartExportBundle` ([below](#the-export-bundle)) | one call: the disclosed document plus a block-keyed artifact per chart block, and a typed refusal for each block that produced none |
 
 A consumer reads the narrative, resolves the fact refs it cites, checks
 them at the export door, and asks for a chart artifact per chart it wants
-to embed.
+to embed. The **export bundle** is that sequence as a single call, and is
+the surface to reach for first — the rows above it are what to bind
+against when a tier needs one piece rather than the set.
 
 ## The chart-artifact handoff
 
@@ -168,6 +171,90 @@ claim a reader resolves rather than a mark on the canvas. Half a binding is
 a legitimate thing to declare — whether it is *sufficient* is the consuming
 tier's policy, and `ChartArtifact.isBound` is the predicate that demands
 both.
+
+## The export bundle
+
+A chart block in a narrative document gives a reader the chart *props*.
+The grammar that turns props into pixels is server-side, so a tier holding
+the document can read every chart in it and render none — and nothing
+paired a block with its artifact even where it could. The bundle is that
+pairing, in one call:
+
+```fsharp skip=fragment
+// No fact tier composed — the pure pairing.
+let bundle = ChartExportBundle.ofDocument renderer document
+
+// With the fact tier composed: the document goes through the SAME
+// `FactExport` door a rendered report goes through, and the artifacts are
+// paired with the disclosed document.
+let! bundle =
+    NarrativeExportBundle.createWithDisclosureGate gate principal renderer scopeId document
+
+bundle.Document        // the (disclosed) document
+bundle.Charts          // Map<"chart:N", ChartArtifact>
+bundle.Gaps            // the blocks that produced no artifact, and why
+```
+
+`bundle.Charts` and `bundle.Gaps` partition the document's chart blocks
+exactly: every block is in one or the other.
+
+### Keys are positional, and the walk is public
+
+A key is `"chart:N"` for the zero-based index of the block in document
+order — sections in declared order, elements within a section in declared
+order, and a container's nested body (`Card` / `Accordion` / `Tabs`)
+walked depth-first *at the point the container appears*. Positional rather
+than declared, because the chart grammar has no chart id and inventing one
+here would be the second grammar the handoff exists not to be; and because
+a document may legitimately draw the same chart twice, which a
+content-derived key would collapse into one entry.
+
+What makes that usable rather than merely deterministic is that the walk
+is public: `ChartExportBundle.blocks document` yields the same keys in the
+same order, so a consumer never reimplements the traversal. The failure
+mode of positional keying is two walks that disagree, and there is only
+one walk.
+
+The caveat, stated once: **a key identifies a position in this document,
+not a chart across revisions.** Insert a chart into an earlier section and
+every later key shifts. A tier that needs identity across revisions keys
+on the block's declared binding (`ChartArtifact.bindingOf`) — which is
+what a binding is for. Keys index the bundle's own `Document` field, which
+is the disclosed one wherever a gate ran, so the pairing holds after the
+door rather than before it.
+
+### A bundle is an export surface, not a side door
+
+`createWithDisclosureGate` calls the report handler's own export door
+rather than reproducing it, and the pin for that is the surface the gate
+records: `FactExport`, the same one the render path checks at. A value
+this principal may not egress is redacted in the bundle's document exactly
+as it would be in a rendered report, and the withheld-values note travels
+with it. `ChartExportBundle.ofDocument` (and the `NarrativeExportBundle.create`
+that names it on the server surface) is the honest counterpart for a
+deployment composing no fact tier: no gate to consult, nothing paid for a
+door it does not have (GP 13).
+
+### Partial rather than failed
+
+One unrenderable block does not fail the bundle. A tier that asked for
+eleven charts is better served by ten plus a typed statement about the
+eleventh than by an exception carrying none, so refusals are collected per
+block:
+
+| Refusal | Means |
+|---|---|
+| `ChartBlockHasNoSeries` | the block declares no usable series (`chart.points` absent, empty, or decoding to nothing). Deliberately stricter than the page grammar, which draws a "no data" placeholder — an export tier embedding a placeholder it did not ask for is worse off than one told the block is empty |
+| `ChartRendererFailed reason` | the composition-supplied renderer raised. The renderer belongs to the deployment, so its own message is carried rather than an invented one |
+
+Each gap carries the block's key, ordinal and section id, so it is
+actionable without re-walking the document. `ChartExportBundle.isComplete`
+is the predicate for a tier whose own policy is all-or-nothing.
+
+Determinism runs end to end: the walk, the keys and every artifact's bytes
+are functions of the document alone — nothing here reads a store or a
+clock — so the same document through the same renderer yields a
+byte-identical bundle.
 
 ## See also
 

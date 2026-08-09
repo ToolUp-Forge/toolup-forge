@@ -46,6 +46,41 @@ ToolUp.Reporting.ChartBinding (class)
 ToolUp.Reporting.ChartBinding..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Reporting.ChartBinding.ArtifactKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Reporting.ChartBinding.DatasetVintage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartBlockRef (class)
+ToolUp.Reporting.ChartBlockRef..ctor(System.String, System.Int32, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Reporting.ChartBlockRef.Key : System.String { get }
+ToolUp.Reporting.ChartBlockRef.Ordinal : System.Int32 { get }
+ToolUp.Reporting.ChartBlockRef.Props : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Reporting.ChartBlockRef.SectionId : System.String { get }
+ToolUp.Reporting.ChartBlockRefusal (class)
+ToolUp.Reporting.ChartBlockRefusal.ChartBlockHasNoSeries : ToolUp.Reporting.ChartBlockRefusal { get }
+ToolUp.Reporting.ChartBlockRefusal.IsChartBlockHasNoSeries : System.Boolean { get }
+ToolUp.Reporting.ChartBlockRefusal.IsChartRendererFailed : System.Boolean { get }
+ToolUp.Reporting.ChartBlockRefusal.Tag : System.Int32 { get }
+ToolUp.Reporting.ChartBlockRefusal+ChartRendererFailed (class)
+ToolUp.Reporting.ChartBlockRefusal+ChartRendererFailed.reason : System.String { get }
+ToolUp.Reporting.ChartBlockRefusal+Tags (class)
+ToolUp.Reporting.ChartBlockRefusal+Tags.ChartBlockHasNoSeries : System.Int32 (literal)
+ToolUp.Reporting.ChartBlockRefusal+Tags.ChartRendererFailed : System.Int32 (literal)
+ToolUp.Reporting.ChartBundleGap (class)
+ToolUp.Reporting.ChartBundleGap..ctor(System.String, System.Int32, System.String, ToolUp.Reporting.ChartBlockRefusal)
+ToolUp.Reporting.ChartBundleGap.Key : System.String { get }
+ToolUp.Reporting.ChartBundleGap.Ordinal : System.Int32 { get }
+ToolUp.Reporting.ChartBundleGap.Refusal : ToolUp.Reporting.ChartBlockRefusal { get }
+ToolUp.Reporting.ChartBundleGap.SectionId : System.String { get }
+ToolUp.Reporting.ChartExportBundle (class)
+ToolUp.Reporting.ChartExportBundle..ctor(ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.ChartArtifact], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ChartBundleGap])
+ToolUp.Reporting.ChartExportBundle.Charts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.ChartArtifact] { get }
+ToolUp.Reporting.ChartExportBundle.Document : ToolUp.Platform.Narrative.NarrativeDocument { get }
+ToolUp.Reporting.ChartExportBundle.Gaps : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ChartBundleGap] { get }
+ToolUp.Reporting.ChartExportBundleModule (class)
+ToolUp.Reporting.ChartExportBundleModule.ChartComponentName : System.String (literal)
+ToolUp.Reporting.ChartExportBundleModule.KeyPrefix : System.String (literal)
+ToolUp.Reporting.ChartExportBundleModule.blocks(ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ChartBlockRef]
+ToolUp.Reporting.ChartExportBundleModule.isComplete(ToolUp.Reporting.ChartExportBundle) : System.Boolean
+ToolUp.Reporting.ChartExportBundleModule.keyFor(System.Int32) : System.String
+ToolUp.Reporting.ChartExportBundleModule.ofDocument(ToolUp.Reporting.ChartArtifactRenderer, ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Reporting.ChartExportBundle
+ToolUp.Reporting.ChartExportBundleModule.specOf(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Reporting.ChartArtifactSpec
 ToolUp.Reporting.ChartPoint (class)
 ToolUp.Reporting.ChartPoint..ctor(System.String, System.Double)
 ToolUp.Reporting.ChartPoint.Label : System.String { get }

@@ -10,6 +10,8 @@ open ToolUp.PublicRendering
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Narrative
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Phase 647 — the deck-export seam ────────────────────────────────
 //
@@ -351,5 +353,409 @@ let tests =
             // the render.
             let meta = ChartArtifact.metadata boundSpec
             Expect.equal meta (ChartArtifact.render svgRenderer boundSpec).Metadata "same metadata either way"
+        }
+    ]
+
+// ─── Phase 650 — the chart export bundle ─────────────────────────────
+//
+// 647 could render one chart a tier already had a spec for; 649 put the
+// binding on the block. The bundle is the pairing: a document plus a
+// block-keyed collection of its rendered artifacts, in one call.
+//
+// Three things are worth pinning and they are not the same kind of claim.
+//
+// **The keying rule** is a contract with a consumer that will recompute
+// it, so the pack fixes the walk order explicitly — including the two
+// cases a reimplementation gets wrong: a chart nested in a container
+// (depth-first at the point the container appears, not appended after its
+// siblings) and two IDENTICAL chart blocks (distinguishable only because
+// the key is positional).
+//
+// **Partiality** is a promise about failure, so it is tested by failing:
+// a block with no series and a renderer that raises on one block both
+// leave the other artifacts in the bundle and name themselves typed.
+//
+// **The disclosure discipline** is the claim that a bundle is an export
+// surface rather than a side door. What proves it is not that a gate
+// exists but that the SAME door ran — so the gate stub records the
+// surface it was asked about, and the denied value's marker is asserted
+// in the bundle's own document.
+
+let private points = series |> List.map (fun p -> p.Label, p.Value)
+
+let private chartBlockBound =
+    NarrativeFromData.chartWith projectorBound NarrativeFromData.Bar (Some "Revenue") points
+
+let private chartBlockUnbound =
+    NarrativeFromData.chart NarrativeFromData.Line (Some "Sessions") points
+
+let private chartBlockNoSeries =
+    NarrativeFromData.chart NarrativeFromData.Area (Some "Pending") []
+
+let private propsOf (element: NarrativeElement) : Map<string, string> =
+    match element with
+    | Component("chart", props) -> props
+    | other -> failtestf "expected a chart Component, got %A" other
+
+let private sectionOf (id: string) (elements: NarrativeElement list) : NarrativeSection = {
+    Id = id
+    Heading = id
+    Subheading = None
+    Elements = elements
+}
+
+let private documentOf (sections: NarrativeSection list) : NarrativeDocument = {
+    Title = "Quarterly review"
+    Subtitle = None
+    Sections = sections
+    Provenance = None
+    Lang = None
+    CanonicalUrl = None
+}
+
+/// Three chart blocks: one at section top level, one nested inside a
+/// card, and one byte-identical to the first. The nesting and the
+/// duplicate are the two cases the keying rule has to answer.
+let private bundleDocument =
+    documentOf [
+        sectionOf "intro" [ Paragraph [ Text "Revenue rose." ]; chartBlockBound ]
+        sectionOf "detail" [
+            Card {
+                Heading = Some "Nested"
+                Image = None
+                Body = [ chartBlockUnbound ]
+            }
+            chartBlockBound
+        ]
+    ]
+
+/// A renderer that raises on bar charts — the "one block fails" fixture.
+/// Everything else renders through the real grammar, so what the partial
+/// bundle keeps is genuine output rather than a stub's.
+let private failsOnBars: ChartArtifactRenderer = {
+    MediaType = svgRenderer.MediaType
+    Render =
+        fun props ->
+            if props.TryFind ChartArtifact.KindProp = Some "bar" then
+                failwith "this deployment draws no bars"
+            else
+                svgRenderer.Render props
+}
+
+/// A document whose prose quotes a fact — the disclosure fixture.
+let private factDocument =
+    documentOf [
+        sectionOf "figures" [
+            Paragraph [ Metric("Revenue", "1200000", Some "fact-restricted") ]
+            chartBlockBound
+        ]
+    ]
+
+/// A gate with preset verdicts that records which egress surface it was
+/// asked about — the recording is the assertion, since "a gate ran" is
+/// weaker than "the export door ran".
+type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>) =
+    let mutable surfaces: FactEgressSurface list = []
+
+    member _.Surfaces = List.rev surfaces
+
+    interface IFactDisclosureGate with
+        member _.Check(_, _, surface, factIds) = async {
+            surfaces <- surface :: surfaces
+
+            return
+                factIds
+                |> List.distinct
+                |> List.map (fun id ->
+                    id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
+                |> Map.ofList
+        }
+
+let private metricValues (document: NarrativeDocument) : string list =
+    document.Sections
+    |> List.collect (fun section ->
+        section.Elements
+        |> List.collect (function
+            | Paragraph spans -> spans
+            | _ -> []))
+    |> List.choose (function
+        | Metric(_, value, _) -> Some value
+        | _ -> None)
+
+let bundleTests =
+    testList "Phase 650 Chart export bundle" [
+
+        // ── the keying rule ──────────────────────────────────────────
+
+        test "blocks are keyed by document-order position, descending into containers" {
+            let blocks = ChartExportBundle.blocks bundleDocument
+
+            Expect.equal
+                (blocks |> List.map _.Key)
+                [ "chart:0"; "chart:1"; "chart:2" ]
+                "positional keys in document order"
+
+            Expect.equal
+                (blocks |> List.map _.Ordinal |> List.map ChartExportBundle.keyFor)
+                (blocks |> List.map _.Key)
+                "keyFor is the function the walk keys with — a consumer needs no other"
+
+            // The nested chart sits at ordinal 1, i.e. BEFORE the
+            // top-level chart that follows its card. A walk that appended
+            // container bodies after their siblings would key these two
+            // the other way round and every artifact would pair with the
+            // wrong block.
+            Expect.equal
+                (blocks[1] |> _.Props)
+                (propsOf chartBlockUnbound)
+                "the card's chart is walked where the card sits"
+
+            Expect.equal
+                (blocks |> List.map _.SectionId)
+                [ "intro"; "detail"; "detail" ]
+                "each block reports the section it renders under, nested or not"
+        }
+
+        test "two identical chart blocks are distinguishable" {
+            // The reason the key is positional rather than derived from
+            // content: a document may legitimately draw the same chart
+            // twice, and a content-derived key would collapse them into
+            // one entry.
+            let blocks = ChartExportBundle.blocks bundleDocument
+
+            Expect.equal blocks[0].Props blocks[2].Props "fixture precondition: the two blocks ARE identical"
+            Expect.notEqual blocks[0].Key blocks[2].Key "and they still key apart"
+        }
+
+        test "a reconstructed spec round-trips to the block's own prop bag" {
+            // The conformance pin for the read half. `specOf` decodes what
+            // `ChartArtifact.props` encodes, so a canonically projected
+            // block must survive the round trip byte-for-byte — otherwise
+            // the artifact would be rendered from a bag that is not the
+            // one the page draws from, which is the second-grammar failure
+            // the whole seam is arranged to avoid.
+            for block in ChartExportBundle.blocks bundleDocument do
+                Expect.equal
+                    (ChartArtifact.props (ChartExportBundle.specOf block.Props))
+                    block.Props
+                    (sprintf "%s round-trips" block.Key)
+
+            let empty = propsOf chartBlockNoSeries
+
+            Expect.equal (ChartArtifact.props (ChartExportBundle.specOf empty)) empty "an empty series round-trips too"
+
+            // And the binding is read by the 649 reader, not a second one.
+            Expect.equal
+                (ChartExportBundle.specOf (propsOf chartBlockBound)).Binding
+                (ChartArtifact.bindingOf (propsOf chartBlockBound))
+                "one binding reader, not two"
+        }
+
+        // ── the pairing ──────────────────────────────────────────────
+
+        test "one call pairs the document with an artifact per chart block" {
+            let bundle = ChartExportBundle.ofDocument svgRenderer bundleDocument
+
+            Expect.equal bundle.Document bundleDocument "the document rides along unchanged"
+
+            Expect.equal
+                (bundle.Charts |> Map.toList |> List.map fst)
+                [ "chart:0"; "chart:1"; "chart:2" ]
+                "every chart block is keyed into the collection"
+
+            Expect.isEmpty bundle.Gaps "nothing refused"
+            Expect.isTrue (ChartExportBundle.isComplete bundle) "so the bundle is complete"
+
+            for key, artifact in Map.toList bundle.Charts do
+                Expect.isGreaterThan artifact.Content.Length 0 (sprintf "%s produced bytes" key)
+                Expect.equal artifact.MediaType "image/svg+xml" (sprintf "%s carries the renderer's media type" key)
+                Expect.equal artifact.Metadata.Grammar ChartArtifact.Grammar (sprintf "%s stamps the grammar" key)
+        }
+
+        test "each artifact carries the binding its block declared" {
+            // Phase 649's props are what the bundle carries through: a
+            // tier reading the artifact recovers the same two identifiers
+            // the block declares, without holding the document open.
+            let bundle = ChartExportBundle.ofDocument svgRenderer bundleDocument
+            let bound = bundle.Charts["chart:0"].Metadata
+            let unbound = bundle.Charts["chart:1"].Metadata
+
+            Expect.equal bound.Kind "bar" "kind read off the block"
+            Expect.equal bound.Title (Some "Revenue") "title read off the block"
+            Expect.equal bound.PointCount 3 "series decoded"
+            Expect.equal bound.ArtifactKey (Some "result-8f2c") "artifact key carried through"
+            Expect.equal bound.DatasetVintage (Some "dataset-v17") "dataset vintage carried through"
+            Expect.isTrue (ChartArtifact.isBound bound) "a bound block yields a bound artifact"
+
+            Expect.equal unbound.ArtifactKey None "an unbound block declares nothing"
+            Expect.equal unbound.DatasetVintage None "in both fields"
+            Expect.isFalse (ChartArtifact.isBound unbound) "and does not report bound"
+        }
+
+        // ── determinism ──────────────────────────────────────────────
+
+        test "the same document yields a byte-identical bundle" {
+            let first = ChartExportBundle.ofDocument svgRenderer bundleDocument
+            let second = ChartExportBundle.ofDocument svgRenderer bundleDocument
+
+            Expect.equal first second "two bundlings of one document are equal"
+
+            Expect.equal
+                (first.Charts |> Map.map (fun _ a -> a.ContentHash))
+                (second.Charts |> Map.map (fun _ a -> a.ContentHash))
+                "every artifact hashes identically"
+
+            // The two identical blocks draw identical bytes — determinism
+            // is a property of the spec, not of the position.
+            Expect.equal
+                first.Charts["chart:0"].ContentHash
+                first.Charts["chart:2"].ContentHash
+                "identical blocks render identically"
+        }
+
+        test "a changed series changes exactly the artifact it belongs to" {
+            // The falsifier. Identical bundles are only evidence if a
+            // different document produces a different one — and the change
+            // must be local, or the "hash" is a document stamp rather than
+            // a content address.
+            let changedSeries = [ "Jan", 11.0; "Feb", 20.0; "Mar", 15.0 ]
+
+            let changed =
+                documentOf [
+                    sectionOf "intro" [
+                        Paragraph [ Text "Revenue rose." ]
+                        NarrativeFromData.chartWith projectorBound NarrativeFromData.Bar (Some "Revenue") changedSeries
+                    ]
+                    sectionOf "detail" [
+                        Card {
+                            Heading = Some "Nested"
+                            Image = None
+                            Body = [ chartBlockUnbound ]
+                        }
+                        chartBlockBound
+                    ]
+                ]
+
+            let before = ChartExportBundle.ofDocument svgRenderer bundleDocument
+            let after = ChartExportBundle.ofDocument svgRenderer changed
+
+            Expect.notEqual before after "a different document is a different bundle"
+
+            Expect.notEqual
+                before.Charts["chart:0"].ContentHash
+                after.Charts["chart:0"].ContentHash
+                "the changed block's artifact changed"
+
+            Expect.equal
+                before.Charts["chart:1"].ContentHash
+                after.Charts["chart:1"].ContentHash
+                "and no other block's did"
+        }
+
+        // ── partiality ───────────────────────────────────────────────
+
+        test "a block with no series is a named gap, not a failed bundle" {
+            let document =
+                documentOf [
+                    sectionOf "intro" [ chartBlockBound ]
+                    sectionOf "empty" [ chartBlockNoSeries ]
+                ]
+
+            let bundle = ChartExportBundle.ofDocument svgRenderer document
+
+            Expect.equal
+                (bundle.Charts |> Map.toList |> List.map fst)
+                [ "chart:0" ]
+                "the renderable block still rendered"
+
+            match bundle.Gaps with
+            | [ gap ] ->
+                Expect.equal gap.Key "chart:1" "the gap names the block"
+                Expect.equal gap.Ordinal 1 "and its ordinal"
+                Expect.equal gap.SectionId "empty" "and where to find it"
+                Expect.equal gap.Refusal ChartBlockHasNoSeries "typed as the refusal it is"
+            | other -> failtestf "expected exactly one gap, got %A" other
+
+            Expect.isFalse (ChartExportBundle.isComplete bundle) "an incomplete bundle says so"
+            Expect.equal bundle.Document document "and still carries the whole document"
+        }
+
+        test "a renderer that raises on one block does not lose the others" {
+            // The load-bearing partiality case: the renderer belongs to
+            // the deployment, so one failing chart must not deny an export
+            // tier the ten that worked.
+            let bundle = ChartExportBundle.ofDocument failsOnBars bundleDocument
+
+            Expect.equal (bundle.Charts |> Map.toList |> List.map fst) [ "chart:1" ] "the line chart survived"
+
+            Expect.equal
+                (bundle.Gaps |> List.map _.Key)
+                [ "chart:0"; "chart:2" ]
+                "both bar blocks are gaps, in document order"
+
+            for gap in bundle.Gaps do
+                match gap.Refusal with
+                | ChartRendererFailed reason ->
+                    Expect.stringContains reason "draws no bars" "the renderer's own message is carried, not invented"
+                | other -> failtestf "expected ChartRendererFailed, got %A" other
+        }
+
+        // ── disclosure discipline ────────────────────────────────────
+
+        test "the gated bundle runs the same FactExport door the render path runs" {
+            let gate =
+                RecordingGate(Map.ofList [ "fact-restricted", FactNotDisclosable "restricted-policy" ])
+
+            let bundle =
+                NarrativeExportBundle.createWithDisclosureGate gate "principal-650" svgRenderer "scope-650" factDocument
+                |> Async.RunSynchronously
+
+            Expect.equal gate.Surfaces [ FactExport ] "checked once, at the export surface — not a bundle-specific door"
+
+            Expect.contains
+                (metricValues bundle.Document)
+                (NarrativeFacts.notDisclosableMarker "restricted-policy")
+                "the denied value is redacted in the bundle's own document"
+
+            Expect.isTrue
+                (bundle.Document.Sections
+                 |> List.exists (fun section -> section.Id = "withheld-values"))
+                "and the withheld-values note travels with it"
+
+            Expect.equal (bundle.Charts |> Map.toList |> List.map fst) [ "chart:0" ] "the pairing survives the door"
+
+            Expect.equal
+                (ChartExportBundle.blocks bundle.Document |> List.map _.Key)
+                (bundle.Charts |> Map.toList |> List.map fst)
+                "and the keys index the DISCLOSED document, which is the one the bundle carries"
+        }
+
+        test "a gate that permits everything leaves the document unchanged" {
+            // The falsifier for the case above — and GP 11 from the
+            // disclosure side: a deployment whose facts are all
+            // disclosable gets the ungated bundle exactly.
+            let gate = RecordingGate(Map.ofList [ "fact-restricted", FactDisclosable ])
+
+            let gated =
+                NarrativeExportBundle.createWithDisclosureGate gate "principal-650" svgRenderer "scope-650" factDocument
+                |> Async.RunSynchronously
+
+            Expect.equal
+                gated
+                (NarrativeExportBundle.create svgRenderer factDocument)
+                "an all-disclosable document bundles identically"
+        }
+
+        test "the ungated entry point is the honest no-fact-tier posture" {
+            // GP 13 — no gate composed means no door to consult, not a
+            // door quietly skipped.
+            let bundle = NarrativeExportBundle.create svgRenderer factDocument
+
+            Expect.equal bundle.Document factDocument "the document is exactly the one handed in"
+
+            Expect.equal
+                bundle
+                (ChartExportBundle.ofDocument svgRenderer factDocument)
+                "and the server entry point adds nothing else"
         }
     ]

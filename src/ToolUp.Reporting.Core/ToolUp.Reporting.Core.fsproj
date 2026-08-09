@@ -20,6 +20,10 @@
              them. -->
         <Compile Include="DeckExport.fs" />
         <Compile Include="ChartArtifact.fs" />
+        <!-- Phase 650 — the export bundle pairs a narrative document with
+             the artifacts its chart blocks render to, so it sits directly
+             above the handoff it renders through. -->
+        <Compile Include="ChartExportBundle.fs" />
         <Compile Include="IReportRenderer.fs" />
         <Compile Include="PlaceholderSubstitution.fs" />
         <Compile Include="MarkdownRenderer.fs" />

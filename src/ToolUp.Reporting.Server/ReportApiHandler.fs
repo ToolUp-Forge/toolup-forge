@@ -106,7 +106,13 @@ let private withheldNoteSection (withheld: (string * string) list) : NarrativeSe
 /// marker (the Phase 525 walk reused), and append the withheld-values
 /// note. A document citing no facts never consults the gate; a
 /// document whose facts are all disclosable returns unchanged.
-let private applyExportDisclosure
+///
+/// Public since Phase 650, and deliberately so: the chart export bundle
+/// is a second document-egress surface, and a second surface with its
+/// own copy of this walk is how one door becomes two doors that agree
+/// until they do not. `NarrativeExportBundle` calls THIS function — the
+/// bundle is an export surface, not a side door.
+let applyExportDisclosure
     (gate: IFactDisclosureGate)
     (principal: string)
     (scopeId: string)

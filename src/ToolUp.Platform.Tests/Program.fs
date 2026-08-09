@@ -223,6 +223,12 @@ let allTests =
         // chart-artifact handoff (determinism + provenance metadata,
         // driven through the real chart grammar).
         DeckExportSeamTests.tests
+        // Phase 650 — the chart export bundle: the positional keying rule
+        // (including a nested container and two identical blocks), the
+        // per-block typed refusals that keep a bundle partial rather than
+        // failed, determinism with its falsifier, and the pin that the
+        // bundle runs the one `FactExport` door rather than a second one.
+        DeckExportSeamTests.bundleTests
         NarrativeElementTests.tests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests
