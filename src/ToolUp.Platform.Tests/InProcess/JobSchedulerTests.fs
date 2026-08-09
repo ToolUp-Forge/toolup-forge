@@ -113,9 +113,26 @@ type private RecordingHandler() =
             return Success
         }
 
-/// Poll `predicate` until it holds or `timeoutMs` elapses — dispatch
-/// is `Async.Start` fire-and-forget, so assertions on handler
-/// execution need a settle wait.
+// ─── Synchronisation, not timing ──────────────────────────────────────
+//
+// Dispatch is `Async.Start` fire-and-forget (`TriggerOnce`, the tick
+// loop, catch-up replay, the external-retry continuation), so nothing
+// is guaranteed durable at the moment a trigger call returns — the
+// `Running` row, the handler execution, the terminal row, the
+// `LastRunStatus` definition update, and the lease release land in
+// that order, each strictly later than the last. One rule governs
+// every assertion downstream of a dispatch (shared with
+// `RoundOrchestratorTests.fs`, which lost the same bet in forge CI
+// first): wait on the production path's own observable state — the run
+// row, the definition, the lease — never on a wall-clock guess about
+// how far the dispatch async has got. The timeout on such a wait is a
+// FAILURE PATH, not a schedule: a green run never spends it, so making
+// it generous costs nothing, and a run that exhausts it has genuinely
+// lost the signal rather than merely been slow.
+
+/// Poll `predicate` until it holds or `timeoutMs` elapses. The wait
+/// ends the moment the predicate holds; the timeout is spent only by a
+/// genuine failure (see the rule above).
 let private waitFor (timeoutMs: int) (predicate: unit -> bool) : bool =
     let deadline = DateTime.UtcNow.AddMilliseconds(float timeoutMs)
     let mutable ok = predicate ()
@@ -590,11 +607,27 @@ let private eventTypes (fixture: HandoffFixture) (scope: string) =
     |> List.map _.EventType
 
 /// Hand off and settle: trigger the job, wait for the run to reach
-/// `AwaitingExternal`, and return it.
+/// `AwaitingExternal`, wait for the dispatch async to finish its tail,
+/// and return the awaiting run.
+///
+/// The second wait is load-bearing: the awaiting ROW is the dispatch
+/// async's FIRST durable write in the `HandedOff` arm, and the handle
+/// registration, the `JobExternalHandedOff` event, and the
+/// `LastRunStatus` definition update all land after it — so a caller
+/// synchronised only on the row races everything else it might assert
+/// on. The definition update is the dispatch's last store write;
+/// observing it means every earlier write is durable too.
 let private handOffAndSettle (fixture: HandoffFixture) scope jobId : JobRun =
     triggerOnce fixture scope jobId
 
     Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId AwaitingExternal)) "the run reached AwaitingExternal"
+
+    Expect.isTrue
+        (waitFor 5000 (fun () ->
+            fixture.Store.Get(scope, jobId)
+            |> Async.RunSynchronously
+            |> Option.exists (fun j -> j.LastRunStatus = Some AwaitingExternal)))
+        "the dispatch finished settling the hand-off (definition updated)"
 
     (latestRun fixture scope jobId).Value
 
@@ -663,9 +696,25 @@ let private handoffTests =
             // "frees its scheduler slot immediately" means here.
             let lockId = sprintf "toolup:job-dispatch:%O" jobId
 
-            let acquired =
-                fixture.Lock.TryAcquire(lockId, TimeSpan.FromSeconds 5.0)
-                |> Async.RunSynchronously
+            // The dispatch async releases the lease in its `finally`,
+            // strictly AFTER the definition update `handOffAndSettle`
+            // synchronised on — so a one-shot `TryAcquire` here is a
+            // wall-clock bet on the last sliver of the dispatch tail.
+            // Poll instead: a green run acquires within a tick or two,
+            // while the defect this test exists for (a scheduler
+            // holding the lease across the whole external await, the
+            // pre-319 blocked-and-polled shape) never releases it and
+            // spends the full failure timeout.
+            let mutable acquired: Lease option = None
+
+            Expect.isTrue
+                (waitFor 5000 (fun () ->
+                    acquired <-
+                        fixture.Lock.TryAcquire(lockId, TimeSpan.FromSeconds 5.0)
+                        |> Async.RunSynchronously
+
+                    acquired.IsSome))
+                "the dispatch lease frees once the hand-off settles"
 
             match acquired with
             | Some lease ->
@@ -1137,12 +1186,23 @@ let private handoffTests =
 
             Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "the in-process handler ran"
 
-            let runs = jobStore.GetRecentRuns(scope, jobId, 10) |> Async.RunSynchronously
+            // "The handler ran" is NOT "the run is terminal": the
+            // `Succeeded` row is written by the fire-and-forget dispatch
+            // async AFTER the handler returns, so asserting on the store
+            // straight after the handler's own signal is a wall-clock
+            // bet — the one forge CI lost (observed: `Some Running`).
+            // Wait on the terminal row itself.
+            let latestStatus () =
+                jobStore.GetRecentRuns(scope, jobId, 10)
+                |> Async.RunSynchronously
+                |> List.tryHead
+                |> Option.map _.Status
 
-            Expect.equal
-                (runs |> List.tryHead |> Option.map _.Status)
-                (Some Succeeded)
+            Expect.isTrue
+                (waitFor 5000 (fun () -> latestStatus () = Some Succeeded))
                 "and succeeded, unchanged by Phase 319"
+
+            let runs = jobStore.GetRecentRuns(scope, jobId, 10) |> Async.RunSynchronously
 
             Expect.isTrue (runs |> List.forall (fun r -> r.ExternalHandle = None)) "no in-process run acquires a handle"
         }
