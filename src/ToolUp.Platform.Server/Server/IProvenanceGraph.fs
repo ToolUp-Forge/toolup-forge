@@ -43,6 +43,18 @@ type ProvenanceNodeKind =
     /// the plan body lives in the fact companion's audit trail, this
     /// node carries its place in the chain.
     | AnswerPlanNode
+    /// Phase 646 — a governed model artifact (`IModelRegistry`). Identity
+    /// is its composite-key hash, the id every registry read already keys
+    /// on; the node carries its place in the chain, not its parameters.
+    | ModelArtifactNode
+    /// Phase 646 — one opaque provenance attachment on a model artifact.
+    /// Identity is the attachment's content hash and the label is its
+    /// declared media type. **The content is never interpreted, only
+    /// cited** — which is the whole reason an attachment can be a chain
+    /// node at all: a walk that had to understand an exploration record to
+    /// place it would make every producing tool's schema a dependency of
+    /// this graph.
+    | ProvenanceAttachmentNode
 
 /// One node in a provenance chain — an existing store identity, its kind,
 /// an optional disclosure class (populated for fact nodes, Phase 524.D),
@@ -79,6 +91,15 @@ type ProvenanceEdgeKind =
     /// `From` (a conversation message — a grounded answer) was produced
     /// from `To` (its recorded answer plan, Phase 560).
     | PlannedBy
+    /// Phase 646 — `From` (a model artifact) carries `To` (an opaque
+    /// provenance attachment) as attached evidence.
+    ///
+    /// Directed the same way every other edge here is: the artifact is the
+    /// downstream thing, the attachment is what it came with, so an
+    /// upstream walk from a published number reaches the exploration
+    /// record that produced the model — with no reference to the
+    /// deployment that built it.
+    | HasAttachment
 
 type ProvenanceEdge = {
     From: string
@@ -110,6 +131,10 @@ type ProvenanceRef =
     | ResultRef of string
     | FactRef of string
     | MessageRef of string
+    /// Phase 646 — a governed model artifact, by composite-key hash. The
+    /// root a grounding certificate cites when the number it certifies came
+    /// out of a model rather than out of a query.
+    | ModelArtifactRef of string
 
 /// The fact-evidence a fact node contributes to the chain — the seam the
 /// graph reads instead of depending on `IFactStore`. A fact-store adapter
@@ -131,6 +156,58 @@ type FactEvidence = {
     /// The fact id this one superseded (`Supersedes` edge), when any.
     Supersedes: string option
 }
+
+// ─── Phase 646 — model-artifact provenance via the same seam shape ───
+//
+// The graph compiles ahead of `IModelRegistry` (it is a view over lineage,
+// and the registry is a store built on top of it), so it reads an
+// artifact's provenance through an interface a registry adapter fills —
+// the shape `IFactEvidenceSource` already established, for the same
+// reason and with the same consequence: absent a source, the walk simply
+// omits artifact and attachment nodes and everything else behaves as it
+// always did.
+//
+// **Strings, not `ProvenanceAttachment`.** The attachment type is declared
+// with the registry, above this file; carrying the bytes here would also be
+// wrong on its own terms, because a chain node CITES an attachment and a
+// walk that materialised every payload would turn "show the working" into
+// a bulk download.
+
+/// One opaque provenance attachment, as the chain cites it: its content
+/// hash and its declared media type, and nothing else.
+type ProvenanceAttachmentRef = {
+    /// `sha256:<lowercase hex>` over the attachment's bytes — the node id.
+    ContentHash: string
+    /// The declared media type, carried as the node's label so a reader
+    /// knows what the citation points at without the graph interpreting it.
+    MediaType: string
+}
+
+/// What a model artifact contributes to a chain: its lifecycle status, the
+/// dataset vintage it was fit against (the lineage hop the walk continues
+/// through), and the attachments it carries.
+type ArtifactProvenance = {
+    /// The artifact's composite-key hash.
+    ArtifactKey: string
+    /// Stable `ModelArtifactStatus` label, carried as the node's disclosure
+    /// annotation so a chain renderer can distinguish an approved evidence
+    /// base from a retired one without a second read.
+    Status: string
+    /// The `{scopeId}/{datasetId}@v{version}` key the fit read. `""` when
+    /// unknown; a `DerivedFrom` edge is emitted only for a non-empty one.
+    DatasetVersion: string
+    /// The attachments, cited by hash + media type.
+    Attachments: ProvenanceAttachmentRef list
+}
+
+/// Read-only seam over the model-artifact registry, scope-bounded (GP 4).
+/// A registry adapter (`ModelArtifactProvenance.source`) fills it; the
+/// provenance graph composes over it without depending on the registry.
+/// Absent (not composed), the graph omits artifact and attachment nodes.
+type IArtifactProvenanceSource =
+    /// The provenance of one artifact, or `None` when the scope holds no
+    /// artifact with that key.
+    abstract GetArtifact: scopeId: string * artifactKey: string -> Async<ArtifactProvenance option>
 
 /// Read-only seam over a fact store, scope-bounded (GP 4). A fact-store
 /// adapter fills it; the provenance graph composes over it without a

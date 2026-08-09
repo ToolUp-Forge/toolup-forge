@@ -750,7 +750,10 @@ ToolUp.Platform.AuditEvent.IsKnowledgeScopeErased : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberAdded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRoleChanged : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelArtifactPromoted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelArtifactProvenanceAttached : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactRegistered : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelArtifactSuperseded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactTransitionAttributed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactTransitionDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelArtifactTransitioned : System.Boolean { get }
@@ -759,6 +762,7 @@ ToolUp.Platform.AuditEvent.IsModelFitBatchSubmitted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitGateFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitStarted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelPromotionPolicyEvaluated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScoreRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelScored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModuleArtefactRejected : System.Boolean { get }
@@ -830,8 +834,6 @@ ToolUp.Platform.AuditEvent.IsUserLoggedIn : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowActionExecuted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowTransitioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.Tag : System.Int32 { get }
-ToolUp.Platform.AuditEvent.IsModelArtifactSuperseded : System.Boolean { get }
-ToolUp.Platform.AuditEvent.IsModelPromotionPolicyEvaluated : System.Boolean { get }
 ToolUp.Platform.AuditEvent+AdClickRecorded (class)
 ToolUp.Platform.AuditEvent+AdClickRecorded.Item : ToolUp.Platform.AdClick { get }
 ToolUp.Platform.AuditEvent+AdImpressionRecorded (class)
@@ -974,6 +976,10 @@ ToolUp.Platform.AuditEvent+MemberRemoved (class)
 ToolUp.Platform.AuditEvent+MemberRemoved.Item : ToolUp.Platform.MemberRemovedPayload { get }
 ToolUp.Platform.AuditEvent+MemberRoleChanged (class)
 ToolUp.Platform.AuditEvent+MemberRoleChanged.Item : ToolUp.Platform.MemberRoleChangedPayload { get }
+ToolUp.Platform.AuditEvent+ModelArtifactPromoted (class)
+ToolUp.Platform.AuditEvent+ModelArtifactPromoted.Item : ToolUp.Platform.ModelArtifactPromotionPayload { get }
+ToolUp.Platform.AuditEvent+ModelArtifactProvenanceAttached (class)
+ToolUp.Platform.AuditEvent+ModelArtifactProvenanceAttached.Item : ToolUp.Platform.ModelArtifactProvenanceAttachedPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered (class)
 ToolUp.Platform.AuditEvent+ModelArtifactRegistered.Item : ToolUp.Platform.ModelArtifactRegisteredPayload { get }
 ToolUp.Platform.AuditEvent+ModelArtifactSuperseded (class)
@@ -1161,7 +1167,10 @@ ToolUp.Platform.AuditEvent+Tags.KnowledgeScopeErased : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberAdded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRoleChanged : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelArtifactPromoted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelArtifactProvenanceAttached : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactRegistered : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelArtifactSuperseded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitionAttributed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitionDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitioned : System.Int32 (literal)
@@ -1170,6 +1179,7 @@ ToolUp.Platform.AuditEvent+Tags.ModelFitBatchSubmitted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitGateFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitStarted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelPromotionPolicyEvaluated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScoreRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelScored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModuleArtefactRejected : System.Int32 (literal)
@@ -1240,8 +1250,6 @@ ToolUp.Platform.AuditEvent+Tags.TenantProvisioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.UserLoggedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowActionExecuted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowTransitioned : System.Int32 (literal)
-ToolUp.Platform.AuditEvent+Tags.ModelArtifactSuperseded : System.Int32 (literal)
-ToolUp.Platform.AuditEvent+Tags.ModelPromotionPolicyEvaluated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+TeamArchived (class)
 ToolUp.Platform.AuditEvent+TeamArchived.Item : ToolUp.Platform.TeamArchivedPayload { get }
 ToolUp.Platform.AuditEvent+TeamCreated (class)
@@ -5469,6 +5477,28 @@ ToolUp.Platform.MinLengthAttribute.MinLength : System.Int32 { get }
 ToolUp.Platform.MinValueAttribute (class)
 ToolUp.Platform.MinValueAttribute..ctor(System.Double)
 ToolUp.Platform.MinValueAttribute.MinValue : System.Double { get }
+ToolUp.Platform.ModelArtifactPromotionPayload (class)
+ToolUp.Platform.ModelArtifactPromotionPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Boolean, System.Boolean, System.String, System.String)
+ToolUp.Platform.ModelArtifactPromotionPayload.Accepted : System.Boolean { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.AttachmentHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.AuthorId : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.AuthorKind : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.Channel : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.Refusal : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.Replayed : System.Boolean { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.SigningKeyId : System.String { get }
+ToolUp.Platform.ModelArtifactPromotionPayload.TargetStatus : System.String { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload (class)
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int32, System.String, System.String)
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.AttachmentHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.MediaTypes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.SigningKeyId : System.String { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.TotalAttachments : System.Int32 { get }
+ToolUp.Platform.ModelArtifactProvenanceAttachedPayload.TotalBytes : System.Int32 { get }
 ToolUp.Platform.ModelArtifactRegisteredPayload (class)
 ToolUp.Platform.ModelArtifactRegisteredPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModelArtifactRegisteredPayload.CompositeKeyHash : System.String { get }
@@ -5642,14 +5672,21 @@ ToolUp.Platform.ModelExecutionRefusal.ScopeUnavailable : ToolUp.Platform.ModelEx
 ToolUp.Platform.ModelExecutionRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.ModelExecutionRefusal+BudgetDenied (class)
 ToolUp.Platform.ModelExecutionRefusal+BudgetDenied.Item : ToolUp.Platform.ComputeBudgetDenial { get }
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch (class)
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.accepted : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
+ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.received : System.Int32 { get }
 ToolUp.Platform.ModelExecutionRefusal+Forbidden (class)
 ToolUp.Platform.ModelExecutionRefusal+Forbidden.reason : System.String { get }
+ToolUp.Platform.ModelExecutionRefusal+GateFailed (class)
+ToolUp.Platform.ModelExecutionRefusal+GateFailed.verdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGateVerdict] { get }
 ToolUp.Platform.ModelExecutionRefusal+InvalidQuery (class)
 ToolUp.Platform.ModelExecutionRefusal+InvalidQuery.reason : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+InvalidSubmission (class)
 ToolUp.Platform.ModelExecutionRefusal+InvalidSubmission.reason : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+NotFound (class)
 ToolUp.Platform.ModelExecutionRefusal+NotFound.what : System.String { get }
+ToolUp.Platform.ModelExecutionRefusal+PolicyRefused (class)
+ToolUp.Platform.ModelExecutionRefusal+PolicyRefused.rule : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+ScoreRefused (class)
 ToolUp.Platform.ModelExecutionRefusal+ScoreRefused.Item : ToolUp.Platform.ModelExecutionScoreRefusal { get }
 ToolUp.Platform.ModelExecutionRefusal+StorageFailure (class)
@@ -5674,17 +5711,6 @@ ToolUp.Platform.ModelExecutionRefusal+Tags.PolicyRefused : System.Int32 (literal
 ToolUp.Platform.ModelExecutionRefusal+Tags.UnknownDocumentKind : System.Int32 (literal)
 ToolUp.Platform.ModelExecutionRefusal+Unexpected (class)
 ToolUp.Platform.ModelExecutionRefusal+Unexpected.message : System.String { get }
-ToolUp.Platform.ModelExecutionRefusal+UnknownProvider (class)
-ToolUp.Platform.ModelExecutionRefusal+UnknownProvider.kind : System.String { get }
-ToolUp.Platform.ModelExecutionRefusalModule (class)
-ToolUp.Platform.ModelExecutionRefusalModule.describe(ToolUp.Platform.ModelExecutionRefusal) : System.String
-ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch (class)
-ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.accepted : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
-ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.received : System.Int32 { get }
-ToolUp.Platform.ModelExecutionRefusal+GateFailed (class)
-ToolUp.Platform.ModelExecutionRefusal+GateFailed.verdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelExecutionGateVerdict] { get }
-ToolUp.Platform.ModelExecutionRefusal+PolicyRefused (class)
-ToolUp.Platform.ModelExecutionRefusal+PolicyRefused.rule : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind (class)
 ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind.kind : System.String { get }
 ToolUp.Platform.ModelExecutionRefusal+UnknownDocumentKind.known : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -5692,6 +5718,10 @@ ToolUp.Platform.ModelExecutionRefusal.IsEnvelopeVersionMismatch : System.Boolean
 ToolUp.Platform.ModelExecutionRefusal.IsGateFailed : System.Boolean { get }
 ToolUp.Platform.ModelExecutionRefusal.IsPolicyRefused : System.Boolean { get }
 ToolUp.Platform.ModelExecutionRefusal.IsUnknownDocumentKind : System.Boolean { get }
+ToolUp.Platform.ModelExecutionRefusal+UnknownProvider (class)
+ToolUp.Platform.ModelExecutionRefusal+UnknownProvider.kind : System.String { get }
+ToolUp.Platform.ModelExecutionRefusalModule (class)
+ToolUp.Platform.ModelExecutionRefusalModule.describe(ToolUp.Platform.ModelExecutionRefusal) : System.String
 ToolUp.Platform.ModelExecutionScoreRefusal (class)
 ToolUp.Platform.ModelExecutionScoreRefusal.IsInputSchemaMismatch : System.Boolean { get }
 ToolUp.Platform.ModelExecutionScoreRefusal.IsInputUnavailable : System.Boolean { get }

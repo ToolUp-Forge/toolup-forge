@@ -318,6 +318,16 @@ type ModelExecutionPeerRefusal =
     /// (`PeerTransition.className`) — a wire word is a federation
     /// artefact, and the platform seam has no business minting one.
     | TransitionRefused of refusal: ModelTransitionRefusal
+    /// Phase 646 — the promotion-transfer seam judged, and refused.
+    ///
+    /// Nested with the platform seam's own vocabulary, the posture
+    /// `TransitionRefused` takes, and the nesting goes two deep for the
+    /// lifecycle arm: a transfer refused on the edge or the grant carries
+    /// §5.7.11's refusal INSIDE this one, because it is §5.7.11's
+    /// judgment. Only the three things a transfer can get wrong that a
+    /// transition cannot — corrupt bytes, an oversized set, a key already
+    /// held with different content — earn a class of their own.
+    | PromotionRefused of refusal: ModelPromotionRefusal
 
 [<RequireQualifiedAccess>]
 module ModelExecutionPeerRefusal =
@@ -349,6 +359,10 @@ module ModelExecutionPeerRefusal =
         // `PeerTransitionContract.fs` beside the wire shapes rather than
         // on the platform seam, which has no wire.
         | ModelExecutionPeerRefusal.TransitionRefused refusal -> PeerTransition.className refusal
+        // Phase 646 — the INNER class again, and `PeerPromotion.className`
+        // is where the lifecycle arm folds back onto §5.7.11's classes
+        // rather than minting parallel ones for the same decision.
+        | ModelExecutionPeerRefusal.PromotionRefused refusal -> PeerPromotion.className refusal
 
     /// Human-readable one-line description (logs + operator display; the
     /// case, not this string, is the contract).
@@ -375,6 +389,7 @@ module ModelExecutionPeerRefusal =
             $"the answer to '{operation}' references data this deployment's disclosure plane withheld at the federated-egress door"
         | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.describe refusal
         | ModelExecutionPeerRefusal.TransitionRefused refusal -> ModelTransitionRefusal.describe refusal
+        | ModelExecutionPeerRefusal.PromotionRefused refusal -> ModelPromotionRefusal.describe refusal
 
     /// Phase 640 — the seam's refusal read in the **submitter** face's own
     /// closed vocabulary, given the operation names this deployment serves.
@@ -408,7 +423,11 @@ module ModelExecutionPeerRefusal =
     ///     caller — the binding decides the scope, so asserting a different
     ///     one is refused as a rule, not as a role;
     ///   * an unbound peer IS `Forbidden`, for the mirror-image reason.
-    let toSubmitterRefusal (known: string list) (r: ModelExecutionPeerRefusal) : ModelExecutionRefusal =
+    /// Recursive only for Phase 646's one nested arm: a promotion refused
+    /// on the lifecycle is a transition refusal, and it maps by delegating
+    /// to this function's own transition arms rather than by restating
+    /// them. One judgment, one reading.
+    let rec toSubmitterRefusal (known: string list) (r: ModelExecutionPeerRefusal) : ModelExecutionRefusal =
         match r with
         | ModelExecutionPeerRefusal.ProfileVersionUnsupported(requested, supported) ->
             ModelExecutionRefusal.EnvelopeVersionMismatch(requested, [ 1..supported ])
@@ -467,6 +486,27 @@ module ModelExecutionPeerRefusal =
             ModelExecutionRefusal.InvalidSubmission(ModelTransitionRefusal.describe refusal)
         | ModelExecutionPeerRefusal.TransitionRefused(ModelTransitionRefusal.InsufficientAuthority _ as refusal) ->
             ModelExecutionRefusal.Forbidden(ModelTransitionRefusal.describe refusal)
+        // Phase 646 — the promotion family maps case by case for the reason
+        // the transition family does: the five do not share a remedy. A
+        // corrupt or oversized attachment set is `InvalidSubmission` —
+        // nothing about the caller is wrong, the document is, and the
+        // description names which bound so it can be re-sent. A conflict is
+        // `PolicyRefused` under a stable rule id, the `ScopeWideningRefused`
+        // posture: no caller is ever permitted to put a second artifact
+        // under one composite key, so it is refused as a rule and not as a
+        // role. A signing failure is `SubstrateDisabled` — the honest shape,
+        // since what the caller learns is that this data host cannot
+        // currently accept a transfer at all, and retrying the same bytes
+        // later is exactly the right response. The lifecycle arm delegates
+        // to the transition mapping so one judgment reads one way.
+        | ModelExecutionPeerRefusal.PromotionRefused(ModelPromotionRefusal.AttachmentRefused _ as refusal) ->
+            ModelExecutionRefusal.InvalidSubmission(ModelPromotionRefusal.describe refusal)
+        | ModelExecutionPeerRefusal.PromotionRefused(ModelPromotionRefusal.PayloadConflict _) ->
+            ModelExecutionRefusal.PolicyRefused "model-execution.promotion-conflict"
+        | ModelExecutionPeerRefusal.PromotionRefused(ModelPromotionRefusal.SigningFailed _) ->
+            ModelExecutionRefusal.SubstrateDisabled "promoted-artifact signer"
+        | ModelExecutionPeerRefusal.PromotionRefused(ModelPromotionRefusal.TransitionRefused inner) ->
+            toSubmitterRefusal known (ModelExecutionPeerRefusal.TransitionRefused inner)
 
 /// The versioned envelope every model-execution request rides in.
 ///
@@ -593,6 +633,20 @@ module ModelExecutionProfile =
     /// the grant is expressed over targets anyway.
     [<Literal>]
     let InvokeTransitionOperation = "InvokeTransition"
+
+    /// Phase 646 — the promotion transfer: a final artifact, its opaque
+    /// spec payload and its provenance attachments landing here as one
+    /// recorded act.
+    ///
+    /// A distinct operation from `InvokeTransition` rather than a widened
+    /// body on it, because the two are different acts with different
+    /// failure modes and one deployment may reasonably admit either
+    /// without the other: a data host willing to let a partner approve
+    /// what it already holds is not thereby willing to accept artifacts it
+    /// has never seen. They share a GRANT, which is a different thing
+    /// from sharing an operation.
+    [<Literal>]
+    let TransferPromotionOperation = "TransferPromotion"
 
     /// Phase 642 — operations that require `Full`: raw data, for
     /// co-located or otherwise fully-trusted deployments.
@@ -757,6 +811,23 @@ module ModelExecutionAdmission =
             Operations = Set.add ModelExecutionProfile.InvokeTransitionOperation admission.Operations
     }
 
+    /// Phase 646 — admit the promotion transfer.
+    ///
+    /// **A third separate declaration, and separate from `withTransitions`
+    /// on purpose.** Accepting an artifact a peer built is a strictly
+    /// larger act than judging one this deployment already holds: it puts
+    /// bytes in this registry that no local process produced. A data host
+    /// that admits transitions and not transfers refuses a transfer as
+    /// undeclared — "we do not do that" — which is a different answer from
+    /// the authority one, and the two remedies differ.
+    ///
+    /// Not called ⇒ the operation stays off the admitted set and a pre-646
+    /// composition admits byte-for-byte what it always did (GP 11).
+    let withPromotions (admission: ModelExecutionAdmission) = {
+        admission with
+            Operations = Set.add ModelExecutionProfile.TransferPromotionOperation admission.Operations
+    }
+
     /// A data host that answers no governed diagnostics: the submitter
     /// operations and nothing else. This is the default a deployment
     /// gets by not declaring, and it is the honest one — a diagnostic
@@ -886,6 +957,19 @@ type ModelExecutionPeerDeps = {
     /// is the grant on its binding. Holding the two apart is what lets one
     /// registry serve many counterparties at different grants.
     Transitions: ModelTransitionDeps option
+    /// Phase 646 — the promotion-transfer seam's substrate, including the
+    /// optional acceptance signer. `None` on a deployment that admits no
+    /// transfer, which is every pre-646 deployment: the operation is then
+    /// off the admitted set too (see
+    /// `ModelExecutionAdmission.withPromotions`), so nothing reaches the
+    /// dispatch arm and nothing is constructed (GP 13).
+    ///
+    /// Beside `Admission` for the reason `Views` and `Transitions` are: the
+    /// registry a transfer lands in is a property of the deployment, while
+    /// which lifecycle statuses a given peer may drive an artifact into is
+    /// the grant on its binding — the SAME grant a bare transition is
+    /// judged by, deliberately, since it is the same question.
+    Promotions: ModelPromotionDeps option
 }
 
 /// The substrate the governed-diagnostics contract runs over.
@@ -1149,6 +1233,16 @@ module ModelExecutionPeerContract =
     /// the profile dispatches on.
     let transitionRequest (invocation: PeerTransitionInvocation) : ModelExecutionPeerRequest =
         request ModelExecutionProfile.InvokeTransitionOperation invocation
+
+    /// Phase 646 — a `TransferPromotion` request envelope, canonicalised.
+    ///
+    /// **The emitter owns the sorts**, as it does for gates, terms and
+    /// series: two builders promoting the same artifact with the same
+    /// evidence must produce the same document, or the envelope is not
+    /// canonical in the sense §3 means — and a transfer's whole
+    /// idempotency claim is that the receiver can recognise a re-send.
+    let promotionRequest (transfer: PeerPromotionTransfer) : ModelExecutionPeerRequest =
+        request ModelExecutionProfile.TransferPromotionOperation (PeerPromotion.canonicalise transfer)
 
     /// A governed-diagnostic request envelope for `diagnostic`, with the
     /// terms in ordinal order for the same reason.
@@ -1440,6 +1534,57 @@ module ModelExecutionPeerContract =
                             return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.TransitionRefused refusal)
                         | Ok recorded -> return answered (PeerTransition.toWireRecord recorded)
 
+            // ── Phase 646 — the promotion transfer ───────────────────
+            //
+            // Reached only when this deployment DECLARED transfers (else
+            // the name is off the admitted set). The peer's GRANT is not
+            // checked here, for the reason the transition arm above does
+            // not check it: it is checked inside `ModelPromotion.judge`,
+            // which reaches `ModelTransition.judge` for the lifecycle
+            // half, so a local promotion and a peer's are decided by one
+            // function against one graph. A grant check hoisted into this
+            // file would be one only peers were subject to.
+            | ModelExecutionProfile.TransferPromotionOperation ->
+                match deps.Promotions with
+                | None ->
+                    return
+                        ModelExecutionPeerAnswer.Refused(
+                            ModelExecutionPeerRefusal.UndeclaredDiagnostic request.Operation
+                        )
+                | Some promotions ->
+                    let transfer = JsonRpc.deserialize<PeerPromotionTransfer> request.Body
+
+                    match PeerPromotion.target transfer with
+                    // Same distinction §5.7.11 draws: a label naming no
+                    // status is an unreadable REQUEST, not an illegal
+                    // edge. "That is not a state" and "that is not an
+                    // edge" have different remedies and only one of them
+                    // is a different edge.
+                    | None ->
+                        return
+                            ModelExecutionPeerAnswer.Refused(
+                                ModelExecutionPeerRefusal.RequestUnreadable
+                                    $"'{transfer.Target}' names no model-artifact lifecycle status"
+                            )
+                    | Some target ->
+                        match PeerPromotion.toPromoted binding.PeerId target transfer with
+                        // Base64 that does not decode is likewise an
+                        // unreadable request rather than a hash mismatch:
+                        // a sender whose encoding is malformed has a
+                        // different bug from one whose bytes were altered
+                        // in flight, and telling it the digest disagreed
+                        // would send it to check the wrong thing.
+                        | Error reason ->
+                            return ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.RequestUnreadable reason)
+                        | Ok promoted ->
+                            match!
+                                ModelPromotion.accept promotions binding.ScopeId binding.TransitionAuthority promoted
+                            with
+                            | Error refusal ->
+                                return
+                                    ModelExecutionPeerAnswer.Refused(ModelExecutionPeerRefusal.PromotionRefused refusal)
+                            | Ok recorded -> return answered (PeerPromotion.toWireRecord recorded)
+
             // Unreachable: `admit` has already refused anything outside
             // the admitted operation set. Kept total rather than assumed
             // — a surface whose default branch is an exception is one
@@ -1533,6 +1678,22 @@ module ModelExecutionPeerContract =
             // refused, which is a stronger record than an egress row.
             | ModelExecutionPeerAnswer.Answered _ when
                 request.Operation = ModelExecutionProfile.InvokeTransitionOperation
+                ->
+                return answer
+            // Phase 646 — a promotion receipt takes the same carve-out,
+            // and by an argument the transfer makes more sharply than the
+            // transition does. The door asks "may this data leave"; every
+            // member of a promotion receipt is either something the CALLER
+            // ITSELF SENT (the artifact key, the attachment digests) or a
+            // statement about a write this deployment has just committed
+            // on the caller's instruction. There is nothing in it the
+            // caller did not already have or is not entitled to learn —
+            // and a withheld receipt would leave a builder unable to
+            // discover whether the artifact it is about to be retired in
+            // favour of actually landed, which is the exact failure this
+            // phase exists to prevent.
+            | ModelExecutionPeerAnswer.Answered _ when
+                request.Operation = ModelExecutionProfile.TransferPromotionOperation
                 ->
                 return answer
             | ModelExecutionPeerAnswer.Answered _ ->
@@ -1699,8 +1860,19 @@ module ModelExecutionPeerContract =
     /// tomorrow. One shape, from the first day — and the poll leg the
     /// specification already describes (§5.5.6) is where the caller
     /// collects it.
+    ///
+    /// Phase 646's `TransferPromotion` for the same reason and one more:
+    /// a transfer carries bytes, and a data host that must hash, store and
+    /// sign them has a unit of work whose duration is a function of what
+    /// the caller sent rather than of what the receiver decided. A
+    /// synchronous seam would make a large but entirely legitimate
+    /// transfer indistinguishable from a wedged one.
     let private queuedOperations: Set<string> =
-        Set.ofList [ "SubmitFit"; ModelExecutionProfile.InvokeTransitionOperation ]
+        Set.ofList [
+            "SubmitFit"
+            ModelExecutionProfile.InvokeTransitionOperation
+            ModelExecutionProfile.TransferPromotionOperation
+        ]
 
     /// The submitter contract's registration.
     ///

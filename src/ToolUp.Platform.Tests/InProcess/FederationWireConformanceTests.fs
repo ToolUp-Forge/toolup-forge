@@ -122,10 +122,12 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
     | "host-envelope", _ -> HostEnvelope.toJson (JsonRpc.deserialize<HostEnvelope> document)
     | "model-execution", "model-execution/submission"
     | "model-execution", "model-execution/view-request"
-    | "model-execution", "model-execution/transition-request" ->
+    | "model-execution", "model-execution/transition-request"
+    | "model-execution", "model-execution/promotion-request" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerRequest> document)
     | "model-execution", "model-execution/outcome"
-    | "model-execution", "model-execution/transition" ->
+    | "model-execution", "model-execution/transition"
+    | "model-execution", "model-execution/promotion" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer> document)
     | "model-execution", "model-execution/diagnostics"
     | "model-execution", "model-execution/refusals"
@@ -283,6 +285,30 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
                     (PeerTransition.className refusal)
                     reason
                     $"'{entry.Id}' must be refused as '{reason}'; the seam said: {ModelTransitionRefusal.describe refusal}"
+    // Phase 646 — a FOURTH reader, run in order for the same reason. The
+    // envelope check accepts a transfer deliberately (well-formed,
+    // declared, in-scope, and needing no level above the floor since a
+    // transfer answers a receipt rather than data); `ModelPromotion.judge`
+    // is what refuses, and for a lifecycle refusal it reaches
+    // `ModelTransition.judge` — so one graph decides for a transfer, a
+    // bare transition, a local action and a policy verdict alike.
+    | Ok request when reason.StartsWith "model-execution-promotion-" ->
+        let transfer = JsonRpc.deserialize<PeerPromotionTransfer> request.Body
+        let existing, limits, grant = promotionStateFor entry.Id
+
+        match PeerPromotion.target transfer with
+        | None -> failtestf "'%s' must name a lifecycle status the profile defines" entry.Id
+        | Some target ->
+            match PeerPromotion.toPromoted "consortium-north" target transfer with
+            | Error reason -> failtestf "'%s' must be readable as a transfer; it was not: %s" entry.Id reason
+            | Ok promoted ->
+                match ModelPromotion.judge existing limits grant promoted with
+                | Ok _ -> failtestf "'%s' must be refused by the transfer seam, and it was admitted" entry.Id
+                | Error refusal ->
+                    Expect.equal
+                        (PeerPromotion.className refusal)
+                        reason
+                        $"'{entry.Id}' must be refused as '{reason}'; the seam said: {ModelPromotionRefusal.describe refusal}"
     | Ok _ -> failtestf "'%s' must be refused, and was accepted" entry.Id
     | Error refusal ->
         Expect.equal

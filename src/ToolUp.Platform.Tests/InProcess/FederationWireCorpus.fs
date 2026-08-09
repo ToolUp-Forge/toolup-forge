@@ -742,6 +742,15 @@ let admissionFor (vectorId: string) : ModelExecutionAdmission =
     | "model-execution/reject-transition-unknown-artifact"
     | "model-execution/reject-transition-invalid"
     | "model-execution/reject-transition-unauthorized" -> referenceAdmission |> ModelExecutionAdmission.withTransitions
+    // Phase 646 — the transfer vectors are read with the transfer
+    // DECLARED and at the reference level, which is `AggregatesOnly`,
+    // for the reason the transition vectors are: a transfer carries data
+    // INBOUND and answers a receipt, so there is nothing for a
+    // data-visibility level to govern and a vector read at a raised level
+    // would let an implementation that fused the two authority axes pass.
+    | "model-execution/reject-promotion-hash-mismatch"
+    | "model-execution/reject-promotion-cap-exceeded"
+    | "model-execution/reject-promotion-conflict" -> referenceAdmission |> ModelExecutionAdmission.withPromotions
     | _ -> referenceAdmission
 
 let private referenceVintage: ModelExecutionPeerVintage = {
@@ -1055,6 +1064,212 @@ let transitionStateFor (vectorId: string) : ModelArtifactStatus option * ModelTr
     | "model-execution/reject-transition-invalid" -> Some ModelArtifactStatus.Retired, ModelTransitionAuthority.full
     | _ -> Some ModelArtifactStatus.Fitted, referenceTransitionGrant
 
+// ─── Reference values — Phase 646 promotion transfers ────────────────
+
+/// The exploration record a modelling tool kept beside the fit — the
+/// canonical example of what an attachment IS.
+///
+/// **Its content is deliberately somebody else's schema.** Nothing in
+/// forge reads this; the corpus carries it as bytes with a digest, which
+/// is exactly the claim the slot makes. A vector whose payload forge could
+/// have parsed would prove the opposite of what it exists to prove.
+let private referenceExplorationRecord =
+    """{"candidates":["price","promo","seasonality"],"kept":["price","promo"],"dropped":{"seasonality":"vif 8.4"}}"""
+
+/// A second record under a different media type, so the vector carries
+/// more than one attachment and the ordinal sort over content hashes is
+/// exercised rather than asserted.
+let private referenceRunLog =
+    "fit 1/3 converged\nfit 2/3 converged\nfit 3/3 converged\n"
+
+let private referenceExplorationAttachment =
+    ProvenanceAttachment.ofText "application/json" referenceExplorationRecord
+
+let private referenceRunLogAttachment =
+    ProvenanceAttachment.ofText "text/plain" referenceRunLog
+
+/// The spec payload the promoted artifact was fit from — the same opaque
+/// document the submission vector carries, because it is the same fit seen
+/// from the other end of its life.
+let private referencePromotedSpecPayload = referenceSubmission.SpecPayload
+
+/// The composite identity of the promoted artifact. Deliberately the same
+/// key the transition vectors name: a data host that received this
+/// artifact by transfer is the same host a peer then transitions it on,
+/// and the corpus says so by reusing the id rather than by asserting it.
+let private referencePromotedKey: FitCompositeKey = {
+    SpecHash = referenceSubmission.SpecHash
+    DatasetVersion = "consortium-north/weekly-panel@v7"
+    Seed = referenceSubmission.Seed
+    ProviderId = "reference-regression"
+    ProviderVersion = "1.4.0"
+    Hash = referenceArtifactKey
+}
+
+/// A final artifact as the BUILDER hands it over: identity, the opaque
+/// spec, the gate verdicts it passed, and the evidence beside it.
+///
+/// Gate verdicts and attachments are declared out of ordinal order on
+/// purpose — the emitter owns the sorts, not whoever typed the value.
+let referencePromotedArtifact: PromotedArtifact = {
+    Outcome = {
+        CompositeKey = referencePromotedKey
+        ArtifactRef = {
+            ArtifactId = "artifact-8821"
+            ContentHash = "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+            ByteLength = 4096L
+        }
+        Diagnostics = Map [ "aic", 812.5; "holdout-r2", 0.71; "vif-max", 3.25 ]
+        GateVerdicts = [
+            {
+                Name = "vif-max"
+                Threshold = 5.0
+                Direction = GateDirection.AtMost
+                Observed = 3.25
+                Passed = true
+            }
+            {
+                Name = "holdout-r2"
+                Threshold = 0.6
+                Direction = GateDirection.AtLeast
+                Observed = 0.71
+                Passed = true
+            }
+        ]
+        // The building deployment's own compute self-report is not part of
+        // what a data host is asked to hold, so the profile does not carry
+        // it and the reference value states zero rather than a number the
+        // wire would drop.
+        DurationMs = 0L
+        CostUnits = 0.0
+    }
+    SpecPayload = referencePromotedSpecPayload
+    Attachments = [ referenceRunLogAttachment; referenceExplorationAttachment ]
+    Target = ModelArtifactStatus.Approved
+    Author = PeerActor("consortium-north", "r.okafor")
+    Rationale = Some "holdout MAPE within tolerance on three vintages"
+}
+
+/// The transfer as it crosses the seam — built by the SHIPPED projection,
+/// so a member added to `PromotedArtifact` fails here rather than wherever
+/// it is next noticed.
+let referencePromotionTransfer =
+    PeerPromotion.ofPromoted referencePromotedArtifact "r.okafor"
+
+/// Every attachment the artifact holds once the transfer lands: the two it
+/// carried plus the spec payload, which the receiver folds into the same
+/// append-only slot under its reserved media type.
+let private referencePromotionAttachmentHashes =
+    ModelPromotion.arriving referencePromotedArtifact |> List.map _.ContentHash
+
+/// The acceptance signature.
+///
+/// The JWS is a reference VALUE — an ECDSA signature is not deterministic,
+/// and standing up a signer inside the corpus would pin this deployment's
+/// key material rather than the shape the specification states. The
+/// **signing-input digest is not**: it is recomputed here from the
+/// canonical form, and `emit.mjs` rebuilds that form independently and
+/// must agree. That is the member worth triangulating — a verifier in
+/// another language has to reconstruct exactly these bytes, and it is the
+/// one part of a signature an independent implementation can get wrong
+/// without any key at all.
+let private referencePromotionSignature: ModelArtifactSignature = {
+    DetachedJws =
+        "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRhdGEtaG9zdC0yMDI2LTA3In0..MEUCIQDdemo0promotion0signature0value0only0not0verifiable"
+    SigningKeyId = "data-host-2026-07"
+    SigningKeyUrl = "/_platform/signing-key/data-host-2026-07"
+    SignedInputHash =
+        ProvenanceAttachment.hashOf (
+            ModelPromotionSigningInput.bytes
+                referencePromotedKey
+                ModelArtifactStatus.Approved
+                referencePromotionAttachmentHashes
+        )
+}
+
+/// The receipt an accepted transfer produced, through the shipped
+/// projection for the reason the transition record goes through its own.
+let private referencePromotionRecord: PeerPromotionRecord =
+    PeerPromotion.toWireRecord {
+        ArtifactKey = referenceArtifactKey
+        Status = "Approved"
+        AttachmentHashes = referencePromotionAttachmentHashes
+        Signature = Some referencePromotionSignature
+        Channel = "peer"
+        AuthorKind = "peer"
+        AuthorId = "consortium-north/r.okafor"
+        Replayed = false
+        RecordedAt = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
+        Version = 2
+    }
+
+/// A transfer whose attachment declares a digest its bytes do not produce.
+/// The one thing a receiver can check about a payload it is forbidden to
+/// read, and therefore the one integrity claim this seam makes.
+let private hashMismatchTransfer = {
+    referencePromotionTransfer with
+        Attachments =
+            referencePromotionTransfer.Attachments
+            |> List.map (fun a ->
+                if a.MediaType = "text/plain" then
+                    {
+                        a with
+                            ContentHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    }
+                else
+                    a)
+}
+
+/// The registry cap each promotion reject vector is judged against, the
+/// artifact the scope already holds, and the peer's grant — the promotion
+/// family's `admissionFor`.
+///
+/// The state has to be supplied for the reason `transitionStateFor`'s
+/// does: `ModelPromotion.judge` is pure, so there is no store for the
+/// harness to read a cap or an incumbent out of, which is exactly the
+/// property that lets it certify against the shipped function.
+let promotionStateFor
+    (vectorId: string)
+    : ModelArtifact option * ProvenanceAttachmentLimits * ModelTransitionAuthority =
+    match vectorId with
+    // A cap of ONE against a transfer carrying three (two records plus the
+    // spec payload). The vector's whole content is that the bound is the
+    // RECEIVER's declared one — nothing in the document is wrong, and a
+    // deployment at the default cap answers the identical bytes.
+    | "model-execution/reject-promotion-cap-exceeded" ->
+        None,
+        {
+            ProvenanceAttachmentLimits.default' with
+                MaxAttachments = 1
+        },
+        referenceTransitionGrant
+    // The scope already holds this composite key, fit from different
+    // parameters. A key names one artifact; two under one key would leave
+    // every downstream citation ambiguous about which it meant.
+    | "model-execution/reject-promotion-conflict" ->
+        Some {
+            CompositeKey = referencePromotedKey
+            ScopeId = modelExecutionBoundScope
+            ArtifactRef = {
+                ArtifactId = "artifact-8821"
+                ContentHash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                ByteLength = 4096L
+            }
+            Diagnostics = Map.empty
+            GateVerdicts = []
+            Status = ModelArtifactStatus.Fitted
+            Annotations = Map.empty
+            Notes = ""
+            Attachments = []
+            Signature = None
+            RegisteredBy = "local-fitter"
+            RegisteredAt = DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero)
+            Version = 1
+        },
+        ProvenanceAttachmentLimits.default',
+        referenceTransitionGrant
+    | _ -> None, ProvenanceAttachmentLimits.default', referenceTransitionGrant
+
 /// One refusal per class the profile defines — so a modeller's mapping
 /// is pinned by the corpus rather than inferred from the two classes it
 /// happened to trip.
@@ -1105,6 +1320,36 @@ let private referenceRefusals: ModelExecutionPeerAnswer list =
         )
         ModelExecutionPeerRefusal.TransitionRefused(
             ModelTransitionRefusal.InsufficientAuthority(referenceArtifactKey, "Retired", "consortium-north/r.okafor")
+        )
+        // Phase 646 — the promotion family. FOUR entries for THREE reject
+        // vectors, and the asymmetry is the point: a signing failure is a
+        // property of the receiver's own arrangements rather than of any
+        // document, so no vector can be built for it from bytes — and a
+        // caller still has to enumerate the class. The lifecycle arm is
+        // deliberately absent from this list: a promotion refused on the
+        // edge or the grant carries §5.7.11's classes unchanged, which are
+        // the three already above, and a fifth entry restating one of them
+        // would suggest a class a modeller has to handle separately.
+        ModelExecutionPeerRefusal.PromotionRefused(
+            ModelPromotionRefusal.AttachmentRefused(
+                referenceArtifactKey,
+                ProvenanceAttachmentRefusal.HashMismatch(
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "sha256:9d3e1a55a4d4dd1b6b9f3d70e0e0a0e5bbd2f9b3d1c7a5f0e2b8c4d6a1937f5e"
+                )
+            )
+        )
+        ModelExecutionPeerRefusal.PromotionRefused(
+            ModelPromotionRefusal.AttachmentRefused(
+                referenceArtifactKey,
+                ProvenanceAttachmentRefusal.CapExceeded("count", 3, 1)
+            )
+        )
+        ModelExecutionPeerRefusal.PromotionRefused(
+            ModelPromotionRefusal.PayloadConflict(referenceArtifactKey, "ArtifactRef.ContentHash")
+        )
+        ModelExecutionPeerRefusal.PromotionRefused(
+            ModelPromotionRefusal.SigningFailed(referenceArtifactKey, "the signing key is unavailable")
         )
     ]
     |> List.map ModelExecutionPeerAnswer.Refused
@@ -1533,6 +1778,67 @@ let vectors () : WireVector list =
                 "model-execution/reject-transition-unauthorized.json"
                 (JsonRpc.serialize (ModelExecutionPeerContract.transitionRequest unauthorizedTransitionInvocation)) with
                 Reject = Some PeerTransition.InsufficientAuthorityClass
+        }
+
+        vector
+            "model-execution/promotion-request"
+            "model-execution"
+            Modeller
+            RoundTrip
+            "A promotion transfer: a final artifact's identity, the opaque spec payload it was fit from, its gate verdicts, and the opaque provenance records that justified it — each with a declared media type and a digest over its base64 content. Gate verdicts and attachments are declared out of ordinal order and cross sorted, because two builders promoting the same artifact must produce the same document or the transfer's idempotency claim means nothing. No scope member, no role member and no grant member: the receiver's own per-peer declaration decides the authority, so nothing a sender writes can widen it."
+            "model-execution/promotion-request.json"
+            (JsonRpc.serialize (ModelExecutionPeerContract.promotionRequest referencePromotionTransfer))
+
+        vector
+            "model-execution/promotion"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The receipt an accepted transfer produced: the status the artifact now holds, the digest of every attachment it carries — including the spec payload, which the receiver folds into the same append-only slot — and the data host's own detached signature over the canonical acceptance input. The signing-input digest is recomputed from that canonical form rather than quoted, because a verifier in another language has to rebuild exactly those bytes and it is the part of a signature an independent implementation can get wrong with no key at all."
+            "model-execution/promotion.json"
+            (JsonRpc.serialize (ModelExecutionPeerAnswer.Answered(JsonRpc.serialize referencePromotionRecord)))
+
+        // Phase 646 — the three transfer reject vectors. Each is admitted
+        // by every envelope check (current profile version, declared
+        // operation, no asserted scope, a granted `AggregatesOnly`) and
+        // refused by `ModelPromotion.judge` — a FOURTH reader in the
+        // corpus, and one that reaches `ModelTransition.judge` for the
+        // lifecycle half so a transfer and a bare transition cannot come
+        // to disagree about whether a peer may approve something.
+        {
+            vector
+                "model-execution/reject-promotion-hash-mismatch"
+                "model-execution"
+                DataHost
+                Reject
+                "A transfer whose attachment declares a digest its own bytes do not produce. The receiver is forbidden to read the content, so this is the ONE integrity claim it can make about it — and it is checked before the cap, before identity and before the lifecycle, because a payload that did not survive transport is not a question about size or authority and answering it as one would send the sender to fix the wrong thing."
+                "model-execution/reject-promotion-hash-mismatch.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.promotionRequest hashMismatchTransfer)) with
+                Reject = Some PeerPromotion.HashMismatchClass
+        }
+
+        {
+            vector
+                "model-execution/reject-promotion-cap-exceeded"
+                "model-execution"
+                DataHost
+                Reject
+                "The reference transfer verbatim, against a receiver whose declared attachment cap is one. Read closely: nothing in the document distinguishes it from a transfer that would be accepted, and a deployment at the default cap answers these exact bytes. The bound is the RECEIVER's, which is why it is published (§5.7.12) rather than discovered by hitting it."
+                "model-execution/reject-promotion-cap-exceeded.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.promotionRequest referencePromotionTransfer)) with
+                Reject = Some PeerPromotion.CapExceededClass
+        }
+
+        {
+            vector
+                "model-execution/reject-promotion-conflict"
+                "model-execution"
+                DataHost
+                Reject
+                "The same document again, against a scope that already holds this composite key with a different fitted artifact. A key names ONE artifact — it is the hash of the spec, vintage, seed and provider that produced it — so two transfers under one key disagree about something the key asserts they share, and reconciling that quietly would leave every downstream citation ambiguous about which it meant. This is also what makes the family idempotent rather than merely tolerant: the IDENTICAL transfer at this key is accepted and writes nothing."
+                "model-execution/reject-promotion-conflict.json"
+                (JsonRpc.serialize (ModelExecutionPeerContract.promotionRequest referencePromotionTransfer)) with
+                Reject = Some PeerPromotion.ConflictClass
         }
 
         {

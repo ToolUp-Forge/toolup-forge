@@ -1117,6 +1117,160 @@ const transitionRecord = {
   version: 2,
 };
 
+// -- Phase 646 -- promotion transfer ---------------------------------
+//
+// A transfer hands a data host a finished artifact so the deployment that
+// built it can be switched off. Three things here are worth a second
+// opinion, and each is somewhere a lone emitter would never notice it had
+// invented a rule:
+//
+//   * the base64 alphabet and padding of an opaque payload;
+//   * the ordinal sort over CONTENT HASHES, which is a sort over values
+//     the emitter computes rather than over values it was handed -- so an
+//     implementation that sorted by arrival order, or by media type,
+//     produces a document that still looks entirely reasonable;
+//   * the canonical signing input. A verifier in another language has to
+//     rebuild those exact bytes from published values, and it can get
+//     them wrong with no key material at all, which makes this the one
+//     part of a signature a corpus can usefully triangulate.
+
+const attachmentHash = (text) => "sha256:" + createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+
+/** Attachments with their digests computed, in the specified order:
+ * ordinal over the content hash. */
+const promotionAttachments = (items) =>
+  items
+    .map((a) => ({ mediaType: a.mediaType, text: a.text, hash: attachmentHash(a.text) }))
+    .sort((x, y) => ordinal(x.hash, y.hash));
+
+const promotionAttachment = (a) =>
+  obj([
+    ["MediaType", str(a.mediaType)],
+    ["ContentHash", str(a.hash)],
+    ["Content", str(Buffer.from(a.text, "utf8").toString("base64"))],
+  ]);
+
+// Declared out of ordinal order on purpose, and out of order by a
+// DIFFERENT key from the gate list above: gates sort by a member the
+// sender wrote, attachments by a digest nobody typed.
+const promotionAttachmentSources = [
+  { mediaType: "text/plain", text: "fit 1/3 converged\nfit 2/3 converged\nfit 3/3 converged\n" },
+  {
+    mediaType: "application/json",
+    text: '{"candidates":["price","promo","seasonality"],"kept":["price","promo"],"dropped":{"seasonality":"vif 8.4"}}',
+  },
+];
+
+const promotionTransfer = {
+  artifactKey: referenceArtifactKey,
+  specHash: submission.specHash,
+  specPayload: submission.specPayload,
+  datasetVersion: outcome.datasetVersion,
+  seed: submission.seed,
+  providerId: outcome.providerId,
+  providerVersion: outcome.providerVersion,
+  artifactId: outcome.artifactId,
+  artifactContentHash: outcome.artifactContentHash,
+  artifactByteLength: 4096,
+  diagnostics: outcome.diagnostics,
+  gateVerdicts: outcome.gateVerdicts,
+  attachments: promotionAttachmentSources,
+  target: "Approved",
+  actorId: "r.okafor",
+  rationale: transitionInvocation.rationale,
+};
+
+const promotionTransferBody = (t) =>
+  obj([
+    ["ArtifactKey", str(t.artifactKey)],
+    ["SpecHash", str(t.specHash)],
+    // Opaque, carried verbatim and never re-hashed against SpecHash --
+    // the spec hash is the submitter's, and re-deriving it would assert a
+    // canonicalisation the two sides never agreed on.
+    ["SpecPayload", str(t.specPayload)],
+    ["DatasetVersion", str(t.datasetVersion)],
+    ["Seed", int64(t.seed)],
+    ["ProviderId", str(t.providerId)],
+    ["ProviderVersion", str(t.providerVersion)],
+    ["ArtifactId", str(t.artifactId)],
+    ["ArtifactContentHash", str(t.artifactContentHash)],
+    ["ArtifactByteLength", int64(t.artifactByteLength)],
+    ["Diagnostics", mapOf(t.diagnostics, real)],
+    ["GateVerdicts", arr([...t.gateVerdicts].sort((a, b) => ordinal(a.name, b.name)).map(gateVerdict))],
+    ["Attachments", arr(promotionAttachments(t.attachments).map(promotionAttachment))],
+    ["Target", str(t.target)],
+    ["ActorId", str(t.actorId)],
+    ["Rationale", opt(t.rationale, str)],
+  ]);
+
+// Every attachment the artifact holds once the transfer lands: the ones
+// it carried, plus the SPEC PAYLOAD, which the receiver folds into the
+// same append-only slot under a reserved media type. A reader that
+// expected the spec to live somewhere else produces a shorter list here
+// and a different signing input below -- exactly the divergence worth
+// catching.
+const specPayloadHash = attachmentHash(promotionTransfer.specPayload);
+
+const promotionHeldHashes = [
+  ...promotionAttachments(promotionTransfer.attachments).map((a) => a.hash),
+  specPayloadHash,
+].sort(ordinal);
+
+/** The canonical bytes a promoted artifact is signed over. Order-fixed;
+ * attachment digests ordinally sorted, because a set has no order and a
+ * signature over an arrival-ordered list would depend on the sender. */
+const promotionSigningInput = (t, status, hashes) =>
+  "toolup.promoted-artifact/1" +
+  `|key=${t.artifactKey}` +
+  `|spec=${t.specHash}` +
+  `|dataset=${t.datasetVersion}` +
+  `|seed=${t.seed}` +
+  `|provider=${t.providerId}` +
+  `|pver=${t.providerVersion}` +
+  `|status=${status}` +
+  [...hashes]
+    .sort(ordinal)
+    .map((h) => `|attachment=${h}`)
+    .join("");
+
+const promotionRecord = {
+  artifactKey: referenceArtifactKey,
+  status: "Approved",
+  attachmentHashes: promotionHeldHashes,
+  // A reference value: an ECDSA signature is not deterministic, so the
+  // JWS is quoted rather than produced. The digest below is NOT quoted.
+  detachedJws:
+    "eyJhbGciOiJFUzI1NiIsImtpZCI6ImRhdGEtaG9zdC0yMDI2LTA3In0..MEUCIQDdemo0promotion0signature0value0only0not0verifiable",
+  signingKeyId: "data-host-2026-07",
+  signingKeyUrl: "/_platform/signing-key/data-host-2026-07",
+  channel: "peer",
+  authorKind: "peer",
+  authorId: "consortium-north/r.okafor",
+  replayed: false,
+  recordedAt: transitionRecord.recordedAt,
+  version: 2,
+};
+
+const promotionRecordBody = (r) =>
+  obj([
+    ["ArtifactKey", str(r.artifactKey)],
+    ["Status", str(r.status)],
+    ["AttachmentHashes", arr([...r.attachmentHashes].sort(ordinal).map(str))],
+    ["DetachedJws", str(r.detachedJws)],
+    ["SigningKeyId", str(r.signingKeyId)],
+    ["SigningKeyUrl", str(r.signingKeyUrl)],
+    [
+      "SignedInputHash",
+      str("sha256:" + sha256Hex(promotionSigningInput(promotionTransfer, r.status, r.attachmentHashes))),
+    ],
+    ["Channel", str(r.channel)],
+    ["AuthorKind", str(r.authorKind)],
+    ["AuthorId", str(r.authorId)],
+    ["Replayed", bool(r.replayed)],
+    ["RecordedAt", str(r.recordedAt)],
+    ["Version", num(r.version)],
+  ]);
+
 const modelExecutionRefusals = () =>
   arr([
     // A multi-payload union case rides as an ARRAY of its payloads in
@@ -1187,6 +1341,52 @@ const modelExecutionRefusals = () =>
         ),
       ),
     ),
+    // Phase 646 -- the promotion family, nested TWO deep for its
+    // attachment arm: the seam's own refusal wraps the attachment
+    // vocabulary, because the two answer different questions and only one
+    // of them belongs to this profile. Four entries and three reject
+    // vectors -- a signing failure is a property of the receiver's own
+    // arrangements rather than of any document, so no vector can be built
+    // for it, and a caller still has to enumerate it.
+    refused(
+      caseOf(
+        "PromotionRefused",
+        caseOf(
+          "AttachmentRefused",
+          arr([
+            str(referenceArtifactKey),
+            caseOf(
+              "HashMismatch",
+              arr([
+                str("sha256:0000000000000000000000000000000000000000000000000000000000000000"),
+                str("sha256:9d3e1a55a4d4dd1b6b9f3d70e0e0a0e5bbd2f9b3d1c7a5f0e2b8c4d6a1937f5e"),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    ),
+    refused(
+      caseOf(
+        "PromotionRefused",
+        caseOf(
+          "AttachmentRefused",
+          arr([str(referenceArtifactKey), caseOf("CapExceeded", arr([str("count"), num(3), num(1)]))]),
+        ),
+      ),
+    ),
+    refused(
+      caseOf(
+        "PromotionRefused",
+        caseOf("PayloadConflict", arr([str(referenceArtifactKey), str("ArtifactRef.ContentHash")])),
+      ),
+    ),
+    refused(
+      caseOf(
+        "PromotionRefused",
+        caseOf("SigningFailed", arr([str(referenceArtifactKey), str("the signing key is unavailable")])),
+      ),
+    ),
   ]);
 
 // ── run ──────────────────────────────────────────────────────────────
@@ -1232,6 +1432,12 @@ const documents = () => {
       transitionInvocationBody(transitionInvocation),
     ),
     "model-execution/transition.json": answered(transitionRecordBody(transitionRecord)),
+    "model-execution/promotion-request.json": requestEnvelope(
+      "TransferPromotion",
+      null,
+      promotionTransferBody(promotionTransfer),
+    ),
+    "model-execution/promotion.json": answered(promotionRecordBody(promotionRecord)),
   };
 };
 

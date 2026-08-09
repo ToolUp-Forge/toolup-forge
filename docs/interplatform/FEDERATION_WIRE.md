@@ -1241,6 +1241,173 @@ whatever the judgment went on to be.
 Corpus: `model-execution/transition-request.json`, `model-execution/transition.json`, the three
 `reject-transition-*` vectors, and the three classes in `model-execution/refusals.json`.
 
+#### 5.7.12 Promotion transfer
+
+§5.7.11 moved the lifecycle **judgment** across the seam: a peer holding the modelling authority can
+approve an artifact the data host already holds. It cannot hand the data host one — and that gap is
+the whole two-instance topology this profile exists to serve.
+
+In that topology a **builder** deployment fits models, explores, and produces the evidence that
+justifies a choice; a **data host** holds the durable record and publishes numbers from it. The
+builder is meant to be **dispensable after promotion**. Retire it, and everything the data host
+publishes must still resolve — which it cannot, if the artifact's spec payload and the exploration
+record behind it live only on the machine being switched off.
+
+One operation, served on the submitter contract:
+
+| Operation | Body | Answer body | Leg |
+|---|---|---|---|
+| `TransferPromotion` | `PromotionTransfer` | `PromotionRecord` | **queued** (§5.5.6) |
+
+**Queued**, for §5.7.11's reason and one more: a transfer carries bytes the receiver must hash, store
+and sign, so its duration is a function of what the CALLER sent rather than of what the receiver
+decided. A synchronous seam would make a large but entirely legitimate transfer indistinguishable
+from a wedged one.
+
+**A separate operation from `InvokeTransition`, and a separate declaration.** Accepting an artifact a
+peer built is strictly larger than judging one the receiver already holds: it puts bytes in the
+receiver's registry that no local process produced. A deployment that admits transitions and not
+transfers refuses a transfer as `model-execution-undeclared-diagnostic`, which is a different answer
+with a different remedy from the authority one.
+
+**`PromotionTransfer`**
+
+| Member | Type | Notes |
+|---|---|---|
+| `ArtifactKey` | string | The artifact's composite-key hash. Also the transfer's **idempotency key**. |
+| `SpecHash` | string | Submitter-minted. Stored and keyed verbatim; the receiver never re-derives it (§5.7.3). |
+| `SpecPayload` | string | The opaque provider spec. Carried so the artifact's assembly resolves data-side once the builder is gone. |
+| `DatasetVersion` | string | The `{scopeId}/{datasetId}@v{version}` key the fit read. |
+| `Seed` | int64 | |
+| `ProviderId` / `ProviderVersion` | string | |
+| `ArtifactId` / `ArtifactContentHash` / `ArtifactByteLength` | string, string, int64 | The fitted-parameter blob's reference. The bytes themselves are not on this wire. |
+| `Diagnostics` | map<string, real> | Provider-reported. Keys sorted ordinally (§3.1 rule 14). |
+| `GateVerdicts` | array | The building deployment's verdicts, sorted ordinally by `Name`. |
+| `Attachments` | array | The opaque provenance records, **sorted ordinally by `ContentHash`**. |
+| `Target` | string | The lifecycle status the artifact is asked to hold, as a stable label. A label naming no status is `model-execution-request-unreadable`, exactly as in §5.7.11. |
+| `ActorId` | string | The calling deployment's own claim. Cross-checked against nothing; decides nothing; buys attribution. |
+| `Rationale` | string, opt | |
+
+**`Attachment`** — `MediaType` (string), `ContentHash` (string), `Content` (string).
+
+`Content` is **base64 of the opaque bytes**, not an embedded document (§3.1 rule 12), because the
+content is not JSON and is not required to be: a provenance record can be a protobuf, a parquet
+fragment or a tarball, and a slot that assumed otherwise would exclude exactly the tools worth
+attaching. `MediaType` is a **label, not an instruction** — a receiver records it so a later reader
+knows what to open the bytes with, and selects no behaviour on it; an unrecognised value is ordinary.
+
+**The receiver MUST NOT parse an attachment's content.** It recomputes the digest and refuses a
+disagreement; that is the only check it makes and the only one it can make. A seam that understood an
+attachment would make every producing tool's schema part of this specification, and the schema of a
+modelling tool is not something a federation wire has any business tracking. This is §5.7.3's opacity
+posture for the spec payload, generalised to everything a promotion carries.
+
+**The spec payload is stored as an attachment.** It arrives as its own member — a sender should not
+have to know a receiver's reserved media type to send the one payload every transfer carries — and
+the receiver folds it into the same append-only slot under
+`application/vnd.toolup.model-spec`, computing its digest itself. So `PromotionRecord.AttachmentHashes`
+carries one more entry than the transfer's `Attachments`, and a reader that expected the spec
+elsewhere produces a different signing input (below) and diverges visibly.
+
+**The attachment set is append-only, de-duplicated by digest, and size-bounded by a cap the RECEIVER
+declares.** Three properties, each load-bearing: provenance that could be edited after the fact is
+not provenance; de-duplication by digest is what makes a re-sent transfer free rather than doubling;
+and a bound a caller can only learn by exceeding it turns every large transfer into a round trip and
+a refusal.
+
+**`PromotionRecord`** — what an accepted transfer produced.
+
+| Member | Type | Notes |
+|---|---|---|
+| `ArtifactKey` | string | |
+| `Status` | string | The lifecycle status the artifact holds afterwards. |
+| `AttachmentHashes` | array of string | Every attachment the artifact now holds, ordinally sorted — **the citation set** a grounding certificate resolves against. |
+| `DetachedJws` | string | The acceptance signature over the canonical signing input. `""` when the receiver composed no signer. |
+| `SigningKeyId` | string | |
+| `SigningKeyUrl` | string | Origin-relative path the public key is served from, so a third party trusting neither deployment can verify offline. |
+| `SignedInputHash` | string | `sha256:<hex>` over the exact bytes signed. |
+| `Channel` / `AuthorKind` / `AuthorId` | string | `"peer"` / `"peer"` / `{peerId}/{actorId}`, as §5.7.11. |
+| `Replayed` | bool | The receiver already held exactly this and wrote nothing. |
+| `RecordedAt` | instant | |
+| `Version` | int32 | The artifact version the transfer left behind. |
+
+**The canonical signing input.** A receiver that signs MUST sign exactly these bytes, UTF-8:
+
+```
+toolup.promoted-artifact/1|key=<ArtifactKey>|spec=<SpecHash>|dataset=<DatasetVersion>
+|seed=<Seed>|provider=<ProviderId>|pver=<ProviderVersion>|status=<Status>
+|attachment=<hash>[|attachment=<hash>…]
+```
+
+(one line, no whitespace; the breaks above are typographic). Attachment digests are **ordinally
+sorted**, because a set has no order and a signature over an arrival-ordered list would depend on
+which sender sent it. `Seed` is plain decimal here, not the sign-prefixed string form §3.1 rule 7
+uses on the wire — the signing input is a byte string, not a JSON document, and stating that
+explicitly is cheaper than a verifier guessing.
+
+What the signature attests is **acceptance, not authorship**: that this deployment accepted this
+artifact, fit from this spec against this vintage, at this status, carrying these attachments. It is
+minted **before the first store write**, so a receiver that cannot sign refuses with nothing landed
+rather than holding an artifact it cannot attest to.
+
+**Idempotency, and its one refusal.** A transfer is idempotent under `ArtifactKey` plus the content
+hashes it carries. Re-sending the identical transfer is **accepted** — `Replayed: true`, no version
+appended, nothing written — because a sender that cannot tell whether its last attempt arrived must
+be able to retry. A *different* payload under the same key is
+`model-execution-promotion-conflict`: a composite key is the hash of the spec, vintage, seed and
+provider that produced the artifact, so two transfers under one key disagree about something the key
+asserts they share, and reconciling that quietly would leave every downstream citation ambiguous
+about which artifact it meant.
+
+**Authority is §5.7.11's grant, unchanged and per-peer.** A peer that may not drive an artifact into
+`Approved` may not promote-transfer one into `Approved`, and it is refused with the same class
+(`model-execution-transition-authority`) by the same judgment. A second grant covering "may this peer
+send us artifacts" would let a deployment grant a target on one axis and withhold it on the other,
+which is not a finer control but a contradiction. The grant is required **even when the artifact
+already holds the target status** and nothing would move: a write path that needed no authority
+because it changed no status would be a hole in the gate exactly where one would be looked for.
+
+**The order of judgment is normative**, and each step is refused before the next is asked:
+
+1. **Integrity.** Every attachment's declared digest recomputes over the bytes that arrived. First,
+   because a payload that did not survive transport is not a question about size, identity or
+   authority — and answering it as one sends the sender to fix the wrong thing.
+2. **Cap.** The arriving set, merged with what the artifact already holds, is inside the declared
+   bound.
+3. **Identity.** A key already held must be held with the same content.
+4. **The edge**, then **5. the grant** — §5.7.11's order, unchanged and for its reasons.
+
+| Class | Union case | Condition |
+|---|---|---|
+| `model-execution-promotion-hash-mismatch` | `AttachmentRefused` → `HashMismatch` | A declared attachment digest disagrees with a recomputation. |
+| `model-execution-promotion-cap-exceeded` | `AttachmentRefused` → `CapExceeded` | The merged set exceeds the receiver's declared cap. `dimension` is `count`, `attachment-bytes` or `total-bytes`. |
+| `model-execution-promotion-conflict` | `PayloadConflict` | The composite key is already held with different content. |
+| `model-execution-promotion-signing-failed` | `SigningFailed` | A signer is composed and could not sign. Not a property of any document, so the corpus carries no reject vector for it — a caller still has to enumerate it. |
+
+They reach the caller nested inside a `PromotionRefused` passthrough case. A transfer refused on the
+**lifecycle** carries §5.7.11's classes nested inside that one, unchanged: one graph, one order, one
+vocabulary, whether the artifact arrived with the request or was already here.
+
+**The receipt does not pass a disclosure gate**, and the argument is sharper than §5.7.11's. Every
+member of a `PromotionRecord` is either something the caller itself sent (the artifact key, the
+attachment digests) or a statement about a write the receiver has just committed on the caller's
+instruction. A withheld receipt would leave a builder unable to discover whether the artifact it is
+about to be retired in favour of actually landed — the exact failure this operation exists to
+prevent.
+
+**The dispensable-builder property, stated as an obligation.** After an accepted transfer, a
+conformant data host answers the full provenance walk for the promoted artifact **with no reference
+to the builder peer**: the artifact record, its lifecycle status, its acceptance signature, the
+verbatim spec payload, every attached provenance record, and the dataset vintage the fit read — all
+resolvable from the receiver's own stores. A receiver that stored an attachment as a REFERENCE to
+the sender (a URL, a peer-scoped id, a promise to fetch on demand) has not implemented this
+operation; it has deferred it, and the deferral comes due at exactly the moment the builder is
+switched off. The receipt's `AttachmentHashes` is the checkable form of the obligation: every digest
+in it must resolve locally, forever, or the artifact should never have been accepted.
+
+Corpus: `model-execution/promotion-request.json`, `model-execution/promotion.json`, the three
+`reject-promotion-*` vectors, and the four classes in `model-execution/refusals.json`.
+
 ---
 
 ## 7. Constants
@@ -1290,6 +1457,10 @@ another language will and should word it differently.
 | `model-execution-transition-unknown-artifact` | model execution | No artifact with that key exists in the peer's scope (§5.7.11). |
 | `model-execution-transition-invalid` | model execution | An edge the lifecycle graph forbids. Refused regardless of grant. |
 | `model-execution-transition-authority` | model execution | The author's declared grant does not admit the target status. |
+| `model-execution-promotion-hash-mismatch` | model execution | A transferred attachment's declared digest disagrees with a recomputation over its bytes (§5.7.12). |
+| `model-execution-promotion-cap-exceeded` | model execution | The merged attachment set exceeds the receiver's declared cap. |
+| `model-execution-promotion-conflict` | model execution | The composite key is already held with different content. |
+| `model-execution-promotion-signing-failed` | model execution | A signer is composed at the receiver and could not sign. No reject vector: not a property of any document. |
 
 ### 7.3 Model-execution constants
 
@@ -1305,7 +1476,20 @@ Operations (§5.7.2): `SubmitFit`, `GetOutcome`, `QueryOutcomes`, `ResolveVintag
 **Queued operations** — those served on the long-running leg (§5.5.6) rather than immediately:
 
 ```
-SubmitFit  InvokeTransition
+SubmitFit  InvokeTransition  TransferPromotion
+```
+
+**Reserved media type** (§5.7.12) — the label a receiver stores a promotion's spec payload under in
+the provenance-attachment slot. Recorded, never interpreted:
+
+```
+application/vnd.toolup.model-spec
+```
+
+**Attachment cap dimensions** (§5.7.12), as carried by a `CapExceeded` refusal:
+
+```
+count  attachment-bytes  total-bytes
 ```
 
 **Lifecycle statuses** (§5.7.11), and the edges between them. A self-transition is never legal;

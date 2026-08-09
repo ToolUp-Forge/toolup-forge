@@ -184,6 +184,14 @@ module GroundingCertificate =
         | NarrativeDocument -> "NarrativeDocument"
         | ConversationMessage -> "ConversationMessage"
         | AnswerPlanNode -> "AnswerPlan"
+        // Phase 646 — a promoted model artifact and the opaque provenance
+        // records it carries. A certificate that names one of these is
+        // making the claim the promotion transfer exists to support: the
+        // number was produced by THIS artifact, whose spec payload and
+        // exploration record resolve from this deployment's own stores,
+        // with no reference to the deployment that fitted it.
+        | ModelArtifactNode -> "ModelArtifact"
+        | ProvenanceAttachmentNode -> "ProvenanceAttachment"
 
     /// Canonical edge-kind string. Total over `ProvenanceEdgeKind`.
     let private edgeKindString (k: ProvenanceEdgeKind) : string =
@@ -193,6 +201,7 @@ module GroundingCertificate =
         | CitesFact -> "CitesFact"
         | Supersedes -> "Supersedes"
         | PlannedBy -> "PlannedBy"
+        | HasAttachment -> "HasAttachment"
 
     let private nodeHash
         (id: string)

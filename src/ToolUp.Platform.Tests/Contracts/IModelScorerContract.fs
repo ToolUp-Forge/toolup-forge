@@ -76,6 +76,10 @@ type private StubModelRegistry(artifacts: (string * ModelArtifact) list) =
 
         member _.TransitionStatus(_, _, _, _, _) = async { return Error(ModelRegistryError.StorageFailure "not used") }
 
+        member _.AttachProvenance(_, _, _, _) = async { return Error(ModelRegistryError.StorageFailure "not used") }
+
+        member _.AttachmentLimits = ProvenanceAttachmentLimits.default'
+
 /// A fresh blob-backed dataset store (the full default stack), one temp dir
 /// per call so tests never share state.
 let private freshStore () : IDatasetStore =
@@ -152,6 +156,8 @@ let private artifactOf (providerId: string) (status: ModelArtifactStatus) : Mode
         Status = status
         Annotations = Map.empty
         Notes = ""
+        Attachments = []
+        Signature = None
         RegisteredBy = "u1"
         RegisteredAt = t0
         Version = 1

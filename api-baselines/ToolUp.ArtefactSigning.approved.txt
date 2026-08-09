@@ -69,6 +69,9 @@ ToolUp.ArtefactSigning.ModuleBindingTrustValidator (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator..ctor(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.ArtefactSigning.ModuleSbomSigning (class)
 ToolUp.ArtefactSigning.ModuleSbomSigning.canonicalBytes(System.String, ToolUp.Platform.ModuleSbom) : System.Byte[]
+ToolUp.ArtefactSigning.PromotedArtifactBundle (class)
+ToolUp.ArtefactSigning.PromotedArtifactBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IPromotedArtifactSigner
+ToolUp.ArtefactSigning.PromotedArtifactBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.ArtefactSigning.PublicKeyMetadata (class)
 ToolUp.ArtefactSigning.PublicKeyMetadata..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String)
 ToolUp.ArtefactSigning.PublicKeyMetadata.Algorithm : ToolUp.ArtefactSigning.SigningAlgorithm { get }

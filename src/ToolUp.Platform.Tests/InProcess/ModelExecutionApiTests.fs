@@ -494,6 +494,8 @@ let tests =
                     member _.QueryByStatus(_, _) = failwith "boom"
                     member _.QueryPage(_, _, _, _) = failwith "boom"
                     member _.TransitionStatus(_, _, _, _, _) = failwith "boom"
+                    member _.AttachProvenance(_, _, _, _) = failwith "boom"
+                    member _.AttachmentLimits = failwith "boom"
                 }
 
             let services = ServiceCollection()

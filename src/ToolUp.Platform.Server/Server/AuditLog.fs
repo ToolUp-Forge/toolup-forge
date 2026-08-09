@@ -1348,6 +1348,26 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelArtifactTransitionAttributed(fromAuditJson<ModelArtifactTransitionAttributedPayload> j)
     }
+    // Phase 646 — the append-only provenance-attachment row and the
+    // promotion-transfer row. Hashes and media types only: the attachment
+    // content is opaque by construction, so a trail carrying it would be
+    // republishing bytes this deployment cannot characterise.
+    {
+        EventType = "ModelArtifactProvenanceAttached"
+        TryEncode =
+            (function
+            | ModelArtifactProvenanceAttached p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactProvenanceAttached(fromAuditJson<ModelArtifactProvenanceAttachedPayload> j)
+    }
+    {
+        EventType = "ModelArtifactPromoted"
+        TryEncode =
+            (function
+            | ModelArtifactPromoted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactPromoted(fromAuditJson<ModelArtifactPromotionPayload> j)
+    }
     // Phase 454 — model-scoring lifecycle audit rows (append-only registration).
     {
         EventType = "ModelScored"

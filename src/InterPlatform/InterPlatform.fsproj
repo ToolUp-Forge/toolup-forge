@@ -275,6 +275,15 @@
          dependency runs one way. Nothing composes it: a deployment that
          declares no views constructs none of it (GP 13). -->
     <Compile Include="Server\PeerViewContract.fs" />
+    <!-- Phase 646 — the promotion-transfer wire half: the transfer a
+         builder sends, the signed receipt it gets back, and the three
+         refusal classes only a transfer can earn. Compiles BEFORE
+         ModelExecutionPeerContract.fs, like PeerViewContract.fs and
+         PeerTransitionContract.fs, because that file's refusal vocabulary
+         carries this one's (`PromotionRefused`) and its deps record holds
+         `ModelPromotionDeps`. Names no model-execution type itself, so the
+         dependency runs one way. -->
+    <Compile Include="Server\PeerPromotionContract.fs" />
     <Compile Include="Server\ModelExecutionPeerContract.fs" />
   </ItemGroup>
   <ItemGroup>

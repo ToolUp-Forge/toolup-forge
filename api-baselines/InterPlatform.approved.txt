@@ -903,6 +903,7 @@ ToolUp.InterPlatform.ModelExecutionAdmissionModule (class)
 ToolUp.InterPlatform.ModelExecutionAdmissionModule.create(Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.InterPlatform.ModelExecutionAdmission
 ToolUp.InterPlatform.ModelExecutionAdmissionModule.submitterOnly : ToolUp.InterPlatform.ModelExecutionAdmission { get }
 ToolUp.InterPlatform.ModelExecutionAdmissionModule.withAuthority(ToolUp.InterPlatform.PeerVisibilityResolution, ToolUp.InterPlatform.ModelExecutionAdmission) : ToolUp.InterPlatform.ModelExecutionAdmission
+ToolUp.InterPlatform.ModelExecutionAdmissionModule.withPromotions(ToolUp.InterPlatform.ModelExecutionAdmission) : ToolUp.InterPlatform.ModelExecutionAdmission
 ToolUp.InterPlatform.ModelExecutionAdmissionModule.withTransitions(ToolUp.InterPlatform.ModelExecutionAdmission) : ToolUp.InterPlatform.ModelExecutionAdmission
 ToolUp.InterPlatform.ModelExecutionAdmissionModule.withViews(ToolUp.InterPlatform.ModelExecutionAdmission) : ToolUp.InterPlatform.ModelExecutionAdmission
 ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps (class)
@@ -943,20 +944,22 @@ ToolUp.InterPlatform.ModelExecutionPeerContract.diagnosticRequest(System.String,
 ToolUp.InterPlatform.ModelExecutionPeerContract.governedDiagnostics(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps) : ToolUp.InterPlatform.GatedContractRegistration
 ToolUp.InterPlatform.ModelExecutionPeerContract.host(ToolUp.InterPlatform.ModelExecutionPeerDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : ToolUp.InterPlatform.PeerContractHost
 ToolUp.InterPlatform.ModelExecutionPeerContract.ofWireSubmission(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.Platform.ModelExecutionFitSubmission
+ToolUp.InterPlatform.ModelExecutionPeerContract.promotionRequest(ToolUp.InterPlatform.PeerPromotionTransfer) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerContract.read(ToolUp.InterPlatform.ModelExecutionAdmission, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ModelExecutionPeerRequest, ToolUp.InterPlatform.ModelExecutionPeerRefusal]
 ToolUp.InterPlatform.ModelExecutionPeerContract.registration(ToolUp.InterPlatform.ModelExecutionPeerDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : ToolUp.InterPlatform.PeerContractRegistration
 ToolUp.InterPlatform.ModelExecutionPeerContract.requestAsserting`1(System.String, System.String, T) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerContract.request`1(System.String, T) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerContract.submissionRequest(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.InterPlatform.ModelExecutionPeerRequest
+ToolUp.InterPlatform.ModelExecutionPeerContract.submitterAnswerBody`1(ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionPeerAnswer) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.ModelExecutionRefusal]
 ToolUp.InterPlatform.ModelExecutionPeerContract.toWireOutcome(ToolUp.Platform.ModelExecutionOutcome) : ToolUp.InterPlatform.ModelExecutionPeerOutcome
 ToolUp.InterPlatform.ModelExecutionPeerContract.toWireVintage(ToolUp.Platform.ModelExecutionDatasetVersion) : ToolUp.InterPlatform.ModelExecutionPeerVintageInfo
-ToolUp.InterPlatform.ModelExecutionPeerContract.submitterAnswerBody`1(ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionPeerAnswer) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.ModelExecutionRefusal]
 ToolUp.InterPlatform.ModelExecutionPeerContract.transitionRequest(ToolUp.InterPlatform.PeerTransitionInvocation) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerContract.viewRequest(ToolUp.InterPlatform.PeerViewRequest) : ToolUp.InterPlatform.ModelExecutionPeerRequest
 ToolUp.InterPlatform.ModelExecutionPeerDeps (class)
-ToolUp.InterPlatform.ModelExecutionPeerDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]], ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionFitPollPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerViewDeps], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelTransitionDeps])
+ToolUp.InterPlatform.ModelExecutionPeerDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]], ToolUp.InterPlatform.ModelExecutionAdmission, ToolUp.InterPlatform.ModelExecutionFitPollPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerViewDeps], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelTransitionDeps], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelPromotionDeps])
 ToolUp.InterPlatform.ModelExecutionPeerDeps.Admission : ToolUp.InterPlatform.ModelExecutionAdmission { get }
 ToolUp.InterPlatform.ModelExecutionPeerDeps.FitPoll : ToolUp.InterPlatform.ModelExecutionFitPollPolicy { get }
+ToolUp.InterPlatform.ModelExecutionPeerDeps.Promotions : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelPromotionDeps] { get }
 ToolUp.InterPlatform.ModelExecutionPeerDeps.ResolveBinding : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.ModelExecutionPeerBinding]]] { get }
 ToolUp.InterPlatform.ModelExecutionPeerDeps.Transitions : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelTransitionDeps] { get }
 ToolUp.InterPlatform.ModelExecutionPeerDeps.Views : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerViewDeps] { get }
@@ -1009,14 +1012,15 @@ ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsAuthorityNarrowingRefused : Sys
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsEgressWithheld : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsPeerUnbound : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsProfileVersionUnsupported : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsPromotionRefused : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsRequestUnreadable : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsRowAccessRefused : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsScopeWideningRefused : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsSubmitterRefused : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsTransitionRefused : System.Boolean { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsUndeclaredDiagnostic : System.Boolean { get }
-ToolUp.InterPlatform.ModelExecutionPeerRefusal.Tag : System.Int32 { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal.IsViewRefused : System.Boolean { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal.Tag : System.Int32 { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+AuthorityLevelExceeded (class)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+AuthorityLevelExceeded.declared : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+AuthorityLevelExceeded.operation : System.String { get }
@@ -1033,6 +1037,8 @@ ToolUp.InterPlatform.ModelExecutionPeerRefusal+PeerUnbound.peerId : System.Strin
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported (class)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported.requested : System.Int32 { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+ProfileVersionUnsupported.supported : System.Int32 { get }
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+PromotionRefused (class)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+PromotionRefused.refusal : ToolUp.Platform.ModelPromotionRefusal { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+RequestUnreadable (class)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+RequestUnreadable.reason : System.String { get }
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+RowAccessRefused (class)
@@ -1047,6 +1053,7 @@ ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.AuthorityNarrowingRefused : 
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.EgressWithheld : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.PeerUnbound : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.ProfileVersionUnsupported : System.Int32 (literal)
+ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.PromotionRefused : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.RequestUnreadable : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.RowAccessRefused : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionPeerRefusal+Tags.ScopeWideningRefused : System.Int32 (literal)
@@ -1093,8 +1100,12 @@ ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.RowCount : System.Int64 { get
 ToolUp.InterPlatform.ModelExecutionPeerVintageInfo.Version : System.Int32 { get }
 ToolUp.InterPlatform.ModelExecutionProfile (class)
 ToolUp.InterPlatform.ModelExecutionProfile.ContractId : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.DescribeViewOperation : System.String (literal)
 ToolUp.InterPlatform.ModelExecutionProfile.DiagnosticsContractId : System.String (literal)
 ToolUp.InterPlatform.ModelExecutionProfile.InvokeTransitionOperation : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.ListViewsOperation : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.RenderViewOperation : System.String (literal)
+ToolUp.InterPlatform.ModelExecutionProfile.TransferPromotionOperation : System.String (literal)
 ToolUp.InterPlatform.ModelExecutionProfile.Version : System.Int32 (literal)
 ToolUp.InterPlatform.ModelExecutionProfile.contractVersion : ToolUp.InterPlatform.ContractVersion { get }
 ToolUp.InterPlatform.ModelExecutionProfile.diagnostics : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -1104,9 +1115,6 @@ ToolUp.InterPlatform.ModelExecutionProfile.requiredAuthority(System.String) : To
 ToolUp.InterPlatform.ModelExecutionProfile.rowAccessOperations : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.InterPlatform.ModelExecutionProfile.template(System.String, ToolUp.InterPlatform.PrivacyGate, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.InterPlatform.CleanRoomTemplate
 ToolUp.InterPlatform.ModelExecutionProfile.viewOperations : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
-ToolUp.InterPlatform.ModelExecutionProfile.DescribeViewOperation : System.String (literal)
-ToolUp.InterPlatform.ModelExecutionProfile.ListViewsOperation : System.String (literal)
-ToolUp.InterPlatform.ModelExecutionProfile.RenderViewOperation : System.String (literal)
 ToolUp.InterPlatform.NoPrivacyBudgetLedger (class)
 ToolUp.InterPlatform.NoPrivacyBudgetLedger..ctor()
 ToolUp.InterPlatform.NoiseDistribution (class)
@@ -1612,6 +1620,63 @@ ToolUp.InterPlatform.PeerPrincipal (class)
 ToolUp.InterPlatform.PeerPrincipal..ctor(ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.UserContext)
 ToolUp.InterPlatform.PeerPrincipal.Caller : ToolUp.InterPlatform.PeerIdentity { get }
 ToolUp.InterPlatform.PeerPrincipal.User : ToolUp.InterPlatform.UserContext { get }
+ToolUp.InterPlatform.PeerPromotion (class)
+ToolUp.InterPlatform.PeerPromotion.CapExceededClass : System.String (literal)
+ToolUp.InterPlatform.PeerPromotion.ConflictClass : System.String (literal)
+ToolUp.InterPlatform.PeerPromotion.HashMismatchClass : System.String (literal)
+ToolUp.InterPlatform.PeerPromotion.SigningFailedClass : System.String (literal)
+ToolUp.InterPlatform.PeerPromotion.canonicalise(ToolUp.InterPlatform.PeerPromotionTransfer) : ToolUp.InterPlatform.PeerPromotionTransfer
+ToolUp.InterPlatform.PeerPromotion.className(ToolUp.Platform.ModelPromotionRefusal) : System.String
+ToolUp.InterPlatform.PeerPromotion.ofPromoted(ToolUp.Platform.PromotedArtifact, System.String) : ToolUp.InterPlatform.PeerPromotionTransfer
+ToolUp.InterPlatform.PeerPromotion.target(ToolUp.InterPlatform.PeerPromotionTransfer) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus]
+ToolUp.InterPlatform.PeerPromotion.toPromoted(System.String, ToolUp.Platform.ModelArtifactStatus, ToolUp.InterPlatform.PeerPromotionTransfer) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PromotedArtifact, System.String]
+ToolUp.InterPlatform.PeerPromotion.toWireAttachment(ToolUp.Platform.ProvenanceAttachment) : ToolUp.InterPlatform.PeerPromotionAttachment
+ToolUp.InterPlatform.PeerPromotion.toWireRecord(ToolUp.Platform.ModelPromotionRecord) : ToolUp.InterPlatform.PeerPromotionRecord
+ToolUp.InterPlatform.PeerPromotionAttachment (class)
+ToolUp.InterPlatform.PeerPromotionAttachment..ctor(System.String, System.String, System.String)
+ToolUp.InterPlatform.PeerPromotionAttachment.Content : System.String { get }
+ToolUp.InterPlatform.PeerPromotionAttachment.ContentHash : System.String { get }
+ToolUp.InterPlatform.PeerPromotionAttachment.MediaType : System.String { get }
+ToolUp.InterPlatform.PeerPromotionGateVerdict (class)
+ToolUp.InterPlatform.PeerPromotionGateVerdict..ctor(System.String, System.Double, System.String, System.Double, System.Boolean)
+ToolUp.InterPlatform.PeerPromotionGateVerdict.Direction : System.String { get }
+ToolUp.InterPlatform.PeerPromotionGateVerdict.Name : System.String { get }
+ToolUp.InterPlatform.PeerPromotionGateVerdict.Observed : System.Double { get }
+ToolUp.InterPlatform.PeerPromotionGateVerdict.Passed : System.Boolean { get }
+ToolUp.InterPlatform.PeerPromotionGateVerdict.Threshold : System.Double { get }
+ToolUp.InterPlatform.PeerPromotionRecord (class)
+ToolUp.InterPlatform.PeerPromotionRecord..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Boolean, System.DateTimeOffset, System.Int32)
+ToolUp.InterPlatform.PeerPromotionRecord.ArtifactKey : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.AttachmentHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PeerPromotionRecord.AuthorId : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.AuthorKind : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.Channel : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.DetachedJws : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.RecordedAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerPromotionRecord.Replayed : System.Boolean { get }
+ToolUp.InterPlatform.PeerPromotionRecord.SignedInputHash : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.SigningKeyId : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.SigningKeyUrl : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.Status : System.String { get }
+ToolUp.InterPlatform.PeerPromotionRecord.Version : System.Int32 { get }
+ToolUp.InterPlatform.PeerPromotionTransfer (class)
+ToolUp.InterPlatform.PeerPromotionTransfer..ctor(System.String, System.String, System.String, System.String, System.Int64, System.String, System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerPromotionGateVerdict], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerPromotionAttachment], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.InterPlatform.PeerPromotionTransfer.ActorId : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ArtifactByteLength : System.Int64 { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ArtifactContentHash : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ArtifactId : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ArtifactKey : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerPromotionAttachment] { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.DatasetVersion : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.GateVerdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerPromotionGateVerdict] { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ProviderId : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.ProviderVersion : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.Rationale : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.Seed : System.Int64 { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.SpecHash : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.SpecPayload : System.String { get }
+ToolUp.InterPlatform.PeerPromotionTransfer.Target : System.String { get }
 ToolUp.InterPlatform.PeerProxyConfig (class)
 ToolUp.InterPlatform.PeerProxyConfig..ctor(ToolUp.InterPlatform.IPeerClient, ToolUp.InterPlatform.TargetPeer, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.UserContext, ToolUp.InterPlatform.ContractVersion, System.String, System.Int32)
 ToolUp.InterPlatform.PeerProxyConfig.Caller : ToolUp.InterPlatform.PeerIdentity { get }

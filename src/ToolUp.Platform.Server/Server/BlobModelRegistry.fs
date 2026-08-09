@@ -58,6 +58,14 @@ type private StoredModelArtifact = {
     Status: string
     Annotations: Map<string, string>
     Notes: string
+    /// Phase 646 — the opaque provenance attachments. **A blob written
+    /// before this field existed deserialises it as `null`, not as the
+    /// empty list**, so every read goes through the coercion in
+    /// `toArtifact`: `[]` is not null in F#, and a downstream `List.map`
+    /// over the null would throw at whatever call site happened to touch it
+    /// first.
+    Attachments: ProvenanceAttachment list
+    Signature: ModelArtifactSignature option
     RegisteredBy: string
     RegisteredAt: DateTimeOffset
 }
@@ -67,7 +75,9 @@ type private StoredModelArtifact = {
 /// Stage 4 provenance edge — absent when the deployment did not compose
 /// lineage, in which case registration silently skips the edge). Construct
 /// via `BlobModelRegistry.create` / `createWithLineage`.
-type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage: ILineageStore option) =
+type BlobModelRegistry
+    (dataObjects: IDataObjectStore, audit: IAuditLog, lineage: ILineageStore option, limits: ProvenanceAttachmentLimits)
+    =
 
     [<Literal>]
     static let DataType = "toolup.modelartifact"
@@ -108,28 +118,79 @@ type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage:
     /// Reconstruct a `ModelArtifact` from a data object's metadata + content
     /// bytes. An unparseable `Status` string is a storage failure (the blob
     /// was written by a future/foreign registry).
+    ///
+    /// **Phase 646 — attachments are hash-verified HERE, on every read.**
+    /// This is the only path a `ModelArtifact` is materialised on, which is
+    /// why the verification lives here rather than on a `ReadProvenance`
+    /// method somebody could route around: a citation is worth something
+    /// only if the bytes behind it are the bytes that were attached, and a
+    /// check on one read path is a check the other paths do not run.
     let toArtifact (dobj: DataObject) (content: byte[]) : Result<ModelArtifact, ModelRegistryError> =
         try
             let stored = JsonSerializer.Deserialize<StoredModelArtifact>(content, jsonOptions)
 
+            // A blob written before the field existed carries `null` here,
+            // and F#'s `[]` is not null — coerce at the boundary rather
+            // than at whichever consumer touches it first.
+            let attachments =
+                if isNull (box stored.Attachments) then
+                    []
+                else
+                    stored.Attachments
+
+            let corrupt = attachments |> List.tryFind (ProvenanceAttachment.hashVerified >> not)
+
             match ModelArtifactStatus.parse stored.Status with
             | None -> Error(ModelRegistryError.StorageFailure $"unknown artifact status '{stored.Status}'")
             | Some status ->
-                Ok {
-                    CompositeKey = stored.CompositeKey
-                    ScopeId = dobj.ScopeId
-                    ArtifactRef = stored.ArtifactRef
-                    Diagnostics = stored.Diagnostics
-                    GateVerdicts = stored.GateVerdicts
-                    Status = status
-                    Annotations = stored.Annotations
-                    Notes = stored.Notes
-                    RegisteredBy = stored.RegisteredBy
-                    RegisteredAt = stored.RegisteredAt
-                    Version = dobj.Version
-                }
+                match corrupt with
+                | Some attachment ->
+                    Error(
+                        ModelRegistryError.AttachmentRefused(
+                            ProvenanceAttachmentRefusal.HashMismatch(
+                                (if isNull (box attachment.ContentHash) then
+                                     ""
+                                 else
+                                     attachment.ContentHash),
+                                ProvenanceAttachment.computedHash attachment
+                            )
+                        )
+                    )
+                | None ->
+                    Ok {
+                        CompositeKey = stored.CompositeKey
+                        ScopeId = dobj.ScopeId
+                        ArtifactRef = stored.ArtifactRef
+                        Diagnostics = stored.Diagnostics
+                        GateVerdicts = stored.GateVerdicts
+                        Status = status
+                        Annotations = stored.Annotations
+                        Notes = stored.Notes
+                        Attachments = attachments
+                        Signature = stored.Signature
+                        RegisteredBy = stored.RegisteredBy
+                        RegisteredAt = stored.RegisteredAt
+                        Version = dobj.Version
+                    }
         with ex ->
             Error(ModelRegistryError.StorageFailure $"artifact record is unreadable: {ex.Message}")
+
+    /// The stored form of an artifact this registry already materialised —
+    /// the immutable core carried verbatim, with only what the caller is
+    /// changing substituted (GP 5).
+    let toStored (artifact: ModelArtifact) (status: ModelArtifactStatus) : StoredModelArtifact = {
+        CompositeKey = artifact.CompositeKey
+        ArtifactRef = artifact.ArtifactRef
+        Diagnostics = artifact.Diagnostics
+        GateVerdicts = artifact.GateVerdicts
+        Status = ModelArtifactStatus.name status
+        Annotations = artifact.Annotations
+        Notes = artifact.Notes
+        Attachments = artifact.Attachments
+        Signature = artifact.Signature
+        RegisteredBy = artifact.RegisteredBy
+        RegisteredAt = artifact.RegisteredAt
+    }
 
     /// Persist a stored artifact under its composite-key hash. `StrictlyVersioned`
     /// so registration + every transition is an immutable, append-only
@@ -222,6 +283,12 @@ type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage:
                     Status = ModelArtifactStatus.name status
                     Annotations = annotations
                     Notes = notes
+                    // Phase 646 — an artifact is born with no attachments
+                    // and no acceptance signature. Both arrive later, by
+                    // an explicit act, which is what keeps registration
+                    // byte-for-byte what it was (GP 11).
+                    Attachments = []
+                    Signature = None
                     RegisteredBy = registeredBy
                     RegisteredAt = DateTimeOffset.UtcNow
                 }
@@ -336,17 +403,7 @@ type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage:
                         do! auditDenied "requires Owner/Admin"
                         return Error(ModelRegistryError.Forbidden "approving a model artifact requires Owner/Admin")
                     else
-                        let stored = {
-                            CompositeKey = current.CompositeKey
-                            ArtifactRef = current.ArtifactRef
-                            Diagnostics = current.Diagnostics
-                            GateVerdicts = current.GateVerdicts
-                            Status = ModelArtifactStatus.name target
-                            Annotations = current.Annotations
-                            Notes = current.Notes
-                            RegisteredBy = current.RegisteredBy
-                            RegisteredAt = current.RegisteredAt
-                        }
+                        let stored = toStored current target
 
                         match! save scopeId stored target with
                         | Error e -> return Error e
@@ -366,14 +423,86 @@ type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage:
                             return Ok updated
         }
 
+        member _.AttachmentLimits = limits
+
+        member _.AttachProvenance(scopeId, keyHash, attachments, signature) = async {
+            match! dataObjects.Get(scopeId, keyHash) with
+            | Error DataObjectError.NotFound -> return Error ModelRegistryError.NotFound
+            | Error e -> return Error(mapDataObjectError e)
+            | Ok(dobj, bytes) ->
+                match toArtifact dobj bytes with
+                | Error e -> return Error e
+                | Ok current ->
+                    let arriving = if isNull (box attachments) then [] else attachments
+
+                    // The shared pure judge, so a companion registry and
+                    // the federated transfer seam cannot come to different
+                    // conclusions about the same set.
+                    match ProvenanceAttachments.validate limits current.Attachments arriving with
+                    | Error refusal -> return Error(ModelRegistryError.AttachmentRefused refusal)
+                    | Ok() ->
+                        let appended = ProvenanceAttachments.append current.Attachments arriving
+                        let novel = ProvenanceAttachments.novel current.Attachments arriving
+
+                        // Nothing new and no signature to record: the whole
+                        // call is a replay. Writing a version anyway would
+                        // make an idempotent re-send indistinguishable from
+                        // a real append in the version history, which is
+                        // the one place an investigation counts them.
+                        if List.isEmpty novel && Option.isNone signature then
+                            return Ok current
+                        else
+                            let stored = {
+                                toStored current current.Status with
+                                    Attachments = appended
+                                    Signature =
+                                        match signature with
+                                        | Some _ -> signature
+                                        | None -> current.Signature
+                            }
+
+                            match! save scopeId stored current.Status with
+                            | Error e -> return Error e
+                            | Ok updated ->
+                                do!
+                                    audit.Record(
+                                        scopeId,
+                                        ModelArtifactProvenanceAttached {
+                                            CompositeKeyHash = keyHash
+                                            AttachmentHashes = novel |> List.map _.ContentHash
+                                            MediaTypes = novel |> List.map _.MediaType |> List.distinct
+                                            TotalAttachments = List.length appended
+                                            TotalBytes = appended |> List.sumBy ProvenanceAttachment.byteLength
+                                            SigningKeyId =
+                                                updated.Signature |> Option.map _.SigningKeyId |> Option.defaultValue ""
+                                            ScopeId = scopeId
+                                        }
+                                    )
+
+                                return Ok updated
+        }
+
 module BlobModelRegistry =
     /// The default blob-backed model registry — no lineage edge emitted
     /// (compose `createWithLineage` to wire the artifact → dataset-version
     /// provenance edge when an `ILineageStore` is present).
     let create (dataObjects: IDataObjectStore) (audit: IAuditLog) : IModelRegistry =
-        BlobModelRegistry(dataObjects, audit, None) :> IModelRegistry
+        BlobModelRegistry(dataObjects, audit, None, ProvenanceAttachmentLimits.default') :> IModelRegistry
 
     /// A blob-backed model registry that emits the artifact → dataset-version
     /// lineage edge on registration (plan Stage 4).
     let createWithLineage (dataObjects: IDataObjectStore) (audit: IAuditLog) (lineage: ILineageStore) : IModelRegistry =
-        BlobModelRegistry(dataObjects, audit, Some lineage) :> IModelRegistry
+        BlobModelRegistry(dataObjects, audit, Some lineage, ProvenanceAttachmentLimits.default') :> IModelRegistry
+
+    /// Phase 646 — the same registry at a deployment-declared provenance
+    /// attachment cap. The cap is a deployment's decision (a data host
+    /// serving a consortium's exploration records wants a different one
+    /// from a single-tenant install), and declaring it is what lets a
+    /// counterparty size a transfer before sending it.
+    let createWithLimits
+        (dataObjects: IDataObjectStore)
+        (audit: IAuditLog)
+        (lineage: ILineageStore option)
+        (limits: ProvenanceAttachmentLimits)
+        : IModelRegistry =
+        BlobModelRegistry(dataObjects, audit, lineage, limits) :> IModelRegistry

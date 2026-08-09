@@ -171,3 +171,42 @@ type IModelRegistry =
     abstract TransitionStatus:
         scopeId: string * keyHash: string * target: ModelArtifactStatus * callerRole: TeamRole * actorUserId: string ->
             Async<Result<ModelArtifact, ModelRegistryError>>
+
+    /// Phase 646 — append opaque provenance attachments to an artifact, and
+    /// (optionally) record the acceptance signature over it.
+    ///
+    /// **Append-only**: nothing already attached is dropped or replaced,
+    /// and an attachment whose content hash is already held is a no-op
+    /// rather than a duplicate — which is what makes a re-sent promotion
+    /// transfer idempotent without a separate idempotency store. The
+    /// arriving set is validated by the shared pure
+    /// `ProvenanceAttachments.validate` against `AttachmentLimits`, so a
+    /// companion implementation cannot admit a set the default refuses:
+    /// a declared digest that does not recompute, or a set over the cap,
+    /// is `AttachmentRefused` and nothing is written.
+    ///
+    /// `signature` is `None` on a local append and `Some` on an accepted
+    /// promotion. Recording one twice with different content is not
+    /// possible in the honest flow (the signing input is a function of the
+    /// artifact's identity + attachment set), so a later signature simply
+    /// replaces the stored one; the versioned write keeps the earlier
+    /// record readable (GP 5).
+    ///
+    /// Like every other write here, the result is a new immutable version
+    /// of the artifact record; `NotFound` when the scope holds no artifact
+    /// with that hash.
+    abstract AttachProvenance:
+        scopeId: string *
+        keyHash: string *
+        attachments: ProvenanceAttachment list *
+        signature: ModelArtifactSignature option ->
+            Async<Result<ModelArtifact, ModelRegistryError>>
+
+    /// Phase 646 — the attachment cap this registry enforces, DECLARED
+    /// rather than discovered.
+    ///
+    /// A caller sizes a transfer against this before sending it, and a
+    /// federated seam publishes it to a counterparty. A bound a caller can
+    /// only learn by exceeding it is a bound that turns every large
+    /// transfer into a round trip and a refusal.
+    abstract AttachmentLimits: ProvenanceAttachmentLimits

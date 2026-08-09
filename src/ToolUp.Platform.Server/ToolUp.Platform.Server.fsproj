@@ -361,6 +361,21 @@
              calls `ModelTransition.invoke` keeps the pre-644 path exactly
              (GP 11) and constructs none of this (GP 13). -->
         <Compile Include="Server\ModelTransitionSeam.fs" />
+        <!-- Phase 646 — promotion-time provenance transfer. The transfer
+             seam lands a final artifact, its opaque spec payload and its
+             provenance attachments as ONE recorded act, signs it on
+             acceptance through the neutral IPromotedArtifactSigner seam
+             (ToolUp.ArtefactSigning fills it — the dependency cannot run
+             the other way, GP 1), and reaches the lifecycle graph through
+             ModelTransitionSeam.fs rather than restating it. The adapter
+             beside it fills Phase 524's IArtifactProvenanceSource over the
+             registry, so the provenance walk enumerates attachments as
+             chain nodes without ProvenanceGraph.fs (which compiles far
+             above) depending on the registry. Nothing composes either: a
+             deployment that never accepts a transfer keeps the pre-646
+             path exactly (GP 11) and constructs none of it (GP 13). -->
+        <Compile Include="Server\ModelArtifactProvenance.fs" />
+        <Compile Include="Server\ModelPromotionTransfer.fs" />
         <!-- Phase 599 — batch item execution: the `_platform.modelfit.batchitem`
              IJobHandler (fit envelope + batch-annotated registry registration).
              Consumer-wired like the Phase 454 scoring handler. -->

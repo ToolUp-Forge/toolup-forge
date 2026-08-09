@@ -366,6 +366,9 @@ let private dataHost (bindings: Map<string, string>) =
         // Phase 644 — likewise: no transition substrate, so the
         // operation is neither declared nor servable.
         Transitions = None
+        // Phase 646 — and no promotion substrate either: nothing is
+        // constructed, nothing is admitted (GP 13).
+        Promotions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -1031,6 +1034,9 @@ let private dataHostGranting
         // Phase 644 — likewise: no transition substrate, so the
         // operation is neither declared nor servable.
         Transitions = None
+        // Phase 646 — and no promotion substrate either: nothing is
+        // constructed, nothing is admitted (GP 13).
+        Promotions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -1754,6 +1760,9 @@ let private dataHostRendering
         FitPoll = ModelExecutionFitPollPolicy.immediate
         Views = views
         Transitions = None
+        // Phase 646 — and no promotion substrate either: nothing is
+        // constructed, nothing is admitted (GP 13).
+        Promotions = None
     }
 
     let fusion: PeerJobFusion = {
@@ -2296,6 +2305,8 @@ type private MemoryModelRegistry(initial: (string * ModelArtifactStatus) list) =
         Status = status
         Annotations = Map.empty
         Notes = ""
+        Attachments = []
+        Signature = None
         RegisteredBy = "fitter"
         RegisteredAt = DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero)
         Version = version
@@ -2329,6 +2340,8 @@ type private MemoryModelRegistry(initial: (string * ModelArtifactStatus) list) =
         member _.QueryByDatasetVersion(_, _) = failwith "not used"
         member _.QueryByStatus(_, _) = failwith "not used"
         member _.QueryPage(_, _, _, _) = failwith "not used"
+        member _.AttachProvenance(_, _, _, _) = failwith "not used"
+        member _.AttachmentLimits = ProvenanceAttachmentLimits.default'
 
 /// An audit log that keeps what it was handed, so an attributed row can
 /// be asserted as a recorded fact rather than inferred from an answer.
@@ -2396,6 +2409,10 @@ let private dataHostTransitioning (grant: ModelTransitionAuthority) =
         FitPoll = ModelExecutionFitPollPolicy.immediate
         Views = None
         Transitions = Some(transitionDeps registry (audit :> IAuditLog))
+        // Phase 646 — this fixture is the TRANSITION harness; the transfer
+        // seam has its own, over the real blob-backed registry, because a
+        // transfer that stored nothing would certify nothing.
+        Promotions = None
     }
 
     let fusion: PeerJobFusion = {

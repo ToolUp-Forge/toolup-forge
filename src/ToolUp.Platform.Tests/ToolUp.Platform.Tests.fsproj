@@ -330,6 +330,7 @@
              (reference provider family over the blob-backed default stack). -->
         <Compile Include="InProcess\ModelEvaluationTests.fs" />
         <Compile Include="InProcess\ModelPromotionPolicyTests.fs" />
+        <Compile Include="InProcess\ModelPromotionTransferTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
         <!-- Phase 531 — Postgres IEntityStore companion (contract + query

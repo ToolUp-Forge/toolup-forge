@@ -2962,6 +2962,80 @@ type ModelArtifactTransitionAttributedPayload = {
     ScopeId: string
 }
 
+/// Phase 646 — opaque provenance attachments were appended to a model
+/// artifact, and (where a promotion was accepted) the acceptance signature
+/// recorded. Reserved `SourceModule = "_platform.audit"`.
+///
+/// **Hashes and media types, never bytes.** The attachment content is
+/// opaque by construction — forge does not read it, so an audit trail that
+/// carried it would be publishing a payload this deployment cannot
+/// characterise into a store with a different retention policy from the
+/// artifact's. The digest is what a later investigation actually needs: it
+/// resolves to the attachment, or it does not resolve at all, and either
+/// answer is the one being asked for.
+type ModelArtifactProvenanceAttachedPayload = {
+    CompositeKeyHash: string
+    /// Digests of the attachments this call ADDED. Empty when the call
+    /// only recorded a signature.
+    AttachmentHashes: string list
+    /// The distinct media types added, in arrival order.
+    MediaTypes: string list
+    /// How many attachments the artifact holds after the append, and how
+    /// many bytes — the two dimensions the declared cap bounds, recorded so
+    /// an operator can see an artifact approaching one.
+    TotalAttachments: int
+    TotalBytes: int
+    /// The signing-key id of the acceptance signature recorded by this
+    /// call, or the one already held. `""` when the artifact carries none
+    /// — an artifact this deployment fitted itself, or a promotion
+    /// accepted with no signer composed.
+    SigningKeyId: string
+    ScopeId: string
+}
+
+/// Phase 646 — a promotion transfer JUDGED at the transfer seam: a final
+/// artifact, its spec payload and its provenance attachments landing in
+/// this deployment's registry as one recorded act. Reserved
+/// `SourceModule = "_platform.audit"`.
+///
+/// **Why this is its own row rather than the attributed transition row
+/// plus an attachment row.** A promotion is one act with one outcome, and
+/// the question it has to answer later is "did this data host accept this
+/// artifact from this peer, and does it still hold what it accepted". Read
+/// off two rows written by two layers, that question needs a join on a key
+/// neither row was designed to correlate on — and a refused transfer writes
+/// no attachment row at all, so the join would silently lose exactly the
+/// cases worth finding.
+///
+/// Written for an accepted transfer AND for a refused one, for the reason
+/// `ModelArtifactTransitionAttributedPayload` is: a transfer refused at the
+/// seam never reaches the registry, so a trail of successful writes could
+/// not answer which peer tried to promote what.
+type ModelArtifactPromotionPayload = {
+    CompositeKeyHash: string
+    /// The lifecycle status the transfer asked the artifact to hold.
+    TargetStatus: string
+    /// Where the transfer entered this deployment: `"local"` or `"peer"`.
+    Channel: string
+    /// `"user"` / `"peer"` / `"policy"` — `ModelTransitionAuthor.kind`.
+    AuthorKind: string
+    AuthorId: string
+    /// Digests of every attachment the transfer carried.
+    AttachmentHashes: string list
+    /// The signing-key id of the acceptance signature. `""` when the
+    /// transfer was refused, or accepted with no signer composed.
+    SigningKeyId: string
+    /// Did the transfer land? `false` carries `Refusal`.
+    Accepted: bool
+    /// The identical transfer was already held; nothing was written. An
+    /// accepted replay, which is a different fact from a first acceptance
+    /// and is the one an idempotency question is about.
+    Replayed: bool
+    /// The seam's refusal, described. `""` on an accepted transfer.
+    Refusal: string
+    ScopeId: string
+}
+
 // ─── Phase 454 — model-scoring audit payloads ──────────────────────────
 //
 // A scoring run applies a governed artifact (Phase 453) to a new dataset
@@ -3938,6 +4012,12 @@ type AuditEvent =
     /// Phase 644 — a lifecycle transition judged at the author-agnostic
     /// seam, carrying the author and the channel it arrived on.
     | ModelArtifactTransitionAttributed of ModelArtifactTransitionAttributedPayload
+    /// Phase 646 — opaque provenance attachments were appended to a model
+    /// artifact (and/or its acceptance signature recorded).
+    | ModelArtifactProvenanceAttached of ModelArtifactProvenanceAttachedPayload
+    /// Phase 646 — a promotion transfer was judged at the transfer seam:
+    /// artifact + spec payload + attachments landing as one recorded act.
+    | ModelArtifactPromoted of ModelArtifactPromotionPayload
     /// Phase 454 — a scoring run produced predictions as a new dataset
     /// version (provenance names the artifact + input vintage).
     | ModelScored of ModelScoredPayload
@@ -4134,6 +4214,8 @@ module AuditEvent =
         | ModelArtifactTransitioned _ -> "ModelArtifactTransitioned"
         | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"
         | ModelArtifactTransitionAttributed _ -> "ModelArtifactTransitionAttributed"
+        | ModelArtifactProvenanceAttached _ -> "ModelArtifactProvenanceAttached"
+        | ModelArtifactPromoted _ -> "ModelArtifactPromoted"
         | ModelScored _ -> "ModelScored"
         | ModelScoreRefused _ -> "ModelScoreRefused"
         | ModelEvaluated _ -> "ModelEvaluated"

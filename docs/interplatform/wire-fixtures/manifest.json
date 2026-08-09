@@ -239,7 +239,7 @@
       "profile": "participant-modeller",
       "kind": "round-trip",
       "file": "model-execution/refusals.json",
-      "sha256": "0b1cb92c31aa040c17e8573557e800f03a729fc48972b046881cabc431347244",
+      "sha256": "44a980d20c0b3e82cce71a39f258f0a8f243197e0c1dc06fdd20a39b7cd97e5e",
       "description": "One answer per refusal class the profile defines, including the submitter surface's own typed refusal carried through unchanged — so a modeller's mapping is pinned by the corpus rather than inferred from the classes it happened to trip."
     },
     {
@@ -307,6 +307,54 @@
       "sha256": "9985b08988058c54cf175b8718ee169116d8b7ccd49245b77090c529cad71c9b",
       "reject": "model-execution-transition-authority",
       "description": "An invocation for a legal edge this peer's grant does not admit. The peer HOLDS a grant — it may approve — and this is the case that separates checking what a grant admits from checking whether one exists. The one refusal in the family whose remedy is a conversation between the two organisations, which is why it maps to `Forbidden` in the submitter face."
+    },
+    {
+      "id": "model-execution/promotion-request",
+      "family": "model-execution",
+      "profile": "participant-modeller",
+      "kind": "round-trip",
+      "file": "model-execution/promotion-request.json",
+      "sha256": "1c8d4c1f893eaa8e4c6c95a7cbcb4ae982c60c827ae5d01888ae0e65e1d5e75d",
+      "description": "A promotion transfer: a final artifact's identity, the opaque spec payload it was fit from, its gate verdicts, and the opaque provenance records that justified it — each with a declared media type and a digest over its base64 content. Gate verdicts and attachments are declared out of ordinal order and cross sorted, because two builders promoting the same artifact must produce the same document or the transfer's idempotency claim means nothing. No scope member, no role member and no grant member: the receiver's own per-peer declaration decides the authority, so nothing a sender writes can widen it."
+    },
+    {
+      "id": "model-execution/promotion",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "round-trip",
+      "file": "model-execution/promotion.json",
+      "sha256": "0b7dfcc47b5c994ee755bdf5186bad2d2688eeb6f40567a9c5eb884bbf213939",
+      "description": "The receipt an accepted transfer produced: the status the artifact now holds, the digest of every attachment it carries — including the spec payload, which the receiver folds into the same append-only slot — and the data host's own detached signature over the canonical acceptance input. The signing-input digest is recomputed from that canonical form rather than quoted, because a verifier in another language has to rebuild exactly those bytes and it is the part of a signature an independent implementation can get wrong with no key at all."
+    },
+    {
+      "id": "model-execution/reject-promotion-hash-mismatch",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-promotion-hash-mismatch.json",
+      "sha256": "92e9a1721e5680863044fbd4dc8c7933cc25bddba0f0dfaa717e142e1f51d8f4",
+      "reject": "model-execution-promotion-hash-mismatch",
+      "description": "A transfer whose attachment declares a digest its own bytes do not produce. The receiver is forbidden to read the content, so this is the ONE integrity claim it can make about it — and it is checked before the cap, before identity and before the lifecycle, because a payload that did not survive transport is not a question about size or authority and answering it as one would send the sender to fix the wrong thing."
+    },
+    {
+      "id": "model-execution/reject-promotion-cap-exceeded",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-promotion-cap-exceeded.json",
+      "sha256": "1c8d4c1f893eaa8e4c6c95a7cbcb4ae982c60c827ae5d01888ae0e65e1d5e75d",
+      "reject": "model-execution-promotion-cap-exceeded",
+      "description": "The reference transfer verbatim, against a receiver whose declared attachment cap is one. Read closely: nothing in the document distinguishes it from a transfer that would be accepted, and a deployment at the default cap answers these exact bytes. The bound is the RECEIVER's, which is why it is published (§5.7.12) rather than discovered by hitting it."
+    },
+    {
+      "id": "model-execution/reject-promotion-conflict",
+      "family": "model-execution",
+      "profile": "participant-data-host",
+      "kind": "reject",
+      "file": "model-execution/reject-promotion-conflict.json",
+      "sha256": "1c8d4c1f893eaa8e4c6c95a7cbcb4ae982c60c827ae5d01888ae0e65e1d5e75d",
+      "reject": "model-execution-promotion-conflict",
+      "description": "The same document again, against a scope that already holds this composite key with a different fitted artifact. A key names ONE artifact — it is the hash of the spec, vintage, seed and provider that produced it — so two transfers under one key disagree about something the key asserts they share, and reconciling that quietly would leave every downstream citation ambiguous about which it meant. This is also what makes the family idempotent rather than merely tolerant: the IDENTICAL transfer at this key is accepted and writes nothing."
     },
     {
       "id": "model-execution/reject-row-read",

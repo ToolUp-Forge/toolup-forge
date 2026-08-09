@@ -230,6 +230,12 @@ ToolUp.Platform.ArtefactProvenance.Version : System.String { get }
 ToolUp.Platform.ArtifactCanonical (class)
 ToolUp.Platform.ArtifactCanonical.encodeManifest(ToolUp.Platform.ArtifactManifest) : System.Byte[]
 ToolUp.Platform.ArtifactCanonical.messageToSign(ToolUp.Platform.ArtifactManifest, System.Byte[]) : System.Byte[]
+ToolUp.Platform.ArtifactProvenance (class)
+ToolUp.Platform.ArtifactProvenance..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachmentRef])
+ToolUp.Platform.ArtifactProvenance.ArtifactKey : System.String { get }
+ToolUp.Platform.ArtifactProvenance.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachmentRef] { get }
+ToolUp.Platform.ArtifactProvenance.DatasetVersion : System.String { get }
+ToolUp.Platform.ArtifactProvenance.Status : System.String { get }
 ToolUp.Platform.ArtifactRef (class)
 ToolUp.Platform.ArtifactRef..ctor(System.String, System.String, System.Int64)
 ToolUp.Platform.ArtifactRef.ArtifactId : System.String { get }
@@ -573,9 +579,10 @@ ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobS
 ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.BlobExternalHandleStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore]
 ToolUp.Platform.BlobModelRegistry (class)
-ToolUp.Platform.BlobModelRegistry..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
+ToolUp.Platform.BlobModelRegistry..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits)
 ToolUp.Platform.BlobModelRegistryModule (class)
 ToolUp.Platform.BlobModelRegistryModule.create(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IModelRegistry
+ToolUp.Platform.BlobModelRegistryModule.createWithLimits(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILineageStore) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobProviderProfile (class)
 ToolUp.Platform.BlobProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
@@ -1974,7 +1981,7 @@ ToolUp.Platform.DefaultFieldClassifierModule (class)
 ToolUp.Platform.DefaultFieldClassifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldClassification]) : ToolUp.Platform.IFieldClassifier
 ToolUp.Platform.DefaultFieldClassifierModule.encryptionKeyFor(ToolUp.Platform.IFieldClassifier, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.DefaultProvenanceGraph (class)
-ToolUp.Platform.DefaultProvenanceGraph..ctor(ToolUp.Platform.ILineageStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IFactEvidenceSource])
+ToolUp.Platform.DefaultProvenanceGraph..ctor(ToolUp.Platform.ILineageStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IFactEvidenceSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IArtifactProvenanceSource])
 ToolUp.Platform.DefaultSubjectResolver (class)
 ToolUp.Platform.DefaultSubjectResolver+DefaultSubjectResolver (class)
 ToolUp.Platform.DefaultSubjectResolver+DefaultSubjectResolver..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+ITeamStore], Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
@@ -3260,6 +3267,8 @@ ToolUp.Platform.HotSwapOutcome+Tags (class)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapApplied : System.Int32 (literal)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapRejected : System.Int32 (literal)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapRolledBack : System.Int32 (literal)
+ToolUp.Platform.IArtifactProvenanceSource (interface)
+ToolUp.Platform.IArtifactProvenanceSource.GetArtifact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ArtifactProvenance]]
 ToolUp.Platform.IArtifactSigner (interface)
 ToolUp.Platform.IArtifactSigner.PublisherKeyId : ToolUp.Platform.PublisherKeyId { get }
 ToolUp.Platform.IArtifactSigner.Sign(ToolUp.Platform.ArtifactManifest, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SignedArtifact]
@@ -3656,6 +3665,8 @@ ToolUp.Platform.IModelFitProvider.Fit(ToolUp.Platform.FitRequest) : Microsoft.FS
 ToolUp.Platform.IModelFitProvider.Kind : System.String { get }
 ToolUp.Platform.IModelFitProvider.ProviderVersion : System.String { get }
 ToolUp.Platform.IModelRegistry (interface)
+ToolUp.Platform.IModelRegistry.AttachProvenance(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
+ToolUp.Platform.IModelRegistry.AttachmentLimits : ToolUp.Platform.ProvenanceAttachmentLimits { get }
 ToolUp.Platform.IModelRegistry.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelRegistry.QueryByDatasetVersion(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
 ToolUp.Platform.IModelRegistry.QueryBySpecHash(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
@@ -3749,6 +3760,8 @@ ToolUp.Platform.IPresenceTracker.Join(System.String, System.String, Microsoft.FS
 ToolUp.Platform.IPresenceTracker.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Move(System.String, System.String, ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]
+ToolUp.Platform.IPromotedArtifactSigner (interface)
+ToolUp.Platform.IPromotedArtifactSigner.SignArtifact(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactSignature, System.String]]
 ToolUp.Platform.IProvenanceGraph (interface)
 ToolUp.Platform.IProvenanceGraph.GetChain(System.String, ToolUp.Platform.ProvenanceRef, ToolUp.Platform.ProvenanceDirection, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
 ToolUp.Platform.IProvenanceGraph.GetChainForMessage(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
@@ -4552,9 +4565,10 @@ ToolUp.Platform.MigrationProbes.SecretPresent : Microsoft.FSharp.Core.FSharpFunc
 ToolUp.Platform.MigrationProbesModule (class)
 ToolUp.Platform.MigrationProbesModule.noneProvisioned : ToolUp.Platform.MigrationProbes { get }
 ToolUp.Platform.ModelArtifact (class)
-ToolUp.Platform.ModelArtifact..ctor(ToolUp.Platform.FitCompositeKey, System.String, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, System.DateTimeOffset, System.Int32)
+ToolUp.Platform.ModelArtifact..ctor(ToolUp.Platform.FitCompositeKey, System.String, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature], System.String, System.DateTimeOffset, System.Int32)
 ToolUp.Platform.ModelArtifact.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ModelArtifact.ArtifactRef : ToolUp.Platform.ArtifactRef { get }
+ToolUp.Platform.ModelArtifact.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment] { get }
 ToolUp.Platform.ModelArtifact.CompositeKey : ToolUp.Platform.FitCompositeKey { get }
 ToolUp.Platform.ModelArtifact.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
 ToolUp.Platform.ModelArtifact.GateVerdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict] { get }
@@ -4562,6 +4576,7 @@ ToolUp.Platform.ModelArtifact.Notes : System.String { get }
 ToolUp.Platform.ModelArtifact.RegisteredAt : System.DateTimeOffset { get }
 ToolUp.Platform.ModelArtifact.RegisteredBy : System.String { get }
 ToolUp.Platform.ModelArtifact.ScopeId : System.String { get }
+ToolUp.Platform.ModelArtifact.Signature : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature] { get }
 ToolUp.Platform.ModelArtifact.Status : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.ModelArtifact.Version : System.Int32 { get }
 ToolUp.Platform.ModelArtifactModule (class)
@@ -4572,6 +4587,15 @@ ToolUp.Platform.ModelArtifactPage.Artifacts : Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.ModelArtifactPage.NextCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ModelArtifactPageModule (class)
 ToolUp.Platform.ModelArtifactPageModule.page(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]) : ToolUp.Platform.ModelArtifactPage
+ToolUp.Platform.ModelArtifactProvenance (class)
+ToolUp.Platform.ModelArtifactProvenance.ofArtifact(ToolUp.Platform.ModelArtifact) : ToolUp.Platform.ArtifactProvenance
+ToolUp.Platform.ModelArtifactProvenance.source(ToolUp.Platform.IModelRegistry) : ToolUp.Platform.IArtifactProvenanceSource
+ToolUp.Platform.ModelArtifactSignature (class)
+ToolUp.Platform.ModelArtifactSignature..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.ModelArtifactSignature.DetachedJws : System.String { get }
+ToolUp.Platform.ModelArtifactSignature.SignedInputHash : System.String { get }
+ToolUp.Platform.ModelArtifactSignature.SigningKeyId : System.String { get }
+ToolUp.Platform.ModelArtifactSignature.SigningKeyUrl : System.String { get }
 ToolUp.Platform.ModelArtifactStatus (class)
 ToolUp.Platform.ModelArtifactStatus.Approved : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.ModelArtifactStatus.Draft : ToolUp.Platform.ModelArtifactStatus { get }
@@ -4665,11 +4689,26 @@ ToolUp.Platform.ModelFitProviderRegistry..ctor(Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.ModelFitProviderRegistry.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModelFitProviderRegistry.Providers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelFitProvider] { get }
 ToolUp.Platform.ModelFitProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelFitProvider]
+ToolUp.Platform.ModelPromotion (class)
+ToolUp.Platform.ModelPromotion.accept(ToolUp.Platform.ModelPromotionDeps, System.String, ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.PromotedArtifact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelPromotionRecord, ToolUp.Platform.ModelPromotionRefusal]]
+ToolUp.Platform.ModelPromotion.arriving(ToolUp.Platform.PromotedArtifact) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]
+ToolUp.Platform.ModelPromotion.judge(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifact], ToolUp.Platform.ProvenanceAttachmentLimits, ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.PromotedArtifact) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelPromotionPlan, ToolUp.Platform.ModelPromotionRefusal]
+ToolUp.Platform.ModelPromotion.specAttachment(ToolUp.Platform.PromotedArtifact) : ToolUp.Platform.ProvenanceAttachment
+ToolUp.Platform.ModelPromotionDeps (class)
+ToolUp.Platform.ModelPromotionDeps..ctor(ToolUp.Platform.ModelTransitionDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPromotedArtifactSigner])
+ToolUp.Platform.ModelPromotionDeps.Signer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPromotedArtifactSigner] { get }
+ToolUp.Platform.ModelPromotionDeps.Transition : ToolUp.Platform.ModelTransitionDeps { get }
 ToolUp.Platform.ModelPromotionJobHandler (class)
 ToolUp.Platform.ModelPromotionJobHandler..ctor(ToolUp.Platform.ModelPromotionPolicyEvaluator, ToolUp.Platform.ILogger)
 ToolUp.Platform.ModelPromotionJobHandlerModule (class)
 ToolUp.Platform.ModelPromotionJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.ModelPromotionJobHandlerModule.create(ToolUp.Platform.ModelPromotionPolicyEvaluator, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.ModelPromotionPlan (class)
+ToolUp.Platform.ModelPromotionPlan..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus], System.Boolean)
+ToolUp.Platform.ModelPromotionPlan.NewAttachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment] { get }
+ToolUp.Platform.ModelPromotionPlan.Registers : System.Boolean { get }
+ToolUp.Platform.ModelPromotionPlan.Replay : System.Boolean { get }
+ToolUp.Platform.ModelPromotionPlan.Transition : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus] { get }
 ToolUp.Platform.ModelPromotionPolicyEvaluator (class)
 ToolUp.Platform.ModelPromotionPolicyEvaluator..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps)
 ToolUp.Platform.ModelPromotionPolicyEvaluator.Evaluate(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PromotionDecision, ToolUp.Platform.PromotionPolicyError]]
@@ -4677,7 +4716,47 @@ ToolUp.Platform.ModelPromotionPolicyEvaluator.GetDecision(System.String, System.
 ToolUp.Platform.ModelPromotionPolicyEvaluator.ListQueuedForCuration(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionQueueEntry]]
 ToolUp.Platform.ModelPromotionPolicyEvaluatorModule (class)
 ToolUp.Platform.ModelPromotionPolicyEvaluatorModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PromotionPolicy], ToolUp.Platform.PromotionPolicyDeps) : ToolUp.Platform.ModelPromotionPolicyEvaluator
+ToolUp.Platform.ModelPromotionRecord (class)
+ToolUp.Platform.ModelPromotionRecord..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature], System.String, System.String, System.String, System.Boolean, System.DateTimeOffset, System.Int32)
+ToolUp.Platform.ModelPromotionRecord.ArtifactKey : System.String { get }
+ToolUp.Platform.ModelPromotionRecord.AttachmentHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelPromotionRecord.AuthorId : System.String { get }
+ToolUp.Platform.ModelPromotionRecord.AuthorKind : System.String { get }
+ToolUp.Platform.ModelPromotionRecord.Channel : System.String { get }
+ToolUp.Platform.ModelPromotionRecord.RecordedAt : System.DateTimeOffset { get }
+ToolUp.Platform.ModelPromotionRecord.Replayed : System.Boolean { get }
+ToolUp.Platform.ModelPromotionRecord.Signature : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature] { get }
+ToolUp.Platform.ModelPromotionRecord.Status : System.String { get }
+ToolUp.Platform.ModelPromotionRecord.Version : System.Int32 { get }
+ToolUp.Platform.ModelPromotionRefusal (class)
+ToolUp.Platform.ModelPromotionRefusal.IsAttachmentRefused : System.Boolean { get }
+ToolUp.Platform.ModelPromotionRefusal.IsPayloadConflict : System.Boolean { get }
+ToolUp.Platform.ModelPromotionRefusal.IsSigningFailed : System.Boolean { get }
+ToolUp.Platform.ModelPromotionRefusal.IsTransitionRefused : System.Boolean { get }
+ToolUp.Platform.ModelPromotionRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.ModelPromotionRefusal+AttachmentRefused (class)
+ToolUp.Platform.ModelPromotionRefusal+AttachmentRefused.artifactKey : System.String { get }
+ToolUp.Platform.ModelPromotionRefusal+AttachmentRefused.refusal : ToolUp.Platform.ProvenanceAttachmentRefusal { get }
+ToolUp.Platform.ModelPromotionRefusal+PayloadConflict (class)
+ToolUp.Platform.ModelPromotionRefusal+PayloadConflict.artifactKey : System.String { get }
+ToolUp.Platform.ModelPromotionRefusal+PayloadConflict.field : System.String { get }
+ToolUp.Platform.ModelPromotionRefusal+SigningFailed (class)
+ToolUp.Platform.ModelPromotionRefusal+SigningFailed.artifactKey : System.String { get }
+ToolUp.Platform.ModelPromotionRefusal+SigningFailed.reason : System.String { get }
+ToolUp.Platform.ModelPromotionRefusal+Tags (class)
+ToolUp.Platform.ModelPromotionRefusal+Tags.AttachmentRefused : System.Int32 (literal)
+ToolUp.Platform.ModelPromotionRefusal+Tags.PayloadConflict : System.Int32 (literal)
+ToolUp.Platform.ModelPromotionRefusal+Tags.SigningFailed : System.Int32 (literal)
+ToolUp.Platform.ModelPromotionRefusal+Tags.TransitionRefused : System.Int32 (literal)
+ToolUp.Platform.ModelPromotionRefusal+TransitionRefused (class)
+ToolUp.Platform.ModelPromotionRefusal+TransitionRefused.refusal : ToolUp.Platform.ModelTransitionRefusal { get }
+ToolUp.Platform.ModelPromotionRefusalModule (class)
+ToolUp.Platform.ModelPromotionRefusalModule.describe(ToolUp.Platform.ModelPromotionRefusal) : System.String
+ToolUp.Platform.ModelPromotionSigningInput (class)
+ToolUp.Platform.ModelPromotionSigningInput.bytes(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.Byte[]
+ToolUp.Platform.ModelPromotionSigningInput.canonical(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.String
 ToolUp.Platform.ModelRegistryError (class)
+ToolUp.Platform.ModelRegistryError.IsAttachmentRefused : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsForbidden : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsIllegalTransition : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsInvalidQuery : System.Boolean { get }
@@ -4685,6 +4764,8 @@ ToolUp.Platform.ModelRegistryError.IsNotFound : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsStorageFailure : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.NotFound : ToolUp.Platform.ModelRegistryError { get }
 ToolUp.Platform.ModelRegistryError.Tag : System.Int32 { get }
+ToolUp.Platform.ModelRegistryError+AttachmentRefused (class)
+ToolUp.Platform.ModelRegistryError+AttachmentRefused.Item : ToolUp.Platform.ProvenanceAttachmentRefusal { get }
 ToolUp.Platform.ModelRegistryError+Forbidden (class)
 ToolUp.Platform.ModelRegistryError+Forbidden.reason : System.String { get }
 ToolUp.Platform.ModelRegistryError+IllegalTransition (class)
@@ -4695,6 +4776,7 @@ ToolUp.Platform.ModelRegistryError+InvalidQuery.reason : System.String { get }
 ToolUp.Platform.ModelRegistryError+StorageFailure (class)
 ToolUp.Platform.ModelRegistryError+StorageFailure.Item : System.String { get }
 ToolUp.Platform.ModelRegistryError+Tags (class)
+ToolUp.Platform.ModelRegistryError+Tags.AttachmentRefused : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.Forbidden : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.IllegalTransition : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.InvalidQuery : System.Int32 (literal)
@@ -5471,6 +5553,14 @@ ToolUp.Platform.PrincipalRegistry.listPrincipalsWith(ToolUp.Platform.BlobStorage
 ToolUp.Platform.ProcessProfileGate (class)
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
+ToolUp.Platform.PromotedArtifact (class)
+ToolUp.Platform.PromotedArtifact..ctor(ToolUp.Platform.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionAuthor, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.PromotedArtifact.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment] { get }
+ToolUp.Platform.PromotedArtifact.Author : ToolUp.Platform.ModelTransitionAuthor { get }
+ToolUp.Platform.PromotedArtifact.Outcome : ToolUp.Platform.FitOutcome { get }
+ToolUp.Platform.PromotedArtifact.Rationale : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PromotedArtifact.SpecPayload : System.String { get }
+ToolUp.Platform.PromotedArtifact.Target : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.PromotionComparator (class)
 ToolUp.Platform.PromotionComparator.IsAtLeast : System.Boolean { get }
 ToolUp.Platform.PromotionComparator.IsAtMost : System.Boolean { get }
@@ -5672,6 +5762,55 @@ ToolUp.Platform.PromotionVerdict+Tags.NoChampion : System.Int32 (literal)
 ToolUp.Platform.PromotionVerdictModule (class)
 ToolUp.Platform.PromotionVerdictModule.describe(ToolUp.Platform.PromotionVerdict) : System.String
 ToolUp.Platform.PromotionVerdictModule.permitsPromotion(ToolUp.Platform.PromotionVerdict) : System.Boolean
+ToolUp.Platform.ProvenanceAttachment (class)
+ToolUp.Platform.ProvenanceAttachment..ctor(System.String, System.String, System.Byte[])
+ToolUp.Platform.ProvenanceAttachment.Bytes : System.Byte[] { get }
+ToolUp.Platform.ProvenanceAttachment.ContentHash : System.String { get }
+ToolUp.Platform.ProvenanceAttachment.MediaType : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentLimits (class)
+ToolUp.Platform.ProvenanceAttachmentLimits..ctor(System.Int32, System.Int32, System.Int32)
+ToolUp.Platform.ProvenanceAttachmentLimits.MaxAttachmentBytes : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentLimits.MaxAttachments : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentLimits.MaxTotalBytes : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentLimitsModule (class)
+ToolUp.Platform.ProvenanceAttachmentLimitsModule.default' : ToolUp.Platform.ProvenanceAttachmentLimits { get }
+ToolUp.Platform.ProvenanceAttachmentModule (class)
+ToolUp.Platform.ProvenanceAttachmentModule.HashPrefix : System.String (literal)
+ToolUp.Platform.ProvenanceAttachmentModule.SpecPayloadMediaType : System.String (literal)
+ToolUp.Platform.ProvenanceAttachmentModule.byteLength(ToolUp.Platform.ProvenanceAttachment) : System.Int32
+ToolUp.Platform.ProvenanceAttachmentModule.bytes(ToolUp.Platform.ProvenanceAttachment) : System.Byte[]
+ToolUp.Platform.ProvenanceAttachmentModule.computedHash(ToolUp.Platform.ProvenanceAttachment) : System.String
+ToolUp.Platform.ProvenanceAttachmentModule.create(System.String, System.Byte[]) : ToolUp.Platform.ProvenanceAttachment
+ToolUp.Platform.ProvenanceAttachmentModule.hashOf(System.Byte[]) : System.String
+ToolUp.Platform.ProvenanceAttachmentModule.hashVerified(ToolUp.Platform.ProvenanceAttachment) : System.Boolean
+ToolUp.Platform.ProvenanceAttachmentModule.ofText(System.String, System.String) : ToolUp.Platform.ProvenanceAttachment
+ToolUp.Platform.ProvenanceAttachmentRef (class)
+ToolUp.Platform.ProvenanceAttachmentRef..ctor(System.String, System.String)
+ToolUp.Platform.ProvenanceAttachmentRef.ContentHash : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentRef.MediaType : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal (class)
+ToolUp.Platform.ProvenanceAttachmentRefusal.IsCapExceeded : System.Boolean { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal.IsHashMismatch : System.Boolean { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+CapExceeded (class)
+ToolUp.Platform.ProvenanceAttachmentRefusal+CapExceeded.cap : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+CapExceeded.dimension : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+CapExceeded.measured : System.Int32 { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+HashMismatch (class)
+ToolUp.Platform.ProvenanceAttachmentRefusal+HashMismatch.computed : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+HashMismatch.declared : System.String { get }
+ToolUp.Platform.ProvenanceAttachmentRefusal+Tags (class)
+ToolUp.Platform.ProvenanceAttachmentRefusal+Tags.CapExceeded : System.Int32 (literal)
+ToolUp.Platform.ProvenanceAttachmentRefusal+Tags.HashMismatch : System.Int32 (literal)
+ToolUp.Platform.ProvenanceAttachmentRefusalModule (class)
+ToolUp.Platform.ProvenanceAttachmentRefusalModule.AttachmentBytesDimension : System.String (literal)
+ToolUp.Platform.ProvenanceAttachmentRefusalModule.CountDimension : System.String (literal)
+ToolUp.Platform.ProvenanceAttachmentRefusalModule.TotalBytesDimension : System.String (literal)
+ToolUp.Platform.ProvenanceAttachmentRefusalModule.describe(ToolUp.Platform.ProvenanceAttachmentRefusal) : System.String
+ToolUp.Platform.ProvenanceAttachments (class)
+ToolUp.Platform.ProvenanceAttachments.append(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]
+ToolUp.Platform.ProvenanceAttachments.novel(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]
+ToolUp.Platform.ProvenanceAttachments.validate(ToolUp.Platform.ProvenanceAttachmentLimits, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ProvenanceAttachmentRefusal]
 ToolUp.Platform.ProvenanceChain (class)
 ToolUp.Platform.ProvenanceChain..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceNode], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceEdge])
 ToolUp.Platform.ProvenanceChain.Edges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceEdge] { get }
@@ -5695,9 +5834,11 @@ ToolUp.Platform.ProvenanceEdgeKind (class)
 ToolUp.Platform.ProvenanceEdgeKind.CitesFact : ToolUp.Platform.ProvenanceEdgeKind { get }
 ToolUp.Platform.ProvenanceEdgeKind.DerivedFrom : ToolUp.Platform.ProvenanceEdgeKind { get }
 ToolUp.Platform.ProvenanceEdgeKind.EvidenceFor : ToolUp.Platform.ProvenanceEdgeKind { get }
+ToolUp.Platform.ProvenanceEdgeKind.HasAttachment : ToolUp.Platform.ProvenanceEdgeKind { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsCitesFact : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsDerivedFrom : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsEvidenceFor : System.Boolean { get }
+ToolUp.Platform.ProvenanceEdgeKind.IsHasAttachment : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsPlannedBy : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsSupersedes : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.PlannedBy : ToolUp.Platform.ProvenanceEdgeKind { get }
@@ -5707,10 +5848,13 @@ ToolUp.Platform.ProvenanceEdgeKind+Tags (class)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.CitesFact : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.DerivedFrom : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.EvidenceFor : System.Int32 (literal)
+ToolUp.Platform.ProvenanceEdgeKind+Tags.HasAttachment : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.PlannedBy : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.Supersedes : System.Int32 (literal)
 ToolUp.Platform.ProvenanceGraph (class)
 ToolUp.Platform.ProvenanceGraph.create(ToolUp.Platform.ILineageStore) : ToolUp.Platform.IProvenanceGraph
+ToolUp.Platform.ProvenanceGraph.createWith(ToolUp.Platform.ILineageStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IFactEvidenceSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IArtifactProvenanceSource]) : ToolUp.Platform.IProvenanceGraph
+ToolUp.Platform.ProvenanceGraph.createWithArtifacts(ToolUp.Platform.ILineageStore, ToolUp.Platform.IArtifactProvenanceSource) : ToolUp.Platform.IProvenanceGraph
 ToolUp.Platform.ProvenanceGraph.createWithFacts(ToolUp.Platform.ILineageStore, ToolUp.Platform.IFactEvidenceSource) : ToolUp.Platform.IProvenanceGraph
 ToolUp.Platform.ProvenanceMismatch (class)
 ToolUp.Platform.ProvenanceMismatch.IsArtefactDigestMismatch : System.Boolean { get }
@@ -5752,8 +5896,12 @@ ToolUp.Platform.ProvenanceNodeKind.IsAnswerPlanNode : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsConversationMessage : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsDataObjectVersion : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsFactNode : System.Boolean { get }
+ToolUp.Platform.ProvenanceNodeKind.IsModelArtifactNode : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsNarrativeDocument : System.Boolean { get }
+ToolUp.Platform.ProvenanceNodeKind.IsProvenanceAttachmentNode : System.Boolean { get }
+ToolUp.Platform.ProvenanceNodeKind.ModelArtifactNode : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.NarrativeDocument : ToolUp.Platform.ProvenanceNodeKind { get }
+ToolUp.Platform.ProvenanceNodeKind.ProvenanceAttachmentNode : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.Tag : System.Int32 { get }
 ToolUp.Platform.ProvenanceNodeKind+Tags (class)
 ToolUp.Platform.ProvenanceNodeKind+Tags.AnalysisResult : System.Int32 (literal)
@@ -5761,11 +5909,14 @@ ToolUp.Platform.ProvenanceNodeKind+Tags.AnswerPlanNode : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.ConversationMessage : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.DataObjectVersion : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.FactNode : System.Int32 (literal)
+ToolUp.Platform.ProvenanceNodeKind+Tags.ModelArtifactNode : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.NarrativeDocument : System.Int32 (literal)
+ToolUp.Platform.ProvenanceNodeKind+Tags.ProvenanceAttachmentNode : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef (class)
 ToolUp.Platform.ProvenanceRef.IsDataObjectRef : System.Boolean { get }
 ToolUp.Platform.ProvenanceRef.IsFactRef : System.Boolean { get }
 ToolUp.Platform.ProvenanceRef.IsMessageRef : System.Boolean { get }
+ToolUp.Platform.ProvenanceRef.IsModelArtifactRef : System.Boolean { get }
 ToolUp.Platform.ProvenanceRef.IsResultRef : System.Boolean { get }
 ToolUp.Platform.ProvenanceRef.Tag : System.Int32 { get }
 ToolUp.Platform.ProvenanceRef+DataObjectRef (class)
@@ -5774,12 +5925,15 @@ ToolUp.Platform.ProvenanceRef+FactRef (class)
 ToolUp.Platform.ProvenanceRef+FactRef.Item : System.String { get }
 ToolUp.Platform.ProvenanceRef+MessageRef (class)
 ToolUp.Platform.ProvenanceRef+MessageRef.Item : System.String { get }
+ToolUp.Platform.ProvenanceRef+ModelArtifactRef (class)
+ToolUp.Platform.ProvenanceRef+ModelArtifactRef.Item : System.String { get }
 ToolUp.Platform.ProvenanceRef+ResultRef (class)
 ToolUp.Platform.ProvenanceRef+ResultRef.Item : System.String { get }
 ToolUp.Platform.ProvenanceRef+Tags (class)
 ToolUp.Platform.ProvenanceRef+Tags.DataObjectRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.FactRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.MessageRef : System.Int32 (literal)
+ToolUp.Platform.ProvenanceRef+Tags.ModelArtifactRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.ResultRef : System.Int32 (literal)
 ToolUp.Platform.PublicBaseUrlFormatValidator (class)
 ToolUp.Platform.PublicBaseUrlFormatValidator+PublicBaseUrlFormatValidator (class)

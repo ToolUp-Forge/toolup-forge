@@ -14,15 +14,18 @@ open System.Collections.Generic
 // prevents re-expansion, and `depth` bounds the fact / message hops.
 // Scope-bounded throughout (GP 4) — every underlying read takes `scopeId`.
 
-/// Construct via `ProvenanceGraph.create` / `createWithFacts`.
-type DefaultProvenanceGraph(lineage: ILineageStore, factSource: IFactEvidenceSource option) =
+/// Construct via `ProvenanceGraph.create` / `createWithFacts` /
+/// `createWithArtifacts` / `createWith`.
+type DefaultProvenanceGraph
+    (lineage: ILineageStore, factSource: IFactEvidenceSource option, artifactSource: IArtifactProvenanceSource option) =
 
     let refId =
         function
         | DataObjectRef id
         | ResultRef id
         | FactRef id
-        | MessageRef id -> id
+        | MessageRef id
+        | ModelArtifactRef id -> id
 
     let refKind =
         function
@@ -30,12 +33,23 @@ type DefaultProvenanceGraph(lineage: ILineageStore, factSource: IFactEvidenceSou
         | ResultRef _ -> AnalysisResult
         | FactRef _ -> FactNode
         | MessageRef _ -> ConversationMessage
+        | ModelArtifactRef _ -> ModelArtifactNode
 
     let node id kind disclosure : ProvenanceNode = {
         Id = id
         Kind = kind
         Disclosure = disclosure
         Label = id
+    }
+
+    /// An attachment node. **The label is the media type and the id is the
+    /// hash** — the citation, and nothing that required reading the bytes
+    /// to produce.
+    let attachmentNode (attachment: ProvenanceAttachmentRef) : ProvenanceNode = {
+        Id = attachment.ContentHash
+        Kind = ProvenanceAttachmentNode
+        Disclosure = None
+        Label = attachment.MediaType
     }
 
     // Merge a lineage subgraph (transitive ancestors / descendants) into
@@ -92,6 +106,51 @@ type DefaultProvenanceGraph(lineage: ILineageStore, factSource: IFactEvidenceSou
 
                 if remaining > 0 && visited.Add id then
                     match ref, direction with
+                    // Phase 646 — a model artifact and the opaque
+                    // attachments it carries.
+                    //
+                    // Enumerated in BOTH directions, unlike the lineage
+                    // arms above, and that is the point of the phase rather
+                    // than a shortcut: an attachment is not a thing the
+                    // artifact was derived from OR a thing derived from it,
+                    // it is evidence the artifact carries, and it is
+                    // equally part of the answer whichever way the caller
+                    // came to the artifact. The dataset-version hop is
+                    // direction-sensitive and is handled by re-entering the
+                    // lineage walk below.
+                    | ModelArtifactRef artifactKey, _ ->
+                        match artifactSource with
+                        | None -> ()
+                        | Some source ->
+                            let! provenance = source.GetArtifact(scopeId, artifactKey)
+
+                            match provenance with
+                            | None -> ()
+                            | Some provenance ->
+                                nodes[artifactKey] <- node artifactKey ModelArtifactNode (Some provenance.Status)
+
+                                for attachment in provenance.Attachments do
+                                    nodes[attachment.ContentHash] <- attachmentNode attachment
+
+                                    edges.Add((artifactKey, attachment.ContentHash, HasAttachment)) |> ignore
+
+                                // The artifact → dataset-version edge the
+                                // registry already writes to lineage is
+                                // what carries the walk on to the assembly
+                                // spec and the sources beneath it, so the
+                                // artifact re-enters the walk as an
+                                // ordinary lineage node. The visited set
+                                // makes that free when the key is already
+                                // expanded.
+                                if not (System.String.IsNullOrEmpty provenance.DatasetVersion) then
+                                    if not (nodes.ContainsKey provenance.DatasetVersion) then
+                                        nodes[provenance.DatasetVersion] <-
+                                            node provenance.DatasetVersion DataObjectVersion None
+
+                                    edges.Add((artifactKey, provenance.DatasetVersion, DerivedFrom)) |> ignore
+
+                                    queue.Enqueue(DataObjectRef provenance.DatasetVersion, remaining - 1)
+
                     | FactRef factId, _ ->
                         match factSource with
                         | None -> ()
@@ -202,9 +261,29 @@ module ProvenanceGraph =
     /// / result chains walk; fact and message nodes are absent until an
     /// `IFactEvidenceSource` is composed.
     let create (lineage: ILineageStore) : IProvenanceGraph =
-        DefaultProvenanceGraph(lineage, None) :> IProvenanceGraph
+        DefaultProvenanceGraph(lineage, None, None) :> IProvenanceGraph
 
     /// A provenance graph over lineage + a fact-evidence source (the full
     /// ingestion → run → fact → message chain).
     let createWithFacts (lineage: ILineageStore) (factSource: IFactEvidenceSource) : IProvenanceGraph =
-        DefaultProvenanceGraph(lineage, Some factSource) :> IProvenanceGraph
+        DefaultProvenanceGraph(lineage, Some factSource, None) :> IProvenanceGraph
+
+    /// Phase 646 — a provenance graph over lineage + a model-artifact
+    /// source: artifact → attachments and artifact → dataset version →
+    /// assembly spec → sources, all of it resolvable from this deployment's
+    /// own stores.
+    let createWithArtifacts (lineage: ILineageStore) (artifactSource: IArtifactProvenanceSource) : IProvenanceGraph =
+        DefaultProvenanceGraph(lineage, None, Some artifactSource) :> IProvenanceGraph
+
+    /// The whole graph: lineage, fact evidence and model artifacts. The
+    /// composition a data host that answers grounding certificates over
+    /// promoted models wants — a cited number walks back through the fact
+    /// that produced it, the artifact that fit it, and the exploration
+    /// record attached to that artifact, with no reference to the peer that
+    /// built it.
+    let createWith
+        (lineage: ILineageStore)
+        (factSource: IFactEvidenceSource option)
+        (artifactSource: IArtifactProvenanceSource option)
+        : IProvenanceGraph =
+        DefaultProvenanceGraph(lineage, factSource, artifactSource) :> IProvenanceGraph

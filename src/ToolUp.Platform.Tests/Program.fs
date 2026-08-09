@@ -58,6 +58,10 @@ let allTests =
         // Phase 645 — registry promotion policies (tolerance-gated
         // auto-promotion through the Phase 644 transition seam).
         ModelPromotionPolicyTests.tests
+        // Phase 646 — promotion-time provenance transfer: the opaque
+        // attachment slot, the signed acceptance, and the Phase 524 walk
+        // that resolves it all with the builder gone.
+        ModelPromotionTransferTests.tests
         // Phase 599 — batch fit submission + bulk outcome/registry retrieval.
         ModelFitBatchTests.tests
         // Phase 600 — model-execution submitter API (wire surface + typed refusals).
