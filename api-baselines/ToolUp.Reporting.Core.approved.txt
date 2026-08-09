@@ -3,11 +3,59 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Reporting.ChartArtifact (class)
+ToolUp.Reporting.ChartArtifact..ctor(System.String, System.Byte[], System.String, ToolUp.Reporting.ChartArtifactMetadata)
+ToolUp.Reporting.ChartArtifact.Content : System.Byte[] { get }
+ToolUp.Reporting.ChartArtifact.ContentHash : System.String { get }
+ToolUp.Reporting.ChartArtifact.MediaType : System.String { get }
+ToolUp.Reporting.ChartArtifact.Metadata : ToolUp.Reporting.ChartArtifactMetadata { get }
+ToolUp.Reporting.ChartArtifactMetadata (class)
+ToolUp.Reporting.ChartArtifactMetadata..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Reporting.ChartArtifactMetadata.ArtifactKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartArtifactMetadata.DatasetVintage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartArtifactMetadata.Grammar : System.String { get }
+ToolUp.Reporting.ChartArtifactMetadata.GrammarVersion : System.String { get }
+ToolUp.Reporting.ChartArtifactMetadata.Kind : System.String { get }
+ToolUp.Reporting.ChartArtifactMetadata.PointCount : System.Int32 { get }
+ToolUp.Reporting.ChartArtifactMetadata.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartArtifactModule (class)
+ToolUp.Reporting.ChartArtifactModule.Grammar : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.GrammarVersion : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.KindProp : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.PointsProp : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.TitleProp : System.String (literal)
+ToolUp.Reporting.ChartArtifactModule.contentHash(System.Byte[]) : System.String
+ToolUp.Reporting.ChartArtifactModule.isBound(ToolUp.Reporting.ChartArtifactMetadata) : System.Boolean
+ToolUp.Reporting.ChartArtifactModule.metadata(ToolUp.Reporting.ChartArtifactSpec) : ToolUp.Reporting.ChartArtifactMetadata
+ToolUp.Reporting.ChartArtifactModule.props(ToolUp.Reporting.ChartArtifactSpec) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.Reporting.ChartArtifactModule.render(ToolUp.Reporting.ChartArtifactRenderer, ToolUp.Reporting.ChartArtifactSpec) : ToolUp.Reporting.ChartArtifact
+ToolUp.Reporting.ChartArtifactRenderer (class)
+ToolUp.Reporting.ChartArtifactRenderer..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[]])
+ToolUp.Reporting.ChartArtifactRenderer.MediaType : System.String { get }
+ToolUp.Reporting.ChartArtifactRenderer.Render : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[]] { get }
+ToolUp.Reporting.ChartArtifactSpec (class)
+ToolUp.Reporting.ChartArtifactSpec..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ChartPoint], ToolUp.Reporting.ChartBinding)
+ToolUp.Reporting.ChartArtifactSpec.Binding : ToolUp.Reporting.ChartBinding { get }
+ToolUp.Reporting.ChartArtifactSpec.Kind : System.String { get }
+ToolUp.Reporting.ChartArtifactSpec.Points : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ChartPoint] { get }
+ToolUp.Reporting.ChartArtifactSpec.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartBinding (class)
+ToolUp.Reporting.ChartBinding..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Reporting.ChartBinding.ArtifactKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartBinding.DatasetVintage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ChartPoint (class)
+ToolUp.Reporting.ChartPoint..ctor(System.String, System.Double)
+ToolUp.Reporting.ChartPoint.Label : System.String { get }
+ToolUp.Reporting.ChartPoint.Value : System.Double { get }
 ToolUp.Reporting.ColumnSchema (class)
 ToolUp.Reporting.ColumnSchema..ctor(System.String, System.String, ToolUp.Reporting.PlaceholderKind)
 ToolUp.Reporting.ColumnSchema.DisplayName : System.String { get }
 ToolUp.Reporting.ColumnSchema.Key : System.String { get }
 ToolUp.Reporting.ColumnSchema.Kind : ToolUp.Reporting.PlaceholderKind { get }
+ToolUp.Reporting.DeckExport (class)
+ToolUp.Reporting.DeckExport.isServed(ToolUp.Reporting.TemplateFormat) : System.Boolean
+ToolUp.Reporting.DeckExport.route`1(ToolUp.Reporting.TemplateFormat, Microsoft.FSharp.Core.FSharpOption`1[renderer]) : Microsoft.FSharp.Core.FSharpResult`2[renderer, ToolUp.Reporting.RenderError]
+ToolUp.Reporting.DeckExport.servedFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
 ToolUp.Reporting.HtmlRenderer (class)
 ToolUp.Reporting.HtmlRenderer.create() : ToolUp.Reporting.IReportRenderer
 ToolUp.Reporting.IReportRenderer (interface)
@@ -77,12 +125,15 @@ ToolUp.Reporting.PlaceholderValue+Tags.TextValue : System.Int32 (literal)
 ToolUp.Reporting.PlaceholderValue+TextValue (class)
 ToolUp.Reporting.PlaceholderValue+TextValue.Item : System.String { get }
 ToolUp.Reporting.RenderError (class)
+ToolUp.Reporting.RenderError.IsFormatServedByDeckTier : System.Boolean { get }
 ToolUp.Reporting.RenderError.IsMissingRequiredPlaceholder : System.Boolean { get }
 ToolUp.Reporting.RenderError.IsNoRendererForFormat : System.Boolean { get }
 ToolUp.Reporting.RenderError.IsPlaceholderTypeMismatch : System.Boolean { get }
 ToolUp.Reporting.RenderError.IsRendererFailure : System.Boolean { get }
 ToolUp.Reporting.RenderError.IsUnsupportedPlaceholderKind : System.Boolean { get }
 ToolUp.Reporting.RenderError.Tag : System.Int32 { get }
+ToolUp.Reporting.RenderError+FormatServedByDeckTier (class)
+ToolUp.Reporting.RenderError+FormatServedByDeckTier.Item : ToolUp.Reporting.TemplateFormat { get }
 ToolUp.Reporting.RenderError+MissingRequiredPlaceholder (class)
 ToolUp.Reporting.RenderError+MissingRequiredPlaceholder.key : System.String { get }
 ToolUp.Reporting.RenderError+NoRendererForFormat (class)
@@ -95,6 +146,7 @@ ToolUp.Reporting.RenderError+RendererFailure (class)
 ToolUp.Reporting.RenderError+RendererFailure.reason : System.String { get }
 ToolUp.Reporting.RenderError+RendererFailure.renderer : System.String { get }
 ToolUp.Reporting.RenderError+Tags (class)
+ToolUp.Reporting.RenderError+Tags.FormatServedByDeckTier : System.Int32 (literal)
 ToolUp.Reporting.RenderError+Tags.MissingRequiredPlaceholder : System.Int32 (literal)
 ToolUp.Reporting.RenderError+Tags.NoRendererForFormat : System.Int32 (literal)
 ToolUp.Reporting.RenderError+Tags.PlaceholderTypeMismatch : System.Int32 (literal)

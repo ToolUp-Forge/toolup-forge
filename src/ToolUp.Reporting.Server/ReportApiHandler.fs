@@ -16,8 +16,10 @@ open ToolUp.Reporting.RendererRegistry
 //
 // Render routing:
 //   - Resolve template by id → if missing, TemplateNotFound
-//   - Resolve renderer by template format → if missing,
-//     Renderer (NoRendererForFormat ...)
+//   - Route the template format through the registry → a deck-tier
+//     format refuses Renderer (FormatServedByDeckTier ...); anything
+//     else with nothing registered refuses Renderer
+//     (NoRendererForFormat ...)
 //   - Resolve `NarrativeValue` placeholders through the disclosure
 //     export door (below), projecting each document to format-
 //     appropriate text
@@ -209,9 +211,13 @@ let private createCore
                 match templateOpt with
                 | None -> return Result.Error(TemplateNotFound id)
                 | Some template ->
-                    match registry.TryResolve template.Format with
-                    | None -> return Result.Error(Renderer(NoRendererForFormat template.Format))
-                    | Some renderer ->
+                    // Phase 647 — `Route`, not `TryResolve`: a deck-tier
+                    // format refuses with the error that names the deck
+                    // tier, rather than the "missing PackageReference"
+                    // one it would otherwise fall through to.
+                    match registry.Route template.Format with
+                    | Result.Error routing -> return Result.Error(Renderer routing)
+                    | Result.Ok renderer ->
                         // Phase 564.B — the disclosure export door runs
                         // before rendering; a values map with no
                         // narrative content passes through untouched.

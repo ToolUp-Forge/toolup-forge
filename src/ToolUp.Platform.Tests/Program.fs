@@ -213,6 +213,11 @@ let allTests =
         // method gated, the anonymous path proved refused (with a
         // falsifier fixture), and the in-handler management gate.
         ReportingAuthorizationTests.tests
+        // Phase 647 — the deck-export seam: the Pptx routing posture
+        // (refuses toward the deck tier, unconditionally) and the
+        // chart-artifact handoff (determinism + provenance metadata,
+        // driven through the real chart grammar).
+        DeckExportSeamTests.tests
         NarrativeElementTests.tests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests

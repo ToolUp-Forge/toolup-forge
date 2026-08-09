@@ -14,6 +14,12 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="ReportingTypes.fs" />
+        <!-- Phase 647 — the deck-export routing posture + the chart-artifact
+             handoff. Both sit above ReportingTypes (they name TemplateFormat /
+             RenderError) and below the renderers, which do not depend on
+             them. -->
+        <Compile Include="DeckExport.fs" />
+        <Compile Include="ChartArtifact.fs" />
         <Compile Include="IReportRenderer.fs" />
         <Compile Include="PlaceholderSubstitution.fs" />
         <Compile Include="MarkdownRenderer.fs" />

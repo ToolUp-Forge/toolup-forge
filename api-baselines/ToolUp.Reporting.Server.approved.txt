@@ -51,6 +51,7 @@ ToolUp.Reporting.RendererRegistry+RendererRegistry (class)
 ToolUp.Reporting.RendererRegistry+RendererRegistry..ctor()
 ToolUp.Reporting.RendererRegistry+RendererRegistry.AllRenderers() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.IReportRenderer]
 ToolUp.Reporting.RendererRegistry+RendererRegistry.Register(ToolUp.Reporting.IReportRenderer) : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.RendererRegistry+RendererRegistry.Route(ToolUp.Reporting.TemplateFormat) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.IReportRenderer, ToolUp.Reporting.RenderError]
 ToolUp.Reporting.RendererRegistry+RendererRegistry.SupportedFormats() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat]
 ToolUp.Reporting.RendererRegistry+RendererRegistry.TryResolve(ToolUp.Reporting.TemplateFormat) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.IReportRenderer]
 ToolUp.Reporting.ReportApiConfig (class)

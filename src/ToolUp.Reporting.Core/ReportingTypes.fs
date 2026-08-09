@@ -12,9 +12,16 @@ open System
 /// Format the renderer produces. Each value maps to one (or more)
 /// `IReportRenderer` impls — the platform's `MarkdownRenderer` /
 /// `HtmlRenderer` defaults handle `Markdown` + `Html` in process;
-/// `Pdf` / `Docx` / `Xlsx` / `Pptx` ship in sub-companions and are
-/// resolved through the renderer registry only when the matching
+/// `Pdf` / `Docx` / `Xlsx` ship in sub-companions and are resolved
+/// through the renderer registry only when the matching
 /// PackageReference is present.
+///
+/// **`Pptx` is the exception, and deliberately so.** It is served by a
+/// downstream document-emission tier — see [`DeckExport`](DeckExport.fs)
+/// — never by a renderer here: a request for it is routed to a typed
+/// refusal naming that tier rather than token-filled by a commodity
+/// renderer. The case stays in the DU because a template's declared
+/// format is still a fact the store records and the deck tier reads.
 type TemplateFormat =
     | Markdown
     | Html
@@ -128,11 +135,21 @@ type RenderError =
     /// A placeholder kind isn't supported by this renderer (e.g.
     /// `Image`-by-bytes against the bare `MarkdownRenderer`).
     | UnsupportedPlaceholderKind of renderer: string * key: string * kind: string
+    /// The format is served by the downstream deck export tier, not by
+    /// any renderer here. Distinct from `NoRendererForFormat`, which
+    /// reads as "you are missing a PackageReference" and would send a
+    /// consumer looking for a package that deliberately does not exist.
+    /// This case says the routing is the answer.
+    | FormatServedByDeckTier of TemplateFormat
 
 module RenderError =
     let toMessage =
         function
         | NoRendererForFormat fmt -> $"No renderer registered for format %A{fmt}"
+        | FormatServedByDeckTier fmt ->
+            $"Format %A{fmt} is not rendered by this SDK — deck output is produced by a downstream "
+            + "document-emission tier from the exported result set (narrative + facts + provenance refs) "
+            + "and the chart artifacts this SDK hands off. See the reporting docs, 'Deck export'."
         | MissingRequiredPlaceholder k -> $"Required placeholder '{k}' not supplied"
         | PlaceholderTypeMismatch(k, e, g) -> $"Placeholder '{k}': expected {e}, got {g}"
         | RendererFailure(r, reason) -> $"Renderer '{r}' failed: {reason}"

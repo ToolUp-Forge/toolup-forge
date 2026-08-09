@@ -914,6 +914,10 @@
         <!-- Phase 521 — fact-referencing narrative Metric spans. -->
         <Compile Include="InProcess\NarrativeFactsTests.fs" />
         <Compile Include="InProcess\NarrativeChartsTests.fs" />
+        <!-- Phase 647 — the deck-export seam. Sits beside the chart pack
+             because its handoff arm drives the SAME grammar, and pins its
+             prop encoding against that grammar's own projector. -->
+        <Compile Include="InProcess\DeckExportSeamTests.fs" />
         <Compile Include="InProcess\EnumerableRoutesTests.fs" />
         <Compile Include="InProcess\NavStructuredDataTests.fs" />
         <Compile Include="InProcess\TagFeedTests.fs" />
