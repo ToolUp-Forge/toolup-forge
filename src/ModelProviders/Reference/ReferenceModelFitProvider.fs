@@ -139,12 +139,60 @@ module ReferenceModelFitProvider =
                         )
         }
 
+    /// The prediction rows one fold evaluates, given the WHOLE predictions
+    /// frame (phase 652 — forge slices nothing, so the provider applies the
+    /// fold's window itself):
+    ///
+    /// * `WholeHoldout` — every row (the aggregate row, and the degenerate
+    ///   `TailHoldout` plan's only evaluation);
+    /// * `MaskedOrdinals` — every row EXCEPT the masked ordinals. The series
+    ///   arrived intact, which is the point: a provider whose feature
+    ///   construction needs contiguity builds features over all of it and
+    ///   only excludes the masked observations from the measurement;
+    /// * `TrainTestWindow` — the rows of the test window only.
+    let private rowsOfFold (window: FoldWindow) (rows: DatasetRow list) : DatasetRow list =
+        match window with
+        | FoldWindow.WholeHoldout -> rows
+        | FoldWindow.MaskedOrdinals ordinals ->
+            let masked = Set.ofList ordinals
+
+            rows
+            |> List.indexed
+            |> List.filter (fst >> masked.Contains >> not)
+            |> List.map snd
+        | FoldWindow.TrainTestWindow(_, _, testStart, testEnd) ->
+            rows
+            |> List.indexed
+            |> List.filter (fun (i, _) -> i >= testStart && i < testEnd)
+            |> List.map snd
+
+    /// Plan-aware provider-side metrics (phase 652): the same trivial
+    /// arithmetic as `evaluateMetrics`, restricted to the fold's own rows.
+    /// A *family* fold additionally reports `n_fold_rows`, so a test can
+    /// prove the fold — not the whole frame — was what got measured. The
+    /// whole-frame case emits exactly the Phase 456 map and nothing more,
+    /// which is what keeps a `TailHoldout` run's aggregate row byte-for-byte
+    /// what it was. Still emphatically not statistics; still provider-side
+    /// by design (plan D10).
+    let private evaluateFoldMetrics (context: EvaluationFoldContext) : Async<Result<Map<string, float>, string>> = async {
+        let foldPredictions = rowsOfFold context.Fold.Window context.Predictions
+        let foldActuals = rowsOfFold context.Fold.Window context.Actuals
+
+        match! evaluateMetrics context.PredictionsSchema foldPredictions context.ActualsSchema foldActuals with
+        | Error reason -> return Error reason
+        | Ok metrics ->
+            match context.Fold.Window with
+            | FoldWindow.WholeHoldout -> return Ok metrics
+            | _ -> return Ok(metrics |> Map.add "n_fold_rows" (float (List.length foldPredictions)))
+    }
+
     /// The reference provider as an `IModelFitProvider`. Takes no substrate
     /// dependencies — it is deliberately trivial (a production provider
     /// receives an `IDatasetStore` here and reads the vintage's rows). Also
-    /// implements `IModelEvaluationMetrics` (Phase 456) on the same object,
-    /// so `IModelFitProvider.Evaluate` dispatches to it — the shape every
-    /// evaluation-capable provider follows.
+    /// implements `IModelEvaluationMetrics` (Phase 456) and
+    /// `IModelEvaluationPlanMetrics` (phase 652) on the same object, so
+    /// `IModelFitProvider.Evaluate` / `.EvaluateFold` dispatch to it — the
+    /// shape every evaluation-capable provider follows.
     let create () : IModelFitProvider =
         { new IModelFitProvider with
             member _.Kind = Kind
@@ -154,4 +202,10 @@ module ReferenceModelFitProvider =
           interface IModelEvaluationMetrics with
               member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) =
                   evaluateMetrics predictionsSchema predictions actualsSchema actuals
+          interface IModelEvaluationPlanMetrics with
+              /// The reference family evaluates every plan kind — it is the
+              /// binding provider for the conformance packs.
+              member _.SupportedPlanKinds() = EvaluationPlan.allKindNames
+
+              member _.EvaluateFoldMetrics(context) = evaluateFoldMetrics context
         }

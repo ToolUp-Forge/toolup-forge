@@ -703,7 +703,8 @@ ToolUp.Platform.ColumnMappingStore.create(ToolUp.Platform.IDataObjectStore, Micr
 ToolUp.Platform.ColumnMappingStore.objectIdFor(System.String, System.String) : System.String
 ToolUp.Platform.ColumnMappingStore.recordObjectIdFor(System.String) : System.String
 ToolUp.Platform.ComparisonRequest (class)
-ToolUp.Platform.ComparisonRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, System.String)
+ToolUp.Platform.ComparisonRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, ToolUp.Platform.FoldAggregation, System.String)
+ToolUp.Platform.ComparisonRequest.Aggregation : ToolUp.Platform.FoldAggregation { get }
 ToolUp.Platform.ComparisonRequest.ComparedBy : System.String { get }
 ToolUp.Platform.ComparisonRequest.Direction : ToolUp.Platform.MetricDirection { get }
 ToolUp.Platform.ComparisonRequest.Entrants : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -2616,6 +2617,8 @@ ToolUp.Platform.EvaluationError.IsArtifactNotFound : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsEvaluationUnsupported : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsInputUnavailable : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsNotFound : System.Boolean { get }
+ToolUp.Platform.EvaluationError.IsPlanInvalid : System.Boolean { get }
+ToolUp.Platform.EvaluationError.IsPlanUnsupported : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsProviderFailed : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsProviderNotFound : System.Boolean { get }
 ToolUp.Platform.EvaluationError.IsProviderRefused : System.Boolean { get }
@@ -2628,6 +2631,11 @@ ToolUp.Platform.EvaluationError+EvaluationUnsupported (class)
 ToolUp.Platform.EvaluationError+EvaluationUnsupported.providerId : System.String { get }
 ToolUp.Platform.EvaluationError+InputUnavailable (class)
 ToolUp.Platform.EvaluationError+InputUnavailable.reason : System.String { get }
+ToolUp.Platform.EvaluationError+PlanInvalid (class)
+ToolUp.Platform.EvaluationError+PlanInvalid.reason : System.String { get }
+ToolUp.Platform.EvaluationError+PlanUnsupported (class)
+ToolUp.Platform.EvaluationError+PlanUnsupported.planKind : System.String { get }
+ToolUp.Platform.EvaluationError+PlanUnsupported.providerId : System.String { get }
 ToolUp.Platform.EvaluationError+ProviderFailed (class)
 ToolUp.Platform.EvaluationError+ProviderFailed.message : System.String { get }
 ToolUp.Platform.EvaluationError+ProviderFailed.providerId : System.String { get }
@@ -2647,6 +2655,8 @@ ToolUp.Platform.EvaluationError+Tags.ArtifactNotFound : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.EvaluationUnsupported : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.InputUnavailable : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.NotFound : System.Int32 (literal)
+ToolUp.Platform.EvaluationError+Tags.PlanInvalid : System.Int32 (literal)
+ToolUp.Platform.EvaluationError+Tags.PlanUnsupported : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.ProviderFailed : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.ProviderNotFound : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.ProviderRefused : System.Int32 (literal)
@@ -2655,6 +2665,58 @@ ToolUp.Platform.EvaluationError+Tags.ScoreFailed : System.Int32 (literal)
 ToolUp.Platform.EvaluationError+Tags.StorageFailure : System.Int32 (literal)
 ToolUp.Platform.EvaluationErrorModule (class)
 ToolUp.Platform.EvaluationErrorModule.describe(ToolUp.Platform.EvaluationError) : System.String
+ToolUp.Platform.EvaluationFold (class)
+ToolUp.Platform.EvaluationFold..ctor(System.String, System.Int32, ToolUp.Platform.FoldWindow)
+ToolUp.Platform.EvaluationFold.FoldId : System.String { get }
+ToolUp.Platform.EvaluationFold.Index : System.Int32 { get }
+ToolUp.Platform.EvaluationFold.Window : ToolUp.Platform.FoldWindow { get }
+ToolUp.Platform.EvaluationFoldContext (class)
+ToolUp.Platform.EvaluationFoldContext..ctor(ToolUp.Platform.EvaluationPlan, ToolUp.Platform.EvaluationFold, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow])
+ToolUp.Platform.EvaluationFoldContext.Actuals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow] { get }
+ToolUp.Platform.EvaluationFoldContext.ActualsSchema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.EvaluationFoldContext.Fold : ToolUp.Platform.EvaluationFold { get }
+ToolUp.Platform.EvaluationFoldContext.Plan : ToolUp.Platform.EvaluationPlan { get }
+ToolUp.Platform.EvaluationFoldContext.Predictions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow] { get }
+ToolUp.Platform.EvaluationFoldContext.PredictionsSchema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.EvaluationFoldModule (class)
+ToolUp.Platform.EvaluationFoldModule.AggregateFoldId : System.String (literal)
+ToolUp.Platform.EvaluationFoldModule.aggregate : ToolUp.Platform.EvaluationFold { get }
+ToolUp.Platform.EvaluationFoldModule.at(System.Int32, ToolUp.Platform.FoldWindow) : ToolUp.Platform.EvaluationFold
+ToolUp.Platform.EvaluationFoldOutcome (class)
+ToolUp.Platform.EvaluationFoldOutcome..ctor(System.String, System.String, System.String, System.String, System.String, System.Int32, System.String, ToolUp.Platform.FoldWindow, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.DateTimeOffset)
+ToolUp.Platform.EvaluationFoldOutcome.ArtifactKeyHash : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.Descriptor : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.FoldId : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.FoldIndex : System.Int32 { get }
+ToolUp.Platform.EvaluationFoldOutcome.Metrics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
+ToolUp.Platform.EvaluationFoldOutcome.OutcomeId : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.RecordedAt : System.DateTimeOffset { get }
+ToolUp.Platform.EvaluationFoldOutcome.RunId : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.ScopeId : System.String { get }
+ToolUp.Platform.EvaluationFoldOutcome.Window : ToolUp.Platform.FoldWindow { get }
+ToolUp.Platform.EvaluationFoldOutcomeModule (class)
+ToolUp.Platform.EvaluationFoldOutcomeModule.canonical(System.String, System.String) : System.String
+ToolUp.Platform.EvaluationFoldOutcomeModule.id(System.String, System.String) : System.String
+ToolUp.Platform.EvaluationPlan (class)
+ToolUp.Platform.EvaluationPlan.IsMaskedObservations : System.Boolean { get }
+ToolUp.Platform.EvaluationPlan.IsRollingOrigin : System.Boolean { get }
+ToolUp.Platform.EvaluationPlan.IsTailHoldout : System.Boolean { get }
+ToolUp.Platform.EvaluationPlan.Tag : System.Int32 { get }
+ToolUp.Platform.EvaluationPlan.TailHoldout : ToolUp.Platform.EvaluationPlan { get }
+ToolUp.Platform.EvaluationPlan+MaskedObservations (class)
+ToolUp.Platform.EvaluationPlan+MaskedObservations.Item : ToolUp.Platform.MaskedObservationsPlan { get }
+ToolUp.Platform.EvaluationPlan+RollingOrigin (class)
+ToolUp.Platform.EvaluationPlan+RollingOrigin.Item : ToolUp.Platform.RollingOriginPlan { get }
+ToolUp.Platform.EvaluationPlan+Tags (class)
+ToolUp.Platform.EvaluationPlan+Tags.MaskedObservations : System.Int32 (literal)
+ToolUp.Platform.EvaluationPlan+Tags.RollingOrigin : System.Int32 (literal)
+ToolUp.Platform.EvaluationPlan+Tags.TailHoldout : System.Int32 (literal)
+ToolUp.Platform.EvaluationPlanModule (class)
+ToolUp.Platform.EvaluationPlanModule.allKindNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvaluationPlanModule.folds(ToolUp.Platform.EvaluationPlan, System.Int32) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvaluationFold], System.String]
+ToolUp.Platform.EvaluationPlanModule.isKnownKind(System.String) : System.Boolean
+ToolUp.Platform.EvaluationPlanModule.kindName(ToolUp.Platform.EvaluationPlan) : System.String
+ToolUp.Platform.EvaluationPlanModule.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvaluationPlan]) : ToolUp.Platform.EvaluationPlan
 ToolUp.Platform.EvaluationRegistration (class)
 ToolUp.Platform.EvaluationRegistration..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.EvaluationRegistration.ArtifactKeyHash : System.String { get }
@@ -2667,18 +2729,20 @@ ToolUp.Platform.EvaluationRegistrationModule (class)
 ToolUp.Platform.EvaluationRegistrationModule.canonical(System.String, System.String) : System.String
 ToolUp.Platform.EvaluationRegistrationModule.id(System.String, System.String) : System.String
 ToolUp.Platform.EvaluationRequest (class)
-ToolUp.Platform.EvaluationRequest..ctor(System.String, System.String, ToolUp.Platform.DatasetVersionRef, System.String)
+ToolUp.Platform.EvaluationRequest..ctor(System.String, System.String, ToolUp.Platform.DatasetVersionRef, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvaluationPlan], System.String)
 ToolUp.Platform.EvaluationRequest.ArtifactKeyHash : System.String { get }
 ToolUp.Platform.EvaluationRequest.EvaluatedBy : System.String { get }
 ToolUp.Platform.EvaluationRequest.Holdout : ToolUp.Platform.DatasetVersionRef { get }
+ToolUp.Platform.EvaluationRequest.Plan : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvaluationPlan] { get }
 ToolUp.Platform.EvaluationRequest.ScopeId : System.String { get }
 ToolUp.Platform.EvaluationRun (class)
-ToolUp.Platform.EvaluationRun..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.DatasetVersionRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.String, System.DateTimeOffset)
+ToolUp.Platform.EvaluationRun..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.DatasetVersionRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvaluationPlan], System.String, System.DateTimeOffset)
 ToolUp.Platform.EvaluationRun.ArtifactKeyHash : System.String { get }
 ToolUp.Platform.EvaluationRun.EvaluatedAt : System.DateTimeOffset { get }
 ToolUp.Platform.EvaluationRun.EvaluatedBy : System.String { get }
 ToolUp.Platform.EvaluationRun.Holdout : ToolUp.Platform.DatasetVersionRef { get }
 ToolUp.Platform.EvaluationRun.Metrics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
+ToolUp.Platform.EvaluationRun.Plan : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvaluationPlan] { get }
 ToolUp.Platform.EvaluationRun.Predictions : ToolUp.Platform.DatasetVersionRef { get }
 ToolUp.Platform.EvaluationRun.ProviderId : System.String { get }
 ToolUp.Platform.EvaluationRun.ProviderVersion : System.String { get }
@@ -2687,6 +2751,7 @@ ToolUp.Platform.EvaluationRun.ScopeId : System.String { get }
 ToolUp.Platform.EvaluationRunModule (class)
 ToolUp.Platform.EvaluationRunModule.canonical(System.String, ToolUp.Platform.DatasetVersionRef) : System.String
 ToolUp.Platform.EvaluationRunModule.id(System.String, ToolUp.Platform.DatasetVersionRef) : System.String
+ToolUp.Platform.EvaluationRunModule.plan(ToolUp.Platform.EvaluationRun) : ToolUp.Platform.EvaluationPlan
 ToolUp.Platform.EventKind (class)
 ToolUp.Platform.EventKind.Item : System.String { get }
 ToolUp.Platform.EventKind.Tag : System.Int32 { get }
@@ -2967,12 +3032,12 @@ ToolUp.Platform.FitBatchItemPayload.BatchId : System.String { get }
 ToolUp.Platform.FitBatchItemPayload.Index : System.Int32 { get }
 ToolUp.Platform.FitBatchItemPayload.Request : ToolUp.Platform.FitRequest { get }
 ToolUp.Platform.FitBatchSubmission (class)
+ToolUp.Platform.FitBatchSubmission..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]])
 ToolUp.Platform.FitBatchSubmission.BatchId : System.String { get }
 ToolUp.Platform.FitBatchSubmission.ItemCount : System.Int32 { get }
+ToolUp.Platform.FitBatchSubmission.ScheduleFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]] { get }
 ToolUp.Platform.FitBatchSubmission.ScheduledJobs : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]] { get }
 ToolUp.Platform.FitBatchSubmission.ScopeId : System.String { get }
-ToolUp.Platform.FitBatchSubmission..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]])
-ToolUp.Platform.FitBatchSubmission.ScheduleFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Platform.FitEnqueueRefusal]] { get }
 ToolUp.Platform.FitCompositeKey (class)
 ToolUp.Platform.FitCompositeKey..ctor(System.String, System.String, System.Int64, System.String, System.String, System.String)
 ToolUp.Platform.FitCompositeKey.DatasetVersion : System.String { get }
@@ -2985,6 +3050,9 @@ ToolUp.Platform.FitCompositeKeyModule (class)
 ToolUp.Platform.FitCompositeKeyModule.canonical(System.String, System.String, System.Int64, System.String, System.String) : System.String
 ToolUp.Platform.FitCompositeKeyModule.compute(System.String, System.String, System.Int64, System.String, System.String) : ToolUp.Platform.FitCompositeKey
 ToolUp.Platform.FitEnqueueRefusal (class)
+ToolUp.Platform.FitEnqueueRefusal.IsScheduleRefused : System.Boolean { get }
+ToolUp.Platform.FitEnqueueRefusal.IsTriggerRefused : System.Boolean { get }
+ToolUp.Platform.FitEnqueueRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.FitEnqueueRefusal+ScheduleRefused (class)
 ToolUp.Platform.FitEnqueueRefusal+ScheduleRefused.Item : ToolUp.Platform.ScheduleError { get }
 ToolUp.Platform.FitEnqueueRefusal+Tags (class)
@@ -2992,9 +3060,6 @@ ToolUp.Platform.FitEnqueueRefusal+Tags.ScheduleRefused : System.Int32 (literal)
 ToolUp.Platform.FitEnqueueRefusal+Tags.TriggerRefused : System.Int32 (literal)
 ToolUp.Platform.FitEnqueueRefusal+TriggerRefused (class)
 ToolUp.Platform.FitEnqueueRefusal+TriggerRefused.reason : System.String { get }
-ToolUp.Platform.FitEnqueueRefusal.IsScheduleRefused : System.Boolean { get }
-ToolUp.Platform.FitEnqueueRefusal.IsTriggerRefused : System.Boolean { get }
-ToolUp.Platform.FitEnqueueRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.FitEnqueueRefusalModule (class)
 ToolUp.Platform.FitEnqueueRefusalModule.describe(ToolUp.Platform.FitEnqueueRefusal) : System.String
 ToolUp.Platform.FitOutcome (class)
@@ -3036,6 +3101,42 @@ ToolUp.Platform.FlagEvaluator+FlagEvaluator.IsEnabled : Microsoft.FSharp.Core.FS
 ToolUp.Platform.FlagEvaluator+FlagEvaluator.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.FeatureFlag, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.FlagValue]]] { get }
 ToolUp.Platform.FlagEvaluator+FlagEvaluator.ResolveVariant : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.Platform.FlagEvaluator+FlagEvaluator.TryEvaluate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]]] { get }
+ToolUp.Platform.FoldAggregation (class)
+ToolUp.Platform.FoldAggregation.AggregateMetric : ToolUp.Platform.FoldAggregation { get }
+ToolUp.Platform.FoldAggregation.IsAggregateMetric : System.Boolean { get }
+ToolUp.Platform.FoldAggregation.IsMeanAcrossFolds : System.Boolean { get }
+ToolUp.Platform.FoldAggregation.IsWorstFold : System.Boolean { get }
+ToolUp.Platform.FoldAggregation.MeanAcrossFolds : ToolUp.Platform.FoldAggregation { get }
+ToolUp.Platform.FoldAggregation.Tag : System.Int32 { get }
+ToolUp.Platform.FoldAggregation.WorstFold : ToolUp.Platform.FoldAggregation { get }
+ToolUp.Platform.FoldAggregation+Tags (class)
+ToolUp.Platform.FoldAggregation+Tags.AggregateMetric : System.Int32 (literal)
+ToolUp.Platform.FoldAggregation+Tags.MeanAcrossFolds : System.Int32 (literal)
+ToolUp.Platform.FoldAggregation+Tags.WorstFold : System.Int32 (literal)
+ToolUp.Platform.FoldAggregationModule (class)
+ToolUp.Platform.FoldAggregationModule.name(ToolUp.Platform.FoldAggregation) : System.String
+ToolUp.Platform.FoldAggregationModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FoldAggregation]
+ToolUp.Platform.FoldAggregationModule.resolve(ToolUp.Platform.FoldAggregation, ToolUp.Platform.MetricDirection, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpOption`1[System.Double]]) : Microsoft.FSharp.Core.FSharpOption`1[System.Double]
+ToolUp.Platform.FoldAggregationModule.resolveStored(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FoldAggregation]) : ToolUp.Platform.FoldAggregation
+ToolUp.Platform.FoldWindow (class)
+ToolUp.Platform.FoldWindow.IsMaskedOrdinals : System.Boolean { get }
+ToolUp.Platform.FoldWindow.IsTrainTestWindow : System.Boolean { get }
+ToolUp.Platform.FoldWindow.IsWholeHoldout : System.Boolean { get }
+ToolUp.Platform.FoldWindow.Tag : System.Int32 { get }
+ToolUp.Platform.FoldWindow.WholeHoldout : ToolUp.Platform.FoldWindow { get }
+ToolUp.Platform.FoldWindow+MaskedOrdinals (class)
+ToolUp.Platform.FoldWindow+MaskedOrdinals.ordinals : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
+ToolUp.Platform.FoldWindow+Tags (class)
+ToolUp.Platform.FoldWindow+Tags.MaskedOrdinals : System.Int32 (literal)
+ToolUp.Platform.FoldWindow+Tags.TrainTestWindow : System.Int32 (literal)
+ToolUp.Platform.FoldWindow+Tags.WholeHoldout : System.Int32 (literal)
+ToolUp.Platform.FoldWindow+TrainTestWindow (class)
+ToolUp.Platform.FoldWindow+TrainTestWindow.testEnd : System.Int32 { get }
+ToolUp.Platform.FoldWindow+TrainTestWindow.testStart : System.Int32 { get }
+ToolUp.Platform.FoldWindow+TrainTestWindow.trainEnd : System.Int32 { get }
+ToolUp.Platform.FoldWindow+TrainTestWindow.trainStart : System.Int32 { get }
+ToolUp.Platform.FoldWindowModule (class)
+ToolUp.Platform.FoldWindowModule.describe(ToolUp.Platform.FoldWindow) : System.String
 ToolUp.Platform.ForgeAuthContext (interface)
 ToolUp.Platform.ForgeAuthContext.HasClaim(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.Platform.ForgeAuthContext.HasRole(System.String) : System.Boolean
@@ -3652,10 +3753,14 @@ ToolUp.Platform.IMappingDryRunValidator (interface)
 ToolUp.Platform.IMappingDryRunValidator.Validate(DataManagementTypes+DataTypeSchema, System.String) : ColumnMappingTypes+DryRunReport
 ToolUp.Platform.IModelEvaluationMetrics (interface)
 ToolUp.Platform.IModelEvaluationMetrics.EvaluateMetrics(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.String]]
+ToolUp.Platform.IModelEvaluationPlanMetrics (interface)
+ToolUp.Platform.IModelEvaluationPlanMetrics.EvaluateFoldMetrics(ToolUp.Platform.EvaluationFoldContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.String]]
+ToolUp.Platform.IModelEvaluationPlanMetrics.SupportedPlanKinds() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.IModelEvaluationRunner (interface)
 ToolUp.Platform.IModelEvaluationRunner.Compare(ToolUp.Platform.ComparisonRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelComparison, ToolUp.Platform.EvaluationError]]
 ToolUp.Platform.IModelEvaluationRunner.Evaluate(ToolUp.Platform.EvaluationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvaluationRun, ToolUp.Platform.EvaluationError]]
 ToolUp.Platform.IModelEvaluationRunner.GetComparison(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelComparison, ToolUp.Platform.EvaluationError]]
+ToolUp.Platform.IModelEvaluationRunner.GetFoldOutcomes(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvaluationFoldOutcome]]
 ToolUp.Platform.IModelEvaluationRunner.GetTrackRecord(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvaluationRun]]
 ToolUp.Platform.IModelEvaluationRunner.ListReevaluationRegistrations(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvaluationRegistration]]
 ToolUp.Platform.IModelEvaluationRunner.RegisterReevaluation(System.String, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvaluationRegistration, ToolUp.Platform.EvaluationError]]
@@ -4429,6 +4534,28 @@ ToolUp.Platform.MaintenanceApiHandler.maintenanceApi(Microsoft.FSharp.Core.FShar
 ToolUp.Platform.MappingDryRunValidator (class)
 ToolUp.Platform.MappingDryRunValidator.commitBlocked(ToolUp.Platform.MappingDryRunPolicy, ColumnMappingTypes+DryRunReport) : System.Boolean
 ToolUp.Platform.MappingDryRunValidator.create() : ToolUp.Platform.IMappingDryRunValidator
+ToolUp.Platform.MaskSelection (class)
+ToolUp.Platform.MaskSelection.IsDeclared : System.Boolean { get }
+ToolUp.Platform.MaskSelection.IsSeededBlocked : System.Boolean { get }
+ToolUp.Platform.MaskSelection.IsSeededRandom : System.Boolean { get }
+ToolUp.Platform.MaskSelection.Tag : System.Int32 { get }
+ToolUp.Platform.MaskSelection+Declared (class)
+ToolUp.Platform.MaskSelection+Declared.ordinals : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
+ToolUp.Platform.MaskSelection+SeededBlocked (class)
+ToolUp.Platform.MaskSelection+SeededBlocked.blockCount : System.Int32 { get }
+ToolUp.Platform.MaskSelection+SeededBlocked.blockLength : System.Int32 { get }
+ToolUp.Platform.MaskSelection+SeededBlocked.seed : System.Int64 { get }
+ToolUp.Platform.MaskSelection+SeededRandom (class)
+ToolUp.Platform.MaskSelection+SeededRandom.count : System.Int32 { get }
+ToolUp.Platform.MaskSelection+SeededRandom.seed : System.Int64 { get }
+ToolUp.Platform.MaskSelection+Tags (class)
+ToolUp.Platform.MaskSelection+Tags.Declared : System.Int32 (literal)
+ToolUp.Platform.MaskSelection+Tags.SeededBlocked : System.Int32 (literal)
+ToolUp.Platform.MaskSelection+Tags.SeededRandom : System.Int32 (literal)
+ToolUp.Platform.MaskedObservationsPlan (class)
+ToolUp.Platform.MaskedObservationsPlan..ctor(ToolUp.Platform.MaskSelection, System.Int32)
+ToolUp.Platform.MaskedObservationsPlan.FoldCount : System.Int32 { get }
+ToolUp.Platform.MaskedObservationsPlan.Selection : ToolUp.Platform.MaskSelection { get }
 ToolUp.Platform.MaxRequestBodyBytesValidator (class)
 ToolUp.Platform.MaxRequestBodyBytesValidator+MaxRequestBodyBytesValidator (class)
 ToolUp.Platform.MaxRequestBodyBytesValidator+MaxRequestBodyBytesValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -4623,7 +4750,8 @@ ToolUp.Platform.ModelArtifactStatusModule.name(ToolUp.Platform.ModelArtifactStat
 ToolUp.Platform.ModelArtifactStatusModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus]
 ToolUp.Platform.ModelArtifactStatusModule.requiresElevatedRole(ToolUp.Platform.ModelArtifactStatus) : System.Boolean
 ToolUp.Platform.ModelComparison (class)
-ToolUp.Platform.ModelComparison..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComparisonStanding], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ComparisonResult, System.String, System.DateTimeOffset)
+ToolUp.Platform.ModelComparison..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FoldAggregation], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComparisonStanding], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ComparisonResult, System.String, System.DateTimeOffset)
+ToolUp.Platform.ModelComparison.Aggregation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FoldAggregation] { get }
 ToolUp.Platform.ModelComparison.ComparedAt : System.DateTimeOffset { get }
 ToolUp.Platform.ModelComparison.ComparedBy : System.String { get }
 ToolUp.Platform.ModelComparison.ComparisonId : System.String { get }
@@ -4637,7 +4765,9 @@ ToolUp.Platform.ModelComparison.ScopeId : System.String { get }
 ToolUp.Platform.ModelComparison.Standings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComparisonStanding] { get }
 ToolUp.Platform.ModelComparisonModule (class)
 ToolUp.Platform.ModelComparisonModule.canonical(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection) : System.String
+ToolUp.Platform.ModelComparisonModule.canonicalFor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, ToolUp.Platform.FoldAggregation) : System.String
 ToolUp.Platform.ModelComparisonModule.id(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection) : System.String
+ToolUp.Platform.ModelComparisonModule.idFor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, ToolUp.Platform.FoldAggregation) : System.String
 ToolUp.Platform.ModelComparisonModule.order(ToolUp.Platform.MetricDirection, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double]]]) : System.Tuple`3[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComparisonStanding], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ComparisonResult]
 ToolUp.Platform.ModelEvaluationEnvelope (class)
 ToolUp.Platform.ModelEvaluationEnvelope.isTerminal(ToolUp.Platform.EvaluationError) : System.Boolean
@@ -4689,6 +4819,7 @@ ToolUp.Platform.ModelFitJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.ModelFitJobHandlerModule.create(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ModelFitProviderEvaluationExtensions (class)
 ToolUp.Platform.ModelFitProviderEvaluationExtensions.IModelFitProvider.Evaluate(ToolUp.Platform.IModelFitProvider, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], ToolUp.Platform.EvaluationError]]
+ToolUp.Platform.ModelFitProviderEvaluationExtensions.IModelFitProvider.EvaluateFold(ToolUp.Platform.IModelFitProvider, ToolUp.Platform.EvaluationFoldContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], ToolUp.Platform.EvaluationError]]
 ToolUp.Platform.ModelFitProviderRegistry (class)
 ToolUp.Platform.ModelFitProviderRegistry..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelFitProvider])
 ToolUp.Platform.ModelFitProviderRegistry.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -4851,13 +4982,13 @@ ToolUp.Platform.ModelScoringJobHandlerModule (class)
 ToolUp.Platform.ModelScoringJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.ModelScoringJobHandlerModule.create(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ModelSpecRef (class)
+ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String, System.String)
 ToolUp.Platform.ModelSpecRef.Payload : System.String { get }
 ToolUp.Platform.ModelSpecRef.SpecHash : System.String { get }
+ToolUp.Platform.ModelSpecRef.SpecHashAlgorithm : System.String { get }
 ToolUp.Platform.ModelSpecRefModule (class)
 ToolUp.Platform.ModelSpecRefModule.hashOf(System.String) : System.String
 ToolUp.Platform.ModelSpecRefModule.ofPayload(System.String) : ToolUp.Platform.ModelSpecRef
-ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String, System.String)
-ToolUp.Platform.ModelSpecRef.SpecHashAlgorithm : System.String { get }
 ToolUp.Platform.ModelTransition (class)
 ToolUp.Platform.ModelTransition.invoke(ToolUp.Platform.ModelTransitionDeps, System.String, ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.ModelTransitionRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelTransitionRecord, ToolUp.Platform.ModelTransitionRefusal]]
 ToolUp.Platform.ModelTransition.judge(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactStatus], ToolUp.Platform.ModelTransitionAuthority, ToolUp.Platform.ModelTransitionRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionRefusal]
@@ -6098,6 +6229,13 @@ ToolUp.Platform.RevocationSet (class)
 ToolUp.Platform.RevocationSet..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.RevocationSet.RevokedAnchors : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.RevocationSet.RevokedStamps : Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.RollingOriginPlan (class)
+ToolUp.Platform.RollingOriginPlan..ctor(System.Int32, System.Int32, System.Int32, System.Int32, System.Boolean)
+ToolUp.Platform.RollingOriginPlan.Expanding : System.Boolean { get }
+ToolUp.Platform.RollingOriginPlan.FoldCount : System.Int32 { get }
+ToolUp.Platform.RollingOriginPlan.InitialTrainSize : System.Int32 { get }
+ToolUp.Platform.RollingOriginPlan.Step : System.Int32 { get }
+ToolUp.Platform.RollingOriginPlan.TestSize : System.Int32 { get }
 ToolUp.Platform.RoutingComputeDispatcher (class)
 ToolUp.Platform.RoutingComputeDispatcher..ctor(ToolUp.Platform.ComputeBackendRegistry, ToolUp.Platform.ComputeFleetTelemetry, ToolUp.Platform.Metrics.IMetricsSink)
 ToolUp.Platform.RoutingComputeDispatcher.BackendName : System.String { get }

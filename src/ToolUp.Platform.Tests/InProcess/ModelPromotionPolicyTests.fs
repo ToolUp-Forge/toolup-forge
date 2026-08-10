@@ -66,6 +66,7 @@ type private ThrowingEvaluationRunner() =
     interface IModelEvaluationRunner with
         member _.Evaluate _ = failwith "not reachable in this test"
         member _.GetTrackRecord(_, _) = async { return failwith "the metric source is unavailable" }
+        member _.GetFoldOutcomes(_, _) = failwith "not reachable in this test"
         member _.Compare _ = failwith "not reachable in this test"
         member _.GetComparison(_, _) = failwith "not reachable in this test"
         member _.RegisterReevaluation(_, _, _, _) = failwith "not reachable in this test"

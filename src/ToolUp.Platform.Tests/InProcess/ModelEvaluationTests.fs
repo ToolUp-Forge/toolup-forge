@@ -7,11 +7,14 @@ open System
 open System.IO
 open System.Text
 open System.Security.Cryptography
+open System.Text.Json
+open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.DataObjectStore
 open ToolUp.ModelProviders.Reference
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 456 — model evaluation & champion-challenger harness ─────────
 //
@@ -67,7 +70,7 @@ type private Stack = {
     Audit: RecordingAuditLog
 }
 
-let private freshStack () : Stack =
+let private stackWith (fitProvider: IModelFitProvider) : Stack =
     let tempDir =
         Path.Combine(Path.GetTempPath(), "toolup-eval-test-" + Guid.NewGuid().ToString("N"))
 
@@ -78,7 +81,7 @@ let private freshStack () : Stack =
     let audit = RecordingAuditLog()
     let registry = BlobModelRegistry.create dataObjects audit
 
-    let fitProviders = ModelFitProviderRegistry [ ReferenceModelFitProvider.create () ]
+    let fitProviders = ModelFitProviderRegistry [ fitProvider ]
 
     let scoreProviders =
         ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
@@ -92,6 +95,35 @@ let private freshStack () : Stack =
         Registry = registry
         Runner = ModelEvaluationRunner.create fitProviders registry scorer datasets dataObjects audit
         Audit = audit
+    }
+
+let private freshStack () : Stack =
+    stackWith (ReferenceModelFitProvider.create ())
+
+// ─── Phase 652 — plan-blind provider (the refusal case) ─────────────────
+//
+// A provider of the reference family that implements ONLY the Phase 456
+// whole-frame metrics seam and declares NO plan kinds. Evaluating a fold
+// family through it must be a typed refusal naming the provider and the
+// kind — the one behaviour the phase exists to guarantee, because the
+// alternative (quietly evaluating the whole frame and storing the answer as
+// if the family had been honoured) is wrong in a way nothing downstream can
+// detect.
+
+let private planBlindFitProvider () : IModelFitProvider =
+    let inner = ReferenceModelFitProvider.create ()
+
+    { new IModelFitProvider with
+        member _.Kind = ReferenceModelFitProvider.Kind
+        member _.ProviderVersion = ReferenceModelFitProvider.Version
+        member _.DeclareGates() = inner.DeclareGates()
+        member _.Fit(request) = inner.Fit request
+      interface IModelEvaluationMetrics with
+          member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) =
+              match inner with
+              | :? IModelEvaluationMetrics as metrics ->
+                  metrics.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals)
+              | _ -> async { return Error "the reference provider must implement IModelEvaluationMetrics" }
     }
 
 /// A small panel schema: unit / period / one plain feature / one target.
@@ -200,6 +232,7 @@ let private evaluateOk (stack: Stack) (scope: string) (keyHash: string) (holdout
         ScopeId = scope
         ArtifactKeyHash = keyHash
         Holdout = holdout
+        Plan = None
         EvaluatedBy = "u1"
     }
 
@@ -207,6 +240,54 @@ let private evaluateOk (stack: Stack) (scope: string) (keyHash: string) (holdout
     | Ok run -> return run
     | Error e -> return failwithf "evaluation failed: %s" (EvaluationError.describe e)
 }
+
+/// Seed one vintage of `rowCount` observations on a single panel unit —
+/// enough of an observation axis for a rolling-origin family to advance
+/// through (phase 652).
+let private seedWideVintage (store: IDatasetStore) (scope: string) (datasetId: string) (rowCount: int) = async {
+    let rows =
+        [ 0 .. rowCount - 1 ]
+        |> List.map (fun i -> row "north" (float i) (100.0 + float i) (1000.0 + float i))
+
+    match! store.Create(scope, datasetId, panelSchema, rows, "u1", Map.empty, Versioned) with
+    | Ok v ->
+        return
+            ({
+                ScopeId = scope
+                DatasetId = datasetId
+                Version = v.Version
+            }
+            : DatasetVersionRef)
+    | Error e -> return failwithf "seed failed: %s" (DatasetError.describe e)
+}
+
+/// Evaluate under an explicitly declared plan (phase 652), returning the raw
+/// `Result` so a refusal can be asserted on.
+let private evaluateUnder
+    (stack: Stack)
+    (scope: string)
+    (keyHash: string)
+    (holdout: DatasetVersionRef)
+    (plan: EvaluationPlan)
+    =
+    stack.Runner.Evaluate {
+        ScopeId = scope
+        ArtifactKeyHash = keyHash
+        Holdout = holdout
+        Plan = Some plan
+        EvaluatedBy = "u1"
+    }
+
+/// A three-window rolling-origin family over a 12-observation frame:
+/// train[0,4) test[4,6) · train[0,7) test[7,9) · train[0,10) test[10,12).
+let private threeWindowRolling =
+    EvaluationPlan.RollingOrigin {
+        InitialTrainSize = 4
+        TestSize = 2
+        Step = 3
+        FoldCount = 3
+        Expanding = true
+    }
 
 // ─── Phase 641 — a provider that RESOLVES its artifact through the context ──
 //
@@ -601,6 +682,7 @@ let tests =
                 ScopeId = scope
                 ArtifactKeyHash = artifact.CompositeKey.Hash
                 Holdout = holdout
+                Plan = None
                 EvaluatedBy = "u1"
             }
 
@@ -719,6 +801,7 @@ let tests =
                 ScopeId = scope
                 ArtifactKeyHash = artifact.CompositeKey.Hash
                 Holdout = holdout
+                Plan = None
                 EvaluatedBy = "u1"
             }
 
@@ -842,6 +925,7 @@ let tests =
                 Holdout = holdout
                 PrimaryMetric = "mean_prediction"
                 Direction = MetricDirection.HigherIsBetter
+                Aggregation = FoldAggregation.AggregateMetric
                 ComparedBy = "u1"
             }
 
@@ -887,6 +971,7 @@ let tests =
                 Holdout = holdout
                 PrimaryMetric = "m"
                 Direction = MetricDirection.HigherIsBetter
+                Aggregation = Some FoldAggregation.AggregateMetric
                 Standings = [
                     {
                         ArtifactKeyHash = "chall"
@@ -956,6 +1041,7 @@ let tests =
                 Holdout = holdout
                 PrimaryMetric = "mean_prediction"
                 Direction = MetricDirection.HigherIsBetter
+                Aggregation = FoldAggregation.AggregateMetric
                 ComparedBy = "u1"
             }
 
@@ -1004,6 +1090,7 @@ let tests =
                 Holdout = holdout
                 PrimaryMetric = "mean_prediction"
                 Direction = MetricDirection.HigherIsBetter
+                Aggregation = FoldAggregation.AggregateMetric
                 ComparedBy = "u1"
             }
 
@@ -1068,6 +1155,7 @@ let tests =
                 Holdout = holdout
                 PrimaryMetric = "mean_prediction"
                 Direction = MetricDirection.HigherIsBetter
+                Aggregation = FoldAggregation.AggregateMetric
                 ComparedBy = "u1"
             }
 
@@ -1189,6 +1277,7 @@ let tests =
                     ScopeId = "team-1"
                     ArtifactKeyHash = artifact.CompositeKey.Hash
                     Holdout = holdout
+                    Plan = None
                     EvaluatedBy = "system"
                 }
 
@@ -1206,6 +1295,7 @@ let tests =
                     ScopeId = "team-1"
                     ArtifactKeyHash = "no-such-artifact"
                     Holdout = holdout
+                    Plan = None
                     EvaluatedBy = "system"
                 }
 
@@ -1214,5 +1304,548 @@ let tests =
             match missing with
             | PermanentFailure _ -> ()
             | other -> failtestf "an unknown artifact is terminal; expected PermanentFailure, got %A" other
+        }
+
+        // ── phase 652 — fold families: derivation ─────────────────────
+
+        testCase "the degenerate TailHoldout plan generates NO separate folds — its aggregate row is its fold"
+        <| fun _ ->
+            match EvaluationPlan.folds EvaluationPlan.TailHoldout 12 with
+            | Ok [] -> ()
+            | other -> failtestf "TailHoldout must generate an empty family; got %A" other
+
+        testCase "a rolling-origin family is exact half-open observation windows, advancing by the declared step"
+        <| fun _ ->
+            match EvaluationPlan.folds threeWindowRolling 12 with
+            | Error reason -> failtestf "the family must derive over 12 observations: %s" reason
+            | Ok folds ->
+                Expect.equal (List.length folds) 3 "three declared folds"
+
+                Expect.equal
+                    (folds |> List.map _.Window)
+                    [
+                        FoldWindow.TrainTestWindow(0, 4, 4, 6)
+                        FoldWindow.TrainTestWindow(0, 7, 7, 9)
+                        FoldWindow.TrainTestWindow(0, 10, 10, 12)
+                    ]
+                    "an expanding origin advances the train end and the test window by the step"
+
+                Expect.equal (folds |> List.map _.FoldId) [ "fold-0"; "fold-1"; "fold-2" ] "stable per-fold ids"
+
+        testCase "a sliding rolling-origin family keeps the training window at fixed width"
+        <| fun _ ->
+            let sliding =
+                EvaluationPlan.RollingOrigin {
+                    InitialTrainSize = 4
+                    TestSize = 2
+                    Step = 3
+                    FoldCount = 2
+                    Expanding = false
+                }
+
+            match EvaluationPlan.folds sliding 12 with
+            | Error reason -> failtestf "the family must derive: %s" reason
+            | Ok folds ->
+                Expect.equal
+                    (folds |> List.map _.Window)
+                    [
+                        FoldWindow.TrainTestWindow(0, 4, 4, 6)
+                        FoldWindow.TrainTestWindow(3, 7, 7, 9)
+                    ]
+                    "the train window slides at width 4 rather than growing"
+
+        testCase "a rolling family longer than the frame is a typed refusal, never a truncated family"
+        <| fun _ ->
+            match EvaluationPlan.folds threeWindowRolling 8 with
+            | Error reason ->
+                Expect.stringContains reason "12" "the refusal says how many observations the family needs"
+            | Ok folds -> failtestf "a family that does not fit must refuse, not truncate to %d fold(s)" folds.Length
+
+        testCase "a seeded blocked mask re-derives the IDENTICAL fold set, and its blocks are contiguous"
+        <| fun _ ->
+            let plan =
+                EvaluationPlan.MaskedObservations {
+                    Selection = MaskSelection.SeededBlocked(42L, 2, 2)
+                    FoldCount = 3
+                }
+
+            match EvaluationPlan.folds plan 12, EvaluationPlan.folds plan 12 with
+            | Ok first, Ok second ->
+                Expect.equal first second "the same plan over the same frame re-derives the identical family"
+                Expect.equal (List.length first) 3 "three folds"
+
+                // Each fold masks two blocks of two — 3 or 4 distinct
+                // ordinals, depending on whether the two blocks abut.
+                for fold in first do
+                    match fold.Window with
+                    | FoldWindow.MaskedOrdinals ordinals ->
+                        Expect.equal ordinals (List.sort (List.distinct ordinals)) "mask ordinals are sorted + distinct"
+                        Expect.isTrue (ordinals.Length >= 3 && ordinals.Length <= 4) "two blocks of length two"
+
+                        Expect.all
+                            ordinals
+                            (fun o -> o >= 0 && o < 12)
+                            "every masked ordinal is inside the observation axis"
+                    | other -> failtestf "a masked family must produce masked windows; got %A" other
+
+                Expect.isTrue
+                    (first |> List.map _.Window |> List.distinct |> List.length > 1)
+                    "distinct fold indices draw distinct masks"
+            | a, b -> failtestf "the seeded family must derive twice; got %A / %A" a b
+
+        testCase "a different seed draws a different mask — the seed is load-bearing, not decoration"
+        <| fun _ ->
+            let familyFor (seed: int64) =
+                EvaluationPlan.folds
+                    (EvaluationPlan.MaskedObservations {
+                        Selection = MaskSelection.SeededRandom(seed, 4)
+                        FoldCount = 2
+                    })
+                    12
+
+            match familyFor 1L, familyFor 2L with
+            | Ok a, Ok b -> Expect.notEqual (a |> List.map _.Window) (b |> List.map _.Window) "seeds separate the draws"
+            | a, b -> failtestf "both families must derive; got %A / %A" a b
+
+        testCase "a declared mask is one fold of exactly the declared ordinals; an out-of-range ordinal refuses"
+        <| fun _ ->
+            let declared (ordinals: int list) =
+                EvaluationPlan.folds
+                    (EvaluationPlan.MaskedObservations {
+                        Selection = MaskSelection.Declared ordinals
+                        FoldCount = 5
+                    })
+                    12
+
+            match declared [ 7; 2; 2 ] with
+            | Ok [ fold ] ->
+                Expect.equal fold.Window (FoldWindow.MaskedOrdinals [ 2; 7 ]) "declared ordinals, deduplicated + sorted"
+            | other -> failtestf "a declared mask is exactly one fold; got %A" other
+
+            match declared [ 2; 99 ] with
+            | Error reason -> Expect.stringContains reason "99" "the refusal names the offending ordinal"
+            | Ok _ -> failtest "an ordinal outside the frame must refuse"
+
+        // ── phase 652 — fold families: stored outcomes ────────────────
+
+        testCaseAsync "a three-window rolling-origin run stores three fold outcomes PLUS the unchanged aggregate"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedWideVintage stack.Datasets "team-1" "holdout" 12
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+
+            match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout threeWindowRolling with
+            | Error e -> failtestf "the rolling-origin run must succeed: %s" (EvaluationError.describe e)
+            | Ok run ->
+                Expect.equal run.Plan (Some threeWindowRolling) "the run carries the plan it ran under"
+
+                Expect.equal
+                    (EvaluationRun.plan run)
+                    threeWindowRolling
+                    "and reads it back through the no-migration accessor"
+
+                // The aggregate row is the whole-frame evaluation — the same
+                // shape a Phase 456 run stored.
+                Expect.equal
+                    (run.Metrics |> Map.toList |> List.map fst |> List.sort)
+                    [ "mean_prediction"; "n_actuals"; "n_scored" ]
+                    "the aggregate row is the whole-frame metric map, unchanged"
+
+                Expect.equal (Map.find "n_scored" run.Metrics) 12.0 "the aggregate measured all twelve observations"
+
+                let! folds = stack.Runner.GetFoldOutcomes("team-1", run.RunId)
+                Expect.equal (List.length folds) 3 "three stored fold outcomes"
+                Expect.equal (folds |> List.map _.FoldIndex) [ 0; 1; 2 ] "queried back in family order"
+
+                Expect.equal
+                    (folds |> List.map _.Descriptor)
+                    [ "train[0,4) test[4,6)"; "train[0,7) test[7,9)"; "train[0,10) test[10,12)" ]
+                    "each outcome carries its window descriptor"
+
+                Expect.all
+                    folds
+                    (fun f -> Map.tryFind "n_fold_rows" f.Metrics = Some 2.0)
+                    "each fold measured its own two-observation test window, not the whole frame"
+
+                Expect.all folds (fun f -> f.RunId = run.RunId) "every outcome names its run"
+
+                // Re-running the same (artifact, vintage) is idempotent per
+                // fold, exactly as it already is per run.
+                match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout threeWindowRolling with
+                | Error e -> failtestf "the re-run must succeed: %s" (EvaluationError.describe e)
+                | Ok rerun ->
+                    let! refolds = stack.Runner.GetFoldOutcomes("team-1", rerun.RunId)
+                    Expect.equal (List.length refolds) 3 "the family does not accumulate duplicates on a re-run"
+
+                    Expect.equal
+                        (refolds |> List.map _.Metrics)
+                        (folds |> List.map _.Metrics)
+                        "and reproduces identical per-fold metrics (plan D4)"
+        }
+
+        testCaseAsync "a seeded masked run reproduces the identical fold set on re-run"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedWideVintage stack.Datasets "team-1" "holdout" 12
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+
+            let plan =
+                EvaluationPlan.MaskedObservations {
+                    Selection = MaskSelection.SeededBlocked(42L, 2, 2)
+                    FoldCount = 3
+                }
+
+            let evaluateAndReadFolds () = async {
+                match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout plan with
+                | Error e -> return failtestf "the masked run must succeed: %s" (EvaluationError.describe e)
+                | Ok run -> return! stack.Runner.GetFoldOutcomes("team-1", run.RunId)
+            }
+
+            let! first = evaluateAndReadFolds ()
+            let! second = evaluateAndReadFolds ()
+
+            Expect.equal (List.length first) 3 "three masked folds"
+
+            Expect.equal
+                (first |> List.map _.Window)
+                (second |> List.map _.Window)
+                "the seeded fold set is reproduced byte-identically on re-run"
+
+            Expect.equal
+                (first |> List.map _.Metrics)
+                (second |> List.map _.Metrics)
+                "and so are the provider metrics for each fold"
+
+            Expect.all
+                first
+                (fun f -> Map.tryFind "n_fold_rows" f.Metrics |> Option.exists (fun n -> n < 12.0))
+                "a masked fold measures fewer observations than the frame it was handed"
+        }
+
+        testCaseAsync "a plan the provider does not declare is refused BY NAME — never a tail-holdout fallback"
+        <| async {
+            let stack = stackWith (planBlindFitProvider ())
+            let! holdout = seedWideVintage stack.Datasets "team-1" "holdout" 12
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+
+            match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout threeWindowRolling with
+            | Error(EvaluationError.PlanUnsupported(providerId, planKind)) ->
+                Expect.equal providerId ReferenceModelFitProvider.Kind "the refusal names the provider"
+                Expect.equal planKind "RollingOrigin" "and the plan kind it does not declare"
+            | other -> failtestf "an undeclared plan kind must refuse; got %A" other
+
+            // The refusal is total: nothing was stored, so nothing downstream
+            // can mistake a tail-holdout number for a fold family's.
+            let! trackRecord = stack.Runner.GetTrackRecord("team-1", artifact.CompositeKey.Hash)
+            Expect.isEmpty trackRecord "a refused plan stores no run"
+
+            // The SAME provider still evaluates the degenerate plan — the
+            // Phase 456 path is untouched.
+            match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout EvaluationPlan.TailHoldout with
+            | Ok run ->
+                Expect.isTrue (Map.containsKey "mean_prediction" run.Metrics) "the tail-holdout path still works"
+            | Error e ->
+                failtestf "TailHoldout must still evaluate through the Phase 456 seam: %s" (EvaluationError.describe e)
+        }
+
+        testCaseAsync "a plan that cannot fold over the holdout frame is a typed PlanInvalid refusal"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedVintage stack.Datasets "team-1" "holdout" 0.0
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+
+            match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout threeWindowRolling with
+            | Error(EvaluationError.PlanInvalid reason) ->
+                Expect.stringContains reason "12" "the refusal says what the family needed"
+
+                Expect.isTrue
+                    (ModelEvaluationEnvelope.isTerminal (EvaluationError.PlanInvalid reason))
+                    "and is terminal"
+            | other -> failtestf "a family longer than the frame must refuse; got %A" other
+        }
+
+        testCaseAsync "a TailHoldout run stores NO fold outcomes and is byte-for-byte the pre-plan behaviour"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedVintage stack.Datasets "team-1" "holdout" 0.0
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+
+            // `Plan = None` is what a run stored (or a job payload persisted)
+            // before this phase deserialises to.
+            let! implicitRun = evaluateOk stack "team-1" artifact.CompositeKey.Hash holdout
+            Expect.equal implicitRun.Plan (Some EvaluationPlan.TailHoldout) "an unstated plan resolves to TailHoldout"
+
+            let! folds = stack.Runner.GetFoldOutcomes("team-1", implicitRun.RunId)
+            Expect.isEmpty folds "the degenerate family stores no separate fold outcome"
+
+            match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout EvaluationPlan.TailHoldout with
+            | Error e -> failtestf "an explicit TailHoldout must succeed: %s" (EvaluationError.describe e)
+            | Ok explicitRun ->
+                Expect.equal
+                    explicitRun.Metrics
+                    implicitRun.Metrics
+                    "declaring the plan explicitly changes no stored metric"
+
+                Expect.equal explicitRun.RunId implicitRun.RunId "and does not change the run identity"
+        }
+
+        // ── phase 652 — declared comparison aggregation ───────────────
+
+        testCase "an AggregateMetric comparison keeps the pre-plan identity; another aggregation gets its own"
+        <| fun _ ->
+            let holdout: DatasetVersionRef = {
+                ScopeId = "team-1"
+                DatasetId = "holdout"
+                Version = 1
+            }
+
+            let entrants = [ "a"; "b" ]
+
+            Expect.equal
+                (ModelComparison.idFor
+                    "team-1"
+                    entrants
+                    holdout
+                    "m"
+                    MetricDirection.HigherIsBetter
+                    FoldAggregation.AggregateMetric)
+                (ModelComparison.id "team-1" entrants holdout "m" MetricDirection.HigherIsBetter)
+                "the Phase 456 ranking keeps the id it was stored under"
+
+            Expect.notEqual
+                (ModelComparison.idFor
+                    "team-1"
+                    entrants
+                    holdout
+                    "m"
+                    MetricDirection.HigherIsBetter
+                    FoldAggregation.WorstFold)
+                (ModelComparison.id "team-1" entrants holdout "m" MetricDirection.HigherIsBetter)
+                "a differently-ranked verdict never overwrites it"
+
+        testCase "a fold aggregation refuses partial or unusable evidence rather than laundering it"
+        <| fun _ ->
+            let resolve aggregation folds =
+                FoldAggregation.resolve aggregation MetricDirection.HigherIsBetter (Some 0.5) folds
+
+            Expect.equal
+                (resolve FoldAggregation.MeanAcrossFolds [ Some 0.2; Some 0.4 ])
+                (Some 0.30000000000000004)
+                "a complete family means to the arithmetic mean of the provider's own numbers"
+
+            Expect.equal
+                (resolve FoldAggregation.MeanAcrossFolds [ Some 0.2; None ])
+                None
+                "a fold missing the metric makes the entrant unrankable — not a mean over the rest"
+
+            Expect.equal
+                (resolve FoldAggregation.MeanAcrossFolds [ Some 0.2; Some nan ])
+                None
+                "a NaN fold is unusable, not zero"
+
+            Expect.equal (resolve FoldAggregation.MeanAcrossFolds []) None "an empty family ranks nothing"
+
+            Expect.equal
+                (resolve FoldAggregation.WorstFold [ Some 0.2; Some 0.9 ])
+                (Some 0.2)
+                "HigherIsBetter: the worst fold is the smallest"
+
+            Expect.equal
+                (FoldAggregation.resolve FoldAggregation.WorstFold MetricDirection.LowerIsBetter (Some 0.5) [
+                    Some 0.2
+                    Some 0.9
+                ])
+                (Some 0.9)
+                "LowerIsBetter: the worst fold is the largest"
+
+            Expect.equal
+                (resolve FoldAggregation.AggregateMetric [])
+                (Some 0.5)
+                "the aggregate ranking reads the aggregate row and ignores the family"
+
+        testCaseAsync "a comparison ranks on the DECLARED fold aggregation over the stored fold outcomes"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedWideVintage stack.Datasets "team-1" "holdout" 12
+            let! a = fitAndRegister stack "team-1" 1L holdout
+            let! b = fitAndRegister stack "team-1" 2L holdout
+
+            for artifact in [ a; b ] do
+                match! evaluateUnder stack "team-1" artifact.CompositeKey.Hash holdout threeWindowRolling with
+                | Ok _ -> ()
+                | Error e -> failtestf "the rolling run must succeed: %s" (EvaluationError.describe e)
+
+            let compareUnder aggregation =
+                stack.Runner.Compare {
+                    ScopeId = "team-1"
+                    Entrants = [ a.CompositeKey.Hash; b.CompositeKey.Hash ]
+                    Holdout = holdout
+                    PrimaryMetric = "mean_prediction"
+                    Direction = MetricDirection.HigherIsBetter
+                    Aggregation = aggregation
+                    ComparedBy = "u1"
+                }
+
+            /// The entrant's own stored fold metrics — the evidence forge
+            /// reduced. The assertions below re-derive the ranked value from
+            /// these, so what is proven is that forge SELECTED provider
+            /// numbers, not that it computed a statistic.
+            let foldMetricsOf (keyHash: string) = async {
+                let runId = EvaluationRun.id keyHash holdout
+                let! outcomes = stack.Runner.GetFoldOutcomes("team-1", runId)
+                return outcomes |> List.map (fun o -> Map.find "mean_prediction" o.Metrics)
+            }
+
+            let! foldsA = foldMetricsOf a.CompositeKey.Hash
+            let! foldsB = foldMetricsOf b.CompositeKey.Hash
+            Expect.equal (List.length foldsA) 3 "three fold metrics for the first entrant"
+
+            match! compareUnder FoldAggregation.MeanAcrossFolds with
+            | Error e -> failtestf "the mean-aggregated comparison failed: %s" (EvaluationError.describe e)
+            | Ok comparison ->
+                Expect.equal
+                    comparison.Aggregation
+                    (Some FoldAggregation.MeanAcrossFolds)
+                    "the stored verdict records the aggregation it was declared under"
+
+                let ranked (keyHash: string) =
+                    comparison.Standings
+                    |> List.find (fun s -> s.ArtifactKeyHash = keyHash)
+                    |> _.Metric
+
+                Expect.floatClose
+                    Accuracy.high
+                    (ranked a.CompositeKey.Hash)
+                    (List.sum foldsA / 3.0)
+                    "the ranked value is the mean of the entrant's own stored fold metrics"
+
+                Expect.floatClose
+                    Accuracy.high
+                    (ranked b.CompositeKey.Hash)
+                    (List.sum foldsB / 3.0)
+                    "…for every entrant"
+
+            match! compareUnder FoldAggregation.WorstFold with
+            | Error e -> failtestf "the worst-fold comparison failed: %s" (EvaluationError.describe e)
+            | Ok comparison ->
+                let ranked (keyHash: string) =
+                    comparison.Standings
+                    |> List.find (fun s -> s.ArtifactKeyHash = keyHash)
+                    |> _.Metric
+
+                Expect.floatClose
+                    Accuracy.high
+                    (ranked a.CompositeKey.Hash)
+                    (List.min foldsA)
+                    "HigherIsBetter ranks the entrant on its worst fold"
+
+                match! compareUnder FoldAggregation.MeanAcrossFolds with
+                | Ok meaned ->
+                    Expect.notEqual
+                        meaned.ComparisonId
+                        comparison.ComparisonId
+                        "two aggregations of one entrant set are two stored verdicts, not one overwritten"
+                | Error e -> failtestf "the mean comparison failed: %s" (EvaluationError.describe e)
+        }
+
+        testCase "a record written BEFORE the plan fields existed deserialises to the old meaning — no migration"
+        <| fun _ ->
+            // The no-migration claim is only worth as much as the
+            // deserialiser's actual behaviour on a record that lacks the
+            // field, so this round-trips through the real wire options with
+            // the new properties physically removed, rather than asserting
+            // the intent.
+            let options = FableConverters.create ()
+
+            let strip (property: string) (value: 'T) : string =
+                let node = JsonNode.Parse(JsonSerializer.Serialize(value, options))
+                node.AsObject().Remove property |> ignore
+                node.ToJsonString()
+
+            let holdoutRef: DatasetVersionRef = {
+                ScopeId = "team-1"
+                DatasetId = "holdout"
+                Version = 1
+            }
+
+            let run: EvaluationRun = {
+                RunId = "r1"
+                ScopeId = "team-1"
+                ArtifactKeyHash = "a1"
+                ProviderId = "reference"
+                ProviderVersion = "1.0.0"
+                Holdout = holdoutRef
+                Predictions = holdoutRef
+                Metrics = Map [ "mean_prediction", 0.5 ]
+                Plan = Some threeWindowRolling
+                EvaluatedBy = "u1"
+                EvaluatedAt = t0
+            }
+
+            let legacyRun = JsonSerializer.Deserialize<EvaluationRun>(strip "Plan" run, options)
+
+            Expect.equal legacyRun.Plan None "an absent plan field deserialises to None, not a throw"
+
+            Expect.equal
+                (EvaluationRun.plan legacyRun)
+                EvaluationPlan.TailHoldout
+                "and reads as the degenerate plan it was run under"
+
+            Expect.equal
+                (Map.find "mean_prediction" legacyRun.Metrics)
+                0.5
+                "the aggregate row survives the round trip untouched"
+
+            let comparison: ModelComparison = {
+                ComparisonId = "c1"
+                ScopeId = "team-1"
+                Entrants = [ "a1" ]
+                Holdout = holdoutRef
+                PrimaryMetric = "mean_prediction"
+                Direction = MetricDirection.HigherIsBetter
+                Aggregation = Some FoldAggregation.WorstFold
+                Standings = []
+                MissingMetric = [ "a1" ]
+                Result = ComparisonResult.NoComparableMetrics
+                ComparedBy = "u1"
+                ComparedAt = t0
+            }
+
+            let legacyComparison =
+                JsonSerializer.Deserialize<ModelComparison>(strip "Aggregation" comparison, options)
+
+            Expect.equal legacyComparison.Aggregation None "an absent aggregation deserialises to None"
+
+            Expect.equal
+                (FoldAggregation.resolveStored legacyComparison.Aggregation)
+                FoldAggregation.AggregateMetric
+                "and reads as the ranking such a record was actually stored under"
+
+        testCaseAsync "a fold aggregation over a TailHoldout entrant is a typed missing metric, never the aggregate row"
+        <| async {
+            let stack = freshStack ()
+            let! holdout = seedVintage stack.Datasets "team-1" "holdout" 0.0
+            let! artifact = fitAndRegister stack "team-1" 1L holdout
+            let! _ = evaluateOk stack "team-1" artifact.CompositeKey.Hash holdout
+
+            match!
+                stack.Runner.Compare {
+                    ScopeId = "team-1"
+                    Entrants = [ artifact.CompositeKey.Hash ]
+                    Holdout = holdout
+                    PrimaryMetric = "mean_prediction"
+                    Direction = MetricDirection.HigherIsBetter
+                    Aggregation = FoldAggregation.MeanAcrossFolds
+                    ComparedBy = "u1"
+                }
+            with
+            | Error e -> failtestf "the comparison itself must not fail: %s" (EvaluationError.describe e)
+            | Ok comparison ->
+                Expect.equal
+                    comparison.MissingMetric
+                    [ artifact.CompositeKey.Hash ]
+                    "an entrant with no fold family cannot satisfy a fold aggregation"
+
+                Expect.equal comparison.Result ComparisonResult.NoComparableMetrics "and the verdict says so"
         }
     ]

@@ -41,6 +41,29 @@ open ToolUp.Remoting.Json.SystemTextJson
 //    a single stored comparison's standings (data, not a promise).
 // 6. *Precision at the lower bound* — timestamps are `DateTimeOffset`;
 //    identities are exact SHA-256 keys (no approximate matching).
+//
+// **GP 12 audit of the phase-652 widening** (plans, folds, the plan-aware
+// provider seam, per-fold outcomes, declared comparison aggregation):
+// 1. *Identity by value* — a plan is a closed DU of primitives; a fold is a
+//    string id + int index + an ordinal-valued window; a fold outcome is
+//    keyed by a SHA-256 string over `(run, fold)`. Nothing crossing the seam
+//    is a handle, a stream, or a cursor into the runner's state.
+// 2. *Async at every boundary* — `IModelEvaluationPlanMetrics` and the new
+//    `GetFoldOutcomes` query both return `Async<_>`.
+// 3. *Behaviour as data* — fold GENERATION is plan parameters; plan support
+//    is a declared `SupportedPlanKinds()` list read before the provider is
+//    called; comparison aggregation is a declared `FoldAggregation`. Every
+//    refusal is a typed `EvaluationError` case, never an exception and never
+//    a callback.
+// 4. *Stateless between calls* — a fold's provider call carries its plan,
+//    its fold, and both whole frames; the provider retains nothing between
+//    folds, so a distributed worker may take any fold in any order.
+// 5. *No cross-shard ordering* — folds carry an explicit `FoldIndex` and the
+//    query sorts by it, so family order is DATA on the records rather than a
+//    promise about the store's enumeration.
+// 6. *Precision at the lower bound* — fold windows are exact integer
+//    observation ordinals (half-open ranges); no fractional split points, no
+//    implicit rounding a second implementation could disagree about.
 
 /// A request to evaluate `ArtifactKeyHash` against the `Holdout` vintage
 /// (task 456.A). Also the persisted payload for a `_platform.modeleval.run`
@@ -53,6 +76,10 @@ type EvaluationRequest = {
     ArtifactKeyHash: string
     /// The immutable holdout vintage to evaluate against (Phase 448).
     Holdout: DatasetVersionRef
+    /// The evaluation plan to run under (phase 652). `None` is the
+    /// degenerate `TailHoldout` plan — the Phase 456 behaviour, and what a
+    /// persisted job payload written before this phase deserialises to.
+    Plan: EvaluationPlan option
     /// Actor the run is attributed to.
     EvaluatedBy: string
 }
@@ -70,6 +97,12 @@ type ComparisonRequest = {
     PrimaryMetric: string
     /// Which way the metric improves.
     Direction: MetricDirection
+    /// How each entrant's metric evidence is reduced to the ranked value
+    /// (phase 652) — **declared, never defaulted**: a fold family only means
+    /// something once the comparer says which number it is judged by.
+    /// `FoldAggregation.AggregateMetric` is the Phase 456 ranking and keeps
+    /// the pre-652 comparison identity byte-for-byte.
+    Aggregation: FoldAggregation
     /// Actor the comparison is attributed to.
     ComparedBy: string
 }
@@ -91,6 +124,12 @@ type IModelEvaluationRunner =
     /// `EvaluatedAt` — the out-of-time metric track record (task 456.D).
     /// Empty when the artifact has never been evaluated.
     abstract GetTrackRecord: scopeId: string * artifactKeyHash: string -> Async<EvaluationRun list>
+
+    /// Every stored **per-fold** outcome of one run, in family order (phase
+    /// 652). Empty for a `TailHoldout` run — including every run stored
+    /// before this phase — because the degenerate family's aggregate row IS
+    /// its single fold.
+    abstract GetFoldOutcomes: scopeId: string * runId: string -> Async<EvaluationFoldOutcome list>
 
     /// Compare N artifacts' stored evaluations on one holdout vintage under
     /// the declared primary metric + direction, and store the ordered
@@ -126,6 +165,15 @@ module private ModelEvaluationStorage =
 
     [<Literal>]
     let ComparisonDataType = "toolup.modelcomparison"
+
+    /// Per-fold outcomes (phase 652) — their own data type, so the
+    /// aggregate-row query surface (`GetTrackRecord`) is untouched by their
+    /// arrival and an existing consumer sees exactly what it saw before.
+    [<Literal>]
+    let FoldDataType = "toolup.modelevaluationfold"
+
+    [<Literal>]
+    let FoldRunKey = "evaluationfold.run"
 
     [<Literal>]
     let RegistrationDataType = "toolup.modelevalregistration"
@@ -272,6 +320,113 @@ type ModelEvaluationRunner
         | Error _ -> return None
     }
 
+    /// Every stored per-fold outcome of one run, in family order.
+    let foldOutcomesOf (scopeId: string) (runId: string) = async {
+        let! outcomes =
+            ModelEvaluationStorage.queryBy<EvaluationFoldOutcome>
+                dataObjects
+                scopeId
+                ModelEvaluationStorage.FoldDataType
+                (fun m -> Map.tryFind ModelEvaluationStorage.FoldRunKey m = Some runId)
+
+        return outcomes |> List.sortBy _.FoldIndex
+    }
+
+    /// Phase 652 — run the declared plan: derive its fold family, evaluate
+    /// the **aggregate** row and every fold through the provider, persist the
+    /// per-fold outcomes, and return the aggregate metric map (the run's
+    /// `Metrics`, unchanged in meaning from Phase 456).
+    ///
+    /// Three properties are load-bearing here:
+    ///
+    /// * *Fold generation is enumeration, not statistics.* The family is
+    ///   derived from the observation COUNT and the plan's own declared
+    ///   parameters; no row value is read (plan D10).
+    /// * *Forge slices nothing.* Every fold's provider call receives the
+    ///   WHOLE predictions + holdout frames plus the fold's window/mask
+    ///   descriptor, so a provider whose feature construction needs
+    ///   contiguity keeps the series intact.
+    /// * *A `TailHoldout` run is byte-for-byte what it was.* Its family is
+    ///   empty, so it makes exactly one provider call and stores exactly one
+    ///   record — the aggregate row.
+    let evaluatePlanFolds
+        (provider: IModelFitProvider)
+        (request: EvaluationRequest)
+        (runId: string)
+        (plan: EvaluationPlan)
+        (predictionsSchema: DatasetSchema, predictions: DatasetRow list)
+        (actualsSchema: DatasetSchema, actuals: DatasetRow list)
+        : Async<Result<Map<string, float>, EvaluationError>> =
+        async {
+            let evaluateFold (fold: EvaluationFold) = async {
+                try
+                    return!
+                        provider.EvaluateFold {
+                            Plan = plan
+                            Fold = fold
+                            PredictionsSchema = predictionsSchema
+                            Predictions = predictions
+                            ActualsSchema = actualsSchema
+                            Actuals = actuals
+                        }
+                with ex ->
+                    return Error(EvaluationError.ProviderFailed(provider.Kind, ex.Message))
+            }
+
+            match EvaluationPlan.folds plan (List.length actuals) with
+            | Error reason -> return Error(EvaluationError.PlanInvalid reason)
+            | Ok folds ->
+                match! evaluateFold EvaluationFold.aggregate with
+                | Error e -> return Error e
+                | Ok aggregateMetrics ->
+                    // A fold refusal fails the WHOLE run: a partially
+                    // evaluated family would read as a complete one at the
+                    // comparison, which is the silent-wrong-number failure
+                    // this phase exists to make impossible.
+                    let mutable failure: EvaluationError option = None
+
+                    for fold in folds do
+                        if Option.isNone failure then
+                            match! evaluateFold fold with
+                            | Error e -> failure <- Some e
+                            | Ok foldMetrics ->
+                                let outcome: EvaluationFoldOutcome = {
+                                    OutcomeId = EvaluationFoldOutcome.id runId fold.FoldId
+                                    RunId = runId
+                                    ScopeId = request.ScopeId
+                                    ArtifactKeyHash = request.ArtifactKeyHash
+                                    FoldId = fold.FoldId
+                                    FoldIndex = fold.Index
+                                    Descriptor = FoldWindow.describe fold.Window
+                                    Window = fold.Window
+                                    Metrics = foldMetrics
+                                    RecordedAt = DateTimeOffset.UtcNow
+                                }
+
+                                let foldSidecar =
+                                    Map [
+                                        ModelEvaluationStorage.FoldRunKey, runId
+                                        ModelEvaluationStorage.ArtifactKey, request.ArtifactKeyHash
+                                    ]
+
+                                match!
+                                    ModelEvaluationStorage.save
+                                        dataObjects
+                                        request.ScopeId
+                                        outcome.OutcomeId
+                                        ModelEvaluationStorage.FoldDataType
+                                        request.EvaluatedBy
+                                        foldSidecar
+                                        outcome
+                                with
+                                | Error e -> failure <- Some e
+                                | Ok() -> ()
+
+                    match failure with
+                    | Some e -> return Error e
+                    | None -> return Ok aggregateMetrics
+        }
+
     interface IModelEvaluationRunner with
         member _.Evaluate(request: EvaluationRequest) : Async<Result<EvaluationRun, EvaluationError>> = async {
             match! registry.Get(request.ScopeId, request.ArtifactKeyHash) with
@@ -306,19 +461,17 @@ type ModelEvaluationRunner
                             match! readFrame request.Holdout with
                             | Error e -> return Error e
                             | Ok(actualsSchema, actuals) ->
-                                // Plan D10 — the provider computes the
-                                // metrics; forge stores the map verbatim.
-                                let! evaluated = async {
-                                    try
-                                        let! r =
-                                            provider.Evaluate(predictionsSchema, predictions, actualsSchema, actuals)
+                                let plan = EvaluationPlan.resolve request.Plan
 
-                                        return r
-                                    with ex ->
-                                        return Error(EvaluationError.ProviderFailed(providerId, ex.Message))
-                                }
-
-                                match evaluated with
+                                match!
+                                    evaluatePlanFolds
+                                        provider
+                                        request
+                                        runId
+                                        plan
+                                        (predictionsSchema, predictions)
+                                        (actualsSchema, actuals)
+                                with
                                 | Error e -> return Error e
                                 | Ok metrics ->
                                     let run: EvaluationRun = {
@@ -330,6 +483,7 @@ type ModelEvaluationRunner
                                         Holdout = request.Holdout
                                         Predictions = predictionsRef
                                         Metrics = metrics
+                                        Plan = Some plan
                                         EvaluatedBy = request.EvaluatedBy
                                         EvaluatedAt = DateTimeOffset.UtcNow
                                     }
@@ -380,24 +534,46 @@ type ModelEvaluationRunner
             return runs |> List.sortBy _.EvaluatedAt
         }
 
+        member _.GetFoldOutcomes(scopeId, runId) = foldOutcomesOf scopeId runId
+
         member _.Compare(request: ComparisonRequest) : Async<Result<ModelComparison, EvaluationError>> = async {
             let metrics = ResizeArray<string * float option>()
 
             for entrant in request.Entrants do
                 let! run = tryGetRun request.ScopeId entrant request.Holdout
 
-                metrics.Add(entrant, run |> Option.bind (fun r -> Map.tryFind request.PrimaryMetric r.Metrics))
+                let aggregate =
+                    run |> Option.bind (fun r -> Map.tryFind request.PrimaryMetric r.Metrics)
+
+                // Phase 652 — the fold evidence is read only when the
+                // declared aggregation ranks on it. `AggregateMetric` (the
+                // Phase 456 ranking) touches no fold store at all, so an
+                // existing comparison does exactly the reads it always did.
+                let! foldMetrics =
+                    match request.Aggregation, run with
+                    | FoldAggregation.AggregateMetric, _
+                    | _, None -> async { return [] }
+                    | _, Some r -> async {
+                        let! outcomes = foldOutcomesOf request.ScopeId r.RunId
+                        return outcomes |> List.map (fun o -> Map.tryFind request.PrimaryMetric o.Metrics)
+                      }
+
+                metrics.Add(
+                    entrant,
+                    FoldAggregation.resolve request.Aggregation request.Direction aggregate foldMetrics
+                )
 
             let standings, missing, result =
                 ModelComparison.order request.Direction (List.ofSeq metrics)
 
             let comparisonId =
-                ModelComparison.id
+                ModelComparison.idFor
                     request.ScopeId
                     request.Entrants
                     request.Holdout
                     request.PrimaryMetric
                     request.Direction
+                    request.Aggregation
 
             let comparison: ModelComparison = {
                 ComparisonId = comparisonId
@@ -406,6 +582,7 @@ type ModelEvaluationRunner
                 Holdout = request.Holdout
                 PrimaryMetric = request.PrimaryMetric
                 Direction = request.Direction
+                Aggregation = Some request.Aggregation
                 Standings = standings
                 MissingMetric = missing
                 Result = result
@@ -652,6 +829,11 @@ module ModelEvaluationEnvelope =
         | EvaluationError.ProviderNotFound _
         | EvaluationError.EvaluationUnsupported _
         | EvaluationError.ProviderRefused _
+        // Phase 652 — neither an undeclared plan kind nor an invalid plan
+        // becomes valid on retry: the plan is data, and the holdout frame is
+        // an immutable vintage.
+        | EvaluationError.PlanUnsupported _
+        | EvaluationError.PlanInvalid _
         | EvaluationError.NotFound -> true
         | EvaluationError.ScoreFailed(ScoreError.ProviderNotFound _)
         | EvaluationError.ScoreFailed(ScoreError.NotApproved _)
@@ -774,6 +956,12 @@ type VintageReevaluationJobHandler(runner: IModelEvaluationRunner, datasets: IDa
                                 ScopeId = request.ScopeId
                                 ArtifactKeyHash = registration.ArtifactKeyHash
                                 Holdout = latestRef
+                                // A standing registration declares an
+                                // artifact + dataset, not a fold family, so
+                                // the sweep runs the degenerate plan — the
+                                // Phase 456 behaviour, unchanged by phase
+                                // 652.
+                                Plan = None
                                 EvaluatedBy = request.EvaluatedBy
                             }
 

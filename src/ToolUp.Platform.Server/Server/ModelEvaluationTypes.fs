@@ -29,6 +29,301 @@ open System.Security.Cryptography
 // mirroring Phase 449/453). The audit payload that crosses into persisted
 // `ModuleEvent`s stays in `Core/Shared/AuditTypes.fs`.
 
+// ─── Phase 652 — evaluation plans: masked + rolling fold families ───────
+//
+// The Phase 456 harness evaluates one artifact against one holdout split —
+// the degenerate single-fold case. A closed `EvaluationPlan` DU widens that
+// to two further fold families: `MaskedObservations` (a declared set of
+// excluded observations, excluded from the *evaluation*, with the series
+// left intact for providers whose feature construction needs contiguity)
+// and `RollingOrigin` (a family of train/test windows advancing through the
+// observation axis).
+//
+// **The discipline line is unchanged (plan D10).** Fold *generation
+// parameters* are data on the plan; fold *metric values* are provider
+// output. The derivation below reads the observation **count** and the plan's
+// own parameters — never a row's value — so it enumerates folds without
+// computing anything over the data. Every metric, aggregate or per-fold,
+// still comes from the provider.
+//
+// **No migration.** A stored `EvaluationRun` predating this phase carries no
+// plan; it reads as `TailHoldout` through `EvaluationPlan.resolve`, and the
+// degenerate family has no separate folds at all — its aggregate row *is*
+// its single fold. So an existing run, its stored bytes, and every query
+// over it are unchanged.
+
+/// How the masked observation set of a `MaskedObservations` fold family is
+/// chosen. A seeded selection is **reproducible by construction**: the same
+/// parameters and the same observation count re-derive the identical fold
+/// set on every re-run, so a fold family is auditable without storing every
+/// ordinal.
+[<RequireQualifiedAccess>]
+type MaskSelection =
+    /// The masked observation ordinals are declared verbatim — one fold,
+    /// exactly the ordinals given.
+    | Declared of ordinals: int list
+    /// `Count` ordinals per fold, drawn by a seeded deterministic draw over
+    /// the observation axis.
+    | SeededRandom of seed: int64 * count: int
+    /// `BlockCount` contiguous blocks of `BlockLength` observations per fold,
+    /// block starts drawn by the same seeded deterministic draw — the shape a
+    /// time-series consumer masks with, so a masked span stays contiguous.
+    | SeededBlocked of seed: int64 * blockLength: int * blockCount: int
+
+/// A `MaskedObservations` plan: `FoldCount` folds, each excluding its own
+/// masked observation set from the evaluation. **The series is left intact**
+/// — forge hands the provider the whole frame plus the fold's mask, and
+/// slices nothing, so a provider whose feature construction needs contiguity
+/// keeps it.
+type MaskedObservationsPlan = {
+    /// How each fold's masked set is chosen.
+    Selection: MaskSelection
+    /// How many folds the family generates. A `Declared` selection is always
+    /// one fold; a seeded selection draws a distinct set per fold index.
+    FoldCount: int
+}
+
+/// A `RollingOrigin` plan: a family of train/test windows advancing through
+/// the observation axis. Windows are half-open observation-ordinal ranges;
+/// forge derives them from these parameters and the observation count alone.
+type RollingOriginPlan = {
+    /// Observations in the first training window.
+    InitialTrainSize: int
+    /// Observations in each test window.
+    TestSize: int
+    /// How far the origin advances between folds.
+    Step: int
+    /// How many folds the family generates.
+    FoldCount: int
+    /// `true` — the training window grows from ordinal 0 (expanding origin);
+    /// `false` — it slides at fixed width (rolling window).
+    Expanding: bool
+}
+
+/// The closed evaluation-plan family (phase 652), carried on the evaluation
+/// run. Closed deliberately: a provider declares which kinds it evaluates by
+/// name, and an unrecognised kind is a typed refusal — never a silent
+/// tail-holdout fallback.
+[<RequireQualifiedAccess>]
+type EvaluationPlan =
+    /// Today's shape and the degenerate case: the whole holdout vintage
+    /// evaluated as one tail split. The plan a stored pre-652 run reads as.
+    | TailHoldout
+    /// Declared / seeded masked-observation folds.
+    | MaskedObservations of MaskedObservationsPlan
+    /// A rolling-origin window family.
+    | RollingOrigin of RollingOriginPlan
+
+/// What one fold evaluates, as observation ordinals over the holdout frame.
+/// A descriptor, not a slice — forge never subsets the frames it hands the
+/// provider (plan D10 + the contiguity requirement above).
+[<RequireQualifiedAccess>]
+type FoldWindow =
+    /// The whole holdout frame — the degenerate single fold, and the shape of
+    /// the aggregate evaluation under every plan.
+    | WholeHoldout
+    /// Ordinals excluded from this fold's evaluation, ascending.
+    | MaskedOrdinals of ordinals: int list
+    /// Half-open train `[trainStart, trainEnd)` and test `[testStart, testEnd)`
+    /// observation-ordinal ranges.
+    | TrainTestWindow of trainStart: int * trainEnd: int * testStart: int * testEnd: int
+
+module FoldWindow =
+    /// Stable one-line descriptor stored on the fold outcome, so a query
+    /// surfaces a fold's shape without re-deriving its plan.
+    let describe =
+        function
+        | FoldWindow.WholeHoldout -> "whole-holdout"
+        | FoldWindow.MaskedOrdinals ordinals -> sprintf "masked[%s]" (ordinals |> List.map string |> String.concat ",")
+        | FoldWindow.TrainTestWindow(trainStart, trainEnd, testStart, testEnd) ->
+            sprintf "train[%d,%d) test[%d,%d)" trainStart trainEnd testStart testEnd
+
+/// One fold of an evaluation plan's family — identity, ordinal position, and
+/// the window/mask it evaluates.
+type EvaluationFold = {
+    /// Stable id within the run: `aggregate`, or `fold-<index>`.
+    FoldId: string
+    /// Zero-based fold index; `-1` for the run's aggregate row.
+    Index: int
+    /// What this fold evaluates.
+    Window: FoldWindow
+}
+
+module EvaluationFold =
+    /// Stable fold id of the run's aggregate row.
+    [<Literal>]
+    let AggregateFoldId = "aggregate"
+
+    /// The synthetic fold the run's **aggregate** metric row is computed
+    /// under: the whole holdout frame, index `-1`. Every plan's aggregate is
+    /// evaluated this way — which is exactly why a `TailHoldout` run is
+    /// byte-for-byte what it was before this phase.
+    let aggregate: EvaluationFold = {
+        FoldId = AggregateFoldId
+        Index = -1
+        Window = FoldWindow.WholeHoldout
+    }
+
+    /// A family fold at `index` over `window`.
+    let at (index: int) (window: FoldWindow) : EvaluationFold = {
+        FoldId = sprintf "fold-%d" index
+        Index = index
+        Window = window
+    }
+
+module EvaluationPlan =
+    /// Stable plan-kind name — the token a provider declares support for and
+    /// a refusal names. Recognised by `isKnownKind`; do not rename without a
+    /// wire-format bump, since a provider's declaration is these strings.
+    let kindName =
+        function
+        | EvaluationPlan.TailHoldout -> "TailHoldout"
+        | EvaluationPlan.MaskedObservations _ -> "MaskedObservations"
+        | EvaluationPlan.RollingOrigin _ -> "RollingOrigin"
+
+    /// Every plan-kind name, for a provider declaring blanket support.
+    let allKindNames = [ "TailHoldout"; "MaskedObservations"; "RollingOrigin" ]
+
+    /// `true` iff `name` is a known plan-kind token.
+    let isKnownKind (name: string) = List.contains name allKindNames
+
+    /// The plan of a stored run: `None` — a record written before this phase
+    /// — reads as `TailHoldout`. The whole of the no-migration rule.
+    let resolve (stored: EvaluationPlan option) : EvaluationPlan =
+        defaultArg stored EvaluationPlan.TailHoldout
+
+    /// A stable 64-bit key for `(salt, ordinal)` — SHA-256, so the draw is
+    /// identical on every runtime and platform (`System.Random`'s sequence
+    /// is not a contract). No RNG, no wall-clock: the seeded draws below are
+    /// pure functions of the plan's own parameters.
+    let private drawKey (salt: string) (i: int) : uint64 =
+        let hash = SHA256.HashData(Encoding.UTF8.GetBytes(sprintf "%s|%d" salt i))
+        BitConverter.ToUInt64(hash, 0)
+
+    /// `candidates` in a deterministic seeded order — a total order by
+    /// `(drawKey, ordinal)`, so ties break on the ordinal and the result is
+    /// stable across runs, machines, and list orderings.
+    let private seededOrder (salt: string) (candidates: int list) : int list =
+        candidates |> List.sortBy (fun i -> drawKey salt i, i)
+
+    /// The masked ordinals of one fold of a masked-observation family.
+    let private maskedFold
+        (selection: MaskSelection)
+        (observationCount: int)
+        (foldIndex: int)
+        : Result<int list, string> =
+        match selection with
+        | MaskSelection.Declared ordinals ->
+            let outOfRange = ordinals |> List.filter (fun o -> o < 0 || o >= observationCount)
+
+            if not (List.isEmpty outOfRange) then
+                Error(
+                    sprintf
+                        "declared mask ordinal(s) outside [0, %d): %s"
+                        observationCount
+                        (outOfRange |> List.map string |> String.concat ", ")
+                )
+            else
+                Ok(ordinals |> List.distinct |> List.sort)
+        | MaskSelection.SeededRandom(seed, count) ->
+            if count < 1 then
+                Error "SeededRandom mask count must be at least 1"
+            elif count > observationCount then
+                Error(sprintf "SeededRandom mask count %d exceeds the %d observation(s)" count observationCount)
+            else
+                seededOrder (sprintf "maskrandom|%d|%d" seed foldIndex) [ 0 .. observationCount - 1 ]
+                |> List.truncate count
+                |> List.sort
+                |> Ok
+        | MaskSelection.SeededBlocked(seed, blockLength, blockCount) ->
+            if blockLength < 1 then
+                Error "SeededBlocked block length must be at least 1"
+            elif blockCount < 1 then
+                Error "SeededBlocked block count must be at least 1"
+            elif blockLength > observationCount then
+                Error(
+                    sprintf "SeededBlocked block length %d exceeds the %d observation(s)" blockLength observationCount
+                )
+            else
+                let starts = [ 0 .. observationCount - blockLength ]
+
+                seededOrder (sprintf "maskblocked|%d|%d" seed foldIndex) starts
+                |> List.truncate blockCount
+                |> List.collect (fun s -> [ s .. s + blockLength - 1 ])
+                |> List.distinct
+                |> List.sort
+                |> Ok
+
+    /// The fold family a plan generates over `observationCount` holdout
+    /// observations — **enumeration, not statistics**: the row count and the
+    /// plan's declared parameters are the only inputs.
+    ///
+    /// `TailHoldout` returns an EMPTY family: its aggregate row *is* its
+    /// single fold, which is why a pre-652 run needs no migration and stores
+    /// no fold outcome. `Error` is a typed plan-validity refusal, surfaced by
+    /// the runner as `EvaluationError.PlanInvalid` — never a silent
+    /// truncation of the family.
+    let folds (plan: EvaluationPlan) (observationCount: int) : Result<EvaluationFold list, string> =
+        match plan with
+        | EvaluationPlan.TailHoldout -> Ok []
+        | _ when observationCount < 1 -> Error "the holdout frame has no observations to fold over"
+        | EvaluationPlan.MaskedObservations masked ->
+            if masked.FoldCount < 1 then
+                Error "MaskedObservations fold count must be at least 1"
+            else
+                let foldCount =
+                    match masked.Selection with
+                    | MaskSelection.Declared _ -> 1
+                    | _ -> masked.FoldCount
+
+                let rec build (index: int) (acc: EvaluationFold list) =
+                    if index >= foldCount then
+                        Ok(List.rev acc)
+                    else
+                        match maskedFold masked.Selection observationCount index with
+                        | Error reason -> Error reason
+                        | Ok ordinals ->
+                            build (index + 1) (EvaluationFold.at index (FoldWindow.MaskedOrdinals ordinals) :: acc)
+
+                build 0 []
+        | EvaluationPlan.RollingOrigin rolling ->
+            if rolling.InitialTrainSize < 1 then
+                Error "RollingOrigin initial train size must be at least 1"
+            elif rolling.TestSize < 1 then
+                Error "RollingOrigin test size must be at least 1"
+            elif rolling.Step < 1 then
+                Error "RollingOrigin step must be at least 1"
+            elif rolling.FoldCount < 1 then
+                Error "RollingOrigin fold count must be at least 1"
+            else
+                let lastTestEnd =
+                    rolling.InitialTrainSize
+                    + (rolling.FoldCount - 1) * rolling.Step
+                    + rolling.TestSize
+
+                if lastTestEnd > observationCount then
+                    Error(
+                        sprintf
+                            "RollingOrigin family needs %d observation(s) but the holdout frame has %d"
+                            lastTestEnd
+                            observationCount
+                    )
+                else
+                    [ 0 .. rolling.FoldCount - 1 ]
+                    |> List.map (fun index ->
+                        let trainEnd = rolling.InitialTrainSize + index * rolling.Step
+
+                        let trainStart =
+                            if rolling.Expanding then
+                                0
+                            else
+                                trainEnd - rolling.InitialTrainSize
+
+                        EvaluationFold.at
+                            index
+                            (FoldWindow.TrainTestWindow(trainStart, trainEnd, trainEnd, trainEnd + rolling.TestSize)))
+                    |> Ok
+
 /// The provider-side metric computation an evaluation run dispatches to —
 /// the "provider seam" half of `IModelFitProvider.Evaluate` (task 456.A). A
 /// fit provider that supports holdout evaluation implements this interface
@@ -52,6 +347,53 @@ type IModelEvaluationMetrics =
         actuals: DatasetRow list ->
             Async<Result<Map<string, float>, string>>
 
+/// Everything one fold's metric computation receives (phase 652). The frames
+/// are the **whole** predictions + holdout, not a slice: forge subsets
+/// nothing, so a provider whose feature construction needs contiguity keeps
+/// the series intact and applies `Fold.Window` itself.
+type EvaluationFoldContext = {
+    /// The plan the run declared — the provider sees which family it is in,
+    /// not only the individual fold.
+    Plan: EvaluationPlan
+    /// The fold to evaluate. `EvaluationFold.aggregate` for the run's
+    /// aggregate row (`FoldWindow.WholeHoldout`, index `-1`).
+    Fold: EvaluationFold
+    /// Schema of the predictions frame (the Phase 454 scored vintage).
+    PredictionsSchema: DatasetSchema
+    /// The whole predictions frame.
+    Predictions: DatasetRow list
+    /// Schema of the actuals frame (the holdout vintage itself).
+    ActualsSchema: DatasetSchema
+    /// The whole actuals frame.
+    Actuals: DatasetRow list
+}
+
+/// The **plan-aware** provider-side metric computation (phase 652) — the
+/// widened half of the evaluation seam. A provider that evaluates fold
+/// families implements this alongside (or instead of)
+/// `IModelEvaluationMetrics`; the envelope prefers it whenever the provider
+/// declares the run's plan kind.
+///
+/// Forge never implements it (plan D10). A plan kind no provider declares is
+/// a typed `EvaluationError.PlanUnsupported` naming the provider and the
+/// kind — **never** a silent fallback to tail-holdout evaluation, which
+/// would report a rolling-origin or masked run's numbers as if the fold
+/// family had been honoured.
+type IModelEvaluationPlanMetrics =
+    /// The plan kinds this provider evaluates, by `EvaluationPlan.kindName`
+    /// (`EvaluationPlan.allKindNames` for blanket support). **Declarative
+    /// data** (GP 12 rule 3): the envelope reads it and refuses an
+    /// unsupported kind by name *without calling the provider*, so an
+    /// unrecognised plan cannot be evaluated by accident.
+    abstract SupportedPlanKinds: unit -> string list
+
+    /// Compute provider metrics for one fold of the declared plan.
+    /// `Error reason` is a typed refusal (surfaced as `ProviderRefused`).
+    ///
+    /// **Determinism (plan D4).** A deterministic provider MUST return an
+    /// identical metric map for an identical context — no wall-clock, no RNG.
+    abstract EvaluateFoldMetrics: context: EvaluationFoldContext -> Async<Result<Map<string, float>, string>>
+
 /// Typed failure of the evaluation *envelope* (task 456.A). A refused or
 /// failed evaluation is data, never an exception — distinct cases so the job
 /// handler maps each to the right `JobResult` (terminal vs retryable).
@@ -68,6 +410,16 @@ type EvaluationError =
     /// The resolved provider does not implement `IModelEvaluationMetrics`
     /// (plan D10 — forge never computes a fallback metric). Terminal.
     | EvaluationUnsupported of providerId: string
+    /// The resolved provider does not declare the run's plan kind (phase
+    /// 652). Terminal — and deliberately NOT a tail-holdout fallback: a fold
+    /// family the provider cannot honour must not be reported as if it had
+    /// been.
+    | PlanUnsupported of providerId: string * planKind: string
+    /// The declared evaluation plan cannot generate a fold family over this
+    /// holdout frame (phase 652) — e.g. a rolling-origin window family
+    /// longer than the frame, or a mask ordinal outside it. Terminal: the
+    /// same plan and frame will not become valid on retry.
+    | PlanInvalid of reason: string
     /// The provider's `EvaluateMetrics` returned a typed refusal. Terminal
     /// — the same frames will not satisfy the provider on retry.
     | ProviderRefused of providerId: string * reason: string
@@ -94,6 +446,9 @@ module EvaluationError =
         | EvaluationError.ProviderNotFound k -> sprintf "no IModelFitProvider registered for provider '%s'" k
         | EvaluationError.EvaluationUnsupported k ->
             sprintf "provider '%s' does not implement IModelEvaluationMetrics" k
+        | EvaluationError.PlanUnsupported(k, planKind) ->
+            sprintf "provider '%s' does not declare evaluation plan kind '%s'" k planKind
+        | EvaluationError.PlanInvalid r -> sprintf "evaluation plan is invalid for this holdout: %s" r
         | EvaluationError.ProviderRefused(k, r) -> sprintf "provider '%s' refused to evaluate: %s" k r
         | EvaluationError.ProviderFailed(k, m) -> sprintf "provider '%s' failed to evaluate: %s" k m
         | EvaluationError.ScoreFailed e -> sprintf "holdout scoring failed: %s" (ScoreError.describe e)
@@ -123,8 +478,16 @@ type EvaluationRun = {
     Holdout: DatasetVersionRef
     /// The predictions vintage the Phase 454 scoring leg wrote.
     Predictions: DatasetVersionRef
-    /// Provider-computed metrics, stored verbatim (plan D10).
+    /// Provider-computed metrics for the **whole** holdout frame — the
+    /// aggregate row. Stored verbatim (plan D10) and unchanged by phase 652:
+    /// under every plan the aggregate is the provider's evaluation of the
+    /// whole frame, exactly as before fold families existed.
     Metrics: Map<string, float>
+    /// The evaluation plan the run was executed under (phase 652). `None` on
+    /// a record written before that phase — read it through
+    /// `EvaluationPlan.resolve`, which yields `TailHoldout`. No migration:
+    /// the absent field IS the degenerate plan.
+    Plan: EvaluationPlan option
     /// Actor the run is attributed to.
     EvaluatedBy: string
     /// When the run's outcome was recorded.
@@ -140,6 +503,53 @@ module EvaluationRun =
     /// Deterministic run id — lowercase SHA-256 hex of `canonical`.
     let id (artifactKeyHash: string) (holdout: DatasetVersionRef) : string =
         SHA256.HashData(Encoding.UTF8.GetBytes(canonical artifactKeyHash holdout))
+        |> Convert.ToHexStringLower
+
+    /// The run's plan, with a pre-652 record reading as `TailHoldout`.
+    let plan (run: EvaluationRun) : EvaluationPlan = EvaluationPlan.resolve run.Plan
+
+/// One stored **per-fold** metric outcome of a run (phase 652): which fold of
+/// which run, the window/mask it evaluated, and the provider-computed metric
+/// map for that fold, stored verbatim (plan D10).
+///
+/// A `TailHoldout` run stores **none** of these — its aggregate row is its
+/// single fold — so an existing run's stored footprint is unchanged.
+type EvaluationFoldOutcome = {
+    /// Deterministic identity: SHA-256 over `(run, fold)`. See
+    /// `EvaluationFoldOutcome.id`.
+    OutcomeId: string
+    /// The run this fold belongs to.
+    RunId: string
+    /// Scope the run executed under (GP 4).
+    ScopeId: string
+    /// Composite-key hash of the evaluated artifact — so fold outcomes are
+    /// queryable per artifact without joining through the run.
+    ArtifactKeyHash: string
+    /// Stable fold id within the run (`fold-<index>`).
+    FoldId: string
+    /// Zero-based fold index — the family's declared order.
+    FoldIndex: int
+    /// One-line window / mask descriptor (`FoldWindow.describe`), stored so a
+    /// query surfaces the fold's shape without re-deriving its plan.
+    Descriptor: string
+    /// The typed window / mask this fold evaluated.
+    Window: FoldWindow
+    /// Provider-computed metrics for this fold, stored verbatim (plan D10).
+    Metrics: Map<string, float>
+    /// When the fold outcome was recorded.
+    RecordedAt: DateTimeOffset
+}
+
+module EvaluationFoldOutcome =
+    /// Canonical, order-fixed identity string of a fold outcome — one
+    /// outcome per `(run, fold)` pair, so re-running an evaluation is as
+    /// idempotent per fold as it already is per run.
+    let canonical (runId: string) (foldId: string) : string =
+        sprintf "evalfold|run=%s|fold=%s" runId foldId
+
+    /// Deterministic fold-outcome id — lowercase SHA-256 hex of `canonical`.
+    let id (runId: string) (foldId: string) : string =
+        SHA256.HashData(Encoding.UTF8.GetBytes(canonical runId foldId))
         |> Convert.ToHexStringLower
 
 /// Which way a metric improves. Declared by the comparer (task 456.B) — the
@@ -175,6 +585,89 @@ module MetricDirection =
         match direction with
         | MetricDirection.HigherIsBetter -> challenger > champion + margin
         | MetricDirection.LowerIsBetter -> challenger < champion - margin
+
+/// How a comparison reduces an entrant's stored metric evidence to the one
+/// float it ranks on (phase 652). **Declared on the comparison, no default**
+/// — a fold family only means something once the comparer says which number
+/// it is being judged by, and inferring one would be forge assigning
+/// meaning it has no standing to assign (plan D10).
+///
+/// Every case selects or reduces *provider-computed* values. Forge computes
+/// no statistic over data here or anywhere: `MeanAcrossFolds` averages
+/// numbers the provider already returned, in the same sense that
+/// `AggregateMetric` looks one up.
+[<RequireQualifiedAccess>]
+type FoldAggregation =
+    /// Rank on the run's aggregate row — the whole-frame metric. The
+    /// pre-phase-652 behaviour, and the only one a `TailHoldout` run can
+    /// satisfy (it stores no folds).
+    | AggregateMetric
+    /// Rank on the arithmetic mean of the metric across the run's stored
+    /// fold outcomes.
+    | MeanAcrossFolds
+    /// Rank on the entrant's WORST fold in the comparison's declared
+    /// direction — the conservative reading of a fold family.
+    | WorstFold
+
+module FoldAggregation =
+    /// Stable case-name string (stored records, comparison identity).
+    /// Round-trips through `parse`; do not rename without a wire-format bump.
+    let name =
+        function
+        | FoldAggregation.AggregateMetric -> "AggregateMetric"
+        | FoldAggregation.MeanAcrossFolds -> "MeanAcrossFolds"
+        | FoldAggregation.WorstFold -> "WorstFold"
+
+    /// Inverse of `name`. `None` for an unknown tag.
+    let parse =
+        function
+        | "AggregateMetric" -> Some FoldAggregation.AggregateMetric
+        | "MeanAcrossFolds" -> Some FoldAggregation.MeanAcrossFolds
+        | "WorstFold" -> Some FoldAggregation.WorstFold
+        | _ -> None
+
+    /// The aggregation of a stored comparison: `None` — a record written
+    /// before phase 652 — reads as `AggregateMetric`, which is exactly what
+    /// it ranked on. No migration.
+    let resolveStored (stored: FoldAggregation option) : FoldAggregation =
+        defaultArg stored FoldAggregation.AggregateMetric
+
+    /// Reduce one entrant's evidence — its run's aggregate metric and the
+    /// same metric across its stored fold outcomes, one `float option` per
+    /// fold in family order — to the single float the comparison ranks on.
+    /// `None` means "not rankable", which `ModelComparison.order` surfaces as
+    /// a typed missing-metric outcome, never a silent ordering position.
+    ///
+    /// A missing fold value, a NaN, or an empty family yields `None` for the
+    /// fold aggregations: an aggregation must never launder partial or
+    /// unusable evidence into a rankable number — a mean over whichever
+    /// folds happened to report is not the mean the comparer declared.
+    let resolve
+        (aggregation: FoldAggregation)
+        (direction: MetricDirection)
+        (aggregate: float option)
+        (foldMetrics: float option list)
+        : float option =
+        let usable (v: float) = not (Double.IsNaN v)
+
+        let complete =
+            if
+                List.isEmpty foldMetrics
+                || foldMetrics |> List.exists (fun v -> v |> Option.exists usable |> not)
+            then
+                None
+            else
+                Some(foldMetrics |> List.map Option.get)
+
+        match aggregation with
+        | FoldAggregation.AggregateMetric -> aggregate |> Option.filter usable
+        | FoldAggregation.MeanAcrossFolds -> complete |> Option.map (fun vs -> List.sum vs / float (List.length vs))
+        | FoldAggregation.WorstFold ->
+            complete
+            |> Option.map (fun vs ->
+                match direction with
+                | MetricDirection.HigherIsBetter -> List.min vs
+                | MetricDirection.LowerIsBetter -> List.max vs)
 
 /// One ranked entrant in a comparison: an artifact and the primary-metric
 /// value its evaluation reported. Only entrants whose metric exists (and is
@@ -225,6 +718,11 @@ type ModelComparison = {
     PrimaryMetric: string
     /// Which way `PrimaryMetric` improves.
     Direction: MetricDirection
+    /// How each entrant's metric evidence was reduced to the ranked value
+    /// (phase 652). `None` on a record written before that phase — read it
+    /// through `FoldAggregation.resolveStored`, which yields
+    /// `AggregateMetric`, exactly what such a record ranked on.
+    Aggregation: FoldAggregation option
     /// Ranked entrants, best first. Entrants tied on the exact metric value
     /// keep their declared order (a stable sort) — and the tie is surfaced
     /// in `Result`, never silently broken.
@@ -267,6 +765,41 @@ module ModelComparison =
         (direction: MetricDirection)
         : string =
         SHA256.HashData(Encoding.UTF8.GetBytes(canonical scopeId entrants holdout primaryMetric direction))
+        |> Convert.ToHexStringLower
+
+    /// Canonical identity string including the declared fold aggregation
+    /// (phase 652). `AggregateMetric` appends nothing, so a comparison
+    /// declaring it keeps **exactly** the pre-652 identity — an existing
+    /// stored comparison stays reachable at the id it was written under.
+    /// Any other aggregation ranks differently and therefore gets its own
+    /// id rather than overwriting a differently-ranked verdict.
+    let canonicalFor
+        (scopeId: string)
+        (entrants: string list)
+        (holdout: DatasetVersionRef)
+        (primaryMetric: string)
+        (direction: MetricDirection)
+        (aggregation: FoldAggregation)
+        : string =
+        let baseKey = canonical scopeId entrants holdout primaryMetric direction
+
+        match aggregation with
+        | FoldAggregation.AggregateMetric -> baseKey
+        | other -> sprintf "%s|aggregation=%s" baseKey (FoldAggregation.name other)
+
+    /// Deterministic comparison id including the declared fold aggregation —
+    /// lowercase SHA-256 hex of `canonicalFor`.
+    let idFor
+        (scopeId: string)
+        (entrants: string list)
+        (holdout: DatasetVersionRef)
+        (primaryMetric: string)
+        (direction: MetricDirection)
+        (aggregation: FoldAggregation)
+        : string =
+        SHA256.HashData(
+            Encoding.UTF8.GetBytes(canonicalFor scopeId entrants holdout primaryMetric direction aggregation)
+        )
         |> Convert.ToHexStringLower
 
     /// Order entrants by their primary-metric value (task 456.B): a pure
@@ -479,3 +1012,49 @@ module ModelFitProviderEvaluationExtensions =
                 | Error reason -> return Error(EvaluationError.ProviderRefused(this.Kind, reason))
               }
             | _ -> async { return Error(EvaluationError.EvaluationUnsupported this.Kind) }
+
+        /// `IModelFitProvider.EvaluateFold` — the **plan-aware** evaluation
+        /// dispatch (phase 652). Routes one fold of one plan to the right
+        /// provider surface, and computes nothing itself (plan D10):
+        ///
+        /// 1. a provider implementing `IModelEvaluationPlanMetrics` that
+        ///    **declares this plan kind** gets the fold context;
+        /// 2. otherwise, a `TailHoldout` plan falls to the Phase 456
+        ///    `Evaluate` path — byte-for-byte the behaviour every existing
+        ///    provider and every existing stored run already has;
+        /// 3. otherwise the plan kind is refused BY NAME
+        ///    (`PlanUnsupported`), or the provider is refused for evaluating
+        ///    at all (`EvaluationUnsupported`).
+        ///
+        /// Step 3 is the point of the phase: there is no path on which an
+        /// unrecognised fold family is quietly evaluated as a tail holdout.
+        member this.EvaluateFold(context: EvaluationFoldContext) : Async<Result<Map<string, float>, EvaluationError>> =
+            let planKind = EvaluationPlan.kindName context.Plan
+
+            let declaresPlan =
+                match this with
+                | :? IModelEvaluationPlanMetrics as planned -> List.contains planKind (planned.SupportedPlanKinds())
+                | _ -> false
+
+            match this with
+            | :? IModelEvaluationPlanMetrics as planned when declaresPlan -> async {
+                match! planned.EvaluateFoldMetrics context with
+                | Ok computed -> return Ok computed
+                | Error reason -> return Error(EvaluationError.ProviderRefused(this.Kind, reason))
+              }
+            | _ ->
+                match context.Plan with
+                | EvaluationPlan.TailHoldout ->
+                    this.Evaluate(
+                        context.PredictionsSchema,
+                        context.Predictions,
+                        context.ActualsSchema,
+                        context.Actuals
+                    )
+                | _ ->
+                    match this with
+                    | :? IModelEvaluationMetrics
+                    | :? IModelEvaluationPlanMetrics -> async {
+                        return Error(EvaluationError.PlanUnsupported(this.Kind, planKind))
+                      }
+                    | _ -> async { return Error(EvaluationError.EvaluationUnsupported this.Kind) }

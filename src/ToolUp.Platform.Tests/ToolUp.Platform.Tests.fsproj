@@ -155,6 +155,10 @@
         <Compile Include="Contracts\IModelRegistryContract.fs" />
         <!-- Phase 454 — model-scoring seam conformance (reference scorer + blob store). -->
         <Compile Include="Contracts\IModelScorerContract.fs" />
+        <!-- Phase 652 — plan-aware evaluation-metrics seam conformance: the
+             declared plan-kind vocabulary, the refuse-by-name path for an
+             undeclared kind, and provider determinism per fold. -->
+        <Compile Include="Contracts\IModelEvaluationPlanMetricsContract.fs" />
         <!-- Phase 318 — external-compute broker seam: the NoExternalCompute
              default as a typed refusal (never a DI failure, never a throw),
              the core types' Fable-JSON round-trip (including `Running None`),
