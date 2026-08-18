@@ -214,7 +214,7 @@ module TemplateCanonical =
     /// encoding and a record encoding can never be confused for one
     /// another even if their field sequences happened to coincide.
     [<Literal>]
-    let templateDomain = "toolup.cleanroom.template/1"
+    let templateDomain = "fuaran.federation.cleanroom.template/1"
 
     /// Domain separator for an approval-record encoding.
     [<Literal>]

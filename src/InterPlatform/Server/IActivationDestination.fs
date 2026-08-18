@@ -374,7 +374,7 @@ module ActivationCanonical =
     /// for a template or an approval-record encoding even if their field
     /// sequences coincided.
     [<Literal>]
-    let domain = "toolup.activation.authorisation/1"
+    let domain = "fuaran.federation.activation.authorisation/1"
 
     /// The reserved prefix of a derived template's id, namespaced
     /// beneath `_platform` on the convention `PeerAudit.contractId` and
