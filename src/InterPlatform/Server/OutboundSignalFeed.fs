@@ -477,8 +477,12 @@ module SignalFeedCanonical =
     /// Domain separator, so a delivery key can never collide with an
     /// activation authorisation's digest even if the field sequences
     /// coincided.
-    [<Literal>]
-    let domain = "fuaran.federation.signalfeed.delivery/1"
+    ///
+    /// **Phase 654 — taken from `SignedShape`, not written out here.** A
+    /// `let` rather than a `[<Literal>]` because a literal cannot hold a
+    /// function call; the value is used only as a string, so nothing
+    /// downstream needed a constant.
+    let domain = SignedShape.separator SignedShape.SignalFeedDelivery
 
     let private field (sb: StringBuilder) (value: string) : unit =
         sb.Append(Encoding.UTF8.GetByteCount value).Append(':').Append(value).Append('\n')

@@ -373,8 +373,12 @@ module ActivationCanonical =
     /// Domain separator, so an activation encoding can never be confused
     /// for a template or an approval-record encoding even if their field
     /// sequences coincided.
-    [<Literal>]
-    let domain = "fuaran.federation.activation.authorisation/1"
+    ///
+    /// **Phase 654 — taken from `SignedShape`, not written out here.** A
+    /// `let` rather than a `[<Literal>]` because a literal cannot hold a
+    /// function call; the value is used only as a string, so nothing
+    /// downstream needed a constant.
+    let domain = SignedShape.separator SignedShape.ActivationAuthorisation
 
     /// The reserved prefix of a derived template's id, namespaced
     /// beneath `_platform` on the convention `PeerAudit.contractId` and

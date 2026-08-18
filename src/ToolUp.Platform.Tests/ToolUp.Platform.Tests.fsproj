@@ -1401,6 +1401,13 @@
              signatures; deterministic noise; an injected clock; no
              TestServer. -->
         <Compile Include="InProcess\OutboundSignalFeedTests.fs" />
+        <!-- Phase 654 — the signed-shape separator registry: the set is
+             checked against the union BY REFLECTION, the separators are
+             asserted well formed and pairwise distinct, and every shape
+             carries a digest pinned THROUGH its own canonical encoder.
+             Compiles after the four federation encoder packs because it
+             digests through all of them; nothing depends on it. -->
+        <Compile Include="InProcess\SignedShapeSeparatorTests.fs" />
         <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
              composed peer registrations + deterministic hash-stamped
              export. Pure describe; no TestServer. -->

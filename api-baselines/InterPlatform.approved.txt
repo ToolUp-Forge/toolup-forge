@@ -15,7 +15,7 @@ ToolUp.InterPlatform.ActivationBucket.Label : System.String { get }
 ToolUp.InterPlatform.ActivationCanonical (class)
 ToolUp.InterPlatform.ActivationCanonical.bytes(ToolUp.InterPlatform.ActivationAuthorisation) : System.Byte[]
 ToolUp.InterPlatform.ActivationCanonical.digest(ToolUp.InterPlatform.ActivationAuthorisation) : System.Byte[]
-ToolUp.InterPlatform.ActivationCanonical.domain : System.String (literal)
+ToolUp.InterPlatform.ActivationCanonical.domain : System.String { get }
 ToolUp.InterPlatform.ActivationCanonical.id(ToolUp.InterPlatform.ActivationAuthorisation) : System.String
 ToolUp.InterPlatform.ActivationCanonical.template(ToolUp.InterPlatform.ActivationAuthorisation) : ToolUp.InterPlatform.CleanRoomTemplate
 ToolUp.InterPlatform.ActivationCanonical.templateIdPrefix : System.String (literal)
@@ -1435,10 +1435,10 @@ ToolUp.InterPlatform.PeerEgressPurpose..ctor(System.String, Microsoft.FSharp.Cor
 ToolUp.InterPlatform.PeerEgressPurpose.Claim : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.InterPlatform.PeerEgressPurpose.PurposeId : System.String { get }
 ToolUp.InterPlatform.PeerEgressRoute (class)
+ToolUp.InterPlatform.PeerEgressRoute..ctor(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.InterPlatform.PeerEgressPurpose, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]])
 ToolUp.InterPlatform.PeerEgressRoute.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }
 ToolUp.InterPlatform.PeerEgressRoute.Purpose : ToolUp.InterPlatform.PeerEgressPurpose { get }
 ToolUp.InterPlatform.PeerEgressRoute.References : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
-ToolUp.InterPlatform.PeerEgressRoute..ctor(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.InterPlatform.PeerEgressPurpose, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]])
 ToolUp.InterPlatform.PeerEgressRoute.ViewReferences : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.InterPlatform.PeerError (class)
 ToolUp.InterPlatform.PeerError.IsPeerCleanRoomWithheld : System.Boolean { get }
@@ -2375,7 +2375,7 @@ ToolUp.InterPlatform.SignalFeed.start(ToolUp.InterPlatform.SignalFeedDeps, ToolU
 ToolUp.InterPlatform.SignalFeed.stop(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
 ToolUp.InterPlatform.SignalFeed.validate(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.InterPlatform.SignalFeedCanonical (class)
-ToolUp.InterPlatform.SignalFeedCanonical.domain : System.String (literal)
+ToolUp.InterPlatform.SignalFeedCanonical.domain : System.String { get }
 ToolUp.InterPlatform.SignalFeedCanonical.idempotencyKey(System.String, System.String, System.Int64) : System.String
 ToolUp.InterPlatform.SignalFeedDeps (class)
 ToolUp.InterPlatform.SignalFeedDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
@@ -2495,11 +2495,11 @@ ToolUp.InterPlatform.TemplateApprovalRequest.Template : ToolUp.InterPlatform.Cle
 ToolUp.InterPlatform.TemplateCanonical (class)
 ToolUp.InterPlatform.TemplateCanonical.actionName(ToolUp.InterPlatform.TemplateApprovalAction) : System.String
 ToolUp.InterPlatform.TemplateCanonical.recordBytes(ToolUp.InterPlatform.TemplateApprovalRecord) : System.Byte[]
-ToolUp.InterPlatform.TemplateCanonical.recordDomain : System.String (literal)
+ToolUp.InterPlatform.TemplateCanonical.recordDomain : System.String { get }
 ToolUp.InterPlatform.TemplateCanonical.recordId(ToolUp.InterPlatform.TemplateApprovalRecord) : System.String
 ToolUp.InterPlatform.TemplateCanonical.shapeName(ToolUp.InterPlatform.OutputShape) : System.String
 ToolUp.InterPlatform.TemplateCanonical.templateBytes(ToolUp.InterPlatform.CleanRoomTemplate) : System.Byte[]
-ToolUp.InterPlatform.TemplateCanonical.templateDomain : System.String (literal)
+ToolUp.InterPlatform.TemplateCanonical.templateDomain : System.String { get }
 ToolUp.InterPlatform.TemplateCanonical.truncate(System.DateTimeOffset) : System.DateTimeOffset
 ToolUp.InterPlatform.TemplateCanonical.version(ToolUp.InterPlatform.CleanRoomTemplate) : System.String
 ToolUp.InterPlatform.TypeScriptClientGen (class)

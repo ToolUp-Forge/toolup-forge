@@ -473,12 +473,14 @@ Unknown parameters are **ignored**, so the envelope can gain a TEE-attestation p
 ### What gets signed
 
 ```
-toolup.signed-outcome.v1
+toolup.signed-outcome/1
 <handleId, lowercase D-format>
 <artifactHash>
 <diagnosticsHash>
 <t, byte-for-byte as it appears in the header>
 ```
+
+The domain tag comes from the signed-shape separator registry (`SignedShape.WorkerSignedOutcome`), which is the only sanctioned source for one. It read `toolup.signed-outcome.v1` until the registry landed and harmonised the version suffix with the scheme every other signed shape already used; that was a **breaking wire change** and is recorded in [`docs/migrations/2026-08-18-federation-wire-rename.md`](../migrations/2026-08-18-federation-wire-rename.md).
 
 Newline-separated; the domain tag prevents a signature minted for one ToolUp protocol being replayed as another; the handle id means a genuine envelope cannot be moved between handles. `t` is never reformatted — a normalising round-trip through `DateTimeOffset` would change the bytes and break every signature it touched.
 

@@ -213,12 +213,18 @@ module TemplateCanonical =
     /// Domain separator for a template encoding. Present so a template
     /// encoding and a record encoding can never be confused for one
     /// another even if their field sequences happened to coincide.
-    [<Literal>]
-    let templateDomain = "fuaran.federation.cleanroom.template/1"
+    ///
+    /// **Phase 654 — taken from `SignedShape`, not written out here.**
+    /// It was a local `[<Literal>]`, which is how the SDK came to hold
+    /// separators nothing could enumerate. A `let` rather than a
+    /// `[<Literal>]` because a literal cannot hold a function call; the
+    /// value is used only as a string, never in a pattern or an
+    /// attribute, so nothing downstream needed a constant.
+    let templateDomain = SignedShape.separator SignedShape.CleanRoomTemplate
 
-    /// Domain separator for an approval-record encoding.
-    [<Literal>]
-    let recordDomain = "fuaran.federation.cleanroom.approval/1"
+    /// Domain separator for an approval-record encoding. Same source and
+    /// same reasoning as `templateDomain`.
+    let recordDomain = SignedShape.separator SignedShape.CleanRoomApprovalRecord
 
     /// Emit one field as `{utf8ByteLength}:{value}` followed by a
     /// newline. The length prefix is what makes the encoding injection-

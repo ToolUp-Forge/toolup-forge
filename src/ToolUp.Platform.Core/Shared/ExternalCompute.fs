@@ -756,8 +756,23 @@ module WorkerOutcomeSignature =
     /// Domain separation tag opening the signing payload. Prevents a
     /// signature minted for one ToolUp protocol being replayed as another
     /// — the reason every signed shape in the SDK carries one.
-    [<Literal>]
-    let Domain = "toolup.signed-outcome.v1"
+    ///
+    /// **Phase 654 — taken from `SignedShape`, not written out here.**
+    /// Two consequences worth stating, because both are visible changes:
+    ///
+    ///   * It is a `let`, not a `[<Literal>]` — a literal cannot hold a
+    ///     function call. The value is only ever used as a string (it is
+    ///     concatenated into `signingPayload`), never in a pattern match
+    ///     or an attribute argument, so nothing needed it to be constant.
+    ///   * Its VALUE moved, from `toolup.signed-outcome.v1` to
+    ///     `toolup.signed-outcome/1`. That is a **breaking wire change**:
+    ///     a worker signature minted under the old tag no longer
+    ///     verifies. The `toolup` branding is deliberate and unchanged —
+    ///     this names a ToolUp-specific protocol whose header is literally
+    ///     `X-ToolUp-Worker-Signature` — and only the version suffix moved
+    ///     into the scheme every other signed shape already used. See
+    ///     `docs/migrations/2026-08-18-federation-wire-rename.md`.
+    let Domain = SignedShape.separator SignedShape.WorkerSignedOutcome
 
     /// The envelope-format version the `v` parameter must carry. The
     /// *signed tuple* is closed and versioned; the parameter list is open

@@ -1184,6 +1184,13 @@ let allTests =
         OutboundSignalFeedTests.validationTests
         OutboundSignalFeedTests.operatorTests
         OutboundSignalFeedTests.stateStoreTests
+        // Phase 654 — the signed-shape separator registry. Until this
+        // pack, nothing in the repo tested a domain separator at all:
+        // one could drift, or two modules could silently choose the
+        // same string and defeat domain separation outright, with
+        // every other gate green.
+        SignedShapeSeparatorTests.registryTests
+        SignedShapeSeparatorTests.pinnedDigestTests
         // Phase 590 — PeerSurface descriptor: the deployment's
         // cross-instance face derived from the composed peer
         // registrations, with a deterministic hash-stamped export.

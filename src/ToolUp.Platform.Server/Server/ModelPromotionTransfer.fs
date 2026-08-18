@@ -229,6 +229,16 @@ module ModelPromotionSigningInput =
     /// at THIS status carrying THESE attachments. The attachment digests
     /// are ordinally sorted because a set has no order and a signature over
     /// an arrival-ordered list would depend on which sender sent it.
+    /// The domain separator opening the canonical form.
+    ///
+    /// **Phase 654 — taken from `SignedShape`, not written out here.**
+    /// Until then it was embedded inside the `sprintf` format string
+    /// below, which is why all three passes of the 2026-08-18 rename wave
+    /// missed it: a sweep for a separator-shaped LITERAL finds a
+    /// standalone binding and walks straight past a format string that
+    /// merely starts with one. Its VALUE is unchanged.
+    let domain = SignedShape.separator SignedShape.PromotedArtifact
+
     let canonical (key: FitCompositeKey) (status: ModelArtifactStatus) (attachmentHashes: string seq) : string =
         let attachments =
             attachmentHashes
@@ -237,7 +247,8 @@ module ModelPromotionSigningInput =
             |> String.concat ""
 
         sprintf
-            "fuaran.federation.promoted-artifact/1|key=%s|spec=%s|dataset=%s|seed=%d|provider=%s|pver=%s|status=%s%s"
+            "%s|key=%s|spec=%s|dataset=%s|seed=%d|provider=%s|pver=%s|status=%s%s"
+            domain
             key.Hash
             key.SpecHash
             key.DatasetVersion

@@ -4897,6 +4897,7 @@ ToolUp.Platform.ModelPromotionRefusalModule.describe(ToolUp.Platform.ModelPromot
 ToolUp.Platform.ModelPromotionSigningInput (class)
 ToolUp.Platform.ModelPromotionSigningInput.bytes(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.Byte[]
 ToolUp.Platform.ModelPromotionSigningInput.canonical(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ModelArtifactStatus, System.Collections.Generic.IEnumerable`1[System.String]) : System.String
+ToolUp.Platform.ModelPromotionSigningInput.domain : System.String { get }
 ToolUp.Platform.ModelRegistration (class)
 ToolUp.Platform.ModelRegistration..ctor(ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistrationNovelty)
 ToolUp.Platform.ModelRegistration.Artifact : ToolUp.Platform.ModelArtifact { get }

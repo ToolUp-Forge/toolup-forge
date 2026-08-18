@@ -351,6 +351,18 @@
              peer refusal, plan decision D6). Pure / Fable-safe — the cost
              model and the store are Server-tier. -->
         <Compile Include="Shared\ComputeBudget.fs" />
+        <!-- Phase 654 — the signed-shape separator registry: the closed
+             `SignedShape` DU, its typed `SignedShapeSeparator` parts, and
+             the exhaustively-matched `separator` function every canonical
+             encoder in the SDK now opens with. Depends on NOTHING but the
+             BCL primitives, so its position is set only by its consumers:
+             BEFORE ExternalCompute.fs (whose `WorkerOutcomeSignature.Domain`
+             reads from it), and in Platform.Core at all because
+             `ToolUp.InterPlatform` — which holds the other four encoders —
+             references this project and not the reverse. Pure / Fable-safe
+             (strings + DU + list, no crypto and no reflection), so it ships
+             in the Fable-packed source with the rest of Shared/. -->
+        <Compile Include="Shared\SignedShapeSeparator.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
