@@ -443,17 +443,29 @@ let allTests =
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests
-        // NOTE — Phase 9m.A AIProviderEnvValidator / AIModelEnvValidator /
-        // AIProviderProbeValidator packs are deliberately NOT wired here. They
-        // are orphaned (carry `[<Tests>]` but were never in `allTests`), but
-        // they mutate PROCESS-GLOBAL env vars (`TOOLUP_AI_PROVIDER` /
-        // `TOOLUP_AI_MODEL` / `ANTHROPIC_API_KEY` …) with snapshot/restore.
-        // Under Expecto's default parallel runner they race each other (a
-        // sibling's set/clear leaks across the `withEnv` window), producing
-        // "expected Warning, got Ok" and wrong-value message assertions.
-        // Wiring them needs a `testSequenced`/`testSequencedGroup` wrap over
-        // the whole env-mutating family — Phase 9m.A follow-up, not a blind
-        // add. See the 2026-07-20 orphaned-pack audit report.
+        // Phase 653 — the four previously-orphaned env-mutating config-validator
+        // packs (Phase 9m.A AIProviderEnvValidator / AIModelEnvValidator /
+        // AIProviderProbeValidator + Phase 248 OidcAuthValidatorTimeout), wired
+        // under ONE shared `testSequencedGroup` so they serialise against each
+        // other. Each snapshot/restores PROCESS-GLOBAL env vars
+        // (`TOOLUP_AI_PROVIDER` / `_MODEL` / `_PROBE_ON_STARTUP` /
+        // `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `TOOLUP_OIDC_ISSUER` /
+        // `_PREFLIGHT_TIMEOUT_MS`); the AI three share `TOOLUP_AI_PROVIDER`, so
+        // wrapping each list in its own `testSequenced` would NOT stop them
+        // racing — one shared named group is required (a group serialises every
+        // member carrying the same label). The pack runs `CLIArguments.Sequenced`
+        // by default (see `main`), so this is belt-and-braces for a `--parallel`
+        // invocation. Cross-serialising against already-wired env-touching lists
+        // (e.g. `AuthProvider.fromEnv`, which also mutates `TOOLUP_OIDC_ISSUER`)
+        // is a pre-existing latent `--parallel` coupling, out of scope here.
+        testSequencedGroup
+            "env-mutating-config-validators"
+            (testList "env-mutating config validators (Phase 653)" [
+                AIProviderEnvValidatorTests.providerTests
+                AIProviderEnvValidatorTests.modelTests
+                AIProviderProbeValidatorTests.tests
+                OidcAuthValidatorTimeoutTests.tests
+            ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
@@ -587,14 +599,8 @@ let allTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
-        // NOTE — Phase 248 OidcAuthValidatorTimeoutTests is deliberately NOT
-        // wired here. Orphaned (carries `[<Tests>]`, never in `allTests`), but
-        // its 8 tests mutate the process-global `TOOLUP_OIDC_ISSUER` /
-        // `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` env vars with snapshot/restore and
-        // race each other under Expecto's parallel runner (the exact-Timeout
-        // assertions flake when a sibling clears the var mid-call). Same class
-        // as the Phase 9m.A AI validators above — needs a `testSequenced` wrap.
-        // See the 2026-07-20 orphaned-pack audit report.
+        // Phase 248 OidcAuthValidatorTimeoutTests is wired above (Phase 653),
+        // inside the "env-mutating-config-validators" sequenced group.
         // Phase 247 — invite-by-email capability validator (warns when the
         // invite surface mounts with no IUserDirectory). Same audit.
         InviteEmailCapabilityValidatorTests.tests
