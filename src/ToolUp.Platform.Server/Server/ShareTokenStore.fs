@@ -259,15 +259,60 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
     // needed here; unlike the pending-invites store, claims are
     // one-blob-per-token (not a single full-blob-overwrite map), so a
     // corrupt blob can only break its own token, not erase its siblings.
+    //
+    // A failed `Download` is NOT evidence of absence. `IBlobStorage`
+    // reports it as `Error of string` — `LocalFileStorage` returns
+    // "Blob not found: …" for a missing blob and `ex.Message` for a
+    // caught exception, and both are just strings — so a transient IO
+    // error, a permissions problem or a misconfigured container all
+    // used to collapse into `NotFound` here, pointing the caller at the
+    // wrong subsystem. `MarkUsed` and `Revoke` both route through this
+    // read and short-circuit on its `Error`, so a storage fault reached
+    // an operator as "no such token".
+    //
+    // `Exists` disambiguates, probed only on the error path so the
+    // happy path pays nothing. The disambiguation is deliberately
+    // ONE-SIDED, and that asymmetry is exactly what it buys:
+    //
+    //   Exists = true  → the blob is there and we could not read it.
+    //                    Positively a storage failure.
+    //   Exists = false → absent, OR a fault that took `Exists` down
+    //                    with it. The signature has no error channel
+    //                    (`Async<bool>`) and every cloud implementation
+    //                    ends it `with _ -> return false`, so a
+    //                    container-wide permissions or configuration
+    //                    failure still reads as `NotFound`.
+    //
+    // So this closes "the blob is there, the read failed" and NOT the
+    // container-wide cases. Closing those needs absence and failure to
+    // be distinguishable one layer down — a typed blob-read error. That
+    // is not a local change: `Download` sits on the api-baseline with
+    // thirteen in-tree implementers plus consumer-side custom stores,
+    // and the ETag (Phase 600) and signed-URL (Phase 108) seams in
+    // `IBlobStorage.fs` both record why such a widening goes behind a
+    // probed capability interface rather than into the contract every
+    // backend must answer.
+    //
+    // No existence oracle is opened: `Validate` runs `parseToken` — a
+    // full HMAC check — before it reaches this read, so a caller can
+    // only tell `StorageFailed` from `NotFound` for a token they could
+    // already validly sign.
     let readClaim (scopeId: string) (tokenId: string) = async {
-        let! result = storage.Download(platformContainer, tokenBlob scopeId tokenId)
+        let blob = tokenBlob scopeId tokenId
+        let! result = storage.Download(platformContainer, blob)
 
         match result with
         | Ok bytes ->
             match Json.tryDeserialize<ShareTokenClaim> bytes with
             | Some claim -> return Ok claim
             | None -> return Error(ShareTokenError.StorageFailed "share-token blob deserialisation failed")
-        | Error _ -> return Error ShareTokenError.NotFound
+        | Error downloadError ->
+            let! present = storage.Exists(platformContainer, blob)
+
+            if present then
+                return Error(ShareTokenError.StorageFailed downloadError)
+            else
+                return Error ShareTokenError.NotFound
     }
 
     let recordAudit (scopeId: string) (event: AuditEvent) =

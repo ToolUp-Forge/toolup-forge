@@ -549,6 +549,7 @@ let allTests =
         AuditReplicatorTests.tests
         Ed25519ArtifactSubstrateTests.tests
         ShareTokenStoreTests.tests
+        ShareTokenStoreTests.readPathTests
         ShareTokenAuthMiddlewareTests.tests
         ShareTokenMiddlewareRateLimitTests.tests
         AnonymousSessionMigrationTests.tests
