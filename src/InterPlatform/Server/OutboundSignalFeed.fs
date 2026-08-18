@@ -478,7 +478,7 @@ module SignalFeedCanonical =
     /// activation authorisation's digest even if the field sequences
     /// coincided.
     [<Literal>]
-    let domain = "toolup.signalfeed.delivery/1"
+    let domain = "fuaran.federation.signalfeed.delivery/1"
 
     let private field (sb: StringBuilder) (value: string) : unit =
         sb.Append(Encoding.UTF8.GetByteCount value).Append(':').Append(value).Append('\n')
