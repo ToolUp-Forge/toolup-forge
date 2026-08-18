@@ -380,12 +380,12 @@ A signed record of one step of a bilateral agreement over one exact, content-add
 UTF-8 concatenation, in this order:
 
 ```
-field("toolup.cleanroom.approval/1")   ← domain separator
+field("fuaran.federation.cleanroom.approval/1")   ← domain separator
 field(TemplateId)
 field(TemplateVersion)
 field(ActingPeerId)
 field(CounterpartyPeerId)
-field(actionName)                      ← "Proposed" | "Reviewed" | "Approved" | "Revoked"
+field(actionName)                                 ← "Proposed" | "Reviewed" | "Approved" | "Revoked"
 field(unixSeconds(IssuedAt))
 field(unixSeconds(NotBefore))
 field(ExpiresAt is null ? "none" : unixSeconds(ExpiresAt))
@@ -632,7 +632,7 @@ Corpus: `model-execution/submission.json`.
 
 #### 5.7.2 Operations
 
-Served by the data host, under contract id `toolup.model-execution` at `ContractVersion` 1.0.
+Served by the data host, under contract id `fuaran.model-execution` at `ContractVersion` 1.0.
 
 | Operation | Body | Answer body | Leg |
 |---|---|---|---|
@@ -760,7 +760,7 @@ transform does to the shape. The naive answer is "let them look at a sample", wh
 egress the whole profile exists to prevent. The answer here is a **declared aggregate projection**:
 a named question with a fixed aggregate answer shape, offered only if the deployment declared it.
 
-Served under contract id `toolup.model-execution.diagnostics` at `ContractVersion` 1.0. The
+Served under contract id `fuaran.model-execution.diagnostics` at `ContractVersion` 1.0. The
 **operation is the diagnostic** — there is no diagnostic-name member — because that is what lets a
 deployment's declared method surface be the declaration itself, checked by the receiver's privacy
 gate before the projection runs.
@@ -1305,7 +1305,7 @@ posture for the spec payload, generalised to everything a promotion carries.
 **The spec payload is stored as an attachment.** It arrives as its own member — a sender should not
 have to know a receiver's reserved media type to send the one payload every transfer carries — and
 the receiver folds it into the same append-only slot under
-`application/vnd.toolup.model-spec`, computing its digest itself. So `PromotionRecord.AttachmentHashes`
+`application/vnd.fuaran.model-spec`, computing its digest itself. So `PromotionRecord.AttachmentHashes`
 carries one more entry than the transfer's `Attachments`, and a reader that expected the spec
 elsewhere produces a different signing input (below) and diverges visibly.
 
@@ -1334,7 +1334,7 @@ a refusal.
 **The canonical signing input.** A receiver that signs MUST sign exactly these bytes, UTF-8:
 
 ```
-toolup.promoted-artifact/1|key=<ArtifactKey>|spec=<SpecHash>|dataset=<DatasetVersion>
+fuaran.federation.promoted-artifact/1|key=<ArtifactKey>|spec=<SpecHash>|dataset=<DatasetVersion>
 |seed=<Seed>|provider=<ProviderId>|pver=<ProviderVersion>|status=<Status>
 |attachment=<hash>[|attachment=<hash>…]
 ```
@@ -1467,8 +1467,8 @@ another language will and should word it differently.
 Contract ids, at `ContractVersion` 1.0:
 
 ```
-toolup.model-execution                 the submitter operations (§5.7.2)
-toolup.model-execution.diagnostics     the governed projections (§5.7.6)
+fuaran.model-execution                 the submitter operations (§5.7.2)
+fuaran.model-execution.diagnostics     the governed projections (§5.7.6)
 ```
 
 Operations (§5.7.2): `SubmitFit`, `GetOutcome`, `QueryOutcomes`, `ResolveVintage`.
@@ -1483,7 +1483,7 @@ SubmitFit  InvokeTransition  TransferPromotion
 the provenance-attachment slot. Recorded, never interpreted:
 
 ```
-application/vnd.toolup.model-spec
+application/vnd.fuaran.model-spec
 ```
 
 **Attachment cap dimensions** (§5.7.12), as carried by a `CapExceeded` refusal:

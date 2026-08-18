@@ -237,7 +237,7 @@ module ModelPromotionSigningInput =
             |> String.concat ""
 
         sprintf
-            "toolup.promoted-artifact/1|key=%s|spec=%s|dataset=%s|seed=%d|provider=%s|pver=%s|status=%s%s"
+            "fuaran.federation.promoted-artifact/1|key=%s|spec=%s|dataset=%s|seed=%d|provider=%s|pver=%s|status=%s%s"
             key.Hash
             key.SpecHash
             key.DatasetVersion

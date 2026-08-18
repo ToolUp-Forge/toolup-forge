@@ -556,14 +556,14 @@ module ModelExecutionProfile =
 
     /// The submitter contract's id.
     [<Literal>]
-    let ContractId = "toolup.model-execution"
+    let ContractId = "fuaran.model-execution"
 
     /// The governed-diagnostics contract's id. A separate contract, not
     /// a separate method group: the two have different release rules,
     /// and one gate over a contract whose methods are governed
     /// differently is a gate whose surface argument does not hold.
     [<Literal>]
-    let DiagnosticsContractId = "toolup.model-execution.diagnostics"
+    let DiagnosticsContractId = "fuaran.model-execution.diagnostics"
 
     /// The wire version both contracts are served at.
     let contractVersion: ContractVersion = { Major = 1; Minor = 0 }

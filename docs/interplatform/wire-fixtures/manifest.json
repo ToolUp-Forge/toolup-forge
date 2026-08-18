@@ -129,7 +129,7 @@
       "kind": "hash",
       "file": "attestation/approval.json",
       "sha256": "e2a5a2e1fb0284cd20b981eed8096bf1d92512629b53c2f545b019769174e4d9",
-      "digest": "b9e6069ae3d0c48db8626214271d4fbdbc2981454e944eb6b8c30408467b04df",
+      "digest": "9a65294555f9bed214599b046a8158d9e3f1615fd2461f3d38e98f79bdcaad0a",
       "description": "A signed lifecycle record agreeing one exact content-addressed template version, with no end date. The digest is over the length-prefixed signing input, not over this JSON."
     },
     {
@@ -139,7 +139,7 @@
       "kind": "hash",
       "file": "attestation/revocation.json",
       "sha256": "cba85a1eb42b765464c18792e618a16dfdcb873f0a73f3a2abdc1eb3cd8ef635",
-      "digest": "a0d2f03f566f47a989a49ca87af0f107ca010dd1177e106cfe0acbc45b060e5d",
+      "digest": "4d65cc7ca37300d10845a3b9030d365e3e99ce5b438b9f8961471a9342b3ab97",
       "description": "The same agreement withdrawn, and carrying an end date — the two fields whose encoding a signer must get right for an expiry to be verifiable."
     },
     {
@@ -323,7 +323,7 @@
       "profile": "participant-data-host",
       "kind": "round-trip",
       "file": "model-execution/promotion.json",
-      "sha256": "0b7dfcc47b5c994ee755bdf5186bad2d2688eeb6f40567a9c5eb884bbf213939",
+      "sha256": "41d2aa593f50b2dccde287b9c6cf6a97337b918e558672eaec19966cfe23f344",
       "description": "The receipt an accepted transfer produced: the status the artifact now holds, the digest of every attachment it carries — including the spec payload, which the receiver folds into the same append-only slot — and the data host's own detached signature over the canonical acceptance input. The signing-input digest is recomputed from that canonical form rather than quoted, because a verifier in another language has to rebuild exactly those bytes and it is the part of a signature an independent implementation can get wrong with no key at all."
     },
     {

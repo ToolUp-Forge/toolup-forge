@@ -159,7 +159,7 @@ module ModelArtifactStatus =
 /// verbatim, never acted on.
 type ProvenanceAttachment = {
     /// IANA-shaped media type of `Bytes` (e.g. `application/json`,
-    /// `application/vnd.toolup.model-spec`). Recorded, never interpreted.
+    /// `application/vnd.fuaran.model-spec`). Recorded, never interpreted.
     MediaType: string
     /// `sha256:<lowercase hex>` over `Bytes`. The attachment's identity
     /// within an artifact — two attachments with equal bytes are one
@@ -186,7 +186,7 @@ module ProvenanceAttachment =
     /// stores to keep honest instead of one. Forge still never reads it —
     /// the label says which reader to hand it to, and forge is not one.
     [<Literal>]
-    let SpecPayloadMediaType = "application/vnd.toolup.model-spec"
+    let SpecPayloadMediaType = "application/vnd.fuaran.model-spec"
 
     /// The bytes an attachment carries, with a null blob read as empty. A
     /// list-or-array field absent from an older persisted record

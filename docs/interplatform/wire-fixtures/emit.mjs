@@ -493,7 +493,7 @@ const approvalRecordJson = (r) =>
   ]);
 
 const approvalSigningInput = (r) =>
-  field("toolup.cleanroom.approval/1") +
+  field("fuaran.federation.cleanroom.approval/1") +
   field(r.templateId) +
   field(r.templateVersion) +
   field(r.actingPeerId) +
@@ -1220,7 +1220,7 @@ const promotionHeldHashes = [
  * attachment digests ordinally sorted, because a set has no order and a
  * signature over an arrival-ordered list would depend on the sender. */
 const promotionSigningInput = (t, status, hashes) =>
-  "toolup.promoted-artifact/1" +
+  "fuaran.federation.promoted-artifact/1" +
   `|key=${t.artifactKey}` +
   `|spec=${t.specHash}` +
   `|dataset=${t.datasetVersion}` +

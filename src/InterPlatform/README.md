@@ -392,8 +392,8 @@ Two contracts, and the split is the design:
 
 | Contract | Carries | Registered with |
 |---|---|---|
-| `toolup.model-execution` | submission, outcome retrieval, registry query, vintage resolution — all metadata-shaped | `ModelExecutionPeerContract.host` |
-| `toolup.model-execution.diagnostics` | the declared aggregate projections a remote modeller needs (collinearity, coverage, transform previews) | `ModelExecutionPeerContract.governedDiagnostics` |
+| `fuaran.model-execution` | submission, outcome retrieval, registry query, vintage resolution — all metadata-shaped | `ModelExecutionPeerContract.host` |
+| `fuaran.model-execution.diagnostics` | the declared aggregate projections a remote modeller needs (collinearity, coverage, transform previews) | `ModelExecutionPeerContract.governedDiagnostics` |
 
 The second one has **no ungated construction route**. `governedDiagnostics` demands an
 `ICleanRoomBroker` and a `CleanRoomTemplate` and returns a `GatedContractRegistration`, so a

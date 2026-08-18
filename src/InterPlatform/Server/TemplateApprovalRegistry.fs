@@ -218,7 +218,7 @@ module TemplateCanonical =
 
     /// Domain separator for an approval-record encoding.
     [<Literal>]
-    let recordDomain = "toolup.cleanroom.approval/1"
+    let recordDomain = "fuaran.federation.cleanroom.approval/1"
 
     /// Emit one field as `{utf8ByteLength}:{value}` followed by a
     /// newline. The length prefix is what makes the encoding injection-
