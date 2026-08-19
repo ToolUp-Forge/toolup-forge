@@ -319,6 +319,18 @@ let registerTargets (config: BuildConfig) =
         // not. See `Aggregate` above for why that is worth the minutes a
         // known-red pack costs — briefly, "the gate is red" says nothing
         // about the eleven packs that never ran.
+        // Diagnostic pass-through: `TOOLUP_TEST_ARGS` (whitespace-split)
+        // is appended to every pack invocation after `--`. Exists so CI
+        // can run the suite with e.g. `--debug` (Expecto names each test
+        // as it starts) when hunting a failure that only reproduces on a
+        // runner — a killed run then names its last-started test in the
+        // log. Empty/unset ⇒ byte-for-byte the previous invocation.
+        let extraTestArgs =
+            match System.Environment.GetEnvironmentVariable "TOOLUP_TEST_ARGS" with
+            | null
+            | "" -> []
+            | v -> v.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
+
         match config.TestPacks with
         | [] ->
             Trace.tracefn
@@ -333,8 +345,13 @@ let registerTargets (config: BuildConfig) =
                     // decorates with `ensureExitCode`, which throws on a
                     // non-zero exit and would take every later pack with
                     // it. The invocation is otherwise identical.
+                    let args =
+                        match extraTestArgs with
+                        | [] -> [ "run"; "--project"; pack.Project ]
+                        | extra -> [ "run"; "--project"; pack.Project; "--" ] @ extra
+
                     let result =
-                        CreateProcess.fromRawCommand "dotnet" [ "run"; "--project"; pack.Project ]
+                        CreateProcess.fromRawCommand "dotnet" args
                         |> CreateProcess.withWorkingDirectory "."
                         |> Proc.run
 

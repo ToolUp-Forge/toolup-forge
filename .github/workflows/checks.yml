@@ -496,8 +496,24 @@ jobs:
           # answer here should be a configuration error with a name on
           # it, not a corpus quietly discovered somewhere unexpected.
           TOOLUP_MODEL_EXECUTION_CORPUS: ${{ github.workspace }}/.model-execution-corpus/wire-fixtures
+          # ── TEMPORARY DIAGNOSTIC (2026-08-19) — remove with the fix ──
+          # The exit-143 kill survives the memory-headroom block on some
+          # runners, dying at a consistent point ~90s into the Platform
+          # pack with ~14 GB reported available at test start — the
+          # theory needs data, not another mitigation. `--debug` makes
+          # Expecto name each test as it starts (packs are sequenced),
+          # so a killed run names its last-started test; the MEMSAMPLE
+          # loop below prints used/available every 5s so the log carries
+          # the memory trajectory at the moment of death.
+          TOOLUP_TEST_ARGS: "--debug"
         run: |
           set -euo pipefail
+          ( while true; do
+              echo "MEMSAMPLE $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print "used="$3" avail="$7}') $(free -m | awk '/^Swap:/{print "swapused="$3}')"
+              sleep 5
+            done ) &
+          MEMSAMPLER=$!
+          trap 'kill $MEMSAMPLER 2>/dev/null || true' EXIT
           dotnet run --project Build.fsproj -- VerifyAll 2>&1 | tee verifyall.log
 
           summary=$(awk '/VerifyAll summary:/{seen=1} seen' verifyall.log)
