@@ -252,6 +252,41 @@ Every shipped companion to date wraps a managed SDK. A companion that wraps a *n
 
 Everything else follows the standard companion rules above: GP 1 isolation (the native dependency never reaches `ToolUp.Platform.*`), substrate dependencies through `create`, README packed into the nupkg, and an explicit dev-only vs production-ready declaration in the file header.
 
+## Store-substrate authoring (file layout + opt-in wiring)
+
+When adding a new store substrate (an `IXxxStore` + its types), the canonical split is decided by
+**Fable-safety + client-facing, not habit**:
+
+- **Fable-safe shared types → `src/ToolUp.Platform.Core/Shared/XxxTypes.fs`** — records/DUs for
+  schema, values, page reads, errors: anything a client renders or that crosses the wire. Only
+  `Platform.Core` ships its source under `fable/` in the nupkg (GP 10), so only types housed there
+  are Fable-compilable. Register the file in `ToolUp.Platform.Core.fsproj` near `DataObjectTypes.fs`.
+- **Server-only interface + default impl → `src/ToolUp.Platform.Server/Server/IXxxStore.fs` +
+  `XxxStore.fs`** (canonical precedent: `IDataObjectStore` — types in Core, interface in Server).
+- **Crypto-addressed / server-only-compute types stay in Server** — e.g. SHA-256-addressed envelope
+  types use `System.Security.Cryptography`, which is not Fable-compilable, and belong in
+  `Platform.Server/Server/` even though "types" usually go to Core.
+- **Opt-in wiring (GP 13):** an `XxxStoreMode` DU + a `ServerConfig.Xxx` field defaulting to `NoXxx`
+  in `SDK.Shared.fs`; a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
+  (`TryAddSingleton` with a lazy factory); called from `Server/SDK.Server.fs` next to
+  `registerTimeSeriesStore`. Note a new `ServerConfig` field retypes the record ctor and forces a
+  Core api-baseline regen (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
+
+**Vendor dependencies never enter `ToolUp.Platform.*` (GP 1).** `ToolUp.Tabular` carries
+`DocumentFormat.OpenXml` for its XLSX leg, and its `.fsproj` says so: the vendor dep stays there. Do
+NOT add a `ProjectReference` from any `ToolUp.Platform.*` project to `ToolUp.Tabular` — even to call
+the BCL-only CSV path — because it drags OpenXml into the SDK core's dependency graph. When SDK-core
+code needs Tabular-style behaviour, cut a dependency-free interface seam in `Platform.Server`, ship a
+BCL-only default over the coarse schema, and let a Tabular-backed implementation be composed over the
+seam (precedent: `IMappingDryRunValidator`).
+
+**The remoting `IIdempotencyStore` is deliberately NOT composed by `ServerApp`.** Unlike
+`IOAuthStateStore`, forge never builds or DI-registers an idempotency store — it is wired per-API by
+the consumer via `Remoting.withIdempotencyStore` inside `Api.make(customOptions = …)`, and the
+default `RemotingOptions.IdempotencyStore` is `None`. Any validator or preflight over it must probe
+the DI `IServiceCollection` (the `DeployPlaneDepsValidator` shape) — there is no forge-held instance
+to inspect, and customOptions-only wiring is invisible to preflight by design.
+
 ## Props-injection pattern (legacy source-injection contract)
 
 Some Client-tier companions still inject source via `.Client.props` rather than ship a DLL nupkg. The contract: a companion's `.Client.props` file extends the `_ToolUpPlatformClientSources` item group, and `ToolUp.Platform.Client.props` (in the consuming app's MSBuild graph) prepends those items to `<Compile>` before CoreCompile.
@@ -389,7 +424,61 @@ At phase boundaries: full Fable JS verification — `cd samples/MinimalClient &&
 
 **Always pass `-o output` when verifying.** Bare `dotnet fable` emits `*.fs.js` next to source and leaves `output/` stale.
 
+**Never reference a bare `..\Foo.fs` from a Fable test project.** Fable mirrors each source's
+relative path under `output/`, so an immediate-parent reference resolves to `output/../Foo.js` — a
+stray transpiled `.js` in the project root that `.gitignore` (`output/` only) does not cover and
+`git add <dir>` will stage. References into a subdir (`..\Shared\Foo.fs`) stay safely under
+`output/`; keep shared sources in a `Shared/` subdir so both host projects reference them that way.
+(Bonus from the same class: an XML comment in a `.fsproj` cannot contain `--` — `dotnet build`
+tolerates it but `dotnet fable`'s msbuild crack fails with MSB4025.)
+
+**Expecto `--filter` joins the test path with `.`, not `/` — and a filter that matches nothing
+reports SUCCESS.** A slash-shaped filter (the shape test names suggest) selects zero tests, prints
+`0 tests run … Success!` and exits 0: a vacuous green. Read the *count*, never the exit code; if a
+filtered run reports suspiciously few tests, `--list-tests` first, or make the filter fail once
+(break a test it should select) before believing a green.
+
 **`MemoizedChart` must NOT be `private`.** `AgChart.chart` is a `static member inline` on an `[<Erase>]` type; Fable inlines the method body at every call site, which means call sites import `MemoizedChart` directly. If it's `private`, Fable doesn't export it → runtime `SyntaxError: does not provide an export named 'MemoizedChart'`. Same rule for any module-level value referenced from an `inline` method on an erased type.
+
+## Public-API approval baselines (Phase 175)
+
+`ToolUp.Platform.Tests`' approval gate renders each packable `ToolUp.*` assembly's public surface
+and diffs it against `api-baselines/<assembly>.approved.txt`. The rules that matter when a phase
+touches public surface:
+
+- **It fails ONLY on removed / renamed / retyped members; purely additive growth passes silently.**
+  A changed return type counts as a retype (the old token is "lost"). F# module functions and record
+  fields are public by default, so an "internal-looking" compose helper or a Client `Msg`/model
+  record is tracked surface.
+- **Optional constructor args (`?foo`) read as a REMOVAL.** `type Foo(bar, ?policy)` folds into ONE
+  widened ctor, so the pre-existing `Foo..ctor(bar)` token disappears — a genuine break, not a false
+  positive. Use explicit secondary constructors (`new(bar) = Foo(bar, defaultPolicy)`) to keep the
+  diff additive.
+- **A field added to a shared record ripples exactly as far as EMBEDDING, not reference.** The type's
+  own assembly reddens (the compiler-generated ctor gains a parameter — every `ServerConfig` field
+  addition regens Core), plus any downstream assembly whose own public record/DU embeds the type. An
+  assembly that merely takes it as a parameter/return renders only the type NAME and needs no regen.
+  After a surgical regen, re-run the FULL test pack — not just the approval filter — to catch a
+  downstream baseline you missed.
+- **Regen is non-surgical: `TOOLUP_APPROVE_API=1` rewrites EVERY built baseline** (~95 files),
+  folding in unrelated additive drift and EOL-only churn. Build the whole solution first (the
+  renderer reads DLLs), regen, then `git restore` every baseline except your surgical targets and
+  stage those by name. Verify the real diff WITHOUT the env var — approve mode passes trivially, so
+  its green proves nothing. Never run the regen in a shared working tree (it rewrites files
+  concurrent sessions have in flight), and never apply baseline hunks with `git apply --3way` there
+  (it writes the shared index as a side effect).
+- **A worktree regen is only valid against the HEAD it is pinned to.** If surface lands between your
+  pin and your apply, copying the regenerated file back silently deletes the landed lines — re-pin
+  against the current HEAD copy, apply only your own hunks, and diff-verify zero foreign removals.
+- **An untracked sibling packable project reddens the gate** (`discoverPackable` walks disk, not the
+  git index): a concurrent session's uncommitted `src/**/*.fsproj` with no committed baseline fails
+  the new-package arm. It is not your break — confirm with `git status --short` and note it; do not
+  author the sibling's baseline.
+- **A failing baseline names an assembly, not a cause** — confirm attribution with `git log -- <source
+  files>` before writing it into a commit message.
+- **Design corollary:** because pure additions pass, a new opt-in feature that would widen a shared
+  record's ctor can instead ship as a NEW options record + NEW builder entry points — zero baseline
+  edits, existing builders delegate with a behaviour-preserving default (GP 11).
 
 ## F# style + idioms
 
@@ -405,6 +494,17 @@ At phase boundaries: full Fable JS verification — `cd samples/MinimalClient &&
 let pageView = map[route]
 pageView currentState dispatchMsg
 ```
+
+### Raw control bytes in source — never
+
+A raw NUL (or any raw control byte) embedded in a source file makes git classify the file **binary**
+(`-text` in `git ls-files --eol`), which permanently disables `.gitattributes` EOL normalisation for
+it — the file stays CRLF in an all-LF repo and re-dirties on every Fantomas pass. Use the F# escape
+sequence instead — backslash + u0000, spelled out in prose here because tool payloads carrying the literal sequence have repeatedly mangled it into a real NUL (this very paragraph landed one on first write): it compiles to the identical char (same hashes, same test input) and the
+file stays text. To find offenders: `git ls-files --eol | grep -- -text`. Beware that writing the
+escape VIA A TOOL can itself land a raw byte — build the needle and replacement programmatically
+(e.g. PowerShell `[string][char]0` / `[char]92 + 'u0000'`), then byte-scan the file to prove zero
+control bytes remain.
 
 ### Lambda preference: `_.Property` over `fun x -> x.Property`
 
@@ -430,6 +530,7 @@ Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
 - **SSE / non-Remoting JSON**: must use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()` (returns a `System.Text.Json.JsonSerializerOptions` with the full F# converter set registered — Option / DU / tuple / record / CLIMutable / list / Map / Set / decimal / DateTime / DateOnly / TimeOnly / byte[] / DataSet / DataTable / etc.). Construct once at module level, then call `JsonSerializer.Serialize(value, options)` / `JsonSerializer.Deserialize<'T>(json, options)`. The options instance is mutated to set `PropertyNameCaseInsensitive = true` and `Encoder = UnsafeRelaxedJsonEscaping` — match the Fable.SimpleJson wire shape and absorb camelCase inputs without ceremony. Do NOT use plain `JsonSerializerOptions()` without `FableConverters.addTo` — F# DUs / Option / records all break on the wire. The legacy `Fable.Remoting.Json.FableJsonConverter` (Newtonsoft) was retired in the STJ migration — `Newtonsoft.Json` is no longer a forge dependency.
 - **`unit -> Async<T>` API functions**: work because body normalisation is folded into the dispatcher itself (shipped 0.4.0). The standalone `RemotingBodyNormalizationMiddleware` that 0.3.x relied on was retired — `dotnet build` is the gate, not a middleware presence check.
 - **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` need no extra `Fable.Remoting.*` / `ToolUp.Remoting.*` PackageReferences — the transport, the JSON converter set, and the Giraffe / ASP.NET Core adapters all arrive transitively via `ToolUp.Platform.Server`. `System.Text.Json` ships in the BCL.
+- **Additive fields on persisted records: the STJ path yields `null`, the SimpleJson path THROWS — handle both.** `FableConverters` initialises absent reference-type fields to `null`, so a blob persisted before a field was added comes back with `null` where a `list`/`Map` should be — and a null F# `list` NREs on every list op (`[]` is the `Empty` singleton, NOT null; only `option`'s `None` is null). Coerce at the store read path AND in the pure consumer (`if isNull (box x.Field) then { x with Field = [] }`; `isNull (box …)` is the Fable-safe check), and test by deserialising a JSON literal that OMITS the field. Meanwhile Fable.SimpleJson's `Json.parseAs<'T>` (browser-localStorage records) is the opposite: a missing field **throws** — and a `try/catch reset` fallback then silently discards ALL the user's persisted state, not just the new field. Backfill absent fields into the raw JSON before `parseAs` (array `[]` for list/Set, object `{}` for Map); a post-parse coercion cannot work because parse throws first.
 
 ### AG Charts axes + animation
 
