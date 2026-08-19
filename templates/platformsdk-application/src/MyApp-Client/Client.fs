@@ -12,9 +12,11 @@ let private modules: ErasedModule list = []
 // `__AG_GRID_LICENSE__`, `__CLERK_PUBLISHABLE_KEY__`) via
 // `BundleConstants.fs` and applies overrides on top. The default
 // `ClientConfigOverrides.empty` keeps every field at its
-// `ClientConfig.defaults` value.
+// `ClientConfig.defaults` value. Both names live *inside* the
+// `ClientConfigDefaults` module, so the overrides record stays
+// module-qualified even under `open ToolUp.Platform`.
 
 let private config =
-    ClientConfigDefaults.fromBundleConstants ClientConfigOverrides.empty
+    ClientConfigDefaults.fromBundleConstants ClientConfigDefaults.ClientConfigOverrides.empty
 
 Client.run config modules

@@ -12,6 +12,12 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ToolUp.Platform.Core" />
+    <!-- Unlike a plain module (which needs Core only), this template's
+         Server.fs implements `IDataSource` — a server-tier connector
+         interface declared in ToolUp.Platform.Server. The shared record
+         types it traffics in (DataSourceConfig / TableSchema /
+         IngestionError) live in Core. -->
+    <PackageReference Include="ToolUp.Platform.Server" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />

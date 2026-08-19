@@ -172,6 +172,160 @@ let main args =
         if result.ExitCode <> 0 then
             failwithf "VerifyFable: node exited %d." result.ExitCode)
 
+    // Template-content compile gate.
+    //
+    // The `templates/` scaffolds are shipped to consumers via `dotnet
+    // new`, and nothing compiled them. Two had been broken for an
+    // unknown span: platformsdk-application's client carried a
+    // `ToolUp.Remoting.Client` PackageReference the 0.4.4 fold deleted
+    // (NU1010 under CPM) plus a `ClientConfigOverrides` reference that
+    // needed module qualification, and platformsdk-datamanager's
+    // Server.fs implemented an `IDataSource` shape — Id / DisplayName /
+    // Probe / Pull — that the SDK no longer has. A consumer running
+    // `dotnet new` got a project that did not compile.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyTemplates`
+    //
+    // WHY NOT JUST ADD THEM TO ToolUp.Forge.sln. Template projects
+    // reference ToolUp.Platform.* by PackageReference (they must — that
+    // is what a consumer's instantiated copy does), and forge itself
+    // consumes those only by ProjectReference. CI creates an EMPTY
+    // ../../local-nuget-feed, so a template project inside the solution
+    // would fail restore in CI and take the whole `verify-all` gate with
+    // it. This target supplies the packages instead of assuming them.
+    //
+    // WHY A THROWAWAY VERSION. Packing at $(ToolUpSdkVersion) into the
+    // shared feed would be a same-version repack: NuGet resolves from
+    // the already-extracted global-packages entry, so the gate would
+    // compile the templates against WHATEVER WAS PACKED LAST rather than
+    // against current source — green while the real drift sat
+    // undetected. `0.0.0-templategate` is packed to a scratch feed and
+    // its cache entries are wiped first, so each run reads bits this run
+    // produced. The cache wipe is the load-bearing half; without it the
+    // second run onwards is stale.
+    //
+    // NOT COVERED, deliberately: templates/safer/ and
+    // templates/platformsdk-solution/ are standalone solutions carrying
+    // their own nuget.config (`../local-nuget-feed`, resolved relative to
+    // the consumer's instantiated location) and, in safer's case, a
+    // literal `TOOLUP_SDK_VERSION` placeholder substituted at
+    // instantiation. Neither is buildable in-repo without rewriting what
+    // makes it a template. Gating those needs an instantiate-then-build
+    // harness — a bigger job than this, and the drift found here was all
+    // in the root-inheriting set.
+    let templateGateVersion = "0.0.0-templategate"
+
+    // The SDK packages the gated templates reference, plus the closure
+    // of ToolUp.* packages those declare. Kept explicit rather than
+    // globbed: packing all ~43 is minutes of work for packages no
+    // template names. Adding an SDK->SDK dependency without adding it
+    // here does not silently degrade — the NU1603 escalation below turns
+    // the resulting version fallback into a build error naming the
+    // missing package.
+    let templateGatePackages = [
+        "ToolUp.Platform.Core"
+        "ToolUp.Platform.Client"
+        "ToolUp.Platform.Server"
+        // Declared by Platform.Core.
+        "ToolUp.AI.Wire"
+        // Declared by Platform.Server, and its own ProjectReference.
+        "ToolUp.Graph.InMemory"
+        "ToolUp.Graph.Core"
+    ]
+
+    let gatedTemplateProjects = [
+        "templates/platformsdk-application/src/MyApp-Client/MyApp-Client.fsproj"
+        "templates/platformsdk-application/src/MyApp-Server/MyApp-Server.fsproj"
+        "templates/platformsdk-datamanager/MyDataManager/MyDataManager.fsproj"
+        "templates/platformsdk-module/MyModule/MyModule.fsproj"
+    ]
+
+    Target.create "VerifyTemplates" (fun _ ->
+        let feedDir = Path.getFullName "obj/template-gate-feed"
+
+        let runChecked exe args =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory "."
+            |> CreateProcess.ensureExitCode
+            |> Proc.run
+            |> ignore
+
+        Shell.deleteDir feedDir
+        Directory.ensure feedDir
+
+        // Wipe this version's global-packages entries so the restore
+        // below cannot serve a previous run's extracted copy. See the
+        // "WHY A THROWAWAY VERSION" note above.
+        let globalPackages =
+            match Environment.environVarOrNone "NUGET_PACKAGES" with
+            | Some dir when dir <> "" -> dir
+            | _ ->
+                Path.Combine(
+                    System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile,
+                    ".nuget",
+                    "packages"
+                )
+
+        for pkg in templateGatePackages do
+            let cached =
+                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+
+            if Directory.Exists cached then
+                Trace.tracefn "▶ VerifyTemplates: clearing stale cache entry %s" cached
+                Shell.deleteDir cached
+
+        for pkg in templateGatePackages do
+            Trace.tracefn "▶ VerifyTemplates: packing %s @ %s" pkg templateGateVersion
+
+            runChecked "dotnet" [
+                "pack"
+                sprintf "src/%s/%s.fsproj" pkg pkg
+                sprintf "-p:Version=%s" templateGateVersion
+                "-o"
+                feedDir
+                "--nologo"
+            ]
+
+        // `RestoreAdditionalProjectSources` ADDS the scratch feed to the
+        // repo nuget.config's sources. `--source` would replace them, and
+        // the templates still need nuget.org for Feliz / Fable.Core.
+        //
+        // NU1603 is escalated to an error deliberately. It fires when a
+        // gate-versioned package declares a ToolUp.* dependency that was
+        // NOT packed at the gate version, in which case NuGet quietly
+        // resolves some other version off the shared feed. That fallback
+        // compiles the templates against a mix of current and months-old
+        // SDK, and on a machine whose feed lacks the older version it
+        // does not resolve at all — so the failure would surface later,
+        // somewhere unrelated. Escalated, it names the missing package
+        // and points straight at `templateGatePackages`.
+        for proj in gatedTemplateProjects do
+            Trace.tracefn "▶ VerifyTemplates: building %s" proj
+
+            // Clear obj/ and bin/ first. Both are gitignored local
+            // artefacts, and a consumer's freshly-instantiated copy has
+            // neither — so building over them tests something the
+            // consumer never experiences. Concretely: NuGet no-ops a
+            // restore whose inputs are unchanged and REPLAYS the
+            // warnings recorded in the existing project.assets.json, so
+            // a leftover obj/ makes the gate report the previous run's
+            // resolution rather than this one's.
+            let projDir = Path.GetDirectoryName(Path.getFullName proj)
+            Shell.deleteDir (Path.Combine(projDir, "obj"))
+            Shell.deleteDir (Path.Combine(projDir, "bin"))
+
+            runChecked "dotnet" [
+                "build"
+                proj
+                sprintf "-p:ToolUpSdkVersion=%s" templateGateVersion
+                sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
+                "-warnaserror:NU1603"
+                "--nologo"
+            ]
+
+        Trace.tracefn ""
+        Trace.tracefn "VerifyTemplates summary: %d template project(s) compiled clean." gatedTemplateProjects.Length)
+
     // Phase 620 — compile-checked documentation snippets.
     //
     // Nothing detected a doc snippet naming an API the SDK no longer

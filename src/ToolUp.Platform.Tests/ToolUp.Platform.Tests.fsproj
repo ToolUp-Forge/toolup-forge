@@ -1618,6 +1618,15 @@
              reset / persistence paths and the GP 11 pin that the
              unscoped factories still carry one global vocabulary. -->
         <Compile Include="InProcess\LocalEmbeddingScopeTests.fs" />
+        <!-- Phase 500 — the Tesseract IOcrProvider companion AND the
+             "OCR unavailable" signal in the KnowledgeBase extractor.
+             Structural arm always on (composition detection, the
+             classification's positive and negative cases, the extraction
+             wiring proved against a provider-agnostic stub, and the
+             companion's own create-time guards, which fire before any
+             native probe); native arm env-gated on TOOLUP_TESSDATA. No
+             Docker, no checked-in binary fixture — SkiaSharp rasterises
+             and PdfPig's writer wraps. -->
         <Compile Include="InProcess\OcrProviderTests.fs" />
         <!-- Phase 317 — peer-auth posture advisory. The six-rung ladder a
              composition is classified against (from "no peer surface" up
@@ -1878,11 +1887,13 @@
         <!-- Phase 14z — the local TF-IDF embedder, for its scope-keyed
              factory. Dev-only companion; no external dependency. -->
         <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
+        <!-- Phase 500 — the OCR companion, for its option / fail-loud
+             guards and the env-gated native arm. -->
+        <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />
         <!-- Phase 509 — durable ingestion-queue companion; the live arm of
              DurableIngestionQueueTests binds its store to the shared
              IIngestionQueueStore contract. -->
         <ProjectReference Include="..\IngestionQueues\Redis\ToolUp.IngestionQueues.Redis.fsproj" />
-        <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />
         <!-- Phase 501 — the sparse-index analyzer companions. -->
         <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
         <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />

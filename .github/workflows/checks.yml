@@ -626,3 +626,91 @@ jobs:
 
       - name: Compile every in-scope documentation snippet (VerifyDocSnippets)
         run: dotnet run --project Build.fsproj -- VerifyDocSnippets
+
+  # ─── The template-content gate ─────────────────────────────────────
+  #
+  # Compiles the `dotnet new` scaffolds under `templates/`. Same class as
+  # the docs gate one job above: content shipped to consumers, verbatim,
+  # that no build touched. Two of them had been broken for an unknown
+  # span — platformsdk-application's client carried a PackageReference
+  # the 0.4.4 transport fold deleted (NU1010 under CPM) plus a
+  # `ClientConfigOverrides` reference needing module qualification, and
+  # platformsdk-datamanager's Server.fs implemented an `IDataSource`
+  # shape (Id / DisplayName / Probe / Pull) the SDK no longer has. A
+  # consumer running `dotnet new` got a project that did not compile.
+  #
+  # ── Why this is a separate job and not part of verify-all ───────────
+  #
+  # Template projects reference ToolUp.Platform.* by PackageReference —
+  # they must, because that is what a consumer's instantiated copy does
+  # — while forge itself consumes them only by ProjectReference. Adding
+  # them to ToolUp.Forge.sln would make the solution restore need
+  # packages that do not exist on a runner (the local-feed dir every job
+  # creates here is EMPTY), taking the whole `verify-all` gate down with
+  # it. `VerifyTemplates` supplies the packages instead of assuming
+  # them: it packs the six-package closure at a throwaway version into a
+  # scratch feed, then builds each template against that.
+  #
+  # ── This job cannot pass vacuously ─────────────────────────────────
+  #
+  #   1. The throwaway version defeats the NuGet cache. Packing at
+  #      $(ToolUpSdkVersion) would be a same-version repack, and NuGet
+  #      would serve the already-extracted global-packages entry — the
+  #      gate would compile against whatever was packed last, not
+  #      current source. The target wipes those cache entries first.
+  #   2. NU1603 is escalated to an error. It fires when a gate-versioned
+  #      package declares a ToolUp.* dependency that was not packed at
+  #      the gate version, in which case NuGet silently falls back to
+  #      some older version off a feed. Escalated, a new SDK->SDK
+  #      dependency fails the job by name instead of quietly weakening
+  #      what is being tested. This was not hypothetical — the first
+  #      draft of the target had exactly that hole.
+  #   3. Each template's obj/ and bin/ are cleared before building.
+  #      NuGet no-ops a restore whose inputs are unchanged and REPLAYS
+  #      the warnings cached in project.assets.json, so a leftover obj/
+  #      makes the gate report a previous run's resolution. It also
+  #      matches what a consumer has: nothing.
+  #
+  # Both fixes were verified by reintroducing the original defects and
+  # confirming the target goes red, then reverting.
+  #
+  # NOT COVERED: templates/safer/ and templates/platformsdk-solution/
+  # are standalone solutions with their own nuget.config (a
+  # `../local-nuget-feed` path resolved relative to the consumer's
+  # instantiated location) and, in safer's case, a literal
+  # TOOLUP_SDK_VERSION placeholder substituted at instantiation. Neither
+  # is buildable in-repo without rewriting the thing that makes it a
+  # template; gating them needs an instantiate-then-build harness. All
+  # the drift found so far was in the root-inheriting set.
+  #
+  # Measured cost: ~30s warm on the dev machine, dominated by packing
+  # the six packages.
+  templates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed. The gate
+      # does not read it — its packages come from the scratch feed the
+      # target packs, verified by building with this source excluded.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Compile the dotnet-new template content (VerifyTemplates)
+        run: dotnet run --project Build.fsproj -- VerifyTemplates

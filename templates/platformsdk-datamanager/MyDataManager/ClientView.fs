@@ -32,6 +32,15 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
 
     left, right
 
+/// Returns the erased module. To make it the deployment's data
+/// manager, hand the result to `ExternalDataManager` in the app's
+/// Client.fs composition root:
+///
+///     DataManager = ExternalDataManager(MyDataManager.ClientView.register ())
+///
+/// `DataManagerMode` is a `ClientConfig` field, not a per-module
+/// setting — the shell can only have one data manager, so the choice
+/// belongs to the composition root rather than to this module.
 let register () : ErasedModule =
     ClientModule.create {
         Init = init
@@ -40,5 +49,4 @@ let register () : ErasedModule =
         Icon = Html.span [ prop.text "D" ]
     }
     |> ClientModule.withView view
-    |> ClientModule.withDataManagerMode ExternalDataManager
     |> ClientModule.register

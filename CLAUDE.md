@@ -365,6 +365,12 @@ dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 
 **Shortcut for the Fable tier**: `dotnet run --project Build.fsproj -- VerifyFable` (Phase 614) runs the client-tier harness end to end — `dotnet tool restore`, `npm ci`, `dotnet fable -o output --noCache`, then `node --test` over the transpiled output. It asserts the TAP **pass / fail counts**, not just the exit status, because `node --test` exits 0 when it matched no test file at all; a harness that stopped emitting cases is otherwise indistinguishable from a green run. The floor is a lower bound (currently 100 against 131 shipped cases), so adding a case never needs an edit here.
 
+**Shortcut for the template content**: `dotnet run --project Build.fsproj -- VerifyTemplates` compiles the `dotnet new` scaffolds under `templates/`. It packs the six-package closure the templates reference (`ToolUp.Platform.{Core,Client,Server}` + `ToolUp.AI.Wire` + `ToolUp.Graph.{InMemory,Core}`) at a throwaway `0.0.0-templategate` version into a scratch feed, then builds each template against it.
+
+The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVersion)` would be a same-version repack, and NuGet would resolve from the already-extracted global-packages entry — so the gate would compile the templates against **whatever was packed last** rather than current source. The target wipes those cache entries first. NU1603 is escalated to an error for the same reason: it fires when a gate-versioned package declares a `ToolUp.*` dependency that was not packed at the gate version, and NuGet then silently falls back to an older feed version. **Adding an SDK→SDK dependency therefore fails this gate by name** until the package is added to `templateGatePackages` in `Build.fs`.
+
+`templates/safer/` and `templates/platformsdk-solution/` are deliberately **not** covered — they are standalone solutions carrying their own `nuget.config` (a `../local-nuget-feed` path resolved relative to the consumer's instantiated location) and, in `safer`'s case, a literal `TOOLUP_SDK_VERSION` placeholder substituted at instantiation. Neither is buildable in-repo without rewriting what makes it a template; gating them needs an instantiate-then-build harness.
+
 ### What CI actually gates (Phase 614)
 
 Written down here so the next reader does not have to re-derive it from `.github/workflows/checks.yml` — three phases in one batch had to. **Read the "gates?" column, not the job list**: a job existing is not the same as a job gating.
@@ -378,6 +384,8 @@ Written down here so the next reader does not have to re-derive it from `.github
 | `ai-wire-conformance` | the connector mappers produce identical output across both hosts, over one corpus | yes |
 | **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
 | **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **all twelve Expecto packs** via `VerifyAll` | **yes** |
+| `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles, via `VerifyDocSnippets` | yes |
+| **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates` | **yes** |
 
 Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template.
 
