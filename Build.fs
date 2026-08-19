@@ -250,6 +250,17 @@ let main args =
             |> Proc.run
             |> ignore
 
+        // Same invocation, minus `ensureExitCode`: the caller wants the
+        // exit code back rather than an exception, so an aggregating
+        // loop can record it and carry on.
+        let runExit exe args =
+            let result =
+                CreateProcess.fromRawCommand exe args
+                |> CreateProcess.withWorkingDirectory "."
+                |> Proc.run
+
+            result.ExitCode
+
         Shell.deleteDir feedDir
         Directory.ensure feedDir
 
@@ -299,32 +310,47 @@ let main args =
         // does not resolve at all — so the failure would surface later,
         // somewhere unrelated. Escalated, it names the missing package
         // and points straight at `templateGatePackages`.
-        for proj in gatedTemplateProjects do
-            Trace.tracefn "▶ VerifyTemplates: building %s" proj
+        // The template projects are INDEPENDENT of one another — each is
+        // what a separate `dotnet new` produces — so a broken scaffold
+        // should cost its own signal and not the others'. `runExit`
+        // rather than `runChecked` for exactly that reason: the exit code
+        // is captured and aggregated instead of thrown, and the target
+        // still fails at the end naming every scaffold that did not
+        // compile. Before this, a reader of a red run learned that the
+        // FIRST project in the list was broken and nothing whatsoever
+        // about the rest.
+        //
+        // The pack loop above stays fail-fast deliberately, and the
+        // asymmetry is the point: every build below reads those packages,
+        // so a failed pack makes the remaining results meaningless rather
+        // than merely unknown. Aggregating there would manufacture four
+        // confident-looking failures out of one real one.
+        gatedTemplateProjects
+        |> List.map (fun proj ->
+            Aggregate.leg proj (fun () ->
+                Trace.tracefn "▶ VerifyTemplates: building %s" proj
 
-            // Clear obj/ and bin/ first. Both are gitignored local
-            // artefacts, and a consumer's freshly-instantiated copy has
-            // neither — so building over them tests something the
-            // consumer never experiences. Concretely: NuGet no-ops a
-            // restore whose inputs are unchanged and REPLAYS the
-            // warnings recorded in the existing project.assets.json, so
-            // a leftover obj/ makes the gate report the previous run's
-            // resolution rather than this one's.
-            let projDir = Path.GetDirectoryName(Path.getFullName proj)
-            Shell.deleteDir (Path.Combine(projDir, "obj"))
-            Shell.deleteDir (Path.Combine(projDir, "bin"))
+                // Clear obj/ and bin/ first. Both are gitignored local
+                // artefacts, and a consumer's freshly-instantiated copy has
+                // neither — so building over them tests something the
+                // consumer never experiences. Concretely: NuGet no-ops a
+                // restore whose inputs are unchanged and REPLAYS the
+                // warnings recorded in the existing project.assets.json, so
+                // a leftover obj/ makes the gate report the previous run's
+                // resolution rather than this one's.
+                let projDir = Path.GetDirectoryName(Path.getFullName proj)
+                Shell.deleteDir (Path.Combine(projDir, "obj"))
+                Shell.deleteDir (Path.Combine(projDir, "bin"))
 
-            runChecked "dotnet" [
-                "build"
-                proj
-                sprintf "-p:ToolUpSdkVersion=%s" templateGateVersion
-                sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
-                "-warnaserror:NU1603"
-                "--nologo"
-            ]
-
-        Trace.tracefn ""
-        Trace.tracefn "VerifyTemplates summary: %d template project(s) compiled clean." gatedTemplateProjects.Length)
+                runExit "dotnet" [
+                    "build"
+                    proj
+                    sprintf "-p:ToolUpSdkVersion=%s" templateGateVersion
+                    sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
+                    "-warnaserror:NU1603"
+                    "--nologo"
+                ]))
+        |> Aggregate.runAll "VerifyTemplates" "template project")
 
     // Phase 620 — compile-checked documentation snippets.
     //

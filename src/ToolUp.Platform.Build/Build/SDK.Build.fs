@@ -91,6 +91,100 @@ let private run proc arg dir = proc arg dir |> Proc.run |> ignore
 let private runParallel processes =
     processes |> Proc.Parallel.run |> ignore
 
+// ─── Aggregating gate runner ─────────────────────────────────────────
+
+/// Runs a set of INDEPENDENT gate legs and reports on all of them.
+///
+/// The problem this exists for is an INFORMATION one, not a strictness
+/// one. A gate that stops at the first non-zero exit reports "red" and
+/// nothing else: every leg after the failure never ran, so the log
+/// cannot tell one broken project from twelve. A failure nobody in the
+/// session caused then costs everyone sharing the gate their whole
+/// signal rather than one project's worth of it, and the usual response
+/// to that — stop running the gate — is worse than the failure was.
+///
+/// Deliberately NOT a lenience mechanism. `runAll` raises when any leg
+/// failed, so the aggregate exit status is exactly what fail-fast would
+/// have produced. Only the reporting differs: the gate now says what
+/// else it found on the way.
+///
+/// `internal` so it does not enlarge the published `ToolUp.Platform.Build`
+/// surface, and the Public-API approval baseline with it. The root
+/// `Build.fs` compiles these files into its own assembly, so its targets
+/// reach it regardless.
+module internal Aggregate =
+
+    /// One leg of an aggregating gate. `Run` returns the leg's exit code
+    /// (0 = pass) and does its own tracing, so each caller keeps the
+    /// per-leg log lines it already emitted.
+    type Leg = { Name: string; Run: unit -> int }
+
+    let leg name run = { Name = name; Run = run }
+
+    /// Run every leg in order, summarise all of them, then raise if any
+    /// failed.
+    ///
+    /// A leg body that THROWS is recorded as a failure rather than
+    /// aborting the run. Without that, a caller that kept an
+    /// `ensureExitCode`-shaped process, or that trips over a missing file
+    /// before it launches one at all, reintroduces fail-fast through the
+    /// back door — and silently, which is the shape this module exists
+    /// to remove.
+    ///
+    /// The summary block's shape is load-bearing rather than decoration:
+    /// CI reads it to tell a real pass from a vacuous one (`VerifyAll`
+    /// exits 0 having run nothing when its pack list is empty), counting
+    /// lines that match `PASS` / `FAIL` under the `<label> summary:`
+    /// header. Those tokens must stay unique to the per-leg lines, which
+    /// is why the headline below says "failed" and not "FAILED".
+    let runAll (label: string) (noun: string) (legs: Leg list) : unit =
+        let results = ResizeArray<string * int>()
+
+        try
+            for leg in legs do
+                let exitCode =
+                    try
+                        leg.Run()
+                    with ex ->
+                        Trace.traceError (sprintf "%s: %s raised — %s" label leg.Name ex.Message)
+                        1
+
+                results.Add(leg.Name, exitCode)
+        finally
+            // `finally` so a genuinely fatal abort still reports what had
+            // run by then; the catch above is what keeps the ordinary
+            // failing case complete.
+            Trace.tracefn ""
+            Trace.tracefn "%s summary:" label
+
+            for name, exitCode in results do
+                let status =
+                    if exitCode = 0 then
+                        "PASS"
+                    else
+                        sprintf "FAIL (exit %d)" exitCode
+
+                Trace.tracefn "  %s — %s" status name
+
+        let failures = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+
+        if List.isEmpty failures then
+            Trace.tracefn "%s: all %d %s(s) passed." label results.Count noun
+        else
+            let named =
+                failures
+                |> List.map (fun (n, c) -> sprintf "%s (exit %d)" n c)
+                |> String.concat "; "
+
+            let headline =
+                sprintf "%s: %d of %d %s(s) failed — %s" label failures.Length results.Count noun named
+
+            // Printed as well as raised, so it lands with the summary
+            // block where a reader is already looking rather than only
+            // inside FAKE's error block.
+            Trace.tracefn "%s" headline
+            failwith headline
+
 // ─── Build configuration ───────────────────────────────────────────
 
 open ToolUp.Platform
@@ -220,51 +314,32 @@ let registerTargets (config: BuildConfig) =
         // long-lived watch shapes). Each pack's stdout/stderr stream
         // straight through; the cumulative summary lands at the end.
         //
-        // Failure semantics: each pack uses `CreateProcess.ensureExitCode`
-        // (via the file-top `dotnet` shim), so the first non-zero exit
-        // throws and aborts the loop. The summary still prints for
-        // every pack that ran to completion before the failure.
+        // Failure semantics: EVERY pack runs, whatever the ones before
+        // it did, and the target fails at the end naming each that did
+        // not. See `Aggregate` above for why that is worth the minutes a
+        // known-red pack costs — briefly, "the gate is red" says nothing
+        // about the eleven packs that never ran.
         match config.TestPacks with
         | [] ->
             Trace.tracefn
                 "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
         | packs ->
-            let results = ResizeArray<string * int>()
-
-            // Per-pack process WITHOUT the file-top `dotnet` shim's
-            // `ensureExitCode` decorator — we want to capture every
-            // pack's exit code so the summary lists each one, then
-            // throw at the end if any failed.
-            let runPack (pack: TestPack) =
-                CreateProcess.fromRawCommand "dotnet" [ "run"; "--project"; pack.Project ]
-                |> CreateProcess.withWorkingDirectory "."
-                |> Proc.run
-
-            try
-                for pack in packs do
+            packs
+            |> List.map (fun pack ->
+                Aggregate.leg pack.Name (fun () ->
                     Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
-                    let result = runPack pack
-                    results.Add(pack.Name, result.ExitCode)
-            finally
-                Trace.tracefn ""
-                Trace.tracefn "VerifyAll summary:"
 
-                for name, exitCode in results do
-                    let status =
-                        if exitCode = 0 then
-                            "PASS"
-                        else
-                            sprintf "FAIL (exit %d)" exitCode
+                    // Deliberately NOT the file-top `dotnet` shim: that
+                    // decorates with `ensureExitCode`, which throws on a
+                    // non-zero exit and would take every later pack with
+                    // it. The invocation is otherwise identical.
+                    let result =
+                        CreateProcess.fromRawCommand "dotnet" [ "run"; "--project"; pack.Project ]
+                        |> CreateProcess.withWorkingDirectory "."
+                        |> Proc.run
 
-                    Trace.tracefn "  %s — %s" status name
-
-            let failed = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
-
-            if not failed.IsEmpty then
-                failed
-                |> List.map (fun (n, c) -> sprintf "%s (exit %d)" n c)
-                |> String.concat "; "
-                |> failwithf "VerifyAll: %d pack(s) failed — %s" failed.Length)
+                    result.ExitCode))
+            |> Aggregate.runAll "VerifyAll" "pack")
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed
