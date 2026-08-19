@@ -381,6 +381,28 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
             parameters.NeighbourHeuristic <- hnswParams.NeighbourHeuristic
             parameters.ExpandBestSelection <- hnswParams.ExpandBestSelection
             parameters.KeepPrunedConnections <- hnswParams.KeepPrunedConnections
+            // HNSW.Net's construction-time distance cache defaults to
+            // `InitialDistanceCacheSize = 1_048_576`, and at that setting a
+            // graph build allocates ~4 GB REGARDLESS of corpus size —
+            // measured 4,096 MB for THREE 4-dim vectors (HNSW 26.4.177,
+            // linux-x64; `DistanceCache.Resize` inside `Graph.Core..ctor`
+            // is the allocation site). Per-scope builds stack, so a test
+            // suite or a multi-tenant ingestion burst OOMs a 16 GB host —
+            // this is what killed the forge CI verify-all job with exit
+            // 143 from 2026-08-06 until this line. Disabling the cache
+            // outright is NOT the fix: `Algorithm4.SelectBestForConnecting`
+            // then recomputes distances combinatorially and a
+            // rebuild-heavy path (upsert → search → rebuild) turns a
+            // sub-second build into minutes of CPU spin. The measured
+            // sweet spot is a SMALL fixed cache — the parameter does not
+            // scale memory the way its name suggests (measured, linux-x64:
+            // n=500@192-dim → default 4.4 GB / 2.2 s, size-4096 0.4 GB /
+            // 0.26 s; n=2000@96-dim → default 5.1 GB / 1.4 s, size-4096
+            // 1.9 GB / 0.67 s; proportional n(n+1)/2 sizing is dominated
+            // on both axes). Determinism is unaffected: same seed + same
+            // data + same cache size → same collision pattern → the same
+            // graph, so the seeded-build guarantees above hold.
+            parameters.InitialDistanceCacheSize <- 4096
 
             let graph =
                 SmallWorld<float[], float>(
