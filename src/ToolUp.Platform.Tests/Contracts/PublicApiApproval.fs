@@ -456,10 +456,25 @@ let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
 
 // ─── Diff (pure — the comparer the gate + fixtures exercise) ─────────
 
+// The F# compiler stopped emitting the legacy `(SerializationInfo,
+// StreamingContext)` constructor on exception declarations in SDK
+// 10.0.400 (BinaryFormatter retirement), so whether an assembly carries
+// that member depends on which SDK feature band built it — global.json
+// rolls forward across bands, and 2026-08-19 the hosted runners moved
+// to 10.0.400 while dev machines still carried 10.0.300: eleven
+// assemblies went red in CI on a surface no source change touched. The
+// gate must be insensitive to which side of that compiler change built
+// the DLLs, so the token is excluded from BOTH sides of the comparison
+// (it sits in `significantLines`, the one tokeniser every direction
+// shares). Baselines regenerated under either band stay green; the
+// stale lines fall out of the approved files at the next regen.
+let private isCompilerVersionDependent (l: string) =
+    l.EndsWith "..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)"
+
 let private significantLines (text: string) =
     text.Replace("\r\n", "\n").Split('\n')
     |> Array.map _.TrimEnd()
-    |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+    |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#") && not (isCompilerVersionDependent l))
 
 /// Significant tokens of `candidates` that `present` does not carry.
 /// Both directions of the comparison are this same set difference — which
