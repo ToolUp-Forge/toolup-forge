@@ -447,6 +447,33 @@ jobs:
       - name: Build the solution
         run: dotnet build ToolUp.Forge.sln --nologo
 
+      # ─── Memory headroom for the test step (2026-08-19) ─────────────
+      #
+      # From 2026-08-06 (the commit that added the model-execution
+      # conformance family) this job failed most runs with
+      # `Process completed with exit code 143` ~60-90s into the Platform
+      # pack — SIGTERM from the runner, the hosted-runner
+      # memory-exhaustion signature, after ~16s of thrash silence. The
+      # diagnosis is pressure, not a broken test: successes and failures
+      # alternated on near-identical code on 2026-08-09 (a marginal
+      # resource, not a deterministic bug), completing runs take
+      # 12.5-14.8 min while every failure died at ~8 min (~1 min into
+      # the tests), and the same suite passes locally on a larger
+      # machine in ~12 min. The 7-minute solution build leaves MSBuild
+      # worker nodes — where fsc runs and holds this ~50-project F#
+      # solution's compile state — resident via node reuse; the test
+      # hosts then stack on top of them on a 16 GB VM.
+      #
+      # Three levers, cheapest first. If 143 recurs with these in
+      # place, the next lever is splitting build and test into two jobs
+      # (fresh VM for the test half). The `free -m` probes exist so the
+      # log carries the before/after evidence rather than a theory.
+      - name: Release build-server memory before the tests
+        run: |
+          free -m
+          dotnet build-server shutdown
+          free -m
+
       # The count assertion is the point of this step, not decoration.
       # `VerifyAll` is a no-op that EXITS 0 when `BuildConfig.TestPacks`
       # is empty — a documented path, since the target ships in the SDK
@@ -458,6 +485,12 @@ jobs:
       - name: Run every Expecto pack (VerifyAll)
         env:
           EXPECTED_PACKS: 12
+          # Part of the memory-headroom block above: VerifyAll shells
+          # `dotnet run` per pack, and each inner build would otherwise
+          # re-spawn reusable MSBuild worker nodes that sit idle holding
+          # fsc compile state while the test hosts run. With node reuse
+          # off, each inner build's workers exit when it completes.
+          MSBUILDDISABLENODEREUSE: "1"
           # Named explicitly rather than left to the harness's own
           # search: on a runner the search would work, but a wrong
           # answer here should be a configuration error with a name on
