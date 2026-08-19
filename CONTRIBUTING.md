@@ -218,34 +218,24 @@ contributors never need this.
 ### Publishing NuGet packages
 
 CI publishes via [`publish-nuget.yml`](.github/workflows/publish-nuget.yml)
-on every `v*.*.*` tag push, to two feeds: [nuget.org](https://www.nuget.org)
-(the default consumer source — anonymous restore) and
-[GitHub Packages](https://github.com/orgs/ToolUp-Forge/packages)
-(secondary/failover) using the Actions-provided `GITHUB_TOKEN`. The
-nuget.org lane uses [Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
+on every `v*.*.*` tag push, to [nuget.org](https://www.nuget.org) (the
+consumer source — anonymous restore, no feed wiring), using
+[Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
 — no long-lived API key exists: the workflow exchanges its GitHub OIDC
 token for a one-hour key, validated against a Trusted Publishing policy
 registered on nuget.org (Repository Owner `ToolUp-Forge`, Repository
 `toolup-forge`, Workflow File `publish-nuget.yml`). The only repo secret
 is `NUGET_USER` — the nuget.org profile name owning the policy. No
-contributor-side setup is needed; both nuget.org steps skip automatically
-where that secret is absent (e.g. forks).
+contributor-side setup is needed. (The old `ToolUp-Forge` GitHub
+Packages feed is frozen — historical versions only, no longer pushed
+to.)
 
 For a **local manual publish** (the exception path — Trusted Publishing
-is CI-only), the FAKE `Publish` target reads its key from the
-environment, matched to the target source. GitHub Packages (the default
-source) reads `GITHUB_PACKAGES_TOKEN` — a [GitHub PAT](https://github.com/settings/tokens)
-with the `write:packages` scope:
+is CI-only), the FAKE `Publish` target reads `NUGET_API_KEY` from the
+environment — a classic [api key](https://www.nuget.org/account/apikeys)
+with push scope on the `ToolUp.*` glob (only mint one if you genuinely
+need a local push; the CI lane never uses one):
 
-    $env:GITHUB_PACKAGES_TOKEN = "<your-pat>"
-    dotnet run --project Build.fsproj -- Publish
-
-nuget.org reads `NUGET_API_KEY` — a classic
-[api key](https://www.nuget.org/account/apikeys) with push scope on the
-`ToolUp.*` glob (only mint one if you genuinely need a local nuget.org
-push; the CI lane never uses it):
-
-    $env:TOOLUP_PUBLISH_SOURCE = "https://api.nuget.org/v3/index.json"
     $env:NUGET_API_KEY = "<your-key>"
     dotnet run --project Build.fsproj -- Publish
 

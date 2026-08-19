@@ -16,7 +16,7 @@ The SAFER acronym riffs on [SAFE Stack](https://safe-stack.github.io/) (Saturn +
 dotnet new install ToolUp.Templates.SAFER
 ```
 
-The template installs from nuget.org directly — no feed wiring or authentication needed. It also ships on the [`ToolUp-Forge` GitHub Packages feed](https://github.com/orgs/ToolUp-Forge/packages) (which requires an authenticated `read:packages` token for restore, even on public packages), and a local-feed nupkg installs directly:
+The template installs from nuget.org directly — no feed wiring or authentication needed. A local-feed nupkg also installs directly:
 
 ```powershell
 dotnet new install ../local-nuget-feed/ToolUp.Templates.SAFER.0.4.4.nupkg

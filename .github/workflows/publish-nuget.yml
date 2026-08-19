@@ -1,7 +1,15 @@
-# Publish every public-surface SDK package on a release tag. Two lanes:
-# nuget.org (the anonymous-restore front door — Phase 346, 2026-08-19)
-# and the toolup-forge GitHub Packages NuGet feed (the original Phase
-# 11.C.3 cloud-publish path, 2026-05-28, retained as secondary/failover).
+# Publish every public-surface SDK package to nuget.org on a release
+# tag (Phase 346, 2026-08-19 — the anonymous-restore front door).
+#
+# The original Phase 11.C.3 GitHub Packages lane (2026-05-28) was
+# REMOVED the same day nuget.org went live (operator decision
+# 2026-08-19): GH Packages' NuGet registry demands an authenticated
+# classic PAT even for public packages, so it could never serve as a
+# practical failover — a consumer wired to nuget.org cannot fall back
+# to it without minting a credential mid-outage — and a second lane
+# can diverge from the first on a partial publish failure. The feed at
+# https://nuget.pkg.github.com/ToolUp-Forge/ is frozen (≤ 0.20.0,
+# inert history); do not re-add a push to it.
 #
 # ─── Trigger ─────────────────────────────────────────────────────────
 #
@@ -16,46 +24,26 @@
 #   time. Per-package independent bumps remain possible via a per-fsproj
 #   <Version> override; the tag scheme `v{Package}/{Version}` is reserved
 #   for that future shape but not yet wired here.
-# - `workflow_dispatch` — manual trigger for the first publish + any
-#   re-run after a transient CI failure. Idempotent thanks to
-#   `--skip-duplicate` in the FAKE Publish target — re-runs cleanly skip
-#   versions already pushed.
+# - `workflow_dispatch` — manual re-run after a transient CI failure.
+#   Idempotent thanks to `--skip-duplicate` in the FAKE Publish target —
+#   re-runs cleanly skip versions already pushed. CAUTION: a dispatch
+#   packs main's CURRENT <Version>, tagged or not — dispatch only to
+#   heal a failed tag run, never to publish ahead of a tag.
 #
-# ─── Authentication ──────────────────────────────────────────────────
+# ─── Authentication — Trusted Publishing (Phase 346) ─────────────────
 #
-# GitHub Packages lane: the Actions-provided `GITHUB_TOKEN` is the
-# publish credential. The `permissions: packages: write` declaration
-# below grants it the right scope automatically; no PAT is needed for
-# CI. A PAT with `write:packages` is only required for local manual
-# publishes (set as `GITHUB_PACKAGES_TOKEN` in the developer's
-# environment).
-#
-# nuget.org lane (Phase 346): pushes the same `./artifacts/` set via
-# TRUSTED PUBLISHING — no long-lived API key exists anywhere. The
-# `NuGet/login` action exchanges this job's GitHub OIDC token (the
-# `id-token: write` permission below, already required by the Phase 182
-# attestation) for a one-hour temporary API key, validated on nuget.org
-# against a Trusted Publishing policy the operator registers there
-# (Repository Owner `ToolUp-Forge`, Repository `toolup-forge`, Workflow
-# File `publish-nuget.yml`). The only stored value is the `NUGET_USER`
-# repo secret — the nuget.org PROFILE NAME (not email) owning the
-# policy. Both nuget.org steps are guarded on that secret, so a fork or
-# a checkout without it runs the GH Packages lane exactly as before and
-# skips nuget.org (GP 11). nuget.org is the OSS front door because GH
-# Packages requires an authenticated token for NuGet restore even on
-# public packages. Nothing rotates: the temp key dies within the hour.
-#
-# ─── Acceptance criteria (Phase 11.C.3) ──────────────────────────────
-#
-# After the first successful run on tag v0.3.0:
-# - Every package + `ToolUp.Sdk` meta-manifest appears under
-#   https://github.com/orgs/ToolUp-Forge/packages at version 0.3.0.
-# - A fresh checkout can `dotnet add package
-#   ToolUp.Platform.Core --version 0.3.0` from the cloud feed (with a
-#   `read:packages` PAT — GH Packages requires an authenticated token
-#   for NuGet restore even on public packages, which is why Phase 346
-#   added the nuget.org lane as the anonymous front door).
-# - Consumers adopt the cloud source in a follow-up PR.
+# No long-lived credential exists anywhere. The `NuGet/login` action
+# exchanges this job's GitHub OIDC token (the `id-token: write`
+# permission below, also required by the Phase 182 attestation) for a
+# one-hour temporary API key, validated on nuget.org against a Trusted
+# Publishing policy the operator registers there (Repository Owner
+# `ToolUp-Forge`, Repository `toolup-forge`, Workflow File
+# `publish-nuget.yml`, package glob `ToolUp.*`). The only stored value
+# is the `NUGET_USER` repo secret — the nuget.org PROFILE NAME (not
+# email) owning the policy. The login step is deliberately UNGUARDED:
+# a tag push that cannot publish must fail loudly, because a silently
+# skipped release (a lost secret, a fork tag) reads as a green run.
+# Nothing rotates: the temp key dies within the hour.
 
 name: publish-nuget
 
@@ -67,25 +55,17 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  # Phase 182 — build-provenance attestation. `attest-build-provenance`
-  # mints a signed attestation (in-toto provenance) per published nupkg;
-  # it needs `id-token: write` (OIDC for the Sigstore signing identity)
-  # and `attestations: write` (to record the attestation against the repo).
+  # `id-token: write` serves BOTH OIDC consumers: the NuGet/login
+  # trusted-publishing exchange and the Phase 182 build-provenance
+  # attestation (`attest-build-provenance` mints a signed in-toto
+  # statement per published nupkg; `attestations: write` records it
+  # against the repo).
   id-token: write
   attestations: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # The `secrets` context is NOT available in step-level `if:`
-    # expressions (a workflow that references it there fails file
-    # validation with no jobs at all — observed on the first Phase 346
-    # push). Mapping the secret to job-level env is the documented
-    # workaround: the `env` context IS available in step `if:`, so the
-    # two nuget.org steps gate on `env.NUGET_USER` below.
-    env:
-      NUGET_USER: ${{ secrets.NUGET_USER }}
     steps:
       - uses: actions/checkout@v6
 
@@ -104,42 +84,29 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
-      - name: Pack + push every public-surface SDK package
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Phase 182 — turn on per-package CycloneDX SBOM emission on the
-          # release path (default-off elsewhere, GP 11/13). SBOMs land in
-          # ./artifacts/ alongside the nupkgs; the push step filters to
-          # *.nupkg, so the .cdx.json files are never pushed to the feed.
-          TOOLUP_EMIT_SBOM: "true"
-        run: dotnet run --project Build.fsproj -- Publish
-
-      # Phase 346 — nuget.org publication lane, via Trusted Publishing.
-      # The login step runs AFTER the (long) pack+GH-push step on purpose:
-      # the exchanged key lives one hour, so it is requested immediately
-      # before the push that spends it. One OIDC token buys exactly one
-      # temporary key.
+      # The one-hour temp key comfortably covers the ~10-minute pack that
+      # follows; one OIDC token buys exactly one temporary key.
       - name: NuGet login (OIDC → temp API key)
-        if: ${{ env.NUGET_USER != '' }}
         uses: NuGet/login@v1
         id: nuget-login
         with:
-          user: ${{ env.NUGET_USER }}
+          user: ${{ secrets.NUGET_USER }}
 
-      # Pushes the same artifact set the GH Packages lane just packed, so
-      # the two feeds carry byte-identical nupkgs for every version.
-      # `--skip-duplicate` keeps re-runs idempotent (nuget.org versions
-      # are immutable). The `*.nupkg` glob does not match `.snupkg` — but
-      # `dotnet nuget push` auto-detects a matching `.snupkg` beside each
-      # `.nupkg` and pushes it to nuget.org's symbol server, the symbol
-      # lane GH Packages cannot accept.
-      - name: Push to nuget.org
-        if: ${{ env.NUGET_USER != '' }}
-        run: >
-          dotnet nuget push "artifacts/*.nupkg"
-          --source https://api.nuget.org/v3/index.json
-          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
-          --skip-duplicate
+      # The FAKE Publish target packs every public-surface fsproj into
+      # ./artifacts/ and pushes each .nupkg to nuget.org with
+      # `--skip-duplicate` (idempotent — nuget.org versions are
+      # immutable). `dotnet nuget push` auto-detects the matching
+      # `.snupkg` beside each `.nupkg` and pushes it to the symbol
+      # server; no separate symbol handling exists here.
+      - name: Pack + push every public-surface SDK package to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          # Phase 182 — turn on per-package CycloneDX SBOM emission on the
+          # release path (default-off elsewhere, GP 11/13). SBOMs land in
+          # ./artifacts/ alongside the nupkgs; the push loop filters to
+          # *.nupkg, so the .cdx.json files are never pushed to the feed.
+          TOOLUP_EMIT_SBOM: "true"
+        run: dotnet run --project Build.fsproj -- Publish
 
       # Phase 182 — signed build-provenance attestation for every pushed
       # package. Binds each artefact's SHA-256 digest to this workflow run

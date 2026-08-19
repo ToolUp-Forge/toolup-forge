@@ -409,29 +409,27 @@ let registerTargets (config: BuildConfig) =
             |> failwithf "Pack: %d project(s) failed to pack — %s" failed.Length)
 
     Target.create "Publish" (fun _ ->
-        // Phase 11.C.3 (2026-05-28) — publish every public-surface SDK
-        // fsproj to the toolup-forge GitHub Packages cloud feed.
+        // Phase 11.C.3 (2026-05-28) / Phase 346 (2026-08-19) — publish
+        // every public-surface SDK fsproj to nuget.org (the default
+        // source since the 2026-08-19 cutover; the old ToolUp-Forge
+        // GitHub Packages feed is frozen and no longer pushed to).
         //
         // Packs into a per-run `./artifacts/` directory (NOT the shared
         // `../local-nuget-feed/`) so the push never re-uploads stale
-        // versions from prior local packs. GitHub Packages versions are
+        // versions from prior local packs. Published feed versions are
         // immutable; once a `Package/Version` ships it cannot be
         // re-pushed, so a fresh per-run dir is the only safe shape.
         //
-        // Authentication: reads `GITHUB_TOKEN` (CI — Actions provides it
-        // when `permissions: { packages: write }` is declared on the
-        // workflow) or `GITHUB_PACKAGES_TOKEN` (local — a PAT with
-        // `write:packages` scope) from the environment. Fails loud if
-        // neither is set rather than producing an empty push.
-        //
         // Feed source: configurable via `TOOLUP_PUBLISH_SOURCE`; defaults
-        // to the toolup-forge org cloud feed. Set it to
-        // `https://api.nuget.org/v3/index.json` for a manual nuget.org
-        // publish — key resolution switches to NUGET_API_KEY (Phase 346;
-        // see the token block below).
+        // to nuget.org. Key resolution is source-aware (see the token
+        // block below): nuget.org reads `NUGET_API_KEY` (in CI, the
+        // temp key minted by the trusted-publishing login step; locally,
+        // a classic push-scoped api key); a GH Packages URL — reachable
+        // only by explicit opt-in now — still reads `GITHUB_TOKEN` /
+        // `GITHUB_PACKAGES_TOKEN`. Fails loud if the matching variable
+        // is unset rather than producing an empty push.
         //
-        // Symbol packages: GitHub Packages NuGet does not accept .snupkg,
-        // so the push loop filters to .nupkg only. When the source is
+        // Symbol packages: the push loop filters to .nupkg; for
         // nuget.org, `dotnet nuget push` auto-detects the matching
         // .snupkg beside each .nupkg and pushes it to the symbol server —
         // no extra handling needed here. Symbol files remain in
@@ -488,17 +486,17 @@ let registerTargets (config: BuildConfig) =
         let source =
             match System.Environment.GetEnvironmentVariable "TOOLUP_PUBLISH_SOURCE" with
             | null
-            | "" -> "https://nuget.pkg.github.com/ToolUp-Forge/index.json"
+            | "" -> "https://api.nuget.org/v3/index.json"
             | v -> v
 
-        // Key resolution is source-aware (Phase 346). The default GH
-        // Packages source authenticates with GITHUB_TOKEN (CI) /
-        // GITHUB_PACKAGES_TOKEN (local PAT, write:packages). Pointing
-        // TOOLUP_PUBLISH_SOURCE at nuget.org
-        // (https://api.nuget.org/v3/index.json) instead reads
-        // NUGET_API_KEY — an api.nuget.org API key scoped to push on the
-        // ToolUp.* glob. Fails loud when the matching variable is unset
-        // rather than producing an empty push.
+        // Key resolution is source-aware (Phase 346). The default
+        // nuget.org source reads NUGET_API_KEY (CI: the trusted-
+        // publishing temp key; local: an api.nuget.org key scoped to
+        // push on the ToolUp.* glob). A non-nuget.org source — the
+        // frozen GH Packages feed, reachable only by explicit opt-in —
+        // reads GITHUB_TOKEN / GITHUB_PACKAGES_TOKEN. Fails loud when
+        // the matching variable is unset rather than producing an
+        // empty push.
         let isNuGetOrg =
             source.Contains("api.nuget.org", System.StringComparison.OrdinalIgnoreCase)
 

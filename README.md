@@ -16,7 +16,7 @@ A modular F# full-stack SDK for building production multi-tenant analytical appl
 
 ## Quick start
 
-Packages publish to [nuget.org](https://www.nuget.org/packages?q=ToolUp) — `dotnet add package ToolUp.Platform.Core` works with no feed wiring and no authentication. (The [`ToolUp-Forge` GitHub Packages feed](https://github.com/orgs/ToolUp-Forge/packages) carries the same releases as an alternative source, but GitHub Packages requires an authenticated `read:packages` token for NuGet restore even on public packages — nuget.org is the default path.)
+Packages publish to [nuget.org](https://www.nuget.org/packages?q=ToolUp) — `dotnet add package ToolUp.Platform.Core` works with no feed wiring and no authentication.
 
 Add the meta-manifest to your `Directory.Packages.props`:
 
