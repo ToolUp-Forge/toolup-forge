@@ -350,11 +350,17 @@ let registerTargets (config: BuildConfig) =
         // neither is set rather than producing an empty push.
         //
         // Feed source: configurable via `TOOLUP_PUBLISH_SOURCE`; defaults
-        // to the toolup-forge org cloud feed.
+        // to the toolup-forge org cloud feed. Set it to
+        // `https://api.nuget.org/v3/index.json` for a manual nuget.org
+        // publish — key resolution switches to NUGET_API_KEY (Phase 346;
+        // see the token block below).
         //
-        // Symbol packages: GitHub Packages NuGet does not accept .snupkg
-        // the way nuget.org does, so we push .nupkg only. Symbol files
-        // remain in `artifacts/` for local inspection.
+        // Symbol packages: GitHub Packages NuGet does not accept .snupkg,
+        // so the push loop filters to .nupkg only. When the source is
+        // nuget.org, `dotnet nuget push` auto-detects the matching
+        // .snupkg beside each .nupkg and pushes it to the symbol server —
+        // no extra handling needed here. Symbol files remain in
+        // `artifacts/` for local inspection either way.
 
         let artifactsDir = Path.getFullName "./artifacts"
         Shell.cleanDir artifactsDir
@@ -404,22 +410,43 @@ let registerTargets (config: BuildConfig) =
         if not (List.isEmpty sbomArtefacts) then
             Trace.tracefn "SBOM: emitted %d artefact(s) into %s" (List.length sbomArtefacts) artifactsDir
 
+        let source =
+            match System.Environment.GetEnvironmentVariable "TOOLUP_PUBLISH_SOURCE" with
+            | null
+            | "" -> "https://nuget.pkg.github.com/ToolUp-Forge/index.json"
+            | v -> v
+
+        // Key resolution is source-aware (Phase 346). The default GH
+        // Packages source authenticates with GITHUB_TOKEN (CI) /
+        // GITHUB_PACKAGES_TOKEN (local PAT, write:packages). Pointing
+        // TOOLUP_PUBLISH_SOURCE at nuget.org
+        // (https://api.nuget.org/v3/index.json) instead reads
+        // NUGET_API_KEY — an api.nuget.org API key scoped to push on the
+        // ToolUp.* glob. Fails loud when the matching variable is unset
+        // rather than producing an empty push.
+        let isNuGetOrg =
+            source.Contains("api.nuget.org", System.StringComparison.OrdinalIgnoreCase)
+
+        let tokenNames =
+            if isNuGetOrg then
+                [ "NUGET_API_KEY" ]
+            else
+                [ "GITHUB_TOKEN"; "GITHUB_PACKAGES_TOKEN" ]
+
         let token =
-            [ "GITHUB_TOKEN"; "GITHUB_PACKAGES_TOKEN" ]
+            tokenNames
             |> List.tryPick (fun name ->
                 match System.Environment.GetEnvironmentVariable name with
                 | null
                 | "" -> None
                 | v -> Some v)
             |> Option.defaultWith (fun () ->
-                failwith
-                    "No publish token in environment. Set GITHUB_TOKEN (CI — Actions provides it when permissions: { packages: write } is declared on the workflow) or GITHUB_PACKAGES_TOKEN (local — a PAT with write:packages scope).")
-
-        let source =
-            match System.Environment.GetEnvironmentVariable "TOOLUP_PUBLISH_SOURCE" with
-            | null
-            | "" -> "https://nuget.pkg.github.com/ToolUp-Forge/index.json"
-            | v -> v
+                if isNuGetOrg then
+                    failwith
+                        "No publish key in environment. TOOLUP_PUBLISH_SOURCE targets nuget.org — set NUGET_API_KEY (an api.nuget.org API key with push scope on the ToolUp.* glob)."
+                else
+                    failwith
+                        "No publish token in environment. Set GITHUB_TOKEN (CI — Actions provides it when permissions: { packages: write } is declared on the workflow) or GITHUB_PACKAGES_TOKEN (local — a PAT with write:packages scope).")
 
         Trace.tracefn "Pushing artifacts to %s..." source
 

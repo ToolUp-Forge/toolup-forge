@@ -1,6 +1,7 @@
-# Publish every public-surface SDK package to the toolup-forge GitHub
-# Packages NuGet feed on a release tag. Phase 11.C.3 cloud-publish path
-# (2026-05-28).
+# Publish every public-surface SDK package on a release tag. Two lanes:
+# nuget.org (the anonymous-restore front door — Phase 346, 2026-08-19)
+# and the toolup-forge GitHub Packages NuGet feed (the original Phase
+# 11.C.3 cloud-publish path, 2026-05-28, retained as secondary/failover).
 #
 # ─── Trigger ─────────────────────────────────────────────────────────
 #
@@ -22,11 +23,21 @@
 #
 # ─── Authentication ──────────────────────────────────────────────────
 #
-# The Actions-provided `GITHUB_TOKEN` is the publish credential. The
-# `permissions: packages: write` declaration below grants it the right
-# scope automatically; no PAT is needed for CI. A PAT with
-# `write:packages` is only required for local manual publishes (set as
-# `GITHUB_PACKAGES_TOKEN` in the developer's environment).
+# GitHub Packages lane: the Actions-provided `GITHUB_TOKEN` is the
+# publish credential. The `permissions: packages: write` declaration
+# below grants it the right scope automatically; no PAT is needed for
+# CI. A PAT with `write:packages` is only required for local manual
+# publishes (set as `GITHUB_PACKAGES_TOKEN` in the developer's
+# environment).
+#
+# nuget.org lane (Phase 346): pushes the same `./artifacts/` set with
+# the `NUGET_API_KEY` repo secret — an api.nuget.org API key scoped to
+# push on the `ToolUp.*` glob. The step is guarded on the secret being
+# present, so a fork or a checkout without the secret runs the GH
+# Packages lane exactly as before and skips nuget.org (GP 11). nuget.org
+# is the OSS front door because GH Packages requires an authenticated
+# token for NuGet restore even on public packages. Keys expire (365-day
+# max) — rotation is an operator act on nuget.org + the repo secret.
 #
 # ─── Acceptance criteria (Phase 11.C.3) ──────────────────────────────
 #
@@ -87,6 +98,25 @@ jobs:
           # *.nupkg, so the .cdx.json files are never pushed to the feed.
           TOOLUP_EMIT_SBOM: "true"
         run: dotnet run --project Build.fsproj -- Publish
+
+      # Phase 346 — nuget.org publication lane. Pushes the same artifact
+      # set the GH Packages lane just packed, so the two feeds carry
+      # byte-identical nupkgs for every version. `--skip-duplicate` keeps
+      # re-runs idempotent (nuget.org versions are immutable). The
+      # `*.nupkg` glob does not match `.snupkg` — but `dotnet nuget push`
+      # auto-detects a matching `.snupkg` beside each `.nupkg` and pushes
+      # it to nuget.org's symbol server, the symbol lane GH Packages
+      # cannot accept. Guarded on the secret: absent `NUGET_API_KEY`,
+      # the step skips and the workflow behaves exactly as pre-346.
+      - name: Push to nuget.org
+        if: ${{ secrets.NUGET_API_KEY != '' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate
 
       # Phase 182 — signed build-provenance attestation for every pushed
       # package. Binds each artefact's SHA-256 digest to this workflow run
