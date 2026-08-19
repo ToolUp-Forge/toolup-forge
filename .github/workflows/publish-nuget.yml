@@ -30,14 +30,20 @@
 # publishes (set as `GITHUB_PACKAGES_TOKEN` in the developer's
 # environment).
 #
-# nuget.org lane (Phase 346): pushes the same `./artifacts/` set with
-# the `NUGET_API_KEY` repo secret — an api.nuget.org API key scoped to
-# push on the `ToolUp.*` glob. The step is guarded on the secret being
-# present, so a fork or a checkout without the secret runs the GH
-# Packages lane exactly as before and skips nuget.org (GP 11). nuget.org
-# is the OSS front door because GH Packages requires an authenticated
-# token for NuGet restore even on public packages. Keys expire (365-day
-# max) — rotation is an operator act on nuget.org + the repo secret.
+# nuget.org lane (Phase 346): pushes the same `./artifacts/` set via
+# TRUSTED PUBLISHING — no long-lived API key exists anywhere. The
+# `NuGet/login` action exchanges this job's GitHub OIDC token (the
+# `id-token: write` permission below, already required by the Phase 182
+# attestation) for a one-hour temporary API key, validated on nuget.org
+# against a Trusted Publishing policy the operator registers there
+# (Repository Owner `ToolUp-Forge`, Repository `toolup-forge`, Workflow
+# File `publish-nuget.yml`). The only stored value is the `NUGET_USER`
+# repo secret — the nuget.org PROFILE NAME (not email) owning the
+# policy. Both nuget.org steps are guarded on that secret, so a fork or
+# a checkout without it runs the GH Packages lane exactly as before and
+# skips nuget.org (GP 11). nuget.org is the OSS front door because GH
+# Packages requires an authenticated token for NuGet restore even on
+# public packages. Nothing rotates: the temp key dies within the hour.
 #
 # ─── Acceptance criteria (Phase 11.C.3) ──────────────────────────────
 #
@@ -46,8 +52,9 @@
 #   https://github.com/orgs/ToolUp-Forge/packages at version 0.3.0.
 # - A fresh checkout can `dotnet add package
 #   ToolUp.Platform.Core --version 0.3.0` from the cloud feed (with a
-#   `read:packages` PAT while the feed is private; no auth once the
-#   feed flips public).
+#   `read:packages` PAT — GH Packages requires an authenticated token
+#   for NuGet restore even on public packages, which is why Phase 346
+#   added the nuget.org lane as the anonymous front door).
 # - Consumers adopt the cloud source in a follow-up PR.
 
 name: publish-nuget
@@ -99,23 +106,31 @@ jobs:
           TOOLUP_EMIT_SBOM: "true"
         run: dotnet run --project Build.fsproj -- Publish
 
-      # Phase 346 — nuget.org publication lane. Pushes the same artifact
-      # set the GH Packages lane just packed, so the two feeds carry
-      # byte-identical nupkgs for every version. `--skip-duplicate` keeps
-      # re-runs idempotent (nuget.org versions are immutable). The
-      # `*.nupkg` glob does not match `.snupkg` — but `dotnet nuget push`
-      # auto-detects a matching `.snupkg` beside each `.nupkg` and pushes
-      # it to nuget.org's symbol server, the symbol lane GH Packages
-      # cannot accept. Guarded on the secret: absent `NUGET_API_KEY`,
-      # the step skips and the workflow behaves exactly as pre-346.
+      # Phase 346 — nuget.org publication lane, via Trusted Publishing.
+      # The login step runs AFTER the (long) pack+GH-push step on purpose:
+      # the exchanged key lives one hour, so it is requested immediately
+      # before the push that spends it. One OIDC token buys exactly one
+      # temporary key.
+      - name: NuGet login (OIDC → temp API key)
+        if: ${{ secrets.NUGET_USER != '' }}
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # Pushes the same artifact set the GH Packages lane just packed, so
+      # the two feeds carry byte-identical nupkgs for every version.
+      # `--skip-duplicate` keeps re-runs idempotent (nuget.org versions
+      # are immutable). The `*.nupkg` glob does not match `.snupkg` — but
+      # `dotnet nuget push` auto-detects a matching `.snupkg` beside each
+      # `.nupkg` and pushes it to nuget.org's symbol server, the symbol
+      # lane GH Packages cannot accept.
       - name: Push to nuget.org
-        if: ${{ secrets.NUGET_API_KEY != '' }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: ${{ secrets.NUGET_USER != '' }}
         run: >
           dotnet nuget push "artifacts/*.nupkg"
           --source https://api.nuget.org/v3/index.json
-          --api-key "$NUGET_API_KEY"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
           --skip-duplicate
 
       # Phase 182 — signed build-provenance attestation for every pushed
