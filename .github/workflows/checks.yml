@@ -340,6 +340,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The federation-seam specification and its conformance corpus are NOT
+      # in this repository — this repository is an emitter certifying against
+      # them, and a specification owned by one of its implementations cannot
+      # be conformed to by the others on equal terms.
+      #
+      # Pinned to a REF, not to a branch. The corpus is the oracle this
+      # repository's conformance leg is measured against, so tracking its
+      # default branch would let an upstream edit turn this gate red (or,
+      # worse, green) with no commit here — a gate whose verdict can change
+      # without a change is not a gate. Moving the pin is deliberate, and it
+      # belongs in the same commit as whatever emitter change required it.
+      #
+      # The harness finds it by DIRECTORY name, so `path` is the interface
+      # and the repository name is free to change without touching this.
+      - name: Check out the federation-seam specification home
+        uses: actions/checkout@v6
+        with:
+          repository: fuaran-ui/fuaran-federation-spec
+          ref: 480c03b2ca74e8493bfbb1e005fb30293f4c7078
+          path: fuaran-federation-spec
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:

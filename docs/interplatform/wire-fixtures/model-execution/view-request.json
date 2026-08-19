@@ -1,1 +1,0 @@
-{"ProfileVersion":1,"Operation":"RenderView","AssertedScope":null,"Body":"{\"ViewId\":\"spend-vs-response\",\"DatasetVersion\":7,\"Series\":[\"promo-spend\",\"search-clicks\"],\"Window\":{\"From\":\"2026-04-20T00:00:00+00:00\",\"To\":\"2026-07-13T00:00:00+00:00\"},\"Resolution\":\"week\"}"}

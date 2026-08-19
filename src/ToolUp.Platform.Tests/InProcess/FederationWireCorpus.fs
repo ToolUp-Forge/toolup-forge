@@ -2,13 +2,14 @@ module ToolUp.Platform.Tests.InProcess.FederationWireCorpus
 
 // ─── Phase 596 — federation-seam conformance corpus (the emitter) ─────
 //
-// The executable half of `docs/interplatform/FEDERATION_WIRE.md`. This
+// The executable half of the federation-seam wire specification. This
 // module holds the reference *values* of every specified shape family,
 // renders them through the **live** emitters (`PeerSurface.exportJson`,
 // `AggregatePeerSurface.derive`, `HostEnvelope.toJson`,
 // `JsonRpc.serialize`, `TemplateCanonical.recordId`), and writes the
-// result to `docs/interplatform/wire-fixtures/` as the corpus an
-// implementation in any language certifies against.
+// result to the conformance corpus in the federation-seam specification
+// home — a separate public repository this one does not own — as the
+// corpus an implementation in any language certifies against.
 //
 // **The corpus is emitted, never hand-authored.** A fixture is whatever
 // the emitters produce for a reference value; nobody edits one by hand.
@@ -61,9 +62,149 @@ let repoRoot () =
     let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
     Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-/// `docs/interplatform/wire-fixtures/` — the committed corpus.
+/// The name of the specification home's directory. The DIRECTORY name is
+/// the interface here, not the repository name — a consumer resolves the
+/// corpus by this name, so renaming the repository never reaches one.
+[<Literal>]
+let SpecDirName = "fuaran-federation-spec"
+
+/// Environment override naming the specification home directly. CI and any
+/// checkout that does not sit where the search below looks set this.
+[<Literal>]
+let SpecDirVariable = "TOOLUP_FEDERATION_SPEC_DIR"
+
+/// Opt out of the conformance leg when the specification home is absent.
+///
+/// It is deliberately an OPT-OUT rather than a silent skip. A conformance
+/// suite that quietly does nothing when its corpus is missing is the exact
+/// shape that reads as covered while certifying nothing — so the default is
+/// a loud failure naming how to fix it, and declining the leg has to be an
+/// explicit act somebody wrote down. CI never sets this.
+[<Literal>]
+let SpecOptionalVariable = "TOOLUP_FEDERATION_SPEC_OPTIONAL"
+
+let private envDir (name: string) =
+    match Environment.GetEnvironmentVariable name with
+    | null
+    | "" -> None
+    | v -> Some v
+
+/// Does `dir` look like the specification home? Keyed on the corpus's own
+/// enumeration, so a directory of the right NAME but the wrong contents is
+/// not mistaken for it.
+let private isSpecHome (dir: string) =
+    File.Exists(Path.Combine(dir, "wire-fixtures", "manifest.json"))
+
+/// Bounded search for the specification home: each ancestor of the repo
+/// root, then up to three levels beneath each. A SEARCH rather than a
+/// relative path on purpose — a hard-coded `../../<...>/<...>` would encode
+/// one particular checkout layout into a repository that is cloned
+/// standalone, and would be wrong for everybody else.
+let private searchForSpecHome (start: string) =
+    let skip (name: string) =
+        name.StartsWith '.'
+        || name = "node_modules"
+        || name = "bin"
+        || name = "obj"
+        || name = "packages"
+
+    let rec descend (dir: string) (depth: int) =
+        if depth > 3 then
+            None
+        else
+            let candidate = Path.Combine(dir, SpecDirName)
+
+            if Directory.Exists candidate && isSpecHome candidate then
+                Some candidate
+            else
+                try
+                    Directory.EnumerateDirectories dir
+                    |> Seq.filter (fun d -> not (skip (Path.GetFileName d)))
+                    |> Seq.tryPick (fun d -> descend d (depth + 1))
+                with _ ->
+                    None
+
+    let rec ascend (dir: string) (levels: int) =
+        if levels > 4 || String.IsNullOrEmpty dir then
+            None
+        else
+            match descend dir 1 with
+            | Some found -> Some found
+            | None ->
+                match Path.GetDirectoryName dir with
+                | null -> None
+                | parent -> ascend parent (levels + 1)
+
+    ascend start 0
+
+/// The federation-seam specification home, or `None`.
+///
+/// **This repository does not own the specification or its corpus.** Both
+/// live in their own public home; this repository is an emitter that
+/// certifies against them. That direction is the point rather than an
+/// accident of where files ended up — a specification owned by one of its
+/// implementations cannot be conformed to by the others on equal terms.
+///
+/// Resolved ONCE. Every fixture read goes through here, and the fallback is
+/// a directory walk — resolving it per read would turn ~50 reads into ~50
+/// filesystem searches.
+let private resolvedSpecHome =
+    lazy
+        (match envDir SpecDirVariable with
+         // An explicitly-named directory is still CHECKED — taking it on trust
+         // turns a typo into `File not found` on the first fixture read, which
+         // reads as a corpus problem rather than as the pointer being wrong.
+         | Some explicitDir when isSpecHome explicitDir -> Some explicitDir
+
+         // And when it is set but wrong, that is the ANSWER — the search is not
+         // run as a fallback. Falling back would silently certify against some
+         // other corpus than the one the caller named, which is worse than
+         // finding none: the run goes green having measured the wrong thing,
+         // and the pointer that was wrong is never mentioned.
+         | Some _ -> None
+         | None ->
+             // An in-repo checkout first: it is what CI clones, and it is
+             // the cheapest thing to look for.
+             let inRepo = Path.Combine(repoRoot (), SpecDirName)
+
+             if Directory.Exists inRepo && isSpecHome inRepo then
+                 Some inRepo
+             else
+                 searchForSpecHome (repoRoot ()))
+
+let specHome () : string option = resolvedSpecHome.Value
+
+/// How to obtain the specification home — the whole of the remedy, in the
+/// failure message rather than in a document the reader is not looking at.
+let specHomeMissingMessage =
+    $"the federation-seam specification home was not found, so there is no corpus to certify against.
+       This repository is an EMITTER of that specification, not its owner: the normative text and the
+       conformance corpus live in their own public repository.
+       Fix it in one of three ways:
+         1. clone it into this repository (what CI does; the path is gitignored):
+              git clone https://github.com/fuaran-ui/{SpecDirName}.git {SpecDirName}
+         2. set {SpecDirVariable} to an existing checkout of it — if it is already set, it does
+            not point at one (a spec home contains wire-fixtures/manifest.json), or
+         3. place a checkout named '{SpecDirName}' at or near this repository's parent.
+       To run without the conformance leg, set {SpecOptionalVariable}=1 — which declines the leg
+       deliberately rather than skipping it silently."
+
+/// The conformance corpus inside the specification home.
 let corpusDir () =
-    Path.Combine(repoRoot (), "docs", "interplatform", "wire-fixtures")
+    match specHome () with
+    | Some dir -> Path.Combine(dir, "wire-fixtures")
+    | None -> failwith specHomeMissingMessage
+
+/// Is the conformance leg being declined deliberately? Only ever true when
+/// the specification home is absent AND somebody said so explicitly.
+let specLegDeclined () =
+    match specHome () with
+    | Some _ -> false
+    | None ->
+        match Environment.GetEnvironmentVariable SpecOptionalVariable with
+        | null
+        | "" -> false
+        | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
 
 /// The manifest is the corpus's own enumeration — the count authority.
 let manifestPath () =
@@ -1498,7 +1639,7 @@ let vectors () : WireVector list =
             "aggregate-surface"
             Gateway
             Hash
-            "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing, and `LongRunningEnabled` floored across the exposing members (Phase 630 — every exposing member here dispatches long-running work, so the group does)."
+            "A three-member group fronting two contracts: posture floored across the exposing members (one facet divergent, reported as a sorted `mixed:` marker), vocabulary pins carried only on unanimity, the unexposed member contributing nothing, and `LongRunningEnabled` floored across the exposing members (every exposing member here dispatches long-running work, so the group does)."
             "aggregate-surface/group.json"
             (PeerSurface.exportJson (derived groupExposure))
 

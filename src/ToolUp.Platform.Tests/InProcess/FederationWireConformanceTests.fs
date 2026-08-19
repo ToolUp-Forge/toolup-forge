@@ -2,8 +2,8 @@ module ToolUp.Platform.Tests.InProcess.FederationWireConformanceTests
 
 // ─── Phase 596 — the federation seam certifies against its own spec ───
 //
-// `docs/interplatform/FEDERATION_WIRE.md` specifies the seam; the corpus
-// under `docs/interplatform/wire-fixtures/` is its executable half; this
+// The federation-seam wire specification specifies the seam; the corpus in
+// its own public specification home is its executable half; this
 // is the harness that runs it. The in-tree emitters are the corpus's
 // FIRST conformant host — a specification whose own reference emitter is
 // not held to it is a document, not a protocol.
@@ -393,7 +393,7 @@ let private forwardCouplingTests =
                 Expect.equal
                     (readCommitted v.File)
                     v.Document
-                    $"the emitter and the committed fixture '{v.File}' have drifted apart. A shape change lands with its regenerated corpus in the SAME commit: set TOOLUP_EMIT_WIRE_FIXTURES=1 and re-run this pack, then commit docs/interplatform/wire-fixtures/ alongside the source change."
+                    $"the emitter and the committed fixture '{v.File}' have drifted apart. A shape change lands with its regenerated corpus in the SAME commit: set TOOLUP_EMIT_WIRE_FIXTURES=1 and re-run this pack, then commit the regenerated corpus IN THE SPECIFICATION HOME alongside the source change — it is a separate repository, so that is a second commit and a second push, not a file this one tracks."
         }
 
         test "re-rendering the manifest reproduces the committed manifest" {
@@ -498,10 +498,30 @@ let private probeTests =
         }
     ]
 
+/// The whole conformance leg, or a single test that says out loud why it is
+/// not running.
+///
+/// The specification and its corpus live in their own public repository —
+/// this one is an emitter certifying against them — so a checkout may not
+/// have them. When they are absent the leg FAILS by default, naming the
+/// remedy: a conformance suite that silently does nothing when its corpus is
+/// missing is indistinguishable from one that passed, which is the failure
+/// mode the whole corpus exists to prevent. Declining it is possible, but it
+/// has to be said explicitly, and then it says so in the run output rather
+/// than vanishing from it.
 let tests =
-    testList "Phase 596 — federation-seam wire conformance" [
-        corpusShapeTests
-        forwardCouplingTests
-        certificationTests
-        probeTests
-    ]
+    if FederationWireCorpus.specLegDeclined () then
+        testList "Phase 596 — federation-seam wire conformance" [
+            testCase "DECLINED — the specification home is absent and the leg was opted out"
+            <| fun () ->
+                printfn
+                    "federation-seam conformance: DECLINED via %s. Nothing was certified."
+                    FederationWireCorpus.SpecOptionalVariable
+        ]
+    else
+        testList "Phase 596 — federation-seam wire conformance" [
+            corpusShapeTests
+            forwardCouplingTests
+            certificationTests
+            probeTests
+        ]

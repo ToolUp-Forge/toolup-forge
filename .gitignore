@@ -56,3 +56,7 @@ docs-snippets/generated/
 # separate repository, pinned by revision — see the `verify-all` job in
 # .github/workflows/checks.yml). Never content of this repo.
 .model-execution-corpus/
+
+# A checkout of the federation-seam specification home, which this repository
+# certifies against but does not own. See docs/interplatform/FEDERATION_WIRE.md.
+/fuaran-federation-spec/
