@@ -470,6 +470,14 @@ jobs:
 
       # ─── Memory headroom for the test step (2026-08-19) ─────────────
       #
+      # RESOLVED the same day: the actual killer was HNSW.Net's
+      # construction distance cache allocating ~4 GB per graph build at
+      # its default size, fixed at the call site in
+      # ToolUp.VectorStores.Hnsw (this job's peak memory measured
+      # 3.0 GB after vs 15.8 GB + runner kill before). The steps below
+      # predate that finding and are KEPT as cheap headroom — the
+      # narrative that follows records the hunt as it stood mid-way.
+      #
       # From 2026-08-06 (the commit that added the model-execution
       # conformance family) this job failed most runs with
       # `Process completed with exit code 143` ~60-90s into the Platform
@@ -517,24 +525,18 @@ jobs:
           # answer here should be a configuration error with a name on
           # it, not a corpus quietly discovered somewhere unexpected.
           TOOLUP_MODEL_EXECUTION_CORPUS: ${{ github.workspace }}/.model-execution-corpus/wire-fixtures
-          # ── TEMPORARY DIAGNOSTIC (2026-08-19) — remove with the fix ──
-          # The exit-143 kill survives the memory-headroom block on some
-          # runners, dying at a consistent point ~90s into the Platform
-          # pack with ~14 GB reported available at test start — the
-          # theory needs data, not another mitigation. `--debug` makes
-          # Expecto name each test as it starts (packs are sequenced),
-          # so a killed run names its last-started test; the MEMSAMPLE
-          # loop below prints used/available every 5s so the log carries
-          # the memory trajectory at the moment of death.
-          TOOLUP_TEST_ARGS: "--debug"
+          # The 2026-08-19 exit-143 hunt is CLOSED — root cause was
+          # HNSW.Net's construction distance cache allocating ~4 GB per
+          # graph build at its default size (fixed at the call site in
+          # ToolUp.VectorStores.Hnsw; peak job memory measured 3.0 GB
+          # after vs 15.8 GB + runner kill before). If a kill of that
+          # shape ever recurs, the diagnostics that solved it are one
+          # env line away: set `TOOLUP_TEST_ARGS: "--debug"` here so
+          # Expecto names each test as it starts, and re-add a
+          # `free -m` sampler loop around the run — see the commit
+          # history of this block for the exact shape.
         run: |
           set -euo pipefail
-          ( while true; do
-              echo "MEMSAMPLE $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print "used="$3" avail="$7}') $(free -m | awk '/^Swap:/{print "swapused="$3}')"
-              sleep 5
-            done ) &
-          MEMSAMPLER=$!
-          trap 'kill $MEMSAMPLER 2>/dev/null || true' EXIT
           dotnet run --project Build.fsproj -- VerifyAll 2>&1 | tee verifyall.log
 
           summary=$(awk '/VerifyAll summary:/{seen=1} seen' verifyall.log)
