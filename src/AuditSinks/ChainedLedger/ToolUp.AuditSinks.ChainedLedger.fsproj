@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Tamper-evident chained audit ledger IAuditSink for ToolUp.Platform — every record carries the SHA-256 digest of its predecessor over a canonical serialisation, the head is signable through an injected signer (unsigned by default), and a verification pass reports the first tampered, dropped or reordered record by position. Storage via the abstract IBlobStorage.</Description>
+    <PackageTags>fsharp;sdk;audit;ledger;hash-chain;tamper-evident;integrity;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Chained audit ledger IAuditSink companion. No vendor SDK and no
+       third-party crypto library — BCL SHA-256 and System.Text.Json
+       only (GP 1). Signing is an injected seam, so the package carries
+       no key-management dependency and a deployment that composes no
+       signer needs no key material (GP 11 / GP 13). -->
+  <ItemGroup>
+    <Compile Include="LedgerChain.fs" />
+    <Compile Include="ChainedLedgerAuditSink.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- ToolUp.Remoting.Json (System.Text.Json-based) flows transitively from
+       ToolUp.Platform.Server. FSharp.Core is implicit via the .NET SDK. -->
+</Project>
