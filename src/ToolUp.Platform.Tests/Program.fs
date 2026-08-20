@@ -546,6 +546,7 @@ let allTests =
         SplunkHecAuditSinkTests.tests
         DatadogLogsAuditSinkTests.tests
         CefAuditSinkTests.tests
+        ChainedAuditLedgerTests.tests
         AuditReplicatorTests.tests
         Ed25519ArtifactSubstrateTests.tests
         ShareTokenStoreTests.tests

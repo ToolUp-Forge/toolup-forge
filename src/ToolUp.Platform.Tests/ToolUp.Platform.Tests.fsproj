@@ -691,6 +691,7 @@
         <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
         <Compile Include="InProcess\CefAuditSinkTests.fs" />
+        <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
@@ -1881,6 +1882,7 @@
         <ProjectReference Include="..\AuditSinks\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" />
         <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
         <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" />
+        <ProjectReference Include="..\AuditSinks\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
