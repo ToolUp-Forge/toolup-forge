@@ -354,12 +354,51 @@ jobs:
       #
       # The harness finds it by DIRECTORY name, so `path` is the interface
       # and the repository name is free to change without touching this.
+      # Operator setup: repository variable `FEDERATION_SPEC_REPO` (`owner/name`
+      # of the specification home) and repository secret
+      # `FEDERATION_SPEC_READ_TOKEN` (a token with read access to it).
+      #
+      # The name goes through a VARIABLE rather than a literal because that
+      # repository is private and this one is public — a literal would publish
+      # the private repo's name in a world-readable file. It was public when
+      # this step was written, which is why the literal was harmless then and
+      # is not now (flipped private 2026-08-20).
+      #
+      # The guard below runs first because `actions/checkout` with an empty
+      # `repository` silently re-checks-out THIS repo: the conformance leg
+      # would then run against the wrong tree and fail later wearing the wrong
+      # reason. A PR from a fork cannot read repository secrets, so this job
+      # fails there by design rather than skipping — a conformance job that
+      # skips when it cannot reach its corpus reports green while certifying
+      # nothing.
+      - name: Check the federation-spec configuration is present
+        env:
+          SPEC_REPO: ${{ vars.FEDERATION_SPEC_REPO }}
+          SPEC_TOKEN: ${{ secrets.FEDERATION_SPEC_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${SPEC_REPO}" ]; then
+            echo "::error::Repository variable FEDERATION_SPEC_REPO is unset. It must hold the owner/name of the federation-seam specification home."
+            missing=1
+          fi
+          if [ -z "${SPEC_TOKEN}" ]; then
+            echo "::error::Repository secret FEDERATION_SPEC_READ_TOKEN is unset. It must hold a token with read access to that repository. (A pull request from a fork cannot read repository secrets; this job fails there by design rather than skipping.)"
+            missing=1
+          fi
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::The federation-seam conformance leg cannot run without its specification home, and a conformance run without its corpus certifies nothing."
+            exit 1
+          fi
+
       - name: Check out the federation-seam specification home
         uses: actions/checkout@v6
         with:
-          repository: fuaran-ui/fuaran-federation-spec
+          repository: ${{ vars.FEDERATION_SPEC_REPO }}
           ref: 480c03b2ca74e8493bfbb1e005fb30293f4c7078
+          token: ${{ secrets.FEDERATION_SPEC_READ_TOKEN }}
           path: fuaran-federation-spec
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
