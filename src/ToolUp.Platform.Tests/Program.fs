@@ -1063,6 +1063,16 @@ let allTests =
         DeployPlaneTests.deployPlanFallbackTests
         DeployPlaneTests.deployPlanMutationCheck
         DeployPlaneTests.deployPlanDiffTests
+        // Phase 656 — build transcript + sealed deploy record. The
+        // determinism packs are probed in BOTH directions: equal inputs
+        // must digest equally, and every recorded field must reach the
+        // digest — a canonical form that silently dropped one would pass
+        // the first pack perfectly.
+        BuildTranscriptTests.transcriptDeterminismTests
+        BuildTranscriptTests.transcriptSensitivityTests
+        BuildTranscriptTests.provenanceTests
+        BuildTranscriptTests.deployRecordCanonicalFormTests
+        BuildTranscriptTests.deployRecordVerificationTests
         // DefaultDeployPipeline.Rollback regression: a build-sourced
         // deploy's rollback relaunches the artefact ref recovered from
         // the DeployPushing event history (never a synthetic

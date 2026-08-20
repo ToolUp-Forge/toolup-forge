@@ -1686,6 +1686,15 @@ ToolUp.Platform.BrandingModule.paletteCssVars : Microsoft.FSharp.Collections.FSh
 ToolUp.Platform.BrandingModule.paletteOverrides(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.BrandingModule.paletteVarMap : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.BrandingModule.resolve(ToolUp.Platform.Branding, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Platform.Branding
+ToolUp.Platform.BuildDependency (class)
+ToolUp.Platform.BuildDependency..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BuildDependency.ContentDigest : System.String { get }
+ToolUp.Platform.BuildDependency.Id : System.String { get }
+ToolUp.Platform.BuildDependency.Version : System.String { get }
+ToolUp.Platform.BuildEntryPoint (class)
+ToolUp.Platform.BuildEntryPoint..ctor(System.String, System.String)
+ToolUp.Platform.BuildEntryPoint.ContentDigest : System.String { get }
+ToolUp.Platform.BuildEntryPoint.Path : System.String { get }
 ToolUp.Platform.BuildOrchestratorError (class)
 ToolUp.Platform.BuildOrchestratorError.IsAlreadyTerminated : System.Boolean { get }
 ToolUp.Platform.BuildOrchestratorError.IsInvalidRequest : System.Boolean { get }
@@ -1776,6 +1785,23 @@ ToolUp.Platform.BuildSummary.BuildId : System.String { get }
 ToolUp.Platform.BuildSummary.Status : ToolUp.Platform.BuildStatus { get }
 ToolUp.Platform.BuildSummary.SubmittedAt : System.DateTime { get }
 ToolUp.Platform.BuildSummary.SubmittedBy : System.String { get }
+ToolUp.Platform.BuildToolchain (class)
+ToolUp.Platform.BuildToolchain..ctor(System.String, System.String)
+ToolUp.Platform.BuildToolchain.Name : System.String { get }
+ToolUp.Platform.BuildToolchain.Version : System.String { get }
+ToolUp.Platform.BuildTranscript (class)
+ToolUp.Platform.BuildTranscript..ctor(System.Int32, ToolUp.Platform.BuildToolchain, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency], ToolUp.Platform.BuildEntryPoint)
+ToolUp.Platform.BuildTranscript.Dependencies : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency] { get }
+ToolUp.Platform.BuildTranscript.EntryPoint : ToolUp.Platform.BuildEntryPoint { get }
+ToolUp.Platform.BuildTranscript.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.BuildTranscript.Toolchain : ToolUp.Platform.BuildToolchain { get }
+ToolUp.Platform.BuildTranscriptModule (class)
+ToolUp.Platform.BuildTranscriptModule.FramingVersion : System.String (literal)
+ToolUp.Platform.BuildTranscriptModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.BuildTranscriptModule.canonicalDependencies(ToolUp.Platform.BuildTranscript) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency]
+ToolUp.Platform.BuildTranscriptModule.canonicalForm(ToolUp.Platform.BuildTranscript) : System.String
+ToolUp.Platform.BuildTranscriptModule.create(ToolUp.Platform.BuildToolchain, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency], ToolUp.Platform.BuildEntryPoint) : ToolUp.Platform.BuildTranscript
+ToolUp.Platform.BuildTranscriptModule.empty : ToolUp.Platform.BuildTranscript { get }
 ToolUp.Platform.CapabilityId (class)
 ToolUp.Platform.CapabilityId.Item : System.String { get }
 ToolUp.Platform.CapabilityId.Tag : System.Int32 { get }
@@ -3102,6 +3128,10 @@ ToolUp.Platform.DegradedCapability.DegradedSince : System.DateTimeOffset { get }
 ToolUp.Platform.DegradedCapability.Impact : System.String { get }
 ToolUp.Platform.DegradedCapability.Reason : System.String { get }
 ToolUp.Platform.DegradedCapability.Remediation : System.String { get }
+ToolUp.Platform.DeployArtifactDigest (class)
+ToolUp.Platform.DeployArtifactDigest..ctor(System.String, System.String)
+ToolUp.Platform.DeployArtifactDigest.ContentDigest : System.String { get }
+ToolUp.Platform.DeployArtifactDigest.Path : System.String { get }
 ToolUp.Platform.DeployManifest (class)
 ToolUp.Platform.DeployManifest..ctor(System.Int32, ToolUp.Platform.DeployManifestApp, ToolUp.Platform.DeployManifestRuntime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployManifestSecret], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployManifestDomain], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployManifestModuleRef], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployManifestDependency], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.DeployManifest.App : ToolUp.Platform.DeployManifestApp { get }
@@ -3189,6 +3219,43 @@ ToolUp.Platform.DeployPlaneMode.Tag : System.Int32 { get }
 ToolUp.Platform.DeployPlaneMode+Tags (class)
 ToolUp.Platform.DeployPlaneMode+Tags.NoDeployPlane : System.Int32 (literal)
 ToolUp.Platform.DeployPlaneMode+Tags.SingleNodeDeployPlane : System.Int32 (literal)
+ToolUp.Platform.DeployProvenance (class)
+ToolUp.Platform.DeployProvenance..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DeployProvenance.ArtifactDigests : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest] { get }
+ToolUp.Platform.DeployProvenance.TranscriptDigest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeployProvenance.UpstreamProvenanceDigest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeployProvenanceModule (class)
+ToolUp.Platform.DeployProvenanceModule.FramingVersion : System.String (literal)
+ToolUp.Platform.DeployProvenanceModule.canonicalArtifacts(ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest]
+ToolUp.Platform.DeployProvenanceModule.canonicalForm(ToolUp.Platform.DeployProvenance) : System.String
+ToolUp.Platform.DeployProvenanceModule.coerce(ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
+ToolUp.Platform.DeployProvenanceModule.isEmpty(ToolUp.Platform.DeployProvenance) : System.Boolean
+ToolUp.Platform.DeployProvenanceModule.none : ToolUp.Platform.DeployProvenance { get }
+ToolUp.Platform.DeployProvenanceModule.withArtifacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest], ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
+ToolUp.Platform.DeployProvenanceModule.withTranscriptDigest(System.String, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
+ToolUp.Platform.DeployProvenanceModule.withUpstreamProvenanceDigest(System.String, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
+ToolUp.Platform.DeployRecord (class)
+ToolUp.Platform.DeployRecord..ctor(System.Int32, System.String, System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.DeployProvenance)
+ToolUp.Platform.DeployRecord.BuildId : System.String { get }
+ToolUp.Platform.DeployRecord.DeployId : System.String { get }
+ToolUp.Platform.DeployRecord.Manifest : ToolUp.Platform.DeployManifest { get }
+ToolUp.Platform.DeployRecord.Provenance : ToolUp.Platform.DeployProvenance { get }
+ToolUp.Platform.DeployRecord.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.DeployRecord.TenantId : System.String { get }
+ToolUp.Platform.DeployRecordModule (class)
+ToolUp.Platform.DeployRecordModule.FramingVersion : System.String (literal)
+ToolUp.Platform.DeployRecordModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeployRecordModule.canonicalForm(ToolUp.Platform.DeployRecord) : System.String
+ToolUp.Platform.DeployRecordModule.coerce(ToolUp.Platform.DeployRecord) : ToolUp.Platform.DeployRecord
+ToolUp.Platform.DeployRecordModule.create(System.String, System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployRecord
+ToolUp.Platform.DeployRecordModule.manifestCanonicalForm(ToolUp.Platform.DeployManifest) : System.String
+ToolUp.Platform.DeployRecordSeal (class)
+ToolUp.Platform.DeployRecordSeal..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.DeployRecordSeal.Claim : System.String { get }
+ToolUp.Platform.DeployRecordSeal.KeyId : System.String { get }
+ToolUp.Platform.DeployRecordSeal.Scheme : System.String { get }
+ToolUp.Platform.DeployRecordSeal.SealedAt : System.DateTimeOffset { get }
+ToolUp.Platform.DeployRecordSeal.Token : System.String { get }
 ToolUp.Platform.DeployState (class)
 ToolUp.Platform.DeployState.DeployQueued : ToolUp.Platform.DeployState { get }
 ToolUp.Platform.DeployState.IsDeployBuilding : System.Boolean { get }
@@ -4555,6 +4622,10 @@ ToolUp.Platform.IDataIngestionApi.ListDataSources : Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.IDataIngestionApi.ListRecentRuns : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IngestionRun]]] { get }
 ToolUp.Platform.IDataIngestionApi.SaveDataSource : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceConfig, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IDataIngestionApi.TriggerRefresh : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }
+ToolUp.Platform.IDeployRecordSealer (interface)
+ToolUp.Platform.IDeployRecordSealer.Scheme() : System.String
+ToolUp.Platform.IDeployRecordSealer.Seal(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployRecordSeal, System.String]]
+ToolUp.Platform.IDeployRecordSealer.VerifySeal(System.Byte[], ToolUp.Platform.DeployRecordSeal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IDeploymentReadinessApi (class)
 ToolUp.Platform.IDeploymentReadinessApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport, System.String]]])
 ToolUp.Platform.IDeploymentReadinessApi.GetReadinessReport : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport, System.String]]] { get }
@@ -7256,6 +7327,9 @@ ToolUp.Platform.ProgressCoalescePolicyModule.defaults : ToolUp.Platform.Progress
 ToolUp.Platform.ProgressCoalescePolicyModule.unlimited : ToolUp.Platform.ProgressCoalescePolicy { get }
 ToolUp.Platform.ProgressCoalescer (class)
 ToolUp.Platform.ProgressCoalescer.shouldPublish(ToolUp.Platform.ProgressCoalescePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.ProgressCheckpoint) : System.Boolean
+ToolUp.Platform.ProvenanceFraming (class)
+ToolUp.Platform.ProvenanceFraming.frame(System.Text.StringBuilder, System.String) : System.Void
+ToolUp.Platform.ProvenanceFraming.frameOptional(System.Text.StringBuilder, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Void
 ToolUp.Platform.ProvenanceQueryApi (class)
 ToolUp.Platform.ProvenanceQueryApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.ProvenanceQueryError (class)
@@ -7846,6 +7920,10 @@ ToolUp.Platform.SdkVersionRange (class)
 ToolUp.Platform.SdkVersionRange..ctor(System.String, System.String)
 ToolUp.Platform.SdkVersionRange.MaxExclusive : System.String { get }
 ToolUp.Platform.SdkVersionRange.MinInclusive : System.String { get }
+ToolUp.Platform.SealedDeployRecord (class)
+ToolUp.Platform.SealedDeployRecord..ctor(ToolUp.Platform.DeployRecord, ToolUp.Platform.DeployRecordSeal)
+ToolUp.Platform.SealedDeployRecord.Record : ToolUp.Platform.DeployRecord { get }
+ToolUp.Platform.SealedDeployRecord.Seal : ToolUp.Platform.DeployRecordSeal { get }
 ToolUp.Platform.SecretClass (class)
 ToolUp.Platform.SecretClass.ApiKeySecret : ToolUp.Platform.SecretClass { get }
 ToolUp.Platform.SecretClass.CertificateSecret : ToolUp.Platform.SecretClass { get }

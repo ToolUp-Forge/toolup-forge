@@ -6,6 +6,8 @@
 ToolUp.ArtefactSigning.ApplicationPayload (class)
 ToolUp.ArtefactSigning.ApplicationPayload.FramingVersion : System.String (literal)
 ToolUp.ArtefactSigning.ApplicationPayload.canonicalBytes(System.String, ToolUp.ArtefactSigning.AttestationLevel, System.Byte[]) : System.Byte[]
+ToolUp.ArtefactSigning.ApplicationSignerDeployRecordSealer (class)
+ToolUp.ArtefactSigning.ApplicationSignerDeployRecordSealer..ctor(ToolUp.ArtefactSigning.IApplicationSigner)
 ToolUp.ArtefactSigning.ApplicationSigning (class)
 ToolUp.ArtefactSigning.ApplicationSigning.activate(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.ArtefactSigning.ApplicationSigning.create(ToolUp.ArtefactSigning.SigningProvider) : ToolUp.ArtefactSigning.IApplicationSigner
@@ -70,6 +72,14 @@ ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifySbom(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
+ToolUp.ArtefactSigning.DeployRecordSealer (class)
+ToolUp.ArtefactSigning.DeployRecordSealer.ofProvider(ToolUp.ArtefactSigning.SigningProvider) : ToolUp.Platform.IDeployRecordSealer
+ToolUp.ArtefactSigning.DeployRecordSealer.overApplicationSigner(ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.IDeployRecordSealer
+ToolUp.ArtefactSigning.DeployRecordSealing (class)
+ToolUp.ArtefactSigning.DeployRecordSealing.Purpose : System.String (literal)
+ToolUp.ArtefactSigning.DeployRecordSealing.Scheme : System.String (literal)
+ToolUp.ArtefactSigning.DeployRecordSealing.decodeToken(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, System.String]
+ToolUp.ArtefactSigning.DeployRecordSealing.encodeToken(ToolUp.ArtefactSigning.SignedPayloadEnvelope) : System.String
 ToolUp.ArtefactSigning.EmptySigningKeyLedger (class)
 ToolUp.ArtefactSigning.EmptySigningKeyLedger..ctor()
 ToolUp.ArtefactSigning.EmptySigningKeyLedgerModule (class)

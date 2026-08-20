@@ -18,6 +18,7 @@ let allTests =
         ModuleSbomManifestTests.tests
         ApplicationSigningTests.tests
         SigningProviderConformanceTests.tests
+        DeployRecordSealingTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

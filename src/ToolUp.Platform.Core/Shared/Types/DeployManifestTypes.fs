@@ -24,6 +24,17 @@ open System
 // data — the unknown fields are preserved on disk and surfaced to
 // operator tooling, but not interpreted.
 //
+// **Extended, not widened (Phase 656).** What was deployed and what it
+// was built from — the deployed artifact digest set, the build-transcript
+// digest, and the opaque upstream-provenance slot — is carried by
+// `DeployRecord` in `DeployRecordTypes.fs`, which EMBEDS this manifest
+// rather than adding fields to it. Three more fields here would have
+// retyped this record's constructor and broken every consumer that
+// builds a manifest literally, for the benefit of consumers that fill
+// them; as a separate record, an existing consumer is untouched and an
+// existing deployment serialises byte-for-byte identical manifests
+// (GP 11). Read `DeployRecordTypes.fs` alongside this file.
+//
 // **No portability audit on this file.** These are pure data records
 // with no methods. The six-rule portability audit applies to the four
 // substrate interfaces (`IBuildOrchestrator`, `ITenantFleet`,

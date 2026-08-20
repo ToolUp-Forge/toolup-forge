@@ -21,6 +21,7 @@
         <Compile Include="InProcess\ModuleSbomManifestTests.fs" />
         <Compile Include="InProcess\ApplicationSigningTests.fs" />
         <Compile Include="InProcess\SigningProviderConformanceTests.fs" />
+        <Compile Include="InProcess\DeployRecordSealingTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

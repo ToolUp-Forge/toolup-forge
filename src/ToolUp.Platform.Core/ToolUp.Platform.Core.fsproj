@@ -406,6 +406,12 @@
              operator's CLI serialises to TOML/YAML/JSON). Pure data; no
              async surface; six-rule audit applies to the four substrate
              interfaces (Server-tier), not this file. -->
+        <!-- Phase 656 — build transcript + deploy provenance. Records +
+             pure string building only: the canonical forms are shared so
+             producer and verifier can never disagree about what was
+             covered, and the SHA-256 over them lives server-side (crypto
+             does not compile under Fable). -->
+        <Compile Include="Shared\Types\BuildTranscriptTypes.fs" />
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
         <!-- Phase 26 — supporting types for the four deploy-plane substrate
              interfaces (BuildRequest/BuildSummary, ProvisioningRequest,
@@ -414,6 +420,11 @@
              server-only because IContainerScheduler.StreamLogs returns
              IAsyncEnumerable. -->
         <Compile Include="Shared\Types\DeployPlaneTypes.fs" />
+        <!-- Phase 656 — the deploy record (manifest as deployed +
+             provenance) and the byte-level sealing seam. After
+             DeployPlaneTypes.fs because it uses the DeployId / TenantId /
+             BuildId aliases. -->
+        <Compile Include="Shared\Types\DeployRecordTypes.fs" />
         <!-- Phase 54 — tenant-lifecycle substrate shared types
              (TenantLifecyclePhase / LifecycleHookResult / LifecycleSummary
              / TenantLifecycleEvent). Async-free + Fable-compatible; the

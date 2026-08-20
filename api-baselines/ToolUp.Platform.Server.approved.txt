@@ -1965,12 +1965,21 @@ ToolUp.Platform.DeadTopic..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Coll
 ToolUp.Platform.DeadTopic.EmittedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
 ToolUp.Platform.DeadTopic.Kind : ToolUp.Platform.EventKind { get }
 ToolUp.Platform.DefaultDeployPipeline (class)
+ToolUp.Platform.DefaultDeployPipeline.DeployRecordSealedEventType : System.String (literal)
+ToolUp.Platform.DefaultDeployPipeline.DeployRecordSourceModule : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeployScopeId : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeploySourceModule : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeployStateChangedEventType : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.create(ToolUp.Platform.IBuildOrchestrator, ToolUp.Platform.IContainerScheduler, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline
+ToolUp.Platform.DefaultDeployPipeline.createSealed(ToolUp.Platform.IBuildOrchestrator, ToolUp.Platform.IContainerScheduler, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions) : ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline
 ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline (class)
 ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline..ctor(ToolUp.Platform.IBuildOrchestrator, ToolUp.Platform.IContainerScheduler, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline..ctor(ToolUp.Platform.IBuildOrchestrator, ToolUp.Platform.IContainerScheduler, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions])
+ToolUp.Platform.DefaultDeployPipeline+DefaultDeployPipeline.TryGetSealedRecord(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord]]
+ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions (class)
+ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeploySummary, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployProvenance]], ToolUp.Platform.IDeployRecordSealer)
+ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions.Provenance : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeploySummary, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployProvenance]] { get }
+ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions.Sealer : ToolUp.Platform.IDeployRecordSealer { get }
 ToolUp.Platform.DefaultEvidencePackGenerator (class)
 ToolUp.Platform.DefaultEvidencePackGenerator..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExportEnvelopeSigner], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.Platform.DefaultEvidencePackGeneratorModule (class)
@@ -2010,6 +2019,50 @@ ToolUp.Platform.DeployPlaneDepsValidator+DeployPlaneDepsValidator..ctor(ToolUp.P
 ToolUp.Platform.DeployPlanner (class)
 ToolUp.Platform.DeployPlanner.diff(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerInfo], System.DateTime) : ToolUp.Platform.DeployPlan
 ToolUp.Platform.DeployPlanner.plan(ToolUp.Platform.IContainerScheduler, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.DeployRecords (class)
+ToolUp.Platform.DeployRecords.artifactsUnder(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest]
+ToolUp.Platform.DeployRecords.canonicalBytes(ToolUp.Platform.DeployRecord) : System.Byte[]
+ToolUp.Platform.DeployRecords.digestBytes(System.Byte[]) : System.String
+ToolUp.Platform.DeployRecords.digestCanonicalForm(System.String) : System.String
+ToolUp.Platform.DeployRecords.digestFile(System.String) : System.String
+ToolUp.Platform.DeployRecords.locateUnder(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.DeployRecords.transcriptDigest(ToolUp.Platform.BuildTranscript) : System.String
+ToolUp.Platform.DeployRecords.verify(ToolUp.Platform.IDeployRecordSealer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], ToolUp.Platform.SealedDeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]]
+ToolUp.Platform.DeployRecords.verifyArtifacts(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]
+ToolUp.Platform.DeployRecords.verifySeal(ToolUp.Platform.IDeployRecordSealer, ToolUp.Platform.SealedDeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]]
+ToolUp.Platform.DeployRecords.verifyTranscript(ToolUp.Platform.BuildTranscript, ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsArtifactDigestMismatch : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsArtifactMissing : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsSealRejected : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsSealSchemeMismatch : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsTranscriptDigestMismatch : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsTranscriptNotRecorded : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.Tag : System.Int32 { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.TranscriptNotRecorded : ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMismatch (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMismatch.observed : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMismatch.path : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMismatch.recorded : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactMissing (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactMissing.path : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealRejected (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealRejected.reason : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealSchemeMismatch (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealSchemeMismatch.expected : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealSchemeMismatch.found : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ArtifactDigestMismatch : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ArtifactMissing : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.SealRejected : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.SealSchemeMismatch : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.TranscriptDigestMismatch : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.TranscriptNotRecorded : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+TranscriptDigestMismatch (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+TranscriptDigestMismatch.computed : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+TranscriptDigestMismatch.recorded : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailureModule (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailureModule.describe(ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure) : System.String
 ToolUp.Platform.DeploymentReadinessReport (class)
 ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport]
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi

@@ -31,6 +31,7 @@
          ToolUp.Platform.Core). Lives here so it can reuse the internal
          Jws verify primitives + BouncyCastle without widening any public
          surface, and so the crypto stays off the Fable client tier. -->
+    <Compile Include="Server\DeployRecordSealing.fs" />
     <Compile Include="Server\DefaultModuleBindingVerifier.fs" />
     <!-- Phase 170 — trust-anchor config → verifier + fail-closed preflight
          validator (resolves symmetric secrets via ISecretStore). After the

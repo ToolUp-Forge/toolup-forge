@@ -44,6 +44,21 @@ let DeploySourceModule = "_platform.deploy"
 [<Literal>]
 let DeployStateChangedEventType = "DeployStateChanged"
 
+/// Source module sealed deploy records are persisted under.
+///
+/// **Deliberately NOT `DeploySourceModule`.** Every existing read of
+/// the deploy stream deserialises each event as a `DeploySummary`; a
+/// record event landing in the same stream would be parsed as one,
+/// logged as a parse failure, or — worse — silently produce a summary
+/// of nulls that a tenant filter happens to exclude. A separate source
+/// module means the pre-existing reads see byte-for-byte what they saw
+/// before (GP 11), rather than seeing something new and coping.
+[<Literal>]
+let DeployRecordSourceModule = "_platform.deploy.record"
+
+[<Literal>]
+let DeployRecordSealedEventType = "DeployRecordSealed"
+
 /// Maximum wallclock the substrate driver waits on a build to
 /// terminate before declaring the deploy failed. Substrate-default
 /// expedient — production-grade pipelines override via a companion.
@@ -68,15 +83,43 @@ module private Json =
 
 // ─── DefaultDeployPipeline ───────────────────────────────────────
 
+// ─── Phase 656 — opt-in deploy-record sealing ────────────────────────
+
+/// What a deployment supplies to have its deploy records sealed.
+///
+/// Two halves, because the substrate can supply neither. It does not
+/// know what the deployed artifacts are (nothing in the deploy plane
+/// enumerates a deployment's own files), and it holds no signing
+/// surface (the deploy plane sits below the signing companion). So the
+/// deployment provides the provenance and the sealer, and the substrate
+/// provides the one thing it *does* own: the canonical bytes, computed
+/// identically for the producer and for every later verifier.
+type DeploySealingOptions = {
+    /// Supplies the provenance recorded for a succeeded deploy — the
+    /// deployed artifact digests, the build-transcript digest, and the
+    /// opaque upstream slot. Returning `DeployProvenance.none` records
+    /// a deploy record that claims nothing beyond its manifest, which
+    /// is a legitimate thing to seal.
+    Provenance: DeploySummary -> Async<DeployProvenance>
+    /// The seal applied to the record's canonical bytes.
+    Sealer: IDeployRecordSealer
+}
+
 /// Single-node default `IDeployPipeline`. Composes `IBuildOrchestrator`
 /// + `IContainerScheduler` + `IEventStore`. Constructed at compose
 /// time when `ServerConfig.DeployPlane = SingleNodeDeployPlane`.
+///
+/// `sealing` is `None` for every deployment that has not opted in, and
+/// the four-argument constructor below preserves the pre-Phase-656
+/// shape exactly — a deployment that composes no sealer emits the same
+/// events, in the same order, with the same payloads (GP 11 / GP 13).
 type DefaultDeployPipeline
     (
         buildOrchestrator: IBuildOrchestrator,
         containerScheduler: IContainerScheduler,
         eventStore: IEventStore,
-        logger: ILogger
+        logger: ILogger,
+        sealing: DeploySealingOptions option
     ) =
 
     let emitState (summary: DeploySummary) = async {
@@ -87,6 +130,51 @@ type DefaultDeployPipeline
             do! eventStore.Write evt
         with ex ->
             logger.Warn $"[DeployPipeline] event=write_failed deployId={summary.DeployId}: {ex.Message}"
+    }
+
+    let emitSealedRecord (signedRecord: SealedDeployRecord) = async {
+        try
+            let evt =
+                Events.create
+                    DeployScopeId
+                    DeployRecordSourceModule
+                    DeployRecordSealedEventType
+                    (Json.serialize signedRecord)
+
+            do! eventStore.Write evt
+        with ex ->
+            logger.Warn
+                $"[DeployPipeline] event=record_write_failed deployId={signedRecord.Record.DeployId}: {ex.Message}"
+    }
+
+    /// Seal the deploy record for a deploy that has already succeeded.
+    ///
+    /// **A sealing failure does not fail the deploy**, and that is a
+    /// decision rather than an oversight: by the time this runs the
+    /// container is up and serving, so turning a signing problem into a
+    /// failed deploy would take a healthy deployment down over a record
+    /// nobody has read yet. The failure is logged and no record is
+    /// written — and the ABSENCE of a record is itself the honest
+    /// signal, because a checker asked to verify a deploy with no
+    /// sealed record cannot mistake it for a verified one. What would
+    /// be indefensible is writing an unsealed record that *looks* like
+    /// a sealed one, which is why there is no such path.
+    let sealDeployRecord (summary: DeploySummary) = async {
+        match sealing with
+        | None -> ()
+        | Some options ->
+            try
+                let! provenance = options.Provenance summary
+
+                let record =
+                    DeployRecord.create summary.DeployId summary.TenantId summary.BuildId summary.Manifest provenance
+
+                match! options.Sealer.Seal(DeployRecords.canonicalBytes record) with
+                | Ok seal -> do! emitSealedRecord { Record = record; Seal = seal }
+                | Error reason ->
+                    logger.Warn $"[DeployPipeline] event=record_seal_refused deployId={summary.DeployId}: {reason}"
+            with ex ->
+                logger.Warn $"[DeployPipeline] event=record_seal_failed deployId={summary.DeployId}: {ex.Message}"
     }
 
     /// Read every persisted `DeploySummary` for a tenant, newest first.
@@ -261,7 +349,56 @@ type DefaultDeployPipeline
 
                 current <- succeeded
                 do! emitState succeeded
+
+                // ── Phase 5: seal the deploy record (opt-in). ──
+                //
+                // After the succeeded transition, never before it: the
+                // record describes a deploy that happened, and sealing
+                // one that has not yet succeeded would be sealing a
+                // prediction.
+                do! sealDeployRecord succeeded
         | _ -> ()
+    }
+
+    /// The pre-Phase-656 shape: no deploy-record sealing. Kept as an
+    /// explicit secondary constructor rather than an optional parameter
+    /// — an optional argument folds into one widened constructor and
+    /// the four-argument form disappears from the public surface, which
+    /// is a break for every existing caller.
+    new(buildOrchestrator, containerScheduler, eventStore, logger) =
+        DefaultDeployPipeline(buildOrchestrator, containerScheduler, eventStore, logger, None)
+
+    /// Read back the sealed deploy record for `deployId`, if one was
+    /// sealed. `None` for a deploy that predates sealing, for a
+    /// deployment that composed no sealer, and for a deploy whose
+    /// sealing failed — all three are honestly "no record", and none of
+    /// them may be reported as verified.
+    member _.TryGetSealedRecord(deployId: DeployId) : Async<SealedDeployRecord option> = async {
+        let! events = eventStore.ReadBySource(DeployScopeId, DeployRecordSourceModule)
+
+        return
+            events
+            |> List.filter (fun evt -> evt.EventType = DeployRecordSealedEventType)
+            |> List.choose (fun evt ->
+                try
+                    let signedRecord = Json.deserialize<SealedDeployRecord> evt.Payload
+
+                    if signedRecord.Record.DeployId = deployId then
+                        Some(
+                            evt.OccurredAt,
+                            {
+                                signedRecord with
+                                    Record = DeployRecord.coerce signedRecord.Record
+                            }
+                        )
+                    else
+                        None
+                with ex ->
+                    logger.Warn $"[DeployPipeline] event=record_parse_failed eventId={evt.Id}: {ex.Message}"
+                    None)
+            |> List.sortByDescending fst
+            |> List.tryHead
+            |> Option.map snd
     }
 
     interface IDeployPipeline with
@@ -487,3 +624,16 @@ let create
     (logger: ILogger)
     : DefaultDeployPipeline =
     DefaultDeployPipeline(buildOrchestrator, containerScheduler, eventStore, logger)
+
+/// The same pipeline, with deploy-record sealing composed in. A
+/// separate entry point rather than an optional argument on `create`,
+/// for the reason the secondary constructor exists: `create` is public
+/// surface and must keep the shape it had.
+let createSealed
+    (buildOrchestrator: IBuildOrchestrator)
+    (containerScheduler: IContainerScheduler)
+    (eventStore: IEventStore)
+    (logger: ILogger)
+    (sealing: DeploySealingOptions)
+    : DefaultDeployPipeline =
+    DefaultDeployPipeline(buildOrchestrator, containerScheduler, eventStore, logger, Some sealing)
