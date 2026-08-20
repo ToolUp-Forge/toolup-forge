@@ -65,6 +65,64 @@ verifying because the verifier resolves the public key by the signature's
 For keys that must never enter process memory, wire a KMS-backed signer
 (Phase 22a signing flavour) — the `IArtefactSigner` contract is identical.
 
+## Application signing seam
+
+Everything above signs bytes, which is the right shape for a publish
+pipeline. An **application** signing its own payloads needs three further
+facts on each signature, and `IApplicationSigner` carries them:
+
+```fsharp
+let provider = ApplicationSigning.inProcess secrets audit "app-signing-v1" EcdsaP256 "system"
+let! signer  = ApplicationSigning.createActivated "system" provider
+ApplicationSigning.registerProvider services provider |> ignore   // DI, opt-in
+
+let! envelope = signer.SignPayload("invoice.issued", payloadBytes)
+let! result   = signer.VerifyPayload("invoice.issued", payloadBytes, envelope)
+```
+
+- **Purpose binding.** The signature covers a versioned, length-prefixed
+  framing of `(purpose, level, payload)`, so a signature minted for one
+  use cannot be replayed as another, and relabelling the envelope breaks
+  it.
+- **Attestation level.** `Attribution` (the key is reachable from the
+  signing process) or `IsolatedSigner` (the key is held outside it and
+  never enters its memory), plus a `Reserved` case for future levels. The
+  level is bound into the signed bytes, so it cannot be upgraded after
+  the fact. Choose the provider that matches your custody:
+  `ApplicationSigning.inProcess` or `ApplicationSigning.keyManaged`.
+- **Key lifecycle as data.** `ISigningKeyLedger` records activation,
+  retirement and revocation as append-only attributable events.
+  Retirement is rotation — earlier signatures keep verifying. Revocation
+  is distrust and reaches backwards — every signature under a revoked key
+  is refused, carrying the recorded reason. A key with no recorded
+  history verifies on its bytes, so a deployment that records nothing
+  behaves exactly as it did before (GP 11).
+
+Nothing is composed by default. A deployment that never calls
+`ApplicationSigning.*` is unchanged and pays nothing (GP 13).
+
+### The provider set
+
+Both entry points take substrate the deployment already composed, so the
+provider set is the cross-product of what is already shipped rather than a
+new family of packages:
+
+| Entry point | Key custody | Level |
+|---|---|---|
+| `ApplicationSigning.inProcess` | any `ISecretStore` — a local/file-backed store in development, or one of the managed-store companions in production | `Attribution` |
+| `ApplicationSigning.keyManaged` | one of the key-management-backed `IArtefactSigner` companions (`ToolUp.ArtefactSigning.{AwsKms,AzureKeyVault,GoogleCloudKms}`) | `IsolatedSigner` |
+
+Hardening the store behind `inProcess` does not change its level: the
+level records whether the private key can reach process memory, and a key
+fetched from a hardened store to sign locally still can.
+
+Every provider is certified against one executable conformance pack
+(`ISigningProviderConformance` in `ToolUp.ArtefactSigning.Tests`), which
+is itself probe-verified: deliberately broken providers are run through
+the same pack and it must reject each at the specific case that models
+its defect. Adopting the seam:
+[`docs/migrations/655-application-signing-seam.md`](../../docs/migrations/655-application-signing-seam.md).
+
 ## Portability (GP 12)
 
 `IArtefactSigner` / `IArtefactVerifier` satisfy the six portability rules:

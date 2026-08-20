@@ -56,6 +56,12 @@ let config = {
             // emulator leg is env-gated (clean skip on a fresh checkout); the
             // divergence fixture + seam ratchets always run.
             TestPack.create "CloudParity" "src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj"
+            // The artefact-signing pack: the byte-level signer/verifier
+            // contract, the module-binding surfaces, and the application
+            // signing seam's provider-conformance matrix + its probe
+            // (deliberately broken providers the pack must reject). No env
+            // gating; the crypto runs in-process.
+            TestPack.create "ArtefactSigning" "src/ToolUp.ArtefactSigning.Tests/ToolUp.ArtefactSigning.Tests.fsproj"
         ]
 }
 

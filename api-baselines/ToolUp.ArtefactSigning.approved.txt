@@ -3,6 +3,21 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.ArtefactSigning.ApplicationPayload (class)
+ToolUp.ArtefactSigning.ApplicationPayload.FramingVersion : System.String (literal)
+ToolUp.ArtefactSigning.ApplicationPayload.canonicalBytes(System.String, ToolUp.ArtefactSigning.AttestationLevel, System.Byte[]) : System.Byte[]
+ToolUp.ArtefactSigning.ApplicationSigning (class)
+ToolUp.ArtefactSigning.ApplicationSigning.activate(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.ArtefactSigning.ApplicationSigning.create(ToolUp.ArtefactSigning.SigningProvider) : ToolUp.ArtefactSigning.IApplicationSigner
+ToolUp.ArtefactSigning.ApplicationSigning.createActivated(System.String, ToolUp.ArtefactSigning.SigningProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.ArtefactSigning.IApplicationSigner]
+ToolUp.ArtefactSigning.ApplicationSigning.inProcess(ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String) : ToolUp.ArtefactSigning.SigningProvider
+ToolUp.ArtefactSigning.ApplicationSigning.keyManaged(System.String, ToolUp.ArtefactSigning.IArtefactSigner, ToolUp.ArtefactSigning.IArtefactVerifier, ToolUp.ArtefactSigning.ISigningKeyLedger) : ToolUp.ArtefactSigning.SigningProvider
+ToolUp.ArtefactSigning.ApplicationSigning.provider(System.String, ToolUp.ArtefactSigning.AttestationLevel, ToolUp.ArtefactSigning.IArtefactSigner, ToolUp.ArtefactSigning.IArtefactVerifier, ToolUp.ArtefactSigning.ISigningKeyLedger) : ToolUp.ArtefactSigning.SigningProvider
+ToolUp.ArtefactSigning.ApplicationSigning.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IApplicationSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.ArtefactSigning.ApplicationSigning.registerProvider(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.SigningProvider) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.ArtefactSigning.ApplicationSigning.retire(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.ArtefactSigning.ApplicationSigning.revoke(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.ArtefactSigning.ApplicationSigning.withLedger(ToolUp.ArtefactSigning.ISigningKeyLedger, ToolUp.ArtefactSigning.SigningProvider) : ToolUp.ArtefactSigning.SigningProvider
 ToolUp.ArtefactSigning.ArtefactSignature (class)
 ToolUp.ArtefactSigning.ArtefactSignature..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.DateTimeOffset, System.String)
 ToolUp.ArtefactSigning.ArtefactSignature.Algorithm : ToolUp.ArtefactSigning.SigningAlgorithm { get }
@@ -21,6 +36,25 @@ ToolUp.ArtefactSigning.ArtefactSigning+SidecarResult..ctor(System.Byte[], System
 ToolUp.ArtefactSigning.ArtefactSigning+SidecarResult.Artefact : System.Byte[] { get }
 ToolUp.ArtefactSigning.ArtefactSigning+SidecarResult.Sidecar : System.Byte[] { get }
 ToolUp.ArtefactSigning.ArtefactSigning+SidecarResult.Signature : ToolUp.ArtefactSigning.ArtefactSignature { get }
+ToolUp.ArtefactSigning.AttestationLevel (class)
+ToolUp.ArtefactSigning.AttestationLevel.Attribution : ToolUp.ArtefactSigning.AttestationLevel { get }
+ToolUp.ArtefactSigning.AttestationLevel.IsAttribution : System.Boolean { get }
+ToolUp.ArtefactSigning.AttestationLevel.IsIsolatedSigner : System.Boolean { get }
+ToolUp.ArtefactSigning.AttestationLevel.IsReserved : System.Boolean { get }
+ToolUp.ArtefactSigning.AttestationLevel.IsolatedSigner : ToolUp.ArtefactSigning.AttestationLevel { get }
+ToolUp.ArtefactSigning.AttestationLevel.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.AttestationLevel+Reserved (class)
+ToolUp.ArtefactSigning.AttestationLevel+Reserved.label : System.String { get }
+ToolUp.ArtefactSigning.AttestationLevel+Tags (class)
+ToolUp.ArtefactSigning.AttestationLevel+Tags.Attribution : System.Int32 (literal)
+ToolUp.ArtefactSigning.AttestationLevel+Tags.IsolatedSigner : System.Int32 (literal)
+ToolUp.ArtefactSigning.AttestationLevel+Tags.Reserved : System.Int32 (literal)
+ToolUp.ArtefactSigning.AttestationLevelModule (class)
+ToolUp.ArtefactSigning.AttestationLevelModule.describe(ToolUp.ArtefactSigning.AttestationLevel) : System.String
+ToolUp.ArtefactSigning.AttestationLevelModule.name(ToolUp.ArtefactSigning.AttestationLevel) : System.String
+ToolUp.ArtefactSigning.AttestationLevelModule.parse(System.String) : ToolUp.ArtefactSigning.AttestationLevel
+ToolUp.ArtefactSigning.DefaultApplicationSigner (class)
+ToolUp.ArtefactSigning.DefaultApplicationSigner..ctor(ToolUp.ArtefactSigning.SigningProvider)
 ToolUp.ArtefactSigning.DefaultArtefactSigner (class)
 ToolUp.ArtefactSigning.DefaultArtefactSigner..ctor(ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String)
 ToolUp.ArtefactSigning.DefaultArtefactSignerModule (class)
@@ -36,12 +70,25 @@ ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifySbom(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
+ToolUp.ArtefactSigning.EmptySigningKeyLedger (class)
+ToolUp.ArtefactSigning.EmptySigningKeyLedger..ctor()
+ToolUp.ArtefactSigning.EmptySigningKeyLedgerModule (class)
+ToolUp.ArtefactSigning.EmptySigningKeyLedgerModule.create() : ToolUp.ArtefactSigning.ISigningKeyLedger
+ToolUp.ArtefactSigning.IApplicationSigner (interface)
+ToolUp.ArtefactSigning.IApplicationSigner.ActiveKeyId() : System.String
+ToolUp.ArtefactSigning.IApplicationSigner.KeyHistory() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.ArtefactSigning.SigningKeyHistory]
+ToolUp.ArtefactSigning.IApplicationSigner.Level() : ToolUp.ArtefactSigning.AttestationLevel
+ToolUp.ArtefactSigning.IApplicationSigner.SignPayload(System.String, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, ToolUp.ArtefactSigning.SigningError]]
+ToolUp.ArtefactSigning.IApplicationSigner.VerifyPayload(System.String, System.Byte[], ToolUp.ArtefactSigning.SignedPayloadEnvelope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.ArtefactSigning.PayloadVerificationError]]
 ToolUp.ArtefactSigning.IArtefactSigner (interface)
 ToolUp.ArtefactSigning.IArtefactSigner.KeyId() : System.String
 ToolUp.ArtefactSigning.IArtefactSigner.Sign(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.ArtefactSignature, ToolUp.ArtefactSigning.SigningError]]
 ToolUp.ArtefactSigning.IArtefactSigner.VerifyKey() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.ArtefactSigning.PublicKeyMetadata]
 ToolUp.ArtefactSigning.IArtefactVerifier (interface)
 ToolUp.ArtefactSigning.IArtefactVerifier.Verify(System.Byte[], ToolUp.ArtefactSigning.ArtefactSignature) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.ArtefactSigning.VerificationError]]
+ToolUp.ArtefactSigning.ISigningKeyLedger (interface)
+ToolUp.ArtefactSigning.ISigningKeyLedger.History() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.ArtefactSigning.SigningKeyHistory]
+ToolUp.ArtefactSigning.ISigningKeyLedger.Record(ToolUp.ArtefactSigning.SigningKeyEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.ArtefactSigning.JwsBuilder (class)
 ToolUp.ArtefactSigning.JwsBuilder.assembleDetachedJws(System.String, System.Byte[]) : System.String
 ToolUp.ArtefactSigning.JwsBuilder.base64UrlDecode(System.String) : System.Byte[]
@@ -69,6 +116,26 @@ ToolUp.ArtefactSigning.ModuleBindingTrustValidator (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator..ctor(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.ArtefactSigning.ModuleSbomSigning (class)
 ToolUp.ArtefactSigning.ModuleSbomSigning.canonicalBytes(System.String, ToolUp.Platform.ModuleSbom) : System.Byte[]
+ToolUp.ArtefactSigning.PayloadVerificationError (class)
+ToolUp.ArtefactSigning.PayloadVerificationError.IsKeyRevoked : System.Boolean { get }
+ToolUp.ArtefactSigning.PayloadVerificationError.IsPurposeMismatch : System.Boolean { get }
+ToolUp.ArtefactSigning.PayloadVerificationError.IsSignatureRejected : System.Boolean { get }
+ToolUp.ArtefactSigning.PayloadVerificationError.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+KeyRevoked (class)
+ToolUp.ArtefactSigning.PayloadVerificationError+KeyRevoked.keyId : System.String { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+KeyRevoked.reason : System.String { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+KeyRevoked.revokedAt : System.DateTimeOffset { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+PurposeMismatch (class)
+ToolUp.ArtefactSigning.PayloadVerificationError+PurposeMismatch.actual : System.String { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+PurposeMismatch.expected : System.String { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+SignatureRejected (class)
+ToolUp.ArtefactSigning.PayloadVerificationError+SignatureRejected.Item : ToolUp.ArtefactSigning.VerificationError { get }
+ToolUp.ArtefactSigning.PayloadVerificationError+Tags (class)
+ToolUp.ArtefactSigning.PayloadVerificationError+Tags.KeyRevoked : System.Int32 (literal)
+ToolUp.ArtefactSigning.PayloadVerificationError+Tags.PurposeMismatch : System.Int32 (literal)
+ToolUp.ArtefactSigning.PayloadVerificationError+Tags.SignatureRejected : System.Int32 (literal)
+ToolUp.ArtefactSigning.PayloadVerificationErrorModule (class)
+ToolUp.ArtefactSigning.PayloadVerificationErrorModule.describe(ToolUp.ArtefactSigning.PayloadVerificationError) : System.String
 ToolUp.ArtefactSigning.PromotedArtifactBundle (class)
 ToolUp.ArtefactSigning.PromotedArtifactBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IPromotedArtifactSigner
 ToolUp.ArtefactSigning.PromotedArtifactBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
@@ -78,9 +145,19 @@ ToolUp.ArtefactSigning.PublicKeyMetadata.Algorithm : ToolUp.ArtefactSigning.Sign
 ToolUp.ArtefactSigning.PublicKeyMetadata.Jwk : System.String { get }
 ToolUp.ArtefactSigning.PublicKeyMetadata.KeyId : System.String { get }
 ToolUp.ArtefactSigning.PublicKeyMetadata.Pem : System.String { get }
+ToolUp.ArtefactSigning.SecretStoreSigningKeyLedger (class)
+ToolUp.ArtefactSigning.SecretStoreSigningKeyLedger..ctor(ToolUp.Platform.Secrets+ISecretStore)
+ToolUp.ArtefactSigning.SecretStoreSigningKeyLedger.LedgerKey : System.String { get }
+ToolUp.ArtefactSigning.SecretStoreSigningKeyLedgerModule (class)
+ToolUp.ArtefactSigning.SecretStoreSigningKeyLedgerModule.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.ArtefactSigning.ISigningKeyLedger
 ToolUp.ArtefactSigning.SignedExportBundle (class)
 ToolUp.ArtefactSigning.SignedExportBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IExportEnvelopeSigner
 ToolUp.ArtefactSigning.SignedExportBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.ArtefactSigning.SignedPayloadEnvelope (class)
+ToolUp.ArtefactSigning.SignedPayloadEnvelope..ctor(System.String, ToolUp.ArtefactSigning.AttestationLevel, ToolUp.ArtefactSigning.ArtefactSignature)
+ToolUp.ArtefactSigning.SignedPayloadEnvelope.Level : ToolUp.ArtefactSigning.AttestationLevel { get }
+ToolUp.ArtefactSigning.SignedPayloadEnvelope.Purpose : System.String { get }
+ToolUp.ArtefactSigning.SignedPayloadEnvelope.Signature : ToolUp.ArtefactSigning.ArtefactSignature { get }
 ToolUp.ArtefactSigning.SignedRevocationList (class)
 ToolUp.ArtefactSigning.SignedRevocationList.loadSigned(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]
 ToolUp.ArtefactSigning.SignedRevocationList.verifyAndParse(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]
@@ -114,9 +191,65 @@ ToolUp.ArtefactSigning.SigningError+UnsupportedAlgorithm (class)
 ToolUp.ArtefactSigning.SigningError+UnsupportedAlgorithm.alg : System.String { get }
 ToolUp.ArtefactSigning.SigningErrorModule (class)
 ToolUp.ArtefactSigning.SigningErrorModule.describe(ToolUp.ArtefactSigning.SigningError) : System.String
+ToolUp.ArtefactSigning.SigningKeyEvent (class)
+ToolUp.ArtefactSigning.SigningKeyEvent..ctor(System.String, ToolUp.ArtefactSigning.SigningKeyEventKind, System.DateTimeOffset, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.ArtefactSigning.SigningKeyEvent.Actor : System.String { get }
+ToolUp.ArtefactSigning.SigningKeyEvent.At : System.DateTimeOffset { get }
+ToolUp.ArtefactSigning.SigningKeyEvent.KeyId : System.String { get }
+ToolUp.ArtefactSigning.SigningKeyEvent.Kind : ToolUp.ArtefactSigning.SigningKeyEventKind { get }
+ToolUp.ArtefactSigning.SigningKeyEvent.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind (class)
+ToolUp.ArtefactSigning.SigningKeyEventKind.Activated : ToolUp.ArtefactSigning.SigningKeyEventKind { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.IsActivated : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.IsRetired : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.IsRevoked : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.Retired : ToolUp.ArtefactSigning.SigningKeyEventKind { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.Revoked : ToolUp.ArtefactSigning.SigningKeyEventKind { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.SigningKeyEventKind+Tags (class)
+ToolUp.ArtefactSigning.SigningKeyEventKind+Tags.Activated : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningKeyEventKind+Tags.Retired : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningKeyEventKind+Tags.Revoked : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningKeyEventKindModule (class)
+ToolUp.ArtefactSigning.SigningKeyEventKindModule.name(ToolUp.ArtefactSigning.SigningKeyEventKind) : System.String
+ToolUp.ArtefactSigning.SigningKeyEventKindModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.SigningKeyEventKind]
 ToolUp.ArtefactSigning.SigningKeyHandler (class)
 ToolUp.ArtefactSigning.SigningKeyHandler.RoutePrefix : System.String (literal)
 ToolUp.ArtefactSigning.SigningKeyHandler.routes : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.ArtefactSigning.SigningKeyHistory (class)
+ToolUp.ArtefactSigning.SigningKeyHistory..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.SigningKeyHistoryEntry])
+ToolUp.ArtefactSigning.SigningKeyHistory.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.SigningKeyHistoryEntry] { get }
+ToolUp.ArtefactSigning.SigningKeyHistoryEntry (class)
+ToolUp.ArtefactSigning.SigningKeyHistoryEntry..ctor(System.String, ToolUp.ArtefactSigning.SigningKeyState, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.SigningKeyEvent])
+ToolUp.ArtefactSigning.SigningKeyHistoryEntry.Events : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.SigningKeyEvent] { get }
+ToolUp.ArtefactSigning.SigningKeyHistoryEntry.KeyId : System.String { get }
+ToolUp.ArtefactSigning.SigningKeyHistoryEntry.State : ToolUp.ArtefactSigning.SigningKeyState { get }
+ToolUp.ArtefactSigning.SigningKeyHistoryModule (class)
+ToolUp.ArtefactSigning.SigningKeyHistoryModule.activeKeyIds(ToolUp.ArtefactSigning.SigningKeyHistory) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.ArtefactSigning.SigningKeyHistoryModule.ofEvents(System.Collections.Generic.IEnumerable`1[ToolUp.ArtefactSigning.SigningKeyEvent]) : ToolUp.ArtefactSigning.SigningKeyHistory
+ToolUp.ArtefactSigning.SigningKeyHistoryModule.stateOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.SigningKeyEvent]) : ToolUp.ArtefactSigning.SigningKeyState
+ToolUp.ArtefactSigning.SigningKeyHistoryModule.tryFind(System.String, ToolUp.ArtefactSigning.SigningKeyHistory) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.SigningKeyHistoryEntry]
+ToolUp.ArtefactSigning.SigningKeyState (class)
+ToolUp.ArtefactSigning.SigningKeyState.ActiveKey : ToolUp.ArtefactSigning.SigningKeyState { get }
+ToolUp.ArtefactSigning.SigningKeyState.IsActiveKey : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyState.IsRetiredKey : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyState.IsRevokedKey : System.Boolean { get }
+ToolUp.ArtefactSigning.SigningKeyState.RetiredKey : ToolUp.ArtefactSigning.SigningKeyState { get }
+ToolUp.ArtefactSigning.SigningKeyState.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.SigningKeyState+RevokedKey (class)
+ToolUp.ArtefactSigning.SigningKeyState+RevokedKey.at : System.DateTimeOffset { get }
+ToolUp.ArtefactSigning.SigningKeyState+RevokedKey.reason : System.String { get }
+ToolUp.ArtefactSigning.SigningKeyState+Tags (class)
+ToolUp.ArtefactSigning.SigningKeyState+Tags.ActiveKey : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningKeyState+Tags.RetiredKey : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningKeyState+Tags.RevokedKey : System.Int32 (literal)
+ToolUp.ArtefactSigning.SigningProvider (class)
+ToolUp.ArtefactSigning.SigningProvider..ctor(System.String, ToolUp.ArtefactSigning.AttestationLevel, ToolUp.ArtefactSigning.IArtefactSigner, ToolUp.ArtefactSigning.IArtefactVerifier, ToolUp.ArtefactSigning.ISigningKeyLedger)
+ToolUp.ArtefactSigning.SigningProvider.Ledger : ToolUp.ArtefactSigning.ISigningKeyLedger { get }
+ToolUp.ArtefactSigning.SigningProvider.Level : ToolUp.ArtefactSigning.AttestationLevel { get }
+ToolUp.ArtefactSigning.SigningProvider.Name : System.String { get }
+ToolUp.ArtefactSigning.SigningProvider.Signer : ToolUp.ArtefactSigning.IArtefactSigner { get }
+ToolUp.ArtefactSigning.SigningProvider.Verifier : ToolUp.ArtefactSigning.IArtefactVerifier { get }
 ToolUp.ArtefactSigning.VerificationError (class)
 ToolUp.ArtefactSigning.VerificationError.IsMalformedSignature : System.Boolean { get }
 ToolUp.ArtefactSigning.VerificationError.IsTampered : System.Boolean { get }

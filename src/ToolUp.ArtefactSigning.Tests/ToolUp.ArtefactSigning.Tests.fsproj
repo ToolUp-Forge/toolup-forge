@@ -7,7 +7,10 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Support\InMemoryStores.fs" />
+        <Compile Include="Support\KeyManagedStandIn.fs" />
         <Compile Include="Contracts\IArtefactSignerContract.fs" />
+        <Compile Include="Contracts\ISigningProviderConformance.fs" />
+        <Compile Include="Support\PerturbedApplicationSigner.fs" />
         <Compile Include="InProcess\DefaultArtefactSignerTests.fs" />
         <Compile Include="InProcess\JwsBuilderTests.fs" />
         <Compile Include="InProcess\CloudKmsArtefactSignerTests.fs" />
@@ -16,6 +19,8 @@
         <Compile Include="InProcess\ModuleBindingTrustResolverTests.fs" />
         <Compile Include="InProcess\BindingRevocationContractTests.fs" />
         <Compile Include="InProcess\ModuleSbomManifestTests.fs" />
+        <Compile Include="InProcess\ApplicationSigningTests.fs" />
+        <Compile Include="InProcess\SigningProviderConformanceTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

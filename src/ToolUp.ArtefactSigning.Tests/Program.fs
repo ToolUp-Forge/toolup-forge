@@ -16,7 +16,14 @@ let allTests =
         ModuleBindingTrustResolverTests.tests
         BindingRevocationContractTests.tests
         ModuleSbomManifestTests.tests
+        ApplicationSigningTests.tests
+        SigningProviderConformanceTests.tests
     ]
 
+// Sequenced by default — Expecto deadlocks when parallel tests write to
+// the console. See docs/platform/testing-conventions.md § "Every Expecto
+// pack runs sequenced by default". It matters twice over here: the
+// provider-conformance probe evaluates contract packs in-process.
 [<EntryPoint>]
-let main argv = runTestsWithCLIArgs [] argv allTests
+let main argv =
+    runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
