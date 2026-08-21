@@ -2156,6 +2156,7 @@ ToolUp.Platform.DeployPlanner.plan(ToolUp.Platform.IContainerScheduler, System.S
 ToolUp.Platform.DeployRecords (class)
 ToolUp.Platform.DeployRecords.artifactsUnder(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployArtifactDigest]
 ToolUp.Platform.DeployRecords.canonicalBytes(ToolUp.Platform.DeployRecord) : System.Byte[]
+ToolUp.Platform.DeployRecords.closureDigest(ToolUp.Platform.DependencyClosure) : System.String
 ToolUp.Platform.DeployRecords.digestBytes(System.Byte[]) : System.String
 ToolUp.Platform.DeployRecords.digestCanonicalForm(System.String) : System.String
 ToolUp.Platform.DeployRecords.digestFile(System.String) : System.String
@@ -2163,11 +2164,16 @@ ToolUp.Platform.DeployRecords.locateUnder(System.String, System.String) : Micros
 ToolUp.Platform.DeployRecords.transcriptDigest(ToolUp.Platform.BuildTranscript) : System.String
 ToolUp.Platform.DeployRecords.verify(ToolUp.Platform.IDeployRecordSealer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], ToolUp.Platform.SealedDeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]]
 ToolUp.Platform.DeployRecords.verifyArtifacts(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]
+ToolUp.Platform.DeployRecords.verifyClosure(ToolUp.Platform.DependencyClosure, ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]
 ToolUp.Platform.DeployRecords.verifySeal(ToolUp.Platform.IDeployRecordSealer, ToolUp.Platform.SealedDeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]]
 ToolUp.Platform.DeployRecords.verifyTranscript(ToolUp.Platform.BuildTranscript, ToolUp.Platform.DeployProvenance) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure]]
+ToolUp.Platform.DeployRecords.withClosure(ToolUp.Platform.DependencyClosure, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.ClosureNotRecorded : ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsArtifactDigestMismatch : System.Boolean { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsArtifactMissing : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsClosureDigestMismatch : System.Boolean { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsClosureNotRecorded : System.Boolean { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsSealRejected : System.Boolean { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsSealSchemeMismatch : System.Boolean { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure.IsTranscriptDigestMismatch : System.Boolean { get }
@@ -2180,6 +2186,9 @@ ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMism
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactDigestMismatch.recorded : System.String { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactMissing (class)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ArtifactMissing.path : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ClosureDigestMismatch (class)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ClosureDigestMismatch.computed : System.String { get }
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+ClosureDigestMismatch.recorded : System.String { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealRejected (class)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealRejected.reason : System.String { get }
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealSchemeMismatch (class)
@@ -2188,6 +2197,8 @@ ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+SealSchemeMismatch
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags (class)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ArtifactDigestMismatch : System.Int32 (literal)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ArtifactMissing : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ClosureDigestMismatch : System.Int32 (literal)
+ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.ClosureNotRecorded : System.Int32 (literal)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.SealRejected : System.Int32 (literal)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.SealSchemeMismatch : System.Int32 (literal)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+Tags.TranscriptDigestMismatch : System.Int32 (literal)
@@ -6380,6 +6391,8 @@ ToolUp.Platform.ResourceEnvelopeEnforcement.observe(Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.ResourceEnvelopeEnforcement.observeRefusal(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.EnvelopeRefusal) : System.Void
 ToolUp.Platform.ResourceEnvelopeEnforcement.routeLimitsFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit]
 ToolUp.Platform.ResourceEnvelopeEnforcement.shadowedPrefixes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.RestoreClosures (class)
+ToolUp.Platform.RestoreClosures.readAssetsFile(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]
 ToolUp.Platform.ResultObjectId (class)
 ToolUp.Platform.ResultObjectId.make(System.String, System.String) : System.String
 ToolUp.Platform.ResultObjectId.modulePrefix(System.String) : System.String

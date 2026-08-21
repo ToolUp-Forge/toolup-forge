@@ -1874,6 +1874,19 @@ ToolUp.Platform.ClientModuleContext.TeamId : Microsoft.FSharp.Core.FSharpOption`
 ToolUp.Platform.ClientModuleContext.UserId : System.String { get }
 ToolUp.Platform.ClientModuleContextModule (class)
 ToolUp.Platform.ClientModuleContextModule.empty : ToolUp.Platform.ClientModuleContext { get }
+ToolUp.Platform.ClosureAttestation (class)
+ToolUp.Platform.ClosureAttestation.IsAttestedBy : System.Boolean { get }
+ToolUp.Platform.ClosureAttestation.IsUnattested : System.Boolean { get }
+ToolUp.Platform.ClosureAttestation.Tag : System.Int32 { get }
+ToolUp.Platform.ClosureAttestation+AttestedBy (class)
+ToolUp.Platform.ClosureAttestation+AttestedBy.Item : ToolUp.Platform.UpstreamReleaseReference { get }
+ToolUp.Platform.ClosureAttestation+Tags (class)
+ToolUp.Platform.ClosureAttestation+Tags.AttestedBy : System.Int32 (literal)
+ToolUp.Platform.ClosureAttestation+Tags.Unattested : System.Int32 (literal)
+ToolUp.Platform.ClosureAttestation+Unattested (class)
+ToolUp.Platform.ClosureAttestation+Unattested.Item : ToolUp.Platform.UnattestedReason { get }
+ToolUp.Platform.ClosureAttestationModule (class)
+ToolUp.Platform.ClosureAttestationModule.describe(ToolUp.Platform.ClosureAttestation) : System.String
 ToolUp.Platform.CollaborationTopics (class)
 ToolUp.Platform.CollaborationTopics.Lock : System.String (literal)
 ToolUp.Platform.CollaborationTopics.Presence : System.String (literal)
@@ -3153,6 +3166,27 @@ ToolUp.Platform.DegradedCapability.DegradedSince : System.DateTimeOffset { get }
 ToolUp.Platform.DegradedCapability.Impact : System.String { get }
 ToolUp.Platform.DegradedCapability.Reason : System.String { get }
 ToolUp.Platform.DegradedCapability.Remediation : System.String { get }
+ToolUp.Platform.DependencyClosure (class)
+ToolUp.Platform.DependencyClosure..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DependencyClosureEntry])
+ToolUp.Platform.DependencyClosure.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DependencyClosureEntry] { get }
+ToolUp.Platform.DependencyClosure.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.DependencyClosureEntry (class)
+ToolUp.Platform.DependencyClosureEntry..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.ClosureAttestation)
+ToolUp.Platform.DependencyClosureEntry.Attestation : ToolUp.Platform.ClosureAttestation { get }
+ToolUp.Platform.DependencyClosureEntry.ContentDigest : System.String { get }
+ToolUp.Platform.DependencyClosureEntry.Id : System.String { get }
+ToolUp.Platform.DependencyClosureEntry.Source : System.String { get }
+ToolUp.Platform.DependencyClosureEntry.Version : System.String { get }
+ToolUp.Platform.DependencyClosureModule (class)
+ToolUp.Platform.DependencyClosureModule.FramingVersion : System.String (literal)
+ToolUp.Platform.DependencyClosureModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DependencyClosureModule.attest(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IUpstreamReleaseProvider], ToolUp.Platform.DependencyClosure) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DependencyClosure]
+ToolUp.Platform.DependencyClosureModule.canonicalEntries(ToolUp.Platform.DependencyClosure) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DependencyClosureEntry]
+ToolUp.Platform.DependencyClosureModule.canonicalForm(ToolUp.Platform.DependencyClosure) : System.String
+ToolUp.Platform.DependencyClosureModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DependencyClosureEntry]) : ToolUp.Platform.DependencyClosure
+ToolUp.Platform.DependencyClosureModule.empty : ToolUp.Platform.DependencyClosure { get }
+ToolUp.Platform.DependencyClosureModule.toBuildDependencies(ToolUp.Platform.DependencyClosure) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency]
+ToolUp.Platform.DependencyClosureModule.unattestedEntry(System.String, System.String, System.String, System.String) : ToolUp.Platform.DependencyClosureEntry
 ToolUp.Platform.DeployArtifactDigest (class)
 ToolUp.Platform.DeployArtifactDigest..ctor(System.String, System.String)
 ToolUp.Platform.DeployArtifactDigest.ContentDigest : System.String { get }
@@ -4800,6 +4834,9 @@ ToolUp.Platform.ITimeSeriesStore.ListSeries(System.String) : Microsoft.FSharp.Co
 ToolUp.Platform.ITimeSeriesStore.QueryRange(System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TimeSeriesDownsample]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TimeSeriesPoint], ToolUp.Platform.TimeSeriesError]]
 ToolUp.Platform.ITraceLogger (interface)
 ToolUp.Platform.ITraceLogger.Trace(System.String, System.String) : System.Void
+ToolUp.Platform.IUpstreamReleaseProvider (interface)
+ToolUp.Platform.IUpstreamReleaseProvider.Ledger() : System.String
+ToolUp.Platform.IUpstreamReleaseProvider.Resolve(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UpstreamReleaseCoverage, System.String]]
 ToolUp.Platform.IUserDirectory (interface)
 ToolUp.Platform.IUserDirectory.NotifyInvitation(ToolUp.Platform.InvitationNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IUserDirectory.ResolveUsers(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]
@@ -9130,6 +9167,41 @@ ToolUp.Platform.TriggerSource+Tags (class)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByCron : System.Int32 (literal)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByEvent : System.Int32 (literal)
 ToolUp.Platform.TriggerSource+Tags.ScheduledManually : System.Int32 (literal)
+ToolUp.Platform.UnattestedReason (class)
+ToolUp.Platform.UnattestedReason.ExternalPackage : ToolUp.Platform.UnattestedReason { get }
+ToolUp.Platform.UnattestedReason.IsExternalPackage : System.Boolean { get }
+ToolUp.Platform.UnattestedReason.IsNoCoveringAct : System.Boolean { get }
+ToolUp.Platform.UnattestedReason.IsProviderAbsent : System.Boolean { get }
+ToolUp.Platform.UnattestedReason.IsResolutionFailed : System.Boolean { get }
+ToolUp.Platform.UnattestedReason.NoCoveringAct : ToolUp.Platform.UnattestedReason { get }
+ToolUp.Platform.UnattestedReason.ProviderAbsent : ToolUp.Platform.UnattestedReason { get }
+ToolUp.Platform.UnattestedReason.Tag : System.Int32 { get }
+ToolUp.Platform.UnattestedReason+ResolutionFailed (class)
+ToolUp.Platform.UnattestedReason+ResolutionFailed.reason : System.String { get }
+ToolUp.Platform.UnattestedReason+Tags (class)
+ToolUp.Platform.UnattestedReason+Tags.ExternalPackage : System.Int32 (literal)
+ToolUp.Platform.UnattestedReason+Tags.NoCoveringAct : System.Int32 (literal)
+ToolUp.Platform.UnattestedReason+Tags.ProviderAbsent : System.Int32 (literal)
+ToolUp.Platform.UnattestedReason+Tags.ResolutionFailed : System.Int32 (literal)
+ToolUp.Platform.UnattestedReasonModule (class)
+ToolUp.Platform.UnattestedReasonModule.describe(ToolUp.Platform.UnattestedReason) : System.String
+ToolUp.Platform.UpstreamReleaseCoverage (class)
+ToolUp.Platform.UpstreamReleaseCoverage.IsCovered : System.Boolean { get }
+ToolUp.Platform.UpstreamReleaseCoverage.IsNotCovered : System.Boolean { get }
+ToolUp.Platform.UpstreamReleaseCoverage.IsNotTracked : System.Boolean { get }
+ToolUp.Platform.UpstreamReleaseCoverage.NotCovered : ToolUp.Platform.UpstreamReleaseCoverage { get }
+ToolUp.Platform.UpstreamReleaseCoverage.NotTracked : ToolUp.Platform.UpstreamReleaseCoverage { get }
+ToolUp.Platform.UpstreamReleaseCoverage.Tag : System.Int32 { get }
+ToolUp.Platform.UpstreamReleaseCoverage+Covered (class)
+ToolUp.Platform.UpstreamReleaseCoverage+Covered.Item : ToolUp.Platform.UpstreamReleaseReference { get }
+ToolUp.Platform.UpstreamReleaseCoverage+Tags (class)
+ToolUp.Platform.UpstreamReleaseCoverage+Tags.Covered : System.Int32 (literal)
+ToolUp.Platform.UpstreamReleaseCoverage+Tags.NotCovered : System.Int32 (literal)
+ToolUp.Platform.UpstreamReleaseCoverage+Tags.NotTracked : System.Int32 (literal)
+ToolUp.Platform.UpstreamReleaseReference (class)
+ToolUp.Platform.UpstreamReleaseReference..ctor(System.String, System.String)
+ToolUp.Platform.UpstreamReleaseReference.ActDigest : System.String { get }
+ToolUp.Platform.UpstreamReleaseReference.OpId : System.String { get }
 ToolUp.Platform.UriAttribute (class)
 ToolUp.Platform.UriAttribute..ctor()
 ToolUp.Platform.Usage.BatchFlushPolicy (class)

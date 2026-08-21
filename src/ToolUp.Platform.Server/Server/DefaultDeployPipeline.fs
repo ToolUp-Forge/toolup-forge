@@ -100,6 +100,14 @@ type DeploySealingOptions = {
     /// opaque upstream slot. Returning `DeployProvenance.none` records
     /// a deploy record that claims nothing beyond its manifest, which
     /// is a legitimate thing to seal.
+    ///
+    /// A deployment binding its build's dependency closure composes it
+    /// here: capture (`RestoreClosures.readAssetsFile`, from the
+    /// restore's own assets output) → attest
+    /// (`DependencyClosure.attest`, against a registered
+    /// `IUpstreamReleaseProvider`, or none) → bind
+    /// (`DeployRecords.withClosure`). The pipeline neither knows nor
+    /// checks what a provenance carries — it seals what it is given.
     Provenance: DeploySummary -> Async<DeployProvenance>
     /// The seal applied to the record's canonical bytes.
     Sealer: IDeployRecordSealer

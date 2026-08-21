@@ -1325,7 +1325,11 @@
         <Compile Include="InProcess\DeployPlaneTests.fs" />
         <!-- Phase 656 — build-transcript determinism (probed in BOTH
              directions), deploy-record canonical form, and the sealed-
-             record verification walk against a keyed-hash stub sealer. -->
+             record verification walk against a keyed-hash stub sealer.
+             Phase 659 — the dependency-closure upstream-provenance join:
+             closure canonical form both ways, restore-output capture,
+             the attest seam (provider-absent + stub ledger), and the
+             closure digest bound into the sealed record. -->
         <Compile Include="InProcess\BuildTranscriptTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding

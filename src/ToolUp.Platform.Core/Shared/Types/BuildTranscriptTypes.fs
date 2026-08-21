@@ -281,6 +281,14 @@ type DeployProvenance = {
     /// what the platform offers here. A seal proves the value was not
     /// edited after sealing; it says nothing about whether the value
     /// was right in the first place, and nothing in this substrate can.
+    ///
+    /// The substrate does define ONE structured value a deployment MAY
+    /// choose to fill it with: the digest of its build's
+    /// `DependencyClosure` (the dependency-closure section at the end
+    /// of this file; bound via `DeployRecords.withClosure`). The slot
+    /// stays uninterpreted here either way — a checker that holds the
+    /// closure asks the join question explicitly, and any other filling
+    /// remains as legitimate as it was.
     UpstreamProvenanceDigest: string option
 }
 
@@ -384,3 +392,331 @@ module DeployProvenance =
         ProvenanceFraming.frameOptional builder coerced.UpstreamProvenanceDigest
 
         builder.ToString()
+
+// ─── Dependency-closure provenance (the upstream join) ───────────────
+//
+// The transcript above records a build's resolved dependency closure
+// as an id + version + content-digest SET, and the deploy record's
+// upstream-provenance slot can carry ONE opaque digest. Neither can
+// say, per dependency, WHERE it resolved from or WHICH upstream
+// release stands behind it — so "which attested release does this
+// build stand on" is an investigation, not a lookup.
+//
+// A **dependency closure** answers it with structure: one entry per
+// resolved package, carrying the source the package resolved from (as
+// the restore itself recorded it — observed, never re-derived) and an
+// attestation that either references an upstream release act BY ID or
+// says WHY there is no reference. The reasons are load-bearing: a
+// closure that listed only its attested members would read as complete
+// and would not be, so no entry is ever silently dropped — an external
+// package, a version no release act covers, and the absence of any
+// reference provider are each recorded as themselves.
+//
+// The reference leg is a SEAM (`IUpstreamReleaseProvider`), not a
+// dependency: the substrate defines the shape of the answer and asks a
+// registered provider per entry. With no provider registered every
+// entry is honestly unattested and nothing else changes (GP 11 /
+// GP 13); an upstream ledger this SDK has never heard of activates the
+// join by implementing one interface, with no substrate change.
+//
+// Like the transcript, a closure is content-addressed — sorted,
+// de-duplicated, length-framed; the digest itself lives server-side
+// beside the other digests (`DeployRecords.closureDigest`). A
+// deployment binds the closure into its sealed deploy record by
+// filling the upstream-provenance slot with the closure's digest
+// (`DeployRecords.withClosure`), so a deploy whose build resolved a
+// different closure is a different record and the seal refuses the
+// substitution.
+
+/// A typed reference to one attested release act in an upstream
+/// release ledger.
+type UpstreamReleaseReference = {
+    /// Identifier of the release act, exactly as the upstream ledger
+    /// names it. A join key, not a value anything here parses.
+    OpId: string
+    /// Content digest of the release act, lowercase hex, or `""` when
+    /// the ledger exposes none. An empty digest is honest; a
+    /// fabricated one is not.
+    ActDigest: string
+}
+
+/// Why a closure entry carries no upstream release reference.
+///
+/// Distinguishable on purpose: "nobody was asked", "asked, and the
+/// ledger does not track this package", "asked, and no release act
+/// covers this version" and "asked, and the answer never arrived" are
+/// four different facts, and a reader deciding what a build stands on
+/// needs to know which one they are looking at.
+type UnattestedReason =
+    /// No upstream release provider was registered — nothing was asked.
+    | ProviderAbsent
+    /// The upstream ledger does not track this package at all — an
+    /// external package, outside the ledger's scope.
+    | ExternalPackage
+    /// The ledger tracks the package, but no release act covers this
+    /// version — e.g. a version released before the ledger existed.
+    | NoCoveringAct
+    /// The provider was asked and failed; the failure's own reason is
+    /// carried. Recorded on the entry rather than aborting the closure,
+    /// because losing the whole closure to one failed lookup would be
+    /// the silence this type exists to prevent.
+    | ResolutionFailed of reason: string
+
+[<RequireQualifiedAccess>]
+module UnattestedReason =
+
+    /// Render a reason for an operator-facing surface.
+    let describe (reason: UnattestedReason) : string =
+        match reason with
+        | ProviderAbsent -> "no upstream release provider was registered"
+        | ExternalPackage -> "the upstream ledger does not track this package"
+        | NoCoveringAct -> "no release act in the upstream ledger covers this version"
+        | ResolutionFailed failure -> $"the upstream release provider failed: {failure}"
+
+/// Whether a closure entry stands on an attested upstream release.
+/// Never silent: an entry is attested by reference, or unattested with
+/// the reason.
+type ClosureAttestation =
+    | AttestedBy of UpstreamReleaseReference
+    | Unattested of UnattestedReason
+
+[<RequireQualifiedAccess>]
+module ClosureAttestation =
+
+    /// Render an attestation for an operator-facing surface — wherever
+    /// a transcript or closure renders, this is its vocabulary.
+    let describe (attestation: ClosureAttestation) : string =
+        match attestation with
+        | AttestedBy reference -> $"attested by upstream release act {reference.OpId}"
+        | Unattested reason -> $"unattested — {UnattestedReason.describe reason}"
+
+/// One resolved package in a build's dependency closure.
+type DependencyClosureEntry = {
+    /// Package identifier as the resolver names it.
+    Id: string
+    /// Exact resolved version — what was resolved, never what was
+    /// asked for.
+    Version: string
+    /// The source the package resolved from, exactly as the restore's
+    /// own output recorded it, or `""` when the restore exposed none.
+    /// Observed, never re-derived: an empty source is honest, a
+    /// guessed one is not.
+    Source: string
+    /// Content digest of the resolved artefact, lowercase hex, or `""`
+    /// when the restore exposed none.
+    ContentDigest: string
+    /// The upstream join for this entry: attested by reference, or
+    /// unattested with the reason.
+    Attestation: ClosureAttestation
+}
+
+/// A build's resolved dependency closure, with per-entry upstream
+/// provenance. The structured answer to "which attested releases does
+/// this build stand on" — and, for the entries with no answer, the
+/// honest reason why not.
+type DependencyClosure = {
+    /// Schema version of the closure shape. Bumped only when the
+    /// canonical form changes, which by construction changes every
+    /// closure digest — so bump deliberately, with a migration note.
+    SchemaVersion: int
+    /// The resolved entries, as a set (the canonical form sorts and
+    /// de-duplicates).
+    Entries: DependencyClosureEntry list
+}
+
+/// How an upstream release ledger answers for one closure entry.
+[<RequireQualifiedAccess>]
+type UpstreamReleaseCoverage =
+    /// A release act covers this exact package version.
+    | Covered of UpstreamReleaseReference
+    /// The ledger does not track this package at all.
+    | NotTracked
+    /// The ledger tracks the package, but no release act covers this
+    /// version.
+    | NotCovered
+
+/// The seam through which a dependency closure references upstream
+/// release acts.
+///
+/// **Nothing composes this by default.** A build that registers no
+/// provider records every entry as honestly unattested and behaves
+/// byte-for-byte as it did before this seam existed (GP 11 / GP 13).
+/// The upstream ledger the references point into is not this SDK's to
+/// ship — a provider implements this interface over whatever ledger it
+/// answers from, and the join activates with no substrate change.
+///
+/// **Six portability rules (GP 12).** Identity by value — strings in,
+/// a record out. Async at the boundary. Failure as data (`Result` over
+/// a reason string, never an exception). Stateless between calls, so a
+/// ledger refresh takes effect on the next resolve with nothing to
+/// invalidate. No cross-shard ordering promise; no timing-precision
+/// boundary.
+type IUpstreamReleaseProvider =
+    /// The name of the ledger this provider answers from, for
+    /// diagnostics and operator-facing display.
+    abstract Ledger: unit -> string
+
+    /// Answer for one resolved package: covered (with the reference),
+    /// not tracked at all, or tracked but not covered at this version.
+    abstract Resolve: packageId: string * version: string -> Async<Result<UpstreamReleaseCoverage, string>>
+
+[<RequireQualifiedAccess>]
+module DependencyClosure =
+
+    /// Schema version this build of the substrate emits.
+    [<Literal>]
+    let SchemaVersion = 1
+
+    /// Framing version, prefixed to every canonical form. Bumping it
+    /// invalidates every existing closure digest by construction,
+    /// which is the intended behaviour for a framing change.
+    [<Literal>]
+    let FramingVersion = "toolup.dependencyclosure.v1"
+
+    /// A closure with nothing recorded, at the current schema version.
+    let empty: DependencyClosure = {
+        SchemaVersion = SchemaVersion
+        Entries = []
+    }
+
+    /// Build a closure at the current schema version.
+    let create (entries: DependencyClosureEntry list) : DependencyClosure = {
+        SchemaVersion = SchemaVersion
+        Entries = entries
+    }
+
+    /// An entry as capture observes it: resolved facts recorded, no
+    /// upstream reference resolved yet — which is exactly the
+    /// provider-absent state, and is recorded as such rather than as a
+    /// blank that could be mistaken for "checked and clean".
+    let unattestedEntry
+        (id: string)
+        (version: string)
+        (source: string)
+        (contentDigest: string)
+        : DependencyClosureEntry =
+        {
+            Id = id
+            Version = version
+            Source = source
+            ContentDigest = contentDigest
+            Attestation = Unattested ProviderAbsent
+        }
+
+    let private frameEntry (builder: StringBuilder) (entry: DependencyClosureEntry) : unit =
+        let frame = ProvenanceFraming.frame builder
+
+        frame entry.Id
+        frame entry.Version
+        frame entry.Source
+        frame entry.ContentDigest
+
+        match entry.Attestation with
+        | AttestedBy reference ->
+            frame "attested"
+            frame reference.OpId
+            frame reference.ActDigest
+        | Unattested ProviderAbsent ->
+            frame "unattested"
+            frame "provider-absent"
+            frame ""
+        | Unattested ExternalPackage ->
+            frame "unattested"
+            frame "external-package"
+            frame ""
+        | Unattested NoCoveringAct ->
+            frame "unattested"
+            frame "no-covering-act"
+            frame ""
+        | Unattested(ResolutionFailed reason) ->
+            frame "unattested"
+            frame "resolution-failed"
+            frame reason
+
+    let private entryCanonicalForm (entry: DependencyClosureEntry) : string =
+        let builder = StringBuilder()
+        frameEntry builder entry
+        builder.ToString()
+
+    /// The entries in canonical order: de-duplicated, then sorted by
+    /// each entry's framed text ordinally — a total order, because the
+    /// framing is injective. Exposed for the same reason
+    /// `BuildTranscript.canonicalDependencies` is: a consumer rendering
+    /// a closure should show the order the digest was taken over.
+    let canonicalEntries (closure: DependencyClosure) : DependencyClosureEntry list =
+        closure.Entries
+        |> List.distinct
+        |> List.sortWith (fun a b -> String.CompareOrdinal(entryCanonicalForm a, entryCanonicalForm b))
+
+    /// The canonical text a closure's digest is taken over.
+    /// Deterministic in the same strong sense as
+    /// `BuildTranscript.canonicalForm`, for the same reasons.
+    let canonicalForm (closure: DependencyClosure) : string =
+        let builder = StringBuilder()
+        let frame = ProvenanceFraming.frame builder
+
+        frame FramingVersion
+        frame (string closure.SchemaVersion)
+
+        let entries = canonicalEntries closure
+
+        frame (string entries.Length)
+
+        for entry in entries do
+            frameEntry builder entry
+
+        builder.ToString()
+
+    /// Project the closure into the transcript's dependency shape, so a
+    /// build's transcript records the same resolved set its closure
+    /// annotates — one observation, two projections, no way for the two
+    /// to disagree about what was resolved.
+    let toBuildDependencies (closure: DependencyClosure) : BuildDependency list =
+        closure.Entries
+        |> List.map (fun entry -> {
+            Id = entry.Id
+            Version = entry.Version
+            ContentDigest = entry.ContentDigest
+        })
+
+    /// Resolve every entry's upstream reference through a provider.
+    ///
+    /// `None` re-states every entry as honestly unattested
+    /// (`ProviderAbsent`) — for a freshly captured closure that is the
+    /// identity, and for any closure it is the truthful description of
+    /// an attestation pass that asked nobody. With a provider, each
+    /// entry's answer maps to its attestation and a per-entry failure
+    /// is recorded on that entry (`ResolutionFailed`) rather than
+    /// aborting the closure.
+    let attest (provider: IUpstreamReleaseProvider option) (closure: DependencyClosure) : Async<DependencyClosure> = async {
+        match provider with
+        | None ->
+            return {
+                closure with
+                    Entries =
+                        closure.Entries
+                        |> List.map (fun entry -> {
+                            entry with
+                                Attestation = Unattested ProviderAbsent
+                        })
+            }
+        | Some provider ->
+            let mutable attested = []
+
+            for entry in closure.Entries do
+                let! answer = provider.Resolve(entry.Id, entry.Version)
+
+                let attestation =
+                    match answer with
+                    | Ok(UpstreamReleaseCoverage.Covered reference) -> AttestedBy reference
+                    | Ok UpstreamReleaseCoverage.NotTracked -> Unattested ExternalPackage
+                    | Ok UpstreamReleaseCoverage.NotCovered -> Unattested NoCoveringAct
+                    | Error reason -> Unattested(ResolutionFailed reason)
+
+                attested <- { entry with Attestation = attestation } :: attested
+
+            return {
+                closure with
+                    Entries = List.rev attested
+            }
+    }

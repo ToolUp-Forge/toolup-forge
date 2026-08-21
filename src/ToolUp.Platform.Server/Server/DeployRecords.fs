@@ -34,9 +34,14 @@ open ToolUp.Platform
 //   3. *Does its transcript digest match this transcript?* — the digest
 //      recorded in the record is the digest of the transcript supplied.
 //
-// It answers no question about the OPAQUE upstream-provenance slot
-// beyond "it was not edited after sealing", because the substrate does
-// not know what fills that slot and will not pretend to.
+// `verify` answers no question about the OPAQUE upstream-provenance
+// slot beyond "it was not edited after sealing", because the substrate
+// does not know what fills that slot and will not pretend to. A
+// checker that HOLDS the dependency closure a deployment bound there
+// (`withClosure`) can ask the join question explicitly with
+// `verifyClosure` — *does this record stand on this closure?* —
+// which compares the slot against a closure the CALLER supplies;
+// supplying nothing still asks nothing.
 //
 // Every check accumulates: a call reports every failure it found, not
 // the first. An operator holding a tampered deployment wants the whole
@@ -73,6 +78,14 @@ let digestCanonicalForm (canonicalForm: string) : string =
 /// transcripts canonicalise to the same text.
 let transcriptDigest (transcript: BuildTranscript) : string =
     transcript |> BuildTranscript.canonicalForm |> digestCanonicalForm
+
+/// The content address of a dependency closure: the digest of its
+/// canonical form. Deterministic in the same strong sense as
+/// `transcriptDigest`, for the same reasons — the canonical form sorts
+/// and de-duplicates the entries and length-frames every field,
+/// attestations included.
+let closureDigest (closure: DependencyClosure) : string =
+    closure |> DependencyClosure.canonicalForm |> digestCanonicalForm
 
 /// The exact bytes a deploy record's seal is taken over.
 let canonicalBytes (record: DeployRecord) : byte[] =
@@ -112,6 +125,22 @@ let artifactsUnder (root: string) : DeployArtifactDigest list =
     })
     |> List.ofSeq
 
+/// Bind a dependency closure into a provenance: the closure's digest
+/// fills the upstream-provenance slot, so the closure joins the sealed
+/// set — a deploy whose build resolved a different closure is a
+/// different record, and the seal refuses the substitution.
+///
+/// This is the substrate-defined structured filling of the slot, and
+/// the ONLY thing it adds is a digest in a slot that already existed:
+/// the platform still stores and reports the value without
+/// interpreting it, and a deployment filling the slot with something
+/// else remains as legitimate as it was. `verifyClosure` below asks
+/// the join question only when a checker supplies the closure to ask
+/// it with.
+let withClosure (closure: DependencyClosure) (provenance: DeployProvenance) : DeployProvenance =
+    provenance
+    |> DeployProvenance.withUpstreamProvenanceDigest (closureDigest closure)
+
 // ─── Verification ────────────────────────────────────────────────────
 
 /// One way a sealed deploy record failed verification.
@@ -135,6 +164,15 @@ type DeployRecordVerificationFailure =
     /// The record's transcript digest is not the digest of the
     /// transcript supplied.
     | TranscriptDigestMismatch of recorded: string * computed: string
+    /// A dependency closure was supplied to check against, but the
+    /// record's upstream-provenance slot is empty.
+    | ClosureNotRecorded
+    /// The record's upstream-provenance slot does not carry the digest
+    /// of the closure supplied. Either the slot was filled with
+    /// something other than a dependency closure — legitimate; the slot
+    /// is the deployment's to fill — or the closure supplied is not the
+    /// one the record was sealed over.
+    | ClosureDigestMismatch of recorded: string * computed: string
 
 [<RequireQualifiedAccess>]
 module DeployRecordVerificationFailure =
@@ -149,6 +187,9 @@ module DeployRecordVerificationFailure =
         | TranscriptNotRecorded -> "a transcript was supplied but the record carries no transcript digest"
         | TranscriptDigestMismatch(recorded, computed) ->
             $"transcript digest mismatch: record carries {recorded}, supplied transcript digests to {computed}"
+        | ClosureNotRecorded -> "a dependency closure was supplied but the record's upstream-provenance slot is empty"
+        | ClosureDigestMismatch(recorded, computed) ->
+            $"dependency-closure digest mismatch: record carries {recorded}, supplied closure digests to {computed}"
 
 /// Check every recorded artifact against the bytes on disk.
 ///
@@ -189,6 +230,27 @@ let verifyTranscript
     | None -> Error [ TranscriptNotRecorded ]
     | Some recorded when String.Equals(recorded, computed, StringComparison.OrdinalIgnoreCase) -> Ok()
     | Some recorded -> Error [ TranscriptDigestMismatch(recorded, computed) ]
+
+/// Check the record's upstream-provenance slot against a dependency
+/// closure the checker holds — the join question: *does this record
+/// stand on this closure?*
+///
+/// The slot stays uninterpreted by the platform; this function only
+/// compares it against a closure the CALLER supplies, exactly as
+/// `verifyTranscript` does for the transcript. A mismatch does not
+/// distinguish "filled with something else" from "a different closure"
+/// — the record cannot say which, and the failure text says so rather
+/// than guessing.
+let verifyClosure
+    (closure: DependencyClosure)
+    (provenance: DeployProvenance)
+    : Result<unit, DeployRecordVerificationFailure list> =
+    let computed = closureDigest closure
+
+    match (DeployProvenance.coerce provenance).UpstreamProvenanceDigest with
+    | None -> Error [ ClosureNotRecorded ]
+    | Some recorded when String.Equals(recorded, computed, StringComparison.OrdinalIgnoreCase) -> Ok()
+    | Some recorded -> Error [ ClosureDigestMismatch(recorded, computed) ]
 
 /// Check the seal covers the record's canonical bytes.
 let verifySeal

@@ -1073,6 +1073,16 @@ let allTests =
         BuildTranscriptTests.provenanceTests
         BuildTranscriptTests.deployRecordCanonicalFormTests
         BuildTranscriptTests.deployRecordVerificationTests
+        // Phase 659 — the dependency-closure upstream-provenance join.
+        // The closure's canonical form is probed in both directions like
+        // the transcript's; capture reads the restore's own output; the
+        // attest seam runs provider-absent (honestly unattested) and
+        // against a stub ledger; and the closure's digest is bound into
+        // the sealed record — perturb the closure, the seal refuses.
+        BuildTranscriptTests.closureCanonicalFormTests
+        BuildTranscriptTests.closureAttestationTests
+        BuildTranscriptTests.closureCaptureTests
+        BuildTranscriptTests.closureBindingTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate

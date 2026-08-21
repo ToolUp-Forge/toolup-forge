@@ -456,6 +456,11 @@
              System.Security.Cryptography; the canonical forms it hashes
              live in Platform.Core. -->
         <Compile Include="Server\DeployRecords.fs" />
+        <!-- Phase 659 — dependency-closure capture from the restore's own
+             assets output: observed, never re-derived. Entries start
+             honestly unattested; DependencyClosure.attest (Core) resolves
+             the upstream references through IUpstreamReleaseProvider. -->
+        <Compile Include="Server\RestoreClosures.fs" />
         <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
         <!-- Phase 487 — virtual (zero-copy) dataset bindings: read a dataset
