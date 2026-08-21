@@ -38,6 +38,25 @@ let private SequencedClauseEventType = "SequencedFastPathClause"
 [<Literal>]
 let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
 
+// ─── Phase 6j.B — Tier-3 triage rollup ───────────────────────────
+//
+// The triage resolver writes one row per ATTEMPT under its own
+// `EventType` on this same source, carrying the outcome token. Rolling
+// it up here rather than on a new endpoint is deliberate: an operator
+// tuning the fast path is asking one question — "how much of the
+// instruction traffic is resolving below the agent loop, and where is
+// the rest going" — and Tier 1 and Tier 3 are two answers to it.
+// Splitting them across two endpoints would make the comparison a
+// manual join.
+//
+// The keys are chosen so a *failing* tier is legible, not just a
+// working one. `TriageHits / TriageAttempts` is the value the tier
+// buys; `TriageOutcomes` is where the rest went, and the difference
+// between a healthy `needs-full-agent` majority and a pile of
+// `unparseable` / `unknown-field` is the difference between "triage is
+// correctly declining" and "triage is broken and silently costing a
+// call per turn". A single hit-rate number cannot tell those apart.
+
 // ─── Phase 6j.G — sequencer outcome vocabulary ───────────────────
 //
 // The resolver companion's executor emits one outcome string per
@@ -124,6 +143,29 @@ type private FastPathReport = {
     /// sequence-outcome beacon. `0.0` when no sequence attempts in
     /// window. Drives 8-clause-cap tuning from data.
     MeanClausesPerSequence: float
+    // ── Phase 6j.B Tier-3 triage keys ──────────────────────────
+    /// Triage attempts in the rolling window — turns that actually
+    /// reached the triage provider call. Turns that were never
+    /// candidates (triage disabled, no declared fields, a question
+    /// rather than a command) are NOT counted: they cost nothing and
+    /// including them would understate the hit rate of the tier as
+    /// configured.
+    TriageAttempts: int
+    /// Attempts that resolved to a field set, so the full agent loop
+    /// did not run.
+    TriageHits: int
+    /// `TriageHits / TriageAttempts`. `0.0` when no attempts in window.
+    TriageHitRate: float
+    /// Mean attempt duration in the window, provider call included —
+    /// the number the tier's ~500 ms premise is checked against.
+    /// `0.0` when no attempts in window.
+    TriageMeanLatencyMs: float
+    /// Every outcome token with its in-window count, in the resolver's
+    /// declared order, including zeros. Zeros are included on purpose:
+    /// a missing row and a zero row are the same shape to a reader who
+    /// does not know the vocabulary, and the failure classes are worth
+    /// showing as present-and-zero.
+    TriageOutcomes: (string * int) list
 }
 
 /// Public rollup helper — pure function over decoded outcome events,
@@ -163,6 +205,48 @@ let computeSequencerRollup
             SequencedFallThroughRate = float fallThroughs / float total
             MeanClausesPerSequence = meanClauses
         |}
+
+/// Public rollup helper for the Phase 6j.B triage rows — pure over
+/// decoded attempt payloads, exposed for the same reason
+/// `computeSequencerRollup` is: the Expecto pack can construct
+/// synthetic attempts and assert the keys without a Giraffe pipeline.
+///
+/// Counts every declared outcome token, including the ones with no
+/// rows, so the shape of the report does not change as failure modes
+/// come and go.
+let computeTriageRollup
+    (attempts: FastPathTriageResolver.TriageEventPayload list)
+    : {|
+          TriageAttempts: int
+          TriageHits: int
+          TriageHitRate: float
+          TriageMeanLatencyMs: float
+          TriageOutcomes: (string * int) list
+      |}
+    =
+    let total = attempts.Length
+
+    let counts =
+        FastPathTriageResolver.outcomes
+        |> List.map (fun token -> token, attempts |> List.filter (fun a -> a.Outcome = token) |> List.length)
+
+    let hits =
+        counts
+        |> List.tryFind (fun (token, _) -> token = FastPathTriageResolver.OutcomeHit)
+        |> Option.map snd
+        |> Option.defaultValue 0
+
+    {|
+        TriageAttempts = total
+        TriageHits = hits
+        TriageHitRate = if total = 0 then 0.0 else float hits / float total
+        TriageMeanLatencyMs =
+            if total = 0 then
+                0.0
+            else
+                (attempts |> List.sumBy _.LatencyMs) / float total
+        TriageOutcomes = counts
+    |}
 
 // ─── Statistics ─────────────────────────────────────────────────
 
@@ -205,6 +289,18 @@ let private decodePayload (evt: ModuleEvent) : (FastPathEventPayload * DateTime)
     try
         let payload =
             JsonSerializer.Deserialize<FastPathEventPayload>(evt.Payload, payloadJsonOptions)
+
+        if isNull (box payload) then
+            None
+        else
+            Some(payload, evt.OccurredAt)
+    with _ ->
+        None
+
+let private decodeTriageAttempt (evt: ModuleEvent) : (FastPathTriageResolver.TriageEventPayload * DateTime) option =
+    try
+        let payload =
+            JsonSerializer.Deserialize<FastPathTriageResolver.TriageEventPayload>(evt.Payload, payloadJsonOptions)
 
         if isNull (box payload) then
             None
@@ -280,6 +376,16 @@ let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
 
     let sequencerRollup = computeSequencerRollup outcomeInWindow
 
+    let triageInWindow =
+        events
+        |> List.filter (fun evt ->
+            evt.EventType = FastPathTriageResolver.TriageEventType
+            && evt.OccurredAt >= windowStart)
+        |> List.choose decodeTriageAttempt
+        |> List.map fst
+
+    let triageRollup = computeTriageRollup triageInWindow
+
     return {
         ScopeId = scope.ScopeId
         GeneratedAt = now
@@ -290,6 +396,11 @@ let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
         SequencedHits = sequencerRollup.SequencedHits
         SequencedFallThroughRate = sequencerRollup.SequencedFallThroughRate
         MeanClausesPerSequence = sequencerRollup.MeanClausesPerSequence
+        TriageAttempts = triageRollup.TriageAttempts
+        TriageHits = triageRollup.TriageHits
+        TriageHitRate = triageRollup.TriageHitRate
+        TriageMeanLatencyMs = triageRollup.TriageMeanLatencyMs
+        TriageOutcomes = triageRollup.TriageOutcomes
     }
 }
 

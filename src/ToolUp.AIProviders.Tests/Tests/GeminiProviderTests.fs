@@ -26,6 +26,8 @@ let private spec: ProviderSpec = {
             ToolUse = true
             Vision = true
             SupportsPromptCaching = true
+            SupportsTriage = true
+            TriageModelId = Some "models/gemini-2.5-flash"
             ProviderName = GeminiAIProvider.ProviderId
             Model = GeminiAIProvider.DefaultModel
         }

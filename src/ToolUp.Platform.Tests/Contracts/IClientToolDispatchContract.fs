@@ -136,6 +136,8 @@ type private ScriptedProvider(script: AIProviderResponse list) =
             ToolUse = true
             Vision = false
             SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
             ProviderName = "test-scripted"
             Model = "test-scripted-model"
         }

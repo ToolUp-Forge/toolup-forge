@@ -170,6 +170,16 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
             Vision = true
             // Azure OpenAI prompt caching mirrors OpenAI's automatic caching.
             SupportsPromptCaching = true
+            // Phase 6j.B — Azure OpenAI mirrors OpenAI's native
+            // structured-output surface.
+            SupportsTriage = true
+            // Azure deployment NAMES are arbitrary, so this is the
+            // model family a deployment would point a triage instance
+            // at, not necessarily a deployment id that exists in the
+            // target resource. A composition root that finds no such
+            // deployment leaves `TriageProvider = None` and triage runs
+            // on the turn's own deployment.
+            TriageModelId = Some "gpt-4o-mini"
             ProviderName = ProviderId
             Model = model
         }

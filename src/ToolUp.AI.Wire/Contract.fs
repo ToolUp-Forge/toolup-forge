@@ -232,6 +232,35 @@ type AIProviderCapabilities = {
     /// rollup hides the cache-hit-rate column for that provider/model
     /// bucket.
     SupportsPromptCaching: bool
+    /// Phase 6j.B — this provider can serve a Tier-3 *triage* turn: a
+    /// single, tool-free, schema-constrained call whose only job is to
+    /// decide whether a trivial UI instruction ("set country to UK")
+    /// maps onto one declared field, or needs the full agent loop.
+    ///
+    /// `false` (the value every pre-6j.B provider carries, and the
+    /// value `unknown` carries) means the fast-path triage resolver
+    /// never fires for this provider and the request goes straight to
+    /// the full agent loop — byte-for-byte the pre-6j.B path (GP 11).
+    /// Declare `true` only when the provider can honour a small
+    /// structured-output request cheaply; a provider whose only model
+    /// is a frontier model gains nothing from triage and should leave
+    /// this `false`.
+    SupportsTriage: bool
+    /// Phase 6j.B — the model id this provider family would use to
+    /// serve triage, when it has a cheaper tier than `Model` (an
+    /// Anthropic connector names its Haiku-grade id here; an OpenAI
+    /// connector its mini-grade id).
+    ///
+    /// This is a **declaration, not a dispatch instruction**:
+    /// `IAIProvider` has no per-call model override, so the triage
+    /// resolver cannot re-point a provider at this id by itself. It is
+    /// what a composition root reads to decide which instance to hand
+    /// to `FastPathTriageConfig.TriageProvider` — build a second
+    /// provider at this model, register it, and the triage turn runs
+    /// there while the agent loop keeps the frontier model.
+    /// `None` ⇒ the provider declares no cheaper tier; triage (when
+    /// enabled and `SupportsTriage`) runs on `Model` itself.
+    TriageModelId: string option
     /// Identifier for diagnostics and logging.
     ProviderName: string
     /// Model identifier currently configured.
@@ -246,6 +275,8 @@ module AIProviderCapabilities =
         ToolUse = false
         Vision = false
         SupportsPromptCaching = false
+        SupportsTriage = false
+        TriageModelId = None
         ProviderName = "unknown"
         Model = "unknown"
     }

@@ -45,6 +45,11 @@
         <Compile Include="Server\SSEHandler.fs" />
         <Compile Include="Server\ClientToolDispatch.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
+        <!-- Phase 6j.B — Tier-3 fast-path triage. Depends on ToolContext
+             (the ModuleAction emit) + the AI.Core field-registry seam;
+             must precede AILatencyMetrics (which registers its metric
+             series) and AIAgentEngine (which calls it). -->
+        <Compile Include="Server\FastPathTriageResolver.fs" />
         <Compile Include="Server\AILatencyMetrics.fs" />
         <!-- Phase 523 — numeric-fidelity answer gate: canonicalisation +
              IAnswerVerifier seam + post-response stage. Depends only on

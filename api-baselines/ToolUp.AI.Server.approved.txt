@@ -75,6 +75,7 @@ ToolUp.AI.AICompose+AIServerAppModule.withEntityOutbox(System.Boolean, ToolUp.AI
 ToolUp.AI.AICompose+AIServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEventTriggerCatchUp(System.Boolean, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withExtensions(ToolUp.Platform.ComposeExtensions, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withFastPathTriage(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
@@ -346,7 +347,92 @@ ToolUp.AI.FastPathBeaconHandler+SequencedClauseBeacon.PatternMatched : System.St
 ToolUp.AI.FastPathBeaconHandler+SequencedClauseBeacon.TotalClauses : System.Int32 { get }
 ToolUp.AI.FastPathTelemetryHandler (class)
 ToolUp.AI.FastPathTelemetryHandler.computeSequencerRollup(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.FastPathBeaconHandler+SequenceOutcomeBeacon]) : <>f__AnonymousType783947670`3[System.Double, System.Double, System.Int32]
+ToolUp.AI.FastPathTelemetryHandler.computeTriageRollup(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.FastPathTriageResolver+TriageEventPayload]) : <>f__AnonymousType4142427635`5[System.Int32, System.Double, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]]]
 ToolUp.AI.FastPathTelemetryHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.AI.FastPathTriageResolver (class)
+ToolUp.AI.FastPathTriageResolver.FastPathSourceModule : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeClearUnsupported : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeHit : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeLowConfidence : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeNeedsFullAgent : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeProviderError : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeUnknownField : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.OutcomeUnparseable : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.SetFieldActionKey : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageAttemptsMetric : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageDurationMsMetric : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageEventType : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageOutcomesMetric : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.actionPayloadJson(ToolUp.AI.AIFieldDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
+ToolUp.AI.FastPathTriageResolver.buildTriagePrompt(ToolUp.AI.AIFieldSnapshot) : System.String
+ToolUp.AI.FastPathTriageResolver.fallThroughOutcomes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver.isEligibleInstruction(System.Int32, System.String) : System.Boolean
+ToolUp.AI.FastPathTriageResolver.lastUserInstruction(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.FastPathTriageResolver.outcomes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver.parseTriageDecision(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.FastPathTriageResolver+TriageModelDecision]
+ToolUp.AI.FastPathTriageResolver.planTriage(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig, ToolUp.AI.AIFieldSnapshot, ToolUp.AI.FastPathTriageResolver+TriageModelDecision) : ToolUp.AI.FastPathTriageResolver+TriagePlan
+ToolUp.AI.FastPathTriageResolver.syntheticReply(ToolUp.AI.AIFieldSnapshot, ToolUp.AI.AIFieldDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
+ToolUp.AI.FastPathTriageResolver.triageSchema : System.String { get }
+ToolUp.AI.FastPathTriageResolver.tryTriage(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AI.IAIProvider, System.Guid, System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.FastPathTriageResolver+TriageResult]]
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig (class)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig..ctor(System.Boolean, ToolUp.AI.IAIFieldRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.IAIProvider], System.Int32, System.Double, System.Int32)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.ConfidenceFloor : System.Double { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.Enabled : System.Boolean { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.MaxInstructionChars : System.Int32 { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.Registry : ToolUp.AI.IAIFieldRegistry { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.TimeoutMs : System.Int32 { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig.TriageProvider : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.IAIProvider] { get }
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule (class)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.DefaultConfidenceFloor : System.Double (literal)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.DefaultMaxInstructionChars : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.DefaultTimeoutMs : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.create(ToolUp.AI.IAIFieldRegistry) : ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.effectiveFloor(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : System.Double
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.effectiveMaxInstructionChars(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : System.Int32
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.effectiveTimeoutMs(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : System.Int32
+ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.withTriageProvider(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload (class)
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload..ctor(System.Guid, System.Guid, System.String, System.String, System.String, System.String, System.String, System.String, System.Double, System.Int32)
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ConversationId : System.Guid { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.FieldId : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.InstructionChars : System.Int32 { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.LatencyMs : System.Double { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ModuleId : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.Outcome : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ProviderModel : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ProviderName : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.TaskId : System.Guid { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.TriageModelId : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision (class)
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.String)
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision.Confidence : System.Double { get }
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision.Decision : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision.FieldId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision.Reason : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageModelDecision.Value : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan (class)
+ToolUp.AI.FastPathTriageResolver+TriagePlan.IsTriageFallThrough : System.Boolean { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan.IsTriageSetField : System.Boolean { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan.Tag : System.Int32 { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan+Tags (class)
+ToolUp.AI.FastPathTriageResolver+TriagePlan+Tags.TriageFallThrough : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+TriagePlan+Tags.TriageSetField : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageFallThrough (class)
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageFallThrough.outcome : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageSetField (class)
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageSetField.confidence : System.Double { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageSetField.field : ToolUp.AI.AIFieldDescriptor { get }
+ToolUp.AI.FastPathTriageResolver+TriagePlan+TriageSetField.value : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver+TriageResult (class)
+ToolUp.AI.FastPathTriageResolver+TriageResult.IsTriageResolved : System.Boolean { get }
+ToolUp.AI.FastPathTriageResolver+TriageResult.IsTriageUnresolved : System.Boolean { get }
+ToolUp.AI.FastPathTriageResolver+TriageResult.Tag : System.Int32 { get }
+ToolUp.AI.FastPathTriageResolver+TriageResult.TriageUnresolved : ToolUp.AI.FastPathTriageResolver+TriageResult { get }
+ToolUp.AI.FastPathTriageResolver+TriageResult+Tags (class)
+ToolUp.AI.FastPathTriageResolver+TriageResult+Tags.TriageResolved : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+TriageResult+Tags.TriageUnresolved : System.Int32 (literal)
+ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved (class)
+ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved.reply : System.String { get }
 ToolUp.AI.ICitationCounters (interface)
 ToolUp.AI.ICitationCounters.Record(System.String, System.String, ToolUp.AI.CitationNormalisation) : System.Void
 ToolUp.AI.ICitationCounters.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.CitationCounterRow]

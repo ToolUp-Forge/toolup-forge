@@ -283,6 +283,8 @@ let private claudeDescriptor: AIProviderDescriptor = {
         ToolUse = true
         Vision = true
         SupportsPromptCaching = true
+        SupportsTriage = false
+        TriageModelId = None
         ProviderName = "anthropic"
         Model = "claude-opus-4-8"
     }

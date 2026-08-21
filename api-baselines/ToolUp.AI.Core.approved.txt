@@ -29,6 +29,24 @@ ToolUp.AI.AIFallbackPolicy+Tags (class)
 ToolUp.AI.AIFallbackPolicy+Tags.PermissiveWithPlatformFallback : System.Int32 (literal)
 ToolUp.AI.AIFallbackPolicy+Tags.PlatformOnly : System.Int32 (literal)
 ToolUp.AI.AIFallbackPolicy+Tags.StrictBYOK : System.Int32 (literal)
+ToolUp.AI.AIFieldDescriptor (class)
+ToolUp.AI.AIFieldDescriptor..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.AI.AIFieldDescriptor.Description : System.String { get }
+ToolUp.AI.AIFieldDescriptor.FieldId : System.String { get }
+ToolUp.AI.AIFieldDescriptor.InstructionPatterns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIFieldDescriptor.ValueAliases : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.AI.AIFieldDescriptor.ValueType : System.String { get }
+ToolUp.AI.AIFieldDescriptorModule (class)
+ToolUp.AI.AIFieldDescriptorModule.resolveAlias(ToolUp.AI.AIFieldDescriptor, System.String) : System.String
+ToolUp.AI.AIFieldSnapshot (class)
+ToolUp.AI.AIFieldSnapshot..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIFieldDescriptor], System.String)
+ToolUp.AI.AIFieldSnapshot.Fields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIFieldDescriptor] { get }
+ToolUp.AI.AIFieldSnapshot.ModuleId : System.String { get }
+ToolUp.AI.AIFieldSnapshot.Page : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIFieldSnapshot.StateSummary : System.String { get }
+ToolUp.AI.AIFieldSnapshotModule (class)
+ToolUp.AI.AIFieldSnapshotModule.empty(System.String) : ToolUp.AI.AIFieldSnapshot
+ToolUp.AI.AIFieldSnapshotModule.tryFindField(System.String, ToolUp.AI.AIFieldSnapshot) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIFieldDescriptor]
 ToolUp.AI.AILatencyRecord (class)
 ToolUp.AI.AILatencyRecord..ctor(System.Guid, System.Guid, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.AI.AILatencyRecord.CacheCreationTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -228,6 +246,8 @@ ToolUp.AI.ConversationMessage.RetrievedSources : Microsoft.FSharp.Collections.FS
 ToolUp.AI.ConversationMessage.Timestamp : System.DateTime { get }
 ToolUp.AI.ConversationMessage.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord] { get }
 ToolUp.AI.ConversationMessage.Verification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification] { get }
+ToolUp.AI.IAIFieldRegistry (interface)
+ToolUp.AI.IAIFieldRegistry.Describe(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIFieldSnapshot]]
 ToolUp.AI.IAIProviderFactory (interface)
 ToolUp.AI.IAIProviderFactory.Available : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderDescriptor] { get }
 ToolUp.AI.IAIProviderFactory.BuildPlatform(System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.IAIProvider]

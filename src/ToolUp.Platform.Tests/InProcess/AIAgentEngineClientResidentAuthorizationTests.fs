@@ -60,6 +60,8 @@ type private CannedToolCallProvider(toolNameToCall: string) =
             ToolUse = true
             Vision = false
             SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
             ProviderName = "test-canned"
             Model = "test-canned-model"
         }

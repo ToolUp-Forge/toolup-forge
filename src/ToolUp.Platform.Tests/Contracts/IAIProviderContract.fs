@@ -45,6 +45,8 @@ type private StubProvider(cannedContent: string) =
             ToolUse = false
             Vision = false
             SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
             ProviderName = "stub-67b-contract"
             Model = "stub-model"
         }
@@ -77,6 +79,8 @@ type private FailingProvider() =
             ToolUse = false
             Vision = false
             SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
             ProviderName = "stub-67b-contract-fail"
             Model = "stub-model"
         }

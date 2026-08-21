@@ -633,6 +633,9 @@ let allTests =
         // Phase 6j.E — beacon endpoint idempotency (dedup window + append plan).
         FastPathBeaconIdempotencyTests.tests
         FastPathSequencerTelemetryTests.tests
+        // Phase 6j.B — Tier-3 triage: the plan stage, the agent-loop
+        // intercept, and the /dev/ai-fastpath rollup.
+        FastPathTriageResolverTests.tests
         HnswFidelityTests.tests
         PermissionStoreFailClosedTests.tests
         SmokeTestDefaultsTests.tests

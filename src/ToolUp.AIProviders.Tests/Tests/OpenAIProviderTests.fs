@@ -25,6 +25,8 @@ let private spec: ProviderSpec = {
             ToolUse = true
             Vision = true
             SupportsPromptCaching = true
+            SupportsTriage = true
+            TriageModelId = Some "gpt-4o-mini"
             ProviderName = OpenAIProvider.ProviderId
             Model = OpenAIProvider.DefaultModel
         }

@@ -78,6 +78,11 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
             // request-side opt-in needed; cached portion reported at
             // usage.prompt_tokens_details.cached_tokens.
             SupportsPromptCaching = true
+            // Phase 6j.B — native `response_format: json_schema`, so a
+            // small closed-enum schema is served exactly rather than
+            // coaxed.
+            SupportsTriage = true
+            TriageModelId = Some "gpt-4o-mini"
             ProviderName = "openai"
             Model = model
         }

@@ -88,4 +88,53 @@ let registrations: MetricRegistration list = [
             Tags = [ "provider"; "model" ]
         }
     }
+    // ── Phase 6j.B — Tier-3 fast-path triage ──────────────────────
+    //
+    // Appended here rather than in a second registration list because
+    // `AIServerApp.create` folds exactly one AI list into
+    // `ServerApp.MetricRegistrations`; a parallel list would need a
+    // second fold and would be silently unregistered if anyone forgot
+    // it, which is the failure mode a metric series has (emissions
+    // drop, nothing errors).
+    //
+    // A deployment that never composes `FastPathTriageConfig` still
+    // gets the series ALLOCATED and never emits into them, which is
+    // the same posture the three above take for a deployment that
+    // never chats — three idle series cost less than a conditional
+    // registration path.
+    {
+        Module = None
+        Definition = {
+            Name = FastPathTriageResolver.TriageAttemptsMetric
+            Kind = Counter
+            Description = "Tier-3 fast-path triage attempts (one per turn that reached the triage provider call)"
+            Unit = "1"
+            Tags = [ "provider"; "model" ]
+        }
+    }
+    {
+        Module = None
+        Definition = {
+            Name = FastPathTriageResolver.TriageOutcomesMetric
+            Kind = Counter
+            // The stratification. `outcome` is a closed set of seven
+            // tokens (`FastPathTriageResolver.outcomes`), so the tag
+            // multiplies cardinality by a constant — which is why it is
+            // admissible here and a field id or an instruction would
+            // not be.
+            Description = "Tier-3 fast-path triage attempts by outcome (hit / needs-full-agent / failure class)"
+            Unit = "1"
+            Tags = [ "provider"; "model"; "outcome" ]
+        }
+    }
+    {
+        Module = None
+        Definition = {
+            Name = FastPathTriageResolver.TriageDurationMsMetric
+            Kind = Histogram MetricDefinition.defaultLatencyBucketsMs
+            Description = "Tier-3 fast-path triage attempt duration in milliseconds (provider call included)"
+            Unit = "ms"
+            Tags = [ "provider"; "model" ]
+        }
+    }
 ]

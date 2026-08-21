@@ -79,12 +79,14 @@ ToolUp.Platform.AI.AIContentPartModule (class)
 ToolUp.Platform.AI.AIContentPartModule.exportPlaceholder(System.Int32, ToolUp.Platform.AI.AIContentPart) : System.String
 ToolUp.Platform.AI.AIContentPartModule.redactedSummary(ToolUp.Platform.AI.AIContentPart) : System.String
 ToolUp.Platform.AI.AIProviderCapabilities (class)
-ToolUp.Platform.AI.AIProviderCapabilities..ctor(System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.String, System.String)
+ToolUp.Platform.AI.AIProviderCapabilities..ctor(System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
 ToolUp.Platform.AI.AIProviderCapabilities.Model : System.String { get }
 ToolUp.Platform.AI.AIProviderCapabilities.ProviderName : System.String { get }
 ToolUp.Platform.AI.AIProviderCapabilities.Streaming : System.Boolean { get }
 ToolUp.Platform.AI.AIProviderCapabilities.SupportsPromptCaching : System.Boolean { get }
+ToolUp.Platform.AI.AIProviderCapabilities.SupportsTriage : System.Boolean { get }
 ToolUp.Platform.AI.AIProviderCapabilities.ToolUse : System.Boolean { get }
+ToolUp.Platform.AI.AIProviderCapabilities.TriageModelId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AI.AIProviderCapabilities.Vision : System.Boolean { get }
 ToolUp.Platform.AI.AIProviderCapabilitiesModule (class)
 ToolUp.Platform.AI.AIProviderCapabilitiesModule.unknown : ToolUp.Platform.AI.AIProviderCapabilities { get }

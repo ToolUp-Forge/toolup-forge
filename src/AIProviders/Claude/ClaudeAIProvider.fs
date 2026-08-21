@@ -110,6 +110,16 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             // history; usage block parsed on both streaming and
             // non-streaming paths.
             SupportsPromptCaching = true
+            // Phase 6j.B — Anthropic's structured-output path is the
+            // tool-based workaround this provider already implements,
+            // and it is cheap and reliable over a four-field schema.
+            SupportsTriage = true
+            // The Haiku-grade id. Note this is also `DefaultModel`, so
+            // on an untuned deployment the triage model and the agent
+            // model coincide and pointing a second provider instance
+            // here buys nothing — which is correct, not a gap: there
+            // is no cheaper tier to move to.
+            TriageModelId = Some DefaultModel
             ProviderName = "anthropic-claude"
             Model = model
         }

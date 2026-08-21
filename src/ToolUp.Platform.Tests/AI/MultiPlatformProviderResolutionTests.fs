@@ -53,6 +53,8 @@ let private noCaps: AIProviderCapabilities = {
     ToolUse = false
     Vision = false
     SupportsPromptCaching = false
+    SupportsTriage = false
+    TriageModelId = None
     ProviderName = "test"
     Model = "test"
 }

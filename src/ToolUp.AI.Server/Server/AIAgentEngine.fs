@@ -243,7 +243,15 @@ let private resolveLatencyScope (ctx: HttpContext) : StorageScope =
             Persist = true
         }
 
-let runAgentLoop
+/// The full agent loop. Reached from `runAgentLoop` below, which is
+/// the entry point every caller uses — it applies the Phase 6j.B
+/// Tier-3 triage intercept first and only then delegates here.
+///
+/// Split out rather than guarded inline so the intercept is a visible
+/// seam at the top of the file's public surface instead of a branch
+/// buried 300 lines into the loop body, and so "did triage run before
+/// any provider call" is answerable by reading one function.
+let private runFullAgentLoop
     (provider: IAIProvider)
     (registry: AIToolRegistry)
     (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
@@ -970,4 +978,82 @@ let runAgentLoop
             do! emitLatency turn (Some response) ttftMs turnToolTimings turnSw.Elapsed.TotalMilliseconds
 
         return currentMessages
+    }
+
+// ─── Phase 6j.B — Tier-3 triage intercept ────────────────────────
+//
+// `runAgentLoop` keeps its signature and remains the single entry
+// point; what changed is that a cheap, opt-in classifier now gets one
+// look at the turn before any frontier-model call is made. Everything
+// that decides whether it runs, and everything it costs, lives in
+// `FastPathTriageResolver`; this seam is deliberately thin.
+//
+// `None` from the resolver means triage was not composed, not enabled,
+// not applicable to this turn, or the provider does not support it —
+// in every one of those cases the loop below runs exactly as it did
+// before this phase (GP 11 / GP 13).
+//
+// On a resolution the loop does NOT run at all. The action has already
+// been published to the caller's `ModuleAction` stream by the resolver;
+// what is left here is the user-visible half: stream the recap so the
+// client's buffer has something to commit, close the message so it
+// lands in the chat, and return it appended to the history. That
+// append is what makes the pair — the user's real instruction (already
+// the tail of `messages`) plus this synthetic assistant turn — flow
+// into BOTH persisted blobs through `AIAssistantHandler`'s ordinary
+// path, so the next complex turn replays a history in which the change
+// is visible.
+
+let runAgentLoop
+    (provider: IAIProvider)
+    (registry: AIToolRegistry)
+    (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
+    (ctx: HttpContext)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (surface: AISurface)
+    (activeModule: string option)
+    (activePage: string option)
+    (cancelToken: System.Threading.CancellationToken)
+    (messages: AIProviderMessage list)
+    (systemPrompt: string option)
+    (onEvent: AIStreamEvent -> unit)
+    : Async<AIProviderMessage list> =
+    async {
+        let! triage =
+            FastPathTriageResolver.tryTriage ctx provider taskId conversationId activeModule activePage messages
+
+        match triage with
+        | Some(FastPathTriageResolver.TriageResolved reply) ->
+            onEvent (MessageDelta(conversationId, reply))
+            onEvent (MessageComplete(conversationId, Guid.NewGuid()))
+
+            return
+                messages
+                @ [
+                    {
+                        Role = "assistant"
+                        Content = reply
+                        ToolCalls = []
+                        ToolResults = []
+                        Parts = []
+                    }
+                ]
+        | Some FastPathTriageResolver.TriageUnresolved
+        | None ->
+            return!
+                runFullAgentLoop
+                    provider
+                    registry
+                    dispatchRegistry
+                    ctx
+                    taskId
+                    conversationId
+                    surface
+                    activeModule
+                    activePage
+                    cancelToken
+                    messages
+                    systemPrompt
+                    onEvent
     }

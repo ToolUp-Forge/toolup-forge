@@ -665,6 +665,52 @@ module AIServerApp =
     let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: AIServerApp) : AIServerApp =
         withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
 
+    /// Phase 6j.B — opt into Tier-3 fast-path triage. Registers the
+    /// `FastPathTriageConfig` singleton the agent loop's intercept
+    /// resolves; NOT calling this (or passing a config with
+    /// `Enabled = false`) leaves the chat path byte-for-byte pre-6j.B —
+    /// no triage call, no attempt row, no emission (GP 11 / GP 13).
+    ///
+    /// The metric series ride `AILatencyMetrics.registrations`, which
+    /// `create` already folds in, so there is nothing to add here: a
+    /// deployment that opts in mid-life does not need its metric
+    /// registrations re-derived.
+    ///
+    /// This is deliberately a team-level switch rather than a default.
+    /// Triage trades a small per-instruction token cost for latency,
+    /// and whether that trade is worth making depends on a measurement
+    /// the SDK cannot make for the deployment — the share of its
+    /// instruction traffic that Tier 1's declared patterns already
+    /// catch. Turning it on before that is known buys an unknown
+    /// amount of latency for a known cost.
+    ///
+    /// `config.TriageProvider` is where the cheap model goes. Read the
+    /// primary provider's `Capabilities.TriageModelId`, build a second
+    /// provider instance at that model, and pass it via
+    /// `FastPathTriageConfig.withTriageProvider`; leave it `None` and
+    /// triage runs on the turn's own provider, which is correct but
+    /// pays the frontier model's price for the decision.
+    let withFastPathTriage (config: FastPathTriageResolver.FastPathTriageConfig) (app: AIServerApp) : AIServerApp =
+        if not config.Enabled then
+            app
+        else
+            let register (s: IServiceCollection) =
+                s.AddSingleton<FastPathTriageResolver.FastPathTriageConfig>(config)
+
+            {
+                app with
+                    Base = {
+                        app.Base with
+                            Extensions = {
+                                app.Base.Extensions with
+                                    ServiceConfig =
+                                        match app.Base.Extensions.ServiceConfig with
+                                        | None -> Some register
+                                        | Some baseFn -> Some(fun s -> register (baseFn s))
+                            }
+                    }
+            }
+
     /// Phase 43.A — swap the canonical BYOK provider-profile store
     /// after `create`. Mirrors `ServerApp.withProviderProfile` (the
     /// deferred 42.B seam) onto the AI superset: rebinds both the

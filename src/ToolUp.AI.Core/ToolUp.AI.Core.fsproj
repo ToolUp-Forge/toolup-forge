@@ -19,6 +19,10 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\AITypes.fs" />
+        <!-- Phase 6j.B — the declared-field seam the Tier-3 triage
+             resolver reads. Pure records + one async interface; no
+             dependency on other AI.Core files. -->
+        <Compile Include="Shared\AIFieldRegistry.fs" />
         <Compile Include="Shared\IAIProviderFactory.fs" />
         <Compile Include="Shared\IPlatformAIKeyStore.fs" />
         <Compile Include="Shared\AISettingsTypes.fs" />

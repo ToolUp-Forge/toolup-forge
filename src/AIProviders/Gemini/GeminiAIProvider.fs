@@ -212,6 +212,9 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             // truthfully: counts may flow through but caching is not
             // request-side controlled here.
             SupportsPromptCaching = true
+            // Phase 6j.B — native `generationConfig.responseSchema`.
+            SupportsTriage = true
+            TriageModelId = Some "models/gemini-2.5-flash"
             ProviderName = "google-gemini"
             Model = model
         }

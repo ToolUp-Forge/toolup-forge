@@ -26,6 +26,8 @@ let private spec: ProviderSpec = {
             ToolUse = true
             Vision = true
             SupportsPromptCaching = true
+            SupportsTriage = true
+            TriageModelId = Some ClaudeAIProvider.DefaultModel
             ProviderName = ClaudeAIProvider.ProviderId
             Model = ClaudeAIProvider.DefaultModel
         }
