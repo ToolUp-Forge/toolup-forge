@@ -27,10 +27,11 @@ Use when:
 - Streaming tool use without sacrificing intermediate-result streaming.
 
 Capabilities:
-- `SupportsStreaming = true` — SSE; emits incremental tokens.
-- `SupportsToolUse = true` — multi-turn tool calling.
-- `SupportsVision = true` — but the SDK's multimodal protocol isn't yet wired (declared capability not yet active).
+- `Streaming = true` — SSE; emits incremental tokens.
+- `ToolUse = true` — multi-turn tool calling.
+- `Vision = true` — multipart image input (Phase 6o); model ids the provider classifies as non-vision reject synchronously with `UnsupportedCapability("vision", …)`.
 - `SupportsPromptCaching = true` — explicit `cache_control` markers; the SDK marks system prompt + tools + conversation prefix.
+- `SupportsTriage = true` — the tool-based structured-output workaround serves the triage tier; `TriageModelId` names the Haiku-grade id.
 
 Setup:
 
@@ -62,15 +63,16 @@ The factory invokes the builder per-call with the configured `(apiKey, model)`. 
 
 Use when:
 - You're invested in OpenAI's ecosystem.
-- You need GPT-4o's image / audio modalities (when the SDK wires multimodal — currently deferred).
+- You need GPT-4o's image input (multipart shipped in Phase 6o; audio modalities are not yet wired).
 - You want automatic prompt caching (OpenAI caches automatically; no markers needed).
 - Lower latency on smaller models for non-critical paths.
 
 Capabilities:
-- `SupportsStreaming = true` — SSE; emits incremental tokens + usage chunk on `[DONE]`.
-- `SupportsToolUse = true` — function calling.
-- `SupportsVision = true` — declared, awaiting SDK multimodal wire protocol.
+- `Streaming = true` — SSE; emits incremental tokens + usage chunk on `[DONE]`.
+- `ToolUse = true` — function calling.
+- `Vision = true` — multipart image input (Phase 6o); non-vision model ids reject synchronously with `UnsupportedCapability("vision", …)`.
 - `SupportsPromptCaching = true` — automatic; cached-token counts reported via `stream_options.include_usage`.
+- `SupportsTriage = true` — native `response_format: json_schema` serves the triage tier; `TriageModelId = Some "gpt-4o-mini"`.
 
 Setup:
 
@@ -233,10 +235,12 @@ let descriptor = {
     Capabilities = {
         ProviderName = "myvendor"
         Model = ""    // overridden by builder
-        SupportsStreaming = true
-        SupportsToolUse = true
-        SupportsVision = false
+        Streaming = true
+        ToolUse = true
+        Vision = false
         SupportsPromptCaching = false
+        SupportsTriage = false    // see docs/ai/extending.md "Triage capability"
+        TriageModelId = None
     }
 }
 

@@ -158,10 +158,12 @@ and StopReason = EndTurn | ToolUse | MaxTokens | StopSequence
 and AIProviderCapabilities = {
     ProviderName: string
     Model: string
-    SupportsStreaming: bool
-    SupportsToolUse: bool
-    SupportsVision: bool
+    Streaming: bool
+    ToolUse: bool
+    Vision: bool
     SupportsPromptCaching: bool
+    SupportsTriage: bool          // provider can serve the fast-path triage tier
+    TriageModelId: string option  // cheaper-tier model id, when the family has one
 }
 ```
 
@@ -230,7 +232,7 @@ For production observability, the same data flows through `IMetricsSink` (Promet
 
 ## What this companion does NOT cover
 
-- **Image / audio input** — the `IAIProvider.AIProviderMessage.Content` is currently `string`. Multimodal content blocks (vision input wire protocol) are reserved for a future SDK version. `Capabilities.SupportsVision` exists as a capability flag for providers to declare support, but the protocol translation is not yet shipped.
+- **Audio input** — image (vision) input shipped in Phase 6o: `AIProviderMessage.Parts` carries multimodal content blocks, gated by `Capabilities.Vision` with synchronous `UnsupportedCapability("vision", …)` rejection on non-vision models. Audio content blocks are not yet shipped.
 - **Tool result streaming** — tools return a single `ToolResult` value. Streaming partial tool results (for long-running tool calls) is not yet supported.
 - **Cross-conversation memory** — each conversation is isolated. There's no shared memory across conversations for the same user; "the assistant remembers our prior chat" is an opt-in pattern via the `ToolUp.KnowledgeBase` companion (chat history can be ingested as KB content).
 - **Native multi-agent orchestration** — the agent loop runs one agent at a time. Multi-agent workflows (one agent delegates to another) can be expressed with tool calls but aren't a first-class concept in the API.

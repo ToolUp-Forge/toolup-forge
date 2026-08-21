@@ -176,10 +176,12 @@ type IAIProvider =
 and AIProviderCapabilities = {
     ProviderName: string
     Model: string
-    SupportsStreaming: bool
-    SupportsToolUse: bool
-    SupportsVision: bool
+    Streaming: bool
+    ToolUse: bool
+    Vision: bool
     SupportsPromptCaching: bool
+    SupportsTriage: bool          // provider can serve the fast-path triage tier
+    TriageModelId: string option  // cheaper-tier model id, when the family has one
 }
 
 and AIProviderRequest = {
@@ -199,8 +201,9 @@ and AIProviderResponse = {
 }
 
 and AIProviderMessage = {
-    Role: ProviderMessageRole   // User | Assistant | System
-    Content: string             // future: multimodal content blocks DU
+    Role: string                // "user" | "assistant" | "system"
+    Content: string             // plain-text body; for multipart messages, the concatenated text parts
+    Parts: AIContentPart list   // multimodal content blocks (Phase 6o); [] for plain-text messages
 }
 
 and AIProviderToolCall = {

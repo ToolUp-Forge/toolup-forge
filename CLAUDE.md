@@ -569,7 +569,7 @@ A new provider goes in `src/AIProviders/<Name>/` with its own `.fsproj`, impleme
 - Receives `ISecretStore` through its builder / `create` function.
 - Never reads env vars or config files directly.
 - Supports the streaming + tool-calling contract documented in `docs/ai/extending.md`.
-- Documents capability flags via `AIProviderResponse.Capabilities` (e.g. `SupportsPromptCaching: bool`, `SupportsVisionInput: bool`).
+- Documents capability flags via `IAIProvider.Capabilities` (e.g. `SupportsPromptCaching: bool`, `Vision: bool`, `SupportsTriage: bool`).
 
 `AIProviderResponse.Usage: TokenUsage option` reports `{ PromptTokens; CachedPromptTokens; OutputTokens; CacheCreationTokens }`. Streaming providers parse usage from terminal events (Anthropic `message_delta`; OpenAI `stream_options.include_usage=true` chunks).
 

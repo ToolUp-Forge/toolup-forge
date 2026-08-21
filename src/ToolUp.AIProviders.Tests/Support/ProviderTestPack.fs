@@ -62,7 +62,7 @@ type ProviderSpec = {
     /// `AIProviderBuilder.Build` for case 2.
     CreateWithApiKeyAndModel: string -> string -> IAIProvider
     /// A model id this provider classifies as NON-vision-capable
-    /// (`Capabilities.SupportsVisionInput = false`). Drives the
+    /// (`Capabilities.Vision = false`). Drives the
     /// capability-gating conformance arm: a multimodal message routed
     /// to this model must be rejected synchronously with
     /// `UnsupportedCapability("vision", _)` BEFORE any vendor round-trip,

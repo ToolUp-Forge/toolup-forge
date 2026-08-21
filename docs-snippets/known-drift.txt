@@ -11,7 +11,6 @@ c0c33d7e docs/ai/README.md#3 (line 67) — error FS0001: The type 'string' is no
 972089fc docs/ai/api-reference.md#4 (line 54) — error FS0039: The type 'ToolResult' is not defined. Maybe you want one of the following: ToolSummary ToolCallStatus JobResult
 035989b8 docs/ai/api-reference.md#5 (line 68) — error FS0039: The type 'ToolResult' is not defined. Maybe you want one of the following: ToolSummary ToolCallStatus JobResult
 f92f4826 docs/ai/api-reference.md#8 (line 119) — error FS0039: The type 'Participant' is not defined. Maybe you want one of the following: ParticipantType
-4d1e9a6a docs/ai/api-reference.md#10 (line 160) — error FS0039: The type 'ProviderMessageRole' is not defined. Maybe you want one of the following: ProviderProfile ProviderHealth ProviderResolutionError ProviderEntry ProviderHealthStatus
 36204ba6 docs/ai/api-reference.md#12 (line 250) — error FS0039: The type 'StopReason' is not defined. Maybe you want one of the following: StorageScope
 130ba93f docs/ai/api-reference.md#13 (line 271) — error FS0039: The type 'AIProviderFactory' is not defined. Maybe you want one of the following: AIProviderToolCall AIProviderToolDef AIProviderError AIProviderDescriptor AIProviderToolResult
 7d1ebaa0 docs/ai/api-reference.md#15 (line 306) — error FS0039: The type 'SystemPromptBuilder' is not defined. Maybe you want one of the following: SystemException
