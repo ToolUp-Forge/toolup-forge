@@ -239,6 +239,11 @@ let private toConversationMessage
         // ownership check inside `bgWork`. Empty for assistant turns
         // (only the first message's `CreatedBy` is authoritative).
         CreatedBy = createdBy
+        // Phase 6j.E — beacon idempotency key. Always empty here: this is
+        // the ordinary agent-loop persistence path, which no client
+        // retries against a key. Only `FastPathBeaconHandler` stamps a
+        // non-empty value, and only it scans for one.
+        BeaconId = ""
         // Phase 523 — numeric-fidelity verdict; `None` for user turns and
         // for assistant turns produced with the gate `Off` (the default).
         Verification = verification

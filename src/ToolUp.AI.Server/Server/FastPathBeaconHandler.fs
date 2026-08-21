@@ -60,6 +60,16 @@ open ToolUp.AI
 //     Legacy blobs without `CreatedBy` are accepted (pre-6j.D
 //     conversations have no recorded owner; locking them out would
 //     break existing histories on the upgrade).
+//   * Phase 6j.E — beacon idempotency. A page reload mid-flight, a
+//     browser network blip, or any client retry re-POSTs the same
+//     beacon, and the append path is not naturally idempotent: the
+//     synthetic `User + AIAssistant` pair lands twice and every
+//     subsequent agent-loop turn reads the instruction twice over. Each
+//     emission now carries a client-minted `BeaconId`; the handler scans
+//     the tail of the conversation for it and, on a hit, returns 202
+//     having touched neither blob — so the persisted sequence after N
+//     duplicate POSTs is byte-for-byte the sequence after one. A beacon
+//     with no key is admitted exactly as before.
 
 [<Literal>]
 let private FastPathSourceModule = "_platform.ai.fastpath"
@@ -111,6 +121,32 @@ let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
 [<Literal>]
 let private MaxBeaconTextLen = 16384
 
+/// Phase 6j.E — how many trailing conversation messages the idempotency
+/// scan reads. A beacon appends exactly TWO messages, so 20 covers the
+/// last ten fast-path turns.
+///
+/// Why a window at all, and why this size. The duplicates this exists to
+/// stop arrive within seconds of the original — a reload part-way
+/// through the fetch, a transport-level retry, a double-fired hook — so
+/// they are separated from it by at most a handful of turns, and ten is
+/// generous headroom for that. Bounding the scan also bounds its cost:
+/// an unbounded scan grows with the conversation, which is the wrong
+/// shape for a check that runs on every beacon. And a key resurfacing
+/// LONG after its turn is not a retry — it is a replay, which is a
+/// different event and should append, not silently vanish.
+[<Literal>]
+let BeaconDedupWindow = 20
+
+/// Cap on the beacon's idempotency key. The key is client-supplied and
+/// PERSISTED on both appended turns, so it inherits the same posture as
+/// the free-text fields above: bound it, or a caller can write an
+/// unbounded string into the conversation blob through a field that
+/// exists only to be compared for equality. 128 is ample for the Guid
+/// the shipped client mints (36 chars) and for any other scheme a future
+/// client might use.
+[<Literal>]
+let private MaxBeaconIdLen = 128
+
 // ─── JSON settings (mirrors AIAssistantHandler — must match the
 //     conversation blob format so the LLM sees the synthetic turns
 //     in the right shape). ────────────────────────────────────────
@@ -149,6 +185,13 @@ type FastPathBeacon = {
     /// navigation. Carries enough info for cross-tier consistency
     /// analysis against Tier 4 `set_field` tool calls.
     JsonFragment: string
+    /// Phase 6j.E — per-emission idempotency key (a fresh Guid string
+    /// minted by the client for each beacon it sends, so a retry of the
+    /// SAME emission carries the SAME key). Empty from a pre-6j.E client:
+    /// a missing JSON property deserialises to `null` under
+    /// `FableConverters`, which the dedup scan reads as "no key" and
+    /// admits unchanged — no dedup, no rejection (GP 11).
+    BeaconId: string
 }
 
 // ─── Phase 6j.G — sequenced fast-path wire shapes ────────────────
@@ -258,6 +301,11 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
         Error(sprintf "SyntheticReply exceeds %d-char limit" MaxBeaconTextLen)
     elif safeLen b.JsonFragment > MaxBeaconTextLen then
         Error(sprintf "JsonFragment exceeds %d-char limit" MaxBeaconTextLen)
+    elif safeLen b.BeaconId > MaxBeaconIdLen then
+        // Phase 6j.E — no pre-6j.E client can trip this: the field did
+        // not exist, so it arrives absent (0 chars). Only a client that
+        // opts into keying can exceed the cap.
+        Error(sprintf "BeaconId exceeds %d-char limit" MaxBeaconIdLen)
     else
         Ok()
 
@@ -297,6 +345,39 @@ let checkOwnership (existing: ConversationMessage list) (callerUserId: string) :
         if System.String.IsNullOrEmpty owner then Ok()
         elif owner = callerUserId then Ok()
         else Error owner
+
+// ─── Phase 6j.E — beacon idempotency ────────────────────────────
+//
+// Two normalisations feed one predicate.
+//
+// `FableConverters` deserialises a MISSING JSON property to `null` for a
+// reference type, so a pre-6j.E client's beacon and a pre-6j.E
+// conversation blob both surface `null` where a key would be — never
+// `""`. Reading every key through `beaconKey` folds absent / null /
+// empty into one case, so the "no key ⇒ behave exactly as today" clause
+// holds without three branches restating it.
+
+let private beaconKey (s: string) = if isNull s then "" else s
+
+/// True when this beacon's key is already recorded on a message inside
+/// the conversation's trailing `BeaconDedupWindow` — i.e. this POST is a
+/// repeat of one already applied, and must no-op.
+///
+/// A beacon carrying NO key is never a duplicate: an older client cannot
+/// be deduplicated (it has nothing to deduplicate on) and refusing it
+/// would break the fast path on the upgrade, so it is admitted exactly
+/// as before (GP 11). Symmetrically, a persisted message with no key
+/// never matches — legacy history cannot accidentally suppress a live
+/// beacon.
+let isDuplicateBeacon (existing: ConversationMessage list) (beaconId: string) : bool =
+    let key = beaconKey beaconId
+
+    if key = "" then
+        false
+    else
+        let skip = max 0 (List.length existing - BeaconDedupWindow)
+
+        existing |> List.skip skip |> List.exists (fun m -> beaconKey m.BeaconId = key)
 
 // ─── Conversation persistence ───────────────────────────────────
 
@@ -368,6 +449,11 @@ let private buildUserMessage (callerUserId: string) (beacon: FastPathBeacon) : C
     // treats those degenerate first-writes as legacy/unowned rather
     // than locking the conversation to nobody.
     CreatedBy = callerUserId
+    // Phase 6j.E — stamp the emission's idempotency key so a repeat POST
+    // finds it in the tail scan. Stamped on BOTH turns of the pair, not
+    // just this one: the window is counted in messages, so a pair
+    // straddling its edge would otherwise be half-invisible.
+    BeaconId = beaconKey beacon.BeaconId
     // Phase 523 — fast-path turns bypass the LLM answer path entirely, so
     // no numeric-fidelity verdict applies.
     Verification = None
@@ -421,9 +507,33 @@ let private buildAssistantMessage (beacon: FastPathBeacon) : ConversationMessage
         // CreatedBy is authoritative for the ownership gate. Set to the
         // same caller id so the audit / replay shape is consistent.
         CreatedBy = ""
+        // Phase 6j.E — see `buildUserMessage`: both turns of the pair
+        // carry the key.
+        BeaconId = beaconKey beacon.BeaconId
         // Phase 523 — fast-path synthetic replies quote no facts.
         Verification = None
     }
+
+/// Phase 6j.E — the append decision, whole, as one pure function: the
+/// turns to append, or `None` when this beacon has already been applied.
+///
+/// `None` is what makes the acceptance criterion structural rather than
+/// incidental. The duplicate path does not compute a second pair and
+/// then discard it, and does not append-then-dedupe; it produces nothing
+/// at all, so the caller has nothing to write and the persisted sequence
+/// after any number of repeat POSTs IS the sequence after the first one.
+/// Both blobs are governed by this single decision — the handler returns
+/// before either write, so the conversation blob and the provider-history
+/// blob cannot disagree about whether the beacon landed.
+let planBeaconAppend
+    (existing: ConversationMessage list)
+    (callerUserId: string)
+    (beacon: FastPathBeacon)
+    : ConversationMessage list option =
+    if isDuplicateBeacon existing beacon.BeaconId then
+        None
+    else
+        Some [ buildUserMessage callerUserId beacon; buildAssistantMessage beacon ]
 
 let private buildProviderUser (beacon: FastPathBeacon) : AIProviderMessage = {
     Role = "user"
@@ -596,6 +706,11 @@ let beaconHandler: HttpHandler =
             | Some l -> l.Warn m
             | None -> ()
 
+        let info (m: string) =
+            match logger with
+            | Some l -> l.Info m
+            | None -> ()
+
         try
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
@@ -684,31 +799,43 @@ let beaconHandler: HttpHandler =
                             ctx.Response.StatusCode <- 403
                             return! next ctx
                         | Ok() ->
-                            let userMsg = buildUserMessage callerUserId beacon
-                            let asstMsg = buildAssistantMessage beacon
+                            match planBeaconAppend existing callerUserId beacon with
+                            | None ->
+                                // Phase 6j.E — this beacon is already in the
+                                // conversation's tail. Explicit no-op: neither
+                                // blob is read further or written, and no
+                                // `FastPathResolved` event is emitted (one
+                                // resolution happened, so one event exists —
+                                // counting the retry would inflate the
+                                // rolling-window hit stats the beacon audit
+                                // trail exists to measure). 202, same as the
+                                // append path: the client is fire-and-forget
+                                // and a retry succeeding is the truth.
+                                info
+                                    $"FastPath beacon {beacon.BeaconId} for conversation {beacon.ConversationId} is a duplicate within the last {BeaconDedupWindow} messages; no-op."
 
-                            do!
-                                saveMessages
-                                    storage
-                                    scope.Container
-                                    beacon.ConversationId
-                                    (existing @ [ userMsg; asstMsg ])
+                                ctx.Response.StatusCode <- 202
+                                return! next ctx
+                            | Some turns ->
+                                do! saveMessages storage scope.Container beacon.ConversationId (existing @ turns)
 
-                            let providerUser = buildProviderUser beacon
-                            let providerAsst = buildProviderAssistant beacon
-                            let! providerExisting = loadProviderHistory storage scope.Container beacon.ConversationId
+                                let providerUser = buildProviderUser beacon
+                                let providerAsst = buildProviderAssistant beacon
 
-                            do!
-                                saveProviderHistory
-                                    storage
-                                    scope.Container
-                                    beacon.ConversationId
-                                    (providerExisting @ [ providerUser; providerAsst ])
+                                let! providerExisting =
+                                    loadProviderHistory storage scope.Container beacon.ConversationId
 
-                            do! emitEvent eventStoreOpt logger scope beacon
+                                do!
+                                    saveProviderHistory
+                                        storage
+                                        scope.Container
+                                        beacon.ConversationId
+                                        (providerExisting @ [ providerUser; providerAsst ])
 
-                            ctx.Response.StatusCode <- 202
-                            return! next ctx
+                                do! emitEvent eventStoreOpt logger scope beacon
+
+                                ctx.Response.StatusCode <- 202
+                                return! next ctx
                     | None ->
                         // No storage configured — emit the fast-path
                         // event for telemetry and bail. No append

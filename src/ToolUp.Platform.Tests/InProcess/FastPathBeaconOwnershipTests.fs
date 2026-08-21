@@ -31,6 +31,7 @@ let private msg (createdBy: string) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = createdBy
+    BeaconId = ""
     Verification = None
 }
 

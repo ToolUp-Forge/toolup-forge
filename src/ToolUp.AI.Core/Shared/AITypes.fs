@@ -130,6 +130,18 @@ type ConversationMessage = {
     /// echo) sets this to `""` — it is authoritative only when the
     /// server writes it.
     CreatedBy: string
+    /// Phase 6j.E — the idempotency key of the fast-path beacon that
+    /// appended this message, stamped on BOTH synthetic turns of the
+    /// pair. The beacon handler scans the tail of the conversation for
+    /// this value and no-ops (202) on a repeat, so a page reload
+    /// mid-flight, a network blip, or any client retry cannot append the
+    /// same synthetic `User + AIAssistant` pair twice. `""` everywhere
+    /// else — ordinary agent-loop turns, client-side construction, and
+    /// blobs persisted before this field existed (a missing field
+    /// deserialises to `null` under `FableConverters` and is read
+    /// through `String.IsNullOrEmpty`, so legacy history is untouched;
+    /// additive + backward-compatible, GP 11).
+    BeaconId: string
     /// Phase 523 — numeric-fidelity verdict for this assistant message.
     /// `None` for user / system turns, for assistant turns produced with
     /// the gate `Off` (the default), and for conversation history

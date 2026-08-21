@@ -174,6 +174,7 @@ let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    BeaconId = ""
     Verification = None
 }
 
@@ -211,6 +212,7 @@ let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessag
         RetrievedSources = []
         Parts = []
         CreatedBy = ""
+        BeaconId = ""
         Verification = None
     }
 
@@ -224,6 +226,7 @@ let private debugNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    BeaconId = ""
     Verification = None
 }
 
@@ -244,6 +247,7 @@ let private errorNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    BeaconId = ""
     Verification = None
 }
 
@@ -276,6 +280,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                BeaconId = ""
                 Verification = None
             }
 
@@ -311,6 +316,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                         RetrievedSources = []
                         Parts = []
                         CreatedBy = ""
+                        BeaconId = ""
                         Verification = None
                     }
 
@@ -391,6 +397,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                BeaconId = ""
                 Verification = None
             }
 
@@ -413,6 +420,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                BeaconId = ""
                 Verification = None
             }
 

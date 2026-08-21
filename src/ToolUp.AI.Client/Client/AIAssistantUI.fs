@@ -129,6 +129,7 @@ let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessag
         RetrievedSources = []
         Parts = []
         CreatedBy = ""
+        BeaconId = ""
         Verification = None
     }
 
@@ -142,6 +143,7 @@ let private debugNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    BeaconId = ""
     Verification = None
 }
 
@@ -177,6 +179,7 @@ let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    BeaconId = ""
     Verification = None
 }
 
@@ -286,6 +289,7 @@ let update msg model =
             RetrievedSources = []
             Parts = []
             CreatedBy = ""
+            BeaconId = ""
             Verification = None
         }
 
@@ -474,6 +478,7 @@ let update msg model =
                     RetrievedSources = []
                     Parts = []
                     CreatedBy = ""
+                    BeaconId = ""
                     Verification = None
                 }
 
@@ -609,6 +614,7 @@ let update msg model =
                             RetrievedSources = []
                             Parts = []
                             CreatedBy = ""
+                            BeaconId = ""
                             Verification = None
                         }
 

@@ -787,6 +787,7 @@
         <Compile Include="InProcess\ConversationExportAuditTests.fs" />
         <Compile Include="InProcess\ConversationExporterTests.fs" />
         <Compile Include="InProcess\FastPathBeaconOwnershipTests.fs" />
+        <Compile Include="InProcess\FastPathBeaconIdempotencyTests.fs" />
         <Compile Include="InProcess\FastPathSequencerTelemetryTests.fs" />
         <Compile Include="InProcess\HnswFidelityTests.fs" />
         <Compile Include="InProcess\PermissionStoreFailClosedTests.fs" />

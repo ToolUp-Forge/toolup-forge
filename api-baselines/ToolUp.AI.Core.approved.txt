@@ -216,7 +216,8 @@ ToolUp.AI.Conversation.OverrideProviderLabel : Microsoft.FSharp.Core.FSharpOptio
 ToolUp.AI.Conversation.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Conversation.UpdatedAt : System.DateTime { get }
 ToolUp.AI.ConversationMessage (class)
-ToolUp.AI.ConversationMessage..ctor(System.Guid, System.Guid, ToolUp.AI.ParticipantType, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification])
+ToolUp.AI.ConversationMessage..ctor(System.Guid, System.Guid, ToolUp.AI.ParticipantType, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification])
+ToolUp.AI.ConversationMessage.BeaconId : System.String { get }
 ToolUp.AI.ConversationMessage.Content : System.String { get }
 ToolUp.AI.ConversationMessage.ConversationId : System.Guid { get }
 ToolUp.AI.ConversationMessage.CreatedBy : System.String { get }

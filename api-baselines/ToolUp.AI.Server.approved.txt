@@ -303,13 +303,17 @@ ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.BootstrapKeyFromEnv : Micr
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.Build : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.IAIProvider]] { get }
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.Descriptor : ToolUp.AI.AIProviderDescriptor { get }
 ToolUp.AI.FastPathBeaconHandler (class)
+ToolUp.AI.FastPathBeaconHandler.BeaconDedupWindow : System.Int32 (literal)
 ToolUp.AI.FastPathBeaconHandler.BeaconSurfaceLabel : System.String (literal)
 ToolUp.AI.FastPathBeaconHandler.beaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler.checkOwnership(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.AI.FastPathBeaconHandler.isDuplicateBeacon(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String) : System.Boolean
+ToolUp.AI.FastPathBeaconHandler.planBeaconAppend(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, ToolUp.AI.FastPathBeaconHandler+FastPathBeacon) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]]
 ToolUp.AI.FastPathBeaconHandler.sequenceOutcomeBeaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler.sequencedClauseBeaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon (class)
-ToolUp.AI.FastPathBeaconHandler+FastPathBeacon..ctor(System.Guid, System.Int32, System.String, System.String, System.String, System.String, System.String, System.Double, System.String)
+ToolUp.AI.FastPathBeaconHandler+FastPathBeacon..ctor(System.Guid, System.Int32, System.String, System.String, System.String, System.String, System.String, System.Double, System.String, System.String)
+ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.BeaconId : System.String { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.ConversationId : System.Guid { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.FieldName : System.String { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.Instruction : System.String { get }

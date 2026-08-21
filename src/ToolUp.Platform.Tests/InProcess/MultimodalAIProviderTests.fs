@@ -179,6 +179,7 @@ let private persistenceTests =
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                BeaconId = ""
                 Verification = None
             }
 
@@ -206,6 +207,7 @@ let private persistenceTests =
                 RetrievedSources = []
                 Parts = parts
                 CreatedBy = ""
+                BeaconId = ""
                 Verification = None
             }
 

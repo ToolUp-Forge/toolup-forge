@@ -630,6 +630,8 @@ let allTests =
         ConversationExportAuditTests.tests
         ConversationExporterTests.tests
         FastPathBeaconOwnershipTests.tests
+        // Phase 6j.E — beacon endpoint idempotency (dedup window + append plan).
+        FastPathBeaconIdempotencyTests.tests
         FastPathSequencerTelemetryTests.tests
         HnswFidelityTests.tests
         PermissionStoreFailClosedTests.tests
