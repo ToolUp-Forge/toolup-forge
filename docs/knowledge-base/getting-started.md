@@ -32,27 +32,26 @@ In your client project's `.fsproj`:
 
 In your server composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase
 
 let kbModule =
     ServerModule.create "KnowledgeBase"
     |> ServerModule.withGuardedApi KnowledgeBase.Server.knowledgeApi
-    |> ServerModule.withDataTypes [ KnowledgeBase.Server.kbDataType ]
 
-let ingestionStatusObserver = KnowledgeBase.Server.makeIngestionStatusObserver()
+let ingestionStatusObserver =
+    KnowledgeBase.Server.makeIngestionStatusObserver blobStorage (Some notificationChannel) logger
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withConfig serverConfig
 |> RAGServerApp.withAuth authProvider
 |> RAGServerApp.withStorage blobStorage
 |> RAGServerApp.addModules [ kbModule ]
-|> RAGServerApp.withIngestionStatusObserver ingestionStatusObserver
-|> RAGServerApp.withVectorisationHandler KnowledgeBase.Server.kbVectorisationHandler
+|> RAGServerApp.withIngestionObserver ingestionStatusObserver
 |> RAGServerApp.run
 ```
 
-The vectorisation handler runs on every KB document save and turns the extracted text into chunks for the ingestion queue. The observer surfaces per-document status to the UI via SSE.
+The companion owns its own extraction and chunking path, so there is no KB `DataType` or `VectorisationHandler` to register — `withVectorisation` on a `ServerModule` is for a module contributing its OWN retrievable data. The observer surfaces per-document status to the UI via SSE.
 
 ## 3. Wire the client wrapper + narrative-commit
 
@@ -129,19 +128,17 @@ If the assistant doesn't use the retrieved content, check:
 
 When another module has content worth indexing (analysis output, generated text, etc.), add a "Save to Knowledge Base" button:
 
-```fsharp
+```fsharp skip=fragment
 Html.button [
     prop.text "Save to Knowledge Base"
     prop.onClick (fun _ ->
-        Toolup.NarrativeCommit.submit {
-            Title = "Sales Q3 Analysis"
-            Body = analysisBody
-            SourceModule = "SalesAnalysis"
-        })
+        match Toolup.NarrativeCommit.current () with
+        | Some handler -> handler.Submit analysisDocument false |> Async.StartImmediate
+        | None -> ())   // no KB composed in this deployment
 ]
 ```
 
-The narrative-commit handler (`KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers` by `withKnowledgeBase`) receives the submit, persists the narrative, runs it through the vectorisation handler, and indexes the chunks. Appears in the user's Documents list with `KnowledgeSource.FromNarrative`.
+The broker takes a `NarrativeDocument` plus an overwrite flag — `false` first, then `true` after the UI has confirmed an overwrite — not a title/body/module triple. `Toolup.NarrativeCommit.current ()` returns `None` when nothing registered a handler, so a module's Save button degrades rather than failing. The handler (`KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers` by `withKnowledgeBase`) persists the narrative and indexes its chunks; it appears in the Documents list with `KnowledgeSource.FromNarrative`.
 
 ## 9. Notes
 

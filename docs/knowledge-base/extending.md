@@ -69,11 +69,13 @@ Drop the `ToolUp.KnowledgeBase` `<PackageReference>` entries from the consuming 
 
 Dropping the package reference is the heavy form of replacement. `KnowledgeBaseMode` (Phase 1e) is the light one: a four-case DU parallel to `DataManagerMode`, applied client-side, that lets a deployment swap the module while leaving the props imports and the project reference in place.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
 open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 
-let kbMode = ExternalKnowledgeBase (MyConfluenceKb.register ())
+// MyConfluenceKb.register () is YOUR module's registration, returning an
+// ErasedModule the same way every ClientModule.register does.
+let kbMode = ExternalKnowledgeBase(MyConfluenceKb.register ())
 
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase kbMode clientConfig modules
@@ -160,13 +162,17 @@ The file manager UI accepts EPUBs; the post-save hook routes by `DataTypeId` to 
 
 The built-in `KnowledgeBaseView` subscribes to `"KnowledgeBase.IngestionStatus"` notifications. Custom UI subscribes to the same notification key:
 
-```fsharp
+```fsharp skip=fragment
 // In your custom module's Client.fs
 let subscribeIngestionStatus dispatch =
-    let unsub = NotificationClient.subscribe "KnowledgeBase.IngestionStatus" (fun env ->
-        match env.Payload with
-        | :? IngestionStatusUpdate as update -> dispatch (IngestionStatusReceived update)
-        | _ -> ())
+    let unsub =
+        NotificationClient.subscribe SharedTypes.IngestionStatusNotificationKey (fun (env: NotificationEnvelope) ->
+            // The payload is the JSON body of a CustomNotification, so decode
+            // it rather than type-testing an already-typed value.
+            match decodeIngestionStatusUpdate env with
+            | Some update -> dispatch (IngestionStatusReceived update)
+            | None -> ())
+
     [ unsub ]
 ```
 
@@ -218,16 +224,19 @@ The KB extractor calls `ExtractTables` alongside text extraction; tables go thro
 
 The built-in observer updates document metadata blobs + publishes `IngestionStatusUpdate` notifications. Custom observers can do more — write to Slack on failure, page on-call, increment dashboard metrics:
 
-```fsharp
+The seam is two methods, both taking the `IngestionJob` itself — there are no separate accepted / completed callbacks and no bare job ids:
+
+```fsharp skip=fragment
 type SlackOnFailureObserver(slackWebhookUrl: string) =
     interface IIngestionStatusObserver with
-        member _.OnJobAccepted(_) = async { return () }
-        member _.OnChunkIndexed(_, _) = async { return () }
-        member _.OnJobCompleted(_, _) = async { return () }
-        member _.OnJobFailed(jobId, reason) = async {
-            do! postToSlack slackWebhookUrl $"Ingestion job {jobId} failed: {reason}"
+        member _.OnChunkIndexed(_) = async { return () }
+
+        member _.OnChunkFailed(job, error) = async {
+            do! postToSlack slackWebhookUrl $"Ingestion failed for {job.DocumentId}: {error}"
         }
 ```
+
+Register several with `RAGServerApp.withIngestionObservers` — the built-in KB observer and your own coexist rather than replacing each other.
 
 Wire alongside (or replace) the built-in observer:
 
@@ -270,17 +279,15 @@ The standing-context builder still reads from the same blob path; the difference
 
 A common pattern: surface knowledge from across modules via a single AI conversation. The narrative-commit mechanism gives modules a one-line path to push their content into KB:
 
-```fsharp
+```fsharp skip=fragment
 // In SalesAnalysis ClientView.fs
-let saveAnalysisToKB analysis =
-    Toolup.NarrativeCommit.submit {
-        Title = $"Sales analysis: {analysis.Title}"
-        Body = formatAnalysisAsMarkdown analysis
-        SourceModule = "SalesAnalysis"
-    }
+let saveAnalysisToKB (analysis: Analysis) =
+    match Toolup.NarrativeCommit.current () with
+    | Some handler -> handler.Submit (narrativeOf analysis) false |> Async.StartImmediate
+    | None -> ()   // no KB composed in this deployment
 ```
 
-The narrative-commit handler indexes the markdown body; later chat queries retrieve the content. Multi-module insights aggregate naturally without any cross-module imports.
+The broker takes a `NarrativeDocument` plus an overwrite flag; `current ()` returns `None` when no handler is installed, so the button degrades instead of failing. The handler indexes the document; later chat queries retrieve the content. Multi-module insights aggregate naturally without any cross-module imports.
 
 ## What can't be extended
 

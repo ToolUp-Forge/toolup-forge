@@ -51,21 +51,21 @@ Add the packages:
 
 Wire the server composition root (depends on `RAGServerApp` being in place):
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase
 
 // In the module registration list:
 let kbModule =
     ServerModule.create "KnowledgeBase"
     |> ServerModule.withGuardedApi KnowledgeBase.Server.knowledgeApi
-    |> ServerModule.withDataTypes [ KnowledgeBase.Server.kbDataType ]
 
-let ingestionStatusObserver = KnowledgeBase.Server.makeIngestionStatusObserver()
+let ingestionStatusObserver =
+    KnowledgeBase.Server.makeIngestionStatusObserver blobStorage (Some notificationChannel) logger
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withConfig serverConfig
 |> RAGServerApp.addModules [ kbModule; (* other modules *) ]
-|> RAGServerApp.withIngestionStatusObserver ingestionStatusObserver
+|> RAGServerApp.withIngestionObserver ingestionStatusObserver
 |> RAGServerApp.run
 ```
 

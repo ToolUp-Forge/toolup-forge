@@ -106,29 +106,29 @@ A future extension point (`IDocumentExtractor` interface registered by content-t
 
 `IIngestionStatusObserver` is the contract:
 
-```fsharp
+```fsharp skip=signature
 type IIngestionStatusObserver =
-    abstract OnJobAccepted: IngestionJob -> Async<unit>
-    abstract OnChunkIndexed: jobId: Guid -> chunkId: Guid -> Async<unit>
-    abstract OnJobCompleted: jobId: Guid -> chunkCount: int -> Async<unit>
-    abstract OnJobFailed: jobId: Guid -> reason: string -> Async<unit>
+    abstract OnChunkIndexed: IngestionJob -> Async<unit>
+    abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-`KnowledgeBase.Server.makeIngestionStatusObserver` wires an implementation that:
-1. Looks up the `DocumentId` from the `IngestionJob`'s metadata.
-2. Updates the document's `.meta.json` status: `Pending → Extracting → Chunking → Embedding → Indexed | Failed`.
-3. Emits a `Notification.SystemMessage` with `NotificationKind = "KnowledgeBase.IngestionStatus"` to the scope.
+The job itself carries the identity the observer needs, so there are no separate job-id / chunk-id parameters and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total.
 
-The SSE wire format for the notification is `IngestionStatusUpdate`:
+`KnowledgeBase.Server.makeIngestionStatusObserver storage notificationChannel logger` wires an implementation that:
+1. Resolves the document from the `IngestionJob`.
+2. Advances its persisted status through `Queued → ExtractingText → Embedding (n, total) → Complete n | Failed reason`.
+3. On a terminal status, publishes a `CustomNotification` under `KnowledgeBase.IngestionStatus` to the scope — after re-checking the job's `OriginatingUserId` against the stored `UploadedBy`, so a spoofed enqueue cannot deliver another user's status into the wrong scope.
+
+The SSE wire format for the notification is `IngestionStatusUpdate`. It is deliberately DU-free, so a subscriber in another companion can parse it without mirroring `IngestionStatus` across the module boundary — and only terminal outcomes are published:
 
 ```fsharp
 type IngestionStatusUpdate = {
-    DocumentId: Guid
-    Status: IngestionStatus
-    Progress: float option       // 0.0 - 1.0
-    ChunksIndexed: int
-    ChunksTotal: int option
-    Reason: string option        // populated when Failed
+    DocumentId: string
+    FileName: string
+    Outcome: string       // "Complete" or "Failed"
+    ChunkCount: int       // chunk count when Complete, 0 otherwise
+    ErrorReason: string   // reason when Failed, "" otherwise
+    UploadedBy: string
 }
 ```
 
@@ -142,19 +142,17 @@ The literal `"KnowledgeBase.IngestionStatus"` is a published wire-format contrac
 
 Other modules can deposit content into KB via narrative-commit:
 
-```fsharp
+```fsharp skip=fragment
 Html.button [
     prop.text "Save to Knowledge Base"
     prop.onClick (fun _ ->
-        Toolup.NarrativeCommit.submit {
-            Title = "Sales Q3 Analysis"
-            Body = analysisBody
-            SourceModule = "SalesAnalysis"
-        })
+        match Toolup.NarrativeCommit.current () with
+        | Some handler -> handler.Submit analysisDocument false |> Async.StartImmediate
+        | None -> ())   // no KB composed in this deployment
 ]
 ```
 
-`Toolup.NarrativeCommit.submit` is a global function with no compile-time dependency on KB. The handler is `KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers.NarrativeCommitHandler` at compose time (directly, or by `KnowledgeBaseClientConfig.withKnowledgeBase`).
+`Toolup.NarrativeCommit` is a registry with no compile-time dependency on KB: `current ()` returns the installed `NarrativeCommitHandler`, whose `Submit` takes a `NarrativeDocument` and an overwrite flag (`false` first; the UI re-submits `true` after confirming). `None` means nothing registered a handler, so the Save button degrades instead of failing. The handler is `KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers.NarrativeCommitHandler` at compose time (directly, or by `KnowledgeBaseClientConfig.withKnowledgeBase`).
 
 The handler:
 1. Sends the narrative + title via `KnowledgeApi.IngestNarrative` (ToolUp.Remoting).

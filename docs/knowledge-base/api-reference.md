@@ -6,116 +6,139 @@ Public surface of `ToolUp.KnowledgeBase`.
 
 ### `KnowledgeApi` (ToolUp.Remoting contract)
 
-```fsharp
-type IKnowledgeApi = {
-    UploadDocument: UploadDocumentRequest -> Async<Result<KnowledgeDocument, KnowledgeError>>
-    ListDocuments: unit -> Async<KnowledgeDocument list>
-    GetDocument: DocumentId -> Async<KnowledgeDocument option>
-    DeleteDocument: DocumentId -> Async<unit>
-    ResetKnowledgeBase: unit -> Async<unit>
-    IngestNarrative: IngestNarrativeRequest -> Async<Result<KnowledgeDocument, KnowledgeError>>
-    AddNote: AddNoteRequest -> Async<Result<KnowledgeDocument, KnowledgeError>>
-    UpdateNote: UpdateNoteRequest -> Async<Result<KnowledgeDocument, KnowledgeError>>
-    GetAIContext: unit -> Async<AIContextEntry list>
-    SetAIContext: AIContextEntry list -> Async<unit>
-    GetIngestionStatus: DocumentId -> Async<IngestionStatus option>
-}
+Document ids are plain `string`s throughout — there is no `DocumentId` wrapper.
 
-and UploadDocumentRequest = {
-    FileName: string
-    ContentType: string
-    Bytes: byte[]
+```fsharp
+open ToolUp.Platform.Narrative
+
+type KnowledgeApi = {
+    UploadDocument: byte[] -> string -> Async<KnowledgeDocument>
+    GetDocuments: unit -> Async<KnowledgeDocument list>
+    DeleteDocument: string -> Async<Result<unit, string>>
+    GetStatus: string -> Async<IngestionStatus>
+    IngestNarrative: IngestNarrativeRequest -> Async<Result<KnowledgeDocument, IngestNarrativeError>>
+    AddNote: AddNoteRequest -> Async<Result<KnowledgeDocument, string>>
+    UpdateNote: UpdateNoteRequest -> Async<Result<KnowledgeDocument, string>>
+    GetAIContext: unit -> Async<AIContextEntry option>
+    SetAIContext: string -> Async<Result<AIContextEntry, string>>
+    ResetIndex: unit -> Async<Result<unit, string>>
+    GetSuggestedQuestions: string option -> Async<string list>
+    RefreshAIContext: unit -> Async<unit>
+    GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
+    GetOriginalDelivery: string -> Async<Result<PreviewContent, KnowledgeBaseError>>
+    GetScopeUsage: unit -> Async<KnowledgeScopeUsage>
+    GetDocumentVersions: string -> Async<KnowledgeDocumentVersion list>
+    ImportBatch: BulkImportRequest -> Async<BulkImportReport>
+    SetDocumentTags: SetDocumentTagsRequest -> Async<Result<KnowledgeDocument, string>>
 }
 
 and IngestNarrativeRequest = {
-    Title: string
-    Body: string
-    SourceModule: string
+    Document: NarrativeDocument
+    Overwrite: bool
 }
 
-and AddNoteRequest = {
-    Title: string option
-    Body: string
-}
+and IngestNarrativeError =
+    | MissingProvenance
+    /// Carries the stored document so the UI can offer an overwrite prompt.
+    | DuplicateExists of existing: KnowledgeDocument
+    | IngestFailed of reason: string
 
-and UpdateNoteRequest = {
-    DocumentId: DocumentId
-    Title: string option
-    Body: string
-}
+and AddNoteRequest = { Title: string; Body: string }
 
+and UpdateNoteRequest = { DocId: string; Title: string; Body: string }
+
+/// The standing AI context is ONE markdown body per scope, not a list of
+/// entries. An empty body clears it.
 and AIContextEntry = {
-    Id: Guid
-    Text: string
-    Order: int
+    Body: string
+    UpdatedAt: DateTimeOffset
+    UpdatedBy: string
 }
 ```
 
+Every method is `[<AllowAnonymous>]` except `SetAIContext`, which requires a `scope` claim; `UploadDocument` carries a `[<RateLimit>]`, and `DeleteDocument` / `ResetIndex` carry `[<Audit>]` annotations.
+
 ### `KnowledgeDocument`
+
+The failure reason rides the `IngestionStatus` case rather than a separate field.
 
 ```fsharp
 type KnowledgeDocument = {
-    DocumentId: DocumentId
+    /// Stable lineage identity; also the prefix of every `{Id}:chunk:{n}`.
+    Id: string
     FileName: string
-    ContentType: string
-    Source: KnowledgeSource
+    FileType: string
+    UploadedAt: DateTimeOffset
     UploadedBy: string
-    UploadedAt: DateTime
-    SizeBytes: int64
     Status: IngestionStatus
-    ChunkCount: int option
-    Reason: string option        // populated when Status = Failed
+    SizeBytes: int64
+    ChunkCount: int
+    Source: KnowledgeSource
+    /// SHA-256 of the raw bytes, so a scope-local re-upload short-circuits.
+    /// `None` for notes, narratives, and pre-dedup documents.
+    ContentHash: string option
+    /// 1-based version of this lineage. A versioned re-upload supersedes in
+    /// place, so the index always describes exactly one live document per
+    /// lineage and retrieval structurally targets the current version.
+    Version: int
+    /// Normalised free-form tags, also stamped onto every chunk as
+    /// `_tag.{tag}` so `RetrievalRequest.Filters` can scope to them.
+    Tags: string list
 }
 
 and KnowledgeSource =
     | UploadedFile
-    | FromNarrative of FromNarrativeSource
+    | FromNarrative of NarrativeDocSource
     | Note of NoteSource
 
-and FromNarrativeSource = {
-    SourceModule: string
-    OriginalTitle: string
-}
-
-and NoteSource = {
-    NoteTitle: string option
-}
-
 and IngestionStatus =
-    | Pending
-    | Extracting
-    | Chunking
-    | Embedding
-    | Indexed
-    | Failed
+    | Queued
+    | ExtractingText
+    | Embedding of chunksProcessed: int * chunksTotal: int
+    | Complete of chunkCount: int
+    | Failed of reason: string
+    /// Refused by the deployment's upload policy before anything was
+    /// persisted, so it never appears in `GetDocuments` / `GetStatus`.
+    | UploadRejected of reason: string
+    /// Stored and downloadable, but no extractor recognised the type — so it
+    /// is not searchable. Deliberately distinct from `Complete 0`.
+    | UnsupportedFormat of detail: string
 ```
 
 ### `IngestionStatusUpdate` (SSE wire format)
 
+Only terminal outcomes are published, and the payload is deliberately DU-free so another companion can parse it without mirroring `IngestionStatus` across the module boundary.
+
 ```fsharp
 type IngestionStatusUpdate = {
-    DocumentId: Guid
-    Status: IngestionStatus
-    Progress: float option       // 0.0 - 1.0
-    ChunksIndexed: int
-    ChunksTotal: int option
-    Reason: string option
+    DocumentId: string
+    FileName: string
+    Outcome: string       // "Complete" or "Failed"
+    ChunkCount: int       // chunk count when Complete, 0 otherwise
+    ErrorReason: string   // reason when Failed, "" otherwise
+    UploadedBy: string
 }
 ```
 
 Notification kind: `[<Literal>] IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"`.
 
-### `KnowledgeError`
+### `KnowledgeBaseError`
+
+Typed refusals for the original-document reads. Absence and denial are results, never exceptions.
 
 ```fsharp
-type KnowledgeError =
-    | InvalidFileType of string
-    | FileTooLarge of {| MaxBytes: int64; ActualBytes: int64 |}
-    | ExtractionFailed of string
-    | StorageError of string
-    | NotFound
-    | Forbidden
+type KnowledgeBaseError =
+    /// Not visible in the caller's scope — deliberately indistinguishable from
+    /// "does not exist", so an out-of-scope caller cannot probe for existence.
+    /// A denial audit is emitted.
+    | NotInScope
+    /// In scope, but this source kind has no retrievable original (a
+    /// module-generated narrative, an AI-context entry) or the blob is gone.
+    | NoOriginalAvailable
+    | OriginalRetrievalFailed of reason: string
 ```
+
+Ingestion refusals are not part of this DU: an oversize or disallowed upload comes back as a `KnowledgeDocument` whose `Status` is `UploadRejected reason`.
 
 ## `ToolUp.KnowledgeBase.Server`
 
@@ -123,65 +146,65 @@ type KnowledgeError =
 
 The ToolUp.Remoting handler. Pass directly to `ServerModule.withGuardedApi`:
 
-```fsharp
+```fsharp skip=fragment
 let kbModule =
     ServerModule.create "KnowledgeBase"
     |> ServerModule.withGuardedApi KnowledgeBase.Server.knowledgeApi
-    |> ServerModule.withDataTypes [ KnowledgeBase.Server.kbDataType ]
 ```
 
-### `KnowledgeBase.Server.kbDataType`
+`knowledgeApi` takes the `HttpContext` and resolves its dependencies from DI, so it is an ordinary guarded-API handler — there is no `kbDataType` value to register alongside it. The companion owns its own ingestion path rather than routing uploads through a `DataType`.
 
-`DataType` declaration for the KB module:
+### Vectorisation
 
-```fsharp skip=fragment
-let kbDataType : DataType = {
-    Info = { Id = "Knowledge"; DisplayName = "Knowledge base entries"; Schema = None }
-    Id = "Knowledge"
-    Detect = fun _ -> true   // accepts any registered content-type for the kb route
-    Process = ...
+A `VectorisationHandler` is a plain record keyed by data-type id; `Vectorise` is a pure function over the processed payload, not an async callback over a file name:
+
+```fsharp skip=signature
+type VectorisationHandler = {
+    /// Must match the `DataType.Id` of the module's registered data type.
+    DataTypeId: DataTypeId
+    /// Return `[]` to skip indexing a particular record.
+    Vectorise: ProcessedData -> TextChunk list
+    /// Optional whole-document summary chunk, indexed under `_isSummary`
+    /// with a retrieval score boost.
+    Summarise: (ProcessedData -> TextChunk) option
 }
 ```
 
-### `KnowledgeBase.Server.kbVectorisationHandler`
-
-```fsharp
-let kbVectorisationHandler : VectorisationHandler = {
-    DataTypeId = "Knowledge"
-    Vectorise = fun (fileName, dataObject) -> async {
-        // routes by content-type, extracts text, chunks, returns TextChunk list
-    }
-}
-```
-
-Register via `RAGServerApp.withVectorisationHandler`.
+Register handlers on the module with `ServerModule.withVectorisation`.
 
 ### `KnowledgeBase.Server.makeIngestionStatusObserver`
 
-Factory for the `IIngestionStatusObserver` registered with `composeWithRAG`:
+Builds the `IIngestionStatusObserver` that reflects RAG ingestion progress back into the Knowledge Base's status cache:
 
 ```fsharp skip=signature
-val makeIngestionStatusObserver: unit -> IIngestionStatusObserver
+type IIngestionStatusObserver =
+    abstract OnChunkIndexed: IngestionJob -> Async<unit>
+    abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-Register via `RAGServerApp.withIngestionStatusObserver`.
+Register it with `RAGServerApp.withIngestionObserver` (or `withIngestionObservers` for several).
 
 ### `KnowledgeBase.Server.standingContextBuilder`
 
 Opt-in AI prompt builder that reads the team's standing context per outer turn:
 
 ```fsharp skip=signature
-val standingContextBuilder:
-    IBlobStorage -> ILogger option -> SystemPromptBuilder
+val standingContextBuilder: IBlobStorage -> ILogger option -> SystemPromptBuilder
+/// Emits a one-paragraph summary of the index for the system prompt.
+val kbInventoryBuilder: SystemPromptBuilder
+/// The canonical pair of KB system-prompt builders.
+val knowledgeBasePromptBuilders: IBlobStorage -> ILogger option -> SystemPromptBuilder list
 ```
 
-Compose into `AIAssistantServerConfig.SystemPrompt`:
+Compose into `AIAssistantServerConfig.SystemPrompt`. Both the builders and `compose` live in the `ToolUp.AI.SystemPromptBuilder` module, so that open is needed alongside `open ToolUp.AI`:
 
-```fsharp
+```fsharp skip=fragment
+open ToolUp.AI.SystemPromptBuilder
+
 let combinedPrompt =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic "..."
-        KnowledgeBase.Server.standingContextBuilder blobStorage (Some logger)
+        yield! KnowledgeBase.Server.knowledgeBasePromptBuilders blobStorage (Some logger)
         SystemPromptBuilder.activeModuleContext
     ]
 ```

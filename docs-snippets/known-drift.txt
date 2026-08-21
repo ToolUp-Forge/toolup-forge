@@ -65,20 +65,6 @@ d7977f54 docs/graph/entity-projection.md#1 (line 125) — error FS0039: The name
 5fcf0de1 docs/graph/neo4j.md#1 (line 53) — error FS0039: The namespace 'Neo4j' is not defined.
 53ec4249 docs/graph/neo4j.md#2 (line 95) — error FS0039: The value, namespace, type or module 'Neo4jGraphStore' is not defined.
 3be7aef0 docs/interplatform/non-fsharp-peers.md#1 (line 23) — error FS0039: The type 'BuyerSellerContract' is not defined.
-e26f94d9 docs/knowledge-base/README.md#2 (line 55) — error FS0039: The value, constructor, namespace or type 'kbDataType' is not defined.
-a48dc417 docs/knowledge-base/api-reference.md#1 (line 10) — error FS0039: The type 'KnowledgeError' is not defined. Maybe you want one of the following: KnowledgeBaseError KnowledgeSource KnowledgeBaseMode KnowledgeApi KnowledgeDocument
-5228887a docs/knowledge-base/api-reference.md#2 (line 57) — error FS0039: The type 'DocumentId' is not defined.
-295157ff docs/knowledge-base/api-reference.md#5 (line 127) — error FS0039: The value, constructor, namespace or type 'kbDataType' is not defined.
-a9076b95 docs/knowledge-base/api-reference.md#7 (line 149) — error FS0039: The type 'VectorisationHandler' is not defined. Maybe you want one of the following: VectorScope VectorMatch
-a96f1a6f docs/knowledge-base/api-reference.md#10 (line 181) — error FS0039: The value, namespace, type or module 'SystemPromptBuilder' is not defined. Maybe you want one of the following: System SystemException
-8464b26d docs/knowledge-base/concepts.md#2 (line 109) — error FS0039: The type 'IngestionJob' is not defined. Maybe you want one of the following: IngestionRun IngestionError IngestionStatus IngestionStatusFilter IngestionStatusUpdate
-e0e7fe6c docs/knowledge-base/concepts.md#4 (line 145) — error FS0039: The value, namespace, type or module 'Html' is not defined.
-1d304689 docs/knowledge-base/extending.md#3 (line 73) — error FS0039: The value, namespace, type or module 'MyConfluenceKb' is not defined.
-240c10a3 docs/knowledge-base/extending.md#6 (line 164) — error FS0001: This expression was expected to have type 'NotificationEnvelope -> unit' but here has type 'string'
-f817df4e docs/knowledge-base/extending.md#9 (line 214) — error FS0039: The type 'IIngestionStatusObserver' is not defined. Maybe you want one of the following: IIngestionStatusStore IngestionStatusFilter
-09e63af4 docs/knowledge-base/extending.md#12 (line 266) — error FS0039: The value, constructor, namespace or type 'submit' is not defined.
-3dcc9223 docs/knowledge-base/getting-started.md#3 (line 36) — error FS0039: The value, constructor, namespace or type 'kbDataType' is not defined.
-e0e7fe6c docs/knowledge-base/getting-started.md#6 (line 133) — error FS0039: The value, namespace, type or module 'Html' is not defined.
 536abc1a docs/operations/cloud-umbrella-packages.md#3 (line 78) — error FS0039: The namespace or module 'OpenTelemetry' is not defined.
 205540bf docs/operations/credential-rotation.md#2 (line 68) — error FS0072: The type of this expression could not be inferred before accessing its members. Add a type annotation, e.g. (expr: SomeType), to constrain the type before this point.
 df9710dc docs/operations/degraded-capabilities.md#1 (line 65) — error FS0039: The value, namespace, type or module 'services' is not defined. Maybe you want one of the following: Server ServiceStatusBoardUI ServiceStatusSnapshot ServiceStatusBoardMode ServerApp
