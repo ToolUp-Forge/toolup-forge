@@ -63,14 +63,8 @@ a8e8ebd0 docs/platform/knowledge-portal.md#6 (line 143) — error FS0039: The va
 738e0be3 docs/platform/live-sessions.md#1 (line 13) — error FS0039: The value, constructor, namespace or type 'create' is not defined.
 de9cfd21 docs/platform/metric-registry.md#1 (line 51) — error FS0764: No assignment given for field 'RollUp' of type 'ToolUp.Platform.Grounding.MetricDefinition'
 6b752052 docs/platform/metric-registry.md#2 (line 87) — error FS0039: The value, namespace, type or module 'ctx' is not defined.
-5c9d62c4 docs/platform/modules.md#6 (line 112) — error FS0039: The value or constructor 'helloApiFactory' is not defined.
-9aebb12b docs/platform/modules.md#7 (line 143) — error FS0039: The value or constructor 'init' is not defined. Maybe you want one of the following: int8 int Int16 Int32 Int64
-5e8f40bb docs/platform/modules.md#8 (line 171) — error FS0039: The value or constructor 'leftPanel' is not defined.
-a8492e18 docs/platform/modules.md#11 (line 257) — error FS1129: The record type 'AIToolDefinition' does not contain a label 'Executor'.
-8ab18aaf docs/platform/modules.md#12 (line 282) — error FS0039: The type 'ModuleAIContext' is not defined. Maybe you want one of the following: ModuleApiContext ModelExecutionApi ModuleArea ModuleDataNeed ModuleEvent
 7c541135 docs/platform/modules.md#13 (line 295) — error FS0039: The type 'Model' is not defined. Maybe you want one of the following: ModelScorer ModelSpecRef ModelArtifact ModelFitError ModelComparison
 1a991270 docs/platform/modules.md#15 (line 345) — error FS0039: The value, namespace, type or module 'Reports' is not defined. Maybe you want one of the following: RESPite rethrow
-2e3e5ce9 docs/platform/modules.md#17 (line 414) — error FS0039: The value, namespace, type or module 'MyModule' is not defined. Maybe you want one of the following: Module <Module>
 985f3ad7 docs/platform/modules.md#18 (line 475) — error FS0039: The value, namespace, type or module 'Orders' is not defined.
 bf811bf6 docs/platform/modules.md#22 (line 557) — error FS0039: The namespace 'Tests' is not defined. Maybe you want one of the following: Teams
 db713592 docs/platform/modules.md#24 (line 669) — error FS0039: The namespace 'Build' is not defined. Maybe you want one of the following: BuildRouteHandlers

@@ -108,7 +108,7 @@ A module registers itself via `ClientModule.register` (client) and is added to t
 
 The full server-side registration:
 
-```fsharp
+```fsharp skip=fragment
 let helloModule =
     ServerModule.create "HelloWorld"
     |> ServerModule.withGuardedApi helloApiFactory       // ToolUp.Remoting API
@@ -139,10 +139,12 @@ The strict global default (when no module or route declaration applies) is `user
 
 The client module registration carries a `Visibility: SubjectKind -> bool` predicate. The shell's sidebar filter hides modules whose predicate returns `false` for the current `Subject`. Four smart constructors cover the common shapes:
 
-```fsharp
+`Init` receives a `ClientModuleContext` (the module's resolved config plus the platform config), so a module that needs none of it wraps its nullary init with `ClientModule.withUnitInit`:
+
+```fsharp skip=fragment
 let registerSalesAnalysis () : ErasedModule =
     ClientModule.create {
-        Init = init
+        Init = ClientModule.withUnitInit init
         Update = update
         Name = "Sales Analysis"
         Icon = "/svg/sales.svg"
@@ -167,7 +169,7 @@ Single-page modules (the default) keep the legacy `View: 'Model -> ('Msg -> unit
 
 Multi-page modules opt in with `ClientModule.withPages`, declaring one view per page keyed by `PageConfig.Route`. Each page view returns a `PageContent` value directly (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`), picking its own layout shape:
 
-```fsharp
+```fsharp skip=fragment
 let datasetView model dispatch : PageContent =
     SplitPanel(leftPanel model dispatch, rightPanel model dispatch)
 
@@ -253,23 +255,43 @@ Modules NEVER reach into another module's namespace or call another module's `up
 
 Modules can declare AI tools that the LLM can call. The declaration lives in `Server.fs` and is registered via `ServerModule.withAITools`:
 
+`AIToolDefinition` is **metadata only** — it lives in `ToolUp.Platform.Core` so a module can declare tools without referencing the AI companion at all. `Parameters` is one record per parameter:
+
 ```fsharp
-let myTool : AIToolDefinition = {
+open ToolUp.AI
+
+let myTool: AIToolDefinition = {
     Name = "my_module.analyse"
     Description = "Run sales analysis over selected SKUs."
-    Parameters = ToolParameterSchema.create [
-        "skus", ParamType.StringArray, "List of SKU IDs to analyse"
-        "weeks", ParamType.Integer, "Number of weeks of history"
+    Parameters = [
+        {
+            Name = "skus"
+            Type = "array"
+            Description = "List of SKU IDs to analyse."
+            Required = true
+            Default = None
+        }
+        {
+            Name = "weeks"
+            Type = "number"
+            Description = "Number of weeks of history."
+            Required = false
+            Default = Some "12"
+        }
     ]
-    Executor = fun ctx args -> async {
-        let skus = args |> JsonValue.getStringArray "skus"
-        let weeks = args |> JsonValue.getInt "weeks"
-        let! result = MyModule.Server.runAnalysis ctx skus weeks
-        return ToolResult.ok (Json.serialize result)
-    }
-    Visibility = ToolVisibility.ServerSide   // or ClientResident for UI-control tools
-    Capabilities = ToolCapabilities.empty
+    SourceModule = "MyModule"
+    EmitsActions = None
+    Location = ServerResident   // or ClientResident for UI-control tools
+    Surface = Both
+    IsLiveInterface = false
 }
+```
+
+The executor is a separate `HttpContext -> string -> Async<string>` function, registered **as a pair** with the definition:
+
+```fsharp skip=fragment
+ServerModule.create "MyModule"
+|> ServerModule.withAITools [ myTool, myToolExecutor ]
 ```
 
 The agent loop (in `ToolUp.AI.Server`) picks up registered tools, builds the LLM's tool schema, and routes tool calls to the right executor. See the [AI companion docs](../ai/) for the full tool-authoring guide.
@@ -279,13 +301,13 @@ The agent loop (in `ToolUp.AI.Server`) picks up registered tools, builds the LLM
 Modules can also export a `ModuleAIContext` that gets injected into the system prompt when the user chats from that module's view:
 
 ```fsharp
-let moduleContext : ModuleAIContext = {
+let moduleContext: ModuleAIContext = {
     ModuleName = "MyModule"
     SystemPrompt = "You are helping the user analyse sales data. The active dataset has columns X, Y, Z..."
 }
 ```
 
-Registered at `composeWithAI` time, looked up via the `ActiveModule` field on each `AIMessageRequest`. See the AI companion docs for the layered system-prompt composition (platform + team + module).
+`ModuleName` must match the module's `ModuleDefinition.Id` — the stable permission-key identifier, not the display name — because that is the value the client sends as `AIMessageRequest.ActiveModule` and the key the server looks up. Registered via `AIServerApp.withModuleAIContexts`. See the AI companion docs for the layered system-prompt composition (platform + team + module).
 
 ## Text inputs use local React state, not Elmish model
 
@@ -410,7 +432,7 @@ gathers that into one read-only descriptor — **the module's label.** It is wha
 (an admin dashboard, a scaffolding tool, a conformance check, a composition-time graph rule)
 can rely on without reading the module's source.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 
 let surface = ModuleSurface.describe MyModule.Server.serverModule
