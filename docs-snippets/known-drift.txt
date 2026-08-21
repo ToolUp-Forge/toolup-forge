@@ -165,26 +165,6 @@ dfc44679 docs/rag/extending.md#11 (line 272) — error FS0039: The type 'Tests' 
 938c427c docs/rag/getting-started.md#3 (line 36) — error FS0001: The type ''a * 'b * 'c' is not compatible with the type 'ToolUp.AI.IAIProviderFactory'
 af1575c6 docs/rag/getting-started.md#8 (line 122) — error FS0039: The type 'VectorisationHandler' is not defined. Maybe you want one of the following: VectorScope VectorMatch
 3ac638b7 docs/rag/static-corpus.md#1 (line 31) — error FS0039: The namespace 'StaticCorpus' is not defined.
-3e3d3582 docs/scheduling/README.md#2 (line 39) — error FS0039: The type 'Resource' is not defined. Maybe you want one of the following: ResourceId ResourceEnvelope KeySource AlertSource Result
-a1de8b7c docs/scheduling/README.md#3 (line 59) — error FS0039: The value or constructor 'serverConfig' is not defined. Maybe you want one of the following: ServerConfig ServerConfigOverrides Server ServerHost ServerApp
-0c8b8c82 docs/scheduling/README.md#5 (line 101) — error FS0039: The type 'Frequency' is not defined.
-31596548 docs/scheduling/README.md#6 (line 114) — error FS0039: The record label 'ByDayOfWeek' is not defined.
-b3ae0bb6 docs/scheduling/api-reference.md#4 (line 61) — error FS0039: The type 'SeriesId' is not defined.
-8bbc6c94 docs/scheduling/api-reference.md#7 (line 108) — error FS0039: The type 'Resource' is not defined. Maybe you want one of the following: ResourceId ResourceEnvelope KeySource AlertSource Result
-30bf31a3 docs/scheduling/api-reference.md#10 (line 193) — error FS0039: The type 'Resource' is not defined. Maybe you want one of the following: ResourceId ResourceEnvelope KeySource AlertSource Result
-77655d84 docs/scheduling/api-reference.md#14 (line 253) — error FS0039: The value, namespace, type or module 'Cmd' is not defined.
-cc0bac3c docs/scheduling/api-reference.md#16 (line 297) — error FS0039: The type 'Tests' is not defined.
-994a7892 docs/scheduling/concepts.md#3 (line 63) — error FS0039: The type 'SeriesId' is not defined.
-ee4fe1c4 docs/scheduling/concepts.md#4 (line 87) — error FS0039: The type 'Resource' is not defined. Maybe you want one of the following: ResourceId ResourceEnvelope KeySource AlertSource Result
-22a91c98 docs/scheduling/extending.md#4 (line 84) — error FS0039: The type 'PractitionerId' is not defined. Maybe you want one of the following: PromotionError PromotionVerdict
-aabb9eef docs/scheduling/extending.md#5 (line 111) — error FS0039: The type 'IBookingScheduler' is not defined.
-0dcb8d1e docs/scheduling/extending.md#7 (line 166) — error FS0039: The type 'Model' is not defined. Maybe you want one of the following: ModelScorer ModelSpecRef ModelArtifact ModelFitError ModelComparison
-d0e718b7 docs/scheduling/extending.md#8 (line 197) — error FS0039: The type 'BlockedTime' is not defined.
-69b7e197 docs/scheduling/extending.md#11 (line 232) — error FS0039: The type 'ICalRecurrenceLibrary' is not defined.
-d187c115 docs/scheduling/getting-started.md#2 (line 23) — error FS0039: The type 'Resource' is not defined. Maybe you want one of the following: ResourceId ResourceEnvelope KeySource AlertSource Result
-91f4c907 docs/scheduling/getting-started.md#3 (line 52) — error FS0039: The value or constructor 'authProvider' is not defined. Maybe you want one of the following: AuthProvider IAuthProvider AuthUIProvider AuthUIMode AuthoredBy
-210aea69 docs/scheduling/getting-started.md#8 (line 139) — error FS0039: The pattern discriminator 'Booked' is not defined.
-0610af38 docs/scheduling/getting-started.md#12 (line 222) — error FS0039: The type 'HttpHandler' is not defined. Maybe you want one of the following: AuthUIHandler
 2b2b439f docs/stripe/tier-token-sink.md#2 (line 52) — error FS0039: The value or constructor 'BillingTierSink' is not defined.
 38018c7a src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#6 (line 138) — error FS0001: This expression was expected to have type 'ClientModuleContext' but here has type 'unit'
 58ec0e8f src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#8 (line 191) — error FS0039: The type 'ClientConfig' does not define a field, constructor, or member named 'Mode'.

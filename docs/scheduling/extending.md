@@ -65,39 +65,33 @@ The shipped scheduler is per-`ResourceId`. For multi-resource booking (assign N 
 Each practitioner is their own `Resource`. A booking targets one specific practitioner. The customer-facing UI lets them pick (or auto-assigns).
 
 ```fsharp skip=fragment
-let practitioner1 = { ResourceId = ResourceId "p-1"; Name = "Alice"; ... }
-let practitioner2 = { ResourceId = ResourceId "p-2"; Name = "Bob"; ... }
-let practitioner3 = { ResourceId = ResourceId "p-3"; Name = "Carol"; ... }
+// Each practitioner is a BookableResource with their own weekly availability.
+let practitioners = [ "p-1", "Alice"; "p-2", "Bob"; "p-3", "Carol" ]
 
-// Booking targets one practitioner explicitly
-let! result = schedulingApi.Book {
-    ResourceId = ResourceId "p-2"
-    Start = ...
-    End = ...
-    Notes = ...
-}
+// Booking targets one practitioner explicitly.
+let! result = schedulingApi.Book { seedBooking with ResourceId = "p-2" }
 ```
 
-For auto-assignment, the module queries each practitioner's slots and picks the one with the earliest available slot:
+For auto-assignment, the module asks each practitioner for their free slots and picks the earliest. `ResourceId` is a plain `string`, and `FindAvailableSlots` emits only free windows — there is no slot status to filter on:
 
-```fsharp
-let assignNextAvailable (services: PractitionerId list) (preferredDate: DateTime) = async {
-    let! candidateSlots =
-        services
-        |> List.map (fun pid -> async {
+```fsharp skip=fragment
+let assignNextAvailable (candidates: ResourceId list) (window: DateRange) = async {
+    let! perCandidate =
+        candidates
+        |> List.map (fun rid -> async {
             let! slots =
-                schedulingApi.ListSlots {
-                    ResourceId = pid
-                    Start = preferredDate
-                    End = preferredDate.AddDays 7.
+                schedulingApi.FindAvailableSlots {
+                    ResourceId = rid
+                    Window = window
+                    SlotDurationMinutes = 60
                 }
-            return pid, slots |> List.tryFind (fun s -> s.Status = Free)
+            return rid, List.tryHead slots
         })
         |> Async.Parallel
 
     return
-        candidateSlots
-        |> Array.choose (fun (pid, slotOpt) -> slotOpt |> Option.map (fun s -> pid, s))
+        perCandidate
+        |> Array.choose (fun (rid, slot) -> slot |> Option.map (fun s -> rid, s))
         |> Array.sortBy (fun (_, slot) -> slot.Start)
         |> Array.tryHead
 }
@@ -107,21 +101,24 @@ let assignNextAvailable (services: PractitionerId list) (preferredDate: DateTime
 
 A composite resource represents the "any available practitioner" abstraction. Implement a custom `IBookingScheduler` that routes:
 
-```fsharp
+```fsharp skip=fragment
 type PractitionerPoolScheduler(poolResourceId: ResourceId, poolMembers: ResourceId list, entityStore: IEntityStore) =
     interface IBookingScheduler with
-        member this.Book(scopeId, request, bookedBy) = async {
-            if request.ResourceId = poolResourceId then
-                // Resolve to a specific pool member with capacity
-                let! member_ = this.pickAvailableMember scopeId request
-                match member_ with
+        // Every IBookingScheduler method is scope-first and tupled; the
+        // mutating ones also take the acting user id for the audit payload.
+        member this.Book(scopeId, booking, actorUserId) = async {
+            if booking.ResourceId = poolResourceId then
+                // Resolve to a specific pool member with capacity.
+                match! this.pickAvailableMember scopeId booking with
                 | Some specificId ->
-                    return! this.bookSpecific scopeId { request with ResourceId = specificId } bookedBy
+                    return! this.bookSpecific scopeId { booking with ResourceId = specificId } actorUserId
                 | None ->
-                    return Error SlotOccupied
+                    // No free member: report it as a schedule disagreement, not a
+                    // lookup failure, so the UI can list every reason at once.
+                    return Error(Conflicts [ OverlappingBooking booking.Id ])
             else
-                // Direct booking against a specific resource
-                return! this.bookSpecific scopeId request bookedBy
+                // Direct booking against a specific resource.
+                return! this.bookSpecific scopeId booking actorUserId
         }
         // ...
 ```
@@ -162,23 +159,36 @@ let CalendarView (events: ICalendarEvent[]) (onSlotClick: DateTime -> unit) =
 
 Then in your module's `ClientView.fs`:
 
-```fsharp
+```fsharp skip=fragment
+// model.Slots    : TimeSlot list — free windows from FindAvailableSlots
+// model.Bookings : Booking list  — what is already claimed in the same window
 let calendarView (model: Model) (dispatch: Msg -> unit) =
-    let calendarEvents =
+    let freeEvents =
         model.Slots
         |> List.toArray
         |> Array.map (fun slot -> {|
             id = slot.Start.ToString("O")
-            title = slotTitle slot
+            title = "Available"
             start = slot.Start.ToString("O")
             ``end`` = slot.End.ToString("O")
-            backgroundColor =
-                match slot.Status with
-                | Free -> "#10b981"
-                | Booked _ -> "#ef4444"
-                | Blocked _ -> "#9ca3af"
+            backgroundColor = "#10b981"
         |} :> ICalendarEvent)
-    FullCalendarBindings.CalendarView calendarEvents (fun date -> dispatch (BookSlot date))
+
+    let bookedEvents =
+        model.Bookings
+        |> List.filter (fun b -> b.Status = Confirmed || b.Status = Tentative)
+        |> List.toArray
+        |> Array.map (fun b -> {|
+            id = b.Id
+            title = b.Title
+            start = b.StartUtc.ToString("O")
+            ``end`` = b.EndUtc.ToString("O")
+            backgroundColor = if b.Status = Tentative then "#f59e0b" else "#ef4444"
+        |} :> ICalendarEvent)
+
+    FullCalendarBindings.CalendarView
+        (Array.append freeEvents bookedEvents)
+        (fun date -> dispatch (BookSlot date))
 ```
 
 ### Other calendar libraries
@@ -195,46 +205,52 @@ A future `ICalendarSyncProvider` extension point would pull external availabilit
 
 ```fsharp
 type ICalendarSyncProvider =
-    abstract FetchExternalEvents: resourceId: ResourceId -> start: DateTime -> end_: DateTime -> Async<BlockedTime list>
+    abstract FetchExternalEvents: resourceId: ResourceId * window: DateRange -> Async<AvailabilityException list>
 ```
 
-A `GoogleCalendarSyncProvider` companion would query Google Calendar's API for the resource's owner; the resulting events overlay as `BlockedTime`s in `ListSlots`. The `IBookingScheduler` would query the provider before computing slot status.
+A `GoogleCalendarSyncProvider` companion would query Google Calendar's API for the resource's owner and project what it found as dated `AvailabilityException`s — `Kind = PartialBlock` for a timed event, `FullDay` for an all-day one. `FindAvailableSlots` already subtracts those, so nothing downstream would need to change.
 
 Currently this is a deferred extension. Build it as a custom module-side layer for now:
 
 ```fsharp skip=fragment
-let listSlotsWithExternalSync resourceId start end_ = async {
-    let! slots = schedulingApi.ListSlots { ResourceId = resourceId; Start = start; End = end_ }
-    let! externalEvents = googleCalendarApi.fetchEvents resourceId start end_
-    return overlayExternal slots externalEvents
+let slotsWithExternalSync resourceId window = async {
+    let! slots =
+        schedulingApi.FindAvailableSlots {
+            ResourceId = resourceId
+            Window = window
+            SlotDurationMinutes = 60
+        }
+    let! externalEvents = googleCalendarApi.fetchEvents resourceId window
+    return subtractExternal slots externalEvents
 }
 ```
 
 ## Custom recurrence
 
-The shipped `RecurrenceExpander` covers Daily / Weekly / Monthly / Yearly with `Count` / `Until` termination + `ByDayOfWeek` / `ByDayOfMonth`. For richer recurrence (multi-modifier `BYDAY`, business days, exception dates), write a custom expander:
+The shipped `RecurrenceExpander` covers Daily / Weekly / Monthly / Yearly with `Count` / `Until` termination and a `ByWeekday` filter on Weekly rules. Sub-day frequencies and the complex monthly forms (`BySetPos`, `ByMonthDay`) are out of scope in v1. For richer recurrence — multi-modifier `BYDAY`, business days, exception dates — write a custom expander over `occurrenceStarts`:
 
 ```fsharp skip=fragment
 module CustomRecurrence
 
-let expandWithExceptions
+let occurrencesExcept
+    (seed: DateTimeOffset)
     (rule: RecurrenceRule)
-    (startDate: DateTime)
-    (exceptions: DateTime list)
-    : DateTime list =
-    RecurrenceExpander.expand rule startDate
+    (upperBound: DateTimeOffset)
+    (exceptions: DateTimeOffset list)
+    : DateTimeOffset list =
+    RecurrenceExpander.occurrenceStarts seed rule upperBound
     |> List.filter (fun d -> not (List.contains d exceptions))
 ```
 
 Or wrap an existing RFC 5545 library:
 
-```fsharp
-type FullICalRecurrenceExpander(icalLib: ICalRecurrenceLibrary) =
-    member _.expand (rule: string) (startDate: DateTime) : DateTime list =
-        icalLib.expandRRule rule startDate
+```fsharp skip=fragment
+type FullICalRecurrenceExpander(icalLib: IMyRRuleLibrary) =
+    member _.Expand (rule: string) (seed: DateTimeOffset) : DateTimeOffset list =
+        icalLib.ExpandRRule rule seed
 ```
 
-`RecurrenceExpander.expand` is a pure function; consumers can substitute it without changing the scheduler. The scheduler's `BookSeries` accepts a `RecurrenceRule` and calls the shipped expander internally — for richer rules, expand client-side and call `Book` per-date instead of `BookSeries`.
+Both expander entry points are pure, so a consumer can substitute them without changing the scheduler. There is no series-booking call to intercept: `Book` persists a seed carrying `Recurrence`, and `ExpandRecurrence` materialises occurrences on demand — so for a rule the shipped expander cannot express, expand it yourself and call `Book` per occurrence with `ParentBookingId` set.
 
 ## Wait lists
 

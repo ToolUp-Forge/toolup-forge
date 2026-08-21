@@ -11,48 +11,59 @@ Three primary entities:
 One bookable thing. Carries its own availability + slot configuration.
 
 ```fsharp
-type Resource = {
-    ResourceId: ResourceId
-    Name: string
-    Description: string option
-    AvailabilityWindows: AvailabilityWindow list
-    BlockedTimes: BlockedTime list
-    SlotDurationMinutes: int
-    BufferBetweenSlotsMinutes: int
+type BookableResource = {
+    Id: ResourceId
+    Type: string                      // entity-store discriminator
+    Version: int
+    ResourceType: string              // "Person" / "Room" / "Equipment" / caller-defined
+    DisplayName: string
+    Timezone: string                  // IANA tz name (e.g. "Europe/London")
+    DefaultAvailability: AvailabilityWindow list
+    Metadata: Map<string, string>
 }
 
 and AvailabilityWindow = {
-    Days: DayOfWeek list             // recurring weekly
-    StartTime: TimeSpan
-    EndTime: TimeSpan
-    Timezone: string                  // IANA tz name (e.g. "Europe/London")
-}
-
-and BlockedTime = {
-    Start: DateTime
-    End: DateTime
-    Reason: string
+    DayOfWeek: DayOfWeek option       // None = applies every day
+    StartTime: TimeOnly               // local, inclusive
+    EndTime: TimeOnly                 // local, exclusive; <= StartTime wraps midnight
+    EffectiveFrom: DateOnly option
+    EffectiveTo: DateOnly option
 }
 ```
 
-Persisted as a `IEntityStore` entity. Multi-tenant deployments scope by team; a resource lives in one team's container.
+Persisted as a `IEntityStore` entity — hence the `Type` / `Version` fields. Multi-tenant deployments scope by team; a resource lives in one team's container.
 
-### `Slot`
-
-A computed time interval against a resource. Slots aren't persisted — they're derived per query from `AvailabilityWindows` + `BlockedTimes` + existing `Booking`s.
+One-off deviations from the weekly pattern are separate dated entities rather than a list on the resource, so a blocked afternoon and an opened Saturday are the same shape:
 
 ```fsharp
-type Slot = {
+type AvailabilityException = {
+    Id: string
+    Type: string
+    Version: int
     ResourceId: ResourceId
-    Start: DateTime
-    End: DateTime
-    Status: SlotStatus
+    Date: DateOnly
+    Kind: ExceptionKind
+    StartTime: TimeOnly option        // required for PartialBlock / ExtendedHours
+    EndTime: TimeOnly option
+    Reason: string option
 }
 
-and SlotStatus =
-    | Free
-    | Booked of BookingId
-    | Blocked of reason: string
+and ExceptionKind =
+    | FullDay        // unavailable all day; StartTime / EndTime ignored
+    | PartialBlock   // unavailable during a window inside the day
+    | ExtendedHours  // available OUTSIDE the default windows
+```
+
+### `TimeSlot`
+
+A computed time interval against a resource. Slots aren't persisted — they're derived per query by `FindAvailableSlots` from `DefaultAvailability` + `AvailabilityException`s + existing `Booking`s. A slot carries no status: only free windows are emitted.
+
+```fsharp
+type TimeSlot = {
+    Start: DateTimeOffset
+    End: DateTimeOffset
+    ResourceId: ResourceId
+}
 ```
 
 ### `Booking`
@@ -61,48 +72,42 @@ A claim against a slot. Persisted.
 
 ```fsharp
 type Booking = {
-    BookingId: BookingId
+    Id: BookingId
+    Type: string
+    Version: int
     ResourceId: ResourceId
-    Start: DateTime
-    End: DateTime
-    BookedBy: string
-    BookedAt: DateTime
-    Notes: string option
+    Title: string
+    StartUtc: DateTimeOffset
+    EndUtc: DateTimeOffset
     Status: BookingStatus
-    SeriesId: SeriesId option        // populated for series bookings
+    BookedBy: string                  // principal who created the booking
+    BookedFor: string option          // when an admin books on someone's behalf
+    Recurrence: RecurrenceRule option // Some = this is a series seed
+    ParentBookingId: BookingId option // Some = an occurrence override of a series
+    Metadata: Map<string, string>
 }
 
 and BookingStatus =
-    | Confirmed
-    | Cancelled of cancelledAt: DateTime
+    | Tentative   // soft reservation; still counts for conflict detection
+    | Confirmed   // hard reservation
+    | Cancelled   // ignored by conflict detection
+    | NoShow      // retained for audit, ignored by future conflict detection
 ```
 
-Indexed by `ResourceId` + compound `(ResourceId, Start)` for fast range queries.
+There is no series identifier: a series is a seed booking carrying `Recurrence`, and an occurrence override points back at it through `ParentBookingId`.
 
 ## Slot derivation
 
-`ListSlots` is a pure function over the resource definition + existing bookings:
+`FindAvailableSlots` derives conflict-free windows rather than a graded slot grid. It walks the resource's default availability windows, subtracts existing bookings (ignoring `Cancelled` and `NoShow`), subtracts `FullDay` / `PartialBlock` exceptions, adds `ExtendedHours` exceptions, and emits slots of the requested duration on whatever boundaries survive:
 
-```fsharp
-let listSlots (resource: Resource) (bookings: Booking list) (start: DateTime) (end_: DateTime) : Slot list =
-    let candidateSlots = enumerateSlots resource start end_
-    candidateSlots
-    |> List.map (fun slot ->
-        let status =
-            // Check blocked times first
-            match resource.BlockedTimes |> List.tryFind (overlaps slot) with
-            | Some blocked -> Blocked blocked.Reason
-            | None ->
-                // Then existing bookings
-                match bookings |> List.tryFind (fun b -> b.Status = Confirmed && overlaps slot b) with
-                | Some booking -> Booked booking.BookingId
-                | None -> Free
-        { slot with Status = status })
+```fsharp skip=signature
+abstract FindAvailableSlots:
+    scopeId: string * resourceId: ResourceId * window: DateRange * slotDurationMinutes: int -> Async<TimeSlot list>
 ```
 
-`enumerateSlots` walks `AvailabilityWindow` × `SlotDuration` × `Buffer`, applying timezone conversion at each step. Daylight-saving handled — UTC stored, local rendered.
+Slot length is therefore a property of the *query*, not of the resource. Times are stored as `DateTimeOffset` in UTC and lifted against `BookableResource.Timezone` for the local-window comparison, so daylight saving is handled at evaluation time.
 
-Result: deterministic slot grid against the resource definition; no race condition between `ListSlots` and `Book` because slots are derived, not persisted.
+Result: no race condition between listing and booking, because slots are derived rather than persisted — and `Book` re-runs conflict detection before it writes regardless.
 
 ## Concurrency model
 

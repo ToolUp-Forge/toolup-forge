@@ -35,35 +35,45 @@ Add the packages:
 
 Define a resource:
 
-```fsharp
-open ToolUp.Scheduling
+A resource carries a weekly availability pattern; a slot length is chosen per query rather than baked into the resource.
 
-let salonChair : Resource = {
-    ResourceId = ResourceId "chair-1"
-    Name = "Stylist Chair 1"
-    AvailabilityWindows = [
-        // Mon-Fri 09:00-17:00
-        { Days = [ DayOfWeek.Monday; Tuesday; Wednesday; Thursday; Friday ]
-          StartTime = TimeSpan(9, 0, 0)
-          EndTime = TimeSpan(17, 0, 0)
-          Timezone = "Europe/London" }
+```fsharp
+let weekday (d: DayOfWeek) : AvailabilityWindow = {
+    DayOfWeek = Some d
+    StartTime = TimeOnly(9, 0)
+    EndTime = TimeOnly(17, 0)
+    EffectiveFrom = None
+    EffectiveTo = None
+}
+
+let salonChair: BookableResource = {
+    Id = "chair-1"
+    Type = "BookableResource"
+    Version = 0
+    ResourceType = "Equipment"
+    DisplayName = "Stylist Chair 1"
+    Timezone = "Europe/London"
+    DefaultAvailability = [
+        for d in
+            [
+                DayOfWeek.Monday
+                DayOfWeek.Tuesday
+                DayOfWeek.Wednesday
+                DayOfWeek.Thursday
+                DayOfWeek.Friday
+            ] -> weekday d
     ]
-    SlotDurationMinutes = 60
-    BufferBetweenSlotsMinutes = 0
+    Metadata = Map.empty
 }
 ```
 
-Wire the server composition root:
+Wire the server composition root. There is no compose-time resource list — register resources at runtime, into the caller's scope:
 
-```fsharp
-open ToolUp.Scheduling
-
-ServerApp.empty
-|> ServerApp.withConfig serverConfig
-|> ServerApp.withAuth authProvider
-|> ServerApp.addModules modules
-|> SchedulingServerApp.fromServerApp
-|> SchedulingServerApp.withResource salonChair
+```fsharp skip=fragment
+SchedulingServerApp.create ()
+|> SchedulingServerApp.withConfig serverConfig
+|> SchedulingServerApp.withAuth authProvider
+|> SchedulingServerApp.addModules modules
 |> SchedulingServerApp.run
 ```
 
@@ -99,44 +109,49 @@ The lock is per-resource, not global — different resources book concurrently. 
 
 ```fsharp
 type RecurrenceRule = {
-    Frequency: Frequency             // Daily | Weekly | Monthly | Yearly
+    Frequency: RecurrenceFrequency   // Daily | Weekly | Monthly | Yearly
     Interval: int                    // every N units
-    ByDayOfWeek: DayOfWeek list      // for Weekly
-    ByDayOfMonth: int list           // for Monthly
-    Count: int option                // total occurrences
-    Until: DateTime option           // last occurrence
+    ByWeekday: DayOfWeek list        // filters Weekly emissions; ignored otherwise
+    Until: DateTimeOffset option     // exclusive upper bound
+    Count: int option                // total occurrences, including the seed
 }
 ```
 
-Use `RecurrenceExpander.expand` to materialise a recurrence into concrete dates:
+v1 deliberately omits sub-day frequencies and the complex monthly rules (`BySetPos` / `ByMonthDay`). Use `RecurrenceExpander.occurrenceStarts` to materialise a rule into concrete instants:
 
 ```fsharp
-let weeklyTherapy = {
+let weeklyTherapy: RecurrenceRule = {
     Frequency = Weekly
     Interval = 1
-    ByDayOfWeek = [ DayOfWeek.Tuesday ]
+    ByWeekday = [ DayOfWeek.Tuesday ]
     Count = Some 12
     Until = None
 }
 
-let dates =
-    RecurrenceExpander.expand
+let starts =
+    RecurrenceExpander.occurrenceStarts
+        (DateTimeOffset(2026, 5, 12, 9, 0, 0, TimeSpan.Zero))
         weeklyTherapy
-        (startDate = DateTime(2026, 5, 12))
-// : DateTime list
+        (DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero))
+// : DateTimeOffset list
 ```
 
-The expander is pure — no I/O, no scheduling impl. Use it client-side to render a series of slots; use it server-side to book a series in one call.
+The expander is pure — no I/O, no scheduling impl. `RecurrenceExpander.expand` is the booking-shaped twin: it takes a seed `Booking` and a `DateRange` window and returns the occurrence bookings. Both are bounded by a hard cap of 10,000 occurrences.
 
-## iCalendar export
+## iCalendar
+
+The `iCalendar` module round-trips an RFC 5545 subset in both directions — `parse` / `emit` over `VCalendar`, and `bookingToVEvent` / `vEventToBooking` to map to and from the booking model.
 
 ```fsharp skip=fragment
-let! ics = schedulingApi.ExportICalendar resourceId
-
-// ics : string  (RFC 5545-compliant .ics file content)
+let ics =
+    iCalendar.emit {
+        Version = "2.0"
+        ProdId = iCalendar.CanonicalProdId
+        Events = bookings |> List.map iCalendar.bookingToVEvent
+    }
 ```
 
-Drop into an `.ics` download endpoint. Calendars (Google, Outlook, Apple) consume it. Useful for "subscribe to my booking calendar" + per-customer "your upcoming appointments" exports.
+Drop into an `.ics` download endpoint of your own — the SDK does not auto-inject one. Calendars (Google, Outlook, Apple) consume it. `bookingToVEvent` is lossy by design: `Status`, `BookedBy`, `BookedFor`, `ParentBookingId` and `Metadata` have no iCal representation, and `vEventToBooking` restores them from a `defaults` booking on import.
 
 ## Concepts
 

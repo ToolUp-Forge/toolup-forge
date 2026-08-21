@@ -17,51 +17,56 @@ End-to-end walkthrough: define a bookable resource, book a slot, render a calend
 
 ## 2. Define a resource
 
-A `Resource` represents one bookable thing — a chair, a room, a person's calendar, a piece of equipment.
+A `BookableResource` represents one bookable thing — a chair, a room, a person's calendar, a piece of equipment. The resource carries the timezone once; window times are local to it.
 
 ```fsharp
 open ToolUp.Scheduling
 
-let stylistOne : Resource = {
-    ResourceId = ResourceId "stylist-1"
-    Name = "Jane (Senior Stylist)"
-    Description = Some "Cuts, colours, consultations"
-    AvailabilityWindows = [
-        // Mon-Fri 09:00-17:00 UK time
-        { Days = [ DayOfWeek.Monday; Tuesday; Wednesday; Thursday; Friday ]
-          StartTime = TimeSpan(9, 0, 0)
-          EndTime = TimeSpan(17, 0, 0)
-          Timezone = "Europe/London" }
+let window (day: DayOfWeek) (fromH: int) (toH: int) : AvailabilityWindow = {
+    DayOfWeek = Some day
+    StartTime = TimeOnly(fromH, 0)
+    EndTime = TimeOnly(toH, 0)
+    EffectiveFrom = None
+    EffectiveTo = None
+}
+
+let stylistOne: BookableResource = {
+    Id = "stylist-1"
+    Type = "BookableResource"
+    Version = 0
+    ResourceType = "Person"
+    DisplayName = "Jane (Senior Stylist)"
+    Timezone = "Europe/London"
+    DefaultAvailability = [
+        // Mon-Fri 09:00-17:00 local
+        window DayOfWeek.Monday 9 17
+        window DayOfWeek.Tuesday 9 17
+        window DayOfWeek.Wednesday 9 17
+        window DayOfWeek.Thursday 9 17
+        window DayOfWeek.Friday 9 17
         // Saturday 10:00-14:00
-        { Days = [ DayOfWeek.Saturday ]
-          StartTime = TimeSpan(10, 0, 0)
-          EndTime = TimeSpan(14, 0, 0)
-          Timezone = "Europe/London" }
+        window DayOfWeek.Saturday 10 14
     ]
-    BlockedTimes = []                  // ad-hoc blackouts (holidays, sick days)
-    SlotDurationMinutes = 60
-    BufferBetweenSlotsMinutes = 15     // 15-min gap between back-to-back bookings
+    Metadata = Map [ "speciality", "Cuts, colours, consultations" ]
 }
 ```
 
-`AvailabilityWindow`s are recurring weekly. `BlockedTimes` overlay one-off blackouts. Slot duration + buffer determine the candidate-slot grid.
+`AvailabilityWindow`s repeat weekly (`DayOfWeek = None` means every day). One-off blackouts and one-off extra hours are separate `AvailabilityException` records against a specific date, not a list on the resource. Slot length is chosen per query rather than baked into the resource.
 
 ## 3. Wire `SchedulingServerApp`
 
-```fsharp
-ServerApp.empty
-|> ServerApp.withConfig {
+```fsharp skip=fragment
+SchedulingServerApp.create ()
+|> SchedulingServerApp.withConfig {
     ServerConfig.defaults with
         EntityStore = EnabledEntityStore
 }
-|> ServerApp.withAuth authProvider
-|> ServerApp.addModules modules
-|> SchedulingServerApp.fromServerApp
-|> SchedulingServerApp.withResource stylistOne
+|> SchedulingServerApp.withAuth authProvider
+|> SchedulingServerApp.addModules modules
 |> SchedulingServerApp.run
 ```
 
-That's it. The scheduling API + persistence is now in place.
+That's it. The scheduling API + persistence is now in place. Register `stylistOne` at runtime with `ISchedulingApi.RegisterResource` — resources are per-scope data, not compose-time configuration.
 
 ## 4. List slots for a date range
 
@@ -125,33 +130,30 @@ The server's per-resource `SemaphoreSlim` ensures two concurrent callers booking
 ## 6. Cancel a booking
 
 ```fsharp skip=fragment
-let! result = SchedulingClient.proxy.Cancel bookingId
+let! result = schedulingApi.Cancel(bookingId, "Customer rang to cancel")
 // result : Result<unit, BookingError>
 ```
 
-Cancelled bookings free the slot for re-booking. Audit log records `BookingCancelled`.
+`Cancel` takes the reason alongside the id, and is idempotent — cancelling twice succeeds and emits `BookingCancelled` only on the first transition. A cancelled booking is ignored by conflict detection, so its window frees up for re-booking.
 
 ## 7. Render a calendar grid (UI)
 
 The SDK ships no built-in calendar UI — the data primitives let you render whatever grid your module needs:
 
-```fsharp
+```fsharp skip=fragment
 open Feliz
 
-let calendarView slots =
+// slots : TimeSlot list — FindAvailableSlots emits only free windows, so
+// there is no per-slot status to branch on.
+let calendarView (slots: TimeSlot list) =
     Html.div [
         prop.className "calendar-grid"
         prop.children [
             for slot in slots do
                 Html.div [
-                    prop.className (
-                        match slot.Status with
-                        | Free -> "slot-free"
-                        | Booked _ -> "slot-booked"
-                        | Blocked _ -> "slot-blocked")
+                    prop.className "slot-free"
                     prop.text (slot.Start.ToString("HH:mm"))
-                    prop.onClick (fun _ ->
-                        if slot.Status = Free then bookSlot slot)
+                    prop.onClick (fun _ -> bookSlot slot)
                 ]
         ]
     ]
@@ -211,25 +213,32 @@ let! result = SchedulingClient.proxy.BookSeries {
 
 ## 9. Export to iCalendar
 
+There is no `ExportICalendar` call on the API — the `iCalendar` module is a pure codec, and serving `.ics` is your module's route to write:
+
 ```fsharp skip=fragment
-let! ics = SchedulingClient.proxy.ExportICalendar resourceId
-// ics : string (.ics content)
-```
-
-Serve as a download:
-
-```fsharp
-let icalRoute : HttpHandler =
-    fun next ctx -> task {
-        let resourceId = ResourceId (ctx.Request.Query.["resource"].ToString())
-        let! ics = serviceProvider.GetRequiredService<IBookingScheduler>().ExportICalendar resourceId
-        ctx.Response.Headers.ContentType <- "text/calendar"
-        ctx.Response.Headers.ContentDisposition <- "attachment; filename=bookings.ics"
-        return! ctx.Response.WriteAsync(ics) |> Async.AwaitTask
+let ics (bookings: Booking list) =
+    iCalendar.emit {
+        Version = "2.0"
+        ProdId = iCalendar.CanonicalProdId
+        Events = bookings |> List.map iCalendar.bookingToVEvent
     }
 ```
 
-Or expose it directly in your module's API.
+Serve it as a download:
+
+```fsharp skip=fragment
+let icalRoute: HttpHandler =
+    fun next ctx -> task {
+        let resourceId = ctx.Request.Query["resource"].ToString()
+        let scheduler = ctx.RequestServices.GetRequiredService<IBookingScheduler>()
+        let! bookings = scheduler.ListBookings(scopeId, resourceId, window) |> Async.StartAsTask
+        ctx.Response.Headers.ContentType <- "text/calendar"
+        ctx.Response.Headers.ContentDisposition <- "attachment; filename=bookings.ics"
+        return! ctx.Response.WriteAsync(ics bookings)
+    }
+```
+
+`bookingToVEvent` is lossy — `Status`, `BookedBy`, `BookedFor`, `ParentBookingId` and `Metadata` have no iCal representation. That is the right trade for a calendar client that does not speak ToolUp; use `vEventToBooking` with a `defaults` booking to restore them on import.
 
 ## Next steps
 
