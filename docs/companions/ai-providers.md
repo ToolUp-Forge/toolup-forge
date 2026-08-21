@@ -35,29 +35,50 @@ Capabilities:
 
 Setup:
 
-```fsharp
-open ToolUp.AIProviders.Claude
+Each provider package exposes its identifiers (`ProviderId`, `DefaultModel`, `KnownModels`) and its constructor (`createWithApiKeyAndModel`); the app assembles the `AIProviderBuilder` at compose time, so a provider package never takes a dependency on `ToolUp.AI`:
 
+```fsharp
+open ToolUp.Platform.AI
+open ToolUp.AI
+
+let claudeBuilder: AIProviderBuilder = {
+    Descriptor = {
+        Id = ClaudeAIProvider.ProviderId
+        DisplayName = "Anthropic Claude"
+        SupportedModels = ClaudeAIProvider.KnownModels
+        DefaultModel = ClaudeAIProvider.DefaultModel
+        Capabilities = {
+            AIProviderCapabilities.unknown with
+                ProviderName = ClaudeAIProvider.ProviderId
+                Model = ClaudeAIProvider.DefaultModel
+                Streaming = true
+                ToolUse = true
+                Vision = true
+                SupportsPromptCaching = true
+                SupportsTriage = true
+                TriageModelId = Some ClaudeAIProvider.DefaultModel
+        }
+    }
+    Build = ClaudeAIProvider.createWithApiKeyAndModel
+}
+```
+
+Then hand the builder to the factory:
+
+```fsharp skip=fragment
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder ]
-        aiConfigStore
-        secretStore
-        PlatformOnly
+        [ claudeBuilder ]
+        providerProfile      // IProviderProfile — the platform-wide BYOK store
+        secretStore          // ISecretStore
+        PlatformOnly         // AIFallbackPolicy
+        platformProviders    // DefaultAIProviderFactory.AIPlatformProvider list
+        None                 // IPlatformAIKeyStore option — auto-promoted when None
 ```
 
 Store API key under `_platform` scope, key name `ANTHROPIC_API_KEY`. The provider reads per-call.
 
-Model selection: pass model name in the builder. Default is `claude-opus-4-1-20250109`. Other models (Sonnet, Haiku) via `Build` parameter:
-
-```fsharp
-let builder = {
-    Descriptor = ClaudeAIProvider.descriptor
-    Build = fun apiKey model -> ClaudeAIProvider.createWithApiKeyAndModel apiKey model
-}
-```
-
-The factory invokes the builder per-call with the configured `(apiKey, model)`. Users can change model via the AI Settings UI when `BYOKMode = AllowUserProviders`.
+Model selection: `DefaultModel` is `claude-haiku-4-5-20251001`; the other ids the package knows are in `ClaudeAIProvider.KnownModels`. The factory invokes `Build` per-call with the configured `(apiKey, model)`, so a user can change model via the AI Settings UI under `AllowUserProviders`.
 
 ### `ToolUp.AIProviders.OpenAI` (OpenAI)
 
@@ -77,14 +98,26 @@ Capabilities:
 Setup:
 
 ```fsharp
-open ToolUp.AIProviders.OpenAI
-
-let aiProviderFactory =
-    DefaultAIProviderFactory.create
-        [ OpenAIProvider.builder ]
-        aiConfigStore
-        secretStore
-        PlatformOnly
+let openAiBuilder: AIProviderBuilder = {
+    Descriptor = {
+        Id = OpenAIProvider.ProviderId
+        DisplayName = "OpenAI"
+        SupportedModels = OpenAIProvider.KnownModels
+        DefaultModel = OpenAIProvider.DefaultModel
+        Capabilities = {
+            AIProviderCapabilities.unknown with
+                ProviderName = OpenAIProvider.ProviderId
+                Model = OpenAIProvider.DefaultModel
+                Streaming = true
+                ToolUse = true
+                Vision = true
+                SupportsPromptCaching = true
+                SupportsTriage = true
+                TriageModelId = Some "gpt-4o-mini"
+        }
+    }
+    Build = OpenAIProvider.createWithApiKeyAndModel
+}
 ```
 
 Store API key under `_platform` scope, key name `OPENAI_API_KEY`.
@@ -102,38 +135,31 @@ Capabilities:
 - `ToolUse = true` — `functionDeclarations` + `functionCall` / `functionResponse` parts (no per-call ids — the provider synthesises stable correlations).
 - `Vision = true` — multimodal is the default; image / audio / video parts ride on `inlineData` or `fileData`.
 - `SupportsPromptCaching = true` — surfaces `cachedContentTokenCount` when present (request-side cache management via Gemini's explicit `cachedContents` API is not yet wired here).
+- `SupportsTriage = true` — the native `responseSchema` path serves the triage tier; `TriageModelId = Some "models/gemini-2.5-flash"`.
 
 Setup:
 
 ```fsharp
-open GeminiAIProvider
-
-let geminiBuilder = {
+let geminiBuilder: AIProviderBuilder = {
     Descriptor = {
-        Id = ProviderId
+        Id = GeminiAIProvider.ProviderId
         DisplayName = "Google Gemini"
-        SupportedModels = KnownModels
-        DefaultModel = DefaultModel
+        SupportedModels = GeminiAIProvider.KnownModels
+        DefaultModel = GeminiAIProvider.DefaultModel
         Capabilities = {
             AIProviderCapabilities.unknown with
+                ProviderName = GeminiAIProvider.ProviderId
+                Model = GeminiAIProvider.DefaultModel
                 Streaming = true
                 ToolUse = true
                 Vision = true
                 SupportsPromptCaching = true
-                ProviderName = "google-gemini"
-                Model = DefaultModel
+                SupportsTriage = true
+                TriageModelId = Some GeminiAIProvider.DefaultModel
         }
     }
-    Build = fun apiKey model -> createWithApiKeyAndModel apiKey model
+    Build = GeminiAIProvider.createWithApiKeyAndModel
 }
-
-let aiProviderFactory =
-    DefaultAIProviderFactory.create
-        [ geminiBuilder ]
-        providerProfile
-        secretStore
-        PlatformOnly
-        None
 ```
 
 Store API key under `_platform` scope, key name `GEMINI_API_KEY`. Endpoint targets `generativelanguage.googleapis.com` (v1beta); Vertex AI managed endpoints are out of scope for this package — see `ToolUp.AIProviders.GoogleVertex` (when shipped) for that path.
@@ -142,24 +168,24 @@ Store API key under `_platform` scope, key name `GEMINI_API_KEY`. Endpoint targe
 
 The `DefaultAIProviderFactory` accepts a list of builders. Users (or the platform default) pick the active provider:
 
-```fsharp
+```fsharp skip=fragment
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder
-          OpenAIProvider.builder ]
-        aiConfigStore
+        [ claudeBuilder; openAiBuilder ]
+        providerProfile
         secretStore
-        AllowUserProviders
+        PermissiveWithPlatformFallback
+        platformProviders
+        None
 ```
 
-With `BYOKMode = AllowUserProviders`:
-1. Each user can register their own `AIProviderInstance` via the AI Settings UI.
-2. Per request, the factory looks up the active instance from `IUserAIConfigStore`.
-3. The factory picks the matching builder by `ProviderId`.
-4. The factory pulls the API key from `ISecretStore` (user's encrypted key).
-5. The builder instantiates a provider with `(apiKey, model)`.
+`AIFallbackPolicy` decides what happens when a user or team has configured nothing:
 
-Deployment defaults: `PlatformOnly` mode uses the platform's `_platform`-scoped key for every user. `AllowUserProviders` falls back to the platform default when the user hasn't configured one.
+- **`PlatformOnly`** — user and team configuration is ignored; every request uses the deployment's platform provider. The deployment carries 100% of the cost. `Available` is empty, and the settings UI surfaces a platform-provider + model picker driven by `PlatformDescriptors`.
+- **`PermissiveWithPlatformFallback`** — BYOK where configured, the platform provider otherwise. Free-tier-plus-upgrade deployments.
+- **`StrictBYOK`** — the platform never pays; missing configuration surfaces `ProviderResolutionError.NoProviderConfigured` to the UI.
+
+Under the two BYOK policies, per request the factory resolves the routed entry from `IProviderProfile`, picks the matching builder by `ProviderId`, pulls the API key from `ISecretStore`, and calls `Build apiKey model`.
 
 ## Operator config — startup validation env vars
 
@@ -181,8 +207,8 @@ Both providers share fields on `AIProviderRequest`:
 - `SystemPrompt: string` — composed via `SystemPromptBuilder`.
 - `Messages: AIProviderMessage list` — conversation history + current user message.
 - `Tools: AIProviderToolDef list` — registered tools translated to vendor's tool schema.
-- `MaxTokens: int` — default 4096; tune via `AIAssistantServerConfig.DefaultMaxTokens`.
-- `Temperature: float` — default 0.7; tune via `AIAssistantServerConfig.DefaultTemperature`.
+- `MaxTokens: int` — the per-call output cap the agent loop supplies.
+- `Temperature: float` — sampling temperature the agent loop supplies.
 - `Stream: bool` — `true` for SSE streaming; `false` for buffered response.
 
 Token usage reporting populates `AIProviderResponse.Usage`:
@@ -207,13 +233,16 @@ type AILatencyRecord = {
     TaskId: Guid
     ConversationId: Guid
     TurnNumber: int
-    ProviderName: string         // "claude" or "openai"
-    ProviderModel: string        // "claude-opus-4-1-20250109", "gpt-4o", etc.
-    TtftMs: int option           // time-to-first-token (streaming only)
-    TurnDurationMs: int
+    ProviderName: string            // "anthropic-claude", "openai-gpt", "google-gemini"
+    ProviderModel: string           // "claude-haiku-4-5-20251001", "gpt-4o", etc.
+    TtftMs: float option            // time-to-first-token (streaming only)
+    TurnDurationMs: float
     ToolCalls: ToolCallTiming list
-    StopReason: StopReason
-    Usage: TokenUsage option
+    StopReason: string              // "end_turn" | "tool_use" | "max_tokens" | ""
+    PromptTokens: int option
+    CachedPromptTokens: int option
+    OutputTokens: int option
+    CacheCreationTokens: int option // Anthropic-specific cache-write cost
 }
 ```
 
@@ -255,15 +284,15 @@ let builder = {
 
 Wire into the factory:
 
-```fsharp
+```fsharp skip=fragment
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder
-          OpenAIProvider.builder
-          MyVendor.AIProvider.builder ]
-        aiConfigStore
+        [ claudeBuilder; openAiBuilder; MyVendor.AIProvider.builder ]
+        providerProfile
         secretStore
-        AllowUserProviders
+        PermissiveWithPlatformFallback
+        platformProviders
+        None
 ```
 
 See [`ai/extending.md`](../ai/extending.md) for the full provider authoring guide:
@@ -277,7 +306,7 @@ See [`ai/extending.md`](../ai/extending.md) for the full provider authoring guid
 ## Hardening checklist for production
 
 - API keys stored in `ISecretStore` (never hardcoded, never env-var-only).
-- `BYOKMode = AllowUserProviders` for deployments where users should supply their own keys (cost-attribution).
+- `AIFallbackPolicy = PermissiveWithPlatformFallback` (or `StrictBYOK`) for deployments where users should supply their own keys (cost-attribution).
 - Per-user / per-team rate limits via `ServerConfig.RateLimit`.
 - Per-tenant cost ceilings via custom middleware reading `AILatencyRecord` events.
 - `AIServerApp.withConfigValidator` for provider preflight probes — `ClaudeAIProviderValidator` / `OpenAIProviderValidator` (when shipped per-provider).
@@ -286,7 +315,8 @@ See [`ai/extending.md`](../ai/extending.md) for the full provider authoring guid
 
 ## Cost-control patterns
 
-- **`MaxTurns`** — caps the agent loop iterations per chat. Default 10; tune lower for cost-sensitive deployments.
+- **Agent-loop turn cap** — the loop stops after 15 turns rather than running away; a chat that hits it ends with an explicit message rather than more provider calls.
+- **`AIAssistantServerConfig.MaxHistoryMessages`** — caps the prior history replayed to the model each turn (default 60), so a long-lived conversation cannot grow per-turn token spend without bound.
 - **Token-usage caps** — middleware that short-circuits before hitting the provider when the user/team's daily/monthly cap is exceeded. Build atop `AILatencyRecord` events.
 - **Cheaper models for non-critical paths** — use Haiku / GPT-4o-mini for tool dispatch in modules where Opus / GPT-4o would be overkill.
 - **Cached system prompts** — long system prompts that don't change across users (platform-layer prompts) benefit most from caching. Make module-private prompts shorter than platform-shared ones to maximise hit rate.

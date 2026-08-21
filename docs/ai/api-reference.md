@@ -26,17 +26,18 @@ Branding only. System-prompt content stays server-side.
 ### `AIAssistantApi` (ToolUp.Remoting contract)
 
 ```fsharp
-type IAIAssistantApi = {
+type AIAssistantApi = {
     SubmitMessage: AIMessageRequest -> Async<AITask>
-    GetConversation: ConversationId -> Async<Conversation option>
-    ListConversations: unit -> Async<ConversationSummary list>
-    DeleteConversation: ConversationId -> Async<unit>
-    GetAvailableTools: unit -> Async<AIToolDescriptor list>
-    GetTaskStatus: TaskId -> Async<AITask option>
+    GetConversation: Guid -> Async<ConversationMessage list>
+    ListConversations: unit -> Async<Conversation list>
+    GetAvailableTools: unit -> Async<AIToolDefinition list>
+    GetTaskStatus: Guid -> Async<AITask option>
+    DeleteConversation: Guid -> Async<Result<unit, string>>
+    SetConversationOverride: Guid * string option -> Async<Result<unit, string>>
 }
 ```
 
-Auto-injected via ToolUp.Remoting when AI is enabled. Caller binds the `IAIAssistantApi` proxy on the client; per-method auth gating handled by `makePermissionGuardedApi`.
+Auto-injected via ToolUp.Remoting when AI is enabled. Caller binds the `AIAssistantApi` proxy on the client. Every method carries an authorization attribute (`[<AllowAnonymous>]` throughout — per-scope isolation and the conversation-ownership gate run inside the handlers); `SubmitMessage` additionally carries `[<RateLimit>]` and `DeleteConversation` an `[<Audit>]` annotation. `SetConversationOverride` persists the per-conversation provider override read back as `Conversation.OverrideProviderLabel`.
 
 ### `AIMessageRequest`
 
@@ -52,12 +53,26 @@ type AIMessageRequest = {
 
 ```fsharp
 type AIStreamEvent =
-    | MessageDelta of conversationId: Guid * taskId: Guid * delta: string
-    | ToolCallStarted of conversationId: Guid * taskId: Guid * toolName: string * toolCallId: string * args: JsonValue
-    | ToolCallCompleted of conversationId: Guid * taskId: Guid * toolCallId: string * result: ToolResult
+    | MessageDelta of conversationId: Guid * content: string
+    | ToolCallStarted of conversationId: Guid * toolName: string * toolCallId: Guid
+    | ToolCallCompleted of conversationId: Guid * toolCallId: Guid * result: string
     | TaskStatusChanged of taskId: Guid * status: AITaskStatus
-    | MessageComplete of conversationId: Guid * taskId: Guid * messageId: Guid
-    | StreamError of taskId: Guid * error: string
+    | MessageComplete of conversationId: Guid * messageId: Guid
+    | StreamError of message: string
+    /// The user cancelled the in-flight agent loop; it exits at the next turn boundary.
+    | StreamCancelled of conversationId: Guid
+    /// Ask the client to execute a `ClientResident` tool and POST the result
+    /// to `/api/ai/tool-result`; the agent loop suspends on `toolCallId`.
+    | ClientToolInvoke of
+        taskId: Guid *
+        toolCallId: Guid *
+        toolName: string *
+        argsJson: string *
+        activeModule: string option *
+        activePage: string option
+    /// Per-message numeric-fidelity verdict; emitted only when the answer
+    /// gate ran in `Annotate` / `Strict` mode.
+    | AnswerVerified of conversationId: Guid * verification: AnswerVerification
 ```
 
 Streamed over SSE. Client routes by `NotificationKind = AIStream`.
@@ -66,43 +81,41 @@ Streamed over SSE. Client routes by `NotificationKind = AIStream`.
 
 ```fsharp
 type AIToolDefinition = {
-    Name: string
-    Description: string
-    Parameters: ToolParameterSchema
-    Executor: JsonValue -> Async<ToolResult>
-    Visibility: ToolVisibility
-    Capabilities: ToolCapabilities
+    Name: string                                // e.g. "media_optimisation.run"
+    Description: string                         // shown to the model
+    Parameters: ToolParameterSchema list
+    SourceModule: string                        // which module provides the tool
+    EmitsActions: ActionDeclaration list option // client-side actions the tool may publish
+    Location: ToolLocation
+    Surface: AISurfaceFilter
+    IsLiveInterface: bool                       // reads or drives live browser-resident state
 }
 
-and ToolVisibility =
-    | ServerSide
+and ToolLocation =
+    | ServerResident
     | ClientResident
 
-and ToolCapabilities = {
-    RequiresFullPage: bool      // ClientResident only
-    RequiresPlatformAdmin: bool
-}
+and AISurfaceFilter =
+    | Both
+    | SidePanelOnly
+    | FullPageOnly
 ```
 
-Module-declared tools live in `Server.fs`; the composition root registers them via `ServerModule.withAITools [...]` or directly via `AIServerApp.withAITools`.
+Metadata only — the executor is server-side and lives in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime, so a module can declare tools without referencing the AI companion. Module-declared tools live in `Server.fs`; the composition root registers them via `ServerModule.withAITools [...]` or directly via `AIServerApp.withAITools`.
 
 ### `ToolParameterSchema`
 
 ```fsharp
 type ToolParameterSchema = {
-    Properties: (string * ParamType * string) list  // name, type, description
+    Name: string
+    Type: string            // "string" | "number" | "boolean" | "object" | "array"
+    Description: string
+    Required: bool
+    Default: string option  // JSON-encoded default value
 }
-
-and ParamType =
-    | StringP
-    | StringArray
-    | Integer
-    | Number
-    | Boolean
-    | EnumP of cases: string list
 ```
 
-Translates to JSON Schema at provider request time. The model sees `parameters: { type: "object", properties: { ... } }`.
+One entry per parameter; `AIToolDefinition.Parameters` is a list of them. Deliberately Fable-compatible (no `System.Text.Json` dependency) so the declaration shape can live in the core SDK. Translates to JSON Schema at provider request time — the model sees `parameters: { type: "object", properties: { ... } }`.
 
 ### `ModuleAIContext`
 
@@ -117,41 +130,58 @@ type ModuleAIContext = {
 
 ```fsharp
 type Conversation = {
-    ConversationId: Guid
-    Participants: Participant list
-    Messages: ConversationMessage list
-    Created: DateTime
-    Updated: DateTime
+    Id: Guid
     Title: string option
+    CreatedAt: DateTime
+    UpdatedAt: DateTime
+    MessageCount: int
+    /// Per-conversation provider override, set via `SetConversationOverride`.
+    OverrideProviderLabel: string option
 }
 
 and ConversationMessage = {
-    MessageId: Guid
-    Role: MessageRole       // User | Assistant | System | Tool
+    Id: Guid
+    ConversationId: Guid
+    Participant: ParticipantType     // User | AIAssistant | System
     Content: string
-    ToolCalls: AIProviderToolCall list
-    ToolResults: AIProviderToolResult list
     Timestamp: DateTime
+    ToolCalls: ToolCallRecord list
+    /// Knowledge-base chunks retrieved for this message; `[]` for user and
+    /// system turns, and for assistant turns where retrieval did not run.
+    RetrievedSources: RetrievedSource list
+    /// Multimodal content blocks; `[]` for plain-text turns, where `Content`
+    /// carries the whole message body.
+    Parts: AIContentPart list
+    /// The conversation's owner, stamped when the server persists the first
+    /// message. `""` on client-side construction.
+    CreatedBy: string
+    /// Idempotency key of the fast-path beacon that appended this message;
+    /// `""` for ordinary agent-loop turns.
+    BeaconId: string
+    /// Numeric-fidelity verdict; `None` unless the answer gate ran.
+    Verification: AnswerVerification option
 }
 ```
+
+`Conversation` is metadata only — `ListConversations` returns these, and `GetConversation` returns the `ConversationMessage list` for one.
 
 ### `AITask`
 
 ```fsharp
 type AITask = {
     TaskId: Guid
-    ConversationId: ConversationId
+    ConversationId: Guid
+    Prompt: string
     Status: AITaskStatus
+    CreatedAt: DateTime
+    CompletedAt: DateTime option
 }
 
 and AITaskStatus =
-    | Pending
-    | Running
-    | ToolCalling
-    | Streaming
-    | Completed
-    | Failed of reason: string
-    | Cancelled
+    | Queued
+    | InProgress
+    | AITaskCompleted
+    | AITaskFailed of string
 ```
 
 ### `IAIProvider`
@@ -224,27 +254,21 @@ and StopReason = EndTurn | ToolUse | MaxTokens | StopSequence
 
 (Defined in `ToolUp.Platform.Core`; aliased here for completeness.)
 
-### `IUserAIConfigStore`
+### `IProviderProfile`
+
+The canonical platform-wide BYOK store (it replaced the earlier per-user `IUserAIConfigStore`). Defined in `ToolUp.Platform.Core`, keyed by `StorageScope` so tenant isolation is structural.
 
 ```fsharp
-type IUserAIConfigStore =
-    abstract GetUserConfig: scopeId: string -> userId: string -> Async<UserAIConfig>
-    abstract SaveUserConfig: scopeId: string -> userId: string -> config: UserAIConfig -> Async<unit>
-    abstract GetPlatformDefault: unit -> Async<AIProviderInstance option>
-    abstract SetPlatformDefault: AIProviderInstance -> Async<unit>
-
-and UserAIConfig = {
-    ActiveInstanceId: Guid option
-    Instances: AIProviderInstance list
-}
-
-and AIProviderInstance = {
-    InstanceId: Guid
-    ProviderId: string
-    Model: string
-    SecretKeyRef: string
-    DisplayName: string
-}
+type IProviderProfile =
+    abstract Get: scope: StorageScope -> Async<ProviderProfile option>
+    abstract Set: scope: StorageScope * profile: ProviderProfile -> Async<Result<unit, string>>
+    abstract Clear: scope: StorageScope -> Async<unit>
+    /// Resolve the entry a (surface, context) pair routes to. A context-specific
+    /// rule wins over the surface default; a stale label yields `None`.
+    abstract ResolveEntry: scope: StorageScope * surface: string * context: string option -> Async<ProviderEntry option>
+    /// Write only the advisory health of one entry, so a background probe cannot
+    /// race a user editing routing through `Set`.
+    abstract SetEntryHealth: scope: StorageScope * label: string * health: ProviderHealth -> Async<Result<unit, string>>
 ```
 
 ### `AILatencyRecord`
@@ -253,14 +277,29 @@ and AIProviderInstance = {
 type AILatencyRecord = {
     TaskId: Guid
     ConversationId: Guid
-    TurnNumber: int
+    TurnNumber: int              // 1-based turn index within this agent-loop run
     ProviderName: string
     ProviderModel: string
-    TtftMs: int option
-    TurnDurationMs: int
+    /// Time to first `MessageDelta`. `None` when the model went straight to a
+    /// tool call without narrating, or when the provider does not stream.
+    TtftMs: float option
+    TurnDurationMs: float        // provider call + parallel tool execution + bookkeeping
     ToolCalls: ToolCallTiming list
-    StopReason: StopReason
-    Usage: TokenUsage option
+    /// `"end_turn"`, `"tool_use"`, `"max_tokens"`, or `""` when the loop bailed
+    /// before reading one.
+    StopReason: string
+    PromptTokens: int option
+    CachedPromptTokens: int option
+    OutputTokens: int option
+    /// Anthropic-specific cache-write cost; `None` on providers without one.
+    CacheCreationTokens: int option
+}
+
+and ToolCallTiming = {
+    Name: string
+    Location: ToolExecutionLocation   // ServerSide | ClientSide
+    DurationMs: float
+    Errored: bool
 }
 ```
 
@@ -271,52 +310,70 @@ type AILatencyRecord = {
 Flat superset of `ServerApp`. The fluent shape:
 
 ```fsharp
+open ToolUp.Platform.Providers
+open ToolUp.AI.SystemPromptBuilder
+
 type AIServerApp = {
     Base: ServerApp
-    AIFactory: AIProviderFactory
-    AIConfigStore: IUserAIConfigStore
-    AITools: AIToolDefinition list
+    AIProviderFactory: IAIProviderFactory
+    /// Canonical platform-wide BYOK store. Mirrored onto `Base.ProviderProfile`
+    /// by `create` so a non-AI handler in the same app can resolve it from DI.
+    ProviderProfile: IProviderProfile
+    /// `None` lets the composer auto-promote a blob-backed store when an
+    /// `ISecretStore` is registered in DI.
+    PlatformKeyStore: IPlatformAIKeyStore option
+    /// Declarative accumulator for the wired platform providers, populated
+    /// additively via `withPlatformProvider`.
+    PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
 }
 ```
 
+AI tools are not an `AIServerApp` field — each module contributes them through `ServerModule.withAITools`, and they aggregate on the inner `Base.AITools`.
+
 Constructors:
 
 ```fsharp skip=signature
 module AIServerApp =
-    val create: AIProviderFactory * IUserAIConfigStore -> AIServerApp
-    val empty: AIServerApp        // requires withAIFactory + withAIConfigStore before run
+    val create: IAIProviderFactory -> IProviderProfile -> AIServerApp
+    /// Lift an existing `ServerApp` so AI contributions stack onto whatever it
+    /// already carries.
+    val createFrom: IAIProviderFactory -> IProviderProfile -> ServerApp -> AIServerApp
 ```
 
-Mirrored `ServerApp` builders:
-- `withConfig`, `withAuth`, `withLogger`, `withStorage`, `withSecretStore`, `withEventStore`, `withNotificationChannel`, `withConfigStore`, `withTeamStore`, `withPermissionStore`, `withScopeResolver`, `addModules`, `addModule`, `withHealthCheck`, `withConfigValidator`, `withMetricsSink`, `withAuditSink`, `withTransactionalSink`, `withNotificationAddressBook`, `withJobHandler`, `withDataSource`, `withEncryptedBlobStorage`, `withDevDiagnosticsContributor`, `withAnonymousRoute`, `withHttpsRedirection`, `withForwardedHeaders`, `withStaticPathBehaviour`.
+Mirrored `ServerApp` builders (each delegates to the inner `Base`):
+- `withConfig`, `withAuth`, `withLogger`, `withStorage`, `withNotifications`, `withUserDirectory`, `withCspContributor`, `withTransactionalSink`, `withHealthCheck`, `withConfigValidator`, `withEncryptedBlobStorage`, `withMetricsSink`, `withRateLimitDescriptor`, `withEntity`, `withJobHandler`, `withScheduledJob`, `withBackfillMissedTicks`, `withEventTriggerCatchUp`, `withAuditFailurePolicy`, `withEntityOutbox`, `withExtensions`, `withPreMiddleware`, `withPostMiddleware`, `addModule`, `addModules`.
 
 AI-specific builders:
-- `withAIFactory: AIProviderFactory -> AIServerApp -> AIServerApp`
-- `withAIConfigStore: IUserAIConfigStore -> AIServerApp -> AIServerApp`
-- `withAITools: AIToolDefinition list -> AIServerApp -> AIServerApp`
+- `withProviderProfile: IProviderProfile -> AIServerApp -> AIServerApp`
+- `withPlatformAIKeyStore: IPlatformAIKeyStore -> AIServerApp -> AIServerApp`
+- `withPlatformProvider: DefaultAIProviderFactory.AIPlatformProvider -> AIServerApp -> AIServerApp`
 - `withAIConfig: AIAssistantServerConfig -> AIServerApp -> AIServerApp`
 - `withModuleAIContexts: ModuleAIContext list -> AIServerApp -> AIServerApp`
-- `withBase: ServerApp -> AIServerApp -> AIServerApp` (escape hatch for assembling an `AIServerApp` from a pre-built `ServerApp`)
+- `withAnswerVerifier`, `withNumericFidelityGate`, `withFastPathTriage`
 
 Terminal:
-- `run: AIServerApp -> int`
+- `run: AIServerApp -> int` — `composeAI >> ServerApp.run`.
+- `composeAI: AIServerApp -> ServerApp` — the composition seam, for stacking AI contributions alongside another companion on one composition root.
 
 ### `AIAssistantServerConfig`
 
 ```fsharp
 type AIAssistantServerConfig = {
     Branding: AIAssistantBranding
+    /// `None` sends no system prompt at all.
     SystemPrompt: SystemPromptBuilder option
-    MaxTurns: int                   // default 10
-    DefaultMaxTokens: int           // default 4096
-    DefaultTemperature: float       // default 0.7
-    StreamingEnabled: bool          // default true
+    /// Cap on prior provider-history messages replayed each turn. `None` uses
+    /// `AIAssistantServerConfig.DefaultMaxHistoryMessages` (60); older turns are
+    /// dropped with a Warn log so the truncation is observable.
+    MaxHistoryMessages: int option
+    /// How the server decides each turn's authoritative `AISurface`.
+    AISurfaceDerivation: AISurfaceDerivationMode   // TrustClient | DeriveFromCookie of byte[]
 }
 ```
 
-Passed via `withAIConfig`. When `SystemPrompt = None`, the default prompt builder is used (platform + active-module layers; no team layer).
+Passed via `withAIConfig`. Both this record and the `SystemPromptBuilder` abbreviation live in the `ToolUp.AI.SystemPromptBuilder` module, so a composition root needs `open ToolUp.AI.SystemPromptBuilder` as well as `open ToolUp.AI`.
 
 ### `SystemPromptBuilder`
 
@@ -324,6 +381,8 @@ Passed via `withAIConfig`. When `SystemPrompt = None`, the default prompt builde
 type PromptContext = {
     Access: AccessContext
     ActiveModule: string option
+    ActivePage: string option
+    ActivePageNarrative: NarrativeDocument option
     ModuleContexts: Map<string, ModuleAIContext>
 }
 
@@ -332,6 +391,7 @@ type SystemPromptBuilder = PromptContext -> Async<string>
 module SystemPromptBuilder =
     val fromStatic: string -> SystemPromptBuilder
     val activeModuleContext: SystemPromptBuilder
+    val currentNarrativeContext: SystemPromptBuilder
     val compose: SystemPromptBuilder list -> SystemPromptBuilder
 ```
 

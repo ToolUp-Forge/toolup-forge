@@ -7,16 +7,7 @@
 
 1aea7468 docs/ai/README.md#2 (line 47) — error FS0039: The value, constructor, namespace or type 'builder' is not defined.
 c0c33d7e docs/ai/README.md#3 (line 67) — error FS0001: The type 'string' is not compatible with the type 'Feliz.ReactElement'
-55a69157 docs/ai/api-reference.md#2 (line 29) — error FS0039: The type 'ConversationSummary' is not defined. Maybe you want one of the following: ConversationTurn ConversationStatus ConversationError ConversationStoreMode ConversationId
-972089fc docs/ai/api-reference.md#4 (line 54) — error FS0039: The type 'ToolResult' is not defined. Maybe you want one of the following: ToolSummary ToolCallStatus JobResult
-035989b8 docs/ai/api-reference.md#5 (line 68) — error FS0039: The type 'ToolResult' is not defined. Maybe you want one of the following: ToolSummary ToolCallStatus JobResult
-f92f4826 docs/ai/api-reference.md#8 (line 119) — error FS0039: The type 'Participant' is not defined. Maybe you want one of the following: ParticipantType
-36204ba6 docs/ai/api-reference.md#12 (line 250) — error FS0039: The type 'StopReason' is not defined. Maybe you want one of the following: StorageScope
-130ba93f docs/ai/api-reference.md#13 (line 271) — error FS0039: The type 'AIProviderFactory' is not defined. Maybe you want one of the following: AIProviderToolCall AIProviderToolDef AIProviderError AIProviderDescriptor AIProviderToolResult
-7d1ebaa0 docs/ai/api-reference.md#15 (line 306) — error FS0039: The type 'SystemPromptBuilder' is not defined. Maybe you want one of the following: SystemException
 eda80478 docs/ai/concepts.md#2 (line 54) — error FS0039: The value, constructor, namespace or type 'compose' is not defined.
-a7566f6e docs/ai/concepts.md#3 (line 77) — error FS0039: The type 'ToolResult' is not defined. Maybe you want one of the following: ToolSummary ToolCallStatus JobResult
-e2365f03 docs/ai/concepts.md#5 (line 210) — error FS0039: The type 'StopReason' is not defined. Maybe you want one of the following: StorageScope
 2c62a56e docs/ai/extending.md#3 (line 80) — error FS0039: The namespace or module 'MyVendor' is not defined.
 a8a348cd docs/ai/extending.md#8 (line 278) — error FS1129: The record type 'AIToolDefinition' does not contain a label 'Executor'.
 ca804c84 docs/ai/extending.md#11 (line 368) — error FS0039: The namespace 'Tests' is not defined. Maybe you want one of the following: Teams
@@ -26,13 +17,6 @@ ca804c84 docs/ai/extending.md#11 (line 368) — error FS0039: The namespace 'Tes
 b56f7705 docs/ai/getting-started.md#4 (line 59) — error FS0039: The namespace 'AIProviders' is not defined.
 ab2d9163 docs/ai/getting-started.md#5 (line 82) — error FS0001: The type ''a * 'b' is not compatible with the type 'IAIProviderFactory'
 1d8edebe docs/ai/getting-started.md#6 (line 106) — error FS0001: The type 'string' is not compatible with the type 'Feliz.ReactElement'
-2e6d474c docs/companions/ai-providers.md#1 (line 38) — error FS0039: The namespace 'AIProviders' is not defined.
-2d53f562 docs/companions/ai-providers.md#2 (line 53) — error FS0039: The record label 'Descriptor' is not defined.
-fb729306 docs/companions/ai-providers.md#3 (line 78) — error FS0039: The namespace 'AIProviders' is not defined.
-00610c2a docs/companions/ai-providers.md#4 (line 107) — error FS0039: The record label 'Descriptor' is not defined.
-d6e35d18 docs/companions/ai-providers.md#5 (line 144) — error FS0039: The value, namespace, type or module 'DefaultAIProviderFactory' is not defined. Maybe you want one of the following: DefaultEvidencePackGenerator DefaultPlatformAdmin DefaultFieldClassifier defaultArg DefaultServiceStatusBoard
-6c922f06 docs/companions/ai-providers.md#7 (line 204) — error FS0039: The type 'ToolCallTiming' is not defined. Maybe you want one of the following: ToolLocation ToolDataCount
-fe55b219 docs/companions/ai-providers.md#9 (line 255) — error FS0039: The value, namespace, type or module 'DefaultAIProviderFactory' is not defined. Maybe you want one of the following: DefaultEvidencePackGenerator DefaultPlatformAdmin DefaultFieldClassifier defaultArg DefaultServiceStatusBoard
 0d80f311 docs/companions/auth-providers.md#5 (line 145) — error FS0039: The value or constructor 'issuerUrl' is not defined.
 2ca08796 docs/companions/auth-providers.md#6 (line 177) — error FS0039: The value, constructor, namespace or type 'register' is not defined.
 0e840b45 docs/companions/auth-providers.md#9 (line 288) — error FS0039: The namespace 'EntraExternalId' is not defined.

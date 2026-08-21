@@ -77,16 +77,20 @@ Tools are declared as `AIToolDefinition` records:
 type AIToolDefinition = {
     Name: string
     Description: string
-    Parameters: ToolParameterSchema
-    Executor: JsonValue -> Async<ToolResult>
-    Visibility: ToolVisibility
-    Capabilities: ToolCapabilities
+    Parameters: ToolParameterSchema list
+    SourceModule: string
+    EmitsActions: ActionDeclaration list option
+    Location: ToolLocation
+    Surface: AISurfaceFilter
+    IsLiveInterface: bool
 }
 
-and ToolVisibility =
-    | ServerSide      // executed on the server in-process
+and ToolLocation =
+    | ServerResident  // executed on the server in-process
     | ClientResident  // dispatched to the client; the user's browser runs the tool
 ```
+
+The record is metadata only — it lives in the core SDK so a module can declare tools without referencing the AI companion, and the executor is paired to it server-side by `ToolUp.AI.RegisteredTool`.
 
 Tools come from three sources:
 1. **Platform built-ins** in `AITools.allTools` — generic tools like `_platform.inspect_team`, `_platform.list_modules`, etc.
@@ -215,11 +219,14 @@ type AILatencyRecord = {
     TurnNumber: int
     ProviderName: string
     ProviderModel: string
-    TtftMs: int option              // time-to-first-token (streaming only)
-    TurnDurationMs: int
+    TtftMs: float option            // time-to-first-token (streaming only)
+    TurnDurationMs: float
     ToolCalls: ToolCallTiming list
-    StopReason: StopReason
-    Usage: TokenUsage option
+    StopReason: string              // "end_turn" | "tool_use" | "max_tokens" | ""
+    PromptTokens: int option
+    CachedPromptTokens: int option
+    OutputTokens: int option
+    CacheCreationTokens: int option // Anthropic-specific cache-write cost
 }
 ```
 
