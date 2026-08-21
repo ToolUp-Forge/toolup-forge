@@ -65,12 +65,15 @@ snapshot it into `HttpClient.DefaultRequestHeaders` — build a
 `HttpRequestMessage` per call and set the header from the provider:
 
 ```fsharp
-let resolveToken config =
+open System.Net.Http
+open ToolUp.Secrets.HashiCorpVault
+
+let resolveToken (config: VaultConfig) =
     match config.TokenProvider with
     | Some provider -> provider ()
     | None -> config.Token
 
-let send (client: HttpClient) config method path content = async {
+let send (client: HttpClient) (config: VaultConfig) (method: HttpMethod) (path: string) (content: HttpContent) = async {
     use request = new HttpRequestMessage(method, path)
     request.Headers.TryAddWithoutValidation("X-Vault-Token", resolveToken config) |> ignore
     // ... send, and map 401/403 to a named error (see below) ...

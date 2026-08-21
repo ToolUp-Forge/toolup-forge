@@ -72,6 +72,8 @@ Both pumps advance the same per-`(sinkName, scopeId)` cursor (`_platform/audit-r
 ### Wiring
 
 ```fsharp
+open ToolUp.Platform.AuditSinks
+
 let auditSink =
     S3Archive.create
         "s3-prod-audit"
@@ -163,6 +165,9 @@ Companions self-register readiness probes by implementing the portable `ToolUp.P
 **Companion-authoring contract.** The probe constructor receives whatever the companion's main impl received — the existing factory (`RedisNotificationChannel.fromConnectionString`, `ClaudeAIProvider.create`, etc.) plus its dependencies (`IBlobStorage`, `ISecretStore`, vendor-specific settings). Wire the probe into the consumer's pipeline alongside the main impl:
 
 ```fsharp
+open ToolUp.Platform.NotificationChannels.Redis
+open ToolUp.Platform.NotificationChannels.RedisHealth
+
 // In Server.fs / composition root:
 let multiplexer, channel =
     RedisNotificationChannel.connect connectionString (Some logger)
@@ -205,6 +210,8 @@ ServerApp.empty
 **Companion-authoring contract.** A validator implements `ToolUp.Platform.ConfigValidation.IConfigValidator` (`Name`, `Timeout`, `Validate : unit -> Async<ValidationResult>`) where `ValidationResult = Ok | Warning of string | Error of string`. The interface lives in `Shared/IConfigValidator.fs` for the same `<ProjectReference>` reach as `IHealthCheck`. Validators expose a `create` factory (and optionally a `tryFromEnv` returning `Option` when the activating env var is unset — GP 13: a deployment without the dependency must not be punished for importing the companion's props):
 
 ```fsharp
+open ToolUp.AuthProviders
+
 // In Server.fs / composition root:
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -217,8 +224,10 @@ ServerApp.empty
 When an explicit construction makes more sense (the deployment already built the dependency and wants the validator to share its handle — Redis multiplexer, SMTP `Settings`), use `create` directly:
 
 ```fsharp
+open ToolUp.Platform.NotificationChannels
+
 let multiplexer, channel = RedisNotificationChannel.connect connectionString (Some logger)
-let validator = RedisNotificationChannelValidator.create multiplexer
+let validator = RedisValidator.create multiplexer
 ServerApp.empty
 |> ServerApp.withNotifications channel
 |> ServerApp.withConfigValidator validator   // ← Phase 9m seam
@@ -255,7 +264,7 @@ Both register automatically when their respective service is registered (always,
 
 **Companion validators ship in their respective companion packages:**
 - `OidcAuthValidator` (`src/AuthProviders/Oidc/`) — GET `{issuer}/.well-known/openid-configuration` + JSON-shape check for `authorization_endpoint` / `token_endpoint`. `tryFromEnv` reads `TOOLUP_OIDC_ISSUER`.
-- `RedisNotificationChannelValidator` (`src/NotificationChannels/Redis/`) — `IConnectionMultiplexer.GetDatabase().PingAsync()` with a 500ms `Warning` threshold. `create` takes the same multiplexer the channel and Phase 9k health probe share.
+- `RedisNotificationChannelValidator.fs` (`src/NotificationChannels/Redis/`) — `IConnectionMultiplexer.GetDatabase().PingAsync()` with a 500ms `Warning` threshold. The file declares the module `ToolUp.Platform.NotificationChannels.RedisValidator`, so the call site is `RedisValidator.create`; it takes the same multiplexer the channel and Phase 9k health probe share.
 - `SmtpNotificationSinkValidator` (`src/NotificationChannels/Email/Smtp/`) — TCP-connect to `settings.Host:Port`. No authentication or STARTTLS handshake (matches Phase 9k's reasoning: credential probes generate audit-log noise; TCP reachability is the load-bearing signal). `create` takes explicit `SmtpSettings`; `fromEnv` reads via `SmtpSettings.fromEnv`.
 
 **Test pack.** `IConfigValidatorContract` (7 tests) covers the three-valued return shape, stable identity (Rule 1), concurrent-invocation safety (Rule 4), and timeout-budget compliance — parametrised over `factory : unit -> IConfigValidator` and an expected outcome variant. Three fake bindings (`OkConfigValidatorTests`, `WarningConfigValidatorTests`, `ErrorConfigValidatorTests`) exercise each code path. `ConfigValidatorAggregatorTests` (11 tests) covers aggregator behaviour the contract pack can't: parallel execution, abort-on-`Error`, `SkipPreflight` short-circuit, per-validator timeout enforcement, exception → `Error` translation with 500-char truncation, global budget clamp, snapshot capture, GP-13 zero-validator success path, rejection of constructor-injected registrations.

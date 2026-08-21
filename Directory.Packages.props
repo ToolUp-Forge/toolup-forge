@@ -29,6 +29,15 @@
     <PackageVersion Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.1" />
     <PackageVersion Include="Amazon.Lambda.ApplicationLoadBalancerEvents" Version="3.0.0" />
     <PackageVersion Include="Amazon.Lambda.Core" Version="2.5.1" />
+    <!-- CONSUMER-side Lambda bootstrap, pinned for the documentation-snippet
+         harness only (docs-snippets/ToolUp.DocSnippets.fsproj). The adapter
+         deliberately does not depend on either — a consumer owns its own
+         entry point — but the hosting guide teaches that entry point, and a
+         doc block whose packages the harness cannot see reports its symbols
+         as undefined, which reads as drift the docs cannot fix. No shipped
+         package references these. -->
+    <PackageVersion Include="Amazon.Lambda.RuntimeSupport" Version="2.2.0" />
+    <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.1" />
     <PackageVersion Include="Azure.Core" Version="1.55" />
     <PackageVersion Include="Azure.Data.Tables" Version="12.10.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21" />

@@ -126,15 +126,17 @@ opened (typically the same `NpgsqlDataSource` that backs its `IEntityStore`,
 wired via `AgeGraphStore.ofDataSource`):
 
 ```fsharp
-use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
-use tx = conn.BeginTransaction()
+async {
+    use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+    use tx = conn.BeginTransaction()
 
-let! graphName = AgeSharedTransaction.prepare config conn scopeId
+    let! graphName = AgeSharedTransaction.prepare config conn scopeId
 
-// … the consumer's own relational write on (conn, tx) …
-let! _ = AgeSharedTransaction.upsertNode config conn tx graphName scopeId node
+    // … the consumer's own relational write on (conn, tx) …
+    let! _ = AgeSharedTransaction.upsertNode config conn tx graphName scopeId node
 
-do! tx.CommitAsync() |> Async.AwaitTask   // relational row + graph node land together, or neither
+    do! tx.CommitAsync() |> Async.AwaitTask // relational row + graph node land together, or neither
+}
 ```
 
 A rollback rolls back both. **Portability caveat:** code that must run on any

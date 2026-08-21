@@ -30,7 +30,8 @@ Six files participate. The minimal set:
 // Server.fs — wire a provider-specific IUserClaims into compose:
 open ToolUp.Platform
 
-[<EntryPoint>]
+// Mark this `main` with [<EntryPoint>] in your own Server.fs —
+// `ServerApp.run` returns the `int` exit code the runtime wants.
 let main _ =
     ServerApp.empty
     |> ServerApp.withConfig { ServerConfig.defaults with Port = 5000 }
@@ -55,26 +56,26 @@ The default `ClientConfig.PremiumModel = AnonymousFirst` is already in effect, s
 
 ```fsharp
 open ToolUp.Platform
+open ToolUp.Platform.Premium
 open Giraffe
 
-let handler : HttpHandler =
+let handler: HttpHandler =
     fun next ctx -> task {
-        // Resolve AccessContext, IUserClaims via DI (per the
-        // composition-root pattern in docs/platform/composition-roots.md).
-        let userClaims = ctx.GetService<IUserClaims>()
-        let accessCtx = AccessContextResolver.resolve ctx
-
-        match! PremiumGate.requirePremium userClaims accessCtx with
-        | Ok () ->
+        // `requirePremium` resolves the active `IUserClaims` and the
+        // caller's `AccessContext` from the request's own service
+        // provider, so the handler passes the `HttpContext` and
+        // nothing else.
+        match! PremiumGate.requirePremium ctx |> Async.StartAsTask with
+        | Ok() ->
             // Authoritative premium-only work goes here.
-            return! json { Result = "premium-only payload" } next ctx
+            return! json {| Result = "premium-only payload" |} next ctx
         | Error message ->
             ctx.SetStatusCode 402
             return! json {| Error = message |} next ctx
     }
 ```
 
-`requirePremium` returns `Result<unit, string>` rather than throwing — the caller renders the 402 (or whatever shape the consumer prefers) without an exception cascade through the request pipeline.
+`requirePremium` returns `Async<Result<unit, string>>` rather than throwing — the caller renders the 402 (or whatever shape the consumer prefers) without an exception cascade through the request pipeline. `ifPremium ctx premiumWork` is the conditional counterpart: it runs the supplied async only for premium callers and returns `None` otherwise, for endpoints where the premium path is additive rather than gating.
 
 ## Gating a client-side surface
 
@@ -150,7 +151,7 @@ Steps:
 1. **Wire `ClientConfig.PremiumModel = AnonymousFirst`** in the client composition root. (Default — no change needed unless you want the field to flag intent.)
 2. **Register a feature flag** declaring the comparative-analysis surface gate: `{ Key = "calculator.comparative-analysis"; DefaultValue = FlagValue.Bool true; ... }`. The `Bool true` default means "enabled for premium users by default" — flip to `Bool false` if you want to keep it dark behind an explicit per-user opt-in.
 3. **Register the key in `FeatureFlagSourceRegistry.premiumOnly`** so `FlagEvaluator.createWithSources` returns `false` for anonymous / non-premium subjects.
-4. **Gate the server-side route** that produces the comparative-analysis payload: `match! PremiumGate.requirePremium userClaims ctx with | Ok () -> ... | Error _ -> 402`.
+4. **Gate the server-side route** that produces the comparative-analysis payload: `match! PremiumGate.requirePremium ctx with | Ok () -> ... | Error _ -> 402`.
 5. **Gate the client-side view** with `usePremium ()` so non-premium users see a clean upgrade prompt rather than a 402 error.
 6. **Grant premium** via the PlatformAdmin premium-user list widget. The operator adds the user, the grant endpoint emits `PremiumGranted`, and the next time that user's auth context refreshes, `usePremium` returns `Premium _` and the comparative-analysis surface renders.
 

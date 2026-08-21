@@ -77,6 +77,8 @@ Each consumer wires OTel in their `Program.fs` themselves. The `TOOLUP_OTEL_EXPO
 ```fsharp
 open OpenTelemetry
 open OpenTelemetry.Metrics
+// Azure umbrella only — supplies `AddAzureMonitorMetricExporter`.
+open Azure.Monitor.OpenTelemetry.Exporter
 
 let exporter = System.Environment.GetEnvironmentVariable "TOOLUP_OTEL_EXPORTER"
 

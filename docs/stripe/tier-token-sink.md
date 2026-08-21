@@ -49,6 +49,8 @@ type BillingTierSink(signingKey: byte[]) =
 ## Wiring it into the handler
 
 ```fsharp
+open Giraffe
+
 let sink = BillingTierSink(signingKey) :> ITierTokenSink
 
 let options =
@@ -56,7 +58,7 @@ let options =
     |> WebhookOptions.withTierTokenSink sink
     // optionally also: |> WebhookOptions.withStore durableStore
 
-let webApp =
+let webApp: HttpHandler =
     POST >=> route "/webhooks/stripe" >=> Routes.stripeWebhookWith options stripeConfig onEvent
 ```
 

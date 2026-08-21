@@ -46,6 +46,25 @@
   </ItemGroup>
 
   <!--
+    Third-party packages the docs teach CONSUMERS to reference, which no
+    shipped ToolUp package depends on. The hosting guide's entry-point
+    blocks are the case: `ToolUp.Hosts.AwsLambda` deliberately does not
+    depend on the Lambda bootstrap, and `…GoogleCloudFunctions` not on the
+    Functions Hosting helpers, because a consumer owns its own entry
+    point — but the guide has to show that entry point, and a block whose
+    packages the harness cannot see reports its symbols as undefined,
+    which reads as drift the docs cannot fix. Referencing them HERE keeps
+    the block checked without putting a vendor dependency anywhere near a
+    shipped package (this project is `IsPackable=false` and outside the
+    solution). Versions are pinned centrally in `Directory.Packages.props`.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.RuntimeSupport" />
+    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" />
+    <PackageReference Include="Google.Cloud.Functions.Hosting" />
+  </ItemGroup>
+
+  <!--
     The SDK surface the docs teach. A doc that names a package absent
     from this list reports its symbols as undefined, which is a harness
     gap rather than doc drift — add the ProjectReference here.
@@ -54,18 +73,23 @@
     <ProjectReference Include="../src/AIProviders/Claude/ClaudeAIProvider.fsproj" />
     <ProjectReference Include="../src/AIProviders/Gemini/Gemini.fsproj" />
     <ProjectReference Include="../src/AIProviders/OpenAI/OpenAIProvider.fsproj" />
+    <ProjectReference Include="../src/AgGridEnterprise/AgGridEnterprise.fsproj" />
     <ProjectReference Include="../src/AuthProviders/ClerkUI/ClerkUI.fsproj" />
     <ProjectReference Include="../src/AuthProviders/Oidc/OidcAuthProvider.fsproj" />
     <ProjectReference Include="../src/AuthProviders/OidcClient/OidcClient.fsproj" />
+    <ProjectReference Include="../src/Cloud/Azure/ToolUp.Cloud.Azure.fsproj" />
     <ProjectReference Include="../src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj" />
     <ProjectReference Include="../src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.fsproj" />
     <ProjectReference Include="../src/ExternalCompute/ToolUp.ExternalCompute.Http/ToolUp.ExternalCompute.Http.fsproj" />
     <ProjectReference Include="../src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj" />
     <ProjectReference Include="../src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj" />
+    <ProjectReference Include="../src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj" />
     <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />
     <ProjectReference Include="../src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj" />
+    <ProjectReference Include="../src/Metrics/OpenTelemetry/ToolUp.Metrics.OpenTelemetry.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj" />
     <ProjectReference Include="../src/Secrets/AzureKeyVault/AzureKeyVault.fsproj" />
+    <ProjectReference Include="../src/Secrets/HashiCorpVault/HashiCorpVault.fsproj" />
     <ProjectReference Include="../src/Storage/AwsS3Storage/AwsS3Storage.fsproj" />
     <ProjectReference Include="../src/Storage/AzureBlobStorage/AzureBlobStorage.fsproj" />
     <ProjectReference Include="../src/Storage/GoogleCloudStorage/GoogleCloudStorage.fsproj" />
@@ -83,6 +107,11 @@
     <ProjectReference Include="../src/ToolUp.Forms.Core/ToolUp.Forms.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.Forms.Server/ToolUp.Forms.Server.fsproj" />
     <ProjectReference Include="../src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Graph.AGE/ToolUp.Graph.AGE.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Graph.Neo4j/ToolUp.Graph.Neo4j.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Graph.Projection/ToolUp.Graph.Projection.fsproj" />
     <ProjectReference Include="../src/ToolUp.KnowledgeBase.Client/ToolUp.KnowledgeBase.Client.fsproj" />
     <ProjectReference Include="../src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj" />

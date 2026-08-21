@@ -44,7 +44,12 @@ testCaseAsync "exercises sweepExpired against a real blob"
 The reset function lives in the same source file as the mutable, gated by `internal` accessibility — `ToolUp.Platform.Server` already declares `<InternalsVisibleTo Include="ToolUp.Platform.Tests" />`, so the helper is invisible to external consumers.
 
 ```fsharp
-// In PendingInviteStore.fs
+// In InMemoryPendingInviteStore.fs, inside `module PendingInviteStore`
+type private CacheEntry = {
+    Map: Map<string, PendingInviteByEmail>
+    LoadedAt: DateTime
+}
+
 let mutable private cache: CacheEntry option = None
 
 /// Test-only: drop the in-memory cache so a subsequent test starts
@@ -143,6 +148,8 @@ Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot 
 
 ```fsharp
 // PlatformAIKeysAdminUI.fs — typical AI.Client module shape
+open ToolUp.AI
+
 let private api =
     Api.makeProxy<PlatformAIKeysApi> (customOptions = UserSession.withRequestHeaders)
 ```

@@ -18,26 +18,36 @@ type IJobScheduler =
 
 ```fsharp
 type JobDefinition = {
-    JobId: JobId               // string; caller-supplied; identity by value (portability rule 1)
-    HandlerName: string        // string; looked up against IJobHandler registry
-    Trigger: Trigger
-    Retry: JobRetryPolicy
-    IdempotencyKey: IdempotencyKey option
-    Precision: JobPrecision    // Second | Minute; rule 6 (precision floor)
-    Payload: byte[]            // opaque to scheduler; handler interprets
+    JobId: JobId                    // Guid; scheduler-generated; identity by value (portability rule 1)
     ScopeId: string
-    CreatedBy: string
+    Handler: string                 // logical name; looked up against the IJobHandler registry
+    Payload: string                 // pre-serialised JSON; opaque to the scheduler
+    Trigger: Trigger
+    Idempotency: IdempotencyKey option
+    RetryPolicy: JobRetryPolicy
+    ShardKey: string option         // affinity hint for distributed impls; rule 5
+    Precision: JobPrecision         // Second | Minute; rule 6 (precision floor)
+    Status: JobStatus
+    CreatedAt: DateTime
+    CreatedBy: string               // audit only — the handler runs as a synthetic identity
+    NextRunAt: DateTime option      // Some for CronTrigger; None for OnEvent / Manual
+    LastRunAt: DateTime option
+    LastRunStatus: JobRunStatus option
+    LastRunError: string option
+    ConsecutiveFailures: int
+    Tags: Map<string, string>       // free-form; the scheduler ignores it
 }
 
 and Trigger =
-    | Cron of CronExpression
-    | OnEvent of SourceModule: string * EventType: string
+    | CronTrigger of expression: string   // 5-field cron; validated at Schedule time
+    | OnEvent of eventType: string
     | Manual
 
 and JobRetryPolicy = {
-    MaxAttempts: int
-    BackoffSeconds: int list
-    DeadLetterAfter: TimeSpan option
+    MaxAttempts: int                // inclusive — 5 means up to 5 dispatches
+    InitialBackoff: TimeSpan
+    MaxBackoff: TimeSpan
+    DeadLetterDestination: string option
 }
 
 and JobPrecision = Second | Minute
@@ -47,33 +57,38 @@ and JobPrecision = Second | Minute
 
 ```fsharp
 type IJobHandler =
-    abstract HandlerName: string
-    abstract Execute: ctx: JobContext -> payload: byte[] -> Async<JobResult>
+    abstract Execute: ctx: JobContext -> Async<JobResult>
 
 and JobContext = {
     JobId: JobId
     ScopeId: string
-    RunId: Guid
+    AccessContext: AccessContext   // synthetic — the job's scope, not the scheduling user's rights
     Attempt: int
     Trigger: Trigger
-    AccessContext: AccessContext  // synthetic — handler runs as the CreatedBy identity
-    Services: IServiceProvider
+    TriggerSource: TriggerSource   // cron tick / matched event / explicit admin trigger
+    ScheduledAt: DateTime          // when the scheduler decided the run was due
+    RunningAt: DateTime            // when Execute was called
+    Payload: string                // the persisted payload; handlers deserialise it themselves
+    DeadLetterDestination: string option
 }
 
 and JobResult =
-    | Succeeded
-    | Failed of reason: string
-    | Retry of after: TimeSpan option
+    | Success
+    | TransientFailure of error: string
+    | PermanentFailure of error: string
+    | HandedOff of handle: ExternalHandle  // submitted to external compute; reconciled later
 ```
 
-Handlers receive all state via parameters (rule 4 — stateless between invocations). Anything cached in handler instance fields evaporates between runs. If a handler needs durable state, it persists through `IBlobStorage` / `IEntityStore` / etc.
+The handler *name* is not on the interface — it is the string the scheduler registers an implementation under, so one implementation can serve several names.
+
+Handlers receive all run state through `JobContext` (rule 4 — stateless between invocations). Constructor-captured *dependencies* are fine; anything a handler *caches* in an instance field between runs evaporates, because a distributed implementation is free to deactivate or restart the host. If a handler needs durable state, it persists through `IBlobStorage` / `IEntityStore` / etc.
 
 ## Default in-process scheduler
 
 `InProcessJobScheduler` is the shipped default. Opt in via:
 
 ```fsharp
-ServerConfig.JobScheduler = InProcessJobScheduler
+let config = { ServerConfig.defaults with JobScheduler = InProcessJobScheduler }
 ```
 
 Implementation: a `BackgroundService` ticking every minute aligned to wall clock. Per-`JobId` `SemaphoreSlim` for concurrent-tick safety — if a job is still running when its next tick fires, the tick is skipped (not queued). Retry loop with jittered backoff per `JobRetryPolicy`.
@@ -126,10 +141,16 @@ Common pattern: the data-ingestion subsystem schedules a `Manual` job on `IDataI
 
 ### Idempotency
 
-`IdempotencyKey` is a caller-supplied string with a TTL. If a job is registered with the same `(JobId, IdempotencyKey)` within the TTL window, registration is a no-op (returns `Result.Ok ()`). Useful for "schedule this job, but only once per (user, action) within 5 minutes".
+`JobDefinition.Idempotency` carries an `IdempotencyKey` — a caller-supplied string plus a TTL in
+**seconds**. If a job is registered whose `Key` matches a live job in the same scope inside the TTL
+window, `Schedule` returns the *existing* `JobId` and registers nothing new. The caller cannot tell
+from the return value whether the job is brand-new or recovered — by design: the contract guarantees
+"submitting twice = the job runs once". Useful for "schedule this job, but only once per (user,
+action) within 5 minutes".
 
 ```fsharp
-IdempotencyKey = Some { Key = "refresh-{userId}-{datasourceId}"; Ttl = TimeSpan.FromMinutes 5. }
+let idempotency: IdempotencyKey option =
+    Some { Key = "refresh-{userId}-{datasourceId}"; TtlSeconds = 300 }
 ```
 
 The lookup is per-scope.
@@ -177,33 +198,42 @@ Write paths (`Schedule` / `Unschedule` / `TriggerOnce`) are gated by `TeamRole.O
 
 ## Writing a job handler
 
+`IJobHandler` is a single method — `Execute: ctx: JobContext -> Async<JobResult>`. The handler name
+is *not* on the interface: it is the string the scheduler registers the implementation under, so one
+implementation can serve several names. Dependencies are captured by the handler's **constructor** at
+compose time; `JobContext` carries the run's state (payload, scope, attempt, trigger), never a
+service provider.
+
 ```fsharp
 type MyJobHandler() =
     interface IJobHandler with
-        member _.HandlerName = "my-handler"
-        member _.Execute(ctx, payload) = async {
-            let input = Json.deserialize<MyJobPayload> (Text.Encoding.UTF8.GetString payload)
-            try
-                // Do the work. Use ctx.Services to resolve dependencies.
-                let blobStore = ctx.Services.GetRequiredService<IBlobStorage>()
-                let! result = doWork blobStore input
-                return Succeeded
-            with
-            | :? TransientException -> return Retry None  // backoff per policy
-            | ex -> return Failed ex.Message
+        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
+            // A malformed payload will not recover on retry — terminal, not transient.
+            match tryParsePayload ctx.Payload with
+            | Error e -> return PermanentFailure $"malformed MyJobPayload: {e}"
+            | Ok input ->
+                try
+                    do! doWork input
+                    return Success
+                with ex ->
+                    return TransientFailure ex.Message  // retried per RetryPolicy
         }
 ```
 
-Register handlers in the composition root:
+Declare handlers on the module that owns them; the composition root only has to enable the scheduler:
 
 ```fsharp skip=fragment
+ServerModule.create "my-module"
+|> ServerModule.withJobHandler ("my-handler", MyJobHandler() :> IJobHandler, Manual)
+|> ...
+
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with JobScheduler = InProcessJobScheduler }
-|> ServerApp.withJobHandler (MyJobHandler() :> IJobHandler)
+|> ServerApp.addModule myModule
 |> ...
 ```
 
-The handler registry is a `Map<HandlerName, IJobHandler>`. Handler lookup at trigger time uses `JobDefinition.HandlerName`; if the lookup fails, the job is marked `Failed` immediately (no retry — the deployment can't suddenly grow a missing handler).
+The handler registry is keyed by the registered name. Handler lookup at trigger time uses `JobDefinition.Handler`; if the lookup fails, the job is marked failed immediately (no retry — the deployment can't suddenly grow a missing handler).
 
 ## Common patterns
 

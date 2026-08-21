@@ -26,9 +26,9 @@ let register () : ErasedModule =
         Init = init
         Update = update
         Name = "Catalogue"
-        Icon = "/svg/grid.svg"
+        Icon = Icons.target        // a ReactElement — Icon.ofImport wraps an SVG import
     }
-    |> ClientHostView.withElementView (fun model dispatch host ->
+    |> ClientHostView.withElementView (fun (model: Model) dispatch host ->
         // Render the external tree to a ReactElement; route its actions
         // through the host bag.
         MyTreeRuntime.render model.Page {|

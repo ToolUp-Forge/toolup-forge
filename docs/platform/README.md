@@ -38,7 +38,8 @@ And the minimum composition root (`Server.fs`):
 ```fsharp
 open ToolUp.Platform
 
-[<EntryPoint>]
+// Mark this `main` with [<EntryPoint>] in your own Server.fs —
+// `ServerApp.run` returns the `int` exit code the runtime wants.
 let main _ =
     ServerApp.empty
     |> ServerApp.withConfig { ServerConfig.defaults with Port = 5000 }

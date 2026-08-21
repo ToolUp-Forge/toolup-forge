@@ -30,6 +30,8 @@ The contrast matters: `None` is "feature not installed", `Some (Error (NoHandler
 `ModuleQueryHandler` is a single record (`QueryKey: string`, `Handle: ModuleQueryContext -> Async<string>`) shared across server and client. Modules construct handlers with `ModuleQueryHandler.typed` (server, in `Server/ModuleQueryBus.fs`) or `ClientModuleQueryHandler.typed` (client, in `Client/ModuleQueryClient.fs`) — both take typed request / response functions and wrap them in JSON (de)serialisation:
 
 ```fsharp
+open ToolUp.Platform.ModuleQueryBus
+
 // Server — analytics module registers a handler:
 let latestAnalysisHandler =
     ModuleQueryHandler.typed<LatestAnalysisReq, LatestAnalysisResp>

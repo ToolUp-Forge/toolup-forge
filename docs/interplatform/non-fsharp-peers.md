@@ -22,6 +22,18 @@ The schema is the single source of truth; both generators consume it, so the cli
 ```fsharp
 open ToolUp.InterPlatform
 
+// The contract is an ordinary record of functions — the same shape the
+// in-deployment transport uses. `GetReach` is an immediate method;
+// `BuildReport` is long-running (it returns a `PeerJobHandle`).
+type ReachRequest = { Segment: string; MinK: int }
+type ReachResult = { Reach: int }
+type Report = { Url: string }
+
+type BuyerSellerContract = {
+    GetReach: ReachRequest -> Async<ReachResult>
+    BuildReport: ReachRequest -> Async<PeerJobHandle<Report>>
+}
+
 let schema = PeerSchema.fromContract<BuyerSellerContract> "buyer-seller"
 
 // TypeScript

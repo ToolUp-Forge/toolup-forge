@@ -67,6 +67,8 @@ let clientPages =
 ## Registering sources
 
 ```fsharp
+open ToolUp.PublicRendering.PublicRenderingCompose
+
 PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.withConfig config
 |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
@@ -74,6 +76,8 @@ PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.withContentSource clientPages   // order = resolution order
 |> PublicRenderingServerApp.run
 ```
+
+The compose root lives in `ToolUp.PublicRendering.PublicRenderingCompose`, so a composition file opens that module (or spells the calls `PublicRenderingCompose.PublicRenderingServerApp.…`); `open ToolUp.PublicRendering` alone brings in the types and the source / layout helpers, not the builder.
 
 Multiple `withContentSource` calls compose; resolution is in registration order, first `Some` wins. The helper composes additively the same way `withLayout` / `withFeed` do.
 
@@ -142,6 +146,10 @@ A chart over governed results can declare **which** results, with `NarrativeFrom
 When the body comes from a module's processed-data payload, register one projector per `TypeName` and route through `fromProcessed`. An unknown type degrades to a graceful callout (never an exception); a throwing projector is contained as a `Critical` callout, so one bad payload can't 500 the page.
 
 ```fsharp
+// The module's own payload shape — whatever its `DataType.Process` serialised.
+type SalesRegion = { Name: string; Spend: decimal }
+type SalesSummary = { Regions: SalesRegion list }
+
 let registry =
     NarrativeFromDataProjectors.empty
     |> NarrativeFromDataProjectors.registerTyped<SalesSummary> "SalesData" (fun s ->
@@ -219,6 +227,8 @@ The `<head>` (canonical URL, Open Graph, Twitter card, schema.org JSON-LD) is th
 A layout that wants the data-driven head splices the helper output:
 
 ```fsharp
+open Giraffe.ViewEngine
+
 let pageLayout (page: PublicPage) : XmlNode =
     html [ ] [
         head [ ] [
@@ -271,12 +281,15 @@ When a server-rendered fragment is hosted under PublicRendering, the **Phase 84 
 
 ### Whole page vs embedded block — picking the right seam
 
-`ResolvedContent` is the **whole-page** integration point: the external renderer owns the page body, PublicRendering owns the shell, head, sitemap, cache, and redirects. To embed a server-rendered **block** inside an otherwise-Narrative document, use the Phase 87 `Component` registry instead — the document carries `NarrativeElement.Component(name, props)` and the deployment registers a `ComponentRenderer` (`props -> XmlNode`) that calls the external block renderer:
+`ResolvedContent` is the **whole-page** integration point: the external renderer owns the page body, PublicRendering owns the shell, head, sitemap, cache, and redirects. To embed a server-rendered **block** inside an otherwise-Narrative document, use the Phase 87 `Component` registry instead — the document carries `NarrativeElement.Component(name, props)` and the deployment registers a `ComponentRenderer` (`props -> XmlNode`) in a `NarrativeLayout.ComponentRegistry`, which its layout renders the body under:
 
 ```fsharp
-// Narrative body: …; Component("price-widget", Map ["sku", "X-1"]); …
-NarrativeHtml.RenderOptions.withComponentRenderer "price-widget" (fun props ->
-    renderPriceWidget (props.TryFind "sku"))
+// Narrative body: …; Component("price-widget", Map [ "sku", "X-1" ]); …
+let widgets: NarrativeLayout.ComponentRegistry =
+    Map [ "price-widget", (fun props -> renderPriceWidget (props.TryFind "sku")) ]
+
+// The layout renders the page body under that registry:
+NarrativeLayout.renderBodyWith Set.empty widgets page
 ```
 
 Whole page → `IContentSource` + `ResolvedContent`; embedded block → `Component`. The block seam stays stringly-typed by design (forge `CLAUDE.md` type-erasure boundary #3) and degrades to a safe placeholder for unregistered names.
@@ -289,6 +302,8 @@ Everything above hosts a render *through* `PublicPageHandler`. A consumer that i
 - **`ConditionalGet.cacheable etag lastModified cacheControl`** — a Giraffe combinator that emits `ETag` / `Last-Modified` / `Cache-Control` and short-circuits a conditional re-request to `304`, wrapping the body handler (`ConditionalGet.cacheable … >=> body`). `ConditionalGet.immutableAsset` is the one-year-`immutable` convenience for fingerprinted assets.
 
 ```fsharp
+open Giraffe
+
 let reportRoute (tenant: string) (quarter: string) : HttpHandler =
     fun next ctx ->
         task {

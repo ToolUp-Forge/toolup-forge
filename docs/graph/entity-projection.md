@@ -122,13 +122,17 @@ referencing it. Opt in on the config, then wire the bridge with the entity
 types you want mirrored:
 
 ```fsharp
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Graph.Projection
 
-// 1. Opt in (requires withEntityStore + an IGraphStore — the in-memory
-//    default suffices for dev).
+// 1. Opt in (requires ServerConfig.EntityStore = EnabledEntityStore and an
+//    IGraphStore — the in-memory default suffices for dev).
 let app =
-    ServerApp.create "my-app"
-    |> ServerApp.withEntityStore
+    ServerApp.empty
+    |> ServerApp.withConfig {
+        ServerConfig.defaults with
+            EntityStore = EnabledEntityStore
+    }
     |> ServerApp.withEntity bookRegistration
     |> ServerApp.withEntity authorRegistration
     |> ServerApp.withEntityGraphProjection

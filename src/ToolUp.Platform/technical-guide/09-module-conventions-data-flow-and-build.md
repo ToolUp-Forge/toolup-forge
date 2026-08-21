@@ -43,37 +43,42 @@ At no point does any analytical module reference the DataManager or any other mo
 Hooks are configured at startup, not per-request:
 
 ```fsharp
-// File-level mutables (mirror the storeEvictionMinutes pattern)
-let mutable internal postSaveHooksConfig:
-    (ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit>) list = []
+open ProcessedDataTypes
 
-let mutable internal postSaveHooksLogger: ILogger option = None
+// The one surviving file-level mutable in FileManagement.fs — a
+// registration list companions write to BEFORE `compose` runs. The
+// fourth tuple element is the uploading user's id (`AddFile`'s
+// `createdBy`), distinct from `StorageScope.ScopeId`, which is the
+// team in team scopes.
+let mutable internal pendingPostSaveHooks:
+    (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list = []
 
-let configurePostSaveHooks hooks = postSaveHooksConfig <- hooks
-let configurePostSaveHooksLogger logger = postSaveHooksLogger <- logger
+let configurePostSaveHooks hooks = pendingPostSaveHooks <- hooks
 ```
 
-`compose` calls `configurePostSaveHooksLogger (Some resolvedLogger)` once. RAG's `composeWithRAG` calls `configurePostSaveHooks [ vectorisationHook ]` once. Both run before requests are served.
+RAG's `composeWithRAG` calls `configurePostSaveHooks [ vectorisationHook ]` once. `compose` then **drains** the list into the `FileManagementRuntime` record it builds (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`) and resets it to `[]`, so a second compose run — integration tests that bring the host up repeatedly — starts clean. Everything the hooks pipeline reads at request time comes off that per-compose record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
 
 **Failure routing.** Each hook is wrapped in a `try / with` shim before `Async.Parallel | Async.Start`:
 
 ```fsharp
 let safeHook hook = async {
     try
-        do! hook (data, entry, scope)
+        do! hook (data, entry, scope, createdBy)
     with ex ->
-        match postSaveHooksLogger with
-        | Some logger ->
-            logger.Error(
-                $"Post-save hook failed for file '{upload.filename}' (scope='{scope.ScopeId}')",
-                Some ex)
-        | None -> ()
+        let msg =
+            $"Post-save hook failed for file '{upload.filename}' (scope='{scope.ScopeId}')"
+
+        match runtime.PostSaveHooksLogger with
+        | Some logger -> logger.Error(msg, Some ex)
+        // No configured logger MUST NOT mean a silently dropped index
+        // update — the user was already told the upload succeeded.
+        | None -> eprintfn "%s: %O" msg ex
 }
 ```
 
 The HTTP response has already been sent by the time hooks run, so an unhandled exception inside a hook would otherwise be silently dropped. Without this shim, a transient embedding-provider failure would leave the user thinking their document had been indexed when it hadn't. The shim never re-throws — `Async.Start`'s default behaviour on an unhandled exception is `TaskScheduler.UnobservedTaskException`, which is even worse than silent dropping.
 
-Tests / harnesses that bypass `compose` see `postSaveHooksLogger = None` and silent-fail, matching prior behaviour exactly. The recommended pattern for tests is `configurePostSaveHooksLogger (Some testLogger)` at fixture setup.
+Tests / harnesses that bypass `compose` see `PostSaveHooksLogger = None`, and the `None` arm falls back to stderr rather than dropping the failure — a hook that dies in a harness is still visible. To capture the failures instead, build the runtime with `{ FileManagementRuntime.empty with PostSaveHooksLogger = Some testLogger }` at fixture setup.
 
 ## Build Pipeline
 

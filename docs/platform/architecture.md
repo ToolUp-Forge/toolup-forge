@@ -74,12 +74,22 @@ Client.run
     modules
 ```
 
-For AI, wrap the shell with `AIClientConfig.withAIAssistant`:
+For AI, run the shell through `AIClientConfig.run` instead of `Client.run`:
 
 ```fsharp
-let aiMode = ConfiguredAIAssistant { Name = "Aria"; Icon = "/svg/spark.svg"; ShowSidePanel = true }
+open ToolUp.AI
+open ToolUp.AI.Client
+
+let aiMode = ConfiguredAIAssistant { Name = "Aria"; Icon = sparkIcon; ShowSidePanel = true }
 AIClientConfig.run aiMode { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
 ```
+
+`ConfiguredAIAssistant` carries the **client-side** branding record
+(`AIAssistantClientBranding`), whose `Icon` is a typed `ReactElement` — a
+`vite-plugin-svgr` component import (`sparkIcon` above) drops straight in and
+inherits `currentColor` from the sidebar. The server-side
+`AIAssistantBranding` in shared types keeps a URL string, because it has to
+stay wire-friendly; the two are deliberately separate records.
 
 The Elmish shell handles sidebar navigation, module state management, file management UI (when modules declare data types), team management UI (when `Surfaces` includes a `Team` profile), and config admin UI.
 

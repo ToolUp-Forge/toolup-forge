@@ -25,15 +25,17 @@ Build a tree in code with the constructors, or load it from `nav.yaml`:
 ```fsharp
 open ToolUp.PublicRendering
 
-let nav =
+let siteNav =
     [ NavTree.leaf "Home" "home"
       NavTree.node "Services" (NavSection "services")
         [ NavTree.leaf "Consulting" "services/consulting" ]
       NavTree.leaf "Members" "members" |> NavTree.withAudience NavAuthenticated ]
 
 // or, from a nav.yaml content file:
-let nav = NavTree.parseYaml (System.IO.File.ReadAllText "content/nav.yaml")
+let siteNavFromFile = NavTree.parseYaml (System.IO.File.ReadAllText "content/nav.yaml")
 ```
+
+Name the tree `siteNav` rather than `nav`: a layout module opens `Giraffe.ViewEngine`, whose `nav` element function would otherwise shadow it.
 
 `nav.yaml` is a small documented subset (2-space indent, `label` + a target + optional `audience` + nested `children`) — hand-parsed, no `YamlDotNet` dependency (GP 1):
 
@@ -55,7 +57,7 @@ let nav = NavTree.parseYaml (System.IO.File.ReadAllText "content/nav.yaml")
 `NavTree.filter ctx nav` drops every node the requesting principal can't see — together with its whole subtree — *before* render, so a gated item never appears in the markup for an unauthorised viewer. The audience model is evaluated against the shipped `AccessContext`, so site structure is self-contained; it doesn't depend on page-level audience targeting.
 
 ```fsharp skip=fragment
-let visible = NavTree.filter ctx nav   // ctx from the request
+let visible = NavTree.filter ctx siteNav   // ctx from the request
 ```
 
 ### Rendering menus & breadcrumbs
@@ -63,10 +65,12 @@ let visible = NavTree.filter ctx nav   // ctx from the request
 `NavLayout` produces Giraffe.ViewEngine fragments a layout composes, each carrying stable `tu-nav__*` / `tu-breadcrumb__*` BrandKit class hooks (style them with your own CSS / CSS-variables — the SDK ships no opinionated styling). `menu` highlights the current page (`tu-nav__item--current` + `aria-current="page"`) and emits multi-level dropdown markup; `menuFor` filters by audience inline.
 
 ```fsharp
+open Giraffe.ViewEngine
+
 let pageLayout (page: PublicPage) (ctx: AccessContext) : XmlNode =
     html [] [
         body [] [
-            NavLayout.menuFor ctx (Some page.Slug) nav            // audience-filtered + current highlight
+            NavLayout.menuFor ctx (Some page.Slug) siteNav        // audience-filtered + current highlight
             NavLayout.breadcrumb (NavTree.breadcrumbFromSlug page.Slug)
             // ... page body ...
         ]
@@ -107,6 +111,8 @@ PublicPage.hasTag "Product" page   // true (case-insensitive)
 `TaxonomyHandler.tagIndexSource` is an [`IContentSource`](../platform/dynamic-ssr.md) that serves `/tag/{slug}` pages listing every page carrying that tag, as a `NarrativeDocument` (rendered through the existing Phase 80 renderers — no hand-rolled markup). It composes through the existing `withContentSource` seam:
 
 ```fsharp
+open ToolUp.PublicRendering.PublicRenderingCompose
+
 PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.withConfig config
 |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
@@ -173,7 +179,7 @@ A tag feed surfaces the Narrative-bodied pages carrying that tag, newest-first, 
 ```fsharp skip=fragment
 head [] [
     // …
-    yield! NavLayout.headStructuredData config.PublicBaseUrl ctx (Some page.Slug) nav
+    yield! NavLayout.headStructuredData config.PublicBaseUrl ctx (Some page.Slug) siteNav
 ]
 ```
 

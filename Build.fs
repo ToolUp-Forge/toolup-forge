@@ -827,8 +827,18 @@ let main args =
                     // written on, so an unresolvable one is reported against
                     // the block that DECLARED it rather than every block that
                     // inherits it.
+                    let declaresOpen (o: string) =
+                        // Compare on the same stripped form the carry uses, so
+                        // a block that writes `open X // why` is recognised as
+                        // declaring `open X` and does not get a duplicate.
+                        body
+                        |> List.exists (fun l ->
+                            let t = l.Trim()
+                            let cut = t.IndexOf "//"
+                            (if cut >= 0 then t.Substring(0, cut) else t).TrimEnd() = o)
+
                     for o, srcLine in Seq.distinctBy fst carried do
-                        if not (body |> List.exists (fun l -> l.Trim() = o)) then
+                        if not (declaresOpen o) then
                             sb.AppendLine(lineDirective srcLine) |> ignore
                             sb.AppendLine o |> ignore
 
@@ -847,8 +857,21 @@ let main args =
                 |> List.iteri (fun i l ->
                     let t = l.Trim()
 
-                    if t.StartsWith "open " && not (t.Contains "//") then
-                        carried.Add(t, start + i))
+                    // A trailing comment is STRIPPED, not disqualifying. The
+                    // rule used to drop any `open` line containing `//`,
+                    // which silently refused to carry the very lines a doc
+                    // is most likely to annotate — `open Fake.Core.TargetOperators
+                    // // brings the ==> operator` was declared, explained, and
+                    // then not carried, so the next block on the page failed
+                    // on `==>` with no hint that the open above it was the
+                    // reason. A line that is ITSELF commented out never
+                    // reaches here: it starts with `//`, not `open `.
+                    if t.StartsWith "open " then
+                        let cut = t.IndexOf "//"
+                        let text = (if cut >= 0 then t.Substring(0, cut) else t).TrimEnd()
+
+                        if text.Length > 5 then
+                            carried.Add(text, start + i))
 
         let checkedCount =
             blockTable |> Seq.filter (fun (_, _, _, _, _, ok) -> ok) |> Seq.length
@@ -874,6 +897,33 @@ let main args =
                 docSnippetFloorSeed
 
         let writeCorpusMark (n: int) =
+            // Rewrite the NUMBER, keep every comment line exactly as it is.
+            // A deliberate shrink is a hand edit whose whole value is the
+            // argument written beside it; regenerating the file wholesale on
+            // the next growth would erase that argument — turning the one
+            // motion this guard tries to make expensive back into a silent
+            // one, a release or two later.
+            let existing =
+                if File.Exists floorPath then
+                    File.ReadAllLines floorPath |> Array.toList
+                else
+                    []
+
+            let rewritten =
+                if
+                    existing
+                    |> List.exists (fun l -> l.Trim() <> "" && not (l.TrimStart().StartsWith "#"))
+                then
+                    existing
+                    |> List.map (fun l ->
+                        if l.Trim() <> "" && not (l.TrimStart().StartsWith "#") then
+                            string n
+                        else
+                            l)
+                    |> Some
+                else
+                    None
+
             let lines = [
                 "# The compiled-doc-snippet HIGH-WATER MARK, asserted by"
                 "# `dotnet run --project Build.fsproj -- VerifyDocSnippets`."
@@ -890,7 +940,7 @@ let main args =
             // LF explicitly — `.gitattributes` pins the repo to LF, and
             // WriteAllLines would make every regeneration on Windows a
             // whole-file diff on every other clone.
-            File.WriteAllText(floorPath, System.String.Join("\n", lines) + "\n")
+            File.WriteAllText(floorPath, System.String.Join("\n", rewritten |> Option.defaultValue lines) + "\n")
 
         if checkedCount < corpusMark then
             failwithf
@@ -957,6 +1007,28 @@ let main args =
             |> Array.filter (fun (_, _, ok) -> ok)
             |> Array.map (fun (k, l, _) -> k, l)
 
+        // …but they still fail the BUILD, and that mattered more than the
+        // original design allowed for. The final guard below reads a
+        // non-zero exit with nothing failing as an unexplained harness
+        // fault — which meant the target could never report success while
+        // any skipped block declared an unresolvable `open`. That state
+        // was invisible for as long as the baseline was non-empty, because
+        // the run always failed earlier; it surfaced the moment the
+        // baseline reached zero.
+        //
+        // Counted here rather than merely tolerated. An unresolvable
+        // `open` in a `skip=fragment` block IS rot — the gate simply
+        // cannot act on it, because the block declared itself
+        // uncheckable. That makes the number the most direct evidence
+        // available of drift inside the blind spot, so it belongs in the
+        // summary beside the skip counts rather than in a silent filter.
+        let inSkipped =
+            errorLines
+            |> Array.choose attribute
+            |> Array.filter (fun (_, _, ok) -> not ok)
+            |> Array.map (fun ((r, o, _, _), _, _) -> r, o)
+            |> Array.distinct
+
         let unattributed = errorLines |> Array.filter (attribute >> Option.isNone)
 
         // An error the harness cannot pin to a block is a harness fault
@@ -996,14 +1068,24 @@ let main args =
 
         let writeBaseline () =
             let lines = [
-                "# Phase 620 — documentation snippets that name an API the SDK does not have."
-                "# GENERATED by `dotnet run --project Build.fsproj -- VerifyDocSnippets --update-baseline`."
+                "# Documentation snippets that name an API the SDK does not have."
                 "#"
-                "# Each line: <content-hash> <doc path>#<block> — <first compiler error>"
-                "# The KEY is the full triple `<doc path>#<block> <content-hash>` — never"
-                "# the hash alone, which identical blocks in different files share. The"
-                "# hash is of the block's own text, so editing a block RETIRES its entry"
-                "# and the block must then compile. This list may only shrink."
+                "# EMPTY IS THE ENFORCED STATE. Any entry below fails"
+                "# `dotnet run --project Build.fsproj -- VerifyDocSnippets`."
+                "#"
+                "# This list was a migration device. When the gate landed it held 231"
+                "# entries — blocks that predated it and had already rotted — and it was a"
+                "# ratchet that could only shrink. It reached zero, so the ratchet has"
+                "# nothing left to hold: a block that does not compile is now simply a"
+                "# failure, and the fix is the snippet, against the current SDK surface."
+                "#"
+                "# `--update-baseline` rewrites this file from a run and remains the"
+                "# documented escape for a wholesale re-measurement. It is not a way of"
+                "# going green: whatever it writes here still fails the gate."
+                "#"
+                "# Each line, when one exists: <content-hash> <doc path>#<block> — <first error>"
+                "# The KEY is the full triple `<doc path>#<block> <content-hash>` — never the"
+                "# hash alone, which identical blocks in different files share."
                 ""
                 for (rel, ord, start, h), errs in failing do
                     let first = if errs.Length > 0 then errs[0] else ""
@@ -1084,6 +1166,18 @@ let main args =
 
             Trace.tracefn "  ambient pages   : %d (docs-snippets/ambient/)" ambientPages
 
+            // A WATCHLIST, not a defect count. An `open` of a deliberately
+            // fictional vendor namespace is legitimate in an illustrative
+            // fragment; an `open` of a real SDK namespace that has since
+            // moved is rot the gate cannot act on, because the block
+            // declared itself uncheckable. Only reading them tells you
+            // which — and this line is the only place either is visible.
+            if inSkipped.Length > 0 then
+                Trace.tracefn "  unresolved opens: %d skipped block(s) — illustrative, or moved?" inSkipped.Length
+
+                for rel, ord in inSkipped |> Array.sort do
+                    Trace.tracefn "                    %s#%d" rel ord
+
             if newFailures.Length > 0 then
                 Trace.tracefn ""
 
@@ -1108,7 +1202,38 @@ let main args =
                     "VerifyDocSnippets: %d baseline entr(ies) in docs-snippets/known-drift.txt now compile. Delete the FULL lines printed above — match on path, ordinal AND hash, never on the hash alone: identical illustrative blocks in different files share a hash, and a hash-only prune deletes the wrong file's entry silently. The ratchet only holds if a fixed snippet is removed from the list."
                     fixedButListed.Count
 
-            if result.ExitCode <> 0 && failing.Length = 0 then
+            // The baseline reached zero, so EMPTY is now the enforced state.
+            //
+            // While it held entries, the ratchet's two directions were the
+            // whole mechanism: a new failure could not land, and a fixed
+            // entry had to be deleted. At zero the first direction covers
+            // everything — any failing block is a new failure — and the
+            // second has nothing to act on. What is left is the risk the
+            // ratchet was always shaped around: that the list starts
+            // growing again, one plausible line at a time, and the gate
+            // reports "0 new failures" while drift accumulates in a file
+            // nobody re-reads.
+            //
+            // So an entry is a defect rather than a state. This check runs
+            // AFTER the two above, so a run that both fails and lists gets
+            // the specific diagnosis first.
+            if baselineKeys.Count > 0 then
+                Trace.tracefn ""
+
+                for k in baselineKeys |> Seq.sort do
+                    Trace.traceError (baseline |> Map.find k)
+
+                failwithf
+                    "VerifyDocSnippets: docs-snippets/known-drift.txt holds %d entr(ies), and empty is the enforced state. The baseline was a migration device for the drift that predated this gate; it reached zero, so a block that does not compile is a failure to fix, not a line to record. Fix the snippet against the current SDK surface, or — if the block genuinely cannot be compiled — mark its fence with a skip reason. `--update-baseline` remains the escape for a wholesale re-measurement, but what it writes still fails here."
+                    baselineKeys.Count
+
+            // An unexplained non-zero exit — no failing block AND no error
+            // absorbed by a skipped one — is a harness fault: a restore
+            // failure, an MSBuild-level error, anything that produced no
+            // parseable `file(line,col): error` at all. That is what this
+            // guard is for. It must NOT fire on the explained case, or the
+            // target can never go green (see `inSkipped` above).
+            if result.ExitCode <> 0 && failing.Length = 0 && inSkipped.Length = 0 then
                 printfn "%s" output
 
                 failwithf

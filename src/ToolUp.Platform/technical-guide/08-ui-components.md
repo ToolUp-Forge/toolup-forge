@@ -18,8 +18,13 @@ AG Grid Enterprise initialisation lives in `src/AgGridEnterprise/`, separate fro
 All `ag-grid-enterprise` and `ag-charts-enterprise` imports and module registration calls live at **module top level** in `AgGridEnterprise.fs`:
 
 ```fsharp
+open Fable.Core
+open Fable.Core.JsInterop
+
 // Module top-level — runs immediately when AgGridEnterprise.fs is first evaluated,
 // which happens before Client.fs because AgGridEnterprise.Client.props is imported first.
+let mutable private registered = false
+
 let private moduleRegistry: obj = import "ModuleRegistry" "ag-grid-enterprise"
 let private allEnterpriseModules: obj = import "AllEnterpriseModule" "ag-grid-enterprise"
 let private integratedChartsModule: obj = import "IntegratedChartsModule" "ag-grid-enterprise"
@@ -102,20 +107,26 @@ AG Charts v13.2.1 introduced a regression that makes animations appear instant w
 `MemoizedChart` is a `[<ReactComponent>]` defined in `AgChart.fs` that wraps the real `AgCharts` component:
 
 ```fsharp
+open Feliz
+
+let agChart: obj = import "AgCharts" "ag-charts-react"
+
 [<ReactComponent>]
-let MemoizedChart (options: obj) =
+let MemoizedChart (reactProps: obj) =
     let prevJsonRef = React.useRef ""
-    let stableRef = React.useRef options
-    let json = JS.JSON.stringify options
+    let stableRef = React.useRef reactProps
+    let json = JS.JSON.stringify reactProps
 
     if json <> prevJsonRef.current then
         prevJsonRef.current <- json
-        stableRef.current <- options
+        stableRef.current <- reactProps
 
-    Interop.reactApi.createElement (agChart, createObj [ "options" ==> stableRef.current ])
+    ReactLegacy.createElement (unbox<ReactElement> agChart, stableRef.current)
 ```
 
-On each render it JSON-serializes the incoming options and compares against the previous serialization. Only when the JSON differs (i.e. chart data has semantically changed) does it update `stableRef.current`. The actual `AgCharts` component therefore receives a stable reference between Elmish re-renders, preventing `useEffect([options])` from firing spuriously and killing animations.
+On each render it JSON-serializes the incoming props and compares against the previous serialization. Only when the JSON differs (i.e. chart data has semantically changed) does it update `stableRef.current`. The actual `AgCharts` component therefore receives a stable reference between Elmish re-renders, preventing `useEffect([options])` from firing spuriously and killing animations.
+
+The parameter is the **whole** React props object — `{ options: {...chartConfig...} }`, which is what `ag-charts-react` expects — so it is handed to `createElement` as-is. Wrapping it again (`createObj [ "options" ==> stableRef.current ]`) would produce `{ options: { options: {...} } }`, and AG Charts would warn `Unknown option 'options', ignoring` when iterating the outer object.
 
 `AgChart.chart` delegates to this wrapper:
 

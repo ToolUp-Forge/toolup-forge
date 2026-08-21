@@ -312,21 +312,24 @@ Modules call `SaveResult(... inputs)` the same way regardless of deployment conf
 
 ```fsharp
 // Server-side module handler
-let resultStore =
-    match ctx.RequestServices.GetService(typeof<IResultStore>) with
-    | :? IResultStore as s -> Some s
-    | _ -> None
+let runAnalysis () = async {
+    let resultStore =
+        match ctx.RequestServices.GetService(typeof<IResultStore>) with
+        | :? IResultStore as s -> Some s
+        | _ -> None
 
-let! analysisResult = computeAnalysis input
-match resultStore with
-| None -> () // deployment opted out
-| Some store ->
-    let bytes = JsonSerializer.SerializeToUtf8Bytes analysisResult
-    let inputs = [ inputFileObjectId ]  // produces a LineageLink when 8a is enabled
-    let! _ = store.SaveResult(scopeId, "SalesAnalysis", "QuarterlyReport", bytes, userId, inputs)
-    ()
+    let! analysisResult = computeAnalysis input
 
-return analysisResult
+    match resultStore with
+    | None -> () // deployment opted out
+    | Some store ->
+        let bytes = JsonSerializer.SerializeToUtf8Bytes analysisResult
+        let inputs = [ inputFileObjectId ]  // produces a LineageLink when 8a is enabled
+        let! _ = store.SaveResult(scopeId, "SalesAnalysis", "QuarterlyReport", bytes, userId, inputs)
+        ()
+
+    return analysisResult
+}
 ```
 
 The `null` branch is the cost of opt-in. Modules that want guaranteed availability can require it via DI throw rather than null-check; that's a per-module decision.

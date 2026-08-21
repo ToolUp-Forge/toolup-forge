@@ -36,6 +36,9 @@ A team-private handbook or dashboard. Mark pages `authenticated` (any member) or
 // A role-restricted editorial page:
 //   pages/style-guide.md  →  ---\naudience: scope:editor\n---
 
+open ToolUp.PublicRendering
+open ToolUp.PublicRendering.PublicRenderingCompose
+
 ServerApp.empty
 |> ServerApp.withConfig config            // auth + scope resolver already configured
 |> PublicRenderingCompose.withPublicRendering (fun pr ->

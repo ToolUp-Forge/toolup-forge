@@ -7,6 +7,9 @@ The idiomatic ToolUp composition root collapses to one screen of substrate const
 Every ToolUp composition root follows the same five steps:
 
 ```fsharp
+open ToolUp.Platform
+open ToolUp.RAG.RAGCompose
+
 // 1. Logger from env (TOOLUP_LOG_LEVEL + TOOLUP_TRACE_CATEGORIES).
 let logger = ConsoleLogger.fromEnv ()
 
@@ -30,12 +33,13 @@ let config =
 // 4. Application-specific wiring (algorithm singletons, AI provider
 //    descriptors / builders / platform bundle, per-module API factories,
 //    system-prompt composition). Lives in a sibling Wiring.fs file.
-let aiProviderFactory = Wiring.aiProviderFactory secretStore Wiring.aiConfigStore blobStorage
+let aiProviderFactory = Wiring.aiProviderFactory secretStore Wiring.providerProfile blobStorage
 
 // 5. Composition pipeline (RAGServerApp / AIServerApp / ServerApp).
-[<EntryPoint>]
+//    In your own Server.fs `main` carries [<EntryPoint>]; every
+//    *ServerApp.run returns the int exit code it needs.
 let main _ =
-    RAGServerApp.create aiProviderFactory Wiring.aiConfigStore (EmbeddingProviderEnv.create blobStorage)
+    RAGServerApp.create aiProviderFactory Wiring.providerProfile (LocalEmbeddingProvider.createPersistent blobStorage)
     |> RAGServerApp.withConfig config
     |> RAGServerApp.withAuth authProvider
     |> RAGServerApp.withLogger logger
@@ -54,7 +58,7 @@ A sibling file alongside `Server.fs` carrying the deployment-specific constructi
 - **Algorithm provider singletons** — stateless app-domain implementations (`MathNetElasticityEstimator`, `LevenbergMarquardtCurveFitter`, etc.). Created once, shared across requests.
 - **Cloud-companion resolver lists** — `secretStoreResolvers`, `blobStorageResolvers`, `notificationResolvers`. Naming the cloud companions the deployment ships.
 - **Per-module API factories** — the `xxxApi (ctx: HttpContext) : XxxApi` constructions threading scope into module-domain routines.
-- **AI provider descriptors + builders + platform bundle** — Claude/OpenAI/etc. descriptors, `AIProviderBuilder` records, the `AIPlatformProvider` bundle. `aiProviderFactory` constructed from these via `DefaultAIProviderFactory.create … PlatformOnly (Some bundle)`.
+- **AI provider descriptors + builders + platform bundle** — Claude/OpenAI/etc. descriptors, `AIProviderBuilder` records, the `AIPlatformProvider` bundle. `aiProviderFactory` constructed from these via `DefaultAIProviderFactory.create … PlatformOnly (Some bundle)`, plus the `IProviderProfile` store (`providerProfile`) the AI / RAG composition roots take as their second argument.
 - **`allModules` list** — every `ServerModule.create … |> ServerModule.withGuardedApi …` chain.
 - **System-prompt composition** — `Prompt.compose [...]` for the AI assistant's standing context.
 - **`slowRequestOverrides`** — per-route `Map<string, TimeSpan>` for the deployment's known-slow paths.
@@ -64,6 +68,10 @@ Keeping these in `Wiring.fs` means `Server.fs` reads as a manifest: "what substr
 ## Client-side pattern
 
 ```fsharp
+open ToolUp.Platform
+open ToolUp.Platform.ClientConfigDefaults   // ClientConfigOverrides lives beside the helper
+open ToolUp.AuthProviders
+
 // 1. AG Grid Enterprise + Clerk read once from the SDK's bundle-constants helper.
 let gridModules = AgGridEnterprise.gridModuleConfig BundleConstants.agGridLicense
 AgGridEnterprise.registerCharts ()
@@ -88,14 +96,16 @@ let config =
             Handlers = Some Wiring.handlers
     }
 
-// 3. Module registration list (consumer's modules).
-let modules = Wiring.allModules
+// 3. Module registration list (consumer's modules). The client
+//    project has its own Wiring.fs sibling; its list is the
+//    ErasedModule registrations, not the server's ServerModules.
+let modules = Wiring.clientModules
 
 // 4. Run.
 Client.run config modules
 ```
 
-Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstants`, `Client.run` — plus a `Wiring.fs` sibling for handlers and modules.
+Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstants`, `Client.run` — plus a `Wiring.fs` sibling for handlers and modules. Note the client project carries its **own** `Wiring.fs`: `handlers` is a `ClientHandlerRegistry` and `clientModules` is the `ErasedModule list` each module's `ClientView.register ()` returns, whereas the server sidecar's `allModules` is a `ServerModule list`.
 
 ## When to use the helpers vs roll your own
 
@@ -108,6 +118,12 @@ Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstan
 The terminal `*ServerApp.run` pattern above is the right choice when one companion dominates the deployment — a pure-AI app, a pure-Forms app, a pure-RAG app. When the deployment needs **two or more** companion surfaces side-by-side — e.g. Forms with a `WorkflowDefinition` AND an AI assistant — use the additive `withForms` / `withAI` extensions on a single `ServerApp` pipeline:
 
 ```fsharp
+open ToolUp.Platform
+open ToolUp.Forms
+open ToolUp.Forms.FormsCompose
+open ToolUp.AI
+open ToolUp.AI.AICompose
+
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withLogger logger

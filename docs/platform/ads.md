@@ -83,7 +83,7 @@ The `<AdSlot>` component wraps its render in `ConsentGate` — see the [`IConsen
 type ClientConfig = {
     // ...
     AdPanel: AdPanelMode
-    ConsentProvider: ConsentProvider
+    ConsentProvider: ConsentProviderMode
 }
 ```
 
@@ -110,6 +110,8 @@ Components.AdSlot.AdAnalytics.setSink (ServerSinkAdAnalytics() :> IAdAnalyticsSi
 // Custom — e.g. POSTing to a first-party analytics endpoint (Plausible,
 // GA4, custom warehouse). One implementation per sink kind; the contract
 // is best-effort, errors swallowed internally.
+open Fable.SimpleHttp
+
 type PlausibleAdSink() =
     interface IAdAnalyticsSink with
         member _.LogImpression(event: AdImpression) = async {

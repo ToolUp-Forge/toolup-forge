@@ -380,20 +380,28 @@ The in-memory implementation is single-instance only. Multi-instance deployments
 
 ### Per-Kind credential UI registry
 
-Each connector companion (`src/DataSources/<Provider>/`) registers a Feliz form keyed by its `Kind` discriminator at module load time:
+Each connector companion (`src/DataSources/<Provider>/`) exports a Feliz form paired with its `Kind` discriminator, and the consumer adds it to `ClientConfig.Handlers` at compose time (Phase 13a — this replaced a `register`-at-module-load side effect):
 
 ```fsharp
-DataSourceCredentialUIRegistry.register "GoogleAnalytics" (fun ctx ->
-    // Render the GA4-specific credential inputs:
-    //   - Client ID / Client Secret password fields
-    //   - Connect button → IDataIngestionApi.BeginOAuth
-    //   - Property selector populated from ListTables on connect
-    GoogleAnalyticsCredentialUI.render ctx)
+// In the connector companion (`src/DataSources/<Provider>/`):
+let handler: string * DataSourceCredentialHandler =
+    "GoogleAnalytics",
+    fun ctx ->
+        // Render the GA4-specific credential inputs:
+        //   - Client ID / Client Secret password fields
+        //   - Connect button → IDataIngestionApi.BeginOAuth
+        //   - Property selector populated from ListTables on connect
+        GoogleAnalyticsCredentialUI.render ctx
+
+// In the consumer's client composition root:
+let handlers =
+    { ClientHandlerRegistry.empty with
+        DataSourceCredentialHandlers = [ handler ] }
 ```
 
 The built-in `DataIngestionUI` admin module looks up the renderer at row-expansion time. No registered renderer → "No credential UI registered for kind X. Import the matching connector companion's .Client.props" hint.
 
-The registry is a mutable string-keyed map updated only at companion module-load time (single-threaded in the browser JS runtime). Same shape as `AuthUIProvider` — the SDK shell never imports any connector-specific type. Companion import-order in the client `.fsproj` decides which registration wins for duplicate keys.
+`DataSourceCredentialUIRegistry` is a string-keyed map populated exactly once at boot by `SDK.Client.program`, from `ClientConfig.Handlers.DataSourceCredentialHandlers`; companions never write to it, and `tryGet` / `registeredKinds` are the only read paths. Same shape as the `AuthUIHandlers` registry beside it — the SDK shell never imports any connector-specific type. Duplicate Kinds within the supplied list collapse last-wins, and `Client.run`'s validator surfaces them by name at startup rather than leaving the winner to import order.
 
 ### Credential metadata blob
 

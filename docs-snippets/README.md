@@ -55,22 +55,42 @@ info string as the language, so `fsharp skip=fragment` still highlights as F#.
 **"It does not compile" is not a reason.** `skip` claims a block is not *checkable*. A block
 that is checkable and wrong belongs in the baseline below — or, better, gets fixed.
 
+**Reach for `fragment` last.** A skip buys silence: nothing then checks the block's SDK names, so
+the next rename rots it invisibly — the exact drift class this gate exists to catch, occurring in
+the blocks the gate cannot see. Most blocks marked `fragment` are accurate and merely read locals
+the page never shows in full; those belong in a [per-page ambient preamble](ambient/README.md),
+which keeps them under the gate. `fragment` is right only for a genuinely elided, prose-shaped
+excerpt.
+
 ## What is not in scope
 
-`docs/migrations/**`, as a tree. A migration doc's job is to show the **retired** shape beside
-its replacement, usually in the same block; compiling it is category-incorrect, because the old
-shape must not compile — that is the point of the page. This is one declared exclusion in
-`Build.fs` rather than a marker on each of its 436 blocks, precisely because a per-block marker
-there would be the easy opt-out that gets reached for everywhere else.
+Two trees, and they are the same class: **point-in-time documents whose code deliberately
+reflects a state other than the current surface.**
+
+- `docs/migrations/**` — a migration doc's job is to show the **retired** shape beside its
+  replacement, usually in the same block. Compiling it is category-incorrect, because the old
+  shape must not compile; that is the point of the page.
+- `docs/design/**` — a design record states what was **proposed**. Where implementation
+  diverged, rewriting the blocks against the shipped surface would destroy exactly the value the
+  document has, and marking them individually would mean widening the closed skip set to cover
+  "historically accurate".
+
+Both are declared exclusions in `Build.fs` rather than a marker on each of their blocks,
+precisely because a per-block marker there would be the easy opt-out that gets reached for
+everywhere else. Widening the list needs the same argument, and it is a visible diff.
 
 ## Context
 
 Snippets are excerpts, and the docs must not grow ceremony a reader then copies. So context is
-supplied by the harness, in three layers, none of which touch the markdown:
+supplied by the harness, in four layers, none of which touch the markdown:
 
 1. **A universal preamble** — the ambient `open`s any ToolUp source file has.
 2. **A per-tree preamble** — a page under `docs/rag/` is read in the context of the RAG package.
-3. **Page accumulation** — an `open` written in an earlier block of the same page applies to
+3. **A per-page ambient preamble** — an optional F# file at `ambient/<doc path>.fs` declaring the
+   composition-root locals a page's blocks conventionally read (`config`, an Elmish `Model`, a
+   page-local loader). This is what lets an accurate excerpt be *checked* rather than
+   `skip=fragment`'d into silence. See [`ambient/README.md`](ambient/README.md).
+4. **Page accumulation** — an `open` written in an earlier block of the same page applies to
    later blocks, which is how a reader reads a page top to bottom.
 
 Each block then compiles as its own module in its own generated file under `generated/`
@@ -87,24 +107,67 @@ undefined. That is a harness gap, not doc drift — add the `ProjectReference` t
 `ToolUp.DocSnippets.fsproj`. The target refuses to attribute an unplaceable compiler error to a
 documentation block, so this failure mode is loud rather than silent.
 
-## `known-drift.txt`
+## `known-drift.txt` — empty, and enforced empty
 
-When the gate landed, **230 of 655** in-scope blocks already named an API the SDK does not
-have. Fixing them all is a docs project; marking them `skip=` would be a lie. They are recorded
-in `known-drift.txt`, keyed by a hash of each block's own text.
+When the gate landed, **231 of 655** in-scope blocks already named an API the SDK does not
+have. Fixing them all at once was a docs project, and marking them `skip=` would have been a
+lie, so they were recorded in `known-drift.txt` as a **ratchet** that could only shrink.
 
-The list is a **ratchet**, and it fails in both directions:
+**The ratchet reached zero.** Empty is now the enforced state: any entry in that file fails the
+gate. A block that does not compile is a failure to fix against the current SDK surface, not a
+line to record — and the only reason the list existed was drift that predated the gate, which no
+longer exists.
 
-- a failing block **absent** from the list fails the gate — new drift cannot land;
-- a listed block that **now compiles** also fails the gate, demanding its line be deleted.
+`--update-baseline` still rewrites the file wholesale from a run, and is still the documented
+escape for a deliberate re-measurement. It is not a way of going green: whatever it writes there
+fails the gate too.
 
-Because the key is the block's content hash, editing a listed block retires its entry and the
-block must then compile — a broken snippet cannot be quietly rewritten into a differently-broken
-one.
+If you are reading a line in that file, the key is the **full triple**
+`<doc path>#<ordinal> <hash>`, which is also the literal text of the line's first two fields.
+Never match on the hash alone: identical illustrative blocks in different files legitimately
+share one, and a hash-only prune during the 2026-08-21 burn-down duly deleted the wrong file's
+line, caught only by the next full run.
 
-So: **the list may only shrink.** Fixing a snippet means correcting it against the current SDK
-surface and deleting its line. `--update-baseline` rewrites the file wholesale and exists for
-first seeding and deliberate re-measurement; it is never part of making CI pass.
+## `corpus-floor.txt`
+
+The number of blocks that compile, recorded as a **high-water mark**.
+
+A static floor catches a collapsed harness and nothing else. It cannot ratchet: as the corpus
+grows, the gap between the floor and the truth widens into room for silent hollowing, because
+skip-marking a block that used to compile costs one checked block and the gate says nothing.
+
+- **Below the mark fails.** Blocks that used to be checked no longer are. If the loss is
+  deliberate and argued — a tree exclusion, a page deleted — lower the number **by hand**, in the
+  same commit, so the decision is in the diff a reviewer reads. Deliberately not a flag: an
+  automated lower is the one motion this guard exists to make expensive.
+- **Above the mark rewrites it** and says so. Growth is always legitimate and must not red a
+  build over a docs addition, but the new number lands in your working tree and rides your own
+  commit. Only the number is rewritten — every comment in the file is preserved, so the argument
+  written beside a past shrink is not erased by the next growth.
+
+## Reading the summary
+
+```
+blocks compiled : 271 (high-water mark 271)
+passing         : 271
+known drift     : 0 (docs-snippets/known-drift.txt)
+new failures    : 0
+fixed-but-listed: 0
+skip=fragment     352
+skip=signature    54
+ambient pages   : 30 (docs-snippets/ambient/)
+unresolved opens: 9 skipped block(s) — illustrative, or moved?
+```
+
+The last three lines measure the **blind spot**, which is the part worth watching once the
+failures are zero.
+
+`skip=` counts are the blocks nothing checks. `ambient pages` is how many pages have bought their
+way out of that. `unresolved opens` names skipped blocks whose `open` does not resolve — read it
+as a watchlist, not a defect count: an `open` of a deliberately fictional vendor namespace is
+right in an illustrative fragment, while an `open` of a real SDK namespace that has since moved
+is rot the gate cannot act on, because the block declared itself uncheckable. Only reading them
+tells you which.
 
 ## Why this project is not in the solution
 

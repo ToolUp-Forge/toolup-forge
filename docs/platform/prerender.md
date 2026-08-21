@@ -106,18 +106,20 @@ The prerender substrate supports two equivalent build-time execution paths. Both
 ### FAKE seam — `dotnet run -- Prerender`
 
 ```fsharp
-// Build.fs
+// Build.fs — your existing entry point becomes `[<EntryPoint>] let main args = build args`
 open ToolUp.Platform.Build
+open ToolUp.Platform.Prerender
 
 let config = { BuildConfig.defaults with Port = 5000 }
 
-[<EntryPoint>]
-let main args =
+let build (args: string array) =
     init args
     registerTargets config
-    Prerender.registerTarget config prerenderRoutes  // prerender FAKE target factory
+    registerTarget config PrerenderTargetOptions.defaults prerenderRoutes  // prerender FAKE target factory
     execute args
 ```
+
+`PrerenderTargetOptions.defaults` names the bundle directory, entry file, output directory, and the `<script>` / stylesheet URLs the emitted HTML references — override the fields your pipeline moves.
 
 `dotnet run -- Prerender` runs after the standard `Fable` target. The factory:
 - Spawns Node.js with a small script that imports the consumer's Fable output.

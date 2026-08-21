@@ -33,7 +33,7 @@ No `()` on the binding; no `()` at the call sites; no wrapping parens around `(f
 Module-level construction is safe because **the customiser is a no-op passthrough**, and the actual identity + CSRF headers are attached at *send* time by `CsrfClient`'s request-guard reading live caches per request:
 
 ```fsharp
-// In ToolUp.Platform.Client/Client/UserSession.fs (line 342):
+// In ToolUp.Platform.Client/Client/UserSession.fs:
 
 /// Kept for source compatibility (every `Api.makeProxy
 /// (customOptions = UserSession.withRequestHeaders)` call site). Both

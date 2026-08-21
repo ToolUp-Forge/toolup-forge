@@ -10,7 +10,9 @@ A **server-driven UI** holds the authoritative UI tree on the server, computes d
 ## Compose
 
 ```fsharp
-ServerApp.create config modules
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.addModules modules
 |> LiveSessionsCompose.withLiveSessions (fun o ->
     { o with
         SubscribesPerMinutePerScope = Some 30

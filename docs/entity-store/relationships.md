@@ -94,13 +94,17 @@ own registration instead.
 predicate over the foreign-key field; `relatedToAny` produces an `In` over
 several ids. Both execute through the existing query executor unchanged:
 
-```fsharp skip=fragment
-// "all Orders for Customer c-1"
-let q =
-    EntityQuery.forType<Order> "Order"
-    |> EntityQuery.where (EntityQuery.relatedTo belongsToCustomer "c-1")
+```fsharp
+open ToolUp.Platform
 
-let! orders = store.Query<Order>(scope, q)
+// "all Orders for Customer c-1"
+let ordersForCustomer = async {
+    let q =
+        EntityQuery.forType<Order> "Order"
+        |> EntityQuery.where (EntityQuery.relatedTo belongsToCustomer "c-1")
+
+    return! store.Query<Order>(scope, q)
+}
 ```
 
 Because the foreign-key field is auto-indexed, the query validates and runs as
@@ -138,20 +142,26 @@ let enrolledInCourses = {
 
 Resolving "the courses `s-1` is enrolled in":
 
-```fsharp skip=fragment
-// Leg 1 — query the join entity by the source key.
-let joinQuery =
-    EntityQuery.forType<Enrollment> "Enrollment"
-    |> EntityQuery.where (EntityQuery.relatedTo enrolledInCourses "s-1")
+```fsharp
+let coursesFor (studentId: string) = async {
+    // Leg 1 — query the join entity by the source key.
+    let joinQuery =
+        EntityQuery.forType<Enrollment> "Enrollment"
+        |> EntityQuery.where (EntityQuery.relatedTo enrolledInCourses studentId)
 
-let! Result.Ok enrollments = store.Query<Enrollment>(scope, joinQuery)
+    match! store.Query<Enrollment>(scope, joinQuery) with
+    | Error e -> return Error e
+    | Ok enrollments ->
+        // Leg 2 — load the targets by their extracted ids.
+        let courseIds = enrollments |> List.map _.CourseId
 
-// Leg 2 — load the targets by their extracted ids.
-let courseIds = enrollments |> List.map _.CourseId
-let! courses =
-    courseIds
-    |> List.map (fun cid -> store.Get<Course>(scope, "Course", cid))
-    |> Async.Sequential
+        let! courses =
+            courseIds
+            |> List.map (fun cid -> store.Get<Course>(scope, "Course", cid))
+            |> Async.Sequential
+
+        return Ok courses
+}
 ```
 
 ## Graph projection
@@ -159,7 +169,7 @@ let! courses =
 `EntityRegistration.relationships` returns the declared list as a pure read of
 registration metadata:
 
-```fsharp skip=fragment
+```fsharp
 let edges = EntityRegistration.relationships orderRegistration
 ```
 

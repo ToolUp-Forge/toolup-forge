@@ -52,12 +52,17 @@ handler value:
 
 ```fsharp
 // ClerkUI companion (src/AuthProviders/ClerkUI/ClerkRegister.fs)
+[<Literal>]
+let Tag = "clerk"
+
 let authUI (cfg: ClerkUIConfig) : AuthUIMode = ProviderAuthUI(Tag, box cfg)
 ```
 
 so a Clerk deployment writes:
 
 ```fsharp
+open ToolUp.AuthProviders
+
 { ClientConfig.defaults with
     AuthUI = ClerkRegister.authUI { PublishableKey = key }
     Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ ClerkRegister.handler ] } }

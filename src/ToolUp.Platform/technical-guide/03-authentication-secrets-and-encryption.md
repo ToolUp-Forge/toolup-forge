@@ -249,6 +249,7 @@ Rotating the master key requires decrypting every existing envelope under the ol
 
 ```fsharp
 open ToolUp.Platform
+open ToolUp.Platform.Secrets
 open EncryptedSecretStore
 
 let oldKey = (parseMasterKey "<current base64>").Value
@@ -261,12 +262,18 @@ let newKey = (parseMasterKey (generateMasterKey())).Value
 // outcome) so the run is auditable.
 let logger: ILogger = ConsoleLogger.ConsoleLogger()
 
-let! outcomes =
-    rotateScope (inner :> ISecretStore) oldKey newKey "user-alice" logger
+// `rotateScope` is asynchronous, so the run sits in an `async` block.
+let rotate = async {
+    let! outcomes =
+        rotateScope (inner :> ISecretStore) oldKey newKey "user-alice" logger
 
-let summary = summariseRotation outcomes
-printfn "Rotated %d / %d (unchanged: %d, failed: %d)"
-    summary.Rotated summary.Total summary.Unchanged summary.Failed
+    let summary = summariseRotation outcomes
+
+    printfn "Rotated %d / %d (unchanged: %d, failed: %d)"
+        summary.Rotated summary.Total summary.Unchanged summary.Failed
+}
+
+Async.RunSynchronously rotate
 ```
 
 Per-secret outcomes:
@@ -304,6 +311,8 @@ Wraps any `IBlobStorage` and applies AES-GCM envelope encryption to `Upload` / `
 Envelope layout (raw bytes, no base64): `[Magic:4 "TOBL"][KeyIdLen:1][KeyId:N UTF-8][Nonce:12][Tag:16][Ciphertext:M]`.
 
 ```fsharp
+open ToolUp.Platform.BlobStorage
+
 let storage = LocalFileStorage.LocalFileStorage("data") :> IBlobStorage
 let secrets = FileSecretStore.FileSecretStore() :> ISecretStore
 let resolver = SingleKeyResolver.create secrets

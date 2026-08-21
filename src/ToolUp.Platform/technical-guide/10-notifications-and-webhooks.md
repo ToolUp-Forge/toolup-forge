@@ -119,6 +119,8 @@ When the define isn't wired, `BundleConstants.notificationsDisabledExplicitly` r
 AI and RAG companions no longer own `SSEConnectionManager`. They resolve it from DI inside per-request handlers:
 
 ```fsharp
+open Microsoft.AspNetCore.Http
+
 let resolveManager (ctx: HttpContext) =
     ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
 ```

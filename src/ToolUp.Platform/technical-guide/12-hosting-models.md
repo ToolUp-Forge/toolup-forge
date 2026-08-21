@@ -265,13 +265,28 @@ do
 let handler (req: APIGatewayHttpApiV2ProxyRequest) (_ctx: ILambdaContext) =
     AwsLambdaHost.bridgeV2 (MyApp.Composition.serverHost, req)
 
-[<EntryPoint>]
-let main _ =
+// `Create` is overloaded on `Func<'TInput, ILambdaContext, 'TOutput>` and
+// `Func<'TInput, ILambdaContext, Task<'TOutput>>`. An F# curried function
+// is neither until it is converted, and even the explicit delegate still
+// fits both (with 'TOutput inferred as the Task or as its result), so F#
+// needs the type arguments named to pick one.
+let entryPoint =
+    System.Func<APIGatewayHttpApiV2ProxyRequest, ILambdaContext, Task<APIGatewayHttpApiV2ProxyResponse>>(
+        handler
+    )
+
+// In your own Program.fs this carries the attribute:
+//     [<EntryPoint>] let main argv = run argv
+let run (_argv: string array) =
     LambdaBootstrapBuilder
-        .Create(handler, DefaultLambdaJsonSerializer())
+        .Create<APIGatewayHttpApiV2ProxyRequest, APIGatewayHttpApiV2ProxyResponse>(
+            entryPoint,
+            DefaultLambdaJsonSerializer()
+        )
         .Build()
         .RunAsync()
         .Wait()
+
     0
 ```
 
@@ -553,6 +568,7 @@ The `ToolUp.Platform.Build` package ships three host-packaging helpers consumer 
 ```fsharp
 // Build.fs — consumer-side
 open Fake.Core
+open Fake.Core.TargetOperators  // brings the `==>` target-dependency operator
 open ToolUp.Platform        // brings HostPackaging into scope
 open ToolUp.Platform.Build  // brings BuildConfig, registerTargets, etc.
 
