@@ -19,10 +19,12 @@ type MyVendorProvider(apiKey: string, model: string, httpClient: HttpClient) =
     let capabilities = {
         ProviderName = "myvendor"
         Model = model
-        SupportsStreaming = true
-        SupportsToolUse = true
-        SupportsVision = false
+        Streaming = true
+        ToolUse = true
+        Vision = false
         SupportsPromptCaching = false
+        SupportsTriage = false            // see "Triage capability" below
+        TriageModelId = None
     }
 
     interface IAIProvider with
@@ -57,10 +59,12 @@ let descriptor: AIProviderDescriptor = {
     Capabilities = {
         ProviderName = "myvendor"
         Model = ""                    // overridden by builder
-        SupportsStreaming = true
-        SupportsToolUse = true
-        SupportsVision = false
+        Streaming = true
+        ToolUse = true
+        Vision = false
         SupportsPromptCaching = false
+        SupportsTriage = false        // see "Triage capability" below
+        TriageModelId = None
     }
 }
 
@@ -93,7 +97,7 @@ No other wiring changes. Users can now register a `MyVendor` provider instance v
 
 ### Streaming
 
-For providers that stream SSE responses, the implementation reads the response stream and emits incremental tokens via a streaming callback. The default agent loop handles streaming if `Capabilities.SupportsStreaming = true` and the request's `Stream` flag is true.
+For providers that stream SSE responses, the implementation reads the response stream and emits incremental tokens via a streaming callback. The default agent loop handles streaming if `Capabilities.Streaming = true` and the request's `Stream` flag is true.
 
 Pattern (skeleton — vendor-specific stream parsing varies):
 
@@ -182,7 +186,7 @@ For providers with automatic caching (OpenAI), no markers are needed — set `Ca
 
 - **Receive `ISecretStore` through the builder.** Never read env vars / config files directly. Builders accept the resolved API key as a parameter; the factory pulls the key from `ISecretStore` per-call.
 - **Never log the API key.** Even at trace level. Log a hashed prefix if you must.
-- **Capabilities declared truthfully.** `SupportsToolUse = false` for providers that don't, even if the vendor's docs claim partial support — `false` is the safer floor that won't break the agent loop on unsupported features. Same for `SupportsTriage`: an over-claimed triage capability spends a call per instruction to fall through.
+- **Capabilities declared truthfully.** `ToolUse = false` for providers that don't, even if the vendor's docs claim partial support — `false` is the safer floor that won't break the agent loop on unsupported features. Same for `SupportsTriage`: an over-claimed triage capability spends a call per instruction to fall through.
 - **Author an `IHealthCheck` probe.** Verifies the API key is valid + the endpoint is reachable. Self-register via DI; auto-wired into `/ready`.
 - **Author an `IConfigValidator` probe.** Verifies the configuration is correct at preflight. Refuse to start with helpful error messages when keys / endpoints are misconfigured.
 - **Wire the builder into a `Server.props` extension contract.** Companion files extend `_ToolUpPlatformServerSources`; the consuming server project picks them up via the props chain.
@@ -465,15 +469,16 @@ AIServerApp.create (aiProviderFactory, aiConfigStore)
 
 `AIProviderCapabilities` flags propagate from the provider to consumers (the agent loop, the AI Settings UI, downstream features that need vision input, etc.). Declare truthfully:
 
-- `SupportsStreaming` — true if the provider's `SendMessage` honours `req.Stream = true` and emits incremental tokens.
-- `SupportsToolUse` — true if the provider correctly translates the `Tools` array into the vendor's tool schema and parses tool calls in the response.
-- `SupportsVision` — reserved for future multimodal content support. Today the `AIProviderMessage.Content` is `string`; image / audio blocks are not yet shipped. Set this `true` only when the SDK supports multimodal protocol (future SDK version).
+- `Streaming` — true if the provider's `SendMessage` honours `req.Stream = true` and emits incremental tokens.
+- `ToolUse` — true if the provider correctly translates the `Tools` array into the vendor's tool schema and parses tool calls in the response.
+- `Vision` — true if the provider accepts image content in messages (the `AIProviderMessage.Parts` multipart payload). Providers that declare `false` — or whose configured model isn't vision-capable — reject multipart messages synchronously with `AIProviderError.UnsupportedCapability("vision", …)`, no network round-trip.
 - `SupportsPromptCaching` — true if the provider implements cache markers (explicit or implicit). Drives `CacheHitRate` reporting in `/dev/ai-latency`.
+- `SupportsTriage` / `TriageModelId` — the fast-path triage gate + cheaper-tier declaration; see [Triage capability](#triage-capability) above.
 
 The agent loop respects these:
-- `SupportsStreaming = false` → loop ignores `req.Stream`, treats response as non-streaming.
-- `SupportsToolUse = false` → loop doesn't include `Tools` in the request; tool calls in the response are warned as invariant violations.
-- `SupportsVision = false` → multimodal feature flags upstream of the agent gate to disabled for this provider.
+- `Streaming = false` → loop ignores `req.Stream`, treats response as non-streaming.
+- `ToolUse = false` → loop doesn't include `Tools` in the request; tool calls in the response are warned as invariant violations.
+- `Vision = false` → multimodal feature flags upstream of the agent gate to disabled for this provider.
 
 ## Companion conventions
 
