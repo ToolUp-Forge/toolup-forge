@@ -170,11 +170,19 @@ The Claude provider marks three locations:
 
 For providers with automatic caching (OpenAI), no markers are needed — set `Capabilities.SupportsPromptCaching = true` and consume the cached-token field in the usage response.
 
+### Triage capability
+
+`Capabilities.SupportsTriage` declares that the provider can serve a *triage* turn: one tool-free, schema-constrained call over a four-field schema, whose only job is to classify a trivial UI instruction. The fast-path resolver treats it as a hard gate — a provider declaring `false` is never called for triage, and the request goes straight to the full agent loop.
+
+`false` is the correct default, and the value `AIProviderCapabilities.unknown` carries. Declare `true` only when a small structured-output request is genuinely cheap and reliable for your provider; a connector whose only model is a frontier model gains nothing from the tier and should leave it off.
+
+`Capabilities.TriageModelId` names the cheaper model your provider family would use, when it has one. It is a **declaration a composition root reads**, not a dispatch instruction: `IAIProvider` has no per-call model override, so the resolver cannot re-point your provider at that id. A deployment reads it, builds a second provider instance at that model, and hands it to the triage config. `None` means "no cheaper tier"; triage then runs on `Model` itself. See [`docs/migrations/6j-B-fastpath-triage.md`](../migrations/6j-B-fastpath-triage.md).
+
 ### Provider rules
 
 - **Receive `ISecretStore` through the builder.** Never read env vars / config files directly. Builders accept the resolved API key as a parameter; the factory pulls the key from `ISecretStore` per-call.
 - **Never log the API key.** Even at trace level. Log a hashed prefix if you must.
-- **Capabilities declared truthfully.** `SupportsToolUse = false` for providers that don't, even if the vendor's docs claim partial support — `false` is the safer floor that won't break the agent loop on unsupported features.
+- **Capabilities declared truthfully.** `SupportsToolUse = false` for providers that don't, even if the vendor's docs claim partial support — `false` is the safer floor that won't break the agent loop on unsupported features. Same for `SupportsTriage`: an over-claimed triage capability spends a call per instruction to fall through.
 - **Author an `IHealthCheck` probe.** Verifies the API key is valid + the endpoint is reachable. Self-register via DI; auto-wired into `/ready`.
 - **Author an `IConfigValidator` probe.** Verifies the configuration is correct at preflight. Refuse to start with helpful error messages when keys / endpoints are misconfigured.
 - **Wire the builder into a `Server.props` extension contract.** Companion files extend `_ToolUpPlatformServerSources`; the consuming server project picks them up via the props chain.
