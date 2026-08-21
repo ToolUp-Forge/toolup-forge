@@ -44,7 +44,14 @@ Events are immutable: there's no `Update` or `Delete`. The store is the durable 
 Opt in via:
 
 ```fsharp
-ServerConfig.EventStore = PersistentBlobBacked (MaxAge (TimeSpan.FromDays 90.))
+let config = {
+    ServerConfig.defaults with
+        EventStore =
+            PersistentBlobBacked {
+                MaxAge = Some(TimeSpan.FromDays 90.)
+                MaxCountPerScope = None
+            }
+}
 ```
 
 ### Module event emission
@@ -61,10 +68,15 @@ Domain events flow through the same store as audit events; the `SourceModule` di
 
 The `IAuditLog` interface sits on top of `IEventStore` and records `AuditEvent` cases under `SourceModule = "_platform.audit"`:
 
-```fsharp
+Both members are scope-first and tupled, and the trail comes back as typed `AuditEvent`s rather than raw store rows:
+
+```fsharp skip=signature
 type IAuditLog =
-    abstract Record: AuditEvent -> Async<unit>
-    abstract GetAuditTrail: scopeId: string -> from: DateTime option -> until: DateTime option -> Async<Event list>
+    abstract Record: scopeId: string * audit: AuditEvent -> Async<unit>
+
+    abstract GetAuditTrail:
+        scopeId: string * dateRange: (DateTime * DateTime) option * eventType: string option ->
+            Async<AuditEvent list>
 ```
 
 Audit events come from the SDK's own bookkeeping, not from module code. Shipped events:
@@ -87,11 +99,16 @@ Every event carries the actor's userId, the affected userId (if different), the 
 
 The `IAuditSink` substrate mirrors every `_platform.audit` event to one or more external sinks the deploying organisation does not control — required for SOC 2 / HIPAA / GDPR Article 30 / SOX compliance.
 
-```fsharp
+A sink declares the schema version it emits, so a downstream consumer can tell a format change from a content change:
+
+```fsharp skip=signature
 type IAuditSink =
     abstract Name: string
-    abstract Deliver: batch: Event list -> Async<Result<unit, AuditSinkError>>
+    abstract SchemaVersion: int
+    abstract Deliver: batch: AuditEnvelope list -> Async<Result<unit, string>>
 ```
+
+`Deliver` takes `AuditEnvelope`s — the sink-facing projection, not the raw store `ModuleEvent` — and the whole batch is retried on `Error`, which is why an implementation must be batch-idempotent.
 
 Wiring:
 

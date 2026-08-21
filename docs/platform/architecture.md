@@ -42,12 +42,11 @@ ServerApp.empty
 
 For AI / RAG, use the flat-superset variants:
 
-```fsharp
+```fsharp skip=fragment
 // + AI
-AIServerApp.create (aiProviderFactory, aiConfigStore)
+AIServerApp.create aiProviderFactory providerProfile
 |> AIServerApp.withConfig config
 |> AIServerApp.addModules modules
-|> AIServerApp.withAITools AITools.allTools
 |> AIServerApp.run
 
 // + RAG (which wraps AI)
@@ -181,11 +180,15 @@ A single SSE endpoint at `/api/notifications` serves all subscribers. The client
 
 `IEventStore` provides append-only, queryable event storage:
 
-```fsharp
+Every read is scope-first, so a caller cannot accidentally query across tenants (GP 4):
+
+```fsharp skip=signature
 type IEventStore =
-    abstract Write: Event -> Async<unit>
-    abstract ReadByType: SourceModule: string -> EventType: string -> Async<Event list>
-    abstract ReadByCorrelation: CorrelationId: Guid -> Async<Event list>
+    abstract Write: ModuleEvent -> Async<unit>
+    abstract ReadAll: scopeId: string -> Async<ModuleEvent list>
+    abstract ReadByType: scopeId: string * eventType: string -> Async<ModuleEvent list>
+    abstract ReadBySource: scopeId: string * sourceModule: string -> Async<ModuleEvent list>
+    abstract ListScopes: unit -> Async<string list>
 ```
 
 Default `InMemoryEventStore` for dev; `PersistentEventStore` (blob-backed, optional retention policy) for production. Modules emit domain events; the SDK emits platform events under `_platform.*` source modules.
@@ -244,7 +247,11 @@ Custom resolvers (per-`(scopeId, userId)`, BYOK, KMS-backed) plug in against the
 
 Probes implement `IHealthCheck`:
 
+`HealthKind` and `HealthResult` live in the `ToolUp.Platform.HealthChecks` module alongside the interface:
+
 ```fsharp
+open ToolUp.Platform.HealthChecks
+
 type IHealthCheck =
     abstract Name: string
     abstract Kind: HealthKind  // Liveness | Readiness

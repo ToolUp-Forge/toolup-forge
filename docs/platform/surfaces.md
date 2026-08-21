@@ -194,17 +194,19 @@ Named helpers cover the common cases:
 
 Modules carry a `DefaultSurfaceRequirement`; individual endpoints can override:
 
-```fsharp
+An override is declared on the MODULE, keyed by method + path, rather than threaded through a per-route builder — so the module's whole surface posture is readable in one place:
+
+```fsharp skip=fragment
 ServerModule.create "Forms"
-|> ServerModule.withDefaultRequirement SurfaceRequirement.userOrTeam
-|> ServerModule.addRoute (
-    RouteHandler.create "/api/forms/list" GET listFormsHandler)
-|> ServerModule.addRoute (
-    RouteHandler.create "/api/forms/public/submit" POST publicSubmitHandler
-    |> RouteHandler.withRequirement SurfaceRequirement.claimBearerOnly)
-|> ServerModule.addRoute (
-    RouteHandler.create "/api/forms/admin/delete" DELETE deleteFormHandler
-    |> RouteHandler.withRequirement SurfaceRequirement.teamScoped)
+|> ServerModule.withDefaultSurfaceRequirement SurfaceRequirement.userOrTeam
+|> ServerModule.withRouteSurfaceRequirement
+    "POST"
+    "/api/forms/public/submit"
+    SurfaceRequirement.claimBearerOnly
+|> ServerModule.withRouteSurfaceRequirement
+    "DELETE"
+    "/api/forms/admin/delete"
+    SurfaceRequirement.teamScoped
 ```
 
 When no requirement is declared anywhere (no module default, no route override), the platform applies `SurfaceRequirement.userOrTeam`. Fail-closed is the rule — a forgotten declaration produces a 403 the operator notices, not a silent public exposure.
@@ -298,7 +300,7 @@ Five archetypes drawn from real consumer deployment shapes. Each is a complete a
 
 Authenticated multi-module tool, no public surfaces. The most common shape.
 
-```fsharp
+```fsharp skip=fragment
 let config = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 // referenceApp declares Surfaces = Some Surfaces.individual
 
@@ -315,7 +317,7 @@ ServerApp.empty
 
 Two cooperating deployments addressing each other via peer-bearer routes. Surface model is `Surfaces.individual` on each side; peer-bearer authentication is orthogonal to the Subject model — peer requests carry delegated authority from another deployment, not "a subject acting on its own behalf", and so flow through the `PeerBearerAuthMiddleware` pipeline unchanged.
 
-```fsharp
+```fsharp skip=fragment
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
