@@ -227,18 +227,22 @@ Same Notification cases ride both paths:
 
 ```fsharp
 type Notification =
-    | SystemMessage of message: string * severity: Severity   // pub/sub
-    | JobProgress of jobId: JobId * progress: float           // pub/sub
-    | JobComplete of jobId: JobId * result: JobResult         // pub/sub
-    | RefreshData of dataTypeId: string                       // pub/sub
-    | CustomNotification of kind: string * payload: JsonValue // pub/sub
-    | TransactionalEmail of EmailPayload                      // out-of-band via INotificationSink
-    | TransactionalSms of SmsPayload                          // out-of-band via INotificationSink
-    | MobilePush of PushPayload                               // out-of-band via INotificationSink
+    | SystemMessage of level: SystemMessageLevel * text: string          // pub/sub
+    | JobCompleted of jobId: Guid * status: string * resultLink: string option  // pub/sub
+    | DataRefreshed of dataTypeId: string * scopeId: string              // pub/sub
+    | TeamActivity of kind: string * summary: string                     // pub/sub
+    | ModuleAction of moduleId: string * actionKey: string * payloadJson: string  // pub/sub
+    | CustomNotification of key: string * payloadJson: string            // pub/sub
+    | MembershipChanged of MembershipChangedPayload                      // pub/sub, platform-reserved
+    | TransactionalEmail of EmailEnvelope                                // out-of-band via INotificationSink
+    | TransactionalSms of SmsEnvelope                                    // out-of-band via INotificationSink
+    | MobilePush of PushEnvelope                                         // out-of-band via INotificationSink
 ```
 
+Payloads are JSON **strings**, not a parsed `JsonValue` — the wire shape stays opaque to the SDK so a subscriber decodes it with its own converter set.
+
 `DispatchingNotificationChannel` decorator routes by case:
-- `SystemMessage` / `JobProgress` / `JobComplete` / `RefreshData` / `CustomNotification` → publish over `INotificationChannel` (pub/sub).
+- `SystemMessage` / `JobCompleted` / `DataRefreshed` / `TeamActivity` / `ModuleAction` / `CustomNotification` / `MembershipChanged` → publish over `INotificationChannel` (pub/sub).
 - `TransactionalEmail` / `TransactionalSms` / `MobilePush` → enqueue to `TransactionalDispatcher` (out-of-band).
 
 The decorator is auto-wired by `ServerApp.run` when transactional sinks are registered. Apps without sinks skip the dispatcher entirely.

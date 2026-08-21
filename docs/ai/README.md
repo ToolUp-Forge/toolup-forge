@@ -43,32 +43,43 @@ Add the packages:
 
 Wire the server composition root:
 
-```fsharp
+The app assembles the `AIProviderBuilder` from the provider package's own identifiers (see [`companions/ai-providers.md`](../companions/ai-providers.md)), then hands it to the factory:
+
+```fsharp skip=fragment
 open ToolUp.AI
 
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder ]
-        aiConfigStore
+        [ claudeBuilder ]
+        providerProfile      // IProviderProfile — the platform-wide BYOK store
         secretStore
-        PlatformOnly
+        PlatformOnly         // AIFallbackPolicy
+        platformProviders    // DefaultAIProviderFactory.AIPlatformProvider list
+        None                 // IPlatformAIKeyStore option — auto-promoted when None
 
-AIServerApp.create (aiProviderFactory, aiConfigStore)
+AIServerApp.create aiProviderFactory providerProfile
 |> AIServerApp.withConfig serverConfig
 |> AIServerApp.withAuth authProvider
 |> AIServerApp.addModules modules
-|> AIServerApp.withAITools AITools.allTools
 |> AIServerApp.run
 ```
 
+AI tools are not passed at this level — each module contributes its own through `ServerModule.withAITools`, and they aggregate on the inner `ServerApp`.
+
 Wire the client composition root:
 
-```fsharp
-let aiMode = ConfiguredAIAssistant { Name = "Aria"; Icon = "/svg/spark.svg"; ShowSidePanel = true }
+```fsharp skip=fragment
+open ToolUp.AI.Client
 
-AIClientConfig.withAIAssistant aiMode clientConfig modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+let aiMode =
+    ConfiguredAIAssistant {
+        Name = "Aria"
+        Icon = "/svg/spark.svg"
+        ShowSidePanel = true
+    }
+
+// `run` owns the whole Elmish program — mounting included.
+AIClientConfig.run aiMode clientConfig modules
 ```
 
 That's it. The agent loop, SSE endpoint, conversation persistence, and side-panel UI are now in place. See [getting-started.md](getting-started.md) for the end-to-end walkthrough.

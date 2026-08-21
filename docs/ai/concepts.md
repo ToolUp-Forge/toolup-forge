@@ -50,7 +50,11 @@ The default builder composes three layers:
 2. **Team / deployment layer** — optional; reads team profile from `IConfigStore` or team-scoped `IBlobStorage`. Lets deployments inject team-private context ("the current team is Acme Corp, category 'Health & Beauty'").
 3. **Module layer** — when the user chats from a module's view, the active module's `ModuleAIContext.SystemPrompt` is injected via `SystemPromptBuilder.activeModuleContext`.
 
-```fsharp
+The builder combinators live in the `ToolUp.AI.SystemPromptBuilder` module, which nests a module of the same name — so a composition root opens it rather than reaching through `ToolUp.AI` alone:
+
+```fsharp skip=fragment
+open ToolUp.AI.SystemPromptBuilder
+
 let teamAwarePrompt =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic "You are an analytics assistant. ..."

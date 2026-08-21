@@ -84,15 +84,17 @@ Use when:
 
 Setup:
 
-```fsharp
+`ToolUp.Storage.AzureBlobStorage` is the module itself, so `create` is called unqualified after the open, and it already returns `IBlobStorage`:
+
+```fsharp skip=fragment
 open ToolUp.Storage.AzureBlobStorage
 
 let storage =
-    AzureBlobStorage.create {
+    create {
         AccountName = "myappdata"
         ContainerName = "tenant-blobs"
         // Authentication via DefaultAzureCredential (env vars, managed identity, etc.)
-    } :> IBlobStorage
+    }
 ```
 
 `AzureBlobEncryptionAtRestValidator` calls `GetServiceProperties`; emits `Warning` if encryption isn't enabled.
@@ -105,14 +107,14 @@ Use when:
 
 Setup:
 
-```fsharp
-open ToolUp.Storage.GoogleCloud
+```fsharp skip=fragment
+open ToolUp.Storage.GoogleCloudStorage
 
 let storage =
-    GoogleCloudStorage.create {
+    create {
         ProjectId = "my-gcp-project"
         BucketName = "my-app-data"
-    } :> IBlobStorage
+    }
 ```
 
 `GcsEncryptionAtRestValidator` calls `GetBucket`; emits `Warning` if encryption isn't enabled. CMEK (customer-managed encryption keys) supported via bucket configuration.
@@ -163,7 +165,7 @@ See [`platform/storage.md`](../platform/storage.md) for the full key-resolver mo
 
 For a backend not covered (Cloudflare R2, MinIO, S3-compatible object store, etc.):
 
-```fsharp
+```fsharp skip=fragment
 type MinioStorage(client: AmazonS3Client, bucket: string) =
     interface IBlobStorage with
         member _.Save(container, objectId, contents) = async {

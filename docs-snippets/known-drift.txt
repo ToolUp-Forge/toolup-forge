@@ -5,30 +5,6 @@
 # The hash is of the block's own text, so editing a block RETIRES its
 # entry and the block must then compile. This list may only shrink.
 
-1aea7468 docs/ai/README.md#2 (line 47) — error FS0039: The value, constructor, namespace or type 'builder' is not defined.
-c0c33d7e docs/ai/README.md#3 (line 67) — error FS0001: The type 'string' is not compatible with the type 'Feliz.ReactElement'
-eda80478 docs/ai/concepts.md#2 (line 54) — error FS0039: The value, constructor, namespace or type 'compose' is not defined.
-2c62a56e docs/ai/extending.md#3 (line 80) — error FS0039: The namespace or module 'MyVendor' is not defined.
-a8a348cd docs/ai/extending.md#8 (line 278) — error FS1129: The record type 'AIToolDefinition' does not contain a label 'Executor'.
-ca804c84 docs/ai/extending.md#11 (line 368) — error FS0039: The namespace 'Tests' is not defined. Maybe you want one of the following: Teams
-168579c3 docs/ai/extending.md#12 (line 388) — error FS0039: The value, namespace, type or module 'IClientToolDispatchContract' is not defined. Maybe you want one of the following: IClientToolAuthorizer
-51c21531 docs/ai/extending.md#16 (line 506) — error FS0039: The namespace or module 'Expecto' is not defined.
-48c589ed docs/ai/getting-started.md#3 (line 39) — error FS0039: The value or constructor 'EncryptedSecretStore' is not defined.
-b56f7705 docs/ai/getting-started.md#4 (line 59) — error FS0039: The namespace 'AIProviders' is not defined.
-ab2d9163 docs/ai/getting-started.md#5 (line 82) — error FS0001: The type ''a * 'b' is not compatible with the type 'IAIProviderFactory'
-1d8edebe docs/ai/getting-started.md#6 (line 106) — error FS0001: The type 'string' is not compatible with the type 'Feliz.ReactElement'
-0d80f311 docs/companions/auth-providers.md#5 (line 145) — error FS0039: The value or constructor 'issuerUrl' is not defined.
-2ca08796 docs/companions/auth-providers.md#6 (line 177) — error FS0039: The value, constructor, namespace or type 'register' is not defined.
-0e840b45 docs/companions/auth-providers.md#9 (line 288) — error FS0039: The namespace 'EntraExternalId' is not defined.
-c34e32b8 docs/companions/embedding-providers.md#6 (line 119) — error FS0039: The value, namespace, type or module 'serviceProvider' is not defined. Maybe you want one of the following: ServerResident Server ServerConfigOverrides ServerModule ServiceStatusBoardMode
-79d11185 docs/companions/embedding-providers.md#7 (line 137) — error FS0039: The value or constructor 'secretStore' is not defined. Maybe you want one of the following: SecretStore SecretStoreSeam Secrets SecretClass SecretRequirement
-68715e6d docs/companions/media-library.md#1 (line 23) — error FS0039: The value, namespace, type or module 'MediaLibraryServerApp' is not defined. Maybe you want one of the following: MediaLibraryMode MediaLibraryOptions MediaDeleteError MediaId
-393871cd docs/companions/media-library.md#3 (line 110) — error FS0039: The namespace 'Media' is not defined.
-026528ac docs/companions/media-library.md#4 (line 131) — error FS0039: The namespace 'Media' is not defined.
-8a2d6a6c docs/companions/notification-channels.md#13 (line 229) — error FS0039: The type 'Severity' is not defined.
-d674f37d docs/companions/storage-providers.md#3 (line 88) — error FS0039: The type 'AzureBlobStorage' does not define a field, constructor, or member named 'create'.
-ae9127c4 docs/companions/storage-providers.md#4 (line 109) — error FS0039: The namespace 'GoogleCloud' is not defined. Maybe you want one of the following: GoogleCloudStorage GoogleCloudStorageHealth
-22dd6549 docs/companions/storage-providers.md#6 (line 167) — error FS0039: The type 'IBlobStorage' is not defined. Maybe you want one of the following: IJobStore
 39830fba docs/design/mixed-mode-platform.md#2 (line 98) — error FS0039: The type 'IStorageScopeResolver' is not defined. Maybe you want one of the following: StorageScope
 da63d425 docs/design/mixed-mode-platform.md#3 (line 121) — error FS0039: The value, namespace, type or module 'PlatformMode' is not defined. Maybe you want one of the following: PlatformRole PlatformAdmin Platform PlatformID PlatformAdminUI
 b094ac18 docs/design/mixed-mode-platform.md#7 (line 379) — error FS0039: The type 'PersistencePolicy' is not defined. Maybe you want one of the following: Persistence VersioningPolicy

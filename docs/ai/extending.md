@@ -80,17 +80,17 @@ let builder: AIProviderBuilder = {
 
 ### Wire into the consuming app
 
-```fsharp
+```fsharp skip=fragment
 open MyVendor.AIProvider
 
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder
-          OpenAIProvider.builder
-          MyVendor.AIProvider.builder ]   // append your builder
-        aiConfigStore
+        [ claudeBuilder; openAiBuilder; MyVendor.AIProvider.builder ]   // append yours
+        providerProfile      // IProviderProfile
         secretStore
-        AllowUserProviders
+        PermissiveWithPlatformFallback   // AIFallbackPolicy
+        platformProviders
+        None
 ```
 
 No other wiring changes. Users can now register a `MyVendor` provider instance via the AI Settings UI, selecting `myvendor` from the provider dropdown.
@@ -286,37 +286,62 @@ match result with
 
 ### Server-side tools
 
+`AIToolDefinition` is **metadata only** — it lives in `ToolUp.Platform.Core` so a module can declare tools without referencing the AI companion, and the executor is paired to it at registration time. `Parameters` is a list of one record per parameter, each with a JSON-Schema type name:
+
 ```fsharp
-let myAnalysisTool : AIToolDefinition = {
+let myAnalysisTool: AIToolDefinition = {
     Name = "my_module.analyse"
     Description = "Run analysis over selected items in the active dataset."
-    Parameters = {
-        Properties = [
-            "item_ids", StringArray, "List of item IDs"
-            "metric", EnumP ["revenue"; "units"; "margin"], "Metric to compute"
-            "weeks", Integer, "Weeks of history"
-        ]
-    }
-    Executor = fun args -> async {
-        let itemIds = args |> JsonValue.getStringArray "item_ids"
-        let metric = args |> JsonValue.getString "metric"
-        let weeks = args |> JsonValue.getInt "weeks"
-
-        let! result = MyModule.Server.runAnalysis itemIds metric weeks
-        return ToolResult.ok (Json.serialize result)
-    }
-    Visibility = ServerSide
-    Capabilities = ToolCapabilities.defaults
+    Parameters = [
+        {
+            Name = "item_ids"
+            Type = "array"
+            Description = "List of item IDs."
+            Required = true
+            Default = None
+        }
+        {
+            Name = "metric"
+            Type = "string"
+            Description = "Metric to compute — one of 'revenue', 'units', 'margin'."
+            Required = true
+            Default = None
+        }
+        {
+            Name = "weeks"
+            Type = "number"
+            Description = "Weeks of history."
+            Required = false
+            Default = Some "12"
+        }
+    ]
+    SourceModule = "MyModule"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+    IsLiveInterface = false
 }
 ```
 
-Register via `ServerModule.withAITools`:
+The executor is `HttpContext -> string -> Async<string>` — raw JSON in, raw JSON out — and is registered **as a pair** with the definition. Helpers in `ToolUp.AI.ToolHelpers` (`requireString`, `requireDecimal`, `fableSerialize`) cover the recurring argument-extraction and serialisation boilerplate:
 
 ```fsharp skip=fragment
+open System.Text.Json
+open ToolUp.AI.ToolHelpers
+
+let myAnalysisExecutor (_ctx: HttpContext) (argsJson: string) : Async<string> = async {
+    let args = JsonDocument.Parse(argsJson).RootElement
+    let metric = requireString args "metric" "one of 'revenue', 'units', 'margin'"
+    let weeks = requireDecimal args "weeks" "weeks of history"
+
+    let! result = MyModule.Server.runAnalysis metric (int weeks)
+    return fableSerialize result
+}
+
 let myModule =
     ServerModule.create "MyModule"
     |> ServerModule.withGuardedApi myApi
-    |> ServerModule.withAITools [ myAnalysisTool ]
+    |> ServerModule.withAITools [ myAnalysisTool, myAnalysisExecutor ]
 ```
 
 The agent loop sees the tool in `GetAvailableTools`; the LLM can call it. When called, the executor runs server-side in-process with the caller's `AccessContext` available via the ambient context.
@@ -326,21 +351,21 @@ The agent loop sees the tool in `GetAvailableTools`; the LLM can call it. When c
 The substrate (`ClientToolRuntime` + `ClientToolDispatch` + `AICancellationRegistry`) is generic — any companion can register `ClientResident` tools. A typical use is to let the LLM drive the UI (set form fields, click buttons, select rows, navigate). Server-side, a `ClientResident` tool dispatches to the client over SSE; the browser runs the tool and returns the result.
 
 ```fsharp skip=fragment
-let setFieldTool : AIToolDefinition = {
+let setFieldTool: AIToolDefinition = {
     Name = "_platform.ui.set_field"
     Description = "Set the value of a field in the current page."
-    Parameters = ...
-    Executor = fun args -> async {
-        // Dispatch to the client via ClientToolDispatch
-        let clientResponse = ClientToolDispatch.dispatch ...
-        return clientResponse |> ToolResult.fromClient
-    }
-    Visibility = ClientResident
-    Capabilities = { ToolCapabilities.defaults with RequiresFullPage = true }
+    Parameters = [ (* one record per parameter *) ]
+    SourceModule = "MyCompanion"
+    EmitsActions = None
+    Location = ClientResident
+    Surface = FullPageOnly
+    IsLiveInterface = true
 }
 ```
 
-`RequiresFullPage = true` means the tool only works when the user is using the full-page AI assistant (Mode 2 — "watch me work"). The side panel (Mode 1 — "just do it") doesn't support client-resident tools because the side panel doesn't have the active-page context.
+A `ClientResident` tool still registers an executor alongside its definition, but the agent loop branches on `Location` and dispatches over SSE **before** reaching it — so the paired executor is a stub that fails loudly if it is ever called, which would mean a regression in the dispatch wiring. The reference companion at `src/AI.Samples/ToolUp.AI.SampleClientTool.Server/` shows the shape.
+
+`Surface = FullPageOnly` means the tool is filtered out of the per-turn tool list when the chat comes from the side panel (Mode 1 — "just do it"), which has no active-page context to drive. `IsLiveInterface = true` declares that the tool reads or drives browser-resident state, which is what a RAG deployment's prompt framing keys off — `Location = ClientResident` implies it, so the flag exists for the case `Location` cannot express: a *server*-resident tool that nonetheless projects live interface state.
 
 The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the dispatch lifecycle — opens a session per tool call, waits for the result, returns it to the server. Cancellation cascades both ways.
 
@@ -376,7 +401,7 @@ Any companion implementing `IClientToolAuthorizer` must clear the SDK's portabil
 
    Bind it from your own test pack by handing the pack a fixture: the authorizer plus two anchor calls — one the impl MUST allow and one the impl MUST deny:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.Tests.Contracts
 
    let tests =
@@ -396,7 +421,7 @@ Any companion implementing `IClientToolAuthorizer` must clear the SDK's portabil
 
    Bind it with the same fixture-style ergonomics — the pack owns the registry, dispatch registry, `IEventStore`, `HttpContext`, and scripted provider:
 
-   ```fsharp
+   ```fsharp skip=fragment
    let dispatchTests =
        IClientToolDispatchContract.tests {
            Name = "MyCompanyAuthorizer + handler"
@@ -515,7 +540,7 @@ For pure-DLL companions (no source injection), package as a regular .NET library
 
 The SDK ships `ToolUp.Platform.Tests` with reusable test helpers. For provider integration tests:
 
-```fsharp
+```fsharp skip=fragment
 open Expecto
 open ToolUp.AI
 open MyVendor.AIProvider

@@ -141,7 +141,7 @@ The non-metered constructors (`fromConfig` / `fromConfigWith` / `AuthProvider.fr
 
 The provider's signature-verification step dispatches on the JWT header's `alg` field. The deployment-trusted set is controlled by `AuthConfig.AcceptedAlgorithms` — `None` resolves to `[ RS256 ]` (the historical default; every existing consumer is byte-for-byte unchanged). Operators opt in to additional algorithms explicitly:
 
-```fsharp
+```fsharp skip=fragment
 let authConfig = {
     Issuer = Some issuerUrl
     Audience = Some audience
@@ -173,21 +173,27 @@ Browser-side counterpart to the OIDC server provider. Implements OAuth 2.0 Autho
 
 Setup:
 
-```fsharp
-open ToolUp.AuthProviders.Oidc.OidcClient
+The companion exports a **handler** the consumer registers; there is no `register` side effect to call, and the OIDC config rides `AuthUIMode` rather than a separate provider value.
+
+```fsharp skip=fragment
 open ToolUp.AuthProviders.Oidc.OidcRegister
 
-OidcRegister.register
-    { Issuer = "https://your-issuer.example.com"
-      ClientId = "your-client-id"
-      RedirectUri = "https://your-app.example.com/callback"
-      Scope = "openid profile email" }
+let oidcConfig =
+    OidcUIConfig.defaults
+        "https://your-issuer.example.com"
+        "your-client-id"
+        "https://your-app.example.com/callback"
+    // Scopes default to [ "openid"; "profile"; "email" ].
 
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        Mode = Individual
-        AuthUI = ConfiguredAuthUI OidcClient.uiProvider }
+        AuthUI = OidcAuthUI oidcConfig
+        Handlers = {
+            ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ OidcRegister.handler ]
+                SignOutHandler = Some(OidcRegister.signOutHandler oidcConfig)
+        } }
     modules
 ```
 
@@ -284,7 +290,7 @@ Browser-side counterpart to the External ID server provider. Wraps `ToolUp.AuthP
 
 Wired via the SDK's `CustomAuthUI` extension point (no edit to `AuthUIMode` required):
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders.EntraExternalId
 
 let entraConfig =
@@ -296,7 +302,6 @@ let entraConfig =
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        Mode = MultiTeam
         AuthUI = CustomAuthUI { Wrap = EntraExternalIdAuthUI.wrap entraConfig } }
     modules
 ```

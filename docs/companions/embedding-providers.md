@@ -119,16 +119,16 @@ Every indexed chunk carries `EmbeddingVersion` metadata:
 
 When you swap providers (or models), enqueue the affected scopes for re-embedding:
 
-```fsharp
+```fsharp skip=fragment
 let queue = serviceProvider.GetRequiredService<ReembeddingQueue>()
-do! queue.Enqueue (Team teamId)
+do! queue.Enqueue(Team teamId)
 ```
 
 The `ReembeddingBackgroundService`:
 1. Lists all chunks in the scope via `IVectorStore.ListChunks`.
 2. Filters chunks whose `EmbeddingVersion` doesn't match the current provider's.
 3. Re-embeds each via the new provider.
-4. Replaces the old vector via `IVectorStore.Index` (overwrite).
+4. Replaces the old vector via `IVectorStore.Upsert`, which is idempotent on `(scope, chunkId)`.
 5. Emits `KnowledgeChunkReembedded` event.
 
 Mixing providers within one corpus is structurally allowed but degrades retrieval — different models produce vectors in different spaces; cosine similarity between them is meaningless. Always re-embed the full scope after a provider change.
@@ -137,8 +137,10 @@ Mixing providers within one corpus is structurally allowed but degrades retrieva
 
 All providers receive `ISecretStore` through their `create` function:
 
-```fsharp
-let embedder = OpenAIEmbeddingProvider.create secretStore :> IEmbeddingProvider
+```fsharp skip=fragment
+// The provider package is a top-level module, and `create` already returns
+// IEmbeddingProvider.
+let embedder = OpenAIEmbeddingProvider.create secretStore
 ```
 
 The provider reads the API key per call from `ISecretStore` under the `_platform` scope. Key names are provider-specific (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). Rotation is transparent — write the new key to `ISecretStore`; the next call reads it.

@@ -35,7 +35,7 @@ Provider API keys are resolved per-call from `ISecretStore` — never hardcoded,
 
 Easiest setup for local dev: `FileSecretStore` writes encrypted JSON to disk under `data/secrets/`.
 
-```fsharp
+```fsharp skip=fragment
 let masterKey =
     Environment.GetEnvironmentVariable("TOOLUP_SECRET_MASTER_KEY")
     |> Option.ofObj
@@ -45,68 +45,67 @@ let secretStore =
     EncryptedSecretStore(FileSecretStore(), masterKey) :> ISecretStore
 
 // One-time setup — store the API key under the platform scope.
-do secretStore.SetSecret("_platform", "ANTHROPIC_API_KEY", "<your-key>")
-   |> Async.RunSynchronously
+do
+    secretStore.SetSecret("_platform", "ANTHROPIC_API_KEY", "<your-key>")
+    |> Async.RunSynchronously
 ```
 
 Production: replace `FileSecretStore` with `ToolUp.Secrets.AzureKeyVault` (or a custom `ISecretStore` against AWS Secrets Manager / GCP Secret Manager / HashiCorp Vault).
 
 ## 3. Wire the provider factory
 
-The factory translates "this request, this user" into a configured `IAIProvider` instance. It reads the user's BYOK config (if any) from `IUserAIConfigStore`, falls back to the platform-default if BYOK is disabled or the user hasn't configured one, and pulls the API key from `ISecretStore`.
+The factory translates "this request, this user" into a configured `IAIProvider` instance. It reads the routed entry (if any) from `IProviderProfile`, falls back to a wired platform provider when the policy allows it, and pulls the API key from `ISecretStore`.
 
-```fsharp
+Provider packages are top-level modules exporting `ProviderId` / `DefaultModel` / `KnownModels` / `createWithApiKeyAndModel`; the app assembles each `AIProviderBuilder` from those (see [`companions/ai-providers.md`](../companions/ai-providers.md) for the full literal).
+
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.AI
-open ToolUp.AIProviders.Claude
-open ToolUp.AIProviders.OpenAI
-
-let aiConfigStore =
-    DefaultUserAIConfigStore.create blobStorage secretStore :> IUserAIConfigStore
 
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder; OpenAIProvider.builder ]
-        aiConfigStore
+        [ claudeBuilder; openAiBuilder ]
+        providerProfile
         secretStore
-        PlatformOnly    // or AllowUserProviders for full BYOK
+        PlatformOnly         // AIFallbackPolicy
+        platformProviders
+        None
 ```
 
-`BYOKMode`:
-- `PlatformOnly` — every user uses the deployment's API key. Simplest; deployment carries 100% of cost.
-- `AllowUserProviders` — users may supply their own provider via the AI Settings UI. Each call uses the user's key (if configured), falling back to the platform default. Cost shifts to users for those who BYOK.
+`AIFallbackPolicy`:
+- `PlatformOnly` — user and team configuration is ignored; every request uses the deployment's key. Simplest; the deployment carries 100% of cost.
+- `PermissiveWithPlatformFallback` — BYOK where configured, platform provider otherwise.
+- `StrictBYOK` — the platform never pays; missing configuration surfaces `NoProviderConfigured`.
 
 ## 4. Compose the AI server app
 
-```fsharp
+```fsharp skip=fragment
 [<EntryPoint>]
 let main _ =
-    AIServerApp.create (aiProviderFactory, aiConfigStore)
+    AIServerApp.create aiProviderFactory providerProfile
     |> AIServerApp.withConfig {
         ServerConfig.defaults with
             Port = 5000
-            Mode = Individual
+            Surfaces = Surfaces.individual
     }
     |> AIServerApp.withAuth authProvider
     |> AIServerApp.withStorage blobStorage
     |> AIServerApp.addModules modules
-    |> AIServerApp.withAITools AITools.allTools
     |> AIServerApp.run
 ```
 
-`AIServerApp` is a flat superset of `ServerApp` — every `ServerApp.with*` is mirrored on `AIServerApp`, plus AI-specific helpers (`withAIFactory`, `withAIConfigStore`, `withAITools`, `withAIConfig`, `withModuleAIContexts`). `AIServerApp.run` fails loudly if `aiProviderFactory` or `aiConfigStore` is missing — the create overload above requires both.
+`AIServerApp` is a flat superset of `ServerApp` — every `ServerApp.with*` is mirrored on `AIServerApp`, plus AI-specific helpers (`withProviderProfile`, `withPlatformProvider`, `withPlatformAIKeyStore`, `withAIConfig`, `withModuleAIContexts`). Both `create` arguments are required, so there is no partially-configured state to fail on at `run`.
 
-`AITools.allTools` is the default tool registry; pass `[]` for a tool-less deployment, or a custom list to add module-declared tools. See [extending.md](extending.md).
+Tools are not registered here: each module declares its own with `ServerModule.withAITools`, and they aggregate on the inner `ServerApp`. See [extending.md](extending.md).
 
 ## 5. Wire the client wrapper
 
 In the client entry point:
 
-```fsharp
-open ToolUp.Elmish
-open ToolUp.Elmish.React
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.AI.Client
 
 let aiMode =
     ConfiguredAIAssistant {
@@ -115,13 +114,14 @@ let aiMode =
         ShowSidePanel = true
     }
 
-let clientConfig = { ClientConfig.defaults with AppName = "MyApp"; Mode = Individual }
+let clientConfig = { ClientConfig.defaults with AppName = "MyApp" }
 let modules = [ (* your module registrations *) ]
 
-AIClientConfig.withAIAssistant aiMode clientConfig modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+// `run` owns the whole Elmish program — mounting included.
+AIClientConfig.run aiMode clientConfig modules
 ```
+
+`ClientConfig` carries no `Mode` field; deployment shape is expressed server-side by `ServerConfig.Surfaces`.
 
 `AIAssistantMode`:
 - `NoAIAssistant` — no AI module or side panel. Use `Client.run` directly instead.

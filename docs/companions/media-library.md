@@ -19,8 +19,9 @@ that a media item serves into.
 `ToolUp.MediaLibrary` is opt-in (GP 13). Set the mode and compose with
 `MediaLibraryServerApp` instead of `ServerApp`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.MediaLibrary
+open ToolUp.MediaLibrary.MediaCompose
 
 let config = { ServerConfig.defaults with MediaLibrary = EnabledMediaLibrary }
 
@@ -106,8 +107,8 @@ stores the original and serves a single-file progressive download with
 Shells out to the system `ffmpeg` / `ffprobe` binaries (must be on
 `PATH`; ships no bundled binary):
 
-```fsharp
-open ToolUp.Media.FFmpeg
+```fsharp skip=fragment
+open ToolUp.Media.FFmpeg.FFmpegMediaProvider
 
 app
 |> MediaLibraryServerApp.withDerivation (FFmpegMediaProvider.create None None)        // poster + probe
@@ -127,8 +128,8 @@ The seam for cloud-managed transcode (AWS MediaConvert, Mux, Coconut, …).
 The SDK ships **no cloud-vendor SDK**; the deployment supplies a `submit`
 callback that runs the provider job and returns the produced HLS files:
 
-```fsharp
-open ToolUp.Media.CloudTranscode
+```fsharp skip=fragment
+open ToolUp.Media.CloudTranscode.CloudTranscodeProvider
 
 let transcoder =
     CloudTranscodeProvider.create (fun originalBytes mimeType -> async {
