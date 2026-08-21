@@ -43,21 +43,6 @@ d4338630 docs/design/mixed-mode-platform.md#27 (line 1027) — error FS0039: The
 97543ac9 docs/design/mixed-mode-platform.md#33 (line 1266) — error FS1129: The record type 'RateLimitPolicy' does not contain a label 'Window'. Maybe you want one of the following: WindowSeconds
 d10c7b7d docs/design/mixed-mode-platform.md#42 (line 1840) — error FS0039: The value, constructor, namespace or type 'instance' is not defined.
 092e41ec docs/entity-store/relationships.md#2 (line 81) — error FS0039: The type 'Order' is not defined.
-22568b0c docs/forms/README.md#3 (line 96) — error FS0039: The value, constructor, namespace or type 'render' is not defined. Maybe you want one of the following: renderInput renderMatrix
-29b55368 docs/forms/api-reference.md#10 (line 506) — error FS0039: The type 'TransitionEvent' is not defined. Maybe you want one of the following: TranslationKey Translations TransactionalRetryPolicy
-2a0dbc3e docs/forms/api-reference.md#14 (line 660) — error FS0039: The type 'AnalysisResult' is not defined. Maybe you want one of the following: AnalyserOutput AnalysisRunPayload
-44ca8289 docs/forms/api-reference.md#21 (line 740) — error FS0039: The value, namespace, type or module 'Cmd' is not defined.
-76c17fe6 docs/forms/extending.md#4 (line 65) — error FS0039: The value or constructor 'Validators' is not defined. Maybe you want one of the following: validate ValidationRule ValidationFailed FormValidator
-543b8e63 docs/forms/extending.md#5 (line 79) — error FS0001: This expression was expected to have type 'WorkflowContext' but is a tuple of type ''a * 'b'
-3c00ec61 docs/forms/extending.md#7 (line 114) — error FS0039: The record label 'Guard' is not defined.
-63458254 docs/forms/extending.md#8 (line 128) — error FS0001: This expression was expected to have type 'WorkflowContext' but is a tuple of type ''a * 'b'
-1b64542f docs/forms/extending.md#9 (line 148) — error FS0039: The type 'IEmailService' is not defined.
-661ce037 docs/forms/extending.md#16 (line 354) — error FS0039: The value or constructor 'PostgresActionLedger' is not defined.
-bb14b244 docs/forms/extending.md#18 (line 429) — error FS0039: The type 'IAIProvider' is not defined. Maybe you want one of the following: TimeProvider IAuthProvider
-7a2c2dcb docs/forms/extending.md#22 (line 549) — error FS0039: The value, namespace, type or module 'IShareTokenRateLimiterContract' is not defined. Maybe you want one of the following: IShareTokenRateLimiter ShareTokenRateLimit IShareTokenStore
-c13c2204 docs/forms/getting-started.md#7 (line 161) — error FS1129: The record type 'ServerConfig' does not contain a label 'AuditLogMode'. Maybe you want one of the following: AuditLog
-ca21b125 docs/forms/getting-started.md#10 (line 273) — error FS0039: The value, constructor, namespace or type 'render' is not defined.
-6c06ff80 docs/forms/getting-started.md#13 (line 336) — error FS0003: This value is not a function and cannot be applied. It has type 'ShareTokenStoreMode', which does not accept arguments.
 4649f055 docs/graph/age.md#2 (line 57) — error FS0039: The namespace 'AGE' is not defined.
 5841373a docs/graph/age.md#3 (line 107) — error FS0039: The value, namespace, type or module 'AgeGraphStore' is not defined. Maybe you want one of the following: IGraphStore
 554b68b7 docs/graph/age.md#4 (line 129) — error FS0750: This construct may only be used within computation expressions

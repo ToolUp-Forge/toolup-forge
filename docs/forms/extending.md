@@ -62,38 +62,59 @@ The per-field `CustomValidator` shape is `string -> Result<unit, string>` — sy
 ### Multiple custom validators on one field
 
 ```fsharp
-Validators = [
-    Regex (@"^[^@\s]+@[^@\s]+\.[^@\s]+$", Some "valid email address")
-    Custom "blocklist-check"
-    Custom "domain-allowlist"
-]
+let emailField: FieldSchema = {
+    Key = "email"
+    DisplayName = "Email"
+    Description = None
+    Kind = TextField None
+    Required = true
+    Validators = [
+        Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", Some "valid email address")
+        Custom "blocklist-check"
+        Custom "domain-allowlist"
+    ]
+}
 ```
 
 Run in order. The validator engine accumulates every failure across every rule and every field — no short-circuit, so the UI shows all problems at once.
 
 ## Workflow guards
 
-Predicates that veto a transition. Receive `(Submission * AccessContext)`; return `Async<Result<unit, string>>`. `Ok ()` allows the transition; `Error reason` surfaces as `FormError.TransitionDenied reason`.
+Predicates that veto a transition. Receive a `WorkflowContext`; return `Async<Result<unit, string>>`. `Ok ()` allows the transition; `Error reason` surfaces as `FormError.TransitionDenied reason`.
 
-```fsharp
+The context bundles the submission, the caller's `AccessContext`, and a freshly-resolved `IServiceProvider` — so a guard reaches DI per invocation instead of capturing services at compose time:
+
+```fsharp skip=fragment
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IWorkflowEngine
 
-let hasProposalAttached : WorkflowGuard =
-    fun (submission, _ctx) -> async {
-        if submission.Values.ContainsKey "proposal_file_id" then
-            return Ok ()
+type WorkflowContext = {
+    Submission: Submission
+    AccessContext: AccessContext
+    Services: IServiceProvider
+}
+
+let hasProposalAttached: WorkflowGuard =
+    fun ctx -> async {
+        if ctx.Submission.Values.ContainsKey "proposal_file_id" then
+            return Ok()
         else
             return Error "no proposal file attached"
     }
 
-let creditCheckPassed (creditApi: ICreditCheckApi) : WorkflowGuard =
-    fun (submission, _ctx) -> async {
-        match Map.tryFind "company_name" submission.Values with
-        | Some (TextValue companyName) ->
+let creditCheckPassed: WorkflowGuard =
+    fun ctx -> async {
+        // Resolve per invocation from ctx.Services rather than capturing.
+        let creditApi = ctx.Services.GetService(typeof<ICreditCheckApi>) :?> ICreditCheckApi
+
+        match Map.tryFind "company_name" ctx.Submission.Values with
+        | Some(TextValue companyName) ->
             let! score = creditApi.GetCreditScore companyName
-            if score >= 600.0 then return Ok ()
-            else return Error (sprintf "credit score %g below threshold" score)
+
+            if score >= 600.0 then
+                return Ok()
+            else
+                return Error(sprintf "credit score %g below threshold" score)
         | _ -> return Error "missing company_name field"
     }
 ```
@@ -105,17 +126,19 @@ let app =
     FormsServerApp.create ()
     // ...
     |> FormsServerApp.withGuard "has-proposal-attached" hasProposalAttached
-    |> FormsServerApp.withGuard "credit-check-passed" (creditCheckPassed creditApi)
+    |> FormsServerApp.withGuard "credit-check-passed" creditCheckPassed
 ```
 
 Reference from a `WorkflowDefinition`:
 
 ```fsharp
-{ From = "quoted"
-  Event = "approve"
-  To = "approved"
-  Guard = Some "credit-check-passed"
-  Action = None }
+let approveTransition: ToolUp.Forms.Workflow.Transition = {
+    From = "quoted"
+    Event = "approve"
+    To = "approved"
+    Guard = Some "credit-check-passed"
+    Action = None
+}
 ```
 
 A failing guard returns `Error (FormError.TransitionDenied reason)` to the caller. A guard that **throws** surfaces as `FormError.GuardEvaluationFailed (guardName, exceptionMessage)` so callers can choose to retry on transient faults vs surface a hard denial to the user.
@@ -125,53 +148,50 @@ A failing guard returns `Error (FormError.TransitionDenied reason)` to the calle
 A transition has at most one `Guard`. For multiple checks, compose them into one named guard:
 
 ```fsharp
-let approvalGuard
-    (proposalGuard: WorkflowGuard)
-    (creditGuard: WorkflowGuard)
-    : WorkflowGuard
-    =
-    fun (submission, ctx) -> async {
-        let! proposalCheck = proposalGuard (submission, ctx)
-        match proposalCheck with
+let approvalGuard (proposalGuard: WorkflowGuard) (creditGuard: WorkflowGuard) : WorkflowGuard =
+    fun ctx -> async {
+        match! proposalGuard ctx with
         | Error r -> return Error r
-        | Ok () ->
-            let! creditCheck = creditGuard (submission, ctx)
-            return creditCheck
+        | Ok() -> return! creditGuard ctx
     }
 ```
 
 ## Workflow actions
 
-Side-effects fired after a successful transition. Receive `(Submission * AccessContext)`; return `Async<unit>`. The engine wraps every invocation in the `IActionLedger` lifecycle (exactly-once invocation across replays) and applies the per-action `ActionFailurePolicy` registered via `withActionPolicy` to decide what happens on exception. Without an explicit policy the engine defaults to `DeadLetter` — see [concepts.md](concepts.md) "Action ledger and failure policy" for the full table.
+Side-effects fired after a successful transition. Receive a `WorkflowContext`; return `Async<unit>`. The engine wraps every invocation in the `IActionLedger` lifecycle (exactly-once invocation across replays) and applies the per-action `ActionFailurePolicy` registered via `withActionPolicy` to decide what happens on exception. Without an explicit policy the engine defaults to `DeadLetter` — see [concepts.md](concepts.md) "Action ledger and failure policy" for the full table.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IWorkflowEngine
 
-let sendWelcomeEmail (notify: IEmailService) : WorkflowAction =
-    fun (submission, _ctx) -> async {
+// Resolve collaborators from ctx.Services per invocation — the context is
+// built fresh for each Apply call, so a transient service is never captured
+// across calls.
+let sendWelcomeEmail: WorkflowAction =
+    fun ctx -> async {
+        let notify = ctx.Services.GetService(typeof<IMyEmailService>) :?> IMyEmailService
+
         let email =
-            match Map.tryFind "email" submission.Values with
-            | Some (TextValue s) -> s
+            match Map.tryFind "email" ctx.Submission.Values with
+            | Some(TextValue s) -> s
             | _ -> ""
 
         let name =
-            match Map.tryFind "name" submission.Values with
-            | Some (TextValue s) -> s
+            match Map.tryFind "name" ctx.Submission.Values with
+            | Some(TextValue s) -> s
             | _ -> "there"
 
-        do! notify.Send {|
-            To = email
-            Subject = sprintf "Welcome, %s!" name
-            Body = welcomeEmailBody submission
-        |}
+        do! notify.Send email (sprintf "Welcome, %s!" name) (welcomeEmailBody ctx.Submission)
     }
 
-let kickoffOnboardingJob (jobs: IJobScheduler) : WorkflowAction =
-    fun (submission, _ctx) -> async {
-        do! jobs.TriggerOnce ("onboarding-" + submission.Id)
+let kickoffOnboardingJob: WorkflowAction =
+    fun ctx -> async {
+        let jobs = ctx.Services.GetService(typeof<IJobScheduler>) :?> IJobScheduler
+        do! jobs.TriggerOnce("onboarding-" + ctx.Submission.Id)
     }
 ```
+
+`IEmailService` is not an SDK interface — email delivery rides `INotificationChannel` / `INotificationSink`, or your own service registered in DI.
 
 Register:
 
@@ -350,7 +370,7 @@ type PostgresActionLedger(connectionString: string) =
 
 Register on `FormsServerApp`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.FormsCompose
 
 let app =
@@ -425,7 +445,10 @@ The submission API still validates server-side via the schema's `ValidationRule`
 
 Skeleton for a custom analyser:
 
-```fsharp
+`IAIProvider` lives in `ToolUp.Platform.AI`, so a server-side analyser that calls a model needs that open:
+
+```fsharp skip=fragment
+open ToolUp.Platform.AI
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormSubmissionAnalyser
@@ -545,10 +568,13 @@ Without `withShareTokenRateLimiter`, the compose step auto-builds a fresh `InMem
 
 `ToolUp.Forms.Tests/Contracts/IShareTokenRateLimiterContract.fs` ships a framework-agnostic test pack. Any drop-in implementation MUST pass it:
 
-```fsharp
+```fsharp skip=fragment
+open ToolUp.Forms.Tests.Contracts
+
 let myLimiterTests =
     IShareTokenRateLimiterContract.tests
         "MyCompany.RedisShareTokenRateLimiter"
+        true   // expectedDistributed — the pack asserts the declared posture
         (fun () -> MyCompany.RedisShareTokenRateLimiter(testConnString) :> IShareTokenRateLimiter)
 ```
 

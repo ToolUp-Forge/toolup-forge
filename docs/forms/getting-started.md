@@ -157,7 +157,7 @@ let leadWorkflow : WorkflowDefinition = {
 
 In the server composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Server
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -168,7 +168,7 @@ let serverApp =
     |> FormsServerApp.withConfig {
         ServerConfig.defaults with
             EntityStore = EnabledEntityStore
-            AuditLogMode = EnabledAuditLog
+            AuditLog = EnabledAuditLog
     }
     |> FormsServerApp.withAuth authProvider
     |> FormsServerApp.addModules modules
@@ -176,18 +176,18 @@ let serverApp =
     |> FormsServerApp.withWorkflow leadWorkflow
     |> FormsServerApp.withGuard
         "has-proposal-attached"
-        (fun (submission, _ctx) -> async {
-            if submission.Values.ContainsKey "proposal_file_id" then
-                return Ok ()
+        (fun ctx -> async {
+            if ctx.Submission.Values.ContainsKey "proposal_file_id" then
+                return Ok()
             else
                 return Error "no proposal file attached"
         })
     |> FormsServerApp.withAction
         "send-proposal-email"
-        (fun (submission, _ctx) -> async {
+        (fun ctx -> async {
             let email =
-                match Map.tryFind "email" submission.Values with
-                | Some (TextValue s) -> s
+                match Map.tryFind "email" ctx.Submission.Values with
+                | Some(TextValue s) -> s
                 | _ -> ""
             // ... ship the email via your notification sink ...
             return ()
@@ -197,7 +197,7 @@ let serverApp =
 let exitCode = FormsServerApp.run serverApp
 ```
 
-- **Guards** have signature `Submission * AccessContext -> Async<Result<unit, string>>`. `Ok ()` allows the transition; `Error reason` short-circuits it as `FormError.TransitionDenied reason`. A guard that throws surfaces as `GuardEvaluationFailed (guardName, reason)` so callers can retry transient faults.
+- **Guards** have signature `WorkflowContext -> Async<Result<unit, string>>`, where the context bundles `Submission`, `AccessContext` and a per-invocation `IServiceProvider` — so a guard resolves what it needs from DI rather than capturing it at compose time. `Ok ()` allows the transition; `Error reason` short-circuits it as `FormError.TransitionDenied reason`. A guard that throws surfaces as `GuardEvaluationFailed (guardName, reason)` so callers can retry transient faults.
 - **Actions** have signature `Submission * AccessContext -> Async<unit>`. They run after persistence, wrapped in the `IActionLedger` lifecycle so each `(SubmissionId, transitionId, actionName)` triple fires at most once.
 - **`withActionPolicy`** sets the per-action `ActionFailurePolicy` (`FailSubmission` / `DeadLetter` / `LogOnly`). Without an explicit policy the engine defaults to `DeadLetter`.
 
@@ -269,7 +269,7 @@ open ToolUp.Forms.FormSubmission
 
 ## 7. List + manage submissions
 
-```fsharp
+```fsharp skip=fragment
 let submissionsView model dispatch =
     FormSubmissionsList.render
         {| Submissions = model.Submissions
@@ -332,7 +332,7 @@ let npsSchema =
 
 Wire `IShareTokenStore`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Server
 open ToolUp.Forms.FormsCompose
 
@@ -341,7 +341,7 @@ let serverApp =
     |> FormsServerApp.withConfig {
         ServerConfig.defaults with
             EntityStore = EnabledEntityStore
-            ShareTokenStore = EnabledShareTokenStore { Secret = signingSecret }
+            ShareTokenStore = EnabledShareTokenStore
             PublicBaseUrl = Some "https://my-app.example.com"
     }
     |> FormsServerApp.withFormSchema npsSchema

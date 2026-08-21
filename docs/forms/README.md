@@ -92,7 +92,7 @@ FormsServerApp.create ()
 
 Wire a client view (consumer-side):
 
-```fsharp
+```fsharp skip=fragment
 open Feliz
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission

@@ -504,14 +504,22 @@ Default impl: `FormStore` over `IEntityStore`, optionally wrapped by `DefaultedF
 
 ```fsharp
 open ToolUp.Platform
+open ToolUp.Forms.Workflow
+
+/// Context passed into every guard / action invocation. `Services` is
+/// resolved fresh per `Apply` call, so a handler can reach DI without
+/// capturing services at compose time.
+type WorkflowContext = {
+    Submission: Submission
+    AccessContext: AccessContext
+    Services: IServiceProvider
+}
 
 /// Guard predicate keyed by name in the engine's guard registry.
-type WorkflowGuard =
-    Submission * AccessContext -> Async<Result<unit, string>>
+type WorkflowGuard = WorkflowContext -> Async<Result<unit, string>>
 
 /// Action keyed by name in the engine's action registry.
-type WorkflowAction =
-    Submission * AccessContext -> Async<unit>
+type WorkflowAction = WorkflowContext -> Async<unit>
 
 type IWorkflowEngine =
     /// Apply a transition event to a submission. Failure modes (in
@@ -656,17 +664,18 @@ Tenants get override capability for free; deployments without per-tenant overrid
 
 ### `IFormSubmissionAnalyser` (extension stub)
 
-```fsharp
-/// Sketch — exact record lives in ToolUp.Forms.IFormSubmissionAnalyser.
+An analyser runs **per field**, not per corpus, and returns `None` for a field it has nothing to say about — which is what lets several analysers coexist over the same submissions without coordinating.
+
+```fsharp skip=signature
 type IFormSubmissionAnalyser =
-    abstract Analyse :
-        scopeId: string ->
-        schema: FormSchema ->
-        submissions: Submission list ->
-            Async<AnalysisResult>
+    abstract Name: string
+
+    abstract Analyse:
+        schema: FormSchema * field: FieldSchema * submissions: Submission list ->
+            Async<AnalyserOutput option>
 ```
 
-No default impl ships. Consumers register custom analysers in the DI container; `FormsServerApp.run` resolves the list per-request and composes them.
+No default impl ships. Consumers register custom analysers in the DI container; `FormsServerApp.run` resolves the list per-request and composes them. `IAnalyserCache` memoises the results across calls.
 
 ## `ToolUp.Forms.Client`
 
@@ -736,8 +745,10 @@ val PublicFormsClient.proxy : IPublicFormApi
 
 Use directly in Elmish commands:
 
-```fsharp
-Cmd.OfAsync.either (fun req -> FormsClient.proxy.Submit req) request onSuccess onFailure
+```fsharp skip=fragment
+open Elmish
+
+Cmd.OfAsync.either FormsClient.proxy.Submit request SubmitSucceeded SubmitFailed
 ```
 
 ## Audit events emitted to `_platform.audit`
