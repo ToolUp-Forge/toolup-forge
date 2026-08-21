@@ -46,17 +46,17 @@ Add the packages:
 
 Wire the server composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG
-open ToolUp.EmbeddingProviders.OpenAI
 
-let embedder = OpenAIEmbeddingProvider.create secretStore :> IEmbeddingProvider
+// Each embedding-provider package exposes a top-level module; there is no
+// ToolUp.EmbeddingProviders.* namespace to open.
+let embedder = OpenAIEmbeddingProvider.create secretStore
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withConfig serverConfig
 |> RAGServerApp.withAuth authProvider
 |> RAGServerApp.addModules modules
-|> RAGServerApp.withAITools AITools.allTools
 |> RAGServerApp.run
 ```
 

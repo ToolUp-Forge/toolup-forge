@@ -130,14 +130,19 @@ Trace failures must be swallowed — retrieval can't fail because the tracer fai
 
 For OCR companions integrating with cloud OCR APIs (Azure Document Intelligence, AWS Textract, Google Document AI):
 
-```fsharp
+Both probing methods are curried and take the MIME type alongside the bytes, and the provider declares a `Name` for diagnostics:
+
+```fsharp skip=fragment
 type AzureDocIntelligenceOcrProvider(client: DocumentAnalysisClient) =
     interface IOcrProvider with
-        member _.IsScanned(documentBytes) = async {
-            // Heuristic — try native text extraction; if it returns near-zero text, it's scanned
-            return isLikelyScanned documentBytes
+        member _.Name = "azure-document-intelligence"
+
+        member _.IsScanned documentBytes mimeType = async {
+            // Heuristic — try native text extraction; near-zero text means scanned.
+            return isLikelyScanned documentBytes mimeType
         }
-        member _.ExtractText(documentBytes) = async {
+
+        member _.ExtractText documentBytes mimeType = async {
             // Use Azure DocIntelligence to extract per-page text
             let! result = client.AnalyzeDocumentAsync("prebuilt-read", documentBytes) |> Async.AwaitTask
             return
@@ -168,21 +173,26 @@ Output shape (`ExtractedTable`) is deliberately compatible with `Chunking.SheetD
 
 ## Writing a new `IImageEmbedder`
 
-```fsharp
+`EmbedImage` is curried and takes the image's MIME type; both methods return `float[]`, not `float32[]`.
+
+```fsharp skip=fragment
 type ClipImageEmbedder(httpClient: HttpClient, apiKey: string) =
     let dimensions = 512
+
     interface IImageEmbedder with
-        member _.EmbedImage(imageBytes) = async {
+        member _.ProviderId = "clip-vit-b32"
+        member _.ModelId = "ViT-B/32"
+        member _.Dimensions = dimensions
+
+        member _.EmbedImage imageBytes mimeType = async {
             // POST to CLIP API
             return [| (* 512 floats *) |]
         }
-        member _.EmbedQuery(text) = async {
+
+        member _.EmbedQuery query = async {
             // Text embedding in the same modality space as images
             return [| (* 512 floats *) |]
         }
-        member _.Dimensions = dimensions
-        member _.ProviderId = "clip-vit-b32"
-        member _.ModelId = "ViT-B/32"
 ```
 
 The "modality space" property is key — image vectors and query-text vectors must be in the same space for cross-modal retrieval. Most CLIP-style providers satisfy this; check before assuming.
@@ -195,19 +205,25 @@ No default `IImageEmbedder` is registered — there's no honest no-op for image 
 
 Cross-encoder rerankers (BGE Reranker, Cohere Rerank, Mixedbread Reranker):
 
-```fsharp
+`Rerank` is curried over query and candidates and takes no `topK` — it reorders the pool it is given, and the caller truncates. The batch ceiling is declared as `MaxBatchSize` so the pipeline can chunk the pool for you:
+
+```fsharp skip=fragment
 type CohereReranker(httpClient: HttpClient, apiKey: string) =
     interface IReranker with
-        member _.Rerank(query, candidates, topK) = async {
+        member _.Name = "cohere-rerank"
+        member _.MaxBatchSize = 100
+
+        member _.Rerank query candidates = async {
             let payload = {|
                 model = "rerank-english-v2.0"
                 query = query
-                documents = candidates |> List.map (fun m -> m.Chunk.Text)
-                top_n = topK
+                documents = candidates |> List.map (fun m -> m.Chunk.Content)
             |}
-            let! response = httpClient.PostAsJsonAsync("https://api.cohere.ai/v1/rerank", payload)
-                            |> Async.AwaitTask
-            // Parse response, reorder candidates by reranked score
+
+            let! response =
+                httpClient.PostAsJsonAsync("https://api.cohere.ai/v1/rerank", payload)
+                |> Async.AwaitTask
+            // Parse response, reorder candidates by reranked score.
             return rerankedCandidates
         }
 ```
@@ -220,18 +236,28 @@ Required when `MergeStrategy = DenseSparseRerank`; ignored otherwise.
 
 Optional. Used by `Chunking.withContextualHeader` to prepend a one-sentence summary to each chunk so the model has document-level context.
 
-```fsharp
+`Summarise` receives the document context AND the chunk, curried — the point is a chunk-level summary written with the whole document in view:
+
+```fsharp skip=fragment
 type ClaudeTextSummariser(aiProvider: IAIProvider) =
     interface ITextSummariser with
-        member _.Summarise(text) = async {
-            let! response = aiProvider.SendMessage {
-                SystemPrompt = "Summarise the following text in one sentence."
-                Messages = [ { Role = User; Content = text } ]
-                Tools = []
-                MaxTokens = 100
-                Temperature = 0.0
-                Stream = false
-            }
+        member _.Name = "claude-summariser"
+
+        member _.Summarise documentContext chunk = async {
+            let! response =
+                aiProvider.SendMessage {
+                    SystemPrompt = "Summarise the chunk in one sentence, using the document context."
+                    Messages = [
+                        { Role = "user"
+                          Content = $"Document:\n{documentContext}\n\nChunk:\n{chunk}"
+                          Parts = [] }
+                    ]
+                    Tools = []
+                    MaxTokens = 100
+                    Temperature = 0.0
+                    Stream = false
+                }
+
             return response.Messages |> List.last |> _.Content
         }
 ```
@@ -268,7 +294,10 @@ The `.Server.props` extension contract injects source into the consuming server 
 
 Bind your impl into the contract test pack:
 
-```fsharp
+```fsharp skip=fragment
+open Expecto
+open ToolUp.Platform.Tests.Contracts
+
 [<Tests>]
 let tests =
     testList "MyEmbeddingProvider conformance" [

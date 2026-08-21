@@ -27,7 +27,7 @@ contributes a `VectorisationHandler`, `composeWithRAG` also suppresses the
 ingestion + reembedding background services — so a static-doc deployment pays
 nothing for the live-ingestion machinery it doesn't use.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG.StaticCorpus
 
 let embedder = HashingEmbeddingProvider.createDefault ()   // or a real model

@@ -22,29 +22,31 @@ In your server project's `.fsproj`:
 
 ## 2. Wire an embedding provider
 
-```fsharp
-open ToolUp.EmbeddingProviders.OpenAI
-
-let embedder = OpenAIEmbeddingProvider.create secretStore :> IEmbeddingProvider
+```fsharp skip=fragment
+// The provider package is a top-level module — there is no
+// ToolUp.EmbeddingProviders.* namespace to open, and `create` already
+// returns IEmbeddingProvider.
+let embedder = OpenAIEmbeddingProvider.create secretStore
 ```
 
 The provider reads the OpenAI API key from `ISecretStore` under the `_platform` scope, key name `OPENAI_API_KEY`. Store it once at setup (the same way you stored the AI provider key in the AI walkthrough).
 
 ## 3. Switch from `AIServerApp.create` to `RAGServerApp.create`
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+// Curried, and the second argument is the platform-wide IProviderProfile
+// store (the Phase 43.A successor to IUserAIConfigStore).
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withConfig serverConfig
 |> RAGServerApp.withAuth authProvider
 |> RAGServerApp.withStorage blobStorage
 |> RAGServerApp.addModules modules
-|> RAGServerApp.withAITools AITools.allTools
 |> RAGServerApp.run
 ```
 
-`RAGServerApp` is a flat superset of `AIServerApp`. Every `AIServerApp.with*` helper is mirrored on `RAGServerApp`. Plus RAG-specific tuning:
+`RAGServerApp` is a flat superset of `AIServerApp`. Every `AIServerApp.with*` helper is mirrored on `RAGServerApp`. AI tools are not passed here — each module contributes its own through `ServerModule.withAITools`. Plus RAG-specific tuning:
 
 - `withTopK 10` — how many chunks to retrieve per query (default 5).
 - `withMinScore 0.4` — minimum cosine similarity to include a chunk (default 0.3).
@@ -118,34 +120,28 @@ Each `KnowledgeRetrieved` event carries the hashed query (`SHA256`, never plaint
 
 Modules that emit non-document content can plug into the ingestion pipeline. Declare a handler in `Server.fs`:
 
-```fsharp
-let myDataVectorisationHandler : VectorisationHandler = {
+`Vectorise` is a **pure** function over the already-processed payload — not an async callback taking a file name — and a `TextChunk` is just content plus metadata: no id (the store assigns `{documentId}:chunk:{n}`) and no origin field.
+
+```fsharp skip=fragment
+let myDataVectorisationHandler: VectorisationHandler = {
     DataTypeId = "MyDataType"
-    Vectorise = fun (fileName, dataObject) -> async {
-        // Translate processed data into chunks
-        let chunks =
-            processData dataObject
+    Vectorise =
+        fun processed ->
+            processData processed
             |> List.map (fun entry -> {
-                Id = Guid.NewGuid()
-                Text = $"Entry: {entry.Description}\nValue: {entry.Value}"
-                Metadata = Map.ofList [
-                    "_source", "MyDataType"
-                    "_fileName", fileName
-                ]
-                Origin = ChunkOrigin.UserContent
+                Content = $"Entry: {entry.Description}\nValue: {entry.Value}"
+                Metadata = Map.ofList [ "_source", "MyDataType" ]
             })
-        return chunks
-    }
+    // Optional whole-document summary chunk, indexed with a score boost.
+    Summarise = None
 }
 ```
 
-Register via `composeWithRAG`:
+Handlers are registered on the **module**, not on `RAGServerApp` — that is what keeps a module self-contained:
 
 ```fsharp skip=fragment
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
-|> ...
-|> RAGServerApp.withVectorisationHandler myDataVectorisationHandler
-|> RAGServerApp.run
+ServerModule.create "MyModule"
+|> ServerModule.withVectorisation [ myDataVectorisationHandler ]
 ```
 
 Now every save of `MyDataType` data triggers the handler post-save; the returned chunks queue for ingestion.

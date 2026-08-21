@@ -23,15 +23,15 @@ Channel-backed unbounded queue (bounded with `withIngestionQueueCapacity`). Thre
 
 ### `IIngestionStatusObserver`
 
-```fsharp
+```fsharp skip=signature
 type IIngestionStatusObserver =
-    abstract OnJobAccepted: IngestionJob -> Async<unit>
-    abstract OnChunkIndexed: jobId: Guid -> chunkId: Guid -> Async<unit>
-    abstract OnJobCompleted: jobId: Guid -> chunkCount: int -> Async<unit>
-    abstract OnJobFailed: jobId: Guid -> reason: string -> Async<unit>
+    /// Fired after a chunk has been successfully indexed by `IRetrievalPipeline`.
+    abstract OnChunkIndexed: IngestionJob -> Async<unit>
+    /// Fired when a chunk's pipeline call threw. `error` is the exception message.
+    abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-Optional observer for ingestion lifecycle. `ToolUp.KnowledgeBase` registers one to surface per-document status in the UI. Apps without KB skip it.
+Optional observer for ingestion lifecycle. The job itself carries the identity an observer needs, so there are no bare job-id / chunk-id parameters, and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total. `ToolUp.KnowledgeBase` registers one to surface per-document status in the UI. Apps without KB skip it; several observers can coexist via `RAGServerApp.withIngestionObservers`.
 
 ## Shared types in `ToolUp.Platform.Core`
 
@@ -101,23 +101,38 @@ Modules declare one in `Server.fs` for each `DataTypeId` they want indexed. The 
 
 Flat superset of `AIServerApp`. The fluent shape:
 
-```fsharp
+The record is wide and flat — every knob is a field with a `with*` builder, rather than nested config records. Abbreviated to the shape-defining fields:
+
+```fsharp skip=signature
 type RAGServerApp = {
     AI: AIServerApp
     EmbeddingProvider: IEmbeddingProvider
-    VectorisationHandlers: VectorisationHandler list
-    RetrievalConfig: RetrievalConfig
-    IngestionConfig: IngestionConfig
+    EmbeddingCache: IEmbeddingCache option
+    IngestionObservers: IIngestionStatusObserver list
+    Reranker: IReranker option
+    VectorStore: IVectorStore option
+    SparseAnalyzer: ISparseAnalyzer option
+    RetrievalDefaults: RetrievalDefaults
+    RetrievalPipelineOverride: IRetrievalPipeline option
+    GroundingMode: GroundingMode
     Telemetry: IRagTelemetry option
-    RetrievalTracer: IRetrievalTracer option
+    IngestionConcurrency: int
+    IngestionQueueCapacity: int
+    IngestionRetryPolicy: IngestionRetryPolicy
+    OverflowPolicy: IngestionOverflowPolicy
+    // ... plus the MMR, citation-policy, size-cap, tombstone-retention,
+    // conversation-indexing and ingestion-recovery fields
 }
 ```
+
+Vectorisation handlers are **not** a `RAGServerApp` field — each module contributes its own via `ServerModule.withVectorisation`, and they aggregate on the inner `ServerApp`.
 
 Constructors:
 
 ```fsharp skip=signature
 module RAGServerApp =
-    val create: AIProviderFactory * IUserAIConfigStore * IEmbeddingProvider -> RAGServerApp
+    val create: IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> RAGServerApp
+    val createFrom: IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> ServerApp -> RAGServerApp
     val empty: RAGServerApp                  // requires all three withFactory/withConfigStore/withEmbedder before run
 ```
 
@@ -162,16 +177,24 @@ type IEmbeddingProvider =
 
 ### `IVectorStore`
 
-```fsharp
+Chunk ids are `string`, not `Guid`, and there is no `ChunkVector` type — the vector and its `TextChunk` are passed and returned separately. Deletion is a two-stage tombstone: `DeleteChunk` stamps `_deletedAt` and hides the chunk from `Search`, `RestoreChunk` un-hides it within the retention window, and `Vacuum` hard-removes anything older than the instant given.
+
+```fsharp skip=signature
 type IVectorStore =
-    abstract Index: VectorScope -> ChunkVector -> Async<unit>
-    abstract Search: scopes: VectorScope list -> queryVec: float32[] -> topK: int -> minScore: float -> Async<VectorMatch list>
-    abstract DeleteChunk: VectorScope -> chunkId: Guid -> Async<unit>
-    abstract DeleteByScope: VectorScope -> Async<unit>
-    abstract Vacuum: VectorScope -> retainTombstones: TimeSpan -> Async<int>
-    abstract ListChunks: VectorScope -> Async<ChunkVector list>
+    /// Idempotent on `(scope, chunkId)`; clears any existing tombstone.
+    abstract Upsert: scope: VectorScope -> chunkId: string -> vector: float32 array -> chunk: TextChunk -> Async<unit>
+    /// Descending score order, merged across scopes, tombstones filtered.
+    abstract Search: scopes: VectorScope list -> query: float32 array -> topK: int -> Async<VectorMatch list>
+    abstract ListChunks: scope: VectorScope -> includeDeleted: bool -> Async<(string * TextChunk) list>
+    abstract DeleteChunk: scope: VectorScope -> chunkId: string -> Async<unit>
+    abstract RestoreChunk: scope: VectorScope -> chunkId: string -> Async<unit>
+    abstract Vacuum: scope: VectorScope -> olderThan: DateTimeOffset -> Async<int>
+    /// Bypasses tombstone semantics — there is no recovery from this.
+    abstract DeleteByScope: scope: VectorScope -> Async<unit>
     abstract ListScopes: unit -> Async<VectorScope list>
 ```
+
+`minScore` is not a store-level parameter: score thresholding is applied by the retrieval pipeline, so a store implementation never has to reason about it.
 
 ### `IRetrievalPipeline`
 
@@ -268,15 +291,21 @@ Optional. Required only when `MergeStrategy = DenseSparseRerank`.
 
 ### `IRagTelemetry`
 
-```fsharp
+The recorders are deliberately synchronous — they sit on hot paths and are fire-and-forget, the same documented escape from the async-at-every-boundary rule that `ILogger` and `IMetricsSink` take. `Snapshot` is the only async member.
+
+```fsharp skip=signature
 type IRagTelemetry =
-    abstract RecordEmbeddingLatency: ms: int -> unit
-    abstract RecordIngestionFlush: ms: int -> chunkCount: int -> unit
-    abstract RecordRetrievalHit: scope: VectorScope -> unit
-    abstract RecordRetrievalMiss: scope: VectorScope -> unit
-    abstract RecordRetrievalEmpty: scope: VectorScope -> unit
-    abstract Snapshot: unit -> RagTelemetrySnapshot
+    abstract RecordEmbedding: texts: int * latencyMs: int64 -> unit
+    abstract RecordEnqueue: depth: int * capacity: int * accepted: bool -> unit
+    abstract RecordFlush: dirtyChunks: int * latencyMs: int64 -> unit
+    abstract RecordIndexLoadError: scopeKey: string -> unit
+    abstract RecordRetrievalStages: stageTimings: (string * float) list -> unit
+    abstract RecordRetrieval: topScore: float * resultCount: int * minScoreThreshold: float -> unit
+    abstract RecordObserverFailure: observerName: string -> unit
+    abstract Snapshot: unit -> Async<RagTelemetrySnapshot>
 ```
+
+Retrieval outcomes are recorded as a score plus a result count rather than as hit / miss / empty counters per scope, so a caller can set its own thresholds after the fact; per-scope detail for index-load failures lives in the `KnowledgeIndexLoadFailed` audit trail rather than the snapshot.
 
 ## Chunking
 

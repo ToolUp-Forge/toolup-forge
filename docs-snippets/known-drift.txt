@@ -137,20 +137,6 @@ e4ad4c4e docs/platform/surfaces.md#12 (line 319) — error FS0039: The value or 
 5e7e0445 docs/platform/surfaces.md#15 (line 387) — error FS0039: The value or constructor 'authProvider' is not defined. Maybe you want one of the following: AuthProvider IAuthProvider AuthUIProvider AuthUIMode AuthoredBy
 83f83b4a docs/platform/testing-conventions.md#2 (line 47) — error FS0039: The type 'CacheEntry' is not defined.
 7a5d4789 docs/platform/testing-conventions.md#6 (line 145) — error FS0039: The type 'PlatformAIKeysApi' is not defined. Maybe you want one of the following: PlatformID PlatformInfoApi PlatformInfo PlatformRole PlatformAdminApi
-df11a8d3 docs/rag/README.md#2 (line 50) — error FS0039: The namespace 'EmbeddingProviders' is not defined.
-8464b26d docs/rag/api-reference.md#2 (line 27) — error FS0039: The type 'IngestionJob' is not defined. Maybe you want one of the following: IngestionRun IngestionError IngestionStatus IngestionStatusFilter
-9434837e docs/rag/api-reference.md#5 (line 105) — error FS0039: The type 'AIServerApp' is not defined. Maybe you want one of the following: ServerApp RAGServerApp
-a584d12c docs/rag/api-reference.md#8 (line 165) — error FS0039: The type 'ChunkVector' is not defined. Maybe you want one of the following: ChunkOrigin
-fe4717c4 docs/rag/api-reference.md#17 (line 271) — error FS0039: The type 'RagTelemetrySnapshot' is not defined.
-f498afea docs/rag/extending.md#6 (line 134) — error FS0039: The type 'IOcrProvider' is not defined. Maybe you want one of the following: IFormatProvider IAuthProvider TimeProvider
-eaea3cf7 docs/rag/extending.md#8 (line 172) — error FS0039: The type 'IImageEmbedder' is not defined. Maybe you want one of the following: ClipImageEmbedder
-8ee7e4fc docs/rag/extending.md#9 (line 199) — error FS0039: The type 'IReranker' is not defined.
-dfda6082 docs/rag/extending.md#10 (line 224) — error FS0039: The type 'ITextSummariser' is not defined.
-dfc44679 docs/rag/extending.md#11 (line 272) — error FS0039: The type 'Tests' is not defined.
-0593cd64 docs/rag/getting-started.md#2 (line 26) — error FS0039: The namespace 'EmbeddingProviders' is not defined.
-938c427c docs/rag/getting-started.md#3 (line 36) — error FS0001: The type ''a * 'b * 'c' is not compatible with the type 'ToolUp.AI.IAIProviderFactory'
-af1575c6 docs/rag/getting-started.md#8 (line 122) — error FS0039: The type 'VectorisationHandler' is not defined. Maybe you want one of the following: VectorScope VectorMatch
-3ac638b7 docs/rag/static-corpus.md#1 (line 31) — error FS0039: The namespace 'StaticCorpus' is not defined.
 2b2b439f docs/stripe/tier-token-sink.md#2 (line 52) — error FS0039: The value or constructor 'BillingTierSink' is not defined.
 38018c7a src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#6 (line 138) — error FS0001: This expression was expected to have type 'ClientModuleContext' but here has type 'unit'
 58ec0e8f src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#8 (line 191) — error FS0039: The type 'ClientConfig' does not define a field, constructor, or member named 'Mode'.
