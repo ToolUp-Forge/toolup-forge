@@ -288,6 +288,9 @@ let composeAI (app: AIServerApp) : ServerApp =
             POST
             >=> route "/api/ai/fastpath/sequence-outcome-beacon"
             >=> FastPathBeaconHandler.sequenceOutcomeBeaconHandler
+            POST
+            >=> route "/api/ai/fastpath/sequence-beacon"
+            >=> FastPathBeaconHandler.sequenceBeaconHandler
             // Phase 6h.A: conversation-export audit beacon.
             POST
             >=> route "/api/ai/conversation/export-audit"

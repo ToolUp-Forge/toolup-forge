@@ -309,6 +309,7 @@ ToolUp.AI.FastPathBeaconHandler.beaconHandler(Microsoft.FSharp.Core.FSharpFunc`2
 ToolUp.AI.FastPathBeaconHandler.checkOwnership(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.AI.FastPathBeaconHandler.isDuplicateBeacon(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String) : System.Boolean
 ToolUp.AI.FastPathBeaconHandler.planBeaconAppend(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, ToolUp.AI.FastPathBeaconHandler+FastPathBeacon) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]]
+ToolUp.AI.FastPathBeaconHandler.sequenceBeaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler.sequenceOutcomeBeaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler.sequencedClauseBeaconHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon (class)
@@ -323,6 +324,13 @@ ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.ModuleId : System.String { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.PatternMatched : System.String { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.SyntheticReply : System.String { get }
 ToolUp.AI.FastPathBeaconHandler+FastPathBeacon.Tier : System.Int32 { get }
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon (class)
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon..ctor(System.Guid, System.Int32, System.String, System.Int32, System.Double)
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon.ClauseCount : System.Int32 { get }
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon.ConversationId : System.Guid { get }
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon.Instruction : System.String { get }
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon.LatencyMs : System.Double { get }
+ToolUp.AI.FastPathBeaconHandler+SequenceBeacon.Tier : System.Int32 { get }
 ToolUp.AI.FastPathBeaconHandler+SequenceOutcomeBeacon (class)
 ToolUp.AI.FastPathBeaconHandler+SequenceOutcomeBeacon..ctor(System.String, System.String, System.Int32, System.Int32)
 ToolUp.AI.FastPathBeaconHandler+SequenceOutcomeBeacon.ClauseCount : System.Int32 { get }

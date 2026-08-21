@@ -83,7 +83,7 @@ let private FastPathRejectedEventType = "FastPathRejected"
 // ─── Phase 6j.G — sequenced fast-path event types ───────────────
 //
 // The multi-clause sequencer (whose client-side substrate ships as a
-// separate fast-path-resolver companion outside this repo) emits two
+// separate fast-path-resolver companion outside this repo) emits three
 // additional telemetry beacons per dispatched sequence:
 //
 //   1. One `sequenced-clause-beacon` per successfully-dispatched
@@ -95,24 +95,35 @@ let private FastPathRejectedEventType = "FastPathRejected"
 //      / `"sequence-capped"` / `"handler-failed-mid-sequence"` /
 //      `"handler-timed-out-mid-sequence"` / `"paused-mid-sequence"`
 //      / `"taken-over-mid-sequence"`.
+//   3. One `sequence-beacon` per sequenced resolution — the aggregate
+//      fired from the companion's chat-send hook rather than the
+//      executor, carrying `(conversationId, tier, instruction,
+//      clauseCount, latencyMs)`. It is the only sequencer beacon that
+//      carries the conversation id and the resolution latency, which
+//      is what lets offline analysis join the per-clause / outcome
+//      streams back to the conversation they ran in.
 //
-// Both events ride on the existing `_platform.ai.fastpath` source so
-// the rolling-window read in `FastPathTelemetryHandler` (which already
-// filters by source) picks them up alongside the original
+// All three events ride on the existing `_platform.ai.fastpath` source
+// so the rolling-window read in `FastPathTelemetryHandler` (which
+// already filters by source) picks them up alongside the original
 // `FastPathResolved` events. The `EventType` field distinguishes
 // shapes at decode time.
 //
 // These events are pure telemetry — they don't append synthetic turns
-// to any conversation blob and carry no conversation id. The handlers
-// gate on `StorageScope` + `UserId` (so unauthenticated callers can't
-// stuff fake events into the per-tenant event store) but skip the
-// ownership check the conversation beacon performs.
+// to any conversation blob. The handlers gate on `StorageScope` +
+// `UserId` (so unauthenticated callers can't stuff fake events into
+// the per-tenant event store) but skip the ownership check the
+// conversation beacon performs (nothing here is read back into any
+// conversation, so there is no history to forge).
 
 [<Literal>]
 let private SequencedClauseEventType = "SequencedFastPathClause"
 
 [<Literal>]
 let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
+
+[<Literal>]
+let private SequenceResolvedEventType = "SequencedFastPathResolved"
 
 /// Per-field cap on beacon free-text. A legitimate fast-path
 /// synthetic reply / instruction is a short confirmation; 16 KB is
@@ -235,6 +246,21 @@ type SequenceOutcomeBeacon = {
     Instruction: string
     ClauseCount: int
     ClausesCompleted: int
+}
+
+/// Wire shape POSTed to `/api/ai/fastpath/sequence-beacon` by the
+/// fast-path-resolver companion's chat-send hook after a sequenced
+/// resolution — the whole-sequence aggregate. Unlike the two
+/// executor-emitted beacons above it carries the conversation id, the
+/// resolution tier and the resolution latency: the join key that lets
+/// offline analysis correlate the per-clause / outcome streams with
+/// the conversation they ran in.
+type SequenceBeacon = {
+    ConversationId: Guid
+    Tier: int
+    Instruction: string
+    ClauseCount: int
+    LatencyMs: float
 }
 
 // ─── Provider-history mirror (mirrors AIAssistantHandler types) ─
@@ -855,19 +881,22 @@ let beaconHandler: HttpHandler =
 
 // ─── Phase 6j.G — sequenced fast-path beacon handlers ────────────
 //
-// Two pure-telemetry endpoints that ride alongside the conversation
+// Three pure-telemetry endpoints that ride alongside the conversation
 // beacon. Shape:
 //   POST /api/ai/fastpath/sequenced-clause-beacon  body = SequencedClauseBeacon
 //   POST /api/ai/fastpath/sequence-outcome-beacon  body = SequenceOutcomeBeacon
+//   POST /api/ai/fastpath/sequence-beacon          body = SequenceBeacon
 //
-// Both gate on `StorageScope` + `UserId` resolution so an
+// All gate on `StorageScope` + `UserId` resolution so an
 // unauthenticated caller cannot inject events into a tenant's event
-// store. Both bound the free-text fields to `MaxBeaconTextLen` to
+// store. All bound the free-text fields to `MaxBeaconTextLen` to
 // keep the prompt-injection / log-bloat blast radius matched to the
-// conversation beacon. Neither persists anything to a conversation
+// conversation beacon. None persists anything to a conversation
 // blob — they only emit a `_platform.ai.fastpath` event under the
 // distinguishing `EventType` so `FastPathTelemetryHandler` can roll
-// the events up into the sequencer keys on `/dev/ai-fastpath`.
+// the events up into the sequencer keys on `/dev/ai-fastpath` (the
+// clause and aggregate events are stored for offline analysis and
+// skipped by the current rollup).
 
 let private validateSequencedClauseBeacon (b: SequencedClauseBeacon) : Result<unit, string> =
     if safeLen b.ClauseText > MaxBeaconTextLen then
@@ -882,6 +911,17 @@ let private validateSequencedClauseBeacon (b: SequencedClauseBeacon) : Result<un
 let private validateSequenceOutcomeBeacon (b: SequenceOutcomeBeacon) : Result<unit, string> =
     if safeLen b.Outcome > MaxBeaconTextLen then
         Error(sprintf "Outcome exceeds %d-char limit" MaxBeaconTextLen)
+    elif safeLen b.Instruction > MaxBeaconTextLen then
+        Error(sprintf "Instruction exceeds %d-char limit" MaxBeaconTextLen)
+    else
+        Ok()
+
+let private validateSequenceBeacon (b: SequenceBeacon) : Result<unit, string> =
+    // The conversation id is the aggregate beacon's whole reason to
+    // exist (the offline join key) — an empty Guid is junk telemetry,
+    // refused like the conversation beacon refuses it.
+    if b.ConversationId = Guid.Empty then
+        Error "ConversationId is empty"
     elif safeLen b.Instruction > MaxBeaconTextLen then
         Error(sprintf "Instruction exceeds %d-char limit" MaxBeaconTextLen)
     else
@@ -935,6 +975,31 @@ let private emitSequenceOutcomeEvent
                 do! store.Write evt
             with ex ->
                 logWarn logger $"Sequenced fast-path outcome event write failed: {ex.Message}"
+    }
+
+let private emitSequenceResolvedEvent
+    (eventStore: IEventStore option)
+    (logger: ILogger option)
+    (scope: StorageScope)
+    (beacon: SequenceBeacon)
+    : Async<unit> =
+    async {
+        match eventStore with
+        | None -> return ()
+        | Some store ->
+            let evt: ModuleEvent = {
+                Id = Guid.NewGuid()
+                OccurredAt = DateTime.UtcNow
+                ScopeId = scope.ScopeId
+                SourceModule = FastPathSourceModule
+                EventType = SequenceResolvedEventType
+                Payload = toJson beacon
+            }
+
+            try
+                do! store.Write evt
+            with ex ->
+                logWarn logger $"Sequenced fast-path aggregate event write failed: {ex.Message}"
     }
 
 let sequencedClauseBeaconHandler: HttpHandler =
@@ -1037,6 +1102,59 @@ let sequenceOutcomeBeaconHandler: HttpHandler =
         with ex ->
             match logger with
             | Some l -> l.Error("Sequenced fast-path outcome beacon handler failed.", Some ex)
+            | None -> ()
+
+            ctx.Response.StatusCode <- 400
+            return! next ctx
+    }
+
+let sequenceBeaconHandler: HttpHandler =
+    fun next (ctx: HttpContext) -> task {
+        let logger = resolveLogger ctx
+
+        let eventStoreOpt =
+            match ctx.RequestServices.GetService(typeof<IEventStore>) with
+            | :? IEventStore as s -> Some s
+            | _ -> None
+
+        let warn (m: string) =
+            match logger with
+            | Some l -> l.Warn m
+            | None -> ()
+
+        try
+            use reader = new StreamReader(ctx.Request.Body)
+            let! body = reader.ReadToEndAsync()
+
+            let beacon = JsonSerializer.Deserialize<SequenceBeacon>(body, jsonOptions)
+
+            if isNull (box beacon) then
+                warn "Sequenced fast-path aggregate beacon rejected: unparseable request body."
+                ctx.Response.StatusCode <- 400
+                return! next ctx
+            else
+                match tryResolveScope ctx, tryResolveUserId ctx, validateSequenceBeacon beacon with
+                | None, _, _ ->
+                    warn
+                        "Sequenced fast-path aggregate beacon rejected: no resolved StorageScope. ScopeResolutionMiddleware must run before this endpoint."
+
+                    ctx.Response.StatusCode <- 401
+                    return! next ctx
+                | Some _, None, _ ->
+                    warn "Sequenced fast-path aggregate beacon rejected: no resolved UserId."
+                    ctx.Response.StatusCode <- 401
+                    return! next ctx
+                | Some _, Some _, Error reason ->
+                    warn $"Sequenced fast-path aggregate beacon rejected ({reason})."
+                    ctx.Response.StatusCode <- 400
+                    return! next ctx
+                | Some scope, Some _, Ok() ->
+                    do! emitSequenceResolvedEvent eventStoreOpt logger scope beacon
+                    ctx.Response.StatusCode <- 202
+                    return! next ctx
+        with ex ->
+            match logger with
+            | Some l -> l.Error("Sequenced fast-path aggregate beacon handler failed.", Some ex)
             | None -> ()
 
             ctx.Response.StatusCode <- 400

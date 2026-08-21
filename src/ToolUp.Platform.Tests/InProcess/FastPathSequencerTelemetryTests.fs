@@ -4,6 +4,7 @@
 module ToolUp.Platform.Tests.InProcess.FastPathSequencerTelemetryTests
 
 open Expecto
+open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI.FastPathBeaconHandler
@@ -181,6 +182,46 @@ let private wireRoundTripTests =
 
             let decoded =
                 JsonSerializer.Deserialize<SequenceOutcomeBeacon>(payloadJson, jsonOptions)
+
+            Expect.equal decoded original "every field round-trips through the event-store JSON"
+
+        testCase "SequenceBeacon — the chat-send hook's aggregate wire JSON deserialises"
+        <| fun _ ->
+            // The whole-sequence aggregate beacon (`POST
+            // /api/ai/fastpath/sequence-beacon`) is emitted by the
+            // companion's chat-send hook as raw `sprintf` JSON with
+            // camelCase keys and a `%.2f` latency. This literal pins
+            // the exact shape that hook produces — the endpoint was a
+            // silent 404 until the route landed server-side, so the
+            // wire contract is what this case exists to hold still.
+            let json =
+                """{"conversationId":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","tier":1,"instruction":"set country to UK and set brand to Dove","clauseCount":2,"latencyMs":12.50}"""
+
+            let beacon = JsonSerializer.Deserialize<SequenceBeacon>(json, jsonOptions)
+
+            Expect.equal
+                beacon.ConversationId
+                (Guid.Parse "3f2504e0-4f89-41d3-9a0c-0305e82c3301")
+                "conversationId → ConversationId"
+
+            Expect.equal beacon.Tier 1 "tier → Tier"
+            Expect.equal beacon.Instruction "set country to UK and set brand to Dove" "instruction → Instruction"
+            Expect.equal beacon.ClauseCount 2 "clauseCount → ClauseCount"
+            Expect.floatClose Accuracy.high beacon.LatencyMs 12.5 "latencyMs → LatencyMs"
+
+        testCase "SequenceBeacon — event-store round-trip preserves every field"
+        <| fun _ ->
+            let original: SequenceBeacon = {
+                ConversationId = Guid.NewGuid()
+                Tier = 1
+                Instruction = "set country to UK and set brand to Dove"
+                ClauseCount = 2
+                LatencyMs = 3.75
+            }
+
+            let payloadJson = JsonSerializer.Serialize(original, jsonOptions)
+
+            let decoded = JsonSerializer.Deserialize<SequenceBeacon>(payloadJson, jsonOptions)
 
             Expect.equal decoded original "every field round-trips through the event-store JSON"
     ]

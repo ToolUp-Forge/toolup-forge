@@ -259,7 +259,8 @@ let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
     // `FastPathResolved` events into the per-tier breakdown and
     // `SequencedFastPathOutcome` events into the sequencer rollup
     // without trying to deserialise either as the other's shape.
-    // `SequencedFastPathClause` events are written for offline
+    // `SequencedFastPathClause` and `SequencedFastPathResolved` (the
+    // whole-sequence aggregate) events are written for offline
     // analysis but don't feed the current `/dev/ai-fastpath` keys;
     // they're skipped here.
     let resolvedDecoded =
