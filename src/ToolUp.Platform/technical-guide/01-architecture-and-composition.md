@@ -134,7 +134,7 @@ let register () : ToolUp.Platform.ErasedModule =
 
 **Stage 2: Type erasure.** `ClientModule.register` erases the generic types into `ErasedModule`, where `Model` becomes `obj` and `Msg` becomes `obj`:
 
-```fsharp
+```fsharp skip=fragment
 let register (m: ClientModule<'Model, 'Msg>) : ErasedModule = {
     Definition = m.Definition
     Init =
@@ -187,10 +187,8 @@ The view function builds the sidebar from `ModuleDefinition` metadata — module
 
 `SDK.Client.run` constructs the Elmish program, handles data manager injection, wires HMR in Debug mode, and starts the React root:
 
-```fsharp
+```fsharp skip=fragment
 let run (config: ClientConfig) (modules: ErasedModule list) =
-
-    UserSession.configure config.Mode
 
     let allDataTypeDisplays = modules |> List.collect (fun m -> m.DataTypes)
 
@@ -210,7 +208,7 @@ let run (config: ClientConfig) (modules: ErasedModule list) =
     program |> Program.withReactSynchronous "elmish-app" |> Program.run
 ```
 
-`viewWithSignIn` runs `view` and pipes the result through `AuthUIProvider.gate config.AuthUI config.Mode`. The gate is a pass-through in Anonymous mode and when `ClientConfig.AuthUI = NoAuthUI` (the default) — it only wraps when a companion-backed sign-in UI has been selected. See the [Sign-in UI companions](03-authentication-secrets-and-encryption.md#sign-in-ui-companions) section (Chapter 3) for the delegate-registry pattern.
+`viewWithSignIn` runs `view` and pipes the result through the `AuthUIProvider` gate. The gate is a pass-through when the deployment's surface admits anonymous callers and when `ClientConfig.AuthUI = NoAuthUI` (the default) — it only wraps when a companion-backed sign-in UI has been selected. See the [Sign-in UI companions](03-authentication-secrets-and-encryption.md#sign-in-ui-companions) section (Chapter 3) for the delegate-registry pattern.
 
 ## Server Composition
 
@@ -436,7 +434,7 @@ Run
 
 #### Worked example: CSP via `SecurityHeaders`
 
-```fsharp
+```fsharp skip=fragment
 let private securityHeaders =
     Map.ofList [
         "Content-Security-Policy",
@@ -452,7 +450,7 @@ let private securityHeaders =
 
 let private config = {
     ServerConfig.defaults with
-        Mode = Team
+        Surfaces = Surfaces.team
         SecurityHeaders = securityHeaders
         Cors = Some (CorsConfig.forOrigins [ "https://app.example.com" ])
 }
@@ -495,7 +493,7 @@ ServerApp.empty
 
 The thunk runs before scope resolution, but `AccessContext.TeamId` is not yet populated — the resolver runs later. Use the request's resolved user (set by `ScopeResolutionMiddleware` when present) only when you also register an earlier copy of the resolver, or read team metadata from a header / token claim that's available before scope resolution. The simpler shape is to gate on `Request.Headers["X-Team-Slug"]` (set by an upstream proxy) or on the resolved user's tenant id from the auth provider:
 
-```fsharp
+```fsharp skip=fragment
 let private allowlistMiddleware (allowlist: Map<string, string list>) =
     fun (app: IApplicationBuilder) ->
         app.Use(fun (ctx: HttpContext) (next: Func<Task>) ->

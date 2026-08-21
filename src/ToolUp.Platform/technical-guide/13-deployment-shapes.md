@@ -46,11 +46,11 @@ The three shapes below cover the spectrum from "single binary, every concern" th
 
 **Composition root.** `ProcessProfile = AllInOne` (which is also the default — omit the field to inherit it).
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        Mode = Team
+        Surfaces = Surfaces.team
         // ProcessProfile defaults to AllInOne; shown here for clarity:
         ProcessProfile = AllInOne
 }
@@ -86,17 +86,19 @@ ServerApp.empty
 
 **Composition root — web silo.** `ProcessProfile = WebOnly`; cloud-backed persistence; distributed notification channel.
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        Mode = Team
+        Surfaces = Surfaces.team
         ProcessProfile = WebOnly
-        BlobStorage = AzureBlobStorage(Env.required "TOOLUP_AZURE_BLOB_CONNECTION")
-        Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
         JobScheduler = InProcessJobScheduler   // substrate registers; tick is gated off
         Webhooks = EnabledWebhooks             // substrate registers; dispatcher is gated off
 }
+// Cloud persistence and the distributed notification channel are wired as
+// SUBSTRATE, not as ServerConfig fields.
+|> ServerApp.withStorage (AzureBlobStorage.create azureConfig)
+|> ServerApp.withNotifications redisChannel
 |> ServerApp.addModule (MyApp.Module.register ())
 |> ServerApp.run
 ```
@@ -105,17 +107,19 @@ The web silo still registers `IJobScheduler` and `IWebhookDispatcher` so module 
 
 **Composition root — worker silo.** `ProcessProfile = WorkerOnly`; same persistence + same Redis as the web silo.
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        Mode = Team
+        Surfaces = Surfaces.team
         ProcessProfile = WorkerOnly
-        BlobStorage = AzureBlobStorage(Env.required "TOOLUP_AZURE_BLOB_CONNECTION")
-        Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
         JobScheduler = InProcessJobScheduler
         Webhooks = EnabledWebhooks
 }
+// Cloud persistence and the distributed notification channel are wired as
+// SUBSTRATE, not as ServerConfig fields.
+|> ServerApp.withStorage (AzureBlobStorage.create azureConfig)
+|> ServerApp.withNotifications redisChannel
 |> ServerApp.addModule (MyApp.Module.register ())
 |> ServerApp.run
 ```
@@ -151,16 +155,18 @@ The worker silo's HTTP pipeline is not mounted (`ProcessProfileGate.shouldRegist
 
 **Composition root — dispatcher silo.** `ProcessProfile = DispatcherOnly`; same persistence + same Redis.
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        Mode = Team
+        Surfaces = Surfaces.team
         ProcessProfile = DispatcherOnly
-        BlobStorage = AzureBlobStorage(Env.required "TOOLUP_AZURE_BLOB_CONNECTION")
-        Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
         Webhooks = EnabledWebhooks
 }
+// Cloud persistence and the distributed notification channel are wired as
+// SUBSTRATE, not as ServerConfig fields.
+|> ServerApp.withStorage (AzureBlobStorage.create azureConfig)
+|> ServerApp.withNotifications redisChannel
 |> ServerApp.addModule (MyApp.Module.register ())
 |> ServerApp.run
 ```

@@ -6,7 +6,7 @@ The Platform separates **authentication** (who is the caller?) from **authorisat
 
 Identity-only interface:
 
-```fsharp
+```fsharp skip=signature
 type IAuthProvider =
     abstract GetUser: HttpContext -> Async<AuthenticatedUser option>
     abstract ValidateRequest: HttpContext -> Async<Result<unit, AuthError>>
@@ -27,8 +27,10 @@ That's the entire identity contract. Permissions and team membership are SDK con
 
 Trusts `X-User-Id` HTTP header verbatim. No validation, no signature, no expiry. Safe only for local dev and tightly-network-gated demo deployments.
 
-```fsharp
-let authProvider = HeaderAuthProvider() :> IAuthProvider
+`HeaderAuthProvider` is a top-level module holding the type of the same name, so the constructor is spelled through it:
+
+```fsharp skip=fragment
+let authProvider = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
 ```
 
 ### `StaticJwtAuthProvider`
@@ -37,13 +39,16 @@ HS256 JWT validation. BCL-only (no external NuGet deps). Checks signature, expir
 
 Suitable when JWT issuance is in-house and rotation is operationally managed. Not a real OIDC integration — there's no JWKS discovery or RS256 support; for that, use the OIDC companion.
 
-```fsharp
+It takes a `StaticJwtConfig` record rather than named constructor arguments:
+
+```fsharp skip=fragment
 let authProvider =
-    StaticJwtAuthProvider(
-        signingKey = "...",
-        expectedIssuer = Some "https://issuer.example.com",
-        expectedAudience = Some "my-app"
-    ) :> IAuthProvider
+    StaticJwtAuthProvider.StaticJwtAuthProvider {
+        Secret = "..."
+        Issuer = Some "https://issuer.example.com"
+        Audience = Some "my-app"
+    }
+    :> IAuthProvider
 ```
 
 ### `ToolUp.AuthProviders.Oidc` (server-side)
@@ -52,12 +57,24 @@ Generic OIDC server-side validator. Discovers JWKS via `.well-known/openid-confi
 
 Works against any OIDC-compliant issuer — Auth0, Cognito, Keycloak, etc. Pair with the matching client-side provider (`ToolUp.AuthProviders.Oidc.Client`) for the Authorization Code + PKCE flow.
 
-```fsharp
+The companion exposes factory functions over an `AuthConfig`, not a constructor. `fromConfig` is the plain form; `fromConfigMetered` / `fromConfigHardened` add a metrics sink and the hardening options respectively:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders.OidcAuthProvider
+
+let issuer = "https://your-issuer.example.com"
+
 let authProvider =
-    OidcAuthProvider(
-        issuer = "https://your-issuer.example.com",
-        audience = "your-client-id"
-    ) :> IAuthProvider
+    fromConfig
+        None   // ILogger option
+        {
+            Issuer = Some issuer
+            Audience = Some "your-client-id"
+            KeySource = JwksDiscovery issuer
+            TokenLocation = BearerHeader
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None   // defaults to [ RS256 ]
+        }
 ```
 
 Configuration via environment variables:

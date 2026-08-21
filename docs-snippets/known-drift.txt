@@ -40,10 +40,6 @@ df9710dc docs/operations/degraded-capabilities.md#1 (line 65) — error FS0039: 
 ce453cfc docs/platform/architecture.md#9 (line 248) — error FS0039: The type 'HealthKind' is not defined. Maybe you want one of the following: HealthSnapshot HealthProbeView HealthMonitorMode
 ffcd511e docs/platform/auth-ui-vendor-neutrality.md#2 (line 54) — error FS0039: The value or constructor 'Tag' is not defined. Maybe you want one of the following: tan Task tanh task Task
 049aaab4 docs/platform/auth-ui-vendor-neutrality.md#3 (line 61) — error FS0039: The value, namespace, type or module 'ClerkRegister' is not defined.
-648d05c1 docs/platform/auth.md#1 (line 10) — error FS0039: The type 'HttpContext' is not defined. Maybe you want one of the following: AppContext
-138f7f82 docs/platform/auth.md#2 (line 31) — error FS0039: The value or constructor 'HeaderAuthProvider' is not defined.
-70603b92 docs/platform/auth.md#3 (line 41) — error FS0039: The value or constructor 'StaticJwtAuthProvider' is not defined.
-b650fc46 docs/platform/auth.md#4 (line 56) — error FS0039: The value or constructor 'OidcAuthProvider' is not defined. Maybe you want one of the following: OidcAuthUI IAuthProvider AuthProvider HeaderAuthProvider
 847ec964 docs/platform/client-host-bridge.md#1 (line 17) — error FS0039: The type 'TreePage' is not defined. Maybe you want one of the following: TreePatchReceipt TreePatchEnvelope
 ba07e2c0 docs/platform/client-remoting-proxies.md#1 (line 10) — error FS0039: The type 'IFooApi' is not defined.
 ca8df611 docs/platform/client-remoting-proxies.md#2 (line 18) — error FS0039: The value, namespace, type or module 'Cmd' is not defined.
@@ -99,12 +95,6 @@ e4ad4c4e docs/platform/surfaces.md#12 (line 319) — error FS0039: The value or 
 83f83b4a docs/platform/testing-conventions.md#2 (line 47) — error FS0039: The type 'CacheEntry' is not defined.
 7a5d4789 docs/platform/testing-conventions.md#6 (line 145) — error FS0039: The type 'PlatformAIKeysApi' is not defined. Maybe you want one of the following: PlatformID PlatformInfoApi PlatformInfo PlatformRole PlatformAdminApi
 2b2b439f docs/stripe/tier-token-sink.md#2 (line 52) — error FS0039: The value or constructor 'BillingTierSink' is not defined.
-38018c7a src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#6 (line 138) — error FS0001: This expression was expected to have type 'ClientModuleContext' but here has type 'unit'
-58ec0e8f src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#8 (line 191) — error FS0039: The type 'ClientConfig' does not define a field, constructor, or member named 'Mode'.
-239495ca src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#15 (line 440) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
-8aff9139 src/ToolUp.Platform/technical-guide/01-architecture-and-composition.md#17 (line 499) — error FS0039: The type 'IApplicationBuilder' is not defined.
-9af96c22 src/ToolUp.Platform/technical-guide/02-multi-tenancy-and-access.md#1 (line 17) — error FS0039: The type 'HttpContext' is not defined. Maybe you want one of the following: AppContext
-fcf1a8de src/ToolUp.Platform/technical-guide/02-multi-tenancy-and-access.md#6 (line 269) — error FS0039: The value, namespace, type or module 'config' is not defined. Maybe you want one of the following: ConfigApi Conflict ConfigKeys ConfigKnob ConfigStore
 de94ca4a src/ToolUp.Platform/technical-guide/03-authentication-secrets-and-encryption.md#7 (line 251) — error FS0750: This construct may only be used within computation expressions
 ceb6992c src/ToolUp.Platform/technical-guide/03-authentication-secrets-and-encryption.md#8 (line 307) — error FS0039: The type 'IBlobStorage' is not defined. Maybe you want one of the following: IJobStore
 b128bdd0 src/ToolUp.Platform/technical-guide/04-data-and-storage-substrate.md#10 (line 314) — error FS0039: The value, namespace, type or module 'ctx' is not defined.
@@ -126,7 +116,3 @@ ed7e8ccc src/ToolUp.Platform/technical-guide/12-hosting-models.md#10 (line 253) 
 e4b46ca8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#16 (line 355) — error FS0039: The namespace 'Functions' is not defined.
 d431c9d8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#22 (line 554) — error FS0039: The namespace or module 'Fake' is not defined.
 0f8636d8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#23 (line 582) — error FS0039: The value, namespace, type or module 'Target' is not defined.
-8e9ed30c src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#1 (line 50) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
-33f8f43e src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#2 (line 90) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
-dc10fe45 src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#3 (line 109) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution
-8eea8b51 src/ToolUp.Platform/technical-guide/13-deployment-shapes.md#4 (line 155) — error FS1129: The record type 'ServerConfig' does not contain a label 'Mode'. Maybe you want one of the following: ModelFitting ModuleNames ModelExecution

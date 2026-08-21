@@ -7,17 +7,17 @@
 
 ## Platform Modes and Storage Scoping
 
-Platform modes control the entire authentication and data isolation strategy. The mode is set once in both `ServerConfig.Mode` and `ClientConfig.Mode`.
+Authentication and data isolation are driven by the deployment's declared surfaces — `ServerConfig.Surfaces`, a `SurfaceProfile list` (`Surfaces.anonymous` / `individual` / `team` / `multiTeam`, or a composition such as `Surfaces.anonymousAndTeam`). The retired deployment-wide `Mode: PlatformMode` field has no `ClientConfig` counterpart at all: the client learns the shape from the server.
 
 ### How scope resolution works
 
 Every request resolves a `StorageScope` via `IStorageScopeResolver`:
 
-```fsharp
+```fsharp skip=signature
 type StorageScope = {
     ScopeId: string    // userId, teamId, or sessionId
     Container: string  // "user-abc", "team-xyz", "session-abc"
-    Persist: bool      // false for Anonymous and AuthenticatedEphemeral
+    Persist: bool      // false for ephemeral surfaces
 }
 
 type IStorageScopeResolver =
@@ -265,7 +265,7 @@ The merge is **team-scope gated**. `compose` calls `mergeBrandingSchema` only wh
 
 Every field is `Required = false` with a blank default. On the client, `SDK.Client.run` resolves the effective branding once per render via `Branding.resolve`, reading the prefetched `_platform` map (`Model.PlatformConfig`) against a default record built from the composition root's `ClientConfig` (`AppName`, `AppLogo`):
 
-```fsharp
+```fsharp skip=fragment
 // Shell-side resolution (illustrative)
 let resolvedBranding =
     Branding.resolve
@@ -333,7 +333,6 @@ Premium grant / revoke writes use the Phase 62 endpoints (`POST` / `DELETE /api/
 // Client-side composition (Client.fs):
 let clientConfig = {
     ClientConfig.defaults with
-        Mode = Anonymous
         AdPanel = EnabledAdPanel { DefaultAdClientId = "ca-pub-XXXXXXXX" }
         PremiumModel = AnonymousFirst
         PlatformAdmin = DefaultPlatformAdmin
@@ -343,7 +342,7 @@ let clientConfig = {
 // Server-side composition (Server.fs):
 let serverConfig = {
     ServerConfig.defaults with
-        Mode = Anonymous
+        Surfaces = Surfaces.anonymous
         EntityStore = EnabledEntityStore   // unlocks ad-unit CRUD
         RateLimits = [ /* policies */ ]    // populates the rate-limit event log
         AdAnalytics = EnabledAdAnalytics   // pairs with AdPanel for impression/click capture
