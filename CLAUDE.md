@@ -454,10 +454,13 @@ filtered run reports suspiciously few tests, `--list-tests` first, or make the f
 and diffs it against `api-baselines/<assembly>.approved.txt`. The rules that matter when a phase
 touches public surface:
 
-- **It fails ONLY on removed / renamed / retyped members; purely additive growth passes silently.**
-  A changed return type counts as a retype (the old token is "lost"). F# module functions and record
-  fields are public by default, so an "internal-looking" compose helper or a Client `Msg`/model
-  record is tracked surface.
+- **It fails in BOTH directions (Phase 618): removed / renamed / retyped members, AND additive
+  growth whose baseline was not regenerated** — the failure names the added members and the baseline
+  file, so any new public surface means a surgical regen for the affected assemblies. (Until 618 the
+  gate was one-directional and additive growth passed silently; this bullet said so long after it
+  stopped being true, and cost a session a red `VerifyAll`.) A changed return type counts as a
+  retype (the old token is "lost"). F# module functions and record fields are public by default, so
+  an "internal-looking" compose helper or a Client `Msg`/model record is tracked surface.
 - **Optional constructor args (`?foo`) read as a REMOVAL.** `type Foo(bar, ?policy)` folds into ONE
   widened ctor, so the pre-existing `Foo..ctor(bar)` token disappears — a genuine break, not a false
   positive. Use explicit secondary constructors (`new(bar) = Foo(bar, defaultPolicy)`) to keep the
@@ -484,9 +487,11 @@ touches public surface:
   author the sibling's baseline.
 - **A failing baseline names an assembly, not a cause** — confirm attribution with `git log -- <source
   files>` before writing it into a commit message.
-- **Design corollary:** because pure additions pass, a new opt-in feature that would widen a shared
-  record's ctor can instead ship as a NEW options record + NEW builder entry points — zero baseline
-  edits, existing builders delegate with a behaviour-preserving default (GP 11).
+- **Design corollary:** a new opt-in feature that would widen a shared record's ctor can instead
+  ship as a NEW options record + NEW builder entry points — existing builders delegate with a
+  behaviour-preserving default (GP 11). Since Phase 618 the new surface still needs its assemblies'
+  baselines regenerated (additions are a named, surgical regen rather than a silent pass), but the
+  existing types' baselines stay untouched and no consumer breaks.
 
 ## F# style + idioms
 
