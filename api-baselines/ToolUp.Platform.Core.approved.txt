@@ -701,6 +701,8 @@ ToolUp.Platform.AuditEvent.IsAuthorizationDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsBeaconRejected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldWritten : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsCompositionCapabilityRefused : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsCompositionVerificationRecorded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsComputeBudgetDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsComputeBudgetWarning : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConfigDrift : System.Boolean { get }
@@ -879,6 +881,10 @@ ToolUp.Platform.AuditEvent+ClassifiedFieldRead (class)
 ToolUp.Platform.AuditEvent+ClassifiedFieldRead.Item : ToolUp.Platform.ClassifiedFieldReadPayload { get }
 ToolUp.Platform.AuditEvent+ClassifiedFieldWritten (class)
 ToolUp.Platform.AuditEvent+ClassifiedFieldWritten.Item : ToolUp.Platform.ClassifiedFieldWrittenPayload { get }
+ToolUp.Platform.AuditEvent+CompositionCapabilityRefused (class)
+ToolUp.Platform.AuditEvent+CompositionCapabilityRefused.Item : ToolUp.Platform.CompositionCapabilityRefusedPayload { get }
+ToolUp.Platform.AuditEvent+CompositionVerificationRecorded (class)
+ToolUp.Platform.AuditEvent+CompositionVerificationRecorded.Item : ToolUp.Platform.CompositionVerificationRecordedPayload { get }
 ToolUp.Platform.AuditEvent+ComputeBudgetDenied (class)
 ToolUp.Platform.AuditEvent+ComputeBudgetDenied.Item : ToolUp.Platform.ComputeBudgetDeniedPayload { get }
 ToolUp.Platform.AuditEvent+ComputeBudgetWarning (class)
@@ -1121,6 +1127,8 @@ ToolUp.Platform.AuditEvent+Tags.AuthorizationDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.BeaconRejected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldWritten : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.CompositionCapabilityRefused : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.CompositionVerificationRecorded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ComputeBudgetDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ComputeBudgetWarning : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConfigDrift : System.Int32 (literal)
@@ -1956,11 +1964,28 @@ ToolUp.Platform.ComponentRequirementsModule.resolve(Microsoft.FSharp.Collections
 ToolUp.Platform.ComponentRequirementsModule.signatureOf(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.ComponentRequirements]) : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements]
 ToolUp.Platform.ComponentRequirementsModule.withConfig(ToolUp.Platform.ConfigRequirement, ToolUp.Platform.ComponentRequirements) : ToolUp.Platform.ComponentRequirements
 ToolUp.Platform.ComponentRequirementsModule.withSecret(ToolUp.Platform.SecretRequirement, ToolUp.Platform.ComponentRequirements) : ToolUp.Platform.ComponentRequirements
+ToolUp.Platform.CompositionCapabilityRefusedPayload (class)
+ToolUp.Platform.CompositionCapabilityRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.CompositionCapabilityRefusedPayload.Component : System.String { get }
+ToolUp.Platform.CompositionCapabilityRefusedPayload.Declared : System.String { get }
+ToolUp.Platform.CompositionCapabilityRefusedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.CompositionCapabilityRefusedPayload.Profile : System.String { get }
+ToolUp.Platform.CompositionCapabilityRefusedPayload.Reason : System.String { get }
+ToolUp.Platform.CompositionCapabilityRefusedPayload.Required : System.String { get }
 ToolUp.Platform.CompositionDataFootprint (class)
 ToolUp.Platform.CompositionDataFootprint..ctor(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass], Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass], Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass])
 ToolUp.Platform.CompositionDataFootprint.PersistedClasses : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass] { get }
 ToolUp.Platform.CompositionDataFootprint.ReadClasses : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass] { get }
 ToolUp.Platform.CompositionDataFootprint.WrittenClasses : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DataClass] { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload (class)
+ToolUp.Platform.CompositionVerificationRecordedPayload..ctor(System.String, System.String, System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.CompositionVerificationRecordedPayload.Findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.Policy : System.String { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.Profile : System.String { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.RefusedStart : System.Boolean { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.Summary : System.String { get }
+ToolUp.Platform.CompositionVerificationRecordedPayload.Verdict : System.String { get }
 ToolUp.Platform.ComputeBudget (class)
 ToolUp.Platform.ComputeBudget..ctor(ToolUp.Platform.ComputeBudgetPeriod, ToolUp.Platform.ComputeBudgetLimits, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBudgetLimits])
 ToolUp.Platform.ComputeBudget.ClassLimits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBudgetLimits] { get }

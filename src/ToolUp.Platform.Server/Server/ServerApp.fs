@@ -2136,6 +2136,26 @@ module ServerApp =
         |> CompositionManifest.withGrounding metricEntries subjectEntries
         |> CompositionManifest.withPurposes purposeEntries
 
+    /// Phase 657 — run the boot verification preflight over the composition
+    /// THIS app derived, and decide whether it may serve.
+    ///
+    /// The one line a composition root adds between building its app and
+    /// running it. `Ok` means serve; `Error` means the profile's policy
+    /// refused the start, and carries the verdict so the operator can read
+    /// why. Both arms have already recorded the verdict through the audit
+    /// seam.
+    ///
+    /// Deliberately a function rather than a field on `ServerApp` or a knob
+    /// on `ServerConfig`: either would retype a record every consumer builds,
+    /// for a feature no existing consumer configures. An app that never calls
+    /// this derives no manifest, runs no verification, and behaves exactly as
+    /// it did before this surface existed (GP 11 / GP 13).
+    let verifyComposition
+        (options: BootVerificationOptions)
+        (app: ServerApp)
+        : Async<Result<BootVerificationResult, BootVerificationResult>> =
+        BootVerificationPreflight.run options (compositionManifest app)
+
     /// Phase 583 — project the live registry into the reference edges the
     /// composition rules read but the `CompositionManifest` cannot carry.
     ///

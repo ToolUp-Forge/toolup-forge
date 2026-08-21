@@ -1327,6 +1327,14 @@
              directions), deploy-record canonical form, and the sealed-
              record verification walk against a keyed-hash stub sealer. -->
         <Compile Include="InProcess\BuildTranscriptTests.fs" />
+        <!-- Phase 657 — boot verification preflight (the honest deployment
+             verifies; a broken seal, an edited artifact, a swapped binding
+             and a drifted composition each do not — probed separately), the
+             log-and-serve default vs refuse-on-drift, the mandatory
+             capability gate and its audited refusals, and the isolated-
+             execution enforcement layer. After BuildTranscriptTests, whose
+             StubSealer it reuses rather than duplicating. -->
+        <Compile Include="InProcess\BootVerificationPreflightTests.fs" />
         <!-- Phase 18 — IPlatformPeer in-process binding + buyer→seller
              TestServer worked example (identity validation, audit
              emission, matching RootRequestId across the HTTP boundary). -->

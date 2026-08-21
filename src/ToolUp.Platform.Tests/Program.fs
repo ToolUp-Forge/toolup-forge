@@ -1073,6 +1073,11 @@ let allTests =
         BuildTranscriptTests.provenanceTests
         BuildTranscriptTests.deployRecordCanonicalFormTests
         BuildTranscriptTests.deployRecordVerificationTests
+        // Phase 657 — the boot question nobody was asking: is the running
+        // composition the one that was sealed? Probed in both directions
+        // per axis, plus the verified profile's mandatory capability gate
+        // and its audited refusals.
+        BootVerificationPreflightTests.tests
         // DefaultDeployPipeline.Rollback regression: a build-sourced
         // deploy's rollback relaunches the artefact ref recovered from
         // the DeployPushing event history (never a synthetic

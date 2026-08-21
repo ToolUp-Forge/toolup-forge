@@ -3479,6 +3479,70 @@ type ExternalCallbackRejectedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 657 — the verdict the boot-time composition verification reached,
+/// recorded once per process start.
+///
+/// **Recorded on every verdict, including the affirmative one.** A record
+/// written only when something is wrong cannot distinguish "verified" from
+/// "the check never ran" after the fact, and those are the two states an
+/// operator most needs to tell apart. The row is one per start, so the
+/// volume is bounded by restarts rather than by traffic.
+///
+/// **PII-free by construction.** Every field is a composition fact — a
+/// component id, a config-knob name, a digest — none of which carries user
+/// data. Findings are the substrate's own rendered strings, never
+/// caller-supplied text.
+type CompositionVerificationRecordedPayload = {
+    /// Stable verdict label: `"verified"`, `"unverified"`, `"unsealed"`,
+    /// or `"drifted"`. Machine-readable; the free-text account is
+    /// `Summary`.
+    Verdict: string
+    /// Composition profile the deployment started under: `"standard"` or
+    /// `"verified"`.
+    Profile: string
+    /// The policy that decided what a non-affirmative verdict does:
+    /// `"log-and-serve"` or `"refuse-on-drift"`.
+    Policy: string
+    /// Whether this verdict refused the process a start. `false` under the
+    /// log-and-serve default even when the verdict is not `"verified"` —
+    /// which is exactly the pair of facts an operator rolling the policy
+    /// forward wants to read together.
+    RefusedStart: bool
+    /// One rendered line per finding, each naming what moved or what
+    /// failed. Empty on an affirmative verdict.
+    Findings: string list
+    /// One-line human-readable account of the verdict.
+    Summary: string
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 657 — a composed component was refused a capability beyond the
+/// envelope its composition declared.
+///
+/// The refusal the mandatory capability gate produces under the verified
+/// composition profile. Emitted through `IAuditLog` like any other event,
+/// so whichever sinks a deployment composed record it and the substrate
+/// takes no dependency on which those are.
+type CompositionCapabilityRefusedPayload = {
+    /// The composed component that attempted the access — the raw
+    /// `ComponentId` value.
+    Component: string
+    /// The capability the attempted operation required, rendered as
+    /// `effect/determinism/readiness`.
+    Required: string
+    /// The envelope the component declared, same rendering. The identity
+    /// (`pure/deterministic/distributed-ready`) for an undeclared
+    /// component — which is what makes an undeclared component's effecting
+    /// access a refusal rather than a pass.
+    Declared: string
+    /// The gate's own reason, verbatim: the component, the axes it
+    /// exceeded, and the remedy.
+    Reason: string
+    /// Composition profile in force when the refusal happened.
+    Profile: string
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4092,6 +4156,14 @@ type AuditEvent =
     /// The forged-callback signal; see the payload doc for why it is its
     /// own kind rather than a field on the resolution event.
     | ExternalCallbackRejected of ExternalCallbackRejectedPayload
+    /// Phase 657 — the boot-time composition verification verdict, one row
+    /// per process start. Recorded on the affirmative verdict too: absence
+    /// of a row means the check did not run, and that is a different fact
+    /// from a clean one.
+    | CompositionVerificationRecorded of CompositionVerificationRecordedPayload
+    /// Phase 657 — a composed component was refused a capability beyond
+    /// its declared envelope by the mandatory capability gate.
+    | CompositionCapabilityRefused of CompositionCapabilityRefusedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4260,6 +4332,8 @@ module AuditEvent =
         | SchemaChanged _ -> "SchemaChanged"
         | ExternalCallbackResolved _ -> "ExternalCallbackResolved"
         | ExternalCallbackRejected _ -> "ExternalCallbackRejected"
+        | CompositionVerificationRecorded _ -> "CompositionVerificationRecorded"
+        | CompositionCapabilityRefused _ -> "CompositionCapabilityRefused"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

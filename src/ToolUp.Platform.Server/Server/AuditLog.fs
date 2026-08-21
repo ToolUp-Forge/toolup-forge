@@ -1507,6 +1507,22 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ExternalCallbackRejected(fromAuditJson<ExternalCallbackRejectedPayload> j)
     }
+    {
+        EventType = "CompositionVerificationRecorded"
+        TryEncode =
+            (function
+            | CompositionVerificationRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> CompositionVerificationRecorded(fromAuditJson<CompositionVerificationRecordedPayload> j)
+    }
+    {
+        EventType = "CompositionCapabilityRefused"
+        TryEncode =
+            (function
+            | CompositionCapabilityRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> CompositionCapabilityRefused(fromAuditJson<CompositionCapabilityRefusedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

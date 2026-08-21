@@ -1009,6 +1009,20 @@
              default (GP 11/13); depends only on Core CompanionCapability +
              the Phase 266 registry types. -->
         <Compile Include="Server\CompositionCapabilityGate.fs" />
+        <!-- Phase 657 — boot verification preflight + the verified composition
+             profile: derives nothing itself, but asks at startup whether the
+             running CompositionManifest is the one the Phase 656 sealed deploy
+             record covers (seal, artifact digests, binding-belongs-to-record,
+             component-by-component agreement), and carries the opt-in profile
+             under which that check is refuse-on-drift, the Phase 300 capability
+             gate is mandatory, and Phase 478's ExecutionProfileGate is applied.
+             After CompositionManifest + CompositionCapabilityGate (reads both),
+             after DeployRecords (reuses its verification) and AuditLog (emits
+             verdicts + refusals through the audit seam); before ServerApp,
+             which appends the one-line composition-root entry point. Opt-in —
+             CompositionProfile.Standard with the log-and-serve default is
+             byte-for-byte the prior behaviour (GP 11/13). -->
+        <Compile Include="Server\BootVerificationPreflight.fs" />
         <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
              IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
              NoOp default + in-memory reference. Widens the Phase 268 fault
