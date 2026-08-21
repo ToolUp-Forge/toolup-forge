@@ -1,0 +1,15 @@
+# The compiled-doc-snippet HIGH-WATER MARK, asserted by
+# `dotnet run --project Build.fsproj -- VerifyDocSnippets`.
+#
+# The gate FAILS when fewer blocks compile than this. Growth
+# rewrites the number in place (review it in your diff like any
+# other generated line); a genuine, argued shrink — a tree
+# exclusion, a page deleted — is a HAND edit, so the decision
+# is visible to a reviewer rather than absorbed by a flag.
+#
+# 300 -> 268: `docs/design/**` joined `docs/migrations/**` in the
+# excluded trees. A design record states what was PROPOSED; where
+# implementation diverged, its blocks are accurate history rather
+# than drifted teaching material, so 32 of them left the corpus.
+
+268

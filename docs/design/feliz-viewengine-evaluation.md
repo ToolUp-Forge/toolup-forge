@@ -1,5 +1,11 @@
 # Design evaluation — Feliz.ViewEngine for server-side layouts (Phase 92)
 
+> **Point-in-time design record.** This file records an evaluation and its decision, not the
+> maintained reference for the shipped surface — that is
+> [`docs/platform/layouts.md`](../platform/layouts.md). `docs/design/**` is excluded from the
+> compile-checked-snippet gate (`VerifyDocSnippets`) for that reason: a design record's code
+> deliberately shows what was argued at the time.
+
 **Decision: ADOPT, as an opt-in.** `Feliz.ViewEngine` is referenced by
 `ToolUp.PublicRendering` and surfaced through one adapter
 (`FelizLayout.toGiraffe`) and one compose helper

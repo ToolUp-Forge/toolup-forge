@@ -386,27 +386,95 @@ let main args =
     // That is what makes an in-band marker acceptable here — it adds no
     // ceremony to the code a reader copies.
     //
-    // ONE tree-level exclusion, `docs/migrations/**`: a migration doc's
-    // job is to show the RETIRED shape beside its replacement, usually
-    // in the same block. Compiling it is category-incorrect — the old
-    // shape must not compile, that is the point of the page. This is a
-    // tree exclusion rather than 436 per-block markers precisely
-    // because a marker on every migration block would be the easy
-    // opt-out that gets reached for.
+    // TWO tree-level exclusions, and they are the same class:
+    // point-in-time documents whose code deliberately reflects a state
+    // other than the current surface.
+    //
+    //   `docs/migrations/**` — a migration doc's job is to show the
+    //   RETIRED shape beside its replacement, usually in the same block.
+    //   Compiling it is category-incorrect: the old shape must not
+    //   compile, that is the point of the page.
+    //
+    //   `docs/design/**` — a design record states what was PROPOSED.
+    //   Where implementation diverged from the proposal, rewriting the
+    //   blocks against the shipped surface would destroy exactly the
+    //   value the document has (it would no longer record what was
+    //   argued for), and marking them individually would mean widening
+    //   the closed skip set to cover "historically accurate".
+    //
+    // Both are tree exclusions rather than per-block markers precisely
+    // because a marker on every block of such a page would be the easy
+    // opt-out that gets reached for. Widening this list is a visible
+    // diff to this file and needs the same argument: the tree's code is
+    // point-in-time BY DESIGN, not merely inconvenient to fix.
     //
     // ── How a fragment declares its context (620.B) ─────────────────
     //
     // Snippets are excerpts, not programs, and the docs must not grow
     // `open`-ceremony a reader then copies. So context is supplied
-    // OUT-OF-BAND, in three layers, none of which touch the markdown:
+    // OUT-OF-BAND, in four layers, none of which touch the markdown:
     //
     //   1. `docSnippetPreamble` — the ambient opens any ToolUp source
     //      file has.
     //   2. `docSnippetTreePreamble` — per doc tree; a page under
     //      `docs/rag/` is read in the context of the RAG package.
-    //   3. Page accumulation — `open` lines declared in an EARLIER
+    //   3. Per-page AMBIENT PREAMBLE — an optional F# file at
+    //      `docs-snippets/ambient/<doc path>.fs` (the doc tree mirrored,
+    //      `.md` -> `.fs`), inlined verbatim into every generated block
+    //      of that page. See below.
+    //   4. Page accumulation — `open` lines declared in an EARLIER
     //      block of the same page apply to later ones, which is how a
     //      reader reads a page top to bottom.
+    //
+    // ── The per-page ambient preamble, and what it is FOR ───────────
+    //
+    // A large share of doc blocks are not drifted and not prose: they
+    // are excerpts of a composition root the page never shows in full,
+    // reading locals a reader is expected to already have in scope —
+    // `config`, `providerProfile`, `secretStore`, `authProvider`, an
+    // Elmish `Model`, a page-local `loadCampaign`. Before this layer
+    // existed the only honest classification for those was
+    // `skip=fragment`, which buys silence: the block's SDK names are
+    // then checked by nothing, so the next rename rots it invisibly —
+    // the exact drift class this target exists to catch, in the blocks
+    // the target cannot see.
+    //
+    // The ambient file declares those locals ONCE per page, out of
+    // band, so the block compiles as written and every SDK name in it
+    // is checked. It is ordinary F# (opens, type declarations, `let`
+    // bindings — `failwith "ambient"` is the conventional body, since
+    // nothing here runs), and it is inlined ahead of the block under
+    // its own `#line` directive, so an error INSIDE an ambient file is
+    // reported against that file and lands in the unattributable bucket
+    // — a harness fault, which is exactly what it is.
+    //
+    // The rule for what may go in one: an ambient declaration stands in
+    // for something the PAGE's own surrounding program would provide.
+    // It must never redeclare an SDK name — that would fake the surface
+    // the block is supposed to be checked against, turning the gate
+    // into a mirror. When in doubt, name the binding after the doc's
+    // own prose and give it the SDK type, so the type is still checked.
+    //
+    // SHAPE of an ambient file — `open`s at the top, everything else
+    // inside one auto-opened module:
+    //
+    //     open ToolUp.PublicRendering
+    //
+    //     [<AutoOpen>]
+    //     module PageAmbient =
+    //         type Campaign = { Name: string }
+    //         let loadCampaign (ctx: CallContext) (c: string) = failwith "ambient"
+    //
+    // The file is inlined VERBATIM — no reordering — so the `#line`
+    // attribution stays exact. The two halves are both load-bearing:
+    // top-level `open`s must be visible to the block (an `open` nested
+    // inside the module would not be), while the declarations must NOT,
+    // because a page routinely introduces a type in its first block and
+    // reads it from its fifth. Flat declarations would collide with that
+    // first block; auto-opened ones are simply SHADOWED by it, so the
+    // page teaches the type once and every later block still compiles.
+    //
+    // See `docs-snippets/ambient/README.md`.
     //
     // Each block then compiles as its own module in its own generated
     // file. One file per BLOCK, not per page, is load-bearing: F#
@@ -456,7 +524,7 @@ let main args =
     // for the first seeding and for wholesale re-measurement after a
     // deliberate corpus change; it is never part of making CI pass.
     let docSnippetRoots = [ "docs"; "src/ToolUp.Platform/technical-guide" ]
-    let docSnippetExcludedTrees = [ "docs/migrations" ]
+    let docSnippetExcludedTrees = [ "docs/migrations"; "docs/design" ]
 
     // The closed escape set. Each reason is a claim about the block's
     // SHAPE that a reviewer can check by reading it:
@@ -473,10 +541,32 @@ let main args =
     // Floor guard: this target legitimately exits 0 with an empty
     // corpus (a bad glob, a moved docs folder, an extractor that
     // matched no fences), which is indistinguishable from a pass unless
-    // the count is asserted. A LOWER bound, like `fableCaseFloor` — it
-    // fires when the harness has collapsed, not when the corpus shrank
-    // a little.
-    let docSnippetFloor = 300
+    // the count is asserted.
+    //
+    // A STATIC lower bound catches the collapse but nothing else, and a
+    // static number cannot ratchet: as the corpus grows the gap between
+    // the floor and the truth widens into room for silent hollowing —
+    // skip-marking a block that used to compile costs the corpus one
+    // checked block and the gate says nothing, because the floor was
+    // set years of docs ago. The floor is therefore a HIGH-WATER MARK
+    // recorded in `docs-snippets/corpus-floor.txt`:
+    //
+    //   * `compiled < mark` FAILS. A block that used to compile no
+    //     longer does — skip-marked, deleted, or moved into an excluded
+    //     tree. Legitimate cases exist (that is what the exclusion of
+    //     `docs/design` was), and the remedy is to lower the number BY
+    //     HAND, which puts the decision in the diff where a reviewer
+    //     sees it. Deliberately not a flag: an automated lower is the
+    //     one motion this guard exists to make expensive.
+    //   * `compiled > mark` REWRITES the mark and says so. Growth is
+    //     always legitimate, so it must not red a build over a docs
+    //     addition; but the new number lands in the working tree, so it
+    //     rides the author's own commit as a reviewed one-line diff
+    //     rather than being auto-committed by anything.
+    //
+    // The collapse case the static floor existed for is subsumed: a
+    // harness that matches almost nothing scores far below the mark.
+    let docSnippetFloorSeed = 300
 
     Target.create "VerifyDocSnippets" (fun _ ->
         // Read from the process argv rather than `p.Context.Arguments`:
@@ -487,6 +577,8 @@ let main args =
         let projDir = Path.Combine(repoRoot, "docs-snippets")
         let outDir = Path.Combine(projDir, "generated")
         let baselinePath = Path.Combine(projDir, "known-drift.txt")
+        let floorPath = Path.Combine(projDir, "corpus-floor.txt")
+        let ambientDir = Path.Combine(projDir, "ambient")
 
         let toSlash (s: string) = s.Replace('\\', '/')
 
@@ -643,6 +735,20 @@ let main args =
 
             docSnippetPreamble @ tree
 
+        // Layer 3 — the per-page ambient preamble. Returns the ambient
+        // file's absolute path (for the `#line` directive that makes an
+        // error inside it point AT it) and its lines.
+        let ambientFor (rel: string) =
+            let path = Path.Combine(ambientDir, rel.Substring(0, rel.Length - 3) + ".fs")
+
+            if File.Exists path then
+                Some(path, File.ReadAllLines path |> List.ofArray)
+            else
+                None
+
+        let ambientPages =
+            docFiles |> List.filter (fun (_, rel) -> (ambientFor rel).IsSome) |> List.length
+
         let moduleNameOf (rel: string) =
             let stripped = rel.Replace(".md", "")
 
@@ -702,6 +808,21 @@ let main args =
                     for o in preambleFor rel do
                         sb.AppendLine o |> ignore
 
+                    // The page's ambient preamble, under its OWN line
+                    // directive: an error in it names the ambient file,
+                    // does not match the `.md(` attribution probe, and
+                    // is therefore reported as the harness fault it is
+                    // rather than absorbed as drift in some block that
+                    // merely inherited it.
+                    match ambientFor rel with
+                    | Some(ambientPath, ambientLines) ->
+                        sb.AppendLine(sprintf "# 1 \"%s\"" (ambientPath.Replace("\\", "\\\\")))
+                        |> ignore
+
+                        for l in ambientLines do
+                            sb.AppendLine l |> ignore
+                    | None -> ()
+
                     // Each carried `open` is stamped with the line it was
                     // written on, so an unresolvable one is reported against
                     // the block that DECLARED it rather than every block that
@@ -738,11 +859,52 @@ let main args =
             (blockTable.Count - checkedCount)
             docFiles.Length
 
-        if checkedCount < docSnippetFloor then
+        // ---- the self-ratcheting corpus floor (high-water mark) ----
+        let corpusMark =
+            if File.Exists floorPath then
+                File.ReadAllLines floorPath
+                |> Array.map _.Trim()
+                |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+                |> Array.tryPick (fun l ->
+                    match System.Int32.TryParse l with
+                    | true, n -> Some n
+                    | _ -> None)
+                |> Option.defaultValue docSnippetFloorSeed
+            else
+                docSnippetFloorSeed
+
+        let writeCorpusMark (n: int) =
+            let lines = [
+                "# The compiled-doc-snippet HIGH-WATER MARK, asserted by"
+                "# `dotnet run --project Build.fsproj -- VerifyDocSnippets`."
+                "#"
+                "# The gate FAILS when fewer blocks compile than this. Growth"
+                "# rewrites the number in place (review it in your diff like any"
+                "# other generated line); a genuine, argued shrink — a tree"
+                "# exclusion, a page deleted — is a HAND edit, so the decision"
+                "# is visible to a reviewer rather than absorbed by a flag."
+                ""
+                string n
+            ]
+
+            // LF explicitly — `.gitattributes` pins the repo to LF, and
+            // WriteAllLines would make every regeneration on Windows a
+            // whole-file diff on every other clone.
+            File.WriteAllText(floorPath, System.String.Join("\n", lines) + "\n")
+
+        if checkedCount < corpusMark then
             failwithf
-                "VerifyDocSnippets: only %d block(s) extracted, below the floor of %d. A corpus this small means the extractor matched almost nothing — check the scope roots and the fence parser before lowering the floor."
+                "VerifyDocSnippets: only %d block(s) compile, below the recorded high-water mark of %d (docs-snippets/corpus-floor.txt). Blocks that used to be checked no longer are — skip-marked, deleted, or moved into an excluded tree. Restore them, or, if the loss is deliberate and argued, lower the mark BY HAND in the same commit so the decision is in the diff."
                 checkedCount
-                docSnippetFloor
+                corpusMark
+
+        if checkedCount > corpusMark then
+            writeCorpusMark checkedCount
+
+            Trace.tracefn
+                "VerifyDocSnippets: corpus grew %d -> %d; advanced the high-water mark in docs-snippets/corpus-floor.txt. Include that one-line change in your commit."
+                corpusMark
+                checkedCount
 
         Trace.tracefn "▶ VerifyDocSnippets (2/2): compiling against the real SDK"
 
@@ -814,8 +976,23 @@ let main args =
             |> Array.map (fun (k, es) -> k, es |> Array.map snd)
             |> Array.sortBy (fun ((r, o, _, _), _) -> r, o)
 
+        // The baseline key is the FULL triple `path#ordinal hash`, and
+        // every part of it earns its place. Path alone cannot key a page
+        // with several failing blocks. Hash alone is not unique ACROSS
+        // files — identical illustrative blocks legitimately share one
+        // (`8464b26d` sat in both `knowledge-base/concepts.md` and
+        // `rag/api-reference.md`), and a hash-only prune during the
+        // 2026-08-21 burn-down duly deleted the wrong file's line, which
+        // only the next full run caught. Ordinal disambiguates two
+        // identical blocks on the SAME page, which path+hash cannot.
+        //
+        // It is also the exact text of the baseline line's first two
+        // fields, so "the key" and "the line to delete" are the same
+        // thing a reader is looking at.
+        let keyOf (rel: string) (ord: int) (hash: string) = sprintf "%s#%d %s" rel ord hash
+
         let failingKeys =
-            failing |> Array.map (fun ((r, _, _, h), _) -> r + " " + h) |> Set.ofArray
+            failing |> Array.map (fun ((r, o, _, h), _) -> keyOf r o h) |> Set.ofArray
 
         let writeBaseline () =
             let lines = [
@@ -823,8 +1000,10 @@ let main args =
                 "# GENERATED by `dotnet run --project Build.fsproj -- VerifyDocSnippets --update-baseline`."
                 "#"
                 "# Each line: <content-hash> <doc path>#<block> — <first compiler error>"
-                "# The hash is of the block's own text, so editing a block RETIRES its"
-                "# entry and the block must then compile. This list may only shrink."
+                "# The KEY is the full triple `<doc path>#<block> <content-hash>` — never"
+                "# the hash alone, which identical blocks in different files share. The"
+                "# hash is of the block's own text, so editing a block RETIRES its entry"
+                "# and the block must then compile. This list may only shrink."
                 ""
                 for (rel, ord, start, h), errs in failing do
                     let first = if errs.Length > 0 then errs[0] else ""
@@ -865,10 +1044,12 @@ let main args =
                     File.ReadAllLines baselinePath
                     |> Array.filter (fun l -> l.Trim() <> "" && not (l.StartsWith "#"))
                     |> Array.choose (fun l ->
+                        // `<hash> <path>#<ordinal> (line N) — <error>`:
+                        // fields 2 and 1 ARE the key, in that order.
                         let parts = l.Split(' ')
 
-                        if parts.Length >= 2 then
-                            Some(parts[1].Split('#')[0] + " " + parts[0], l)
+                        if parts.Length >= 2 && parts[1].Contains "#" then
+                            Some(parts[1] + " " + parts[0], l)
                         else
                             None)
                     |> Map.ofArray
@@ -879,21 +1060,29 @@ let main args =
 
             let newFailures =
                 failing
-                |> Array.filter (fun ((r, _, _, h), _) -> not (baselineKeys.Contains(r + " " + h)))
+                |> Array.filter (fun ((r, o, _, h), _) -> not (baselineKeys.Contains(keyOf r o h)))
 
             let fixedButListed = baselineKeys - failingKeys
             let passing = checkedCount - failing.Length
 
             Trace.tracefn ""
             Trace.tracefn "VerifyDocSnippets summary:"
-            Trace.tracefn "  blocks compiled : %d" checkedCount
+            Trace.tracefn "  blocks compiled : %d (high-water mark %d)" checkedCount corpusMark
             Trace.tracefn "  passing         : %d" passing
             Trace.tracefn "  known drift     : %d (docs-snippets/known-drift.txt)" baselineKeys.Count
             Trace.tracefn "  new failures    : %d" newFailures.Length
             Trace.tracefn "  fixed-but-listed: %d" fixedButListed.Count
 
+            // The unchecked pool, printed as a number every run. A skip
+            // marker is honest bookkeeping, but the blocks behind it are
+            // the target's blind spot — and a blind spot nobody measures
+            // is one that grows. `skip=fragment` in particular is the
+            // one an ambient preamble can retire (see the header), so
+            // its count is the standing size of that work.
             for reason, n in skippedByReason do
                 Trace.tracefn "  skip=%-12s %d" reason n
+
+            Trace.tracefn "  ambient pages   : %d (docs-snippets/ambient/)" ambientPages
 
             if newFailures.Length > 0 then
                 Trace.tracefn ""
@@ -910,12 +1099,13 @@ let main args =
 
             if fixedButListed.Count > 0 then
                 Trace.tracefn ""
+                Trace.tracefn "Delete these lines from docs-snippets/known-drift.txt, verbatim:"
 
-                for k in fixedButListed do
-                    Trace.traceError (sprintf "    %s" (baseline |> Map.find k))
+                for k in fixedButListed |> Seq.sort do
+                    Trace.traceError (baseline |> Map.find k)
 
                 failwithf
-                    "VerifyDocSnippets: %d baseline entr(ies) in docs-snippets/known-drift.txt now compile. Delete those lines — the ratchet only holds if a fixed snippet is removed from the list."
+                    "VerifyDocSnippets: %d baseline entr(ies) in docs-snippets/known-drift.txt now compile. Delete the FULL lines printed above — match on path, ordinal AND hash, never on the hash alone: identical illustrative blocks in different files share a hash, and a hash-only prune deletes the wrong file's entry silently. The ratchet only holds if a fixed snippet is removed from the list."
                     fixedButListed.Count
 
             if result.ExitCode <> 0 && failing.Length = 0 then

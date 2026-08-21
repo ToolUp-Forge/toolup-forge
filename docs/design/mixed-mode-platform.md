@@ -1,6 +1,23 @@
 # Mixed-Mode Platform Model — Design
 
-> **Status:** Initial design complete (all 6 phases). Ready for implementation planning.
+> **HISTORICAL DESIGN RECORD — shipped, with deltas.** This document is the design pass
+> that argued for retiring `PlatformMode`. That work was **implemented by Phase 66**, and the
+> implementation diverged from parts of this proposal. The code in this file therefore shows
+> **what was proposed**, not what the SDK has: names, shapes and helper signatures here may
+> differ from the shipped surface, and several do.
+>
+> **Read this for the reasoning — the decision log, the edge cases, the risk analysis.** For
+> what to actually write today, read [`docs/platform/surfaces.md`](../platform/surfaces.md)
+> (the mental-model reference) and the migration recipe at
+> [`docs/migrations/0.X.0-platform-mode-to-surfaces.md`](../migrations/0.X.0-platform-mode-to-surfaces.md).
+>
+> Because its code is point-in-time by design, `docs/design/**` is excluded from the
+> compile-checked-snippet gate (`VerifyDocSnippets`) alongside `docs/migrations/**` — rewriting
+> these blocks against the shipped surface would destroy the only thing the document is for.
+> Do not "fix" a snippet here to match current code; if the shipped shape is what you need,
+> the pages linked above are where it is maintained.
+
+> **Status at the time of writing:** Initial design complete (all 6 phases). Ready for implementation planning.
 > **Scope:** Replace forge's deployment-wide `PlatformMode` enum with a multi-axis model that allows a single deployment to serve anonymous + authenticated surfaces concurrently.
 > **Backward-compat posture:** None. Every current consumer can be updated; the design optimises for the right shape, with migration plan delivered alongside.
 > **Out of scope:** Implementation. This document is a design pass; the deliverable is the document itself.
