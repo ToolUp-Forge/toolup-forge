@@ -99,5 +99,4 @@ f56e798a src/ToolUp.Platform/technical-guide/08-ui-components.md#3 (line 105) �
 ed7e8ccc src/ToolUp.Platform/technical-guide/12-hosting-models.md#10 (line 253) — error FS0039: The namespace 'RuntimeSupport' is not defined.
 49e188f9 src/ToolUp.Platform/technical-guide/12-hosting-models.md#15 (line 336) — error FS0039: The namespace 'Functions' is not defined.
 e4b46ca8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#16 (line 355) — error FS0039: The namespace 'Functions' is not defined.
-d431c9d8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#22 (line 554) — error FS0039: The namespace or module 'Fake' is not defined.
 0f8636d8 src/ToolUp.Platform/technical-guide/12-hosting-models.md#23 (line 582) — error FS0039: The value, namespace, type or module 'Target' is not defined.
