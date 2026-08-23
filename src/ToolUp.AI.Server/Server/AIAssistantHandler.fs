@@ -1137,14 +1137,33 @@ let aiAssistantApi
                             | :? Metrics.IMetricsSink as s -> Some s
                             | _ -> None
 
+                        // Phase 680 — the provenance join. `IAuditLog` is
+                        // composed by the platform, so a gate-on deployment
+                        // gets the typed row (and, through it, whichever
+                        // sinks it composed) without opting into anything
+                        // further; `IAnswerProvenanceAnchors` is opt-in
+                        // (`withAnswerProvenanceAnchors`) and absent leaves
+                        // the row's join fields honestly `None`.
+                        let answerAuditJoin: AnswerVerifier.AnswerAuditJoin = {
+                            AuditLog =
+                                match bgCtx.RequestServices.GetService(typeof<IAuditLog>) with
+                                | :? IAuditLog as a -> Some a
+                                | _ -> None
+                            Anchors =
+                                match bgCtx.RequestServices.GetService(typeof<IAnswerProvenanceAnchors>) with
+                                | :? IAnswerProvenanceAnchors as a -> Some a
+                                | _ -> None
+                        }
+
                         let! (verifiedContent, verificationOpt) =
-                            AnswerVerifier.runVerificationStage
+                            AnswerVerifier.runVerificationStageWithJoin
                                 answerGateOpt
                                 metricRegistryOpt
                                 retrievedSourcesCell.Value
                                 finalContent
                                 answerMetricsSinkOpt
                                 citationEventStore
+                                answerAuditJoin
                                 scope.ScopeId
                                 taskId
                                 conversationId

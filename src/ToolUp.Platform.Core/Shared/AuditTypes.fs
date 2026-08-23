@@ -3543,6 +3543,109 @@ type CompositionCapabilityRefusedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 680 — one numeric token from a verified answer, with the
+/// fact-match status the answer-verification gate reached for it.
+///
+/// PII-free by construction: the token is a figure the answer already
+/// stated, `Canonical` is that figure normalised, and `MatchedFactId` is a
+/// content-addressed fact id. No prose, no principal, no free text.
+type AnswerVerificationTokenAudit = {
+    /// The numeric token exactly as it appeared in the answer.
+    Token: string
+    /// The canonical decimal value it normalised to (invariant string).
+    /// Empty when the token carried no parseable numeric core.
+    Canonical: string
+    /// The verdict reached for this token: `"verified"`, `"unmatched"`, or
+    /// `"no-facts-in-scope"`.
+    Verdict: string
+    /// The fact this token verified against. `Some` only on a `"verified"`
+    /// token whose matching fact carried an id.
+    MatchedFactId: string option
+}
+
+/// Phase 680 — the answer-verification verdict for one served answer, and
+/// the joins from that runtime row to the provenance the answer stands on.
+///
+/// **Recorded on the affirmative verdict too**, the Phase 657 discipline:
+/// a row written only when a figure went unverified cannot distinguish a
+/// clean answer from an answer the gate never saw, and those are the two
+/// states an auditor most needs to tell apart. One row per verified answer,
+/// so the volume is bounded by answered turns rather than by tokens.
+///
+/// **Emitted BESIDE the existing `IEventStore` trail, not instead of it.**
+/// The per-unmatched-token `IEventStore` records remain the module-scoped
+/// query surface; this row is the one that rides `IAuditLog`, so whichever
+/// sinks a deployment composed — a hash-chained ledger among them — record
+/// it, and the answer path depends on none of them.
+///
+/// **Every join field is optional, and absence is honest.** A deployment
+/// that composes no certificates and starts from no sealed composition
+/// records `None` for both rather than a placeholder; a placeholder would
+/// be a claim, and this row makes none it cannot support.
+type AnswerVerificationPayload = {
+    TaskId: Guid
+    ConversationId: Guid
+    /// Gate mode in force: `"Annotate"` or `"Strict"`. An `Off` gate runs
+    /// no verification and records no row at all.
+    Mode: string
+    /// Numeric tokens that matched a retrieved fact.
+    Verified: int
+    /// Numeric tokens with no matching fact while facts WERE in scope —
+    /// the anti-hallucination signal.
+    Unmatched: int
+    /// Numeric tokens the turn had no facts to check against.
+    Unverifiable: int
+    /// How many facts were in scope for the turn. `0` is why a token can be
+    /// unverifiable without being unmatched.
+    FactsInScope: int
+    /// Per-token verdicts, in the answer's reading order.
+    Tokens: AnswerVerificationTokenAudit list
+    /// The distinct fact ids this answer's verified figures cite, sorted.
+    /// The walk from this row into the fact tier.
+    CitedFactIds: string list
+    /// SHA-256 over the canonical join of `CitedFactIds` — a
+    /// deployment-independent head for the provenance chain this answer
+    /// stands on, recomputable by anyone holding the ids. `None` when the
+    /// answer verified against no fact.
+    ProvenanceChainHead: string option
+    /// The grounding certificate covering this answer's chain, when the
+    /// deployment holds one. `None` when it issues no certificates.
+    CertificateRef: string option
+    /// The sealed-composition identity this process affirmed at boot, when
+    /// it started under a verified profile. `None` under an unsealed start
+    /// or a non-affirmative verdict — naming a seal for a composition the
+    /// boot check declined to affirm would assert exactly what it refused.
+    CompositionSealId: string option
+    ProviderName: string
+    ProviderModel: string
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 680 — the deployment-side anchors an answer-verification audit
+/// row joins to.
+///
+/// Neither anchor is derivable inside the answer path: the composition seal
+/// is a boot-time fact, and a certificate is issued by a substrate the
+/// answer tier holds no dependency on. Both therefore arrive as data
+/// through this seam, which **nothing composes by default** — absent, both
+/// anchors resolve to `None` and the recorded row says so (GP 11 / GP 13).
+///
+/// **GP 12.** Identity by value (ids and strings, never live handles);
+/// async at the boundary that may do I/O; stateless between calls — every
+/// input arrives as a parameter.
+type IAnswerProvenanceAnchors =
+    /// The sealed-composition identity this process affirmed at boot.
+    /// A property rather than a call: it is a process constant, fixed
+    /// before the first answer is served.
+    abstract CompositionSealId: string option
+
+    /// The certificate ref covering this answer's provenance chain, when
+    /// the deployment already holds one. Implementations REPORT what
+    /// exists; issuing a certificate here would put a signing round-trip
+    /// on every answered turn. `None` whenever none was issued.
+    abstract TryCertificateRef:
+        scopeId: string * conversationId: Guid * citedFactIds: string list -> Async<string option>
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4164,6 +4267,16 @@ type AuditEvent =
     /// Phase 657 — a composed component was refused a capability beyond
     /// its declared envelope by the mandatory capability gate.
     | CompositionCapabilityRefused of CompositionCapabilityRefusedPayload
+    /// Phase 680 — an answer was verified and every numeric figure it
+    /// carried matched a retrieved fact (or the turn had no facts to check
+    /// against). The affirmative row; it exists so that the absence of a
+    /// row stays a different fact from a clean one.
+    | AnswerVerificationPassed of AnswerVerificationPayload
+    /// Phase 680 — an answer carried at least one numeric figure that
+    /// matched no fact in the turn's retrieved set while facts WERE in
+    /// scope. The grounding refusal, on the same chained path as every
+    /// other audited refusal.
+    | AnswerVerificationFlagged of AnswerVerificationPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4334,6 +4447,8 @@ module AuditEvent =
         | ExternalCallbackRejected _ -> "ExternalCallbackRejected"
         | CompositionVerificationRecorded _ -> "CompositionVerificationRecorded"
         | CompositionCapabilityRefused _ -> "CompositionCapabilityRefused"
+        | AnswerVerificationPassed _ -> "AnswerVerificationPassed"
+        | AnswerVerificationFlagged _ -> "AnswerVerificationFlagged"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

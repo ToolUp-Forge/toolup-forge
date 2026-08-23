@@ -590,6 +590,29 @@ ToolUp.Platform.AnonymousSessionMigratedPayload.Modules : Microsoft.FSharp.Colle
 ToolUp.Platform.AnonymousSessionMigratedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.Outcome : System.String { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.TargetUserId : System.String { get }
+ToolUp.Platform.AnswerVerificationPayload (class)
+ToolUp.Platform.AnswerVerificationPayload..ctor(System.Guid, System.Guid, System.String, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AnswerVerificationTokenAudit], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.AnswerVerificationPayload.CertificateRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AnswerVerificationPayload.CitedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AnswerVerificationPayload.CompositionSealId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AnswerVerificationPayload.ConversationId : System.Guid { get }
+ToolUp.Platform.AnswerVerificationPayload.FactsInScope : System.Int32 { get }
+ToolUp.Platform.AnswerVerificationPayload.Mode : System.String { get }
+ToolUp.Platform.AnswerVerificationPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.AnswerVerificationPayload.ProvenanceChainHead : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AnswerVerificationPayload.ProviderModel : System.String { get }
+ToolUp.Platform.AnswerVerificationPayload.ProviderName : System.String { get }
+ToolUp.Platform.AnswerVerificationPayload.TaskId : System.Guid { get }
+ToolUp.Platform.AnswerVerificationPayload.Tokens : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AnswerVerificationTokenAudit] { get }
+ToolUp.Platform.AnswerVerificationPayload.Unmatched : System.Int32 { get }
+ToolUp.Platform.AnswerVerificationPayload.Unverifiable : System.Int32 { get }
+ToolUp.Platform.AnswerVerificationPayload.Verified : System.Int32 { get }
+ToolUp.Platform.AnswerVerificationTokenAudit (class)
+ToolUp.Platform.AnswerVerificationTokenAudit..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.AnswerVerificationTokenAudit.Canonical : System.String { get }
+ToolUp.Platform.AnswerVerificationTokenAudit.MatchedFactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AnswerVerificationTokenAudit.Token : System.String { get }
+ToolUp.Platform.AnswerVerificationTokenAudit.Verdict : System.String { get }
 ToolUp.Platform.ApiCall`2 (class)
 ToolUp.Platform.ApiCall`2.IsFinished : System.Boolean { get }
 ToolUp.Platform.ApiCall`2.IsStart : System.Boolean { get }
@@ -689,6 +712,8 @@ ToolUp.Platform.AuditEvent.IsAdSlotConfigDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAdSlotConfigUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAnalysisRun : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAnonymousSessionMigrated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsAnswerVerificationFlagged : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsAnswerVerificationPassed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsArtefactSigned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAssetDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAssetUploaded : System.Boolean { get }
@@ -857,6 +882,10 @@ ToolUp.Platform.AuditEvent+AnalysisRun (class)
 ToolUp.Platform.AuditEvent+AnalysisRun.Item : ToolUp.Platform.AnalysisRunPayload { get }
 ToolUp.Platform.AuditEvent+AnonymousSessionMigrated (class)
 ToolUp.Platform.AuditEvent+AnonymousSessionMigrated.Item : ToolUp.Platform.AnonymousSessionMigratedPayload { get }
+ToolUp.Platform.AuditEvent+AnswerVerificationFlagged (class)
+ToolUp.Platform.AuditEvent+AnswerVerificationFlagged.Item : ToolUp.Platform.AnswerVerificationPayload { get }
+ToolUp.Platform.AuditEvent+AnswerVerificationPassed (class)
+ToolUp.Platform.AuditEvent+AnswerVerificationPassed.Item : ToolUp.Platform.AnswerVerificationPayload { get }
 ToolUp.Platform.AuditEvent+ArtefactSigned (class)
 ToolUp.Platform.AuditEvent+ArtefactSigned.Item : ToolUp.Platform.ArtefactSignedPayload { get }
 ToolUp.Platform.AuditEvent+AssetDeleted (class)
@@ -1115,6 +1144,8 @@ ToolUp.Platform.AuditEvent+Tags.AdSlotConfigDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AdSlotConfigUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AnalysisRun : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AnonymousSessionMigrated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.AnswerVerificationFlagged : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.AnswerVerificationPassed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ArtefactSigned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AssetDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AssetUploaded : System.Int32 (literal)
@@ -4650,6 +4681,9 @@ ToolUp.Platform.IActiveAiProbe (interface)
 ToolUp.Platform.IActiveAiProbe.Describe(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ActiveAiSummary]]
 ToolUp.Platform.IAnonymousSessionMigrator (interface)
 ToolUp.Platform.IAnonymousSessionMigrator.Migrate(System.String, ToolUp.Platform.Subject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationSummary, ToolUp.Platform.MigrationError]]
+ToolUp.Platform.IAnswerProvenanceAnchors (interface)
+ToolUp.Platform.IAnswerProvenanceAnchors.CompositionSealId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.IAnswerProvenanceAnchors.TryCertificateRef(System.String, System.Guid, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.IAuditLog (interface)
 ToolUp.Platform.IAuditLog.GetAuditTrail(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]]
 ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

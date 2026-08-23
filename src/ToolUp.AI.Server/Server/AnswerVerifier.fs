@@ -5,6 +5,7 @@ module ToolUp.AI.AnswerVerifier
 
 open System
 open System.Globalization
+open System.Security.Cryptography
 open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
@@ -523,21 +524,147 @@ type AnswerGate = {
 
 let private auditJsonOptions = FableConverters.create ()
 
-/// The post-response numeric-fidelity stage. Verifies the answer against the
-/// turn's retrieved facts, emits the SSE verification event, audits every
-/// unmatched token (GP 6), records verified/unmatched counters (Phase 523.E),
-/// and returns the (possibly `Strict`-withheld / `Annotate`-footnoted) answer
-/// plus the verdict to persist on the `ConversationMessage`.
+// ─── The provenance join (Phase 680) ─────────────────────────────────
+//
+// Two verifiable chains meet here and nowhere else. The serve-tier chain
+// (Phase 657's boot verification into Phase 658's hash-chained ledger)
+// ends at "a runtime action happened"; the grounding chain (provenance
+// traversal into signed grounding certificates) ends at "this fact was
+// produced this way". The answer-verification verdict is the one event
+// that is BOTH — a runtime action whose whole content is a claim about
+// facts — so it is the row that can name each chain's end and let a
+// reader walk between them.
+//
+// What that costs is one audit row per verified answer, carrying the
+// fact ids the answer cites, a digest over them, and — where a
+// deployment has them — the certificate covering the chain and the
+// sealed composition the process affirmed at boot. Nothing here issues,
+// signs, or verifies anything: it records the anchors, and each anchor
+// resolves in the store that owns it.
+//
+// **Additive by construction.** The join rides a NEW entry point; the
+// pre-680 `runVerificationStage` delegates to it with an empty join, so
+// a deployment that composes neither an `IAuditLog` nor an anchors
+// implementation runs the byte-identical pre-680 path (GP 11 / GP 13).
+
+/// The audit half of the verification stage: where the typed row is
+/// recorded, and what deployment-side anchors it may name.
+///
+/// A record rather than two more positional parameters on an already
+/// long signature — and a NEW record rather than fields on `AnswerGate`,
+/// which every consumer of `withAnswerVerifier` constructs.
+type AnswerAuditJoin = {
+    /// Where the typed `AnswerVerification*` row is recorded. `None`
+    /// records nothing, which is what a deployment with no audit log
+    /// composed has to mean.
+    AuditLog: IAuditLog option
+    /// The deployment-side anchors the row may name. `None` leaves every
+    /// join field `None` — an honest absence, not a placeholder.
+    Anchors: IAnswerProvenanceAnchors option
+}
+
+[<RequireQualifiedAccess>]
+module AnswerAuditJoin =
+    /// No audit row, no anchors — the pre-Phase-680 behaviour exactly.
+    let none: AnswerAuditJoin = { AuditLog = None; Anchors = None }
+
+    /// Record the row through `auditLog`, naming no deployment anchors.
+    /// The shape a deployment that has an audit log but neither
+    /// certificates nor a sealed composition composes.
+    let auditOnly (auditLog: IAuditLog) : AnswerAuditJoin = {
+        AuditLog = Some auditLog
+        Anchors = None
+    }
+
+[<RequireQualifiedAccess>]
+module AnswerProvenanceAnchors =
+
+    /// Anchors that name nothing. Behaviourally identical to composing
+    /// none; useful where a value is required rather than an option.
+    let none: IAnswerProvenanceAnchors =
+        { new IAnswerProvenanceAnchors with
+            member _.CompositionSealId = None
+            member _.TryCertificateRef(_, _, _) = async { return None }
+        }
+
+    /// Anchors naming a composition seal and no certificate — the shape a
+    /// deployment running a verified composition profile without the
+    /// certificate substrate composes.
+    let compositionSeal (sealId: string option) : IAnswerProvenanceAnchors =
+        { new IAnswerProvenanceAnchors with
+            member _.CompositionSealId = sealId
+            member _.TryCertificateRef(_, _, _) = async { return None }
+        }
+
+    /// The composition-seal identity a boot verification affirmed: the
+    /// digest of the deploy record the sealed composition binding names.
+    ///
+    /// **`None` unless the verdict was affirmative.** A binding is present
+    /// on a drifted or failed boot too, and naming its seal on an answer
+    /// row would assert precisely what the boot check declined to affirm —
+    /// that the running composition is the sealed one. Under the
+    /// log-and-serve default such a process keeps serving, which is exactly
+    /// when the distinction is load-bearing.
+    let fromBootVerification
+        (result: BootVerificationResult)
+        (binding: SealedCompositionBinding option)
+        : IAnswerProvenanceAnchors =
+        let sealId =
+            if BootVerificationVerdict.isAffirmative result.Verdict then
+                binding |> Option.map _.Binding.DeployRecordDigest
+            else
+                None
+
+        compositionSeal sealId
+
+/// Stable wire label for a token's verdict, matching the vocabulary the
+/// `AnswerVerificationTokenAudit.Verdict` field documents.
+let private verdictLabel (verdict: NumericVerdict) : string =
+    match verdict with
+    | NumberVerified -> "verified"
+    | NumberUnmatched -> "unmatched"
+    | NoFactsInScope -> "no-facts-in-scope"
+
+/// The provenance chain head an answer stands on: SHA-256 over the
+/// canonical join of the distinct fact ids it cites.
+///
+/// Deployment-independent and recomputable — a party holding the cited
+/// ids derives the same digest with no access to this deployment, which
+/// is what makes it a join key rather than a local handle. `None` for an
+/// answer that verified against no fact: a digest over nothing would look
+/// like a chain head and name no chain.
+let provenanceChainHead (citedFactIds: string list) : string option =
+    match citedFactIds with
+    | [] -> None
+    | ids ->
+        use sha = SHA256.Create()
+
+        sha.ComputeHash(Encoding.UTF8.GetBytes(String.Join("\n", ids)))
+        |> Array.map (sprintf "%02x")
+        |> String.concat ""
+        |> Some
+
+/// The post-response numeric-fidelity stage, with the Phase 680 provenance
+/// join. Verifies the answer against the turn's retrieved facts, emits the
+/// SSE verification event, audits every unmatched token to `IEventStore`
+/// (GP 6), records verified/unmatched counters (Phase 523.E), records ONE
+/// typed `AnswerVerification*` row through `join.AuditLog` naming the
+/// provenance the answer stands on, and returns the (possibly
+/// `Strict`-withheld / `Annotate`-footnoted) answer plus the verdict to
+/// persist on the `ConversationMessage`.
 ///
 /// `Off` mode (or an absent `gate`) returns `(answer, None)` with zero side
-/// effects — byte-for-byte the pre-523 path (GP 11 / GP 13).
-let runVerificationStage
+/// effects — byte-for-byte the pre-523 path (GP 11 / GP 13). An empty
+/// `join` (`AnswerAuditJoin.none`) records no typed row and leaves the
+/// `IEventStore` trail exactly as Phase 523 wrote it.
+let runVerificationStageWithJoin
     (gate: AnswerGate option)
     (registry: Grounding.IMetricRegistry option)
     (sources: RetrievedSource list)
     (answer: string)
     (metricsSink: IMetricsSink option)
     (eventStore: IEventStore option)
+    (join: AnswerAuditJoin)
     (scopeId: string)
     (taskId: Guid)
     (conversationId: Guid)
@@ -609,6 +736,82 @@ let runVerificationStage
                                 $"AI answer-verification audit write failed (taskId={taskId}, token={n.Token}): {ex.Message}. Record dropped; conversation unaffected."
             | None -> ()
 
+            // Phase 680 — ONE typed row per verified answer, through
+            // `IAuditLog`, BESIDE the per-token `IEventStore` trail above.
+            // The two are different surfaces answering different questions:
+            // the event-store rows are the module-scoped query surface for
+            // unverified figures, this row is the chained, sink-replicated
+            // statement of the whole verdict plus the provenance it stands
+            // on. Recorded on the affirmative verdict too (Phase 657's
+            // discipline) — absence of a row must stay a different fact
+            // from a clean one.
+            match join.AuditLog with
+            | Some auditLog ->
+                let citedFactIds =
+                    verification.Numbers
+                    |> List.choose (fun n ->
+                        match n.Verdict, n.MatchedFactId with
+                        | NumberVerified, Some id when id <> "" -> Some id
+                        | _ -> None)
+                    |> List.distinct
+                    |> List.sort
+
+                let! certificateRef =
+                    match join.Anchors with
+                    | Some anchors -> anchors.TryCertificateRef(scopeId, conversationId, citedFactIds)
+                    | None -> async { return None }
+
+                let payload: AnswerVerificationPayload = {
+                    TaskId = taskId
+                    ConversationId = conversationId
+                    Mode = modeStr
+                    Verified = verification.Verified
+                    Unmatched = verification.Unmatched
+                    Unverifiable = verification.Unverifiable
+                    FactsInScope = List.length facts
+                    Tokens =
+                        verification.Numbers
+                        |> List.map (fun n -> {
+                            Token = n.Token
+                            Canonical = n.Canonical |> Option.defaultValue ""
+                            Verdict = verdictLabel n.Verdict
+                            MatchedFactId = n.MatchedFactId
+                        })
+                    CitedFactIds = citedFactIds
+                    ProvenanceChainHead = provenanceChainHead citedFactIds
+                    CertificateRef = certificateRef
+                    CompositionSealId = join.Anchors |> Option.bind _.CompositionSealId
+                    ProviderName = providerName
+                    ProviderModel = providerModel
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
+
+                let event =
+                    if verification.Unmatched > 0 then
+                        AuditEvent.AnswerVerificationFlagged payload
+                    else
+                        AuditEvent.AnswerVerificationPassed payload
+
+                // Best-effort, exactly as the event-store write above: a
+                // wedged audit backend must never crash or block the
+                // conversation. `IAuditLog.Record` already swallows its own
+                // store failures; this guard covers a composed sink that
+                // throws or hangs on the way in.
+                try
+                    let recordTask = auditLog.Record(scopeId, event) |> Async.StartAsTask
+                    let timeoutTask = Task.Delay 5_000
+                    let! winner = Task.WhenAny(recordTask :> Task, timeoutTask) |> Async.AwaitTask
+
+                    if winner = (recordTask :> Task) then
+                        do! recordTask |> Async.AwaitTask
+                    else
+                        logger.Warn
+                            $"AI answer-verification audit row timed out (taskId={taskId}); record dropped, conversation unaffected."
+                with ex ->
+                    logger.Warn
+                        $"AI answer-verification audit row failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
+            | None -> ()
+
             // Text rewrite by mode (Phase 523.C).
             let finalAnswer =
                 match g.Mode with
@@ -618,3 +821,36 @@ let runVerificationStage
 
             return (finalAnswer, Some verification)
     }
+
+/// The pre-Phase-680 entry point, preserved verbatim: the verification
+/// stage with no provenance join. Delegates with `AnswerAuditJoin.none`,
+/// so an existing call site records no typed audit row and behaves exactly
+/// as it did (GP 11).
+let runVerificationStage
+    (gate: AnswerGate option)
+    (registry: Grounding.IMetricRegistry option)
+    (sources: RetrievedSource list)
+    (answer: string)
+    (metricsSink: IMetricsSink option)
+    (eventStore: IEventStore option)
+    (scopeId: string)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (providerName: string)
+    (providerModel: string)
+    (logger: ILogger)
+    : Async<string * AnswerVerification option> =
+    runVerificationStageWithJoin
+        gate
+        registry
+        sources
+        answer
+        metricsSink
+        eventStore
+        AnswerAuditJoin.none
+        scopeId
+        taskId
+        conversationId
+        providerName
+        providerModel
+        logger

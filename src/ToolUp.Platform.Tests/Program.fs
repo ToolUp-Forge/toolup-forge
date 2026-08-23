@@ -1098,6 +1098,10 @@ let allTests =
         // per axis, plus the verified profile's mandatory capability gate
         // and its audited refusals.
         BootVerificationPreflightTests.tests
+        // Phase 680 — the grounded-answer chain join: the serve-tier chain
+        // and the grounding chain meet on one audit row, and the walk
+        // between them is exercised end to end rather than argued.
+        GroundedAnswerChainJoinTests.tests
         // DefaultDeployPipeline.Rollback regression: a build-sourced
         // deploy's rollback relaunches the artefact ref recovered from
         // the DeployPushing event history (never a synthetic

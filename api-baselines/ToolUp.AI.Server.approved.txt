@@ -63,6 +63,7 @@ ToolUp.AI.AICompose+AIServerAppModule.create(ToolUp.AI.IAIProviderFactory, ToolU
 ToolUp.AI.AICompose+AIServerAppModule.createFrom(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.ServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.run(ToolUp.AI.AICompose+AIServerApp) : System.Int32
 ToolUp.AI.AICompose+AIServerAppModule.withAIConfig(ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withAnswerProvenanceAnchors(ToolUp.Platform.IAnswerProvenanceAnchors, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAnswerVerifier(ToolUp.AI.AnswerVerifier+AnswerGateMode, ToolUp.AI.AnswerVerifier+IAnswerVerifier, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
@@ -184,9 +185,18 @@ ToolUp.AI.AnswerVerifier.AuditSourceModule : System.String (literal)
 ToolUp.AI.AnswerVerifier.UnmatchedTotal : System.String (literal)
 ToolUp.AI.AnswerVerifier.VerifiedTotal : System.String (literal)
 ToolUp.AI.AnswerVerifier.extractTokens(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+NumericToken]
+ToolUp.AI.AnswerVerifier.provenanceChainHead(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.AnswerVerifier.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
 ToolUp.AI.AnswerVerifier.runVerificationStage(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], System.String, System.Guid, System.Guid, System.String, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification]]]
+ToolUp.AI.AnswerVerifier.runVerificationStageWithJoin(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.AI.AnswerVerifier+AnswerAuditJoin, System.String, System.Guid, System.Guid, System.String, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification]]]
 ToolUp.AI.AnswerVerifier.scopedFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+ScopedFact]
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin (class)
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin.Anchors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors] { get }
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
+ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule (class)
+ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule.auditOnly(ToolUp.Platform.IAuditLog) : ToolUp.AI.AnswerVerifier+AnswerAuditJoin
+ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule.none : ToolUp.AI.AnswerVerifier+AnswerAuditJoin { get }
 ToolUp.AI.AnswerVerifier+AnswerGate (class)
 ToolUp.AI.AnswerVerifier+AnswerGate..ctor(ToolUp.AI.AnswerVerifier+AnswerGateMode, ToolUp.AI.AnswerVerifier+IAnswerVerifier)
 ToolUp.AI.AnswerVerifier+AnswerGate.Mode : ToolUp.AI.AnswerVerifier+AnswerGateMode { get }
@@ -206,6 +216,10 @@ ToolUp.AI.AnswerVerifier+AnswerGateMode+Tags.AnswerGateStrict : System.Int32 (li
 ToolUp.AI.AnswerVerifier+AnswerGateModeModule (class)
 ToolUp.AI.AnswerVerifier+AnswerGateModeModule.parse(System.String) : ToolUp.AI.AnswerVerifier+AnswerGateMode
 ToolUp.AI.AnswerVerifier+AnswerGateModeModule.toString(ToolUp.AI.AnswerVerifier+AnswerGateMode) : System.String
+ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors (class)
+ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.compositionSeal(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.IAnswerProvenanceAnchors
+ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.fromBootVerification(ToolUp.Platform.BootVerificationResult, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedCompositionBinding]) : ToolUp.Platform.IAnswerProvenanceAnchors
+ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.none : ToolUp.Platform.IAnswerProvenanceAnchors { get }
 ToolUp.AI.AnswerVerifier+Canonical (class)
 ToolUp.AI.AnswerVerifier+Canonical.formatPrecision(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.AI.AnswerVerifier+Canonical.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Decimal, System.Int32]]

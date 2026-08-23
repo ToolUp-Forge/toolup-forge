@@ -1523,6 +1523,27 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> CompositionCapabilityRefused(fromAuditJson<CompositionCapabilityRefusedPayload> j)
     }
+    // Phase 680 — grounded-answer verification, both verdicts. Two event
+    // types over one payload shape: the discriminator is what a SIEM rule
+    // and a chained-ledger query cut on, and collapsing the pair into one
+    // type with a `Flagged: bool` field would put that cut inside the
+    // payload where neither can reach it without decoding every row.
+    {
+        EventType = "AnswerVerificationPassed"
+        TryEncode =
+            (function
+            | AnswerVerificationPassed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AnswerVerificationPassed(fromAuditJson<AnswerVerificationPayload> j)
+    }
+    {
+        EventType = "AnswerVerificationFlagged"
+        TryEncode =
+            (function
+            | AnswerVerificationFlagged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AnswerVerificationFlagged(fromAuditJson<AnswerVerificationPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

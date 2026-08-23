@@ -665,6 +665,39 @@ module AIServerApp =
     let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: AIServerApp) : AIServerApp =
         withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
 
+    /// Phase 680 — declare the deployment-side anchors the answer-
+    /// verification audit row names: the sealed composition this process
+    /// affirmed at boot, and the grounding certificate covering an answer's
+    /// chain where one exists.
+    ///
+    /// Registers the `IAnswerProvenanceAnchors` singleton the chat
+    /// handler's post-response stage resolves. **Nothing composes this by
+    /// default**: not calling it leaves both join fields `None` on the
+    /// recorded row — an honest absence — while the row's own counts and
+    /// cited fact ids are unaffected, because those are derived from the
+    /// verdict rather than from any anchor (GP 11 / GP 13).
+    ///
+    /// The row itself rides `IAuditLog`, which the platform composes
+    /// already; a deployment wanting the join with no anchors to declare
+    /// needs nothing here at all.
+    let withAnswerProvenanceAnchors (anchors: IAnswerProvenanceAnchors) (app: AIServerApp) : AIServerApp =
+        let register (s: IServiceCollection) =
+            s.AddSingleton<IAnswerProvenanceAnchors>(anchors)
+
+        {
+            app with
+                Base = {
+                    app.Base with
+                        Extensions = {
+                            app.Base.Extensions with
+                                ServiceConfig =
+                                    match app.Base.Extensions.ServiceConfig with
+                                    | None -> Some register
+                                    | Some baseFn -> Some(fun s -> register (baseFn s))
+                        }
+                }
+        }
+
     /// Phase 6j.B — opt into Tier-3 fast-path triage. Registers the
     /// `FastPathTriageConfig` singleton the agent loop's intercept
     /// resolves; NOT calling this (or passing a config with

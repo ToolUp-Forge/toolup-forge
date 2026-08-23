@@ -1347,6 +1347,12 @@
              execution enforcement layer. After BuildTranscriptTests, whose
              StubSealer it reuses rather than duplicating. -->
         <Compile Include="InProcess\BootVerificationPreflightTests.fs" />
+        <!-- Phase 680 — the grounded-answer chain join: one end-to-end walk
+             from a served answer's audit row to the facts it cites, the
+             certificate over that chain, and the sealed composition the
+             boot preflight affirmed. After BootVerificationPreflightTests,
+             whose StubSealer + composition fixtures it builds on. -->
+        <Compile Include="InProcess\GroundedAnswerChainJoinTests.fs" />
         <!-- Phase 18 — IPlatformPeer in-process binding + buyer→seller
              TestServer worked example (identity validation, audit
              emission, matching RootRequestId across the HTTP boundary). -->
