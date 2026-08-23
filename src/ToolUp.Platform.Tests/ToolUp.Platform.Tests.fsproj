@@ -1014,6 +1014,12 @@
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->
         <Compile Include="InProcess\GroundingCertificateTests.fs" />
+        <!-- Grounding certificate exported as a DSSE-wrapped in-toto
+             Statement: PAE against the specification's worked example, a
+             pinned deterministic-key signature vector, offline verify
+             against the public key alone, and the distinct refusals
+             (tamper / wrong subject / transplanted signature). -->
+        <Compile Include="InProcess\CertificateEnvelopeTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

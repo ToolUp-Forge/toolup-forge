@@ -826,6 +826,11 @@ let allTests =
         // predicate withholding a fact's structure (value never present), and
         // the GP-13 no-signing-substrate refusal.
         GroundingCertificateTests.tests
+        // Grounding certificate as a DSSE-wrapped in-toto Statement — the
+        // standard-interop export. Reference vectors for the encoding, an
+        // offline verify against the public key alone, and one distinct
+        // refusal per failure mode.
+        CertificateEnvelopeTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

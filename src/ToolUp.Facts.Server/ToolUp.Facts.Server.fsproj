@@ -38,6 +38,12 @@
         <Compile Include="Server\FactQueryTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
+        <!-- Grounding certificate exported as a DSSE-wrapped in-toto
+             Statement — the standard-interop projection over the
+             certificate the file above issues. Pure functions, no
+             composition change: a deployment that never exports one pays
+             nothing (GP 13). -->
+        <Compile Include="Server\CertificateEnvelope.fs" />
         <Compile Include="Server\RecomputeJobHandler.fs" />
         <Compile Include="Server\ReactiveDataChange.fs" />
         <Compile Include="Server\CoherenceCheck.fs" />

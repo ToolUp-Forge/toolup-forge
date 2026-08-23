@@ -2541,6 +2541,36 @@ ToolUp.Platform.DistributedLockSelection.fromEnv(ToolUp.Platform.ILogger, Micros
 ToolUp.Platform.DryRun (class)
 ToolUp.Platform.DryRun.shouldCompose(ToolUp.Platform.RegistrationCatalogue, ToolUp.Platform.CompositionDescriptor) : ToolUp.Platform.CompositionDryRunReport
 ToolUp.Platform.DryRun.shouldComposeWithin(System.TimeSpan, ToolUp.Platform.RegistrationCatalogue, ToolUp.Platform.CompositionDescriptor) : ToolUp.Platform.CompositionDryRunReport
+ToolUp.Platform.DsseEnvelope (class)
+ToolUp.Platform.DsseEnvelope..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DsseSignature])
+ToolUp.Platform.DsseEnvelope.Payload : System.String { get }
+ToolUp.Platform.DsseEnvelope.PayloadType : System.String { get }
+ToolUp.Platform.DsseEnvelope.Signatures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DsseSignature] { get }
+ToolUp.Platform.DsseEnvelopeModule (class)
+ToolUp.Platform.DsseEnvelopeModule.InTotoPayloadType : System.String (literal)
+ToolUp.Platform.DsseEnvelopeModule.StatementType : System.String (literal)
+ToolUp.Platform.DsseEnvelopeModule.checkShape(ToolUp.Platform.EnvelopeExpectation, ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelopeModule+ParsedStatement, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Platform.DsseEnvelopeModule.isJsonObject(System.String) : System.Boolean
+ToolUp.Platform.DsseEnvelopeModule.pae(System.String, System.Byte[]) : System.Byte[]
+ToolUp.Platform.DsseEnvelopeModule.paeOf(ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Platform.DsseEnvelopeModule.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]
+ToolUp.Platform.DsseEnvelopeModule.payloadBytes(ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Platform.DsseEnvelopeModule.readStatement(ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelopeModule+ParsedStatement, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Platform.DsseEnvelopeModule.sha256Hex(System.Byte[]) : System.String
+ToolUp.Platform.DsseEnvelopeModule.sign(ToolUp.Platform.IStatementEnvelopeSigner, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InTotoSubject], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
+ToolUp.Platform.DsseEnvelopeModule.signatureBytes(ToolUp.Platform.DsseSignature) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Platform.DsseEnvelopeModule.signatureFor(System.String, ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DsseSignature]
+ToolUp.Platform.DsseEnvelopeModule.statementJson(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InTotoSubject], System.String, System.String) : System.String
+ToolUp.Platform.DsseEnvelopeModule.toJson(ToolUp.Platform.DsseEnvelope) : System.String
+ToolUp.Platform.DsseEnvelopeModule+ParsedStatement (class)
+ToolUp.Platform.DsseEnvelopeModule+ParsedStatement..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
+ToolUp.Platform.DsseEnvelopeModule+ParsedStatement.PredicateJson : System.String { get }
+ToolUp.Platform.DsseEnvelopeModule+ParsedStatement.PredicateType : System.String { get }
+ToolUp.Platform.DsseEnvelopeModule+ParsedStatement.SubjectDigests : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DsseSignature (class)
+ToolUp.Platform.DsseSignature..ctor(System.String, System.String)
+ToolUp.Platform.DsseSignature.KeyId : System.String { get }
+ToolUp.Platform.DsseSignature.Sig : System.String { get }
 ToolUp.Platform.Ed25519ArtifactSigner (class)
 ToolUp.Platform.Ed25519ArtifactSigner..ctor(ToolUp.Platform.PublisherKeyId, System.Byte[])
 ToolUp.Platform.Ed25519ArtifactSignerModule (class)
@@ -2801,6 +2831,49 @@ ToolUp.Platform.EntityStore+EntityRegistry.Register`1(ToolUp.Platform.EntityType
 ToolUp.Platform.EntityStore+EntityRegistry.TryGet`1(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityRegistration`1[T]]
 ToolUp.Platform.EntityStoreTenantFleet (class)
 ToolUp.Platform.EntityStoreTenantFleet..ctor(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.IContainerScheduler, ToolUp.Platform.IDeployPipeline, ToolUp.Platform.ILogger)
+ToolUp.Platform.EnvelopeExpectation (class)
+ToolUp.Platform.EnvelopeExpectation..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.EnvelopeExpectation.PredicateType : System.String { get }
+ToolUp.Platform.EnvelopeExpectation.SubjectDigest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EnvelopeKeySignature (class)
+ToolUp.Platform.EnvelopeKeySignature..ctor(System.String, System.Byte[])
+ToolUp.Platform.EnvelopeKeySignature.KeyId : System.String { get }
+ToolUp.Platform.EnvelopeKeySignature.Signature : System.Byte[] { get }
+ToolUp.Platform.EnvelopeVerdict (class)
+ToolUp.Platform.EnvelopeVerdict.EnvelopeSignatureInvalid : ToolUp.Platform.EnvelopeVerdict { get }
+ToolUp.Platform.EnvelopeVerdict.EnvelopeValid : ToolUp.Platform.EnvelopeVerdict { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopeMalformed : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopePayloadTypeMismatch : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopePredicateTypeMismatch : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopeSignatureInvalid : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopeSubjectMismatch : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopeUnsignedForKey : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.IsEnvelopeValid : System.Boolean { get }
+ToolUp.Platform.EnvelopeVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopeMalformed (class)
+ToolUp.Platform.EnvelopeVerdict+EnvelopeMalformed.reason : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopePayloadTypeMismatch (class)
+ToolUp.Platform.EnvelopeVerdict+EnvelopePayloadTypeMismatch.actual : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopePayloadTypeMismatch.expected : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopePredicateTypeMismatch (class)
+ToolUp.Platform.EnvelopeVerdict+EnvelopePredicateTypeMismatch.actual : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopePredicateTypeMismatch.expected : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopeSubjectMismatch (class)
+ToolUp.Platform.EnvelopeVerdict+EnvelopeSubjectMismatch.actual : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopeSubjectMismatch.expected : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+EnvelopeUnsignedForKey (class)
+ToolUp.Platform.EnvelopeVerdict+EnvelopeUnsignedForKey.keyId : System.String { get }
+ToolUp.Platform.EnvelopeVerdict+Tags (class)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopeMalformed : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopePayloadTypeMismatch : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopePredicateTypeMismatch : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopeSignatureInvalid : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopeSubjectMismatch : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopeUnsignedForKey : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdict+Tags.EnvelopeValid : System.Int32 (literal)
+ToolUp.Platform.EnvelopeVerdictModule (class)
+ToolUp.Platform.EnvelopeVerdictModule.describe(ToolUp.Platform.EnvelopeVerdict) : System.String
+ToolUp.Platform.EnvelopeVerdictModule.isValid(ToolUp.Platform.EnvelopeVerdict) : System.Boolean
 ToolUp.Platform.ErasurePipeline (class)
 ToolUp.Platform.ErasurePipeline.executeErase(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IErasureHandler], ToolUp.Platform.DataSubjectRequest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DataSubjectRequestApi+ErasureRunSummary]
 ToolUp.Platform.ErasurePipeline.executeExport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], ToolUp.Platform.DataSubjectRequest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment]]
@@ -4211,6 +4284,9 @@ ToolUp.Platform.ISparseIndex+ISparseIndex.DeleteChunk(ToolUp.Platform.VectorKnow
 ToolUp.Platform.ISparseIndex+ISparseIndex.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Search(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Upsert(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IStatementEnvelopeSigner (interface)
+ToolUp.Platform.IStatementEnvelopeSigner.KeyId() : System.String
+ToolUp.Platform.IStatementEnvelopeSigner.SignPreAuthenticated(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EnvelopeKeySignature, System.String]]
 ToolUp.Platform.IStreamingDatasetCodec (interface)
 ToolUp.Platform.IStreamingDatasetCodec.DecodeChunk(Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]]], System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], Microsoft.FSharp.Core.FSharpOption`1[System.String]], System.String]]
 ToolUp.Platform.ITableExtractor (class)
@@ -4381,6 +4457,10 @@ ToolUp.Platform.InProcessOAuthTokenRefresher+Impl.Recover() : Microsoft.FSharp.C
 ToolUp.Platform.InProcessOAuthTokenRefresher+Impl.TryGetDescriptor(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthRefreshDescriptor]
 ToolUp.Platform.InProcessRateLimiter (class)
 ToolUp.Platform.InProcessRateLimiter..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IAuditLog, System.TimeSpan, ToolUp.Platform.ILogger)
+ToolUp.Platform.InTotoSubject (class)
+ToolUp.Platform.InTotoSubject..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.InTotoSubject.Digest : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.InTotoSubject.Name : System.String { get }
 ToolUp.Platform.IngestionStatusStore (class)
 ToolUp.Platform.IngestionStatusStore.DataType : System.String (literal)
 ToolUp.Platform.IngestionStatusStore.create(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IIngestionStatusStore

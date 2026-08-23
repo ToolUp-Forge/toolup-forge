@@ -80,6 +80,12 @@ ToolUp.ArtefactSigning.DeployRecordSealing.Purpose : System.String (literal)
 ToolUp.ArtefactSigning.DeployRecordSealing.Scheme : System.String (literal)
 ToolUp.ArtefactSigning.DeployRecordSealing.decodeToken(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, System.String]
 ToolUp.ArtefactSigning.DeployRecordSealing.encodeToken(ToolUp.ArtefactSigning.SignedPayloadEnvelope) : System.String
+ToolUp.ArtefactSigning.DsseEnvelopeSigning (class)
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.fromSecretStore(ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.ArtefactSigning.SigningAlgorithm) : ToolUp.Platform.IStatementEnvelopeSigner
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.readUnverifiedStatement(ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verify(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.EnvelopeExpectation, ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifyJson(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.EnvelopeExpectation, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifySignature(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.DsseEnvelope) : ToolUp.Platform.EnvelopeVerdict
 ToolUp.ArtefactSigning.EmptySigningKeyLedger (class)
 ToolUp.ArtefactSigning.EmptySigningKeyLedger..ctor()
 ToolUp.ArtefactSigning.EmptySigningKeyLedgerModule (class)

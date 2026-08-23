@@ -546,6 +546,14 @@
              (DsrAsyncDeps) names it. The interface depends only on Core
              types (DataSubjectRequest + ExportTicket/ExportStatus). -->
         <Compile Include="Server\IBackgroundExportStore.fs" />
+        <!-- Signed-statement envelope (in-toto Statement v1 + DSSE), format
+             half only: types, pre-authentication encoding, statement
+             assembly, structural checks, and the narrow raw-signing seam.
+             Crypto-free beyond SHA-256, so a substrate can emit an envelope
+             without taking a key-management dependency (GP 1); the signer
+             and the offline verifier live in ToolUp.ArtefactSigning, which
+             references this project. -->
+        <Compile Include="Server\DsseEnvelope.fs" />
         <!-- Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack generator.
              Pure orchestration over IEventStore (audit) + IDataExporter
              (DSR) + IFieldClassifier (classification) + IExportEnvelopeSigner
