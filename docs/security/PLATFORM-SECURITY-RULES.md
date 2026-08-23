@@ -25,7 +25,7 @@ matching version tag.
 
 **There are no aspirational rules in this document.** A control that is planned,
 partial, or unenforced is either absent or listed in
-[§9 Out of scope and known limitations](#9-out-of-scope-and-known-limitations).
+[§10 Out of scope and known limitations](#10-out-of-scope-and-known-limitations).
 If you find a rule whose evidence does not support it, that is a defect — report
 it via [`SECURITY.md`](../../SECURITY.md).
 
@@ -680,7 +680,7 @@ section eliminates structurally.
 > `docs/platform/auth.md` (§"Hardening checklist for production")
 >
 > *Transport encryption itself is terminated by the deployment's infrastructure —
-> see [§9](#9-out-of-scope-and-known-limitations).*
+> see [§10](#10-out-of-scope-and-known-limitations).*
 
 > **EN-2 — Application-tier envelope encryption at rest is available for every
 > blob-backed store, transparently.**
@@ -780,7 +780,7 @@ section eliminates structurally.
 > *Enablement:* Always on for the interface contract and the scope guarantee;
 > the "never read environment variables directly" part is a **documented
 > authoring rule verified by review, not by an analyzer** — see
-> [§9 known limitations](#known-limitations-of-the-shipped-controls).
+> [§10 known limitations](#known-limitations-of-the-shipped-controls).
 > Every credential-bearing companion takes `ISecretStore` through its
 > construction function. The interface contract requires that a secret
 > registered under one scope is **never** returned for another scope's lookup,
@@ -1136,7 +1136,7 @@ also what keeps the core's supply-chain surface small.
 
 This section is deliberately the most conservative in the document, because AI is
 where a security artefact is most likely to over-claim. Read the enablement
-labels closely, and read [§9](#9-out-of-scope-and-known-limitations) for what the
+labels closely, and read [§10](#10-out-of-scope-and-known-limitations) for what the
 SDK explicitly does **not** enforce about model providers.
 
 > **AI-1 — AI-driven UI control is not shipped, and tool dispatch has a single
@@ -1246,7 +1246,102 @@ SDK explicitly does **not** enforce about model providers.
 
 ---
 
-## 9. Out of scope and known limitations
+## 9. Supply chain
+
+Two questions sit behind this section, and they are different from each other.
+The first is what a consumer can verify about the packages this project
+publishes. The second is what stands behind the *native* code a deployment ends
+up executing in-process, which is the sharpest supply-chain question the SDK
+touches: a native library is not constrained by anything in §1–§8 — it runs with
+the full authority of the process, and no type, validator or gate in this
+document reaches it.
+
+The section is deliberately narrow. It does not claim a dependency-review
+process, a vulnerability-scanning posture, or anything about the upstream
+projects themselves. What it states is what is *enforced*.
+
+> **SC-1 — Every published package carries a signed build-provenance attestation
+> and a software bill of materials.**
+> *Enablement:* Always on for the released channel.
+> Publication runs from a tag through a workflow that mints a signed in-toto
+> build-provenance statement per pushed package, binding it to the source commit
+> and the build environment, and emits a CycloneDX SBOM per package on the same
+> path. Authentication to the registry is short-lived and OIDC-derived rather
+> than a stored key. A consumer verifies a package against the attestation with
+> `gh attestation verify <nupkg> --repo <owner>/<repo>`, which is a check on the
+> artefact they actually downloaded rather than a claim in this document.
+> **Evidence:** `.github/workflows/publish-nuget.yml` (the attestation and SBOM
+> steps, and the trusted-publishing exchange) ·
+> `docs/migrations/182-release-sbom-provenance-attestation.md` ·
+> `docs/migrations/216-module-sbom-in-stamp-manifest.md` (the module-binding
+> stamp manifest, which carries the same information for a composed deployment's
+> own modules)
+
+> **SC-2 — No package in this repository vendors a native binary.**
+> *Enablement:* Always on. Structural, and checkable by a reviewer in one
+> command.
+> Nothing in the tracked source tree is a `.dll`, `.so` or `.dylib`:
+> `git ls-files | grep -E '\.(dll|so|dylib)$'` returns nothing at the tag under
+> review. The one companion with a native dependency — the Tesseract OCR
+> provider — declares no foreign-function bindings of its own and takes its
+> engine from a published upstream package pinned centrally, so the review
+> surface for a native-contract change is that pinned version rather than a
+> local binding file, and its integrity rests on the upstream package's own
+> signature. **This repository records no digest of its own for it**, which is
+> stated because the alternative reading — that a pinned version implies a
+> recorded hash — is the kind of assumption this document exists to remove.
+> **Evidence:** `src/OcrProviders/Tesseract/README.md` (§"Native dependency",
+> which states that integrity posture in the same terms) ·
+> `src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj` ·
+> `Directory.Packages.props` (the central pin) ·
+> `CLAUDE.md` (§"Native-dependency companions (P/Invoke)")
+
+> **SC-3 — A companion that *does* vendor a native binary pins it by digest, and
+> the pin is enforced by a build failure rather than by convention.**
+> *Enablement:* Always on in the companions that vendor native artefacts —
+> enforced in each companion's own repository. An authoring requirement here;
+> see the scope note below, which is the part a reviewer should read.
+> Each such companion carries a provenance manifest declaring every native
+> artefact it ships — upstream repository, tag, commit, licence, SHA-256, size —
+> and its build hashes the bytes on disk and **fails** when they do not match,
+> naming the artefact, the recorded digest and the actual one. Three further
+> failures close the ways the record could quietly stop being true: a declared
+> artefact that has gone missing, a provenance document that no longer states the
+> digest the manifest records, and a native binary that no declaration covers at
+> all. That last one is what keeps the manifest from recording only what somebody
+> remembered to record.
+> Where a companion *builds* its native dependency from pinned upstream source
+> rather than vendoring bytes — two toolchains compiling one tag do not produce
+> one binary, so no digest recorded in the repository could be true anywhere else
+> — the pin is the upstream tag, held in a file the build script reads, and the
+> build fails when that file and the manifest disagree. The distinction is
+> stated in each companion's provenance document rather than smoothed over,
+> because a digest pin and a source pin are different claims.
+> **Scope — the enforcement is not in this repository.** These companions ship
+> as their own packages from their own repositories, so this document cannot
+> cite a repository-relative path for the mechanism, and a rule whose evidence a
+> reviewer cannot resolve here would be worth less than the sentence saying so.
+> The two questions to put to any native companion, this project's or anyone
+> else's: *show me the provenance manifest*, and *show me one byte of the
+> vendored artefact changing and the build going red*. Both are answerable for
+> the companions this project ships.
+> **Evidence:** `CLAUDE.md` (§"Native-dependency companions (P/Invoke)" — the
+> normative authoring rule, including the RID-vendoring, narrow-shim and
+> LGPL-boundary requirements this one sits beside) ·
+> [§10](#10-out-of-scope-and-known-limitations) (the corresponding limitation)
+
+**What a pin does not claim, in either form.** A digest detects substitution
+*after* the moment of recording: it says nothing about the supply chain upstream
+of that moment, and an upstream release that was itself compromised and then
+pinned faithfully is pinned faithfully. A source pin says only that the bytes
+came from a named tag built by a named script. And neither bounds what the
+native code does once loaded — there is no sandbox, no separate process and no
+capability restriction between a vendored native library and the rest of the
+application. Pinning answers *which* native code runs, and nothing else.
+
+---
+
+## 10. Out of scope and known limitations
 
 Everything in this section is deliberate. A control listed here is **not**
 enforced by the SDK, and a reviewer should direct the corresponding question to
@@ -1325,6 +1420,18 @@ Stated plainly so a reviewer does not have to discover them:
   classifier.** It enforces a classification decision; deciding *which* fields
   are sensitive is the deployment's own field classifier to implement.
   ([AZ-9](#3-authorisation))
+- **Native-artefact pinning is enforced in each native companion's own
+  repository, not in this one.** [SC-3](#9-supply-chain) is a real
+  build-failing mechanism, but its evidence is not resolvable at this
+  repository's tag, so a reviewer assessing a deployment that composes a native
+  companion has to ask that companion for it — the manifest, and a byte changing
+  and the build going red. Nothing in this repository would detect a native
+  companion that stopped enforcing its pin.
+- **A pin identifies which native code runs; it does not contain it.** There is
+  no sandbox, no separate process and no capability restriction between a native
+  library loaded through a companion and the rest of the application. A defect in
+  that library is a defect in the deployment, and no digest changes that.
+  ([SC-3](#9-supply-chain))
 - **The SDK is pre-1.0.** A minor version bump may carry a breaking change and
   may therefore change a rule. See
   [Ruleset versioning](README.md#ruleset-versioning).
