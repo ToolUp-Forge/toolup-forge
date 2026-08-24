@@ -239,7 +239,7 @@ let create (config: AwsSecretsManagerConfig) : ISecretStore =
 /// composition root chose (typically `EncryptedSecretStore` over
 /// `FileSecretStore`).
 let fromEnv () : ISecretStore option =
-    match Environment.GetEnvironmentVariable "TOOLUP_AWS_SECRETS_REGION" with
+    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.awsSecretsRegion with
     | null
     | "" -> None
     | region -> Some(create { Region = region })

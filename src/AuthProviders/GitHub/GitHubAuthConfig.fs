@@ -127,10 +127,12 @@ module GitHubAuthConfig =
     ///                                          `/user/emails` fallback.
     ///   - `TOOLUP_GITHUB_USER_AGENT`        — override the API User-Agent.
     let fromEnv () : GitHubAuthConfig = {
-        ApiBaseUrl = envVar "TOOLUP_GITHUB_API_BASE_URL" |> Option.defaultValue defaults.ApiBaseUrl
+        ApiBaseUrl =
+            envVar ConfigKeys.Names.githubApiBaseUrl
+            |> Option.defaultValue defaults.ApiBaseUrl
         TokenLocation = defaults.TokenLocation
         AllowedOrgs =
-            envVar "TOOLUP_GITHUB_ALLOWED_ORGS"
+            envVar ConfigKeys.Names.githubAllowedOrgs
             |> Option.map parseOrgs
             |> Option.defaultValue []
         CacheTtlSeconds =
@@ -138,7 +140,7 @@ module GitHubAuthConfig =
             // silently fall back to the default — a typo'd TTL becomes a
             // security-relevant setting nobody knew was ignored. Fail
             // fast; leaving it unset still uses the 300s default.
-            envVar "TOOLUP_GITHUB_CACHE_TTL_SECONDS"
+            envVar ConfigKeys.Names.githubCacheTtlSeconds
             |> Option.map (fun s ->
                 match Int32.TryParse(s.Trim()) with
                 | true, n when n >= 0 -> n
@@ -149,8 +151,10 @@ module GitHubAuthConfig =
                         DefaultCacheTtlSeconds)
             |> Option.defaultValue defaults.CacheTtlSeconds
         FetchPrimaryEmail =
-            envVar "TOOLUP_GITHUB_FETCH_PRIMARY_EMAIL"
+            envVar ConfigKeys.Names.githubFetchPrimaryEmail
             |> Option.map parseBool
             |> Option.defaultValue defaults.FetchPrimaryEmail
-        UserAgent = envVar "TOOLUP_GITHUB_USER_AGENT" |> Option.defaultValue defaults.UserAgent
+        UserAgent =
+            envVar ConfigKeys.Names.githubUserAgent
+            |> Option.defaultValue defaults.UserAgent
     }

@@ -67,9 +67,9 @@ type ProviderProbeSpec = {
     Fetch: string -> Async<ProbeOutcome>
 }
 
-let private providerEnvVarName = "TOOLUP_AI_PROVIDER"
-let private modelEnvVarName = "TOOLUP_AI_MODEL"
-let private probeEnvVarName = "TOOLUP_AI_PROBE_ON_STARTUP"
+let private providerEnvVarName = ToolUp.Platform.ConfigKeys.Names.aiProvider
+let private modelEnvVarName = ToolUp.Platform.ConfigKeys.Names.aiModel
+let private probeEnvVarName = ToolUp.Platform.ConfigKeys.Names.aiProbeOnStartup
 
 let private readEnv (name: string) =
     match Environment.GetEnvironmentVariable name with

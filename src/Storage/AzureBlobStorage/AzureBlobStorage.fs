@@ -339,7 +339,7 @@ let create (config: AzureBlobStorageConfig) : IBlobStorage = AzureBlobStorage co
 /// whatever it has wired. `rootContainer` overrides the default
 /// `"toolup"` name when `Some`.
 let fromEnv (rootContainer: string option) : IBlobStorage option =
-    match Environment.GetEnvironmentVariable "TOOLUP_AZURE_STORAGE_CONNECTION_STRING" with
+    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.azureStorageConnectionString with
     | null
     | "" -> None
     | connectionString ->

@@ -76,7 +76,7 @@ let create (apiBaseUrl: string) : IConfigValidator = Impl(apiBaseUrl) :> IConfig
 /// referencing the companion.
 let tryFromEnv () : IConfigValidator option =
     let enabled =
-        match Environment.GetEnvironmentVariable "TOOLUP_GITHUB_AUTH" with
+        match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.githubAuth with
         | null
         | "" -> false
         | raw ->
@@ -92,7 +92,7 @@ let tryFromEnv () : IConfigValidator option =
         None
     else
         let apiBaseUrl =
-            match Environment.GetEnvironmentVariable "TOOLUP_GITHUB_API_BASE_URL" with
+            match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.githubApiBaseUrl with
             | null
             | "" -> GitHubAuthConfig.GitHubAuthConfig.DefaultApiBaseUrl
             | v -> v

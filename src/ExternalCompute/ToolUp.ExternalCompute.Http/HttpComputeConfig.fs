@@ -701,13 +701,13 @@ module HttpComputeConfig =
     // ── Environment binding (GP 11) ─────────────────────────────────
 
     [<Literal>]
-    let private Prefix = "TOOLUP_EXTERNAL_COMPUTE_HTTP_"
+    let private Prefix = ToolUp.Platform.ConfigKeys.Names.externalComputeHttpPrefix
 
     /// The env var selecting this companion. `fromEnv` returns `None`
     /// unless it reads `http` (case-insensitively), so a deployment that
     /// has not opted in composes nothing and pays nothing (GP 13).
     [<Literal>]
-    let SelectorEnvVar = "TOOLUP_EXTERNAL_COMPUTE"
+    let SelectorEnvVar = ToolUp.Platform.ConfigKeys.Names.externalCompute
 
     let private env (name: string) =
         match Environment.GetEnvironmentVariable(Prefix + name) with

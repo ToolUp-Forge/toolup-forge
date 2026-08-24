@@ -51,7 +51,7 @@ open ToolUp.Platform.BlobEncryption
 // `PerScopeKeyResolver.DestroyKey` with the resolved actor user-id.
 
 [<Literal>]
-let private AdminTokenEnvVar = "TOOLUP_ADMIN_TOKEN"
+let private AdminTokenEnvVar = ConfigKeys.Names.adminToken
 
 [<Literal>]
 let private AdminTokenHeader = "X-Admin-Token"

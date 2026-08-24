@@ -30,7 +30,7 @@ open ToolUp.Platform.ConfigValidation
 //      later admin UI rollout).
 
 [<Literal>]
-let private AdminTokenEnvVar = "TOOLUP_ADMIN_TOKEN"
+let private AdminTokenEnvVar = ConfigKeys.Names.adminToken
 
 let private isAdminTokenSet () =
     match Environment.GetEnvironmentVariable AdminTokenEnvVar with

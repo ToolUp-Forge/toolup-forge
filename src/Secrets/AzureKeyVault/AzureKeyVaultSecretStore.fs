@@ -211,7 +211,7 @@ let create (config: AzureKeyVaultConfig) : ISecretStore =
 /// composition root chose (typically `EncryptedSecretStore` over
 /// `FileSecretStore`).
 let fromEnv () : ISecretStore option =
-    match Environment.GetEnvironmentVariable "TOOLUP_AZURE_KEY_VAULT_URL" with
+    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.azureKeyVaultUrl with
     | null
     | "" -> None
     | url -> Some(create { VaultUrl = url })

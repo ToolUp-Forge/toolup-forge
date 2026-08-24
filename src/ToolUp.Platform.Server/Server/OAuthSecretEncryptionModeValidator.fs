@@ -45,7 +45,7 @@ open ToolUp.Platform.ConfigValidation
 /// passthrough mode, reports `false`.
 let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
     let cloudKmsBacked =
-        match Environment.GetEnvironmentVariable "TOOLUP_SECRET_STORE" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.secretStore with
         | null
         | "" -> false
         | s ->

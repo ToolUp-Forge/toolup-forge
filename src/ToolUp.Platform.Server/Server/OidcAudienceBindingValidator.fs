@@ -34,10 +34,10 @@ open ToolUp.Platform.ConfigValidation
 // subject against this app. Mirrors Phase 6l.A / 6l.I.
 
 [<Literal>]
-let private AuthModeEnvVar = "TOOLUP_AUTH_MODE"
+let private AuthModeEnvVar = ConfigKeys.Names.authMode
 
 [<Literal>]
-let private OidcAudienceEnvVar = "TOOLUP_OIDC_AUDIENCE"
+let private OidcAudienceEnvVar = ConfigKeys.Names.oidcAudience
 
 let private envValue (name: string) =
     match Environment.GetEnvironmentVariable name with

@@ -16,7 +16,8 @@ open ToolUp.RAG.Benchmarks.BeirTypes
 /// the executable so `dotnet clean` doesn't wipe it. Operator can override
 /// via env var if they want to share a cache across multiple checkouts.
 let cacheRoot =
-    let envOverride = Environment.GetEnvironmentVariable "TOOLUP_BEIR_CACHE"
+    let envOverride =
+        Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.beirCache
 
     if not (String.IsNullOrWhiteSpace envOverride) then
         envOverride

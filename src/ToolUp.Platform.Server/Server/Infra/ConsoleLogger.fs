@@ -79,7 +79,7 @@ let private envVar (name: string) =
 /// the no-arg `ConsoleLogger()` constructor.
 let envSettings () : LogLevel * Set<string> =
     let level =
-        match envVar "TOOLUP_LOG_LEVEL" with
+        match envVar ConfigKeys.Names.logLevel with
         | None -> LogLevel.Info
         | Some raw ->
             match LogLevel.tryParse raw with
@@ -89,7 +89,7 @@ let envSettings () : LogLevel * Set<string> =
                 LogLevel.Info
 
     let categories =
-        match envVar "TOOLUP_TRACE_CATEGORIES" with
+        match envVar ConfigKeys.Names.traceCategories with
         | None -> Set.empty
         | Some raw ->
             raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)

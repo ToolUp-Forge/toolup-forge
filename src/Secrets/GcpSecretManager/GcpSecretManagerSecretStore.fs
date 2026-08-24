@@ -670,7 +670,7 @@ let create (config: GcpSecretManagerConfig) : ISecretStore =
 /// composition root chose (typically `EncryptedSecretStore` over
 /// `FileSecretStore`).
 let fromEnv () : ISecretStore option =
-    match Environment.GetEnvironmentVariable "TOOLUP_GCP_PROJECT_ID" with
+    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.gcpProjectId with
     | null
     | "" -> None
     | projectId -> Some(create { ProjectId = projectId })

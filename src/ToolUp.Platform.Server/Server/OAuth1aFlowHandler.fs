@@ -41,7 +41,7 @@ open ToolUp.Platform.TeamManagement
 // companion candidate).
 
 [<Literal>]
-let private RedirectBaseEnvVar = "TOOLUP_OAUTH_REDIRECT_BASE"
+let private RedirectBaseEnvVar = ConfigKeys.Names.oauthRedirectBase
 
 /// TTL for a pending request-token authorisation (the user has this long
 /// to complete provider consent before the stashed state expires).

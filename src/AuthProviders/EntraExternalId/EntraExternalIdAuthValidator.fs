@@ -96,8 +96,8 @@ let tryFromEnv () : IConfigValidator option =
         | "" -> None
         | value -> Some value
 
-    let tenant = readEnv "TOOLUP_ENTRA_EXTERNAL_ID_TENANT"
-    let audience = readEnv "TOOLUP_ENTRA_EXTERNAL_ID_AUDIENCE"
+    let tenant = readEnv ToolUp.Platform.ConfigKeys.Names.entraExternalIdTenant
+    let audience = readEnv ToolUp.Platform.ConfigKeys.Names.entraExternalIdAudience
 
     match tenant, audience with
     | None, None ->
@@ -123,5 +123,7 @@ let tryFromEnv () : IConfigValidator option =
             :> IConfigValidator
         )
     | Some tenant, Some _ ->
-        let customDomain = readEnv "TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN"
+        let customDomain =
+            readEnv ToolUp.Platform.ConfigKeys.Names.entraExternalIdCustomDomain
+
         Some(create tenant customDomain)

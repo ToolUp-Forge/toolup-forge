@@ -418,12 +418,12 @@ let create (config: GoogleCloudStorageConfig) : IBlobStorage =
 let fromEnv () : IBlobStorage option =
     let read name = Environment.GetEnvironmentVariable name
 
-    match read "TOOLUP_GCS_BUCKET" with
+    match read ToolUp.Platform.ConfigKeys.Names.gcsBucket with
     | null
     | "" -> None
     | bucket ->
         let credsJson =
-            match read "TOOLUP_GCS_CREDENTIALS_JSON" with
+            match read ToolUp.Platform.ConfigKeys.Names.gcsCredentialsJson with
             | null
             | "" -> None
             | json -> Some json

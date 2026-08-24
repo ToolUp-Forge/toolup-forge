@@ -51,6 +51,32 @@ Consequences, all additive:
 No behaviour changed: every variable was already read exactly as before. This is a documentation
 and introspection fix, not a correctness one.
 
+## Readers cite `Names.*`, and the bindings are now `[<Literal>]`
+
+Nearly every `TOOLUP_*` string literal in shipped source has been replaced by a
+`ConfigKeys.Names.*` citation — 87 in `ServerConfig.fromEnv` and 113 across the
+companions, validators and notification sinks. Renaming a
+variable is now a compile error at every reader rather than silent drift.
+
+Making that work required the `Names` bindings to become `[<Literal>]`. A dozen
+readers bind the variable name to their own `[<Literal>]` (for example
+`AdminTokenValidator.AdminTokenEnvVar`), and a plain `let` value is not a valid
+constant expression there. This is a **consumer-visible change**: the baseline
+now renders each binding as `(literal)` rather than a property getter, and a
+literal is inlined into consuming assemblies at compile time. A consumer that
+pins an older SDK and does not recompile keeps the previously-inlined string —
+which is harmless for env-var names, but worth knowing if you reflect over them.
+
+Two files deliberately keep raw literals, each for a structural reason:
+
+| File | Why |
+|---|---|
+| `Core/Shared/ComponentConfig.fs` | Compiles at position 71, before the registry at 278, so the binding is not in scope. It defines the `TOOLUP_COMPONENT__` prefix, which the registry documents. |
+| `ToolUp.Remoting.Analyzers/Analyzer.fs` | The analyzer project takes no `ToolUp.Platform.Core` reference by design — it loads inside the IDE, and widening its dependency graph for one token would be the wrong trade. |
+| `ToolUp.Platform.Build/Build/SDK.Build.fs`, `SDK.Sbom.fs` | The root `Build.fsproj` compiles these as **source**, with only FAKE package references. It is the orchestrator that builds Core, so giving it a Core reference would be circular. (The library project `ToolUp.Platform.Build.fsproj` does reference Core, which is why a solution build alone does not catch this — only `dotnet run --project Build.fsproj` does.) |
+
+Both still carry descriptors, and arm 1 of the coverage gate still holds them.
+
 ## The gate that let it drift
 
 `ConfigReferenceTests` asserted that "every env var read by the `*FromEnv` dispatch readers has a

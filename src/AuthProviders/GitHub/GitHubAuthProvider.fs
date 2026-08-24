@@ -383,7 +383,7 @@ let fromConfigWithMetrics
 /// `try`/`with`. When enabled, config layers `GitHubAuthConfig.fromEnv`
 /// over the defaults (`TOOLUP_GITHUB_ALLOWED_ORGS`, `_API_BASE_URL`, …).
 let fromEnv (logger: ILogger option) : IAuthProvider option =
-    match Environment.GetEnvironmentVariable "TOOLUP_GITHUB_AUTH" with
+    match Environment.GetEnvironmentVariable ConfigKeys.Names.githubAuth with
     | null
     | "" -> None
     | raw ->
@@ -399,7 +399,7 @@ let fromEnv (logger: ILogger option) : IAuthProvider option =
 /// `IMetricsSink` into the constructed provider when `TOOLUP_GITHUB_AUTH`
 /// is enabled.
 let fromEnvMetered (logger: ILogger option) (metrics: IMetricsSink option) : IAuthProvider option =
-    match Environment.GetEnvironmentVariable "TOOLUP_GITHUB_AUTH" with
+    match Environment.GetEnvironmentVariable ConfigKeys.Names.githubAuth with
     | null
     | "" -> None
     | raw ->

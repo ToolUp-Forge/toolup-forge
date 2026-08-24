@@ -39,13 +39,13 @@ open ToolUp.Platform.TeamManagement
 let private bootstrapActor = "_bootstrap"
 
 [<Literal>]
-let initialTeamNameEnvVar = "TOOLUP_INITIAL_TEAM_NAME"
+let initialTeamNameEnvVar = ConfigKeys.Names.initialTeamName
 
 [<Literal>]
-let initialTeamIdEnvVar = "TOOLUP_INITIAL_TEAM_ID"
+let initialTeamIdEnvVar = ConfigKeys.Names.initialTeamId
 
 [<Literal>]
-let initialAdminEnvVar = "TOOLUP_INITIAL_PLATFORM_ADMIN"
+let initialAdminEnvVar = ConfigKeys.Names.initialPlatformAdmin
 
 let private trimOrNone (value: string) =
     if String.IsNullOrWhiteSpace value then

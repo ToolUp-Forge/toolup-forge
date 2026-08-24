@@ -30,8 +30,8 @@ open ToolUp.Platform.ConfigValidation
 // Companion auto-registration: same as AIProviderEnvValidator —
 // always-on, self-skips with Ok when TOOLUP_AI_MODEL is unset.
 
-let private modelEnvVarName = "TOOLUP_AI_MODEL"
-let private providerEnvVarName = "TOOLUP_AI_PROVIDER"
+let private modelEnvVarName = ToolUp.Platform.ConfigKeys.Names.aiModel
+let private providerEnvVarName = ToolUp.Platform.ConfigKeys.Names.aiProvider
 
 let private readEnv (name: string) =
     match Environment.GetEnvironmentVariable name with

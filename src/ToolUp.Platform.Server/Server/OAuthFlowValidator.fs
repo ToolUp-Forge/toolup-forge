@@ -32,7 +32,7 @@ open ToolUp.Platform.ConfigValidation
 // use OAuth flows skip the validator entirely (no env var pressure).
 
 [<Literal>]
-let private RedirectBaseEnvVar = "TOOLUP_OAUTH_REDIRECT_BASE"
+let private RedirectBaseEnvVar = ConfigKeys.Names.oauthRedirectBase
 
 let private readEnv () : string option =
     match Environment.GetEnvironmentVariable RedirectBaseEnvVar with

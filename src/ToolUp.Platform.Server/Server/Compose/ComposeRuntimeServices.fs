@@ -544,7 +544,7 @@ let registerFileManagementRuntime
     // falls back to the default. Operators raising the limit for large uploads no
     // longer need a code change + repack.
     let maxFileBytes: int64 option =
-        match System.Environment.GetEnvironmentVariable "TOOLUP_MAX_FILE_BYTES" with
+        match System.Environment.GetEnvironmentVariable ConfigKeys.Names.maxFileBytes with
         | null
         | "" -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
         | raw ->

@@ -345,18 +345,18 @@ let create (config: AwsS3StorageConfig) : IBlobStorage = AwsS3Storage config :> 
 let fromEnv () : IBlobStorage option =
     let read name = Environment.GetEnvironmentVariable name
 
-    match read "TOOLUP_AWS_S3_BUCKET" with
+    match read ToolUp.Platform.ConfigKeys.Names.awsS3Bucket with
     | null
     | "" -> None
     | bucket ->
         let region =
-            match read "TOOLUP_AWS_S3_REGION" with
+            match read ToolUp.Platform.ConfigKeys.Names.awsS3Region with
             | null
             | "" -> "us-east-1"
             | r -> r
 
         let endpoint =
-            match read "TOOLUP_AWS_S3_ENDPOINT" with
+            match read ToolUp.Platform.ConfigKeys.Names.awsS3Endpoint with
             | null
             | "" -> None
             | e -> Some e

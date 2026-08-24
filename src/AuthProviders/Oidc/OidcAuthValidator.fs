@@ -54,7 +54,7 @@ let private hasField (json: string) (field: string) : bool =
 
 /// Env var that overrides the discovery-reachability probe deadline.
 [<Literal>]
-let timeoutEnvVar = "TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS"
+let timeoutEnvVar = ToolUp.Platform.ConfigKeys.Names.oidcPreflightTimeoutMs
 
 /// Upper sanity bound on the override (ms). A budget beyond this is
 /// almost certainly a typo (seconds keyed as ms, an extra zero). The
@@ -194,14 +194,14 @@ let createWithAudience (issuer: string) (audience: string option) : IConfigValid
 /// validator that fails preflight with a clear message — never a silent
 /// fallback to the default.
 let tryFromEnv () : IConfigValidator option =
-    match Environment.GetEnvironmentVariable "TOOLUP_OIDC_ISSUER" with
+    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.oidcIssuer with
     | null
     | "" -> None
     | issuer ->
         // Phase 341 — an unset TOOLUP_OIDC_AUDIENCE means the provider
         // skips the aud-claim check; warn so the silent skip is visible.
         let warnAudienceNone =
-            match Environment.GetEnvironmentVariable "TOOLUP_OIDC_AUDIENCE" with
+            match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.oidcAudience with
             | null
             | "" -> true
             | _ -> false

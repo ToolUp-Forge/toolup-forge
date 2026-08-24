@@ -54,7 +54,7 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
     // EncryptedSecretStore wrapping; `TOOLUP_SECRETS_MASTER_KEY`
     // becomes irrelevant and the master-key gate is skipped.
     let isCloudKmsBacked () =
-        match Environment.GetEnvironmentVariable "TOOLUP_SECRET_STORE" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.secretStore with
         | null
         | "" -> false
         | s ->

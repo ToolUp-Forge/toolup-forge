@@ -80,23 +80,23 @@ module SmtpSettings =
             | None -> failwithf "Phase 6f Smtp: env var %s is required" name
 
         let port =
-            match Int32.TryParse(readRequired "TOOLUP_SMTP_PORT") with
+            match Int32.TryParse(readRequired ConfigKeys.Names.smtpPort) with
             | true, n when n >= 1 && n <= 65535 -> n
             | _ -> failwithf "Phase 6f Smtp: TOOLUP_SMTP_PORT must be an integer in 1-65535"
 
         let useTls =
-            match read "TOOLUP_SMTP_TLS" with
+            match read ConfigKeys.Names.smtpTls with
             | Some v -> v.Equals("false", StringComparison.OrdinalIgnoreCase) |> not
             | None -> true
 
         {
-            Host = readRequired "TOOLUP_SMTP_HOST"
+            Host = readRequired ConfigKeys.Names.smtpHost
             Port = port
-            Username = read "TOOLUP_SMTP_USERNAME"
-            Password = read "TOOLUP_SMTP_PASSWORD"
+            Username = read ConfigKeys.Names.smtpUsername
+            Password = read ConfigKeys.Names.smtpPassword
             UseTls = useTls
-            DefaultFromAddress = readRequired "TOOLUP_SMTP_FROM"
-            DefaultFromDisplayName = read "TOOLUP_SMTP_FROM_NAME"
+            DefaultFromAddress = readRequired ConfigKeys.Names.smtpFrom
+            DefaultFromDisplayName = read ConfigKeys.Names.smtpFromName
         }
 
 /// Stable provider string — separate constant so test code asserts

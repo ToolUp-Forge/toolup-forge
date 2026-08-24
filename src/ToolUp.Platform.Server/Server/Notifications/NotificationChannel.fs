@@ -185,7 +185,8 @@ let fromEnv
     let inProcess () =
         InMemoryNotificationChannel(Some logger) :> INotificationChannel, None, None
 
-    let chosen = envVar "TOOLUP_NOTIFICATION_CHANNEL" |> Option.map _.ToLowerInvariant()
+    let chosen =
+        envVar ConfigKeys.Names.notificationChannel |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

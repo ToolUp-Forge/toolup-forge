@@ -67,14 +67,14 @@ module SendGridSettings =
             | v -> Some v
 
         let fromAddress =
-            match read "TOOLUP_SENDGRID_FROM" with
+            match read ConfigKeys.Names.sendGridFrom with
             | Some v -> v
             | None -> failwithf "Phase 6f SendGrid: env var TOOLUP_SENDGRID_FROM is required"
 
         {
             DefaultFromAddress = fromAddress
-            DefaultFromDisplayName = read "TOOLUP_SENDGRID_FROM_NAME"
-            EndpointOverride = read "TOOLUP_SENDGRID_ENDPOINT"
+            DefaultFromDisplayName = read ConfigKeys.Names.sendGridFromName
+            EndpointOverride = read ConfigKeys.Names.sendGridEndpoint
         }
 
 // ─── Wire DTOs ───────────────────────────────────────────────────

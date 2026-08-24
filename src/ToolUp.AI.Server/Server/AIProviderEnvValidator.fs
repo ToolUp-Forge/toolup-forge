@@ -26,7 +26,7 @@ open ToolUp.Platform.ConfigValidation
 // TOOLUP_AI_PROVIDER is unset — zero cost for deployments that don't
 // rely on the env var (GP 13 — lightweight default).
 
-let private envVarName = "TOOLUP_AI_PROVIDER"
+let private envVarName = ToolUp.Platform.ConfigKeys.Names.aiProvider
 
 let private readEnv () =
     match Environment.GetEnvironmentVariable envVarName with

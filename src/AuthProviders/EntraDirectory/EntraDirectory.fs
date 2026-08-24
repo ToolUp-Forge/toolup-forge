@@ -510,20 +510,20 @@ let fromManagedIdentity () : IUserDirectory = create EntraDirectoryConfig.defaul
 /// handler short-circuits to `Ok []` and the UI degrades gracefully).
 let fromEnv () : IUserDirectory option =
     let enabled =
-        match Environment.GetEnvironmentVariable "TOOLUP_ENTRA_DIRECTORY_ENABLED" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.entraDirectoryEnabled with
         | "1"
         | "true"
         | "TRUE" -> true
         | _ -> false
 
     let explicitEndpoint =
-        match Environment.GetEnvironmentVariable "TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.entraDirectoryGraphEndpoint with
         | null
         | "" -> None
         | url -> Some url
 
     let senderOid =
-        match Environment.GetEnvironmentVariable "TOOLUP_ENTRA_DIRECTORY_SENDER_OID" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.entraDirectorySenderOid with
         | null
         | "" -> None
         | v -> Some v

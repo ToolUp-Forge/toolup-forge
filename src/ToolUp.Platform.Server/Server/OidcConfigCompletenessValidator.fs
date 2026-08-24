@@ -32,10 +32,10 @@ open ToolUp.Platform.ConfigValidation
 // TOOLUP_AUTH_MODE entirely.
 
 [<Literal>]
-let private AuthModeEnvVar = "TOOLUP_AUTH_MODE"
+let private AuthModeEnvVar = ConfigKeys.Names.authMode
 
 [<Literal>]
-let private OidcIssuerEnvVar = "TOOLUP_OIDC_ISSUER"
+let private OidcIssuerEnvVar = ConfigKeys.Names.oidcIssuer
 
 let private envValue (name: string) =
     match Environment.GetEnvironmentVariable name with

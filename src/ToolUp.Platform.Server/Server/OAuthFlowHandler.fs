@@ -48,7 +48,7 @@ open ToolUp.Platform.TeamManagement
 // ─── Internal helpers ───────────────────────────────────────────────
 
 [<Literal>]
-let private RedirectBaseEnvVar = "TOOLUP_OAUTH_REDIRECT_BASE"
+let private RedirectBaseEnvVar = ConfigKeys.Names.oauthRedirectBase
 
 [<Literal>]
 let private PlatformContainer = "_platform"

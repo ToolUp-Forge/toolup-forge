@@ -246,6 +246,6 @@ module RedisDistributedLock =
     ///         ServiceConfig = Some(fun s -> s.AddSingleton<IDistributedLock>(lck)) }
     let resolver: DistributedLockResolver = {
         Name = "redis"
-        ConnectionEnvVar = "TOOLUP_REDIS_CONNECTION"
+        ConnectionEnvVar = ConfigKeys.Names.redisConnection
         Resolve = fun logger connStr -> fromConnectionString connStr (Some logger)
     }

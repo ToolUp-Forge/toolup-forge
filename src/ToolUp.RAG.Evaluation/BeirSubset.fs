@@ -30,7 +30,8 @@ open ToolUp.RAG.Evaluation.EvalTypes
 /// both consumers (`TOOLUP_BEIR_CACHE`); falls back to a per-project
 /// `bin/.../data/beir/` cache near the executable.
 let cacheRoot =
-    let envOverride = Environment.GetEnvironmentVariable "TOOLUP_BEIR_CACHE"
+    let envOverride =
+        Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.beirCache
 
     if not (String.IsNullOrWhiteSpace envOverride) then
         envOverride

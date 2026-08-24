@@ -199,7 +199,7 @@ module LdapConfig =
     /// deployment that does not use LDAP — and has not set the flag —
     /// pays nothing and registers nothing (GP 13).
     let enabledFromEnv () : bool =
-        match envVar "TOOLUP_LDAP_AUTH" with
+        match envVar ToolUp.Platform.ConfigKeys.Names.ldapAuth with
         | Some raw -> parseBool raw
         | None -> false
 
@@ -208,7 +208,7 @@ module LdapConfig =
     /// this is set — a plaintext bind puts credentials on the wire in
     /// the clear, so it must never be reachable by omission.
     let plaintextAllowedFromEnv () : bool =
-        match envVar "TOOLUP_LDAP_ALLOW_PLAINTEXT" with
+        match envVar ToolUp.Platform.ConfigKeys.Names.ldapAllowPlaintext with
         | Some raw -> parseBool raw
         | None -> false
 
@@ -244,43 +244,44 @@ module LdapConfig =
     ///   - `TOOLUP_LDAP_CACHE_TTL_SECONDS`  — identity-cache TTL.
     ///   - `TOOLUP_LDAP_TIMEOUT_SECONDS`    — per-op timeout.
     let fromEnv () : LdapConfig =
-        let host = envVar "TOOLUP_LDAP_HOST" |> Option.defaultValue ""
+        let host =
+            envVar ToolUp.Platform.ConfigKeys.Names.ldapHost |> Option.defaultValue ""
 
         let channel =
-            envVar "TOOLUP_LDAP_CHANNEL"
+            envVar ToolUp.Platform.ConfigKeys.Names.ldapChannel
             |> Option.map parseChannelBinding
             |> Option.defaultValue Ldaps
 
         let certValidation =
             if
-                envVar "TOOLUP_LDAP_ALLOW_UNTRUSTED_CERT"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapAllowUntrustedCert
                 |> Option.map parseBool
                 |> Option.defaultValue false
             then
                 AllowUntrusted
             else
-                Strict(envVar "TOOLUP_LDAP_CERT_THUMBPRINT")
+                Strict(envVar ToolUp.Platform.ConfigKeys.Names.ldapCertThumbprint)
 
         let baseDefaults = defaults host
 
         let schema = {
             LoginAttribute =
-                envVar "TOOLUP_LDAP_LOGIN_ATTR"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapLoginAttr
                 |> Option.defaultValue baseDefaults.Schema.LoginAttribute
             UserIdAttribute =
-                envVar "TOOLUP_LDAP_USER_ID_ATTR"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapUserIdAttr
                 |> Option.defaultValue baseDefaults.Schema.UserIdAttribute
             DisplayNameAttribute =
-                envVar "TOOLUP_LDAP_DISPLAY_ATTR"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapDisplayAttr
                 |> Option.defaultValue baseDefaults.Schema.DisplayNameAttribute
             EmailAttribute =
-                envVar "TOOLUP_LDAP_EMAIL_ATTR"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapEmailAttr
                 |> Option.defaultValue baseDefaults.Schema.EmailAttribute
             MemberOfAttribute =
-                envVar "TOOLUP_LDAP_MEMBEROF_ATTR"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapMemberOfAttr
                 |> Option.defaultValue baseDefaults.Schema.MemberOfAttribute
             UserObjectClass =
-                envVar "TOOLUP_LDAP_USER_OBJECTCLASS"
+                envVar ToolUp.Platform.ConfigKeys.Names.ldapUserObjectClass
                 |> Option.defaultValue baseDefaults.Schema.UserObjectClass
         }
 
@@ -294,19 +295,19 @@ module LdapConfig =
 
         {
             baseDefaults with
-                Port = intVar "TOOLUP_LDAP_PORT" (defaultPortFor channel)
+                Port = intVar ToolUp.Platform.ConfigKeys.Names.ldapPort (defaultPortFor channel)
                 ChannelBinding = channel
                 CertificateValidation = certValidation
-                ServiceBindDn = envVar "TOOLUP_LDAP_BIND_DN" |> Option.defaultValue ""
+                ServiceBindDn = envVar ToolUp.Platform.ConfigKeys.Names.ldapBindDn |> Option.defaultValue ""
                 BindPasswordSecretKey =
-                    envVar "TOOLUP_LDAP_BIND_SECRET_KEY"
+                    envVar ToolUp.Platform.ConfigKeys.Names.ldapBindSecretKey
                     |> Option.defaultValue DefaultBindPasswordSecretKey
-                SearchBase = envVar "TOOLUP_LDAP_SEARCH_BASE" |> Option.defaultValue ""
+                SearchBase = envVar ToolUp.Platform.ConfigKeys.Names.ldapSearchBase |> Option.defaultValue ""
                 Schema = schema
                 NestedGroupResolution =
-                    envVar "TOOLUP_LDAP_NESTED_GROUPS"
+                    envVar ToolUp.Platform.ConfigKeys.Names.ldapNestedGroups
                     |> Option.map parseBool
                     |> Option.defaultValue true
-                CacheTtlSeconds = intVar "TOOLUP_LDAP_CACHE_TTL_SECONDS" DefaultCacheTtlSeconds
-                TimeoutSeconds = intVar "TOOLUP_LDAP_TIMEOUT_SECONDS" DefaultTimeoutSeconds
+                CacheTtlSeconds = intVar ToolUp.Platform.ConfigKeys.Names.ldapCacheTtlSeconds DefaultCacheTtlSeconds
+                TimeoutSeconds = intVar ToolUp.Platform.ConfigKeys.Names.ldapTimeoutSeconds DefaultTimeoutSeconds
         }

@@ -158,225 +158,563 @@ type ConfigKeyDescriptor = {
 [<RequireQualifiedAccess>]
 module Names =
     // Storage & secrets
+    [<Literal>]
     let blobStorage = "TOOLUP_BLOB_STORAGE"
+
+    [<Literal>]
     let secretStore = "TOOLUP_SECRET_STORE"
+
+    [<Literal>]
     let secretsMasterKey = "TOOLUP_SECRETS_MASTER_KEY"
+
+    [<Literal>]
     let secretsPath = "TOOLUP_SECRETS_PATH"
+
+    [<Literal>]
     let azureStorageConnectionString = "TOOLUP_AZURE_STORAGE_CONNECTION_STRING"
+
+    [<Literal>]
     let awsS3Bucket = "TOOLUP_AWS_S3_BUCKET"
+
+    [<Literal>]
     let gcsBucket = "TOOLUP_GCS_BUCKET"
 
     // Auth & identity
+    [<Literal>]
     let authMode = "TOOLUP_AUTH_MODE"
+
+    [<Literal>]
     let oidcIssuer = "TOOLUP_OIDC_ISSUER"
+
+    [<Literal>]
     let oidcAudience = "TOOLUP_OIDC_AUDIENCE"
+
+    [<Literal>]
     let sseAuth = "TOOLUP_SSE_AUTH"
+
+    [<Literal>]
     let initialPlatformAdmin = "TOOLUP_INITIAL_PLATFORM_ADMIN"
+
+    [<Literal>]
     let adminToken = "TOOLUP_ADMIN_TOKEN"
+
+    [<Literal>]
     let allowDevAdminBootstrap = "TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP"
+
+    [<Literal>]
     let initialTeamName = "TOOLUP_INITIAL_TEAM_NAME"
+
+    [<Literal>]
     let initialTeamId = "TOOLUP_INITIAL_TEAM_ID"
+
+    [<Literal>]
     let oauthRedirectBase = "TOOLUP_OAUTH_REDIRECT_BASE"
 
     // Logging & observability
+    [<Literal>]
     let logLevel = "TOOLUP_LOG_LEVEL"
+
+    [<Literal>]
     let logFormat = "TOOLUP_LOG_FORMAT"
+
+    [<Literal>]
     let traceCategories = "TOOLUP_TRACE_CATEGORIES"
+
+    [<Literal>]
     let appName = "TOOLUP_APP_NAME"
 
     // Deployment shape
+    [<Literal>]
     let replicaCount = "TOOLUP_REPLICA_COUNT"
+
+    [<Literal>]
     let notificationChannel = "TOOLUP_NOTIFICATION_CHANNEL"
+
+    [<Literal>]
     let distributedLock = "TOOLUP_DISTRIBUTED_LOCK"
+
+    [<Literal>]
     let redisConnection = "TOOLUP_REDIS_CONNECTION"
+
+    [<Literal>]
     let requireHttps = "TOOLUP_REQUIRE_HTTPS"
+
+    [<Literal>]
     let trustForwardedHeaders = "TOOLUP_TRUST_FORWARDED_HEADERS"
+
+    [<Literal>]
     let maxRequestBodyBytes = "TOOLUP_MAX_REQUEST_BODY_BYTES"
+
+    [<Literal>]
     let maxFileBytes = "TOOLUP_MAX_FILE_BYTES"
+
+    [<Literal>]
     let smokeToken = "TOOLUP_SMOKE_TOKEN"
+
+    [<Literal>]
     let auditAdminRequired = "TOOLUP_AUDIT_ADMIN_REQUIRED"
 
     // Security preflight escape hatches — each lowers a specific
     // `IConfigValidator` refusal to a warning. Documented so an operator
     // can see the full list of "I know what I'm doing" overrides.
+    [<Literal>]
     let acceptLocalFallback = "TOOLUP_ACCEPT_LOCAL_FALLBACK"
+
+    [<Literal>]
     let acceptHeaderAuthInAuthMode = "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE"
+
+    [<Literal>]
     let acceptUnboundAudienceInAuthMode = "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE"
 
+    [<Literal>]
     let acceptSameSiteOnlyCsrfInAuthMode =
         "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE"
 
+    [<Literal>]
     let acceptNoRateLimitInAuthMode = "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE"
 
+    [<Literal>]
     let acceptQueryParamSseAuthInAuthMode =
         "TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE"
 
+    [<Literal>]
     let acceptInviteByEmailWithoutDirectory =
         "TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY"
 
+    [<Literal>]
     let acceptPendingInviteStoreMultiInstance =
         "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE"
 
+    [<Literal>]
     let acceptInMemoryOAuthStateMultiInstance =
         "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"
 
     // --- Phase 689: keys previously read with no descriptor ---
+    [<Literal>]
     let shareTokenStore = "TOOLUP_SHARE_TOKEN_STORE"
+
+    [<Literal>]
     let webhooks = "TOOLUP_WEBHOOKS"
+
+    [<Literal>]
     let auditLog = "TOOLUP_AUDIT_LOG"
+
+    [<Literal>]
     let lineage = "TOOLUP_LINEAGE"
+
+    [<Literal>]
     let dataIngestion = "TOOLUP_DATA_INGESTION"
+
+    [<Literal>]
     let columnMapping = "TOOLUP_COLUMN_MAPPING"
+
+    [<Literal>]
     let oauthRefresher = "TOOLUP_OAUTH_REFRESHER"
+
+    [<Literal>]
     let entityStore = "TOOLUP_ENTITY_STORE"
+
+    [<Literal>]
     let entityOutbox = "TOOLUP_ENTITY_OUTBOX"
+
+    [<Literal>]
     let usageMetering = "TOOLUP_USAGE_METERING"
+
+    [<Literal>]
     let computeBudget = "TOOLUP_COMPUTE_BUDGET"
+
+    [<Literal>]
     let metricsEndpoint = "TOOLUP_METRICS_ENDPOINT"
+
+    [<Literal>]
     let platformKnowledgeBase = "TOOLUP_PLATFORM_KNOWLEDGE_BASE"
+
+    [<Literal>]
     let configDriftDetection = "TOOLUP_CONFIG_DRIFT_DETECTION"
+
+    [<Literal>]
     let rateLimiter = "TOOLUP_RATE_LIMITER"
+
+    [<Literal>]
     let smokeTest = "TOOLUP_SMOKE_TEST"
+
+    [<Literal>]
     let deploymentReadiness = "TOOLUP_DEPLOYMENT_READINESS"
+
+    [<Literal>]
     let deploymentVerification = "TOOLUP_DEPLOYMENT_VERIFICATION"
+
+    [<Literal>]
     let assetStore = "TOOLUP_ASSET_STORE"
+
+    [<Literal>]
     let consentAudit = "TOOLUP_CONSENT_AUDIT"
+
+    [<Literal>]
     let adAnalytics = "TOOLUP_AD_ANALYTICS"
+
+    [<Literal>]
     let jobScheduler = "TOOLUP_JOB_SCHEDULER"
+
+    [<Literal>]
     let staticPathBehaviour = "TOOLUP_STATIC_PATH_BEHAVIOUR"
+
+    [<Literal>]
     let authCookieIssuance = "TOOLUP_AUTH_COOKIE_ISSUANCE"
+
+    [<Literal>]
     let auditFailurePolicy = "TOOLUP_AUDIT_FAILURE_POLICY"
+
+    [<Literal>]
     let resultStore = "TOOLUP_RESULT_STORE"
+
+    [<Literal>]
     let consentStateStore = "TOOLUP_CONSENT_STATE_STORE"
+
+    [<Literal>]
     let serverlessHost = "TOOLUP_SERVERLESS_HOST"
+
+    [<Literal>]
     let processProfile = "TOOLUP_PROCESS_PROFILE"
+
+    [<Literal>]
     let teamCreationPolicy = "TOOLUP_TEAM_CREATION_POLICY"
+
+    [<Literal>]
     let rateLimitStore = "TOOLUP_RATE_LIMIT_STORE"
+
+    [<Literal>]
     let eventStore = "TOOLUP_EVENT_STORE"
+
+    [<Literal>]
     let conversationStore = "TOOLUP_CONVERSATION_STORE"
+
+    [<Literal>]
     let publicRendering = "TOOLUP_PUBLIC_RENDERING"
+
+    [<Literal>]
     let dataSubjectRequests = "TOOLUP_DATA_SUBJECT_REQUESTS"
+
+    [<Literal>]
     let securityHardening = "TOOLUP_SECURITY_HARDENING"
+
+    [<Literal>]
     let mappingDryRunBlock = "TOOLUP_MAPPING_DRYRUN_BLOCK"
+
+    [<Literal>]
     let platformSurfaces = "TOOLUP_PLATFORM_SURFACES"
 
+    [<Literal>]
     let acceptPlaintextSecretsInAuthMode =
         "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE"
 
+    [<Literal>]
     let acceptInProcessSchedulerMultiInstance =
         "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE"
 
+    [<Literal>]
     let acceptUnsignedPublishable = "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE"
 
+    [<Literal>]
     let acceptInMemoryShareTokenRateLimiterMultiInstance =
         "TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE"
 
+    [<Literal>]
     let acceptInProcessIngestionMultiInstance =
         "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE"
 
+    [<Literal>]
     let acceptSharedEmbeddingCacheInTeamMode =
         "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE"
 
+    [<Literal>]
     let acceptEphemeralRagIndex = "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX"
+
+    [<Literal>]
     let acceptLocalEmbedderAtScale = "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE"
 
+    [<Literal>]
     let acceptStickyRoutedAiMultiInstance =
         "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE"
 
+    [<Literal>]
     let acceptForwardedHeadersFromAnyProxy =
         "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY"
 
+    [<Literal>]
     let backfillMissedTicks = "TOOLUP_BACKFILL_MISSED_TICKS"
+
+    [<Literal>]
     let eventTriggerCatchUp = "TOOLUP_EVENT_TRIGGER_CATCHUP"
+
+    [<Literal>]
     let migrateWebhookSecretsAtRest = "TOOLUP_MIGRATE_WEBHOOK_SECRETS"
+
+    [<Literal>]
     let skipPreflight = "TOOLUP_SKIP_PREFLIGHT"
+
+    [<Literal>]
     let healthStateTracking = "TOOLUP_HEALTH_STATE_TRACKING"
+
+    [<Literal>]
     let enableCitationDevEndpoint = "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT"
+
+    [<Literal>]
     let enableDevEndpoints = "TOOLUP_ENABLE_DEV_ENDPOINTS"
+
+    [<Literal>]
     let moduleBindingAllowUnbound = "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND"
+
+    [<Literal>]
     let includePlatformDefaults = "TOOLUP_INCLUDE_PLATFORM_DEFAULTS"
+
+    [<Literal>]
     let storeEvictionMinutes = "TOOLUP_STORE_EVICTION_MINUTES"
+
+    [<Literal>]
     let rateLimitPermits = "TOOLUP_RATE_LIMIT_PERMITS"
+
+    [<Literal>]
     let rateLimitWindowSeconds = "TOOLUP_RATE_LIMIT_WINDOW_SECONDS"
+
+    [<Literal>]
     let rateLimitQueue = "TOOLUP_RATE_LIMIT_QUEUE"
+
+    [<Literal>]
     let defaultStorageQuotaBytes = "TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES"
+
+    [<Literal>]
     let slowRequestMs = "TOOLUP_SLOW_REQUEST_MS"
+
+    [<Literal>]
     let maxSseConnectionsPerScope = "TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE"
+
+    [<Literal>]
     let slowRateLimitMs = "TOOLUP_SLOW_RATE_LIMIT_MS"
+
+    [<Literal>]
     let publicBaseUrl = "TOOLUP_PUBLIC_BASE_URL"
+
+    [<Literal>]
     let publicPath = "TOOLUP_PUBLIC_PATH"
+
+    [<Literal>]
     let moduleFilter = "TOOLUP_MODULE"
+
+    [<Literal>]
     let trustedProxyCidrs = "TOOLUP_TRUSTED_PROXY_CIDRS"
+
+    [<Literal>]
     let webhookUrlAllowedHosts = "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS"
+
+    [<Literal>]
     let peerRoutePrefixes = "TOOLUP_PEER_ROUTE_PREFIXES"
+
+    [<Literal>]
     let moduleBindingAnchors = "TOOLUP_MODULE_BINDING_ANCHORS"
+
+    [<Literal>]
     let aiProvider = "TOOLUP_AI_PROVIDER"
+
+    [<Literal>]
     let aiModel = "TOOLUP_AI_MODEL"
+
+    [<Literal>]
     let aiProbeOnStartup = "TOOLUP_AI_PROBE_ON_STARTUP"
+
+    [<Literal>]
     let ragRefuseOnIndexCorruption = "TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION"
+
+    [<Literal>]
     let awsS3Region = "TOOLUP_AWS_S3_REGION"
+
+    [<Literal>]
     let awsS3Endpoint = "TOOLUP_AWS_S3_ENDPOINT"
+
+    [<Literal>]
     let awsSecretsRegion = "TOOLUP_AWS_SECRETS_REGION"
+
+    [<Literal>]
     let azureKeyVaultUrl = "TOOLUP_AZURE_KEY_VAULT_URL"
+
+    [<Literal>]
     let gcpProjectId = "TOOLUP_GCP_PROJECT_ID"
+
+    [<Literal>]
     let gcsCredentialsJson = "TOOLUP_GCS_CREDENTIALS_JSON"
+
+    [<Literal>]
     let entraExternalIdTenant = "TOOLUP_ENTRA_EXTERNAL_ID_TENANT"
+
+    [<Literal>]
     let entraExternalIdAudience = "TOOLUP_ENTRA_EXTERNAL_ID_AUDIENCE"
+
+    [<Literal>]
     let entraExternalIdCustomDomain = "TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN"
+
+    [<Literal>]
     let entraExternalIdSignInPolicy = "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_IN_POLICY"
+
+    [<Literal>]
     let entraExternalIdSignUpPolicy = "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_UP_POLICY"
+
+    [<Literal>]
     let entraExternalIdClockSkewSeconds = "TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS"
+
+    [<Literal>]
     let entraDirectoryEnabled = "TOOLUP_ENTRA_DIRECTORY_ENABLED"
+
+    [<Literal>]
     let entraDirectoryGraphEndpoint = "TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT"
+
+    [<Literal>]
     let entraDirectorySenderOid = "TOOLUP_ENTRA_DIRECTORY_SENDER_OID"
+
+    [<Literal>]
     let githubAuth = "TOOLUP_GITHUB_AUTH"
+
+    [<Literal>]
     let githubApiBaseUrl = "TOOLUP_GITHUB_API_BASE_URL"
+
+    [<Literal>]
     let githubAllowedOrgs = "TOOLUP_GITHUB_ALLOWED_ORGS"
+
+    [<Literal>]
     let githubCacheTtlSeconds = "TOOLUP_GITHUB_CACHE_TTL_SECONDS"
+
+    [<Literal>]
     let githubFetchPrimaryEmail = "TOOLUP_GITHUB_FETCH_PRIMARY_EMAIL"
+
+    [<Literal>]
     let githubUserAgent = "TOOLUP_GITHUB_USER_AGENT"
+
+    [<Literal>]
     let ldapAuth = "TOOLUP_LDAP_AUTH"
+
+    [<Literal>]
     let ldapHost = "TOOLUP_LDAP_HOST"
+
+    [<Literal>]
     let ldapPort = "TOOLUP_LDAP_PORT"
+
+    [<Literal>]
     let ldapChannel = "TOOLUP_LDAP_CHANNEL"
+
+    [<Literal>]
     let ldapAllowPlaintext = "TOOLUP_LDAP_ALLOW_PLAINTEXT"
+
+    [<Literal>]
     let ldapAllowUntrustedCert = "TOOLUP_LDAP_ALLOW_UNTRUSTED_CERT"
+
+    [<Literal>]
     let ldapCertThumbprint = "TOOLUP_LDAP_CERT_THUMBPRINT"
+
+    [<Literal>]
     let ldapSearchBase = "TOOLUP_LDAP_SEARCH_BASE"
+
+    [<Literal>]
     let ldapBindDn = "TOOLUP_LDAP_BIND_DN"
+
+    [<Literal>]
     let ldapBindSecretKey = "TOOLUP_LDAP_BIND_SECRET_KEY"
+
+    [<Literal>]
     let ldapTimeoutSeconds = "TOOLUP_LDAP_TIMEOUT_SECONDS"
+
+    [<Literal>]
     let ldapCacheTtlSeconds = "TOOLUP_LDAP_CACHE_TTL_SECONDS"
+
+    [<Literal>]
     let ldapNestedGroups = "TOOLUP_LDAP_NESTED_GROUPS"
+
+    [<Literal>]
     let ldapUserIdAttr = "TOOLUP_LDAP_USER_ID_ATTR"
+
+    [<Literal>]
     let ldapLoginAttr = "TOOLUP_LDAP_LOGIN_ATTR"
+
+    [<Literal>]
     let ldapEmailAttr = "TOOLUP_LDAP_EMAIL_ATTR"
+
+    [<Literal>]
     let ldapDisplayAttr = "TOOLUP_LDAP_DISPLAY_ATTR"
+
+    [<Literal>]
     let ldapMemberOfAttr = "TOOLUP_LDAP_MEMBEROF_ATTR"
+
+    [<Literal>]
     let ldapUserObjectClass = "TOOLUP_LDAP_USER_OBJECTCLASS"
+
+    [<Literal>]
     let smtpHost = "TOOLUP_SMTP_HOST"
+
+    [<Literal>]
     let smtpPort = "TOOLUP_SMTP_PORT"
+
+    [<Literal>]
     let smtpUsername = "TOOLUP_SMTP_USERNAME"
+
+    [<Literal>]
     let smtpPassword = "TOOLUP_SMTP_PASSWORD"
+
+    [<Literal>]
     let smtpTls = "TOOLUP_SMTP_TLS"
+
+    [<Literal>]
     let smtpFrom = "TOOLUP_SMTP_FROM"
+
+    [<Literal>]
     let smtpFromName = "TOOLUP_SMTP_FROM_NAME"
+
+    [<Literal>]
     let sendGridFrom = "TOOLUP_SENDGRID_FROM"
+
+    [<Literal>]
     let sendGridFromName = "TOOLUP_SENDGRID_FROM_NAME"
+
+    [<Literal>]
     let sendGridEndpoint = "TOOLUP_SENDGRID_ENDPOINT"
+
+    [<Literal>]
     let twilioAccountSid = "TOOLUP_TWILIO_ACCOUNT_SID"
+
+    [<Literal>]
     let twilioFrom = "TOOLUP_TWILIO_FROM"
+
+    [<Literal>]
     let twilioEndpoint = "TOOLUP_TWILIO_ENDPOINT"
+
+    [<Literal>]
     let oidcPreflightTimeoutMs = "TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS"
+
+    [<Literal>]
     let externalCompute = "TOOLUP_EXTERNAL_COMPUTE"
+
+    [<Literal>]
     let externalComputeHttpPrefix = "TOOLUP_EXTERNAL_COMPUTE_HTTP_"
+
+    [<Literal>]
     let componentConfigPrefix = "TOOLUP_COMPONENT__"
+
+    [<Literal>]
     let emitSbom = "TOOLUP_EMIT_SBOM"
+
+    [<Literal>]
     let publishSource = "TOOLUP_PUBLISH_SOURCE"
+
+    [<Literal>]
     let testArgs = "TOOLUP_TEST_ARGS"
+
+    [<Literal>]
     let cookbookPath = "TOOLUP_COOKBOOK_PATH"
+
+    [<Literal>]
     let enterpriseCookbookPath = "TOOLUP_ENTERPRISE_COOKBOOK_PATH"
+
+    [<Literal>]
     let beirCache = "TOOLUP_BEIR_CACHE"
+
+    [<Literal>]
     let remotingAnalyzerAudit = "TOOLUP_REMOTING_ANALYZER_AUDIT"
 
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader

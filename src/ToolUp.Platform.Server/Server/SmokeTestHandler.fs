@@ -37,7 +37,7 @@ open ToolUp.Platform.SmokeTests
 // row belongs under `"_platform.diagnostics"`.
 
 [<Literal>]
-let private SmokeTokenEnvVar = "TOOLUP_SMOKE_TOKEN"
+let private SmokeTokenEnvVar = ConfigKeys.Names.smokeToken
 
 [<Literal>]
 let private SmokeTokenHeader = "X-Smoke-Token"

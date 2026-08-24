@@ -315,7 +315,7 @@ module internal ApiSeams =
     /// dispatcher refuses startup (compliance-edition deployments).
     let auditAdminRequired =
         lazy
-            (match System.Environment.GetEnvironmentVariable "TOOLUP_AUDIT_ADMIN_REQUIRED" with
+            (match System.Environment.GetEnvironmentVariable ConfigKeys.Names.auditAdminRequired with
              | null -> false
              | v ->
                  let v = v.Trim()

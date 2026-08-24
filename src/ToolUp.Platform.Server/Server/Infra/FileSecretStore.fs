@@ -82,7 +82,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                     // Override mode: no per-scope file sources
                     Map.empty
                 | None ->
-                    match Environment.GetEnvironmentVariable "TOOLUP_SECRETS_PATH" with
+                    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.secretsPath with
                     | null
                     | "" ->
                         let dir = resolvedBaseDir ()
@@ -137,7 +137,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     let writePathFor scopeId =
         let dir = resolvedBaseDir ()
 
-        match path, Environment.GetEnvironmentVariable "TOOLUP_SECRETS_PATH" with
+        match path, Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.secretsPath with
         | Some p, _ when scopeId = "_platform" -> Some p
         | _, p when scopeId = "_platform" && not (String.IsNullOrEmpty p) -> Some p
         | _ when scopeId = "_platform" -> Some(Path.Combine(dir, "secrets.json"))

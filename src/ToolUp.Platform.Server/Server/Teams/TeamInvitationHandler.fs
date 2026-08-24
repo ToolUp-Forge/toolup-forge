@@ -577,7 +577,7 @@ let teamInvitationApi
                                     // matches whatever the deployment surfaces to
                                     // its users.
                                     let appName =
-                                        match System.Environment.GetEnvironmentVariable "TOOLUP_APP_NAME" with
+                                        match System.Environment.GetEnvironmentVariable ConfigKeys.Names.appName with
                                         | null
                                         | "" ->
                                             let host = ctx.Request.Host.Value

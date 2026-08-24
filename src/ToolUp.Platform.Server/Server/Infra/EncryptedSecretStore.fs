@@ -124,7 +124,7 @@ let parseMasterKey (base64: string) : byte[] option =
 /// Returns `Unset` when the env var is unset / empty, `Malformed reason`
 /// when set but unparseable / wrong length, `Valid bytes` when ready.
 let masterKeyFromEnvironmentDetailed () : MasterKeyResolution =
-    match Environment.GetEnvironmentVariable "TOOLUP_SECRETS_MASTER_KEY" with
+    match Environment.GetEnvironmentVariable ConfigKeys.Names.secretsMasterKey with
     | null
     | "" -> Unset
     | value -> parseMasterKeyDetailed value

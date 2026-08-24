@@ -85,10 +85,10 @@ open ToolUp.Platform.ConfigValidation
 // tenant's erasure guarantee.
 
 [<Literal>]
-let private ReplicaCountEnvVar = "TOOLUP_REPLICA_COUNT"
+let private ReplicaCountEnvVar = ConfigKeys.Names.replicaCount
 
 [<Literal>]
-let private NotificationChannelEnvVar = "TOOLUP_NOTIFICATION_CHANNEL"
+let private NotificationChannelEnvVar = ConfigKeys.Names.notificationChannel
 
 let private envValue (name: string) =
     match Environment.GetEnvironmentVariable name with

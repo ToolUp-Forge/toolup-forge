@@ -27,10 +27,10 @@ open ToolUp.Platform.ConfigValidation
 // the fallback (e.g. graceful staging without all credentials).
 
 [<Literal>]
-let private BlobStorageEnvVar = "TOOLUP_BLOB_STORAGE"
+let private BlobStorageEnvVar = ConfigKeys.Names.blobStorage
 
 [<Literal>]
-let private EscapeHatchEnvVar = "TOOLUP_ACCEPT_LOCAL_FALLBACK"
+let private EscapeHatchEnvVar = ConfigKeys.Names.acceptLocalFallback
 
 let private cloudBackends = Set.ofList [ "azure"; "s3"; "gcs" ]
 

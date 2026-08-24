@@ -285,7 +285,7 @@ let compose
             // `TOOLUP_LOG_LEVEL` / `TOOLUP_TRACE_CATEGORIES` env-override
             // model for default-logger configuration.
             let wantsJson =
-                match System.Environment.GetEnvironmentVariable "TOOLUP_LOG_FORMAT" with
+                match System.Environment.GetEnvironmentVariable ConfigKeys.Names.logFormat with
                 | null -> false
                 | s -> s.Trim().ToLowerInvariant() = "json"
 

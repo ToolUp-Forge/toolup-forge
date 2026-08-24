@@ -69,9 +69,9 @@ module TwilioSettings =
             | None -> failwithf "Phase 6f Twilio: env var %s is required" name
 
         {
-            AccountSid = readRequired "TOOLUP_TWILIO_ACCOUNT_SID"
-            FromPhoneNumber = readRequired "TOOLUP_TWILIO_FROM"
-            EndpointOverride = read "TOOLUP_TWILIO_ENDPOINT"
+            AccountSid = readRequired ConfigKeys.Names.twilioAccountSid
+            FromPhoneNumber = readRequired ConfigKeys.Names.twilioFrom
+            EndpointOverride = read ConfigKeys.Names.twilioEndpoint
         }
 
 let private buildAuthHeader (sid: string) (token: string) =

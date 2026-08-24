@@ -61,7 +61,7 @@ let private writeLockId = "toolup:platform-admin:write"
 let private writeLeaseTtl = TimeSpan.FromMinutes 1.0
 
 [<Literal>]
-let private initialAdminEnvVar = "TOOLUP_INITIAL_PLATFORM_ADMIN"
+let private initialAdminEnvVar = ConfigKeys.Names.initialPlatformAdmin
 
 /// Phase 230 — explicit second opt-in required for the
 /// `AutoBootstrapDevAdmin` fallback to elevate in an auth-requiring
@@ -72,7 +72,7 @@ let private initialAdminEnvVar = "TOOLUP_INITIAL_PLATFORM_ADMIN"
 /// deliberate env var means a single leaked field can never escalate.
 /// Public so the preflight validator references the same name.
 [<Literal>]
-let allowDevAdminBootstrapEnvVar = "TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP"
+let allowDevAdminBootstrapEnvVar = ConfigKeys.Names.allowDevAdminBootstrap
 
 module private Json =
     let private options =

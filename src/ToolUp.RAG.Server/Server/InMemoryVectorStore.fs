@@ -247,7 +247,7 @@ type InMemoryVectorStore
     // aborted with an actionable error instead of starting the scope empty;
     // for the eager Platform/Deployment loads this fails process startup.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable "TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
         | "1"
         | "true"
         | "TRUE" -> true

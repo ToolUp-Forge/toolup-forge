@@ -97,7 +97,7 @@ type ICspContributor =
 /// Falls back to the raw issuer (pre-Phase 3b.C behaviour) if the
 /// value is not a parseable URI — keeps the contributor inert-safe.
 type OidcIssuerCspContributor() =
-    static member val EnvVar = "TOOLUP_OIDC_ISSUER" with get
+    static member val EnvVar = ConfigKeys.Names.oidcIssuer with get
 
     interface ICspContributor with
         member _.RequiredSources =

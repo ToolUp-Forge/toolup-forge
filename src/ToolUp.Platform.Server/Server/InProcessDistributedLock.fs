@@ -187,7 +187,7 @@ type DistributedLockResolver = {
 /// than learning two conventions.
 module DistributedLockSelection =
     [<Literal>]
-    let EnvVar = "TOOLUP_DISTRIBUTED_LOCK"
+    let EnvVar = ConfigKeys.Names.distributedLock
 
     let private envVar (name: string) =
         match Environment.GetEnvironmentVariable name with

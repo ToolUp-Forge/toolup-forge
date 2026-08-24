@@ -502,7 +502,7 @@ type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions,
     // metadata. A compliance deployment would rather stop than answer
     // from a corpus it cannot fully read.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable "TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
         | "1"
         | "true"
         | "TRUE" -> true

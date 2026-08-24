@@ -132,7 +132,7 @@ let candidatePaths (fileName: string) : string list =
         Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
 
     [
-        match Environment.GetEnvironmentVariable "TOOLUP_COOKBOOK_PATH" with
+        match Environment.GetEnvironmentVariable ConfigKeys.Names.cookbookPath with
         | null
         | "" -> ()
         | p -> if Directory.Exists p then Path.Combine(p, fileName) else p
