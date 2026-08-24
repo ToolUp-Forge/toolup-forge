@@ -605,12 +605,26 @@ module AnswerProvenanceAnchors =
     /// that the running composition is the sealed one. Under the
     /// log-and-serve default such a process keeps serving, which is exactly
     /// when the distinction is load-bearing.
+    ///
+    /// **Phase 694 — the test is `isFullyCompared`, not `isAffirmative`,
+    /// and this is the one call site where the two must differ.** A
+    /// `VerifiedUnrecorded` boot is affirmative: everything the binding
+    /// recorded matched, and the process is right to serve. But the
+    /// declaration it could NOT compare is the canonical-method selector —
+    /// which decides which method's lineage a method-less query resolves
+    /// to, and therefore what the very numbers on this answer row mean.
+    /// Naming the seal here would be the silent equality Phase 694 exists
+    /// to prevent, restated at the one surface where the selector is
+    /// material. The cost is that an answer row carries no seal id until
+    /// the composition binding is re-sealed — the same single act the
+    /// migration doc names — and the degraded state is the pre-657 one (no
+    /// anchor) rather than a claim nobody checked.
     let fromBootVerification
         (result: BootVerificationResult)
         (binding: SealedCompositionBinding option)
         : IAnswerProvenanceAnchors =
         let sealId =
-            if BootVerificationVerdict.isAffirmative result.Verdict then
+            if BootVerificationVerdict.isFullyCompared result.Verdict then
                 binding |> Option.map _.Binding.DeployRecordDigest
             else
                 None

@@ -43,6 +43,14 @@ open System.Text
 //   4. *Is the running composition the one the binding recorded?* — a
 //      component-by-component, knob-by-knob comparison that names every
 //      difference rather than reporting a digest that did not match.
+//      **Phase 694 added the canonical-method selector to that
+//      comparison**, and it is worth saying why it needed adding: the
+//      manifest recorded a metric as its id alone, so two boots either
+//      side of a canonical-method flip — the one grounding mutation that
+//      changes what an already enumerated number MEANS — compared equal
+//      and this preflight reported `verified`. It now compares them, and
+//      reads a binding sealed before that field existed as SILENT on it
+//      (`VerifiedUnrecorded`) rather than as agreeing.
 //
 // ── What it does NOT prove ───────────────────────────────────────────
 //
@@ -144,6 +152,21 @@ type CompositionDrift =
     /// A config knob the sealed composition recorded that is absent at
     /// boot.
     | ConfigKnobRemoved of name: string * value: string
+    /// Phase 694 — a metric present in both compositions whose
+    /// canonical-method selector moved: a method-less query over that
+    /// metric now resolves to a different method's lineage than the sealed
+    /// composition declared. Nothing else about the composition need have
+    /// changed for this to change what a recorded number means.
+    | CanonicalMethodChanged of metricId: string * recorded: string * observed: string
+    /// Phase 694 — a metric the sealed composition recorded WITHOUT a
+    /// canonical method that now declares one. A first declaration is a
+    /// change of resolution behaviour, not an addition to a blank slate:
+    /// before it, a method-less query surfaced every competing head.
+    | CanonicalMethodDeclared of metricId: string * observed: string
+    /// Phase 694 — a metric whose recorded canonical method is no longer
+    /// declared. The twin of `CanonicalMethodDeclared`, and equally a
+    /// change in what a method-less query returns.
+    | CanonicalMethodWithdrawn of metricId: string * recorded: string
 
 [<RequireQualifiedAccess>]
 module CompositionDrift =
@@ -159,6 +182,48 @@ module CompositionDrift =
             $"config knob '{name}' is '{observed}', recorded as '{recorded}'"
         | ConfigKnobAdded(name, value) -> $"config knob '{name}' = '{value}' is set but was not recorded"
         | ConfigKnobRemoved(name, value) -> $"config knob '{name}' was recorded as '{value}' and is not set"
+        | CanonicalMethodChanged(metricId, recorded, observed) ->
+            $"metric '{metricId}' resolves a method-less query by canonical method '{observed}', recorded as '{recorded}'"
+        | CanonicalMethodDeclared(metricId, observed) ->
+            $"metric '{metricId}' declares canonical method '{observed}', and the sealed composition recorded none for it"
+        | CanonicalMethodWithdrawn(metricId, recorded) ->
+            $"metric '{metricId}' declares no canonical method, and the sealed composition recorded '{recorded}'"
+
+// ─── Phase 694 — what an older binding could not record ──────────────
+
+/// One declaration the running composition makes that the sealed binding
+/// is too old to have recorded — so the comparison could not be
+/// performed, and the honest report of that is neither a match nor a
+/// difference.
+///
+/// **This exists so that "unrecorded" never renders as "unchanged".** A
+/// binding sealed before a field joined the manifest is silent about it;
+/// resolving that silence as agreement would let the single most
+/// consequential grounding mutation pass a preflight that reported
+/// `verified`, which is worse than reporting nothing because it is
+/// believed.
+type CompositionUnrecorded =
+    /// The sealed binding predates the manifest's canonical-method field,
+    /// so this metric's selector could not be compared. `observed` is what
+    /// the running composition declares — `None` when it declares none,
+    /// which is equally unprovable against a silent binding.
+    | CanonicalMethodUnrecorded of metricId: string * observed: string option
+
+[<RequireQualifiedAccess>]
+module CompositionUnrecorded =
+    /// One rendered line naming the metric, what is live, and why nothing
+    /// can be concluded about it.
+    let describe =
+        function
+        | CanonicalMethodUnrecorded(metricId, Some selector) ->
+            $"metric '{metricId}' resolves a method-less query by canonical method '{selector}', and the sealed binding predates canonical-method recording — so this could not be compared, and is not evidence that it did not move"
+        | CanonicalMethodUnrecorded(metricId, None) ->
+            $"metric '{metricId}' declares no canonical method, and the sealed binding predates canonical-method recording — so this could not be compared, and is not evidence that it did not move"
+
+    /// Stable lowercase code for a payload / dashboard cut.
+    let code =
+        function
+        | CanonicalMethodUnrecorded _ -> "canonical-method-unrecorded"
 
 // ─── Verdict ─────────────────────────────────────────────────────────
 
@@ -169,6 +234,20 @@ type BootVerificationVerdict =
     /// the record is sealed, its artifacts match, the binding belongs to
     /// it, and the running composition is the one it recorded.
     | Verified
+    /// Phase 694 — everything the sealed binding recorded matched, and the
+    /// binding is too old to have recorded one or more declarations, so
+    /// those could not be compared. Carries each.
+    ///
+    /// **Affirmative, and deliberately not `Verified`.** Affirmative
+    /// because an old binding is not a drifted deployment: the transition
+    /// boot after an upgrade must not refuse to start, or the honest fix
+    /// for a blind spot would cost every sealed deployment an outage.
+    /// Distinct from `Verified` because the preflight did not check what
+    /// it did not check, and a verdict that said otherwise would be the
+    /// silent equality this case exists to prevent. The remedy is one
+    /// act — re-seal the binding from the running composition — after
+    /// which the verdict is `Verified` and stays there.
+    | VerifiedUnrecorded of unrecorded: CompositionUnrecorded list
     /// Nothing was supplied to verify against — no sealed deploy record,
     /// or no sealed composition binding. Its own verdict rather than a
     /// failure: an unsealed deployment is not a tampered one, and
@@ -188,13 +267,28 @@ module BootVerificationVerdict =
     let label =
         function
         | BootVerificationVerdict.Verified -> "verified"
+        | BootVerificationVerdict.VerifiedUnrecorded _ -> "verified-unrecorded"
         | BootVerificationVerdict.Unsealed _ -> "unsealed"
         | BootVerificationVerdict.VerificationFailed _ -> "unverified"
         | BootVerificationVerdict.Drifted _ -> "drifted"
 
-    /// `true` only for the affirmative verdict. Everything else is a
+    /// `true` for the two affirmative verdicts. Everything else is a
     /// reason not to serve under a refusing policy.
+    ///
+    /// `VerifiedUnrecorded` is affirmative on purpose — see its own
+    /// documentation. A caller that needs the stricter question ("did the
+    /// preflight compare everything it now knows how to compare?") matches
+    /// on the verdict; that is the discrimination the case exists to make
+    /// available, and folding it in here would remove it again.
     let isAffirmative =
+        function
+        | BootVerificationVerdict.Verified
+        | BootVerificationVerdict.VerifiedUnrecorded _ -> true
+        | _ -> false
+
+    /// `true` only for the verdict under which every question the
+    /// preflight can ask was asked AND answered affirmatively.
+    let isFullyCompared =
         function
         | BootVerificationVerdict.Verified -> true
         | _ -> false
@@ -204,6 +298,7 @@ module BootVerificationVerdict =
     let findings =
         function
         | BootVerificationVerdict.Verified -> []
+        | BootVerificationVerdict.VerifiedUnrecorded unrecorded -> unrecorded |> List.map CompositionUnrecorded.describe
         | BootVerificationVerdict.Unsealed reason -> [ reason ]
         | BootVerificationVerdict.VerificationFailed(failures, bindingFindings) ->
             (failures |> List.map DeployRecords.DeployRecordVerificationFailure.describe)
@@ -216,6 +311,8 @@ module BootVerificationVerdict =
         match verdict with
         | BootVerificationVerdict.Verified ->
             "boot verification: the running composition is the one the sealed deploy record covers"
+        | BootVerificationVerdict.VerifiedUnrecorded unrecorded ->
+            $"boot verification: the running composition matches everything the sealed binding recorded, and the binding is too old to have recorded {unrecorded.Length} declaration(s) — re-seal the composition binding to close the gap"
         | BootVerificationVerdict.Unsealed reason -> $"boot verification: nothing to verify against — {reason}"
         | BootVerificationVerdict.VerificationFailed _ ->
             let count = (findings verdict).Length
@@ -459,12 +556,29 @@ module BootVerificationPreflight =
         |> List.distinctBy _.Name
         |> List.sortBy _.Name
 
+    /// Framing version for the Phase 694 canonical-method block. Part of
+    /// the framed bytes, so a manifest canonicalised under a future
+    /// scheme can never collide with one canonicalised under this.
+    [<Literal>]
+    let CanonicalMethodFramingVersion = "toolup.compositionmanifest.canonicalmethods.v1"
+
     /// Length-framed canonical text for a composition manifest.
     ///
     /// Framed with the same injective scheme Phase 656 uses, for the same
     /// reason: without it, two distinct compositions could canonicalise
     /// to the same text by concatenation and a digest over them would be
     /// meaningless.
+    ///
+    /// **Phase 694: the canonical-method block is emitted only for a
+    /// manifest that records it, and that gate is load-bearing.** A
+    /// binding sealed before Phase 694 must canonicalise to the exact
+    /// bytes its seal was minted over — for ever, on every host that
+    /// re-reads it. Appending even a `"0"` length for an absent block
+    /// would change the canonical form of every manifest in existence, and
+    /// the first thing an upgraded deployment would find is that its own
+    /// genuine, untampered seal no longer verifies. Versioned evolution
+    /// means the old bytes stay reachable, not merely that the new field
+    /// is optional.
     let compositionCanonicalForm (manifest: CompositionManifest) : string =
         let builder = StringBuilder()
         let frame = ProvenanceFraming.frame builder
@@ -486,6 +600,17 @@ module BootVerificationPreflight =
         for knob in knobs do
             frame knob.Name
             frame knob.Value
+
+        if CompositionManifest.recordsCanonicalMethods manifest then
+            let methods = CompositionManifest.canonicalMethods manifest
+
+            frame CanonicalMethodFramingVersion
+            frame (string (CompositionManifest.effectiveSchemaVersion manifest))
+            frame (string methods.Length)
+
+            for method in methods do
+                frame method.MetricId
+                frame method.Selector
 
         builder.ToString()
 
@@ -582,7 +707,81 @@ module BootVerificationPreflight =
                     ConfigKnobRemoved(name, recordedValue)
         ]
 
-        componentFindings @ knobFindings
+        // Phase 694 — the canonical-method selectors, compared ONLY when
+        // both manifests record them. When the recorded side does not, the
+        // comparison is not performed at all and `unrecorded` below says
+        // so; silently treating the legacy side's empty list as "no metric
+        // declared one" would resolve the upgrade of every sealed
+        // deployment as a fresh declaration on every metric.
+        let canonicalMethodFindings =
+            if
+                not (
+                    CompositionManifest.recordsCanonicalMethods recorded
+                    && CompositionManifest.recordsCanonicalMethods observed
+                )
+            then
+                []
+            else
+                let metricIds (manifest: CompositionManifest) =
+                    coerceEntries manifest.Metrics |> List.map _.Label |> Set.ofList
+
+                // Restricted to metrics BOTH compositions carry: a metric
+                // that appeared or vanished is already one finding
+                // (`ComponentAdded` / `ComponentRemoved`), and reporting
+                // its selector as a second is two lines for one move.
+                let shared = Set.intersect (metricIds recorded) (metricIds observed)
+
+                let selectors (manifest: CompositionManifest) =
+                    CompositionManifest.canonicalMethods manifest
+                    |> List.filter (fun m -> Set.contains m.MetricId shared)
+                    |> List.map (fun m -> m.MetricId, m.Selector)
+                    |> Map.ofList
+
+                let recordedMethods = selectors recorded
+                let observedMethods = selectors observed
+
+                [
+                    for KeyValue(metricId, observedSelector) in observedMethods do
+                        match Map.tryFind metricId recordedMethods with
+                        | None -> CanonicalMethodDeclared(metricId, observedSelector)
+                        | Some recordedSelector ->
+                            if recordedSelector <> observedSelector then
+                                CanonicalMethodChanged(metricId, recordedSelector, observedSelector)
+
+                    for KeyValue(metricId, recordedSelector) in recordedMethods do
+                        if not (Map.containsKey metricId observedMethods) then
+                            CanonicalMethodWithdrawn(metricId, recordedSelector)
+                ]
+
+        componentFindings @ knobFindings @ canonicalMethodFindings
+
+    /// Phase 694 — every declaration the running composition makes that
+    /// the sealed binding is too old to have recorded.
+    ///
+    /// Separate from `compare` rather than folded into its return, because
+    /// these are categorically not differences: a caller acting on drift
+    /// must not act on these, and a policy refusing on drift must not
+    /// refuse on these. Empty whenever the binding is new enough to speak
+    /// — so a deployment that re-seals once never sees this again.
+    let unrecorded (recorded: CompositionManifest) (observed: CompositionManifest) : CompositionUnrecorded list =
+        if CompositionManifest.recordsCanonicalMethods recorded then
+            []
+        else
+            let metricIds (manifest: CompositionManifest) =
+                coerceEntries manifest.Metrics |> List.map _.Label |> Set.ofList
+
+            let observedSelectors =
+                CompositionManifest.canonicalMethods observed
+                |> List.map (fun m -> m.MetricId, m.Selector)
+                |> Map.ofList
+
+            // Only metrics BOTH sides carry. A grounding-free composition
+            // therefore reports nothing at all: with no metric recorded on
+            // either side, no selector can exist to be silent about, and
+            // that is a provable statement rather than a hedge.
+            Set.intersect (metricIds recorded) (metricIds observed)
+            |> Set.toList
+            |> List.map (fun metricId -> CanonicalMethodUnrecorded(metricId, Map.tryFind metricId observedSelectors))
 
     // ─── Verifying ───────────────────────────────────────────────────
 
@@ -658,7 +857,17 @@ module BootVerificationPreflight =
                 return BootVerificationVerdict.VerificationFailed(recordFailures, bindingFindings)
             else
                 match compare sealedBinding.Binding.Composition observed with
-                | [] -> return BootVerificationVerdict.Verified
+                | [] ->
+                    // Phase 694 — drift first, then what could not be
+                    // compared. A drifted verdict already names an
+                    // actionable difference whose remedy (re-seal the
+                    // binding from the running composition) is the same
+                    // act that closes the unrecorded gap, so precedence
+                    // costs the reader nothing and keeps the verdict
+                    // single-subject.
+                    match unrecorded sealedBinding.Binding.Composition observed with
+                    | [] -> return BootVerificationVerdict.Verified
+                    | items -> return BootVerificationVerdict.VerifiedUnrecorded items
                 | drift -> return BootVerificationVerdict.Drifted drift
     }
 

@@ -154,14 +154,26 @@ type GroundingDeclaration = {
 /// The declared grounding envelope: every enumerated declaration a
 /// composition made, as one comparable, digestible value.
 ///
-/// **Not a field on `CompositionManifest` and not derived from its
-/// entries alone.** The manifest projects a registered metric as an id
-/// with no `Impl`, so a canonical-method flip is invisible in it — the
-/// boot binding would verify perfectly across the flip. Widening the
-/// manifest to carry the selector would move every existing deployment's
-/// recorded composition and drift them all on upgrade (GP 11). A separate
-/// projection leaves Phase 657's binding untouched and lets this one
-/// carry what it needs.
+/// **A separate projection from `CompositionManifest`, derived entirely
+/// FROM it.** The two halves of that sentence were not both true until
+/// Phase 694. This type stays separate because it answers a different
+/// question — what a later answer's provenance is judged against, walked
+/// post-boot — and because Phase 657's binding has its own canonical form
+/// and seal. What changed is where the canonical-method selector comes
+/// from: the manifest now records it under a versioned schema (Phase 694,
+/// `CompositionManifest.CanonicalMethods`), so `ofManifest` reads it back
+/// out rather than a second code path deriving it from the metric
+/// registry. **One derivation, not two that agree today.** Two
+/// derivations of the same declaration can stop agreeing, and both the
+/// boot seal and this envelope would go on verifying while they did —
+/// each internally consistent, jointly describing a deployment that does
+/// not exist.
+///
+/// The concern that kept the selector out of the manifest before 694 — a
+/// widened manifest drifting every already-sealed deployment on upgrade
+/// (GP 11) — is answered by the versioning rather than by the separation:
+/// a legacy binding canonicalises to its original bytes and reads as
+/// silent on the selector, never as agreeing.
 type GroundingEnvelope = {
     SchemaVersion: int
     Declarations: GroundingDeclaration list
@@ -252,9 +264,16 @@ module GroundingEnvelope =
     /// version (Phase 592), and the per-surface allowed purpose sets the
     /// manifest carries as `DisclosurePurposes.<Surface>` knobs.
     ///
-    /// The canonical-method facet is NOT here — the manifest does not
-    /// carry it. `withCanonicalMethods` (or `ofComposition`) adds it from
-    /// the registry the composition accumulated.
+    /// **Phase 694 — the canonical-method facet is now here too**, read
+    /// from `CompositionManifest.CanonicalMethods`. It was absent before
+    /// that phase for the honest reason that the manifest did not carry
+    /// the selector; now that it does, deriving it a second time from the
+    /// metric registry would be exactly the two-derivations hazard the
+    /// `GroundingEnvelope` doc comment describes.
+    ///
+    /// A manifest too old to record selectors (`recordsCanonicalMethods`
+    /// is `false`) contributes no canonical-method declarations, which is
+    /// the pre-694 behaviour of this function unchanged.
     let ofManifest (manifest: CompositionManifest) : GroundingEnvelope =
         let entries (kind: ComponentKind) (list: ComponentEntry list) =
             (if isNull (box list) then [] else list)
@@ -299,6 +318,17 @@ module GroundingEnvelope =
                 Value = k.Value
             })
 
+        let canonicalMethodDeclarations =
+            if not (CompositionManifest.recordsCanonicalMethods manifest) then
+                []
+            else
+                CompositionManifest.canonicalMethods manifest
+                |> List.map (fun m -> {
+                    Facet = CanonicalMethodFacet
+                    Subject = m.MetricId
+                    Value = m.Selector
+                })
+
         {
             SchemaVersion = SchemaVersion
             Declarations =
@@ -306,19 +336,28 @@ module GroundingEnvelope =
                 @ subjectDeclarations
                 @ purposeDeclarations
                 @ disclosureDeclarations
+                @ canonicalMethodDeclarations
         }
 
-    /// Add the canonical-method facet from `(metricId, selector)` pairs.
+    /// Set the canonical-method facet from `(metricId, selector)` pairs.
     ///
     /// An UNDECLARED canonical method contributes nothing, so a
     /// composition that declares none has an envelope byte-identical to
     /// the pre-566 one (GP 11) — and a later declaration therefore reads
     /// as an addition rather than a change from a synthetic default,
     /// which is what it is.
+    ///
+    /// **Phase 694 — it REPLACES the facet rather than appending to it.**
+    /// `ofManifest` now emits canonical-method declarations of its own, so
+    /// an appending version applied on top would leave two declarations
+    /// for one `(facet, subject)`; the canonical form's de-duplication
+    /// hides that when the selectors agree and silently keeps one of them
+    /// when they do not. Replacement is idempotent and has no such state.
     let withCanonicalMethods (selectors: (string * string) list) (envelope: GroundingEnvelope) : GroundingEnvelope = {
         envelope with
             Declarations =
-                coerce envelope.Declarations
+                (coerce envelope.Declarations
+                 |> List.filter (fun d -> d.Facet <> CanonicalMethodFacet))
                 @ (selectors
                    |> List.map (fun (metricId, selector) -> {
                        Facet = CanonicalMethodFacet
@@ -327,9 +366,8 @@ module GroundingEnvelope =
                    }))
     }
 
-    /// The whole declared envelope of a composition: the manifest facets
-    /// plus the canonical-method selectors the accumulated metric
-    /// registrations declared.
+    /// The whole declared envelope of a composition: the manifest facets,
+    /// including the canonical-method selectors the manifest records.
     ///
     /// A composition root calls this with its own manifest and
     /// `ServerApp.RegisteredMetrics`:
@@ -338,13 +376,24 @@ module GroundingEnvelope =
     /// let envelope =
     ///     GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
     /// ```
+    ///
+    /// **Phase 694 — the selectors travel through the MANIFEST, and this
+    /// function's `metrics` argument now feeds that one derivation rather
+    /// than running a parallel one.** The consequence worth knowing is
+    /// that `ofManifest (ServerApp.compositionManifest app)` and
+    /// `ofComposition (ServerApp.compositionManifest app)
+    /// app.RegisteredMetrics` are now the SAME envelope by construction,
+    /// not by two code paths coincidentally agreeing — which is the
+    /// property that lets the boot seal and this envelope be evidence
+    /// about one deployment rather than two.
+    ///
+    /// The argument is kept, and kept meaningful, for the caller that
+    /// holds a manifest built by something other than
+    /// `ServerApp.compositionManifest`.
     let ofComposition (manifest: CompositionManifest) (metrics: Grounding.MetricRegistration list) : GroundingEnvelope =
-        let selectors =
-            (if isNull (box metrics) then [] else metrics)
-            |> List.choose (fun r -> r.Definition.CanonicalMethod |> Option.map (fun s -> r.Definition.Id, s))
-            |> List.distinct
-
-        ofManifest manifest |> withCanonicalMethods selectors
+        manifest
+        |> CompositionManifest.withCanonicalMethods (CompositionManifest.canonicalMethodsOf metrics)
+        |> ofManifest
 
     // ─── Comparison ──────────────────────────────────────────────────
 

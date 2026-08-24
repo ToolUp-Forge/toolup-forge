@@ -833,6 +833,41 @@ let tests =
                 | other -> failtestf "expected BootSealRejected, got %A" other
             }
 
+            test "Phase 694 — keeps a partly-uncomparable verdict separate from a plain verification" {
+                // Folding `VerifiedUnrecorded` into `BootSealVerified`
+                // would restate one tier up the very blind spot Phase 694
+                // closed: the report would say "verified" about a binding
+                // that could not speak to the canonical-method selectors.
+                let verdict =
+                    BootVerificationVerdict.VerifiedUnrecorded [
+                        CanonicalMethodUnrecorded("revenue", Some "computed:rollup:2")
+                    ]
+
+                let evidence = ServerApp.bootSealEvidence (Ok(resultWith verdict))
+
+                match evidence with
+                | BootSealVerifiedUnrecorded(_, _, _, unrecorded) ->
+                    Expect.stringContains
+                        (unrecorded |> String.concat " | ")
+                        "revenue"
+                        "each declaration that could not be compared rides through by name"
+                | other -> failtestf "expected BootSealVerifiedUnrecorded, got %A" other
+
+                let section =
+                    DeploymentVerificationReport.gatherBootSeal (fullEvidence (Some evidence) None None None None)
+
+                Expect.equal
+                    (VerificationSectionVerdict.label section.Verdict)
+                    "observed"
+                    "composed, read, and part of its check not performed — neither a pass nor a failure"
+
+                Expect.isFalse
+                    (VerificationSectionVerdict.isAdverse section.Verdict)
+                    "and not adverse: an upgrade that turned every sealed deployment's report red would be worse than the blind spot it closed"
+
+                Expect.isNonEmpty section.Findings "the gap is visible, so its one-act remedy is legible"
+            }
+
             test "keeps unsealed separate from rejected" {
                 match ServerApp.bootSealEvidence (Ok(resultWith (BootVerificationVerdict.Unsealed "no record"))) with
                 | BootSealUnsealed(_, _, reason) -> Expect.stringContains reason "no record" "the reason survives"

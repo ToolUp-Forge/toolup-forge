@@ -68,6 +68,30 @@ type ComponentEntry = {
 /// full `ServerConfig` is not duplicated here.
 type ConfigKnob = { Name: string; Value: string }
 
+/// Phase 694 — one metric's declared **canonical-method selector**: which
+/// method's lineage a method-less query over that metric resolves to
+/// (Phase 566 / D19).
+///
+/// **Why this is a field of its own rather than the metric entry's unused
+/// `Impl` slot.** Phase 684 recorded the argument and it is the reason
+/// this record exists: `metricEntry` records a metric as its id with
+/// `Impl = None`, and the boot comparison folds an absent `Impl` into the
+/// entry's `Label`. Moving the selector into that slot would change every
+/// already-sealed deployment's recorded composition the moment it
+/// upgraded, and the Phase 657 preflight would report the upgrade itself
+/// as drift on every one of them (GP 11). A separate, *versioned* field
+/// leaves the entry projection byte-identical and lets a binding sealed
+/// before this phase be read as what it is — silent on the selector,
+/// which is not the same as recording that nothing changed.
+type MetricCanonicalMethod = {
+    /// The declaring metric's registry id (`MetricDefinition.Id`) — the
+    /// same string `metricEntry` carries as its `Label`.
+    MetricId: string
+    /// The declared selector, matched against method-identity strings per
+    /// `Grounding.CanonicalMethod.matches`.
+    Selector: string
+}
+
 /// Phase 592 — a composition-declared disclosure purpose (the "declared
 /// why" facet), as the generic strings the manifest projects (GP 1: the
 /// typed taxonomy + enforcement live in the facts companion; the
@@ -95,6 +119,17 @@ type RegisteredPurpose = {
 /// never a separately-declared list (no drift-vs-reflection gap), and
 /// never built unless a caller asks for it (GP 13).
 type CompositionManifest = {
+    /// Phase 694 — the manifest schema this value was projected under.
+    ///
+    /// **Read it, never assume it.** A manifest deserialised from a
+    /// binding sealed before Phase 694 carries no such field, so it
+    /// arrives as `0`; `CompositionManifest.effectiveSchemaVersion` reads
+    /// that as the pre-694 schema rather than as a version zero. The
+    /// version is what lets a reader tell "this manifest declares no
+    /// canonical methods" from "this manifest is too old to say" — a
+    /// distinction no amount of inspecting `CanonicalMethods` can recover,
+    /// because both render as an empty list.
+    SchemaVersion: int
     Modules: ComponentEntry list
     CompanionSlots: ComponentEntry list
     DataTypes: ComponentEntry list
@@ -112,6 +147,16 @@ type CompositionManifest = {
     /// `DisclosurePurposes.<Surface>` entries.
     Purposes: ComponentEntry list
     ConfigKnobs: ConfigKnob list
+    /// Phase 694 — the canonical-method selector each registered metric
+    /// declared, when it declared one. Empty at `SchemaVersion` 2+ means
+    /// *no metric declares one*; at the pre-694 schema it means *this
+    /// manifest never carried them*, which is why the two are told apart
+    /// by the version above and not by this list.
+    ///
+    /// This is the one grounding declaration that changes what an already
+    /// recorded number MEANS without changing anything else the manifest
+    /// enumerates, which is why the boot seal was blind to exactly it.
+    CanonicalMethods: MetricCanonicalMethod list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -120,6 +165,79 @@ type CompositionManifest = {
 /// with the ids every telemetry / introspection surface correlates
 /// against.
 module CompositionManifest =
+
+    // ─── Schema version (Phase 694) ──────────────────────────────────
+
+    /// The schema every manifest this binary projects is stamped with.
+    [<Literal>]
+    let SchemaVersion = 2
+
+    /// The schema of every manifest projected before Phase 694 — the
+    /// shape that carried no version field at all, and therefore
+    /// deserialises its version as `0`.
+    [<Literal>]
+    let PreCanonicalMethodSchemaVersion = 1
+
+    /// The schema at which canonical-method selectors began to be
+    /// recorded. Separate from `SchemaVersion` deliberately: the next
+    /// field to join the manifest advances `SchemaVersion` and must NOT
+    /// move this, or every binding sealed between the two would be read
+    /// as silent about selectors it did in fact record.
+    [<Literal>]
+    let CanonicalMethodSchemaVersion = 2
+
+    /// The schema a manifest was projected under, reading an absent or
+    /// non-positive field as the pre-694 shape.
+    ///
+    /// `0` is what a JSON round-trip yields for a field the document does
+    /// not carry, and it is the ONLY value a legacy manifest can present.
+    /// Mapping it to the pre-694 schema here — once — is what keeps every
+    /// other reader from having to know that.
+    let effectiveSchemaVersion (manifest: CompositionManifest) : int =
+        if manifest.SchemaVersion <= 0 then
+            PreCanonicalMethodSchemaVersion
+        else
+            manifest.SchemaVersion
+
+    /// Whether this manifest is new enough for its `CanonicalMethods` to
+    /// be evidence. `false` means the manifest is SILENT on the selectors,
+    /// which a comparison must report as unrecorded rather than resolve as
+    /// unchanged.
+    let recordsCanonicalMethods (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= CanonicalMethodSchemaVersion
+
+    /// The recorded canonical-method selectors, in a canonical order, with
+    /// the null-list coercion every manifest read path needs (a manifest
+    /// deserialised from a document predating the field carries `null`,
+    /// and a null F# list faults on the first list operation).
+    let canonicalMethods (manifest: CompositionManifest) : MetricCanonicalMethod list =
+        (if isNull (box manifest.CanonicalMethods) then
+             []
+         else
+             manifest.CanonicalMethods)
+        |> List.distinctBy _.MetricId
+        |> List.sortBy _.MetricId
+
+    /// **THE derivation** of canonical-method selectors from the metric
+    /// registry a composition accumulated.
+    ///
+    /// One function, called by both readers that need the answer: the
+    /// manifest projection (`ServerApp.compositionManifest`) and Phase
+    /// 684's grounding envelope, which now reads the selectors back OUT of
+    /// the manifest rather than deriving them a second time. Two
+    /// derivations that happen to agree today are two derivations that can
+    /// stop agreeing, and the seal either side of them would keep
+    /// verifying while they did.
+    let canonicalMethodsOf (metrics: Grounding.MetricRegistration list) : MetricCanonicalMethod list =
+        (if isNull (box metrics) then [] else metrics)
+        |> List.choose (fun r ->
+            r.Definition.CanonicalMethod
+            |> Option.map (fun selector -> {
+                MetricId = r.Definition.Id
+                Selector = selector
+            }))
+        |> List.distinct
+        |> List.sortBy _.MetricId
 
     /// A registered module, identified by the resolved id `addModule`
     /// accumulated onto `ServerApp.ModuleComponentIds` (explicit when
@@ -205,6 +323,11 @@ module CompositionManifest =
         (configKnobs: ConfigKnob list)
         : CompositionManifest =
         {
+            // Phase 694 — a manifest this binary projects is stamped with
+            // the current schema whether or not any metric declares a
+            // selector, because "I record selectors and there are none" is
+            // exactly the claim a legacy manifest cannot make.
+            SchemaVersion = SchemaVersion
             Modules = modules
             CompanionSlots = companionSlots
             DataTypes = dataTypes
@@ -213,6 +336,7 @@ module CompositionManifest =
             Subjects = []
             Purposes = []
             ConfigKnobs = configKnobs
+            CanonicalMethods = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -238,6 +362,20 @@ module CompositionManifest =
     let withPurposes (purposes: ComponentEntry list) (m: CompositionManifest) : CompositionManifest = {
         m with
             Purposes = purposes
+    }
+
+    /// Phase 694 — record the canonical-method selectors, same additive
+    /// shape as `withGrounding` / `withPurposes`.
+    ///
+    /// It stamps `SchemaVersion` as well as the list, and that is the
+    /// whole mechanism: recording the selectors is what makes a manifest
+    /// one that SPEAKS about them. A manifest that went through this call
+    /// with an empty list is claiming "no metric declares one"; a manifest
+    /// that never did is claiming nothing at all.
+    let withCanonicalMethods (methods: MetricCanonicalMethod list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            CanonicalMethods = methods
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was

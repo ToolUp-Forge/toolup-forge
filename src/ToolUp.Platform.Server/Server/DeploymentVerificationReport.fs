@@ -58,14 +58,27 @@ open ToolUp.Platform.DeploymentVerification
 
 /// The boot verification verdict (Phase 657), mirrored.
 ///
-/// Three cases where the source has four: `VerificationFailed` and
+/// Four cases where the source has five: `VerificationFailed` and
 /// `Drifted` both mean the preflight ran and its answer was adverse, and
 /// the report treats them identically — the distinction between them is
 /// carried in `detail` and `findings`, which is where an operator reads
 /// it. `Unsealed` stays separate because it is NOT adverse.
+///
+/// **Phase 694's `VerifiedUnrecorded` gets its own case rather than
+/// folding into `BootSealVerified`.** That fold is the exact confusion
+/// the source verdict was split to prevent: a binding sealed before the
+/// manifest recorded canonical-method selectors cannot speak to them, and
+/// a report that rendered "matched everything it recorded" as a plain
+/// verification would restate the blind spot one tier up.
 type BootSealIntegrity =
     /// The running composition is the sealed one.
     | BootSealVerified of profile: string * policy: string * detail: string
+    /// The running composition matches everything the sealed binding
+    /// recorded, and the binding predates one or more of the declarations
+    /// the preflight now compares. Not adverse — an old binding is not a
+    /// drifted deployment — and not a verification either. `unrecorded`
+    /// names each declaration that could not be compared.
+    | BootSealVerifiedUnrecorded of profile: string * policy: string * detail: string * unrecorded: string list
     /// The preflight ran and had nothing to compare against — no sealed
     /// deploy record, or a record with no composition binding. Honest,
     /// legitimate, and emphatically not a verification.
@@ -291,6 +304,19 @@ module DeploymentVerificationReport =
                 title
                 (VerificationSectionVerdict.Verified(sprintf "%s (profile %s, policy %s)" detail profile policy))
                 []
+        | Some(BootSealVerifiedUnrecorded(profile, policy, detail, unrecorded)) ->
+            // `Observed`, not `Verified`: the substrate is composed, was
+            // read, and there is a part of its check it could not perform.
+            // Not `Failed` either — nothing failed, and an upgrade that
+            // turned every sealed deployment's report red would be a worse
+            // outcome than the blind spot it closed. Non-adverse, so the
+            // report still exits zero; visible, so the one-act remedy
+            // (re-seal the binding) is legible.
+            section
+                BootSealSection
+                title
+                (VerificationSectionVerdict.Observed(sprintf "%s (profile %s, policy %s)" detail profile policy))
+                unrecorded
         | Some(BootSealUnsealed(profile, policy, reason)) ->
             section
                 BootSealSection
@@ -621,6 +647,26 @@ module DeploymentVerificationReport =
                     if isComposed GroundingContinuitySection then
                         Some
                             "the five enumerated grounding facets (metric registration, subject registration, purpose declaration, canonical method, disclosure policy) are covered post-boot by the continuity chain above. The rest of the composition is not."
+                    else
+                        None
+            }
+            {
+                // Phase 694. Before it, the honest statement here would
+                // have been that the boot comparison was structurally
+                // blind to a canonical-method flip — and the report did
+                // not make it, which is the more instructive half of why
+                // this entry exists. The manifest now records the selector
+                // under a versioned schema, so the comparison sees it; the
+                // residual bound is the age of the binding being compared
+                // against, and the verdict names that itself rather than
+                // resolving it as a match.
+                Id = "boot-seal-covers-what-it-recorded"
+                Statement =
+                    "The boot comparison proves the running composition matches what the sealed binding RECORDED. A binding sealed before a declaration joined the recorded manifest cannot speak to that declaration — most consequentially a metric's canonical-method selector, which changes what an already enumerated number means without changing anything else."
+                Narrowing =
+                    if isComposed BootSealSection then
+                        Some
+                            "the manifest records canonical-method selectors under a versioned schema, so a flip between two recorded boots is a named difference; a binding too old to carry them reports 'verified-unrecorded' and names each metric, never a match. Re-sealing the binding from the running composition closes the gap for good."
                     else
                         None
             }

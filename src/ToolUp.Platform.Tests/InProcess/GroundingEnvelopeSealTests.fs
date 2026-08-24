@@ -216,17 +216,86 @@ let tests =
                  |> List.exists (fun (f, s, v) -> f = "canonical-method" && s = "revenue" && v = "computed:rollup"))
                 "the canonical-method selector is declared, keyed by metric id"
 
-            // The facet the manifest cannot see. Phase 526's metric entry
-            // carries the id and nothing else, so a flip is invisible to
-            // Phase 657's binding — which is exactly why this envelope is
-            // a separate projection rather than a read of the manifest.
-            let manifestOnly =
-                GroundingEnvelope.ofManifest (ServerApp.compositionManifest (groundedApp None))
+            // Phase 694 — the facet the manifest could not see, and now
+            // does. This assertion was the exact inverse until 694: the
+            // manifest recorded a metric as its id alone, so a flip was
+            // invisible to Phase 657's binding and only this envelope saw
+            // it. The manifest now records the selector under a versioned
+            // schema, and `ofManifest` reads it back rather than a second
+            // code path deriving it from the registry.
+            let declaringApp = groundedApp (Some "computed:rollup")
+            let manifest = ServerApp.compositionManifest declaringApp
+
+            Expect.equal
+                (GroundingEnvelope.ofManifest manifest)
+                (GroundingEnvelope.ofComposition manifest declaringApp.RegisteredMetrics)
+                "ONE derivation: the envelope read from the manifest and the envelope derived beside it are the same value by construction, not two paths that happen to agree"
+
+            Expect.isTrue
+                (GroundingEnvelope.ofManifest manifest
+                 |> _.Declarations
+                 |> List.exists (fun d -> d.Facet = CanonicalMethodFacet && d.Subject = "revenue"))
+                "the manifest alone now carries the canonical-method facet"
+
+            // The probe that proves the agreement is not vacuous: a
+            // manifest too old to record selectors still contributes none,
+            // which is the pre-694 behaviour of `ofManifest` unchanged.
+            let legacyManifest = {
+                manifest with
+                    SchemaVersion = 0
+                    CanonicalMethods = Unchecked.defaultof<MetricCanonicalMethod list>
+            }
 
             Expect.isFalse
-                (manifestOnly.Declarations
+                (GroundingEnvelope.ofManifest legacyManifest
+                 |> _.Declarations
                  |> List.exists (fun d -> d.Facet = CanonicalMethodFacet))
-                "the manifest alone carries no canonical-method facet"
+                "a manifest predating canonical-method recording declares none, and does not fault on the null list"
+        }
+
+        test "Phase 694 — a canonical-method flip moves the envelope AND the boot comparison, naming the same metric" {
+            // The agreement point, probed as one fact rather than two.
+            // Before 694 the left-hand side moved and the right-hand side
+            // did not: the envelope digest changed across a flip while
+            // Phase 657's binding verified perfectly, so the deployment
+            // held two pieces of evidence that disagreed about whether
+            // anything had happened.
+            let before = groundedApp (Some "computed:rollup:1")
+            let after = groundedApp (Some "computed:rollup:2")
+
+            let beforeManifest = ServerApp.compositionManifest before
+            let afterManifest = ServerApp.compositionManifest after
+
+            Expect.notEqual
+                (GroundingEnvelope.digest (envelopeOf before))
+                (GroundingEnvelope.digest (envelopeOf after))
+                "the envelope sees the flip (this held before Phase 694 too)"
+
+            let drift = BootVerificationPreflight.compare beforeManifest afterManifest
+            let rendered = drift |> List.map CompositionDrift.describe |> String.concat " | "
+
+            Expect.equal
+                drift.Length
+                1
+                "exactly one difference — the selector, nothing else about the composition moved"
+
+            Expect.stringContains rendered "revenue" "the finding names the metric"
+            Expect.stringContains rendered "computed:rollup:1" "and the recorded selector"
+            Expect.stringContains rendered "computed:rollup:2" "and the observed one"
+
+            // The control: the same two compositions with no flip between
+            // them must produce neither signal, or the assertions above
+            // would pass for a comparison that reported everything.
+            Expect.equal
+                (GroundingEnvelope.digest (envelopeOf before))
+                (GroundingEnvelope.digest (envelopeOf (groundedApp (Some "computed:rollup:1"))))
+                "an unflipped pair digests identically"
+
+            Expect.isEmpty
+                (BootVerificationPreflight.compare
+                    beforeManifest
+                    (ServerApp.compositionManifest (groundedApp (Some "computed:rollup:1"))))
+                "and reports no drift"
         }
 
         test "a grounding-free composition seals to the empty envelope (GP 11)" {

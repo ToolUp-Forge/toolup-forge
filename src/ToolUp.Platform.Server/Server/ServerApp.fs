@@ -1865,6 +1865,17 @@ module ServerApp =
         match result.Verdict with
         | BootVerificationVerdict.Verified ->
             BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict)
+        | BootVerificationVerdict.VerifiedUnrecorded _ ->
+            // Phase 694 — affirmative, and carried as its own case. See
+            // `BootSealVerifiedUnrecorded`: rendering it as a plain
+            // verification here would restate one tier up the blind spot
+            // the verdict was split to surface.
+            BootSealVerifiedUnrecorded(
+                profile,
+                policy,
+                BootVerificationVerdict.describe result.Verdict,
+                BootVerificationVerdict.findings result.Verdict
+            )
         | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
         | BootVerificationVerdict.VerificationFailed _
         | BootVerificationVerdict.Drifted _ ->
@@ -2278,6 +2289,15 @@ module ServerApp =
         CompositionManifest.build modules companionSlots dataTypes tools (configKnobs @ purposeKnobs)
         |> CompositionManifest.withGrounding metricEntries subjectEntries
         |> CompositionManifest.withPurposes purposeEntries
+        // Phase 694 — the canonical-method selector each metric declared.
+        // The one grounding declaration that changes what an already
+        // enumerated metric MEANS, and the one the manifest was silent
+        // about: `metricEntry` records the id and nothing else, so two
+        // boots either side of a canonical flip compared equal. Derived by
+        // `CompositionManifest.canonicalMethodsOf` — the single derivation
+        // Phase 684's envelope now reads back out of the manifest rather
+        // than computing a second time.
+        |> CompositionManifest.withCanonicalMethods (CompositionManifest.canonicalMethodsOf app.RegisteredMetrics)
 
     /// Phase 657 — run the boot verification preflight over the composition
     /// THIS app derived, and decide whether it may serve.

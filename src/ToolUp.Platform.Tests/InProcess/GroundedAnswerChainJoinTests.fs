@@ -480,6 +480,36 @@ let tests =
             Expect.isSome affirmative.CompositionSealId "the affirmative verdict does name it — the probe can fail"
         }
 
+        test "Phase 694 — a boot that could not compare the canonical methods names no seal id either" {
+            // The one call site where `isAffirmative` and `isFullyCompared`
+            // must part company. A `VerifiedUnrecorded` boot is affirmative
+            // and the process serves; what it could not compare is the
+            // selector deciding which method's lineage a method-less query
+            // resolves to — i.e. what the numbers on THIS row mean. Naming
+            // the seal here would restate Phase 694's silent equality at
+            // the one surface where the selector is material.
+            let bootResult, sealedBinding = verifiedBoot ()
+
+            let unrecorded = {
+                bootResult with
+                    Verdict =
+                        BootVerificationVerdict.VerifiedUnrecorded [
+                            CanonicalMethodUnrecorded("revenue", Some "computed:rollup:2")
+                        ]
+            }
+
+            Expect.isTrue
+                (BootVerificationVerdict.isAffirmative unrecorded.Verdict)
+                "the verdict IS affirmative — the process serves, and this test is not asserting otherwise"
+
+            let anchors =
+                AnswerProvenanceAnchors.fromBootVerification unrecorded (Some sealedBinding)
+
+            Expect.isNone
+                anchors.CompositionSealId
+                "and the anchor still declines: re-seal the binding to get it back, which is the same one act the upgrade already needs"
+        }
+
         // ── The unchanged deployment ──────────────────────────────────
 
         test "a deployment composing no audit log records no row at all" {

@@ -108,6 +108,35 @@ let private composition: CompositionManifest =
             CompositionManifest.knob "RateLimiter" "NoRateLimiter"
         ]
 
+// ─── Phase 694 fixtures — canonical-method visibility ────────────────
+
+/// A composition carrying one grounding metric, optionally declaring a
+/// canonical-method selector for it.
+let private grounded (selector: string option) : CompositionManifest =
+    let withMetric =
+        CompositionManifest.build [] [] [] [] [ CompositionManifest.knob "FactStore" "EnabledFactStore" ]
+        |> CompositionManifest.withGrounding [ CompositionManifest.metricEntry "revenue" ] []
+
+    match selector with
+    | None -> withMetric |> CompositionManifest.withCanonicalMethods []
+    | Some s ->
+        withMetric
+        |> CompositionManifest.withCanonicalMethods [ { MetricId = "revenue"; Selector = s } ]
+
+/// The pre-694 projection of a manifest, as a binding sealed before that
+/// phase actually deserialises: no schema field at all (so `0`) and no
+/// canonical-method list (so `null`).
+///
+/// Both halves matter. A test that set `SchemaVersion = 1` and
+/// `CanonicalMethods = []` would exercise the version gate without ever
+/// touching the null-list read path, which is the half that faults rather
+/// than misreports.
+let private asLegacy (manifest: CompositionManifest) : CompositionManifest = {
+    manifest with
+        SchemaVersion = 0
+        CanonicalMethods = Unchecked.defaultof<MetricCanonicalMethod list>
+}
+
 let private sealer = StubSealer "boot-secret" :> IDeployRecordSealer
 
 let private optionsFor
@@ -339,6 +368,227 @@ let tests =
                 Expect.isEmpty
                     (BootVerificationPreflight.compare composition observed)
                     "a binding round-tripped through a serialiser predating a list deserialises it as null"
+            }
+        ]
+
+        // ─── Phase 694 — the canonical-method flip ───────────────────
+        //
+        // Two claims, and the whole phase turns on them being probed in
+        // BOTH directions rather than only the one that would pass:
+        //
+        //   * A flip between two RECORDED boots is drift. Probed because
+        //     this comparison silently returned "verified" across exactly
+        //     this move until now.
+        //   * The legacy→recorded transition boot is NOT drift. Probed
+        //     because the naive fix — putting the selector in the metric
+        //     entry's unused `Impl` slot — passes the first probe and
+        //     fails this one, drifting every already-sealed deployment the
+        //     moment it upgrades.
+
+        testList "canonical-method visibility (Phase 694)" [
+            test "a manifest predating the field is silent about selectors, and says so rather than claiming none" {
+                Expect.isFalse
+                    (CompositionManifest.recordsCanonicalMethods (asLegacy (grounded (Some "computed:rollup:1"))))
+                    "an absent schema field reads as the pre-694 schema, never as version zero"
+
+                Expect.isTrue
+                    (CompositionManifest.recordsCanonicalMethods (grounded None))
+                    "a manifest this binary projected records selectors even when no metric declares one — that is a claim a legacy manifest cannot make"
+            }
+
+            test "a legacy manifest canonicalises to its pre-694 bytes, so an already-minted seal still verifies" {
+                let legacy = asLegacy (grounded (Some "computed:rollup:1"))
+                let form = BootVerificationPreflight.compositionCanonicalForm legacy
+
+                Expect.isFalse
+                    (form.Contains BootVerificationPreflight.CanonicalMethodFramingVersion)
+                    "the canonical-method block is not emitted for a manifest too old to carry it — emitting even a zero length would change every existing binding's canonical form and break its genuine seal"
+
+                // And the gate is real rather than vacuous: the same
+                // composition recorded at the current schema DOES carry the
+                // block.
+                let currentForm = BootVerificationPreflight.compositionCanonicalForm (grounded None)
+
+                Expect.isTrue
+                    (currentForm.Contains BootVerificationPreflight.CanonicalMethodFramingVersion)
+                    "a manifest at the current schema emits the block"
+
+                // End-to-end: a binding sealed over a legacy composition
+                // verifies. This is the property the gate exists for, and
+                // the only one an operator experiences.
+                let sealedRecord, sealedBinding = sealPair baseRecord legacy
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                match verdictOf options legacy with
+                | BootVerificationVerdict.VerificationFailed(failures, findings) ->
+                    failtestf "a legacy binding's own seal stopped verifying: %A / %A" failures findings
+                | _ -> ()
+            }
+
+            test "a flip between two recorded boots is drift, naming the metric and both selectors" {
+                let recorded = grounded (Some "computed:rollup:1")
+                let observed = grounded (Some "computed:rollup:2")
+
+                let drift = BootVerificationPreflight.compare recorded observed
+
+                Expect.equal drift.Length 1 "the selector moved and nothing else did"
+
+                let rendered = CompositionDrift.describe drift.Head
+
+                Expect.stringContains rendered "revenue" "the finding names the metric"
+                Expect.stringContains rendered "computed:rollup:1" "and the recorded selector"
+                Expect.stringContains rendered "computed:rollup:2" "and the observed one"
+            }
+
+            test "a first declaration and a withdrawal are each drift between recorded boots" {
+                let declaredDrift =
+                    BootVerificationPreflight.compare (grounded None) (grounded (Some "computed:rollup:1"))
+
+                Expect.equal
+                    declaredDrift.Length
+                    1
+                    "declaring a canonical method changes what a method-less query returns"
+
+                Expect.stringContains
+                    (CompositionDrift.describe declaredDrift.Head)
+                    "computed:rollup:1"
+                    "the finding names the newly declared selector"
+
+                let withdrawnDrift =
+                    BootVerificationPreflight.compare (grounded (Some "computed:rollup:1")) (grounded None)
+
+                Expect.equal withdrawnDrift.Length 1 "and so does withdrawing one"
+
+                Expect.stringContains
+                    (CompositionDrift.describe withdrawnDrift.Head)
+                    "computed:rollup:1"
+                    "the finding names the selector that is gone"
+            }
+
+            test "identical recorded selectors report no drift" {
+                Expect.isEmpty
+                    (BootVerificationPreflight.compare
+                        (grounded (Some "computed:rollup:1"))
+                        (grounded (Some "computed:rollup:1")))
+                    "a comparison that flagged an unmoved selector would be measuring nothing"
+            }
+
+            test "the legacy to recorded transition reports NO drift, and is reported as unrecorded instead" {
+                let recorded = asLegacy (grounded (Some "computed:rollup:1"))
+                let observed = grounded (Some "computed:rollup:2")
+
+                Expect.isEmpty
+                    (BootVerificationPreflight.compare recorded observed)
+                    "an upgrade is not a drift: the binding never recorded the selector, so it cannot be evidence that this one is different"
+
+                let unrecorded = BootVerificationPreflight.unrecorded recorded observed
+
+                Expect.equal unrecorded.Length 1 "and the fact that it could not be compared is not dropped"
+
+                let rendered = CompositionUnrecorded.describe unrecorded.Head
+
+                Expect.stringContains rendered "revenue" "naming the metric"
+                Expect.stringContains rendered "computed:rollup:2" "and what is live"
+            }
+
+            test "unrecorded is empty once the binding records selectors, so a re-seal closes it for good" {
+                Expect.isEmpty
+                    (BootVerificationPreflight.unrecorded
+                        (grounded (Some "computed:rollup:1"))
+                        (grounded (Some "computed:rollup:2")))
+                    "a binding at the current schema is never silent — its disagreement is drift, which is the other list"
+            }
+
+            test "a grounding-free composition under a legacy binding is Verified, not qualified" {
+                let legacy = asLegacy composition
+                let sealedRecord, sealedBinding = sealPair baseRecord legacy
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                Expect.equal
+                    (verdictOf options composition)
+                    BootVerificationVerdict.Verified
+                    "with no metric on either side no selector can exist to be silent about — a provable statement, not a hedge, and a caveat every deployment saw would be one nobody read"
+            }
+
+            test "the transition boot is VerifiedUnrecorded — affirmative, and not a match" {
+                let legacy = asLegacy (grounded (Some "computed:rollup:1"))
+                let observed = grounded (Some "computed:rollup:2")
+                let sealedRecord, sealedBinding = sealPair baseRecord legacy
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                let verdict = verdictOf options observed
+
+                match verdict with
+                | BootVerificationVerdict.VerifiedUnrecorded items ->
+                    Expect.equal items.Length 1 "the one declaration that could not be compared"
+                | other -> failtestf "expected VerifiedUnrecorded, got %A" other
+
+                Expect.equal (BootVerificationVerdict.label verdict) "verified-unrecorded" "its own label"
+
+                Expect.isTrue
+                    (BootVerificationVerdict.isAffirmative verdict)
+                    "affirmative: an old binding is not a drifted deployment, and an upgrade must not cost a refuse-on-drift deployment an outage"
+
+                Expect.isFalse
+                    (BootVerificationVerdict.isFullyCompared verdict)
+                    "and NOT a full comparison — the whole point is that the preflight does not claim to have checked what it did not check"
+
+                Expect.stringContains
+                    (BootVerificationVerdict.findings verdict |> String.concat " | ")
+                    "revenue"
+                    "the finding names the metric"
+            }
+
+            test "under refuse-on-drift the transition boot serves and the flip does not" {
+                let observed = grounded (Some "computed:rollup:2")
+
+                let runWith (recordedComposition: CompositionManifest) =
+                    let sealedRecord, sealedBinding = sealPair baseRecord recordedComposition
+
+                    let options =
+                        optionsFor
+                            CompositionProfile.Verified
+                            BootVerificationPolicy.RefuseOnDrift
+                            (Some sealedRecord)
+                            (Some sealedBinding)
+                            None
+
+                    BootVerificationPreflight.run options observed |> Async.RunSynchronously
+
+                match runWith (asLegacy (grounded (Some "computed:rollup:1"))) with
+                | Ok result -> Expect.isFalse result.RefusedStart "the transition boot serves"
+                | Error result -> failtestf "the upgrade refused the start: %A" result.Verdict
+
+                match runWith (grounded (Some "computed:rollup:1")) with
+                | Error result ->
+                    Expect.isTrue result.RefusedStart "a flip between two recorded boots refuses"
+
+                    Expect.stringContains
+                        (BootVerificationVerdict.findings result.Verdict |> String.concat " | ")
+                        "computed:rollup:2"
+                        "naming what it is running"
+                | Ok result -> failtestf "the flip was allowed to serve: %A" result.Verdict
             }
         ]
 
