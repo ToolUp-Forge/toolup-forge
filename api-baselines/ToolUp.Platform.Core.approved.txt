@@ -767,6 +767,8 @@ ToolUp.Platform.AuditEvent.IsFileReprocessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmissionUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmitted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGroundingEnvelopeMutated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGroundingMutationRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsHealthStateChanged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsHostActionDispatched : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeDocumentDeduplicated : System.Boolean { get }
@@ -994,6 +996,10 @@ ToolUp.Platform.AuditEvent+FormSubmissionUpdated (class)
 ToolUp.Platform.AuditEvent+FormSubmissionUpdated.Item : ToolUp.Platform.FormSubmissionUpdatedPayload { get }
 ToolUp.Platform.AuditEvent+FormSubmitted (class)
 ToolUp.Platform.AuditEvent+FormSubmitted.Item : ToolUp.Platform.FormSubmittedPayload { get }
+ToolUp.Platform.AuditEvent+GroundingEnvelopeMutated (class)
+ToolUp.Platform.AuditEvent+GroundingEnvelopeMutated.Item : ToolUp.Platform.GroundingEnvelopeMutatedPayload { get }
+ToolUp.Platform.AuditEvent+GroundingMutationRefused (class)
+ToolUp.Platform.AuditEvent+GroundingMutationRefused.Item : ToolUp.Platform.GroundingMutationRefusedPayload { get }
 ToolUp.Platform.AuditEvent+HealthStateChanged (class)
 ToolUp.Platform.AuditEvent+HealthStateChanged.Item : ToolUp.Platform.HealthStateChangedPayload { get }
 ToolUp.Platform.AuditEvent+HostActionDispatched (class)
@@ -1205,6 +1211,8 @@ ToolUp.Platform.AuditEvent+Tags.FileReprocessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmissionUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmitted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GroundingEnvelopeMutated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GroundingMutationRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.HealthStateChanged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.HostActionDispatched : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeDocumentDeduplicated : System.Int32 (literal)
@@ -4500,6 +4508,28 @@ ToolUp.Platform.Grounding.SubjectRegistration (class)
 ToolUp.Platform.Grounding.SubjectRegistration..ctor(System.String, ToolUp.Platform.Grounding.SubjectDefinition)
 ToolUp.Platform.Grounding.SubjectRegistration.Definition : ToolUp.Platform.Grounding.SubjectDefinition { get }
 ToolUp.Platform.Grounding.SubjectRegistration.Module : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload (class)
+ToolUp.Platform.GroundingEnvelopeMutatedPayload..ctor(System.String, System.String, System.String, System.String, System.Int32, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.AfterDigest : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.BeforeDigest : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Facet : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Observations : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Principal : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Profile : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Reason : System.String { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Sequence : System.Int32 { get }
+ToolUp.Platform.GroundingEnvelopeMutatedPayload.Subject : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload (class)
+ToolUp.Platform.GroundingMutationRefusedPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.GroundingMutationRefusedPayload.ChainedDigest : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.Facet : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.ObservedDigest : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.Principal : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.Profile : System.String { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.Reasons : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingMutationRefusedPayload.Subject : System.String { get }
 ToolUp.Platform.HealthChecks (class)
 ToolUp.Platform.HealthChecks+HealthKind (class)
 ToolUp.Platform.HealthChecks+HealthKind.IsLiveness : System.Boolean { get }

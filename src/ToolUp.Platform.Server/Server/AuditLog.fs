@@ -1564,6 +1564,27 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> FactImportRefused(fromAuditJson<FactImportPayload> j)
     }
+    // Phase 684 — grounding-envelope mutation, both verdicts. Two event
+    // types over two payload shapes: a refusal carries the chained-vs-
+    // observed digest pair and no sequence, because nothing was appended
+    // to the chain — folding it into the mutation row would need every
+    // field on it to be optional and the walk to skip rows by inspection.
+    {
+        EventType = "GroundingEnvelopeMutated"
+        TryEncode =
+            (function
+            | GroundingEnvelopeMutated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GroundingEnvelopeMutated(fromAuditJson<GroundingEnvelopeMutatedPayload> j)
+    }
+    {
+        EventType = "GroundingMutationRefused"
+        TryEncode =
+            (function
+            | GroundingMutationRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GroundingMutationRefused(fromAuditJson<GroundingMutationRefusedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

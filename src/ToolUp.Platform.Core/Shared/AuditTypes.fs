@@ -3704,6 +3704,88 @@ type FactImportPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 684 — one grounding-envelope mutation that landed through the
+/// audited choke point.
+///
+/// **Before and after, as digests, on the same row.** A mutation record
+/// carrying only the new state proves nothing about what it replaced, so a
+/// chain of them cannot be walked. With both digests present, `seal +
+/// recorded chain ⇒ current envelope` is a computation an auditor can
+/// perform from the trail alone — which is the whole point of routing the
+/// mutation through a door rather than trusting that nobody moved.
+///
+/// **Recorded on the clean mutation too**, the Phase 657 / 680 / 683
+/// discipline: a trail carrying only the anomalous mutations cannot
+/// distinguish a deployment whose grounding envelope moved lawfully from
+/// one whose door was never composed.
+///
+/// **Identifiers only.** Component ids, facet labels, digests, and the
+/// operator principal the audit trail already records elsewhere. No
+/// declared value, no fact value, no caller-supplied data rides this row.
+type GroundingEnvelopeMutatedPayload = {
+    /// Which facet of the declared grounding envelope moved:
+    /// `"metric-registration"`, `"subject-registration"`,
+    /// `"purpose-declaration"`, `"canonical-method"`, or
+    /// `"disclosure-policy"`.
+    Facet: string
+    /// The declaration's subject — the metric id, subject-hierarchy id,
+    /// purpose id, or egress-surface name the mutation concerned.
+    Subject: string
+    /// Lowercase-hex digest of the canonical grounding envelope as it
+    /// stood BEFORE this mutation.
+    BeforeDigest: string
+    /// Lowercase-hex digest of the envelope AFTER it.
+    AfterDigest: string
+    /// Position of this mutation in the chain, counting from 1. The
+    /// position a continuity divergence is reported at.
+    Sequence: int
+    /// Composition profile in force: `"standard"` or `"verified"`.
+    Profile: string
+    /// The principal that asked for the mutation.
+    Principal: string
+    /// The reason the caller stated. Free-form operator text.
+    Reason: string
+    /// Findings that WOULD have refused this mutation under the verified
+    /// profile, recorded rather than enforced because the deployment is
+    /// running `standard`. Empty on a clean in-path mutation, and always
+    /// empty under `verified` — there the mutation was refused instead.
+    /// The same log-then-refuse adoption ladder Phase 657's
+    /// `LogAndServe` → `RefuseOnDrift` policy offers.
+    Observations: string list
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 684 — a grounding-envelope mutation was refused at the choke
+/// point and nothing moved.
+///
+/// Its own event type rather than a flag on the mutation row, for the
+/// reason Phase 683's import pair records: the discriminator is what a
+/// SIEM rule and a chained-ledger query cut on, and folding it into the
+/// payload puts that cut where neither can reach it without decoding
+/// every row.
+type GroundingMutationRefusedPayload = {
+    /// The facet the refused mutation claimed. Same vocabulary as
+    /// `GroundingEnvelopeMutatedPayload.Facet`.
+    Facet: string
+    /// The subject the refused mutation claimed.
+    Subject: string
+    /// The digest the recorded chain proves the envelope should stand at.
+    ChainedDigest: string
+    /// The digest actually observed — of the live envelope for an
+    /// out-of-path drift, or of the baseline the caller presented for a
+    /// stale request.
+    ObservedDigest: string
+    /// One rendered line per refusal reason, each naming its subject.
+    Reasons: string list
+    /// Composition profile in force. Always `"verified"` — the standard
+    /// profile records observations on the mutation row and refuses
+    /// nothing.
+    Profile: string
+    /// The principal whose mutation was refused.
+    Principal: string
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4343,6 +4425,13 @@ type AuditEvent =
     /// nothing was asserted. The unverifiable / tampered / id-mismatched
     /// signal, on the same audited path as every other refusal.
     | FactImportRefused of FactImportPayload
+    /// Phase 684 — a declared grounding-envelope facet moved through the
+    /// audited choke point, carrying the before/after envelope digests
+    /// that make the mutation chain walkable.
+    | GroundingEnvelopeMutated of GroundingEnvelopeMutatedPayload
+    /// Phase 684 — a grounding-envelope mutation was refused under the
+    /// verified composition profile and nothing moved.
+    | GroundingMutationRefused of GroundingMutationRefusedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4517,6 +4606,8 @@ module AuditEvent =
         | AnswerVerificationFlagged _ -> "AnswerVerificationFlagged"
         | FactImportAccepted _ -> "FactImportAccepted"
         | FactImportRefused _ -> "FactImportRefused"
+        | GroundingEnvelopeMutated _ -> "GroundingEnvelopeMutated"
+        | GroundingMutationRefused _ -> "GroundingMutationRefused"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

@@ -1044,6 +1044,19 @@
              CompositionProfile.Standard with the log-and-serve default is
              byte-for-byte the prior behaviour (GP 11/13). -->
         <Compile Include="Server\BootVerificationPreflight.fs" />
+        <!-- Phase 684 — the grounding envelope sealed past boot: the enumerated
+             grounding-relevant mutation surface (metric / subject registration,
+             purpose declaration, canonical-method selection, disclosure policy),
+             its digestible envelope projection, the single audited mutation
+             choke point, and the continuity proof that boot seal + recorded
+             mutation chain accounts for the live envelope. Closes the post-boot
+             gap Phase 657's own doc names, the op-stream way rather than the
+             freeze way. After BootVerificationPreflight (reads CompositionProfile
+             + the seal discipline), after CompositionManifest (projects it) and
+             AuditLog (emits mutations + refusals through the audit seam); before
+             ServerApp. Opt-in — a deployment that composes no mutator is
+             byte-for-byte unchanged (GP 11/13). -->
+        <Compile Include="Server\GroundingEnvelopeSeal.fs" />
         <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
              IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
              NoOp default + in-memory reference. Widens the Phase 268 fault

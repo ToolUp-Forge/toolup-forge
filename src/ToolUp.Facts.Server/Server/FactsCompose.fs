@@ -456,6 +456,104 @@ module FactsCompose =
                     }
             }
 
+    // ─── Phase 684 — the grounding envelope sealed past boot (opt-in) ─
+    //
+    // Phase 657 seals the composition AT boot and says plainly that it
+    // proves nothing about what happens afterwards. For the grounding tier
+    // that gap is the live one: the declarations a later answer's
+    // provenance is judged against — which metrics are registered, which
+    // method a method-less query canonically resolves to, which purposes
+    // may disclose at which surface — are free to move the instant the
+    // preflight verdict lands, and nothing in the trail says they did.
+    //
+    // This composes the door. Grounding-relevant mutation stays possible
+    // and stops being invisible: each becomes a typed, audited operation
+    // carrying the before/after envelope digest, and `boot seal +
+    // recorded chain ⇒ live envelope` is a computation an auditor runs
+    // from the trail. Under `CompositionProfile.Verified` a mutation
+    // arriving out of path is refused; under `Standard` the same findings
+    // are recorded and the mutation lands.
+    //
+    // A separate, explicit opt-in on top of the fact store — the shape
+    // every opt-in above it takes, and for the same reason: a deployment
+    // that only wants the store is byte-for-byte unchanged (GP 11 /
+    // GP 13).
+
+    /// Compose the audited grounding-envelope mutation door and its
+    /// continuity proof (Phase 684). Registers `IGroundingEnvelopeMutator`
+    /// over the composed `IAuditLog`, sealed to the grounding envelope
+    /// this app declares. A `NoFactStore` deployment (or one that never
+    /// calls this) is byte-for-byte unchanged (GP 11 / GP 13).
+    ///
+    /// **Insert LAST among the grounding compose steps.** The envelope is
+    /// sealed from the app AS IT STANDS at this call, so a metric,
+    /// purpose, or disclosure declaration composed after it is outside
+    /// the seal:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withDisclosurePurposes purposeConfig
+    /// |> FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// `observe` re-derives the envelope from whatever LIVE grounding
+    /// state the deployment holds, and is the honest bound on the whole
+    /// mechanism. `None` is the right answer for a composition whose
+    /// grounding declarations are compose-time immutable — which is every
+    /// composition this SDK ships: continuity is then continuous by
+    /// construction, and what that proves is that the deployment has
+    /// nothing that could drift, not that a drift check passed. A
+    /// deployment holding mutable grounding state passes `Some` a
+    /// function that reads it, and only then can the check catch
+    /// anything.
+    let withGroundingEnvelopeSeal
+        (profile: CompositionProfile)
+        (observe: (unit -> GroundingEnvelope) option)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let sealedEnvelope =
+                GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
+
+            let register (s: IServiceCollection) =
+                s.AddSingleton<IGroundingEnvelopeMutator>(
+                    Func<IServiceProvider, IGroundingEnvelopeMutator>(fun sp ->
+                        let auditLog = sp.GetRequiredService<IAuditLog>()
+
+                        match observe with
+                        | None ->
+                            GroundingEnvelopeMutator.forImmutableComposition
+                                profile
+                                auditLog
+                                GroundingEnvelopeMutator.PlatformScopeId
+                                sealedEnvelope
+                        | Some observeLive ->
+                            GroundingEnvelopeMutator.create
+                                profile
+                                auditLog
+                                GroundingEnvelopeMutator.PlatformScopeId
+                                sealedEnvelope
+                                observeLive)
+                )
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //
     // A separate, explicit opt-in on top of the fact store: the standing

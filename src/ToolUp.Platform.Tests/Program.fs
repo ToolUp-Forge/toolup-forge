@@ -1112,6 +1112,11 @@ let allTests =
         // and the grounding chain meet on one audit row, and the walk
         // between them is exercised end to end rather than argued.
         GroundedAnswerChainJoinTests.tests
+        // Phase 684 — the post-boot gap Phase 657 names, closed for the
+        // grounding tier: seal + recorded mutation chain accounts for the
+        // live envelope, an unrecorded drift does not, and the door
+        // refuses to extend a chain it can no longer prove.
+        GroundingEnvelopeSealTests.tests
         // DefaultDeployPipeline.Rollback regression: a build-sourced
         // deploy's rollback relaunches the artefact ref recovered from
         // the DeployPushing event history (never a synthetic

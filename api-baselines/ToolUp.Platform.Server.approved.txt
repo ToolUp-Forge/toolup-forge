@@ -3450,6 +3450,145 @@ ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
 ToolUp.Platform.GrantPremiumApiHandler (class)
 ToolUp.Platform.GrantPremiumApiHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.GroundingContinuity (class)
+ToolUp.Platform.GroundingContinuity.verify(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
+ToolUp.Platform.GroundingContinuity.verifyAgainst(ToolUp.Platform.GroundingEnvelope, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
+ToolUp.Platform.GroundingContinuityVerdict (class)
+ToolUp.Platform.GroundingContinuityVerdict.IsContinuous : System.Boolean { get }
+ToolUp.Platform.GroundingContinuityVerdict.IsDiverged : System.Boolean { get }
+ToolUp.Platform.GroundingContinuityVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityVerdict+Continuous (class)
+ToolUp.Platform.GroundingContinuityVerdict+Continuous.digest : System.String { get }
+ToolUp.Platform.GroundingContinuityVerdict+Continuous.steps : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityVerdict+Diverged (class)
+ToolUp.Platform.GroundingContinuityVerdict+Diverged.Item : ToolUp.Platform.GroundingDivergence { get }
+ToolUp.Platform.GroundingContinuityVerdict+Tags (class)
+ToolUp.Platform.GroundingContinuityVerdict+Tags.Continuous : System.Int32 (literal)
+ToolUp.Platform.GroundingContinuityVerdict+Tags.Diverged : System.Int32 (literal)
+ToolUp.Platform.GroundingContinuityVerdictModule (class)
+ToolUp.Platform.GroundingContinuityVerdictModule.describe(ToolUp.Platform.GroundingContinuityVerdict) : System.String
+ToolUp.Platform.GroundingContinuityVerdictModule.isContinuous(ToolUp.Platform.GroundingContinuityVerdict) : System.Boolean
+ToolUp.Platform.GroundingContinuityVerdictModule.label(ToolUp.Platform.GroundingContinuityVerdict) : System.String
+ToolUp.Platform.GroundingDeclaration (class)
+ToolUp.Platform.GroundingDeclaration..ctor(ToolUp.Platform.GroundingFacet, System.String, System.String)
+ToolUp.Platform.GroundingDeclaration.Facet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingDeclaration.Subject : System.String { get }
+ToolUp.Platform.GroundingDeclaration.Value : System.String { get }
+ToolUp.Platform.GroundingDivergence (class)
+ToolUp.Platform.GroundingDivergence.IsChainBreak : System.Boolean { get }
+ToolUp.Platform.GroundingDivergence.IsHeadMismatch : System.Boolean { get }
+ToolUp.Platform.GroundingDivergence.IsSealMismatch : System.Boolean { get }
+ToolUp.Platform.GroundingDivergence.Tag : System.Int32 { get }
+ToolUp.Platform.GroundingDivergence+ChainBreak (class)
+ToolUp.Platform.GroundingDivergence+ChainBreak.expected : System.String { get }
+ToolUp.Platform.GroundingDivergence+ChainBreak.observed : System.String { get }
+ToolUp.Platform.GroundingDivergence+ChainBreak.position : System.Int32 { get }
+ToolUp.Platform.GroundingDivergence+HeadMismatch (class)
+ToolUp.Platform.GroundingDivergence+HeadMismatch.differences : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingDivergence+HeadMismatch.expected : System.String { get }
+ToolUp.Platform.GroundingDivergence+HeadMismatch.observed : System.String { get }
+ToolUp.Platform.GroundingDivergence+HeadMismatch.position : System.Int32 { get }
+ToolUp.Platform.GroundingDivergence+SealMismatch (class)
+ToolUp.Platform.GroundingDivergence+SealMismatch.expected : System.String { get }
+ToolUp.Platform.GroundingDivergence+SealMismatch.observed : System.String { get }
+ToolUp.Platform.GroundingDivergence+Tags (class)
+ToolUp.Platform.GroundingDivergence+Tags.ChainBreak : System.Int32 (literal)
+ToolUp.Platform.GroundingDivergence+Tags.HeadMismatch : System.Int32 (literal)
+ToolUp.Platform.GroundingDivergence+Tags.SealMismatch : System.Int32 (literal)
+ToolUp.Platform.GroundingDivergenceModule (class)
+ToolUp.Platform.GroundingDivergenceModule.describe(ToolUp.Platform.GroundingDivergence) : System.String
+ToolUp.Platform.GroundingDivergenceModule.position(ToolUp.Platform.GroundingDivergence) : System.Int32
+ToolUp.Platform.GroundingEnvelope (class)
+ToolUp.Platform.GroundingEnvelope..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingDeclaration])
+ToolUp.Platform.GroundingEnvelope.Declarations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingDeclaration] { get }
+ToolUp.Platform.GroundingEnvelope.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.GroundingEnvelopeModule (class)
+ToolUp.Platform.GroundingEnvelopeModule.DisclosurePurposeKnobPrefix : System.String (literal)
+ToolUp.Platform.GroundingEnvelopeModule.FramingVersion : System.String (literal)
+ToolUp.Platform.GroundingEnvelopeModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.GroundingEnvelopeModule.canonicalBytes(ToolUp.Platform.GroundingEnvelope) : System.Byte[]
+ToolUp.Platform.GroundingEnvelopeModule.canonicalDeclarations(ToolUp.Platform.GroundingEnvelope) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingDeclaration]
+ToolUp.Platform.GroundingEnvelopeModule.canonicalForm(ToolUp.Platform.GroundingEnvelope) : System.String
+ToolUp.Platform.GroundingEnvelopeModule.diff(ToolUp.Platform.GroundingEnvelope, ToolUp.Platform.GroundingEnvelope) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.GroundingEnvelopeModule.digest(ToolUp.Platform.GroundingEnvelope) : System.String
+ToolUp.Platform.GroundingEnvelopeModule.empty : ToolUp.Platform.GroundingEnvelope { get }
+ToolUp.Platform.GroundingEnvelopeModule.movedSubjects(ToolUp.Platform.GroundingEnvelope, ToolUp.Platform.GroundingEnvelope) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
+ToolUp.Platform.GroundingEnvelopeModule.ofComposition(ToolUp.Platform.CompositionManifest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration]) : ToolUp.Platform.GroundingEnvelope
+ToolUp.Platform.GroundingEnvelopeModule.ofManifest(ToolUp.Platform.CompositionManifest) : ToolUp.Platform.GroundingEnvelope
+ToolUp.Platform.GroundingEnvelopeModule.withCanonicalMethods(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingEnvelope
+ToolUp.Platform.GroundingEnvelopeMutator (class)
+ToolUp.Platform.GroundingEnvelopeMutator.PlatformScopeId : System.String (literal)
+ToolUp.Platform.GroundingEnvelopeMutator.create(ToolUp.Platform.CompositionProfile, ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.GroundingEnvelope, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.GroundingEnvelope]) : ToolUp.Platform.IGroundingEnvelopeMutator
+ToolUp.Platform.GroundingEnvelopeMutator.forImmutableComposition(ToolUp.Platform.CompositionProfile, ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.IGroundingEnvelopeMutator
+ToolUp.Platform.GroundingEnvelopeMutator.mutatedPayload(ToolUp.Platform.CompositionProfile, ToolUp.Platform.GroundingMutationRecord) : ToolUp.Platform.GroundingEnvelopeMutatedPayload
+ToolUp.Platform.GroundingEnvelopeMutator.refusedPayload(ToolUp.Platform.CompositionProfile, ToolUp.Platform.GroundingMutationRequest, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRefusal]) : ToolUp.Platform.GroundingMutationRefusedPayload
+ToolUp.Platform.GroundingFacet (class)
+ToolUp.Platform.GroundingFacet.CanonicalMethodFacet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingFacet.DisclosurePolicyFacet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingFacet.IsCanonicalMethodFacet : System.Boolean { get }
+ToolUp.Platform.GroundingFacet.IsDisclosurePolicyFacet : System.Boolean { get }
+ToolUp.Platform.GroundingFacet.IsMetricRegistrationFacet : System.Boolean { get }
+ToolUp.Platform.GroundingFacet.IsPurposeDeclarationFacet : System.Boolean { get }
+ToolUp.Platform.GroundingFacet.IsSubjectRegistrationFacet : System.Boolean { get }
+ToolUp.Platform.GroundingFacet.MetricRegistrationFacet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingFacet.PurposeDeclarationFacet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingFacet.SubjectRegistrationFacet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingFacet.Tag : System.Int32 { get }
+ToolUp.Platform.GroundingFacet+Tags (class)
+ToolUp.Platform.GroundingFacet+Tags.CanonicalMethodFacet : System.Int32 (literal)
+ToolUp.Platform.GroundingFacet+Tags.DisclosurePolicyFacet : System.Int32 (literal)
+ToolUp.Platform.GroundingFacet+Tags.MetricRegistrationFacet : System.Int32 (literal)
+ToolUp.Platform.GroundingFacet+Tags.PurposeDeclarationFacet : System.Int32 (literal)
+ToolUp.Platform.GroundingFacet+Tags.SubjectRegistrationFacet : System.Int32 (literal)
+ToolUp.Platform.GroundingFacetModule (class)
+ToolUp.Platform.GroundingFacetModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingFacet] { get }
+ToolUp.Platform.GroundingFacetModule.label(ToolUp.Platform.GroundingFacet) : System.String
+ToolUp.Platform.GroundingMutationRecord (class)
+ToolUp.Platform.GroundingMutationRecord..ctor(System.Int32, ToolUp.Platform.GroundingFacet, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.GroundingMutationRecord.After : System.String { get }
+ToolUp.Platform.GroundingMutationRecord.Before : System.String { get }
+ToolUp.Platform.GroundingMutationRecord.Facet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingMutationRecord.Observations : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingMutationRecord.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.GroundingMutationRecord.Principal : System.String { get }
+ToolUp.Platform.GroundingMutationRecord.Reason : System.String { get }
+ToolUp.Platform.GroundingMutationRecord.Sequence : System.Int32 { get }
+ToolUp.Platform.GroundingMutationRecord.Subject : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal (class)
+ToolUp.Platform.GroundingMutationRefusal.IsMutationMovesNothing : System.Boolean { get }
+ToolUp.Platform.GroundingMutationRefusal.IsMutationSubjectMismatch : System.Boolean { get }
+ToolUp.Platform.GroundingMutationRefusal.IsOutOfPathDrift : System.Boolean { get }
+ToolUp.Platform.GroundingMutationRefusal.IsStaleBaseline : System.Boolean { get }
+ToolUp.Platform.GroundingMutationRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.GroundingMutationRefusal+MutationMovesNothing (class)
+ToolUp.Platform.GroundingMutationRefusal+MutationMovesNothing.digest : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+MutationSubjectMismatch (class)
+ToolUp.Platform.GroundingMutationRefusal+MutationSubjectMismatch.facet : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+MutationSubjectMismatch.moved : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingMutationRefusal+MutationSubjectMismatch.subject : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+OutOfPathDrift (class)
+ToolUp.Platform.GroundingMutationRefusal+OutOfPathDrift.chained : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+OutOfPathDrift.differences : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundingMutationRefusal+OutOfPathDrift.observed : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+StaleBaseline (class)
+ToolUp.Platform.GroundingMutationRefusal+StaleBaseline.current : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+StaleBaseline.presented : System.String { get }
+ToolUp.Platform.GroundingMutationRefusal+Tags (class)
+ToolUp.Platform.GroundingMutationRefusal+Tags.MutationMovesNothing : System.Int32 (literal)
+ToolUp.Platform.GroundingMutationRefusal+Tags.MutationSubjectMismatch : System.Int32 (literal)
+ToolUp.Platform.GroundingMutationRefusal+Tags.OutOfPathDrift : System.Int32 (literal)
+ToolUp.Platform.GroundingMutationRefusal+Tags.StaleBaseline : System.Int32 (literal)
+ToolUp.Platform.GroundingMutationRefusalModule (class)
+ToolUp.Platform.GroundingMutationRefusalModule.code(ToolUp.Platform.GroundingMutationRefusal) : System.String
+ToolUp.Platform.GroundingMutationRefusalModule.describe(ToolUp.Platform.GroundingMutationRefusal) : System.String
+ToolUp.Platform.GroundingMutationRequest (class)
+ToolUp.Platform.GroundingMutationRequest..ctor(ToolUp.Platform.GroundingFacet, System.String, System.String, ToolUp.Platform.GroundingEnvelope, System.String, System.String)
+ToolUp.Platform.GroundingMutationRequest.Baseline : System.String { get }
+ToolUp.Platform.GroundingMutationRequest.Facet : ToolUp.Platform.GroundingFacet { get }
+ToolUp.Platform.GroundingMutationRequest.Principal : System.String { get }
+ToolUp.Platform.GroundingMutationRequest.Proposed : ToolUp.Platform.GroundingEnvelope { get }
+ToolUp.Platform.GroundingMutationRequest.Reason : System.String { get }
+ToolUp.Platform.GroundingMutationRequest.Subject : System.String { get }
 ToolUp.Platform.GroundingSurface (class)
 ToolUp.Platform.GroundingSurface..ctor(ToolUp.Platform.ComponentId, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.GroundingSurface.DisclosureDefaults : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
@@ -3926,6 +4065,12 @@ ToolUp.Platform.IFieldClassifier.IsClassified(System.String, System.String) : Mi
 ToolUp.Platform.IFieldClassifier.LookupBySubject(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldHit]]
 ToolUp.Platform.IFlagSource (interface)
 ToolUp.Platform.IFlagSource.Resolve(ToolUp.Platform.FeatureFlag, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]
+ToolUp.Platform.IGroundingEnvelopeMutator (interface)
+ToolUp.Platform.IGroundingEnvelopeMutator.Apply(ToolUp.Platform.GroundingMutationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundingMutationRecord, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRefusal]]]
+ToolUp.Platform.IGroundingEnvelopeMutator.Chain : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord] { get }
+ToolUp.Platform.IGroundingEnvelopeMutator.Continuity() : ToolUp.Platform.GroundingContinuityVerdict
+ToolUp.Platform.IGroundingEnvelopeMutator.Current : ToolUp.Platform.GroundingEnvelope { get }
+ToolUp.Platform.IGroundingEnvelopeMutator.Seal : System.String { get }
 ToolUp.Platform.IHostedTreeUsageExport (interface)
 ToolUp.Platform.IHostedTreeUsageExport.Record(System.String, ToolUp.Platform.HostedTreeUsageEvent) : System.Void
 ToolUp.Platform.IHostedTreeUsageExport.Snapshot(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostedTreeUsageSnapshot]
