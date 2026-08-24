@@ -267,6 +267,15 @@
         <Compile Include="Shared\ModuleVisibilityApi.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
+        <!-- Phase 214 / 689 — the ConfigKeys module: reserved config-subsystem
+             identifiers plus the central env-var config-key registry (name /
+             type / default / description / secret flag). Lives in Core, not
+             Server, so `ServerConfig.fromEnv` (the largest reader) can cite
+             `ConfigKeys.Names.*` instead of inlining literals — a renamed var
+             is then a compile error rather than silent drift from the
+             generated reference. Before BrandingTypes.fs (BrandingKeys) and
+             SDK.Shared.fs (fromEnv). -->
+        <Compile Include="Shared\Types\ConfigKeyDescriptor.fs" />
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />

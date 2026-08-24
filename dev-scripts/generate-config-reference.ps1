@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 # Phase 214 — regenerate docs/reference/config-reference.md from the central
 # config-key registry (`ConfigKeys.all` in
-# src/ToolUp.Platform.Server/Server/ConfigKeyDescriptor.fs).
+# src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs).
 #
 # The reference doc is GENERATED, never hand-edited. This script drives the
 # golden-file test in regeneration mode: with TOOLUP_REGEN_CONFIG_REFERENCE=1

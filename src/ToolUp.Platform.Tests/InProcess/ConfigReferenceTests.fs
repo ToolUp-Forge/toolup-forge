@@ -16,8 +16,8 @@ open ToolUp.Platform.ConfigKeys
 //      regenerable and never hand-maintained. Set
 //      `TOOLUP_REGEN_CONFIG_REFERENCE=1` to rewrite it instead of
 //      comparing (mirrors the `TOOLUP_APPROVE_API` idiom).
-//   2. Every env var the headline `*FromEnv` dispatch readers consult
-//      carries a descriptor — a key without a descriptor fails here.
+//   2. Every `TOOLUP_*` string literal in shipped (non-test) source
+//      carries a descriptor — a key without one fails here.
 //   3. The registry itself is well-formed (unique names, non-empty
 //      descriptions, all `TOOLUP_`-prefixed).
 
@@ -37,19 +37,51 @@ let private regenModeOn () =
 
 let private normalise (s: string) = s.Replace("\r\n", "\n")
 
-/// The `*FromEnv` dispatch readers whose env-var reads must each have a
-/// descriptor. Scanning their source (rather than the whole 179-file
-/// surface) keeps the gate stable while still catching the realistic
-/// failure mode: a new env var added to a dispatch reader with no
-/// registry entry.
-let private dispatchReaderSources = [
-    "src/ToolUp.Platform.Server/Server/Infra/BlobStorageFromEnv.fs"
-    "src/ToolUp.Platform.Server/Server/Infra/SecretStoreFromEnv.fs"
-    "src/ToolUp.Platform.Server/Auth/AuthProviderFromEnv.fs"
-    "src/ToolUp.Platform.Server/Server/Infra/ConsoleLogger.fs"
-]
+/// Every non-test source file under `src/` is scanned: a `TOOLUP_*`
+/// *string literal* anywhere in shipped source must carry a descriptor.
+///
+/// This used to be a four-file allow-list, which structurally could not
+/// see the largest reader in the codebase — `ServerConfig.fromEnv` in
+/// `SDK.Shared.fs` reads 87 vars, 72 of which had no descriptor while
+/// this test reported clean. Enumerating readers is exactly the thing
+/// that drifts, so the gate now quantifies over the tree instead.
+///
+/// Test sources are excluded: they set vars to exercise the readers, and
+/// a fixture var is not deployment configuration.
+let private scanRoots = [ "src" ]
 
-let private envVarPattern = Regex("TOOLUP_[A-Z0-9_]+", RegexOptions.Compiled)
+/// Literals that are env-var *prefixes* rather than variables in their
+/// own right — the suffix is supplied at runtime. Each is registered
+/// under its prefix, so the descriptor exists and the doc explains the
+/// shape; this set only stops the scanner demanding a second one.
+let private prefixLiterals =
+    Set.ofList [ "TOOLUP_COMPONENT__"; "TOOLUP_EXTERNAL_COMPUTE_HTTP_" ]
+
+/// Matches a `TOOLUP_*` token only inside a double-quoted string, so a
+/// var named in a doc comment is not mistaken for one that is read.
+/// Scanning raw text instead would demand descriptors for prose
+/// mentions — including `TOOLUP_MODULE_BINDING_*` (a glob) and
+/// `TOOLUP_PLATFORM_MODE` (retired in Phase 66, read nowhere).
+let private envVarLiteralPattern =
+    Regex("\"(TOOLUP_[A-Z0-9_]+)\"", RegexOptions.Compiled)
+
+let private shippedSourceFiles (root: string) =
+    scanRoots
+    |> List.collect (fun rel ->
+        let dir = Path.Combine(root, rel)
+
+        if Directory.Exists dir then
+            Directory.EnumerateFiles(dir, "*.fs", SearchOption.AllDirectories)
+            |> Seq.filter (fun f ->
+                let norm = f.Replace('\\', '/')
+
+                not (norm.Contains "/obj/")
+                && not (norm.Contains "/bin/")
+                && not (norm.Contains ".Tests/")
+                && not (norm.Contains "/Tests/"))
+            |> List.ofSeq
+        else
+            [])
 
 let tests =
     testList "ConfigReference" [
@@ -73,27 +105,73 @@ let tests =
                     (normalise rendered)
                     "docs/reference/config-reference.md is stale. Regenerate with `dev-scripts/generate-config-reference.ps1`."
 
-        testCase "every env var read by the *FromEnv dispatch readers has a descriptor"
+        testCase "every TOOLUP_ env var in shipped source has a descriptor"
         <| fun _ ->
             let registered = all |> List.map _.EnvVar |> Set.ofList
             let root = repoRoot ()
+            let files = shippedSourceFiles root
+
+            Expect.isGreaterThan
+                (List.length files)
+                100
+                "scanned suspiciously few source files — the scan root is probably wrong, and an empty scan passes vacuously"
 
             let readVars =
-                dispatchReaderSources
-                |> List.collect (fun rel ->
-                    let full = Path.Combine(root, rel)
-                    Expect.isTrue (File.Exists full) (sprintf "reader source not found: %s" full)
-
-                    File.ReadAllText full |> envVarPattern.Matches |> Seq.map _.Value |> List.ofSeq)
+                files
+                |> List.collect (fun full ->
+                    File.ReadAllText full
+                    |> envVarLiteralPattern.Matches
+                    |> Seq.map (fun m -> m.Groups[1].Value)
+                    |> List.ofSeq)
                 |> Set.ofList
 
-            let missing = Set.difference readVars registered
+            let missing = Set.difference (Set.difference readVars registered) prefixLiterals
 
             Expect.isEmpty
                 missing
                 (sprintf
-                    "These env vars are read by a *FromEnv reader but have no ConfigKeyDescriptor in ConfigKeys.all: %s"
+                    "These TOOLUP_ env vars appear as string literals in shipped source but have no ConfigKeyDescriptor in ConfigKeys.all, so `--print-config` omits them and docs/reference/config-reference.md does not document them: %s"
                     (missing |> Set.toList |> String.concat ", "))
+
+        testCase "every ConfigKeys.Names binding has a descriptor"
+        <| fun _ ->
+            // Arm 1 scans string literals, so it stops seeing a var the moment a
+            // reader switches to citing `Names.*` — which is exactly what the
+            // registry's own header asks readers to do. A binding used by a
+            // reader but never added to `all` would then be invisible to it.
+            let registered = all |> List.map _.EnvVar |> Set.ofList
+            let root = repoRoot ()
+
+            let registryPath =
+                Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "Types", "ConfigKeyDescriptor.fs")
+
+            Expect.isTrue (File.Exists registryPath) (sprintf "registry source not found: %s" registryPath)
+
+            let namesModule =
+                let text = File.ReadAllText registryPath
+                let start = text.IndexOf "module Names ="
+                let stop = text.IndexOf "let all: ConfigKeyDescriptor list ="
+                Expect.isGreaterThan start -1 "Names module not found in the registry source"
+                Expect.isGreaterThan stop start "`all` does not follow the Names module"
+                text.Substring(start, stop - start)
+
+            let bound =
+                Regex.Matches(namesModule, "let\\s+\\w+\\s*=\\s*\"(TOOLUP_[A-Z0-9_]+)\"")
+                |> Seq.map (fun m -> m.Groups[1].Value)
+                |> Set.ofSeq
+
+            Expect.isGreaterThan
+                (Set.count bound)
+                100
+                "parsed suspiciously few Names bindings — the parse is probably wrong, and an empty parse passes vacuously"
+
+            let orphaned = Set.difference bound registered
+
+            Expect.isEmpty
+                orphaned
+                (sprintf
+                    "These ConfigKeys.Names bindings have no matching descriptor in ConfigKeys.all, so a reader citing them is undocumented and absent from --print-config: %s"
+                    (orphaned |> Set.toList |> String.concat ", "))
 
         testCase "registry is well-formed (unique, TOOLUP_-prefixed, described)"
         <| fun _ ->

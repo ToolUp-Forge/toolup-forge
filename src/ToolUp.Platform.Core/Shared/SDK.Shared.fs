@@ -3645,7 +3645,7 @@ module ServerConfig =
         | other -> Error other
 
     let private parseStaticPathBehaviour (logger: ILogger) =
-        match envVar "TOOLUP_STATIC_PATH_BEHAVIOUR" |> Option.map _.ToLowerInvariant() with
+        match envVar ConfigKeys.Names.staticPathBehaviour |> Option.map _.ToLowerInvariant() with
         | Some "warn"
         | None -> Warn
         | Some("require" | "requireexist" | "require-exist") -> RequireExist
@@ -3657,7 +3657,7 @@ module ServerConfig =
             Warn
 
     let private parseSseAuthMode (logger: ILogger) =
-        match envVar "TOOLUP_SSE_AUTH" |> Option.map _.ToLowerInvariant() with
+        match envVar ConfigKeys.Names.sseAuth |> Option.map _.ToLowerInvariant() with
         | Some "cookie" -> CookieRequired
         | Some "fallback"
         | Some "queryparam"
@@ -3669,7 +3669,7 @@ module ServerConfig =
             QueryParamFallback
 
     let private parseAuthCookieIssuance (logger: ILogger) =
-        match envVar "TOOLUP_AUTH_COOKIE_ISSUANCE" |> Option.map _.ToLowerInvariant() with
+        match envVar ConfigKeys.Names.authCookieIssuance |> Option.map _.ToLowerInvariant() with
         | Some "enabled"
         | Some "on"
         | Some "1" -> EnabledAuthCookieIssuance
@@ -3684,7 +3684,7 @@ module ServerConfig =
             NoAuthCookieIssuance
 
     let private parseReplicaCount (logger: ILogger) =
-        match envVar "TOOLUP_REPLICA_COUNT" with
+        match envVar ConfigKeys.Names.replicaCount with
         | None -> 1
         | Some raw ->
             match Int32.TryParse raw with
@@ -3694,7 +3694,7 @@ module ServerConfig =
                 1
 
     let private parseEphemeralStoreEvictionMinutes (logger: ILogger) =
-        match envVar "TOOLUP_STORE_EVICTION_MINUTES" with
+        match envVar ConfigKeys.Names.storeEvictionMinutes with
         | None -> defaults.EphemeralStoreEvictionMinutes
         | Some raw ->
             match Double.TryParse raw with
@@ -3719,9 +3719,9 @@ module ServerConfig =
         // overrides are a code-level concern (`RateLimitConfig.perShape`
         // / `.withOverrides`), not expressible via three scalar env vars.
         match
-            parsePositive "TOOLUP_RATE_LIMIT_PERMITS",
-            parsePositive "TOOLUP_RATE_LIMIT_WINDOW_SECONDS",
-            parsePositive "TOOLUP_RATE_LIMIT_QUEUE"
+            parsePositive ConfigKeys.Names.rateLimitPermits,
+            parsePositive ConfigKeys.Names.rateLimitWindowSeconds,
+            parsePositive ConfigKeys.Names.rateLimitQueue
         with
         | Some permits, Some windowSeconds, Some queue ->
             RateLimitConfig.uniform {
@@ -3737,7 +3737,7 @@ module ServerConfig =
             RateLimitConfig.none
 
     let private parseDefaultTeamStorageQuotaBytes (logger: ILogger) =
-        match envVar "TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES" with
+        match envVar ConfigKeys.Names.defaultStorageQuotaBytes with
         | None -> defaults.DefaultTeamStorageQuotaBytes
         | Some "none"
         | Some "0" -> None
@@ -3750,7 +3750,7 @@ module ServerConfig =
                 defaults.DefaultTeamStorageQuotaBytes
 
     let private parseSlowRequestThreshold (logger: ILogger) =
-        match envVar "TOOLUP_SLOW_REQUEST_MS" with
+        match envVar ConfigKeys.Names.slowRequestMs with
         | None -> defaults.SlowRequestThreshold
         | Some raw ->
             match Int32.TryParse raw with
@@ -3760,7 +3760,7 @@ module ServerConfig =
                 defaults.SlowRequestThreshold
 
     let private parseMaxSseConnectionsPerScope (logger: ILogger) =
-        match envVar "TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE" with
+        match envVar ConfigKeys.Names.maxSseConnectionsPerScope with
         | None -> defaults.MaxSseConnectionsPerScope
         | Some "none"
         | Some "0" -> None
@@ -3775,7 +3775,7 @@ module ServerConfig =
 
     let private parseLogLevel () : LogLevel * Set<string> =
         let level =
-            match envVar "TOOLUP_LOG_LEVEL" with
+            match envVar ConfigKeys.Names.logLevel with
             | None -> LogLevel.Info
             | Some raw ->
                 match LogLevel.tryParse raw with
@@ -3794,7 +3794,7 @@ module ServerConfig =
                     LogLevel.Info
 
         let categories =
-            match envVar "TOOLUP_TRACE_CATEGORIES" with
+            match envVar ConfigKeys.Names.traceCategories with
             | None -> Set.empty
             | Some raw ->
                 raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
@@ -3827,7 +3827,7 @@ module ServerConfig =
     /// own `/r/{token}`-style segment and a pasted `https://x/` otherwise
     /// produces a double slash. Unset → `defaults.PublicBaseUrl` (`None`).
     let private parsePublicBaseUrl (logger: ILogger) : string option =
-        match envVar "TOOLUP_PUBLIC_BASE_URL" with
+        match envVar ConfigKeys.Names.publicBaseUrl with
         | None -> defaults.PublicBaseUrl
         | Some raw ->
             let trimmed = raw.Trim()
@@ -3862,7 +3862,7 @@ module ServerConfig =
     /// Phase 71.A.5 — `TOOLUP_PUBLIC_PATH`. Canonical precedence:
     /// env var > override-record value > `defaults.PublicPath`.
     let private resolvePublicPath (overrides: ServerConfigOverrides) : string =
-        envVar "TOOLUP_PUBLIC_PATH"
+        envVar ConfigKeys.Names.publicPath
         |> Option.orElse overrides.PublicPath
         |> Option.defaultValue defaults.PublicPath
 
@@ -4052,7 +4052,7 @@ module ServerConfig =
             | _ -> defaults.Surfaces
 
         let surfaces =
-            match envVar "TOOLUP_PLATFORM_SURFACES" with
+            match envVar ConfigKeys.Names.platformSurfaces with
             | None -> overridesFallback
             | Some raw ->
                 let tokens =
@@ -4104,10 +4104,10 @@ module ServerConfig =
         // compose-time validator's fail-closed concern (Phase 170 validator).
         let moduleBindingTrust =
             let allowUnbound =
-                envFlagOrFail "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND" ModuleBindingTrustConfig.defaults.AllowUnbound
+                envFlagOrFail ConfigKeys.Names.moduleBindingAllowUnbound ModuleBindingTrustConfig.defaults.AllowUnbound
 
             let anchors =
-                match envVar "TOOLUP_MODULE_BINDING_ANCHORS" with
+                match envVar ConfigKeys.Names.moduleBindingAnchors with
                 | None -> []
                 | Some raw ->
                     raw.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
@@ -4131,35 +4131,39 @@ module ServerConfig =
             defaults with
                 PublicPath = resolvePublicPath overrides // Phase 71.A.5
                 Surfaces = surfaces
-                ModuleFilter = envVar "TOOLUP_MODULE"
+                ModuleFilter = envVar ConfigKeys.Names.moduleFilter
                 ModuleBindingTrust = moduleBindingTrust
-                RequireHttps = envFlag "TOOLUP_REQUIRE_HTTPS"
-                TrustForwardedHeaders = envFlagOrFail "TOOLUP_TRUST_FORWARDED_HEADERS" defaults.TrustForwardedHeaders
+                RequireHttps = envFlag ConfigKeys.Names.requireHttps
+                TrustForwardedHeaders =
+                    envFlagOrFail ConfigKeys.Names.trustForwardedHeaders defaults.TrustForwardedHeaders
                 // Phase 325 — trusted-proxy CIDR allowlist + its escape hatch.
                 // Entries are validated (fail-loud on malformed CIDR) by the
                 // preflight validator + the pipeline's options builder, not here:
                 // `fromEnv` stays a pure string read so the error surfaces with
                 // the same message whichever construction path built the config.
-                TrustedProxyCidrs = parseStringList "TOOLUP_TRUSTED_PROXY_CIDRS"
-                AcceptForwardedHeadersFromAnyProxy = envFlag "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY"
+                TrustedProxyCidrs = parseStringList ConfigKeys.Names.trustedProxyCidrs
+                AcceptForwardedHeadersFromAnyProxy = envFlag ConfigKeys.Names.acceptForwardedHeadersFromAnyProxy
                 StaticPathBehaviour = parseStaticPathBehaviour logger
                 SlowRequestThresholdOverrides =
                     overrides.SlowRequestThresholdOverrides
                     |> Option.defaultValue defaults.SlowRequestThresholdOverrides
                 // Phase 71.A.6 — env wins over override-record value, else fallback.
                 EnableDevEndpoints =
-                    envFlagTri "TOOLUP_ENABLE_DEV_ENDPOINTS" overrides.EnableDevEndpoints defaults.EnableDevEndpoints
+                    envFlagTri
+                        ConfigKeys.Names.enableDevEndpoints
+                        overrides.EnableDevEndpoints
+                        defaults.EnableDevEndpoints
                 AutoBootstrapDevAdmin = overrides.AutoBootstrapDevAdmin
                 IncludePlatformDefaults =
                     envFlagTri
-                        "TOOLUP_INCLUDE_PLATFORM_DEFAULTS"
+                        ConfigKeys.Names.includePlatformDefaults
                         overrides.IncludePlatformDefaults
                         defaults.IncludePlatformDefaults
                 // Phase 71.A.7 batch 2 — override-bearing toggles: env > override > default.
                 ShareTokenStore =
                     parseEnabledDisabledWith
                         logger
-                        "TOOLUP_SHARE_TOKEN_STORE"
+                        ConfigKeys.Names.shareTokenStore
                         overrides.ShareTokenStore
                         NoShareTokenStore
                         EnabledShareTokenStore
@@ -4167,7 +4171,7 @@ module ServerConfig =
                 Webhooks =
                     parseEnabledDisabledWith
                         logger
-                        "TOOLUP_WEBHOOKS"
+                        ConfigKeys.Names.webhooks
                         overrides.Webhooks
                         NoWebhooks
                         EnabledWebhooks
@@ -4175,7 +4179,7 @@ module ServerConfig =
                 AuditLog =
                     parseEnabledDisabledWith
                         logger
-                        "TOOLUP_AUDIT_LOG"
+                        ConfigKeys.Names.auditLog
                         overrides.AuditLog
                         NoAuditLog
                         EnabledAuditLog
@@ -4183,7 +4187,7 @@ module ServerConfig =
                 SecurityHardening =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_SECURITY_HARDENING"
+                        ConfigKeys.Names.securityHardening
                         [
                             "no", NoSecurityHardening
                             "off", NoSecurityHardening
@@ -4198,58 +4202,58 @@ module ServerConfig =
                 TraceCategories = traceCategories
                 SseAuthMode = parseSseAuthMode logger
                 AuthCookieIssuance = parseAuthCookieIssuance logger
-                AcceptHeaderAuthWhenAuthRequired = envFlag "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE"
-                AcceptPlaintextSecretsWhenAuthRequired = envFlag "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE"
+                AcceptHeaderAuthWhenAuthRequired = envFlag ConfigKeys.Names.acceptHeaderAuthInAuthMode
+                AcceptPlaintextSecretsWhenAuthRequired = envFlag ConfigKeys.Names.acceptPlaintextSecretsInAuthMode
                 ReplicaCount = parseReplicaCount logger
-                AcceptInProcessSchedulerInMultiInstance = envFlag "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE"
-                AcceptNoRateLimitWhenAuthRequired = envFlag "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE"
-                AcceptUnsignedPublishable = envFlag "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE"
-                AcceptQueryParamSseAuthWhenAuthRequired = envFlag "TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE"
-                AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE"
+                AcceptInProcessSchedulerInMultiInstance = envFlag ConfigKeys.Names.acceptInProcessSchedulerMultiInstance
+                AcceptNoRateLimitWhenAuthRequired = envFlag ConfigKeys.Names.acceptNoRateLimitInAuthMode
+                AcceptUnsignedPublishable = envFlag ConfigKeys.Names.acceptUnsignedPublishable
+                AcceptQueryParamSseAuthWhenAuthRequired = envFlag ConfigKeys.Names.acceptQueryParamSseAuthInAuthMode
+                AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag ConfigKeys.Names.acceptSameSiteOnlyCsrfInAuthMode
                 AcceptInMemoryShareTokenRateLimiterInMultiInstance =
-                    envFlag "TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE"
+                    envFlag ConfigKeys.Names.acceptInMemoryShareTokenRateLimiterMultiInstance
                 // Phase 71.A.2 — six `Accept*` flags whose documented env
                 // vars `fromEnv` never read (audit §7). Each preserves
                 // GP 11: unset → `false`, and the matching validator still
                 // refuses startup unless the operator opts in.
-                AcceptInProcessIngestionInMultiInstance = envFlag "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE"
-                AcceptSharedEmbeddingCacheInTeamMode = envFlag "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE"
+                AcceptInProcessIngestionInMultiInstance = envFlag ConfigKeys.Names.acceptInProcessIngestionMultiInstance
+                AcceptSharedEmbeddingCacheInTeamMode = envFlag ConfigKeys.Names.acceptSharedEmbeddingCacheInTeamMode
                 // Phase 9m.B — the two RAG escape hatches this phase
                 // introduced. Same GP 11 shape as the rest of the family:
                 // unset ⇒ `false`, and the matching validator still fires.
-                AcceptEphemeralRagIndex = envFlag "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX"
-                AcceptLocalEmbedderAtScale = envFlag "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE"
-                AcceptStickyRoutedAiInMultiInstance = envFlag "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE"
-                AcceptUnboundAudienceWhenAuthRequired = envFlag "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE"
-                AcceptInMemoryOAuthStateInMultiInstance = envFlag "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"
-                AcceptPendingInviteStoreInMultiInstance = envFlag "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE"
-                AcceptInviteByEmailWithoutDirectory = envFlag "TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY"
+                AcceptEphemeralRagIndex = envFlag ConfigKeys.Names.acceptEphemeralRagIndex
+                AcceptLocalEmbedderAtScale = envFlag ConfigKeys.Names.acceptLocalEmbedderAtScale
+                AcceptStickyRoutedAiInMultiInstance = envFlag ConfigKeys.Names.acceptStickyRoutedAiMultiInstance
+                AcceptUnboundAudienceWhenAuthRequired = envFlag ConfigKeys.Names.acceptUnboundAudienceInAuthMode
+                AcceptInMemoryOAuthStateInMultiInstance = envFlag ConfigKeys.Names.acceptInMemoryOAuthStateMultiInstance
+                AcceptPendingInviteStoreInMultiInstance = envFlag ConfigKeys.Names.acceptPendingInviteStoreMultiInstance
+                AcceptInviteByEmailWithoutDirectory = envFlag ConfigKeys.Names.acceptInviteByEmailWithoutDirectory
                 // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
                 // inside the `fromEnv` seam (were compose-only / unread).
                 Port = parseServerPort ()
                 PublicBaseUrl = parsePublicBaseUrl logger
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.
-                BackfillMissedTicks = envFlag "TOOLUP_BACKFILL_MISSED_TICKS"
+                BackfillMissedTicks = envFlag ConfigKeys.Names.backfillMissedTicks
                 // Phase 598 tail — env lift for the event-trigger catch-up
                 // opt-in, 71.A.6 parity with TOOLUP_BACKFILL_MISSED_TICKS.
-                EventTriggerCatchUp = envFlag "TOOLUP_EVENT_TRIGGER_CATCHUP"
-                MigrateWebhookSecretsAtRest = envFlag "TOOLUP_MIGRATE_WEBHOOK_SECRETS"
-                SkipPreflight = envFlag "TOOLUP_SKIP_PREFLIGHT"
-                HealthStateTracking = envFlag "TOOLUP_HEALTH_STATE_TRACKING"
-                EnableCitationDevEndpoint = envFlagOpt "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT"
-                MaxRequestBodyBytes = envInt64Opt logger "TOOLUP_MAX_REQUEST_BODY_BYTES"
+                EventTriggerCatchUp = envFlag ConfigKeys.Names.eventTriggerCatchUp
+                MigrateWebhookSecretsAtRest = envFlag ConfigKeys.Names.migrateWebhookSecretsAtRest
+                SkipPreflight = envFlag ConfigKeys.Names.skipPreflight
+                HealthStateTracking = envFlag ConfigKeys.Names.healthStateTracking
+                EnableCitationDevEndpoint = envFlagOpt ConfigKeys.Names.enableCitationDevEndpoint
+                MaxRequestBodyBytes = envInt64Opt logger ConfigKeys.Names.maxRequestBodyBytes
                 SlowRateLimitThreshold =
-                    envTimeSpanMs logger "TOOLUP_SLOW_RATE_LIMIT_MS" defaults.SlowRateLimitThreshold
+                    envTimeSpanMs logger ConfigKeys.Names.slowRateLimitMs defaults.SlowRateLimitThreshold
                 // Phase 71.A.8 — server string lists.
-                WebhookUrlAllowedHosts = parseStringList "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS"
-                PeerRoutePrefixes = parseStringList "TOOLUP_PEER_ROUTE_PREFIXES"
+                WebhookUrlAllowedHosts = parseStringList ConfigKeys.Names.webhookUrlAllowedHosts
+                PeerRoutePrefixes = parseStringList ConfigKeys.Names.peerRoutePrefixes
                 // Phase 71.A.7 (batch 1) — flat-case DU lifts (no override
                 // member, no payload). Additive: unset → `defaults.X`.
                 AuditFailurePolicy =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_AUDIT_FAILURE_POLICY"
+                        ConfigKeys.Names.auditFailurePolicy
                         [
                             "log", LogAndContinue
                             "logandcontinue", LogAndContinue
@@ -4263,7 +4267,7 @@ module ServerConfig =
                 ResultStore =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_RESULT_STORE"
+                        ConfigKeys.Names.resultStore
                         [
                             "no", NoResultStore
                             "inmemory", InMemoryResultStore
@@ -4273,120 +4277,135 @@ module ServerConfig =
                         None
                         defaults.ResultStore
                 Lineage =
-                    parseEnabledDisabled logger "TOOLUP_LINEAGE" NoLineageStore EnabledLineageStore defaults.Lineage
+                    parseEnabledDisabled
+                        logger
+                        ConfigKeys.Names.lineage
+                        NoLineageStore
+                        EnabledLineageStore
+                        defaults.Lineage
                 DataIngestion =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_DATA_INGESTION"
+                        ConfigKeys.Names.dataIngestion
                         NoDataIngestion
                         EnabledDataIngestion
                         defaults.DataIngestion
                 ColumnMapping =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_COLUMN_MAPPING"
+                        ConfigKeys.Names.columnMapping
                         NoColumnMapping
                         EnabledColumnMapping
                         defaults.ColumnMapping
                 MappingDryRun =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_MAPPING_DRYRUN_BLOCK"
+                        ConfigKeys.Names.mappingDryRunBlock
                         WarnOnValidationFailure
                         BlockOnValidationFailure
                         defaults.MappingDryRun
                 OAuthRefresher =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_OAUTH_REFRESHER"
+                        ConfigKeys.Names.oauthRefresher
                         NoOAuthRefresher
                         EnabledOAuthRefresher
                         defaults.OAuthRefresher
                 EntityStore =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_ENTITY_STORE"
+                        ConfigKeys.Names.entityStore
                         NoEntityStore
                         EnabledEntityStore
                         defaults.EntityStore
                 EntityOutbox =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_ENTITY_OUTBOX"
+                        ConfigKeys.Names.entityOutbox
                         NoEntityOutbox
                         EnabledEntityOutbox
                         defaults.EntityOutbox
                 UsageMetering =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_USAGE_METERING"
+                        ConfigKeys.Names.usageMetering
                         NoUsageMetering
                         EnabledUsageMetering
                         defaults.UsageMetering
                 ComputeBudget =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_COMPUTE_BUDGET"
+                        ConfigKeys.Names.computeBudget
                         NoComputeBudget
                         EnabledComputeBudget
                         defaults.ComputeBudget
                 MetricsEndpoint =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_METRICS_ENDPOINT"
+                        ConfigKeys.Names.metricsEndpoint
                         NoMetricsEndpoint
                         EnabledMetricsEndpoint
                         defaults.MetricsEndpoint
                 PlatformKnowledgeBase =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_PLATFORM_KNOWLEDGE_BASE"
+                        ConfigKeys.Names.platformKnowledgeBase
                         NoPlatformKnowledgeBase
                         EnabledPlatformKnowledgeBase
                         defaults.PlatformKnowledgeBase
                 ConfigDriftDetection =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_CONFIG_DRIFT_DETECTION"
+                        ConfigKeys.Names.configDriftDetection
                         NoConfigDriftDetection
                         EnabledConfigDriftDetection
                         defaults.ConfigDriftDetection
                 RateLimiter =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_RATE_LIMITER"
+                        ConfigKeys.Names.rateLimiter
                         NoRateLimiter
                         EnabledRateLimiter
                         defaults.RateLimiter
                 SmokeTest =
-                    parseEnabledDisabled logger "TOOLUP_SMOKE_TEST" NoSmokeTest EnabledSmokeTest defaults.SmokeTest
+                    parseEnabledDisabled
+                        logger
+                        ConfigKeys.Names.smokeTest
+                        NoSmokeTest
+                        EnabledSmokeTest
+                        defaults.SmokeTest
                 DeploymentReadiness =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_DEPLOYMENT_READINESS"
+                        ConfigKeys.Names.deploymentReadiness
                         NoReadinessReport
                         EnabledReadinessReport
                         defaults.DeploymentReadiness
                 DeploymentVerification =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_DEPLOYMENT_VERIFICATION"
+                        ConfigKeys.Names.deploymentVerification
                         NoDeploymentVerification
                         EnabledDeploymentVerification
                         defaults.DeploymentVerification
                 AssetStore =
-                    parseEnabledDisabled logger "TOOLUP_ASSET_STORE" NoAssetStore EnabledAssetStore defaults.AssetStore
+                    parseEnabledDisabled
+                        logger
+                        ConfigKeys.Names.assetStore
+                        NoAssetStore
+                        EnabledAssetStore
+                        defaults.AssetStore
                 ConsentAudit =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_CONSENT_AUDIT"
+                        ConfigKeys.Names.consentAudit
                         NoConsentAudit
                         EnabledConsentAudit
                         defaults.ConsentAudit
                 AdAnalytics =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_AD_ANALYTICS"
+                        ConfigKeys.Names.adAnalytics
                         NoAdAnalytics
                         EnabledAdAnalytics
                         defaults.AdAnalytics
@@ -4394,7 +4413,7 @@ module ServerConfig =
                 ConsentStateStore =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_CONSENT_STATE_STORE"
+                        ConfigKeys.Names.consentStateStore
                         [
                             "no", NoConsentStateStore
                             "off", NoConsentStateStore
@@ -4409,14 +4428,14 @@ module ServerConfig =
                 ServerlessHost =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_SERVERLESS_HOST"
+                        ConfigKeys.Names.serverlessHost
                         [ "kestrel", KestrelHost; "serverless", ServerlessHost ]
                         None
                         defaults.ServerlessHost
                 ProcessProfile =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_PROCESS_PROFILE"
+                        ConfigKeys.Names.processProfile
                         [
                             "allinone", AllInOne
                             "all-in-one", AllInOne
@@ -4433,7 +4452,7 @@ module ServerConfig =
                 TeamCreationPolicy =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_TEAM_CREATION_POLICY"
+                        ConfigKeys.Names.teamCreationPolicy
                         [
                             "platformadminonly", PlatformAdminOnly
                             "platform-admin-only", PlatformAdminOnly
@@ -4449,14 +4468,14 @@ module ServerConfig =
                 JobScheduler =
                     parseEnabledDisabled
                         logger
-                        "TOOLUP_JOB_SCHEDULER"
+                        ConfigKeys.Names.jobScheduler
                         NoJobScheduler
                         InProcessJobScheduler
                         defaults.JobScheduler
                 RateLimitStore =
                     parseFlatDuCase
                         logger
-                        "TOOLUP_RATE_LIMIT_STORE"
+                        ConfigKeys.Names.rateLimitStore
                         [
                             "no", NoRateLimitStore
                             "off", NoRateLimitStore
@@ -4473,7 +4492,7 @@ module ServerConfig =
                 EventStore =
                     parseHybridCase
                         logger
-                        "TOOLUP_EVENT_STORE"
+                        ConfigKeys.Names.eventStore
                         [
                             "inmemory", Ok InMemoryOnly
                             "in-memory", Ok InMemoryOnly
@@ -4483,7 +4502,7 @@ module ServerConfig =
                 ConversationStore =
                     parseHybridCase
                         logger
-                        "TOOLUP_CONVERSATION_STORE"
+                        ConfigKeys.Names.conversationStore
                         [
                             "no", Ok NoConversationStore
                             "off", Ok NoConversationStore
@@ -4496,7 +4515,7 @@ module ServerConfig =
                 PublicRendering =
                     parseHybridCase
                         logger
-                        "TOOLUP_PUBLIC_RENDERING"
+                        ConfigKeys.Names.publicRendering
                         [
                             "no", Ok NoPublicRendering
                             "off", Ok NoPublicRendering
@@ -4509,7 +4528,7 @@ module ServerConfig =
                 DataSubjectRequests =
                     parseHybridCase
                         logger
-                        "TOOLUP_DATA_SUBJECT_REQUESTS"
+                        ConfigKeys.Names.dataSubjectRequests
                         [
                             "disabled", Ok DataSubjectRequestMode.Disabled
                             "no", Ok DataSubjectRequestMode.Disabled

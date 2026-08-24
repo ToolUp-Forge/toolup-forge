@@ -2229,6 +2229,7 @@ ToolUp.Platform.ConfigFieldSchema.Required : System.Boolean { get }
 ToolUp.Platform.ConfigKeys (class)
 ToolUp.Platform.ConfigKeys.NotificationPrefsModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.PlatformModuleKey : System.String (literal)
+ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys+BrandingKeys (class)
 ToolUp.Platform.ConfigKeys+BrandingKeys.AppName : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.BrandDarkColor : System.String (literal)
@@ -2238,12 +2239,219 @@ ToolUp.Platform.ConfigKeys+BrandingKeys.NegColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.PosColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.PrimaryColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.SidebarColor : System.String (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor..ctor(System.String, System.String, ToolUp.Platform.ConfigKeys+ConfigKeyType, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.String)
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Category : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Default : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Description : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.EnvVar : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.IsSecret : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Type : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyType.BoolKey : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.IntKey : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.IsBoolKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.IsEnumKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.IsIntKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.IsStringKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.StringKey : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType+EnumKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyType+EnumKey.choices : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.BoolKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.EnumKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.IntKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.StringKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+Names (class)
+ToolUp.Platform.ConfigKeys+Names.acceptEphemeralRagIndex : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptForwardedHeadersFromAnyProxy : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptHeaderAuthInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptInMemoryOAuthStateMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptInMemoryShareTokenRateLimiterMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptInProcessIngestionMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptInProcessSchedulerMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptInviteByEmailWithoutDirectory : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptLocalEmbedderAtScale : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptLocalFallback : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptNoRateLimitInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptPendingInviteStoreMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptPlaintextSecretsInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptQueryParamSseAuthInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptSameSiteOnlyCsrfInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptSharedEmbeddingCacheInTeamMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptStickyRoutedAiMultiInstance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptUnboundAudienceInAuthMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.acceptUnsignedPublishable : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.adAnalytics : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.adminToken : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.aiModel : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.aiProbeOnStartup : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.aiProvider : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.allowDevAdminBootstrap : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.appName : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.assetStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.auditAdminRequired : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.auditFailurePolicy : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.auditLog : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.authCookieIssuance : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.authMode : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.awsS3Bucket : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.awsS3Endpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.awsS3Region : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.awsSecretsRegion : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.azureKeyVaultUrl : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.azureStorageConnectionString : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.backfillMissedTicks : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.beirCache : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.blobStorage : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.columnMapping : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.componentConfigPrefix : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.computeBudget : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.configDriftDetection : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.consentAudit : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.consentStateStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.conversationStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.cookbookPath : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.dataIngestion : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.dataSubjectRequests : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.defaultStorageQuotaBytes : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.deploymentReadiness : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.deploymentVerification : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.distributedLock : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.emitSbom : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.enableCitationDevEndpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.enableDevEndpoints : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.enterpriseCookbookPath : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entityOutbox : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entityStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraDirectoryEnabled : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraDirectoryGraphEndpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraDirectorySenderOid : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdAudience : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdClockSkewSeconds : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdCustomDomain : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdSignInPolicy : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdSignUpPolicy : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.entraExternalIdTenant : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.eventStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.eventTriggerCatchUp : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.externalCompute : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.externalComputeHttpPrefix : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.gcpProjectId : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.gcsBucket : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.gcsCredentialsJson : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubAllowedOrgs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubApiBaseUrl : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubAuth : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubCacheTtlSeconds : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubFetchPrimaryEmail : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.githubUserAgent : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.healthStateTracking : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.includePlatformDefaults : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.initialPlatformAdmin : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.initialTeamId : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.initialTeamName : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.jobScheduler : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapAllowPlaintext : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapAllowUntrustedCert : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapAuth : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapBindDn : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapBindSecretKey : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapCacheTtlSeconds : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapCertThumbprint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapChannel : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapDisplayAttr : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapEmailAttr : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapHost : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapLoginAttr : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapMemberOfAttr : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapNestedGroups : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapPort : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapSearchBase : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapTimeoutSeconds : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapUserIdAttr : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ldapUserObjectClass : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.lineage : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.logFormat : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.logLevel : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.mappingDryRunBlock : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.maxFileBytes : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.maxRequestBodyBytes : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.maxSseConnectionsPerScope : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.metricsEndpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.migrateWebhookSecretsAtRest : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.moduleBindingAllowUnbound : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.moduleBindingAnchors : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.moduleFilter : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.notificationChannel : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.oauthRedirectBase : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.oauthRefresher : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.oidcAudience : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.oidcIssuer : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.oidcPreflightTimeoutMs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.peerRoutePrefixes : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.platformKnowledgeBase : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.platformSurfaces : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.processProfile : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.publicBaseUrl : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.publicPath : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.publicRendering : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.publishSource : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.ragRefuseOnIndexCorruption : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.rateLimitPermits : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.rateLimitQueue : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.rateLimitStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.rateLimitWindowSeconds : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.rateLimiter : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.redisConnection : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.remotingAnalyzerAudit : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.replicaCount : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.requireHttps : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.resultStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.secretStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.secretsMasterKey : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.secretsPath : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.securityHardening : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.sendGridEndpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.sendGridFrom : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.sendGridFromName : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.serverlessHost : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.shareTokenStore : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.skipPreflight : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.slowRateLimitMs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.slowRequestMs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smokeTest : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smokeToken : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpFrom : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpFromName : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpHost : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpPassword : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpPort : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpTls : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.smtpUsername : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.sseAuth : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.staticPathBehaviour : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.storeEvictionMinutes : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.teamCreationPolicy : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.testArgs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.traceCategories : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.trustForwardedHeaders : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.trustedProxyCidrs : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.twilioAccountSid : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.twilioEndpoint : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.twilioFrom : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.usageMetering : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.webhookUrlAllowedHosts : System.String { get }
+ToolUp.Platform.ConfigKeys+Names.webhooks : System.String { get }
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys (class)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.EmailEnabled : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.EmailFromAddress : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.PushEnabled : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SchemaOnlyMaxSampleRows : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SmsEnabled : System.String (literal)
+ToolUp.Platform.ConfigKeys+ReferenceDoc (class)
+ToolUp.Platform.ConfigKeys+ReferenceDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.ConfigKnobType (class)
 ToolUp.Platform.ConfigKnobType.BoolKnob : ToolUp.Platform.ConfigKnobType { get }
 ToolUp.Platform.ConfigKnobType.DurationKnob : ToolUp.Platform.ConfigKnobType { get }
