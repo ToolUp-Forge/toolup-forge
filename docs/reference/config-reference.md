@@ -8,6 +8,17 @@ Every `TOOLUP_*` environment variable the SDK reads, projected from the central 
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the manifest cannot name its own location). Precedence is consumer literal > environment variable > manifest > override record > default.
 
+A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:
+
+```json
+{
+  "$schema": "./toolup.config.schema.json",
+  "TOOLUP_PLATFORM_SURFACES": "team"
+}
+```
+
+The schema is the only non-registry property the loader tolerates; it is skipped, never bound.
+
 ## Storage & secrets
 
 | Env var | Type | Default | Secret | Manifest | Description |

@@ -164,6 +164,16 @@ type ConfigKeyDescriptor = {
 [<Literal>]
 let ToolingCategory = "Build & tooling"
 
+/// The one non-registry property a deployment configuration manifest may
+/// carry: the pointer an editor follows to validate the file as it is
+/// typed. The loader skips it rather than binding it.
+///
+/// Declared here, beside the registry, rather than beside the loader that
+/// tolerates it — the generated schema names the same property, and the
+/// two statements would be free to drift the moment either moved.
+[<Literal>]
+let ManifestSchemaProperty = "$schema"
+
 /// Canonical env-var name constants. The `*FromEnv` readers reference
 /// these instead of inlining the string literal, so a rename is a
 /// compile error that the reference doc can never silently lag behind.
@@ -2524,6 +2534,18 @@ module ReferenceDoc =
 
         sb.AppendLine "" |> ignore
 
+        // The schema is generated from this same registry and lists
+        // exactly the keys the Manifest column marks `yes`, so it belongs
+        // beside that paragraph rather than in a section of its own.
+        sb.AppendLine(
+            sprintf
+                "A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:\n\n```json\n{\n  \"%s\": \"./toolup.config.schema.json\",\n  \"TOOLUP_PLATFORM_SURFACES\": \"team\"\n}\n```\n\nThe schema is the only non-registry property the loader tolerates; it is skipped, never bound."
+                ManifestSchemaProperty
+        )
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+
         for category in orderedCategories keys do
             sb.AppendLine(sprintf "## %s" category) |> ignore
             sb.AppendLine "" |> ignore
@@ -2586,3 +2608,207 @@ module ReferenceDoc =
         // across platforms (StringBuilder.AppendLine emits the platform
         // newline; the committed file is `\n`).
         sb.ToString().Replace("\r\n", "\n")
+
+/// Project the registry to `docs/reference/toolup.config.schema.json` —
+/// the JSON Schema an editor validates a deployment configuration
+/// manifest against while it is being typed. Pure, like `ReferenceDoc`:
+/// the same registry always yields the same bytes, so the golden-file
+/// test can compare the committed schema against a fresh render.
+///
+/// **It describes what a valid manifest may contain today, not the whole
+/// registry.** A secret key is refused by the loader outright, and a
+/// registered key whose reader has not migrated to the resolution seam is
+/// accepted-and-warned rather than honoured — so both are omitted, and
+/// `additionalProperties: false` reports either at edit time with the same
+/// finality the loader has at boot. The property set therefore GROWS as
+/// readers migrate; the golden-file test is what keeps the committed copy
+/// level with the registry rather than lagging it.
+///
+/// The `enum` clauses carry each descriptor's declared choices, which are
+/// the **canonical** spellings rather than every accepted one: several
+/// readers additionally take a hyphenated or abbreviated alias no
+/// descriptor lists (`in-memory`, `all-in-one`, `admin`), and all of them
+/// match case-insensitively. An editor therefore flags a
+/// working-but-undocumented spelling. That is the intended reading — the
+/// documented value is the one to write — and the schema's own description
+/// says so, because an operator meeting a squiggle on a file that boots
+/// needs to be told which of the two is wrong.
+[<RequireQualifiedAccess>]
+module ConfigSchema =
+    open System
+    open System.Text
+
+    /// The JSON Schema dialect the generated document declares. 2020-12 is
+    /// the current draft and the one editors' bundled validators default
+    /// to; it is the schema's own `$schema`, not the manifest's.
+    [<Literal>]
+    let Dialect = "https://json-schema.org/draft/2020-12/schema"
+
+    /// JSON string escaping. Hand-rolled rather than reached for from a
+    /// serialiser because this module sits in the Fable-packed tier and
+    /// must build its output from strings alone.
+    let private escape (s: string) =
+        let sb = StringBuilder()
+
+        for ch in s do
+            match ch with
+            | '"' -> sb.Append "\\\"" |> ignore
+            | '\\' -> sb.Append "\\\\" |> ignore
+            | '\n' -> sb.Append "\\n" |> ignore
+            | '\r' -> sb.Append "\\r" |> ignore
+            | '\t' -> sb.Append "\\t" |> ignore
+            | c when c < ' ' -> sb.Append(sprintf "\\u%04x" (int c)) |> ignore
+            | c -> sb.Append c |> ignore
+
+        sb.ToString()
+
+    let private str (s: string) = "\"" + escape s + "\""
+
+    /// `true` when `raw` is a JSON-legal integer literal. `Int32.TryParse`
+    /// is more permissive than JSON — a leading `+`, leading zeros and
+    /// surrounding whitespace all parse for a reader but are not legal
+    /// JSON numbers — so a default in any of those shapes is omitted
+    /// rather than emitted as a document no validator can load.
+    let private isJsonInteger (raw: string) =
+        let body = if raw.StartsWith "-" then raw.Substring 1 else raw
+
+        body.Length > 0
+        && body |> Seq.forall Char.IsDigit
+        && (body = "0" || not (body.StartsWith "0"))
+
+    /// The JSON boolean a descriptor's default text denotes, when it
+    /// denotes one. The recognised token set is the readers' own
+    /// (`1` / `true` / `yes` / `on` and their negatives).
+    let private jsonBool (raw: string) =
+        match raw.ToLowerInvariant() with
+        | "1"
+        | "true"
+        | "yes"
+        | "on" -> Some "true"
+        | "0"
+        | "false"
+        | "no"
+        | "off" -> Some "false"
+        | _ -> None
+
+    /// The instance constraint for a key's value.
+    ///
+    /// Bool and int keys accept **both** the natural JSON scalar and a
+    /// string, because that is what the loader accepts: it renders every
+    /// scalar back to the string an environment variable would have
+    /// carried, so `true` and `"true"` reach the reader identically. The
+    /// `pattern` beside an int constrains only the string arm — a
+    /// `pattern` keyword ignores every non-string instance — so `3` stays
+    /// valid while `"3.5"` and `"soon"` do not.
+    let private typeClauses (t: ConfigKeyType) =
+        match t with
+        | StringKey -> [ "\"type\": \"string\"" ]
+        | BoolKey -> [ "\"type\": [ \"boolean\", \"string\" ]" ]
+        | IntKey -> [ "\"type\": [ \"integer\", \"string\" ]"; "\"pattern\": \"^-?[0-9]+$\"" ]
+        | EnumKey choices -> [
+            "\"type\": \"string\""
+            "\"enum\": [ " + (choices |> List.map str |> String.concat ", ") + " ]"
+          ]
+
+    /// The descriptor's default, carried over **only when it is a valid
+    /// instance of the property's own schema**.
+    ///
+    /// `Default` is documentation text, not always a value: a key that is
+    /// simply unset until set carries prose (`(unset — probes
+    /// ./toolup.config.json)`). In a reference table that reads correctly;
+    /// in a schema a `default` is what an editor offers to insert, so a
+    /// prose default would be a suggestion that refuses the moment it is
+    /// accepted. Anything that does not round-trip — a non-token bool, a
+    /// non-JSON integer, a value outside the enum, a parenthesised
+    /// annotation — is dropped, and the reference table remains the place
+    /// the prose is read.
+    let private defaultClauses (k: ConfigKeyDescriptor) =
+        match k.Default with
+        | None -> []
+        | Some raw ->
+            let trimmed = raw.Trim()
+
+            match k.Type with
+            | BoolKey -> jsonBool trimmed |> Option.map (fun b -> "\"default\": " + b) |> Option.toList
+            | IntKey ->
+                if isJsonInteger trimmed then
+                    [ "\"default\": " + trimmed ]
+                else
+                    []
+            | EnumKey choices ->
+                choices
+                |> List.tryFind (fun c -> c.ToLowerInvariant() = trimmed.ToLowerInvariant())
+                |> Option.map (fun c -> "\"default\": " + str c)
+                |> Option.toList
+            | StringKey ->
+                if trimmed.StartsWith "(" then
+                    []
+                else
+                    [ "\"default\": " + str trimmed ]
+
+    let private block (indent: string) (name: string) (clauses: string list) =
+        let inner = indent + "  "
+        let body = clauses |> List.map (fun c -> inner + c) |> String.concat ",\n"
+        indent + str name + ": {\n" + body + "\n" + indent + "}"
+
+    /// Render the schema for `keys`. Only the manifest-bindable,
+    /// non-secret subset appears; properties are ordered by name so the
+    /// committed file diffs by the key that changed.
+    let render (keys: ConfigKeyDescriptor list) : string =
+        let bindable =
+            keys
+            |> List.filter (fun k -> not k.IsSecret && isManifestBindable k.EnvVar)
+            |> List.sortBy _.EnvVar
+
+        let schemaProperty =
+            block "    " ManifestSchemaProperty [
+                "\"type\": \"string\""
+                "\"description\": "
+                + str
+                    "Optional pointer to this schema, so an editor validates the manifest as it is typed. Tolerated by the loader and never bound to a config key."
+            ]
+
+        let keyProperties =
+            bindable
+            |> List.map (fun k ->
+                block
+                    "    "
+                    k.EnvVar
+                    ([ "\"description\": " + str k.Description ]
+                     @ typeClauses k.Type
+                     @ defaultClauses k))
+
+        let properties = (schemaProperty :: keyProperties) |> String.concat ",\n"
+
+        let description =
+            sprintf
+                "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the %d keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md."
+                bindable.Length
+
+        let sb = StringBuilder()
+
+        sb.Append("{\n") |> ignore
+        sb.Append("  \"$schema\": " + str Dialect + ",\n") |> ignore
+
+        sb.Append(
+            "  \"$comment\": "
+            + str
+                "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs."
+            + ",\n"
+        )
+        |> ignore
+
+        sb.Append("  \"title\": " + str "ToolUp deployment configuration manifest" + ",\n")
+        |> ignore
+
+        sb.Append("  \"description\": " + str description + ",\n") |> ignore
+        sb.Append("  \"type\": \"object\",\n") |> ignore
+        sb.Append("  \"additionalProperties\": false,\n") |> ignore
+        sb.Append("  \"properties\": {\n") |> ignore
+        sb.Append(properties) |> ignore
+        sb.Append("\n  }\n") |> ignore
+        sb.Append("}\n") |> ignore
+
+        // `\n` throughout by construction (no `AppendLine`), so the
+        // committed bytes are identical on every platform.
+        sb.ToString()

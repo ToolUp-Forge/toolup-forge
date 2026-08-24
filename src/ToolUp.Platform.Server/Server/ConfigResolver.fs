@@ -62,8 +62,13 @@ let DefaultManifestFileName = "toolup.config.json"
 /// The one non-registry key a manifest may carry: editors use it to find
 /// the schema that validates the file as it is typed. Skipped by the
 /// binder rather than bound.
+///
+/// Aliased to the registry-side literal rather than restating it: the
+/// generated schema (`ConfigSchema.render`) declares the same property,
+/// and a loader that tolerated one spelling while the schema published
+/// another would refuse the very file it told the operator to write.
 [<Literal>]
-let SchemaKey = "$schema"
+let SchemaKey = ConfigKeys.ManifestSchemaProperty
 
 /// A manifest that failed to load. The message is the operator-facing
 /// refusal and names every problem found, not just the first — a file

@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
+  "title": "ToolUp deployment configuration manifest",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the 87 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema, so an editor validates the manifest as it is typed. Tolerated by the loader and never bound to a config key."
+    },
+    "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX": {
+      "description": "Allows a RAG index that does not survive a restart. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY": {
+      "description": "Trusts X-Forwarded-* headers from any peer instead of the configured proxy CIDRs, which lets a client spoof its own IP. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE": {
+      "description": "Acknowledge running the spoofable HeaderAuthProvider in an authenticated mode (only safe behind a mTLS proxy).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE": {
+      "description": "Acknowledge the in-memory OAuth state store under a multi-instance deployment (callback may hit a replica without the state).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE": {
+      "description": "Allows the in-memory share-token rate limiter when ReplicaCount is above 1, making the limit per-instance. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE": {
+      "description": "Allows in-process ingestion when ReplicaCount is above 1, so a document may be ingested more than once. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE": {
+      "description": "Allows the in-process job scheduler when ReplicaCount is above 1, so scheduled jobs run on every instance. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY": {
+      "description": "Acknowledge a team invite-by-email surface mounted with no IUserDirectory (emails silently never send).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE": {
+      "description": "Allows the local embedding provider at a corpus size it is not built for. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE": {
+      "description": "Acknowledge an internet-facing authenticated deployment with no rate limiting.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE": {
+      "description": "Acknowledge the in-memory pending-invite store under a multi-instance deployment (per-replica drift).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE": {
+      "description": "Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE": {
+      "description": "Acknowledge SSE query-param auth fallback in an authenticated mode (leaks the userId in URLs/logs).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE": {
+      "description": "Acknowledge relying on SameSite cookies alone (no server-side CSRF token) for cookie auth.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE": {
+      "description": "Allows a shared embedding cache in a team-scoped deployment, weakening tenant isolation of cached vectors. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE": {
+      "description": "Allows sticky-routed AI streaming when ReplicaCount is above 1 without a distributed notification channel. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE": {
+      "description": "Acknowledge an unset OIDC audience in an authenticated mode (token-reuse risk).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE": {
+      "description": "Allows publishable surfaces without artefact signing. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_AD_ANALYTICS": {
+      "description": "Enables the advertising-analytics surface.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_ASSET_STORE": {
+      "description": "Enables the IAssetStore substrate for uploaded media and derivative rendering.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_AUDIT_FAILURE_POLICY": {
+      "description": "What happens when an audit sink write fails: log and continue, refuse the action, or degrade to a local file.",
+      "type": "string",
+      "enum": [ "log", "refuse", "degrade" ],
+      "default": "log"
+    },
+    "TOOLUP_AUDIT_LOG": {
+      "description": "Enables the audit log and its sink dispatcher.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_AUTH_COOKIE_ISSUANCE": {
+      "description": "Issues the platform auth cookie alongside the bearer token, so SSE can authenticate without a query parameter.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_BACKFILL_MISSED_TICKS": {
+      "description": "On startup, runs schedule ticks that were missed while the process was down.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_COLUMN_MAPPING": {
+      "description": "Enables the column-mapping subsystem for uploaded tabular data.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_COMPUTE_BUDGET": {
+      "description": "Enables compute-budget accounting and enforcement for long-running work.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_CONFIG_DRIFT_DETECTION": {
+      "description": "Enables startup detection of drift between persisted config and the composed defaults.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_CONSENT_AUDIT": {
+      "description": "Enables consent-change auditing.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_CONSENT_STATE_STORE": {
+      "description": "Selects the consent-state backend.",
+      "type": "string",
+      "enum": [ "off", "inmemory", "entity" ],
+      "default": "off"
+    },
+    "TOOLUP_CONVERSATION_STORE": {
+      "description": "Disables AI conversation persistence. Enabling it requires a retentionDays value, so it must be set in ServerConfig rather than here.",
+      "type": "string",
+      "enum": [ "no" ],
+      "default": "no"
+    },
+    "TOOLUP_DATA_INGESTION": {
+      "description": "Enables the data-ingestion pipeline (IDataIngestor plus the background ingestion service).",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_DATA_SUBJECT_REQUESTS": {
+      "description": "Disables the data-subject-request surface. Enabling it requires an explicit ErasurePolicy, a compliance decision, so it must be set in ServerConfig.",
+      "type": "string",
+      "enum": [ "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES": {
+      "description": "Default per-team storage quota in bytes. Unset means unlimited.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_DEPLOYMENT_READINESS": {
+      "description": "Enables the deployment-readiness report surface.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_DEPLOYMENT_VERIFICATION": {
+      "description": "Enables the one-command post-deployment verification report.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT": {
+      "description": "Exposes the RAG citation inspection dev endpoint.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ENABLE_DEV_ENDPOINTS": {
+      "description": "Exposes the /dev/* inspection endpoints. Should stay off in production.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ENTITY_OUTBOX": {
+      "description": "Enables the entity outbox, so entity saves publish transactionally instead of being discarded unpublished.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_ENTITY_STORE": {
+      "description": "Enables the IEntityStore substrate (registered entity types and persistence).",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_EVENT_STORE": {
+      "description": "Selects the IEventStore backend. The persistent option uses the blob-backed store with the 90-day retention policy.",
+      "type": "string",
+      "enum": [ "inmemory", "persistent" ],
+      "default": "inmemory"
+    },
+    "TOOLUP_EVENT_TRIGGER_CATCHUP": {
+      "description": "On startup, replays event triggers that fired while the process was down.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_HEALTH_STATE_TRACKING": {
+      "description": "Tracks health-check state transitions, so a probe can report how long a component has been unhealthy.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_INCLUDE_PLATFORM_DEFAULTS": {
+      "description": "Merges the SDK platform default config schema into the composed surface.",
+      "type": [ "boolean", "string" ],
+      "default": true
+    },
+    "TOOLUP_JOB_SCHEDULER": {
+      "description": "Selects the in-process IJobScheduler. Dev-shaped: a multi-instance deployment needs a distributed scheduler companion.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_LINEAGE": {
+      "description": "Enables the lineage store recording dataset and derivation provenance.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_LOG_LEVEL": {
+      "description": "Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info.",
+      "type": "string",
+      "enum": [ "Debug", "Info", "Warn", "Error" ],
+      "default": "Info"
+    },
+    "TOOLUP_MAPPING_DRYRUN_BLOCK": {
+      "description": "When enabled, a failed column-mapping dry run blocks the import instead of only warning.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_MAX_REQUEST_BODY_BYTES": {
+      "description": "Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE": {
+      "description": "Maximum concurrent SSE connections per scope.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 10
+    },
+    "TOOLUP_METRICS_ENDPOINT": {
+      "description": "Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_MIGRATE_WEBHOOK_SECRETS": {
+      "description": "Migrates inline webhook secrets into the secret store on boot.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_MODULE": {
+      "description": "Restricts the composed surface to a single named module. Intended for local iteration.",
+      "type": "string"
+    },
+    "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND": {
+      "description": "Allows modules that carry no signed binding manifest to load.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_OAUTH_REFRESHER": {
+      "description": "Enables the background OAuth token refresher for stored data-source credentials.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_PEER_ROUTE_PREFIXES": {
+      "description": "Comma-separated route prefixes served by the cross-deployment peer substrate.",
+      "type": "string"
+    },
+    "TOOLUP_PLATFORM_KNOWLEDGE_BASE": {
+      "description": "Enables the platform-level knowledge base, the SDK-shipped document KB surface.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_PLATFORM_SURFACES": {
+      "description": "Comma-separated surface profiles the deployment exposes, for example anonymous, user, multi-team or claim-bearer.",
+      "type": "string"
+    },
+    "TOOLUP_PROCESS_PROFILE": {
+      "description": "Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only.",
+      "type": "string",
+      "enum": [ "allinone", "web", "worker", "dispatcher" ],
+      "default": "allinone"
+    },
+    "TOOLUP_PUBLIC_BASE_URL": {
+      "description": "Absolute base URL the deployment is reachable at. Used to build links in emails, share tokens and OAuth redirects.",
+      "type": "string"
+    },
+    "TOOLUP_PUBLIC_PATH": {
+      "description": "Filesystem path served as static public content.",
+      "type": "string",
+      "default": "deploy/public"
+    },
+    "TOOLUP_PUBLIC_RENDERING": {
+      "description": "Disables server-side public page rendering. Enabling it requires a ContentRoot path, so it must be set in ServerConfig rather than here.",
+      "type": "string",
+      "enum": [ "no" ],
+      "default": "no"
+    },
+    "TOOLUP_RATE_LIMITER": {
+      "description": "Enables the request rate-limiter middleware.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_RATE_LIMIT_PERMITS": {
+      "description": "Requests allowed per window. Set alongside the window and queue keys to switch rate limiting on.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_RATE_LIMIT_QUEUE": {
+      "description": "How many requests may queue once the permit count is exhausted.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_RATE_LIMIT_STORE": {
+      "description": "Selects where rate-limit counters live. The in-memory store is per-instance and therefore wrong for a multi-instance deployment.",
+      "type": "string",
+      "enum": [ "no", "inmemory", "external" ],
+      "default": "no"
+    },
+    "TOOLUP_RATE_LIMIT_WINDOW_SECONDS": {
+      "description": "Length of the rate-limit window, in seconds.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_REPLICA_COUNT": {
+      "description": "Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 1
+    },
+    "TOOLUP_REQUIRE_HTTPS": {
+      "description": "When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_RESULT_STORE": {
+      "description": "Selects the result store backing long-running job output retrieval.",
+      "type": "string",
+      "enum": [ "no", "inmemory", "persistent" ],
+      "default": "no"
+    },
+    "TOOLUP_SECURITY_HARDENING": {
+      "description": "Security-header and hardening posture applied to every response.",
+      "type": "string",
+      "enum": [ "no", "default", "strict" ],
+      "default": "no"
+    },
+    "TOOLUP_SERVERLESS_HOST": {
+      "description": "Host shape the server assumes: the standard Kestrel host, or a serverless host that skips long-lived background services.",
+      "type": "string",
+      "enum": [ "kestrel", "serverless" ],
+      "default": "kestrel"
+    },
+    "TOOLUP_SHARE_TOKEN_STORE": {
+      "description": "Enables the IShareTokenStore substrate backing publishable share links (signed tokens + claim store).",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_SKIP_PREFLIGHT": {
+      "description": "Skips the entire startup config preflight. Intended for local iteration; a production deployment that sets it boots unvalidated.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_SLOW_RATE_LIMIT_MS": {
+      "description": "Milliseconds a request may wait on the rate limiter before that wait is logged as slow.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 5000
+    },
+    "TOOLUP_SLOW_REQUEST_MS": {
+      "description": "Milliseconds above which a request is logged as slow.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 1000
+    },
+    "TOOLUP_SMOKE_TEST": {
+      "description": "Enables the post-boot smoke-test surface, which is itself guarded by TOOLUP_SMOKE_TOKEN.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_SSE_AUTH": {
+      "description": "When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only.",
+      "type": "string",
+      "enum": [ "cookie", "cookies", "cookieonly" ]
+    },
+    "TOOLUP_STATIC_PATH_BEHAVIOUR": {
+      "description": "How a missing static-content path is treated at boot: warn, refuse to start, or skip silently.",
+      "type": "string",
+      "enum": [ "warn", "require", "skip" ],
+      "default": "warn"
+    },
+    "TOOLUP_STORE_EVICTION_MINUTES": {
+      "description": "Idle minutes before an ephemeral in-memory store entry is evicted.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 60
+    },
+    "TOOLUP_STRICT_CONFIG": {
+      "description": "Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_TEAM_CREATION_POLICY": {
+      "description": "Who may create a team: platform admins only, or any authenticated user.",
+      "type": "string",
+      "enum": [ "platformadminonly", "anyauthenticateduser" ],
+      "default": "platformadminonly"
+    },
+    "TOOLUP_TRACE_CATEGORIES": {
+      "description": "Comma/space-separated whitelist of trace categories to emit (e.g. ai.sse,platform.sse). Empty emits no Trace output.",
+      "type": "string"
+    },
+    "TOOLUP_TRUSTED_PROXY_CIDRS": {
+      "description": "Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted.",
+      "type": "string"
+    },
+    "TOOLUP_TRUST_FORWARDED_HEADERS": {
+      "description": "When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps).",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_USAGE_METERING": {
+      "description": "Enables per-scope usage metering, the counters feeding quota and billing surfaces.",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_WEBHOOKS": {
+      "description": "Enables outbound webhook delivery (subscriptions, signing, retry).",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
+    },
+    "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS": {
+      "description": "Comma-separated host allow-list for outbound webhook URLs. Unset allows any host.",
+      "type": "string"
+    }
+  }
+}

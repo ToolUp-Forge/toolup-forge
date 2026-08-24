@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ConfigReferenceTests
 open System
 open System.IO
 open System.Reflection
+open System.Text.Json
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform.ConfigKeys
@@ -11,11 +12,14 @@ open ToolUp.Platform.ConfigKeys
 //
 // Three guarantees over the central `ConfigKeys` registry:
 //
-//   1. The committed `docs/reference/config-reference.md` is exactly what
-//      `ReferenceDoc.render ConfigKeys.all` produces — so the doc is
-//      regenerable and never hand-maintained. Set
-//      `TOOLUP_REGEN_CONFIG_REFERENCE=1` to rewrite it instead of
-//      comparing (mirrors the `TOOLUP_APPROVE_API` idiom).
+//   1. The committed `docs/reference/config-reference.md` — and, since
+//      Phase 697, `docs/reference/toolup.config.schema.json` beside it —
+//      is exactly what the generator produces from `ConfigKeys.all`, so
+//      both are regenerable and never hand-maintained. Set
+//      `TOOLUP_REGEN_CONFIG_REFERENCE=1` to rewrite them instead of
+//      comparing (mirrors the `TOOLUP_APPROVE_API` idiom). One flag
+//      covers both projections: they read one registry, so a regen that
+//      refreshed only one would leave the other lying.
 //   2. Every `TOOLUP_*` string literal in shipped (non-test) source
 //      carries a descriptor — a key without one fails here.
 //   3. The registry itself is well-formed (unique names, non-empty
@@ -28,6 +32,9 @@ let private repoRoot () =
 
 let private referenceDocPath () =
     Path.Combine(repoRoot (), "docs", "reference", "config-reference.md")
+
+let private schemaPath () =
+    Path.Combine(repoRoot (), "docs", "reference", "toolup.config.schema.json")
 
 let private regenModeOn () =
     match Environment.GetEnvironmentVariable "TOOLUP_REGEN_CONFIG_REFERENCE" with
@@ -104,6 +111,80 @@ let tests =
                     committed
                     (normalise rendered)
                     "docs/reference/config-reference.md is stale. Regenerate with `dev-scripts/generate-config-reference.ps1`."
+
+        testCase "toolup.config.schema.json matches the rendered registry (regenerable)"
+        <| fun _ ->
+            // Phase 697 — the schema is a second projection of the same
+            // registry, so it rides the same regen flag and the same
+            // byte-equality compare as the reference doc. One
+            // `dev-scripts/generate-config-reference.ps1` refreshes both;
+            // a registry edit that moves one and not the other cannot
+            // reach a commit.
+            let rendered = ConfigSchema.render all
+            let path = schemaPath ()
+
+            if regenModeOn () then
+                Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+                File.WriteAllText(path, rendered)
+            else
+                Expect.isTrue
+                    (File.Exists path)
+                    (sprintf "%s is missing. Generate it with `dev-scripts/generate-config-reference.ps1`." path)
+
+                let committed = File.ReadAllText path |> normalise
+
+                Expect.equal
+                    committed
+                    (normalise rendered)
+                    "docs/reference/toolup.config.schema.json is stale. Regenerate with `dev-scripts/generate-config-reference.ps1`."
+
+        testCase "the generated schema admits exactly what a manifest may contain"
+        <| fun _ ->
+            // The properties the schema declares ARE the claim an editor
+            // enforces, so they are asserted against the registry rather
+            // than against the committed file — which the arm above has
+            // already pinned to this render. Four things have to hold, and
+            // the last two are the ones that would fail silently: a schema
+            // listing a secret would invite an operator to commit one, and
+            // a schema without `additionalProperties: false` would accept
+            // every typo the loader refuses at boot.
+            use doc = JsonDocument.Parse(ConfigSchema.render all)
+            let root = doc.RootElement
+
+            Expect.equal
+                (root.GetProperty("$schema").GetString())
+                ConfigSchema.Dialect
+                "the schema must declare its dialect"
+
+            Expect.isFalse
+                (root.GetProperty("additionalProperties").GetBoolean())
+                "additionalProperties must be false — an unknown key is a refusal at boot, so it is an error at edit time too"
+
+            let properties =
+                root.GetProperty("properties").EnumerateObject() |> Seq.map _.Name |> Set.ofSeq
+
+            Expect.isTrue
+                (Set.contains "$schema" properties)
+                "the manifest's own $schema pointer is tolerated by the loader, so the schema must admit it"
+
+            let declared = Set.remove "$schema" properties
+
+            let expected =
+                all
+                |> List.filter (fun k -> not k.IsSecret && isManifestBindable k.EnvVar)
+                |> List.map _.EnvVar
+                |> Set.ofList
+
+            Expect.equal
+                declared
+                expected
+                "the schema must declare exactly the non-secret manifest-bindable keys — a missing one refuses a valid manifest in the editor, an extra one invites a manifest key nothing reads"
+
+            let secrets = all |> List.filter _.IsSecret |> List.map _.EnvVar |> Set.ofList
+
+            Expect.isEmpty
+                (Set.intersect declared secrets)
+                "no secret key may appear in the schema: the loader refuses it with no hatch, and the schema is what tells the operator that before they type the value"
 
         testCase "every TOOLUP_ env var in shipped source has a descriptor"
         <| fun _ ->

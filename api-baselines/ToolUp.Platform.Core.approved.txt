@@ -2227,6 +2227,7 @@ ToolUp.Platform.ConfigFieldSchema.Key : System.String { get }
 ToolUp.Platform.ConfigFieldSchema.Kind : ToolUp.Platform.ConfigFieldKind { get }
 ToolUp.Platform.ConfigFieldSchema.Required : System.Boolean { get }
 ToolUp.Platform.ConfigKeys (class)
+ToolUp.Platform.ConfigKeys.ManifestSchemaProperty : System.String (literal)
 ToolUp.Platform.ConfigKeys.NotificationPrefsModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.PlatformModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.ToolingCategory : System.String (literal)
@@ -2268,6 +2269,9 @@ ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.BoolKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.EnumKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.IntKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.StringKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigSchema (class)
+ToolUp.Platform.ConfigKeys+ConfigSchema.Dialect : System.String (literal)
+ToolUp.Platform.ConfigKeys+ConfigSchema.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.ConfigKeys+Names (class)
 ToolUp.Platform.ConfigKeys+Names.acceptEphemeralRagIndex : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptForwardedHeadersFromAnyProxy : System.String (literal)
