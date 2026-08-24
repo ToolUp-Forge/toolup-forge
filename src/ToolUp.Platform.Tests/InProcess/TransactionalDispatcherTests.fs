@@ -76,12 +76,45 @@ type CapturingLogger() =
 /// `NotificationDeliveryFailed` at terminal-status points; tests
 /// assert the right cases land in the right order.
 type CapturingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
+    let recorded = ResizeArray<string * AuditEvent>()
+    let gate = obj ()
 
-    member _.Recorded = recorded |> Seq.toList
+    member _.Recorded = lock gate (fun () -> List.ofSeq recorded)
+
+    /// The dispatcher emits audit via `Async.Start` (fire-and-forget
+    /// onto the thread pool), so a test asserting on the rows waits for
+    /// writes it deliberately did not await. Event-driven, not polled:
+    /// `Record` pulses the monitor, so this returns the instant the
+    /// `count`-th row lands, and the cap only bites when the rows are
+    /// not coming at all. A timeout fails HERE, naming what did arrive
+    /// — the deny-observer fixtures' 5s wall-clock poll expired under
+    /// machine load on 2026-08-24 and blamed the downstream audit claim
+    /// instead of the scheduler; this file's old predicate-poll
+    /// `waitFor` carried the same 5s bound.
+    member _.WaitFor(count: int) =
+        let cap = TimeSpan.FromSeconds 30.0
+        let sw = Diagnostics.Stopwatch.StartNew()
+
+        lock gate (fun () ->
+            while recorded.Count < count && sw.Elapsed < cap do
+                let remaining = cap - sw.Elapsed
+
+                if remaining > TimeSpan.Zero then
+                    Monitor.Wait(gate, remaining) |> ignore
+
+            if recorded.Count < count then
+                failtestf
+                    "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the dispatcher's fire-and-forget write never happened (it is not merely late); the audit assertion after this wait has NOT been evaluated"
+                    recorded.Count
+                    count
+                    cap.TotalSeconds)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () ->
+                recorded.Add((scopeId, audit))
+                Monitor.PulseAll gate)
+        }
 
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
@@ -182,25 +215,6 @@ let private makeFixture
 
         return dispatcher, sink, wrapping, (logger :?> CapturingLogger), auditLog
     }
-
-/// Wait up to `timeout` for `predicate ()` to return `true`,
-/// re-checking every 10ms. Used in audit-emission assertions where
-/// the dispatcher's `Async.Start` makes timing non-deterministic.
-let private waitFor (predicate: unit -> bool) (timeout: TimeSpan) : Async<bool> = async {
-    let deadline = DateTime.UtcNow.Add timeout
-
-    let rec loop () = async {
-        if predicate () then
-            return true
-        elif DateTime.UtcNow > deadline then
-            return false
-        else
-            do! Async.Sleep 10
-            return! loop ()
-    }
-
-    return! loop ()
-}
 
 [<Tests>]
 let tests =
@@ -333,9 +347,7 @@ let tests =
 
                 do! channel.Publish("scope-A", TransactionalEmail envelopePayload)
 
-                let! arrived = waitFor (fun () -> not audit.Recorded.IsEmpty) (TimeSpan.FromSeconds 5.0)
-
-                Expect.isTrue arrived "audit log must record an entry on Delivered"
+                audit.WaitFor 1
 
                 let entries = audit.Recorded
                 Expect.equal entries.Length 1 "exactly one audit entry on a single Delivered"
@@ -365,9 +377,7 @@ let tests =
             try
                 do! channel.Publish("scope-A", TransactionalEmail(emptyEnvelope ()))
 
-                let! arrived = waitFor (fun () -> not audit.Recorded.IsEmpty) (TimeSpan.FromSeconds 5.0)
-
-                Expect.isTrue arrived "audit log records a failure entry on PermanentFailure"
+                audit.WaitFor 1
 
                 let _scopeId, evt = audit.Recorded.Head
 
@@ -393,9 +403,7 @@ let tests =
             try
                 do! channel.Publish("scope-A", TransactionalEmail(emptyEnvelope ()))
 
-                let! arrived = waitFor (fun () -> not audit.Recorded.IsEmpty) (TimeSpan.FromSeconds 5.0)
-
-                Expect.isTrue arrived "audit log records a failure entry after retry exhaustion"
+                audit.WaitFor 1
 
                 let _scopeId, evt = audit.Recorded.Head
 
