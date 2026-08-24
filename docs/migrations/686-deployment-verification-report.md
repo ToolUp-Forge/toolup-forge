@@ -12,15 +12,24 @@ Nothing, until you opt in. `ServerConfig.DeploymentVerification` defaults to
 
 ## What it composes
 
-Five verifiers that already existed, none of them altered:
+Verifiers that already existed, none of them altered. **This table is the report's documented
+section list — a phase that adds a section amends it here in the same commit.** The section ids are
+string literals rather than a closed union precisely so that adding one is an addition and not a
+break, which means nothing in the type system will remind you.
 
-| Section | Verifier | Absent when |
-|---|---|---|
-| `boot-seal` | the boot verification verdict over the sealed composition | no boot preflight was run |
-| `grounding-continuity` | the grounding-envelope continuity walk | no grounding-envelope seal is composed |
-| `audit-ledger` | the hash-chained audit ledger walk | no chained ledger is composed |
-| `certificate-issuance` | the certificate issuance log | no certificate substrate is composed |
-| `answer-verification-join` | the answer-verification provenance join | no answer-verification audit join is composed |
+| Section | Verifier | Absent when | Since |
+|---|---|---|---|
+| `boot-seal` | the boot verification verdict over the sealed composition | no boot preflight was run | 686 |
+| `grounding-continuity` | the grounding-envelope continuity walk | no grounding-envelope seal is composed | 686 |
+| `audit-ledger` | the hash-chained audit ledger walk | no chained ledger is composed | 686 |
+| `certificate-issuance` | the certificate issuance log | no certificate substrate is composed | 686 |
+| `answer-verification-join` | the answer-verification provenance join | no answer-verification audit join is composed | 686 |
+| `seam-authority` | each module's declared reachable-seam set beside the reach its registrations imply, and whether the composition was checked against it | no seam-authority declaration or check is composed | 693 |
+
+New sections are **appended**, never inserted. Adding one moves every deployment's verdict digest
+once, which is correct — the report grew. Inserting one among the others would move the section
+lines after it too, and a reader diffing two canonical forms across the upgrade could not then tell
+a re-ordering from a re-verdict.
 
 ## Wiring it
 
@@ -65,6 +74,48 @@ that, which is what a test wants and a composition root does not.
 
 **Both arms of the boot result belong here.** `ServerApp.bootSealEvidence` takes the whole
 `Result`: `Error` means the policy refused the start, not that the check produced nothing.
+
+### The seam-authority section (Phase 693)
+
+Supplied through a **sibling** interface rather than a sixth member on
+`IDeploymentVerificationEvidence`: adding an abstract member to a shipped F# interface is a source
+break, so an evidence value built before this phase still compiles and its sixth section reads
+`NotComposed`. Pipe the value through `withSeamAuthority`, exactly the way
+`withGroundingContinuity` already works:
+
+```fsharp
+let seamOutcome =
+    SeamAuthorityEnforcement.verifyAudited auditLog "_platform" profile capabilities grants modules
+
+let evidence =
+    DeploymentVerificationEvidence.create bootSeal None ledger certificates answerJoins
+    |> DeploymentVerificationEvidence.withSeamAuthority (
+        Some(
+            SeamAuthorityEnforcement.deploymentVerificationEvidence
+                profile
+                grants
+                modules
+                (Some seamOutcome)      // `None` if this deployment never ran the check
+        ))
+```
+
+**The last argument is the whole point of the section.** Phase 691 gave the seam gate a production
+call site, but *invoking* it stays a per-deployment act — so `None` means this composition never
+asked the gate anything, and the section says so rather than borrowing the SDK's posture. Nothing
+else is taken on trust: the component roster and both counts are recomputed here from the Phase
+438/554 `Needs` projection, so a root cannot overstate its coverage by passing a flattering number,
+and the report reads the same declaration→substrate map the gate does.
+
+The verdicts, and why two plausible-looking states are deliberately *not* `Verified`:
+
+| State | Verdict | Why |
+|---|---|---|
+| the check ran, grants were declared, every reach admitted | `Verified` | the conjunction — anything less is not a bound |
+| grants declared, nothing routed through the gate | `Observed` | declaring is not enforcing; the declarations bound nothing here |
+| the check ran over a composition declaring nothing | `Observed` | every component resolves to `UnrestrictedSeams`, so the gate could not have refused — the Phase 688 additive floor, not a confinement result |
+| a component reached a seam it did not declare | `Failed` | the finding, with the refusal enumerated |
+| the verified profile could not be bound (no signature, half-declared grants) | `Failed` | a mandatory check answered by withholding its input is not an absence |
+| no seam evidence supplied at all | `NotComposed` | the deployment's own boundary |
 
 ## Reading it
 
@@ -124,7 +175,8 @@ unchanged deployment digest identically, and drift is visible as a change rather
 Stop calling `ServerApp.withDeploymentVerification` and
 `ServerApp.withDeploymentVerificationEvidence`. Nothing else observes them, no hosted service is
 registered, and the `--verify-deployment` flag on a deployment that registered no evidence prints
-five `NotComposed` sections and exits 0.
+a `NotComposed` section per row of the table above and exits 0. Dropping only the seam-authority
+member (stop calling `withSeamAuthority`) rolls back that section alone.
 
 ## What this report does not prove
 
@@ -144,3 +196,8 @@ migration doc is not available to the person reading the report:
   was issued. Re-verifying the document needs the holder's copy, checked against the log by digest.
 - **The ledger covers what reached it.** A verified chain proves its records are the records it was
   given, in order — not that every event which occurred reached it.
+- **Seam reach is a subset claim.** The seam-authority section reports the substrate each module's
+  registrations *imply*. A module can still resolve substrate from the container by hand, and route
+  handlers are closures whose reach is not enumerable — so a refusal is sound while an admission is
+  never a proof of confinement. Composing the section narrows this to "the distance between what was
+  declared and what is observable is visible rather than inferred"; it does not close it.

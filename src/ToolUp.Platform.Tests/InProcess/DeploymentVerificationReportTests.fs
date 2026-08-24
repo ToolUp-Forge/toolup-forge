@@ -15,7 +15,8 @@ open ToolUp.Platform.AuditSinks.ChainedLedger
 
 // ─── Phase 686 — the one-command deployment verification report ──────
 //
-// The report composes five verifiers that already exist. So this pack
+// The report composes verifiers that already exist — five at Phase 686,
+// six since Phase 693 added module seam authority. So this pack
 // deliberately does NOT re-prove those verifiers — each has its own pack,
 // and duplicating them here would produce a suite that goes green when
 // the composition is wrong as long as the pieces are right. What it
@@ -74,6 +75,21 @@ type private RecordingAuditLog() =
                 |> List.rev
         }
 
+/// Phase 693 — a job handler that does nothing, so a probe module can
+/// declare a job registration (and therefore imply `IJobScheduler`)
+/// without a scheduler being involved.
+type private NoopSeamJobHandler() =
+    interface IJobHandler with
+        member _.Execute _ = async { return JobResult.Success }
+
+/// Phase 693 — an audit log the seam gate's deny observer can write to
+/// without a probe asserting on it. The refusal path is Phase 688's and
+/// is proved there; what the mapper probes is the mirror it produces.
+type private SilentSeamAuditLog() =
+    interface IAuditLog with
+        member _.Record(_, _) = async { return () }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
 /// A service provider over an explicit type→instance table. Small on
 /// purpose: the report resolves exactly two services (the evidence and
 /// the audit log) and a full container would hide which.
@@ -112,6 +128,11 @@ let private allSectionIds = [
     AuditLedgerSection
     CertificateIssuanceSection
     AnswerJoinSection
+    // Phase 693. Appended, matching `buildReport`'s own ordering — the
+    // canonical form is order-sensitive, and a list here that disagreed
+    // with the report's would make every ordered assertion below assert
+    // something other than what it reads as.
+    SeamAuthoritySection
 ]
 
 // ─── Healthy sources ─────────────────────────────────────────────────
@@ -142,6 +163,30 @@ let private healthyAnswerJoins () = async {
         }
 }
 
+/// A composition that declared seam sets AND checked them, with every
+/// derived reach admitted — the one shape that earns `Verified` on the
+/// Phase 693 section. Both halves are load-bearing and the probes below
+/// remove each in turn.
+let private healthySeamAuthority = {
+    Profile = "verified"
+    DeclarationMandatory = true
+    Components = [
+        {
+            AuthorityComponent = ComponentId.ofModule "reference-service"
+            DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore"; "IAuditSink" ]
+            DerivedReach = [ SeamId.ofInterface "IEntityStore"; SeamId.ofInterface "IAuditSink" ]
+            ComposedHere = true
+        }
+        {
+            AuthorityComponent = ComponentId.ofModule "reader"
+            DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore" ]
+            DerivedReach = [ SeamId.ofInterface "IEntityStore" ]
+            ComposedHere = true
+        }
+    ]
+    Verification = SeamAuthorityAdmitted(2, 3)
+}
+
 /// A deployment composing every substrate, all healthy.
 let private fullEvidence
     (bootSeal: BootSealIntegrity option)
@@ -156,6 +201,12 @@ let private fullEvidence
         (Some(defaultArg ledger healthyLedger))
         (Some(defaultArg certificates healthyCertificates))
         (Some(defaultArg answerJoins healthyAnswerJoins))
+    |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority)
+
+/// The same composition with the seam-authority member replaced.
+let private withSeam (seam: SeamAuthorityIntegrity) =
+    fullEvidence None None None None None
+    |> DeploymentVerificationEvidence.withSeamAuthority (Some seam)
 
 let private healthyEvidence () = fullEvidence None None None None None
 
@@ -268,7 +319,7 @@ let tests =
 
                 Expect.equal
                     (allSectionIds |> List.map (labelOf report))
-                    [ "verified"; "verified"; "verified"; "verified"; "verified" ]
+                    [ "verified"; "verified"; "verified"; "verified"; "verified"; "verified" ]
                     "every composed and healthy section verifies"
 
                 Expect.equal
@@ -369,8 +420,9 @@ let tests =
                         "not-composed"
                         "not-composed"
                         "not-composed"
+                        "not-composed"
                     ]
-                    "an unregistered evidence seam degrades to five absent sections, not an error"
+                    "an unregistered evidence seam degrades to absent sections throughout, not an error"
 
                 Expect.equal
                     report.Outcome
@@ -425,7 +477,7 @@ let tests =
                 Expect.equal
                     report.Outcome
                     DeploymentVerificationOutcome.AllComposedVerified
-                    "'all COMPOSED verified' says nothing about the four that were not"
+                    "'all COMPOSED verified' says nothing about the five that were not"
 
                 Expect.equal (exitCode report) 0 "a partial deployment with no failure exits zero"
             }
@@ -953,6 +1005,448 @@ let tests =
                         payloadWith (Unchecked.defaultof<string list>) None
                     ))
                     "a null list coerces to empty rather than taking the section down"
+            }
+        ]
+
+        // ── Phase 693: the seam-authority section ─────────────────────
+        //
+        // Three claims, and the middle one is what the phase is for.
+        //
+        //   * **the seeded drift lands here and nowhere else.** A
+        //     component reaching past its declaration reddens exactly the
+        //     seam section against a deployment whose other five are
+        //     healthy, and the exit-code contract is unchanged.
+        //   * **declaring is not enforcing, and enforcing nothing is not
+        //     enforcement.** Phase 691 shipped the gate's production call
+        //     site, but invoking it is per-deployment — so a composition
+        //     that declared grants and never checked them, and one that
+        //     checked a composition declaring nothing, are both READ and
+        //     both non-affirmative, in wording that says which. Probed by
+        //     the verdict LABEL, so a truthiness fold cannot pass them.
+        //   * **the mirror is derived from a real composition.** The
+        //     adapter runs over genuine `ServerModule` values and its
+        //     roster and counts are recomputed from `reachOf`, so a root
+        //     cannot overstate its coverage by passing a flattering
+        //     number and the section cannot drift from Phase 438's
+        //     `Needs` projection.
+
+        testList "the seam-authority section" [
+            let seamLabel report = labelOf report SeamAuthoritySection
+
+            let seamDetail report =
+                VerificationSectionVerdict.detail (sectionOf report SeamAuthoritySection).Verdict
+
+            test "a declared-and-admitted composition verifies" {
+                let report = runReport (healthyEvidence ()) None
+
+                Expect.equal
+                    (seamLabel report)
+                    "verified"
+                    "the check ran, grants were declared, every reach was admitted"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "profile verified"
+                    "the verdict names the profile binding it was checked under"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "seam declaration mandatory"
+                    "and whether declaring a seam set was mandatory or advisory"
+            }
+
+            test "the section enumerates each component's declared set beside its derived reach" {
+                let findings =
+                    (sectionOf (runReport (healthyEvidence ()) None) SeamAuthoritySection).Findings
+
+                Expect.hasLength findings 2 "one line per component in the composition"
+
+                Expect.stringContains
+                    (List.head findings)
+                    "declared declared{IAuditSink,IEntityStore}"
+                    "the declared set is rendered in the Phase 688 vocabulary"
+
+                Expect.stringContains
+                    (List.head findings)
+                    "reaches {IAuditSink,IEntityStore}"
+                    "beside the reach the registrations imply — the gap between them is the review surface"
+            }
+
+            test "a component reaching past its declaration reddens this section and no other" {
+                let refused = {
+                    healthySeamAuthority with
+                        Verification =
+                            SeamAuthorityRefused(
+                                "1 reach(es) were refused: a component reached a seam it did not declare",
+                                [
+                                    "component 'reader' may not resolve seam 'ISecretStore': it declared {IEntityStore}"
+                                ]
+                            )
+                }
+
+                let report = runReport (withSeam refused) None
+
+                onlyAdverse report SeamAuthoritySection
+
+                Expect.stringContains
+                    (String.Join(" ", (sectionOf report SeamAuthoritySection).Findings))
+                    "ISecretStore"
+                    "the refusal enumerates the seam that was reached, not just a count"
+            }
+
+            test "a profile that could not be bound is a failure, not an absence" {
+                // The state a composition reaches by declaring the
+                // verified profile and supplying no grants. Reading it as
+                // NotComposed would let a deployment answer a mandatory
+                // check by withholding its input.
+                let refused = {
+                    healthySeamAuthority with
+                        Components = []
+                        Verification =
+                            SeamAuthorityRefused(
+                                "the composition could not be bound to the profile it declared, so no reach was checked",
+                                [ "the verified composition profile requires a SeamGrantSignature" ]
+                            )
+                }
+
+                onlyAdverse (runReport (withSeam refused) None) SeamAuthoritySection
+            }
+
+            test "grants declared and never checked are OBSERVED, not verified" {
+                // The claim the phase exists to keep honest. The SDK's
+                // enforcement is real; this deployment does not call it,
+                // so the declarations bound nothing here.
+                let unenforced = {
+                    healthySeamAuthority with
+                        Verification = SeamAuthorityUnenforced
+                }
+
+                let report = runReport (withSeam unenforced) None
+
+                Expect.equal (seamLabel report) "observed" "declaring is not enforcing"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "routes through the seam gate"
+                    "and the verdict says which half is missing rather than implying the bound holds"
+
+                Expect.equal (exitCode report) 0 "an unenforced declaration is not adverse — nothing failed"
+
+                Expect.isFalse
+                    (VerificationSectionVerdict.isAffirmative (sectionOf report SeamAuthoritySection).Verdict)
+                    "and emphatically not a pass"
+            }
+
+            test "a check that admitted an all-unrestricted composition is OBSERVED, not verified" {
+                // The Phase 688 additive floor. Every component resolves
+                // to UnrestrictedSeams, so the gate could not have
+                // refused anything — crediting that as a verification
+                // would credit a check that had nothing to check.
+                let floor = {
+                    healthySeamAuthority with
+                        Profile = "standard"
+                        DeclarationMandatory = false
+                        Components =
+                            healthySeamAuthority.Components
+                            |> List.map (fun entry -> {
+                                entry with
+                                    DeclaredGrant = UnrestrictedSeams
+                            })
+                }
+
+                let report = runReport (withSeam floor) None
+
+                Expect.equal (seamLabel report) "observed" "an admission over an undeclared composition is structural"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "additive floor"
+                    "and the verdict names why it is not a confinement result"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "seam declaration advisory"
+                    "the advisory posture is reported as such under the standard profile"
+            }
+
+            test "a composition that declared nothing and checked nothing says both" {
+                let bare = {
+                    healthySeamAuthority with
+                        Components = []
+                        Verification = SeamAuthorityUnenforced
+                }
+
+                let report = runReport (withSeam bare) None
+
+                Expect.equal (seamLabel report) "observed" "composed, read, and with nothing to affirm"
+
+                Expect.stringContains
+                    (seamDetail report)
+                    "whatever the container will hand it"
+                    "the honest reading of a composition that bounds nothing"
+            }
+
+            test "a deployment supplying no seam evidence reads absent, and the section stays optional" {
+                // The five-source evidence value predates Phase 693 and
+                // carries no seam member. It must still build a report,
+                // and its sixth section must read as the deployment's own
+                // boundary rather than as an error.
+                let preExisting =
+                    DeploymentVerificationEvidence.create
+                        (Some healthyBootSeal)
+                        (Some healthyContinuity)
+                        (Some healthyLedger)
+                        (Some healthyCertificates)
+                        (Some healthyAnswerJoins)
+
+                let report = runReport preExisting None
+
+                Expect.equal
+                    (seamLabel report)
+                    "not-composed"
+                    "an evidence value that says nothing about seams is absent, not broken"
+
+                Expect.equal (exitCode report) 0 "and absence keeps the exit-code contract"
+
+                Expect.isTrue
+                    (report.NotProved
+                     |> List.find (fun st -> st.Id = "seam-reach-is-a-subset-claim")
+                     |> _.Narrowing
+                     |> Option.isNone)
+                    "with nothing composed the subset-claim bound stands whole"
+            }
+
+            test "withGroundingContinuity carries the seam member through" {
+                // The default path, not an edge case:
+                // `ServerApp.withDeploymentVerificationEvidence` calls
+                // this wither on EVERY registration to derive the
+                // continuity section from the container. A wither that
+                // rebuilt the value without the member it does not name
+                // would delete the sixth section for every root that
+                // supplies both — silently, and by default.
+                let report =
+                    healthyEvidence ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity (Some healthyContinuity)
+                    |> fun evidence -> runReport evidence None
+
+                Expect.equal (seamLabel report) "verified" "replacing one member must not drop another"
+            }
+
+            test "withSeamAuthority carries the other five members through" {
+                let report =
+                    healthyEvidence ()
+                    |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority)
+                    |> fun evidence -> runReport evidence None
+
+                Expect.equal
+                    (allSectionIds |> List.map (labelOf report))
+                    [ "verified"; "verified"; "verified"; "verified"; "verified"; "verified" ]
+                    "the seam wither replaces exactly one member and preserves the rest"
+            }
+
+            test "composing the section narrows the subset-claim statement without deleting it" {
+                let statement =
+                    (runReport (healthyEvidence ()) None).NotProved
+                    |> List.find (fun st -> st.Id = "seam-reach-is-a-subset-claim")
+
+                Expect.isSome statement.Narrowing "a composed section narrows the bound"
+
+                Expect.isGreaterThan
+                    statement.Statement.Length
+                    0
+                    "narrowing shrinks the bound, it never removes the statement"
+            }
+
+            test "a grant declared for a component this deployment does not compose is reported, not dropped" {
+                let stale = {
+                    healthySeamAuthority with
+                        Components =
+                            healthySeamAuthority.Components
+                            @ [
+                                {
+                                    AuthorityComponent = ComponentId.ofModule "retired-module"
+                                    DeclaredGrant = SeamGrant.ofInterfaces [ "ISecretStore" ]
+                                    DerivedReach = []
+                                    ComposedHere = false
+                                }
+                            ]
+                }
+
+                let findings =
+                    (sectionOf (runReport (withSeam stale) None) SeamAuthoritySection).Findings
+
+                Expect.stringContains
+                    (String.Join(" ", findings))
+                    "does not compose"
+                    "a stale grant still reads as governance, so it is named rather than silently omitted"
+            }
+
+            test "the per-component enumeration is capped and says how many it withheld" {
+                let many = {
+                    healthySeamAuthority with
+                        Components =
+                            [ 1..25 ]
+                            |> List.map (fun i -> {
+                                AuthorityComponent = ComponentId.ofModule (sprintf "component-%02d" i)
+                                DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore" ]
+                                DerivedReach = [ SeamId.ofInterface "IEntityStore" ]
+                                ComposedHere = true
+                            })
+                }
+
+                let findings =
+                    (sectionOf (runReport (withSeam many) None) SeamAuthoritySection).Findings
+
+                Expect.hasLength
+                    findings
+                    (DeploymentVerificationReport.SeamAuthorityComponentCap + 1)
+                    "the cap plus one line accounting for what it withheld"
+
+                Expect.stringContains
+                    (List.last findings)
+                    "5 further component(s) not listed"
+                    "a silent truncation would let a large composition present as a small one"
+            }
+        ]
+
+        // ── Phase 693: the mirror is derived from a real composition ───
+
+        testList "the seam-authority mapper" [
+            let jobModule () =
+                ServerModule.create "Jobs"
+                |> ServerModule.withComponentId "jobs-service"
+                |> ServerModule.withJobHandler ("scan", NoopSeamJobHandler(), CronTrigger "0 8 * * *")
+
+            let jobsComponent = ComponentId.ofModule "jobs-service"
+
+            /// An effect envelope for the probe module, so the Phase 300
+            /// half never has an opinion of its own here — without one
+            /// the profile resolves `SeamAuthorityGate.disabled` and the
+            /// seam question is never asked.
+            let effectEnvelope = Map.ofList [ jobsComponent, CompanionCapability.identity ]
+
+            test "the component roster and the counts are recomputed, never reported by the caller" {
+                let modules = [ jobModule (); ServerModule.create "Empty" ]
+
+                let mirror =
+                    SeamAuthorityEnforcement.deploymentVerificationEvidence
+                        CompositionProfile.Standard
+                        None
+                        modules
+                        (Some(Ok()))
+
+                Expect.hasLength mirror.Components 2 "one entry per composed module"
+
+                let expectedSeams =
+                    modules
+                    |> List.sumBy (fun m -> (SeamAuthorityEnforcement.reachOf m).ReachedSeams.Length)
+
+                match mirror.Verification with
+                | SeamAuthorityAdmitted(components, seams) ->
+                    Expect.equal components 2 "the component count comes from the composition"
+
+                    Expect.equal
+                        seams
+                        expectedSeams
+                        "and the seam count is recomputed from the Phase 438 Needs projection, not passed in"
+                | other -> failtestf "expected SeamAuthorityAdmitted, got %A" other
+            }
+
+            test "an undeclared composition mirrors as unrestricted throughout — the additive floor" {
+                let mirror =
+                    SeamAuthorityEnforcement.deploymentVerificationEvidence
+                        CompositionProfile.Standard
+                        None
+                        [ jobModule () ]
+                        (Some(Ok()))
+
+                Expect.isFalse
+                    (mirror.Components |> List.exists (fun e -> SeamGrant.isDeclared e.DeclaredGrant))
+                    "a composition with no SeamGrantSignature declares nothing (GP 11)"
+
+                Expect.isFalse mirror.DeclarationMandatory "and the standard profile does not demand it"
+                Expect.equal mirror.Profile "standard" "the profile label rides through"
+            }
+
+            test "a root that never ran the check mirrors as unenforced" {
+                // `None`, not a flag: the fact IS the absence of a
+                // result, so there is no value a root could pass that
+                // claims enforcement it did not perform.
+                let grants =
+                    Map.ofList [ jobsComponent, SeamGrant.ofInterfaces [ "IJobScheduler" ] ]
+
+                let mirror =
+                    SeamAuthorityEnforcement.deploymentVerificationEvidence
+                        CompositionProfile.Verified
+                        (Some grants)
+                        [ jobModule () ]
+                        None
+
+                Expect.equal
+                    mirror.Verification
+                    SeamAuthorityUnenforced
+                    "no result means no enforcement, and it says so"
+
+                Expect.isTrue mirror.DeclarationMandatory "the verified profile makes declaration mandatory"
+
+                Expect.isTrue
+                    (mirror.Components |> List.forall (fun e -> SeamGrant.isDeclared e.DeclaredGrant))
+                    "the declarations are still reported — they exist, they simply bound nothing"
+
+                Expect.equal
+                    (labelOf (runReport (withSeam mirror) None) SeamAuthoritySection)
+                    "observed"
+                    "and end to end that reads as observed, never as a verification"
+            }
+
+            test "the mirror's reach agrees with the projection the gate itself reads" {
+                let m = jobModule ()
+
+                let mirror =
+                    SeamAuthorityEnforcement.deploymentVerificationEvidence CompositionProfile.Standard None [ m ] None
+
+                Expect.equal
+                    (mirror.Components |> List.head |> _.DerivedReach |> Set.ofList)
+                    ((SeamAuthorityEnforcement.reachOf m).ReachedSeams |> Set.ofList)
+                    "the report and the gate must read one declaration-to-substrate map, never two"
+            }
+
+            test "a real refusal mirrors with its own account and the enumeration behind it" {
+                let modules = [ jobModule () ]
+
+                // Grant the module a seam it does NOT reach and withhold
+                // the one it does, so the refusal is produced by the real
+                // gate rather than constructed here.
+                let grants = Map.ofList [ jobsComponent, SeamGrant.ofInterfaces [ "IAuditSink" ] ]
+
+                let outcome =
+                    SeamAuthorityEnforcement.verifyAudited
+                        (SilentSeamAuditLog() :> IAuditLog)
+                        scope
+                        CompositionProfile.Standard
+                        (Some effectEnvelope)
+                        (Some grants)
+                        modules
+
+                Expect.isError outcome "the composition genuinely reaches a seam it did not declare"
+
+                let mirror =
+                    SeamAuthorityEnforcement.deploymentVerificationEvidence
+                        CompositionProfile.Standard
+                        (Some grants)
+                        modules
+                        (Some outcome)
+
+                match mirror.Verification with
+                | SeamAuthorityRefused(detail, findings) ->
+                    Expect.stringContains detail "refused" "the summary says the check refused"
+                    Expect.isNonEmpty findings "and the enumeration behind it is carried, not folded into the summary"
+                | other -> failtestf "expected SeamAuthorityRefused, got %A" other
+
+                Expect.equal
+                    (labelOf (runReport (withSeam mirror) None) SeamAuthoritySection)
+                    "failed"
+                    "and a real refusal reddens the section end to end"
             }
         ]
     ]

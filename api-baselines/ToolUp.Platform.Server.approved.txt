@@ -983,6 +983,12 @@ ToolUp.Platform.ComponentScaleModule.meetAll(System.Collections.Generic.IEnumera
 ToolUp.Platform.ComponentScaleModule.needs(ToolUp.Platform.ComponentScale) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.ComponentScaleModule.ofNeeds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]) : ToolUp.Platform.ComponentScale
 ToolUp.Platform.ComponentScaleModule.ofReadiness(ToolUp.Platform.Readiness) : ToolUp.Platform.ComponentScale
+ToolUp.Platform.ComponentSeamAuthority (class)
+ToolUp.Platform.ComponentSeamAuthority..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId], System.Boolean)
+ToolUp.Platform.ComponentSeamAuthority.AuthorityComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.ComponentSeamAuthority.ComposedHere : System.Boolean { get }
+ToolUp.Platform.ComponentSeamAuthority.DeclaredGrant : ToolUp.Platform.SeamGrant { get }
+ToolUp.Platform.ComponentSeamAuthority.DerivedReach : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId] { get }
 ToolUp.Platform.ComponentSeamGrant (class)
 ToolUp.Platform.ComponentSeamGrant..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant)
 ToolUp.Platform.ComponentSeamGrant.GrantComponent : ToolUp.Platform.ComponentId { get }
@@ -2260,10 +2266,13 @@ ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform
 ToolUp.Platform.DeploymentVerificationEvidence (class)
 ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
+ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
 ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityComponentCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.buildReport(ToolUp.Platform.IDeploymentVerificationEvidence, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
 ToolUp.Platform.DeploymentVerificationReport.deploymentVerificationApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentVerificationApi
 ToolUp.Platform.DeploymentVerificationReport.gatherAnswerJoins(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
@@ -2271,6 +2280,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherBootSeal(ToolUp.Platform.IDep
 ToolUp.Platform.DeploymentVerificationReport.gatherCertificates(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
 ToolUp.Platform.DeploymentVerificationReport.recordRead(System.IServiceProvider, ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.DeploymentVerificationReport.resolveEvidence(System.IServiceProvider) : ToolUp.Platform.IDeploymentVerificationEvidence
@@ -4499,6 +4509,8 @@ ToolUp.Platform.IRetrievalTracer+RetrievalTrace.StageTimings : Microsoft.FSharp.
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopK : System.Int32 { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopScore : System.Double { get }
+ToolUp.Platform.ISeamAuthorityEvidence (interface)
+ToolUp.Platform.ISeamAuthorityEvidence.SeamAuthority : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity] { get }
 ToolUp.Platform.ISeamAuthorityGate (interface)
 ToolUp.Platform.ISeamAuthorityGate.CheckSeam(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId, ToolUp.Platform.CompanionCapability) : ToolUp.Platform.CapabilityGateDecision
 ToolUp.Platform.ISeedPack (interface)
@@ -7062,6 +7074,7 @@ ToolUp.Platform.SeamAuthorityDelta.GrantsNarrowed : Microsoft.FSharp.Collections
 ToolUp.Platform.SeamAuthorityDelta.GrantsRemoved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant] { get }
 ToolUp.Platform.SeamAuthorityDelta.GrantsWidened : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]] { get }
 ToolUp.Platform.SeamAuthorityEnforcement (class)
+ToolUp.Platform.SeamAuthorityEnforcement.deploymentVerificationEvidence(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SeamAuthorityRefusal]]) : ToolUp.Platform.SeamAuthorityIntegrity
 ToolUp.Platform.SeamAuthorityEnforcement.describeRefusal(ToolUp.Platform.SeamAuthorityRefusal) : System.String
 ToolUp.Platform.SeamAuthorityEnforcement.reach(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamReach]
 ToolUp.Platform.SeamAuthorityEnforcement.reachOf(ToolUp.Platform.ServerModule) : ToolUp.Platform.ComponentSeamReach
@@ -7075,6 +7088,12 @@ ToolUp.Platform.SeamAuthorityGate.permitsSeam(ToolUp.Platform.SeamGrant, ToolUp.
 ToolUp.Platform.SeamAuthorityGate.refusalReason(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamId) : System.String
 ToolUp.Platform.SeamAuthorityGate.resolveSeam`1(ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId, ToolUp.Platform.CompanionCapability, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, T]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.CapabilityDenial]
 ToolUp.Platform.SeamAuthorityGate.unrestricted(ToolUp.Platform.ICompositionCapabilityGate) : ToolUp.Platform.ISeamAuthorityGate
+ToolUp.Platform.SeamAuthorityIntegrity (class)
+ToolUp.Platform.SeamAuthorityIntegrity..ctor(System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamAuthority], ToolUp.Platform.SeamAuthorityVerification)
+ToolUp.Platform.SeamAuthorityIntegrity.Components : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamAuthority] { get }
+ToolUp.Platform.SeamAuthorityIntegrity.DeclarationMandatory : System.Boolean { get }
+ToolUp.Platform.SeamAuthorityIntegrity.Profile : System.String { get }
+ToolUp.Platform.SeamAuthorityIntegrity.Verification : ToolUp.Platform.SeamAuthorityVerification { get }
 ToolUp.Platform.SeamAuthorityRefusal (class)
 ToolUp.Platform.SeamAuthorityRefusal.IsProfile : System.Boolean { get }
 ToolUp.Platform.SeamAuthorityRefusal.IsReaches : System.Boolean { get }
@@ -7101,6 +7120,22 @@ ToolUp.Platform.SeamAuthoritySurfaceModule.ofWire(Microsoft.FSharp.Collections.F
 ToolUp.Platform.SeamAuthoritySurfaceModule.renderDelta(ToolUp.Platform.SeamAuthorityDelta) : System.String
 ToolUp.Platform.SeamAuthoritySurfaceModule.severity(ToolUp.Platform.SeamAuthorityDelta) : ToolUp.Platform.AuthorizationDriftSeverity
 ToolUp.Platform.SeamAuthoritySurfaceModule.toWire(ToolUp.Platform.SeamAuthoritySurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamAuthorityWireEntry]
+ToolUp.Platform.SeamAuthorityVerification (class)
+ToolUp.Platform.SeamAuthorityVerification.IsSeamAuthorityAdmitted : System.Boolean { get }
+ToolUp.Platform.SeamAuthorityVerification.IsSeamAuthorityRefused : System.Boolean { get }
+ToolUp.Platform.SeamAuthorityVerification.IsSeamAuthorityUnenforced : System.Boolean { get }
+ToolUp.Platform.SeamAuthorityVerification.SeamAuthorityUnenforced : ToolUp.Platform.SeamAuthorityVerification { get }
+ToolUp.Platform.SeamAuthorityVerification.Tag : System.Int32 { get }
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityAdmitted (class)
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityAdmitted.components : System.Int32 { get }
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityAdmitted.seams : System.Int32 { get }
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityRefused (class)
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityRefused.detail : System.String { get }
+ToolUp.Platform.SeamAuthorityVerification+SeamAuthorityRefused.findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SeamAuthorityVerification+Tags (class)
+ToolUp.Platform.SeamAuthorityVerification+Tags.SeamAuthorityAdmitted : System.Int32 (literal)
+ToolUp.Platform.SeamAuthorityVerification+Tags.SeamAuthorityRefused : System.Int32 (literal)
+ToolUp.Platform.SeamAuthorityVerification+Tags.SeamAuthorityUnenforced : System.Int32 (literal)
 ToolUp.Platform.SeamAuthorityWireEntry (class)
 ToolUp.Platform.SeamAuthorityWireEntry..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.SeamAuthorityWireEntry.GrantComponentIdentity : System.String { get }

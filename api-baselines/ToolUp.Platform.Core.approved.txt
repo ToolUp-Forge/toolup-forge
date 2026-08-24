@@ -3746,6 +3746,7 @@ ToolUp.Platform.DeploymentVerification.CertificateIssuanceSection : System.Strin
 ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
 ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerification.SeamAuthoritySection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.canonicalForm(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]) : System.String
 ToolUp.Platform.DeploymentVerification.exitCode(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : System.Int32
 ToolUp.Platform.DeploymentVerification.outcomeOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : ToolUp.Platform.DeploymentVerificationOutcome

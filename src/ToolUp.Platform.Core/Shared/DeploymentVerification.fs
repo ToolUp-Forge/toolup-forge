@@ -190,6 +190,14 @@ module DeploymentVerification =
     [<Literal>]
     let AnswerJoinSection = "answer-verification-join"
 
+    /// Phase 693 — the sixth section, and the first one added after the
+    /// report shipped. It exists in this list rather than in a widened
+    /// union precisely because the comment above anticipated it: adding a
+    /// verifier adds a literal, and no consumer that matched on the five
+    /// stops compiling.
+    [<Literal>]
+    let SeamAuthoritySection = "seam-authority"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

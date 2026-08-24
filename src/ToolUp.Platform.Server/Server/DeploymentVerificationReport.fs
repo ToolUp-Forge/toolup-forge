@@ -9,7 +9,12 @@ open System.Text
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform.DeploymentVerification
 
-// ─── Phase 686 — composing the five verifiers into one report ────────
+// ─── Phase 686 — composing the verifiers into one report ─────────────
+//
+// Five at Phase 686; six since Phase 693 added module seam authority.
+// The section id set was declared open for exactly this — a literal per
+// section rather than a closed union — so the sixth is an addition
+// rather than a break, and this header counts them nowhere else.
 //
 // The verifiers this gathers already exist and are already tested. This
 // file mints NO verification logic: it takes each substrate's own verdict
@@ -35,9 +40,12 @@ open ToolUp.Platform.DeploymentVerification
 // Both of their substrates compile AFTER the route-handler table that
 // mounts this report, so neither could be reached from here by reference
 // even though both live in this assembly. Rather than special-casing
-// them into a different shape, all five are mirrored into tier-neutral
-// records and supplied together. `ServerApp.withDeploymentVerification-
-// Evidence` — which compiles late enough to see both — derives the
+// them into a different shape, every source is mirrored into a
+// tier-neutral record and supplied together — the shape Phase 693's
+// seam-authority member follows too, and for the same reason: the seam
+// gate, the composition profile and the refusal union all compile after
+// this file as well. `ServerApp.withDeploymentVerificationEvidence` —
+// which compiles late enough to see the grounding mutator — derives the
 // grounding thunk from the container itself, so a deployment that
 // composed Phase 684 gets that section without wiring it by hand.
 //
@@ -164,11 +172,98 @@ type AnswerJoinIntegrity = {
     Unanchored: int
 }
 
+/// Whether this deployment's composition was actually routed through the
+/// seam-authority gate, and what the gate said (Phase 688 / 691).
+///
+/// **Three cases, and the first one is the whole point of the section.**
+/// Phase 691 shipped the gate's production call site, but calling it is
+/// per-deployment (GP 13): `SeamAuthorityEnforcement.verify` is a
+/// function a composition root invokes, not a hosted service that runs
+/// itself. So "the SDK has enforcement" and "this deployment enforces"
+/// are different facts, and a report that rendered the first as the
+/// second would be asserting a bound nobody applied. `Unenforced` is
+/// what a deployment that declared grants and never checked them looks
+/// like — declarations, not a bound.
+type SeamAuthorityVerification =
+    /// No composition in this deployment routed its modules through the
+    /// gate. Whatever was declared bounds nothing here.
+    | SeamAuthorityUnenforced
+    /// The check ran over `components` composed component(s) and admitted
+    /// all `seams` derived reach(es). Affirmative ONLY when something was
+    /// declared — an admission over an all-unrestricted signature is the
+    /// additive floor and the gatherer reads it as such.
+    | SeamAuthorityAdmitted of components: int * seams: int
+    /// The check ran and refused: a profile that could not be bound, or a
+    /// component reaching past its declaration. `detail` is the refusal's
+    /// own account and `findings` enumerates it.
+    | SeamAuthorityRefused of detail: string * findings: string list
+
+/// One composed unit's declared outbound authority beside the reach its
+/// own registrations imply.
+///
+/// Field names carry the `Authority` / `Declared` / `Derived` prefixes
+/// for the Phase 431 field-inference reason recorded on
+/// `AuthorizationSurface.Exposed`: F#'s last-declared-wins inference
+/// re-points every unannotated construction sharing a full field-name set
+/// at whichever record compiled later.
+///
+/// **Both halves are carried in their own types rather than as strings.**
+/// `DeclaredGrant` keeps the `UnrestrictedSeams` / `DeclaredSeams
+/// Set.empty` distinction that a name-and-list projection loses — the
+/// difference between "reaches everything" and "reaches nothing", which
+/// is the security property Phase 688 exists to make expressible.
+type ComponentSeamAuthority = {
+    /// The component's stable Phase 279 id — the key the grant signature,
+    /// the capability signature and the Phase 438 surface all share.
+    AuthorityComponent: ComponentId
+    /// What it declared it may reach. `UnrestrictedSeams` for a component
+    /// absent from the signature (GP 11 — absence is the no-op).
+    DeclaredGrant: SeamGrant
+    /// The substrate seams its registrations imply, from the Phase
+    /// 438/554 `Needs` projection. Empty means the projection derived
+    /// nothing from what it can see — never that the component reaches
+    /// nothing (see the section's not-proved statement).
+    DerivedReach: SeamId list
+    /// Whether the component is composed as a module in this deployment.
+    /// `false` is a declaration with nothing behind it — reported rather
+    /// than dropped, because a grant naming a component that left the
+    /// composition is stale review surface that still reads as governance.
+    ComposedHere: bool
+}
+
+/// The seam-authority posture (Phase 688 / 691), mirrored.
+///
+/// Tier-neutral for the same reason the boot verdict and the continuity
+/// walk are: `CompositionProfile`, `SeamAuthorityRefusal` and
+/// `CapabilityDenial` all compile AFTER the route-handler table that
+/// mounts this report, even though all three live in this assembly.
+/// `ComponentId` / `SeamId` / `SeamGrant` are `Platform.Core` value types
+/// and cross that boundary freely, so only the Server-tier verdicts are
+/// flattened.
+type SeamAuthorityIntegrity = {
+    /// The composition profile this deployment declared —
+    /// `CompositionProfile.label`, so `"standard"` or `"verified"`.
+    Profile: string
+    /// Whether declaring a reachable-seam set is MANDATORY under that
+    /// profile rather than advisory. Carried as its own field, not
+    /// re-derived from `Profile`, because `CompositionProfile` already
+    /// keeps `requiresSeamGrants` a separate predicate from the profile
+    /// label for exactly this reason: a reader deciding what is demanded
+    /// should not have to know the two move together today.
+    DeclarationMandatory: bool
+    /// Every composed component's declared grant and derived reach, plus
+    /// any grant declared for a component this deployment does not
+    /// compose. Deterministic order.
+    Components: ComponentSeamAuthority list
+    /// What the gate said, if this deployment asked it anything.
+    Verification: SeamAuthorityVerification
+}
+
 /// The deployment-supplied evidence this report composes.
 ///
 /// Every member is optional and absence is honest throughout: a
-/// deployment supplying none of it gets a report of five `NotComposed`
-/// sections, which is exactly what it should get.
+/// deployment supplying none of it gets a report whose every section
+/// reads `NotComposed`, which is exactly what it should get.
 ///
 /// The three downstream members are thunks because reading them is I/O
 /// and a report that is never run should not pay for it; the two in-tier
@@ -203,8 +298,46 @@ type IDeploymentVerificationEvidence =
     /// name. `None` when no answer-verification audit join is composed.
     abstract AnswerJoins: (unit -> Async<Result<AnswerJoinIntegrity, string>>) option
 
+/// Phase 693 — the sixth section's source.
+///
+/// **A sibling interface rather than a sixth member on
+/// `IDeploymentVerificationEvidence`, and that is the rule this estate
+/// already recorded rather than a compatibility dodge.** Adding an
+/// abstract member to a shipped F# interface is a source break — F#
+/// cannot author a default implementation, so every hand-written object
+/// expression stops compiling — which is exactly why Phase 688 made
+/// `ISeamAuthorityGate` inherit `ICompositionCapabilityGate` instead of
+/// growing it. Here the same reasoning lands on a standalone sibling:
+/// the report resolves it by type test, so an evidence value that never
+/// heard of seam authority still compiles and its sixth section reads
+/// `NotComposed` — which is the honest verdict for a deployment that
+/// composed nothing to say (GP 11).
+///
+/// A value, not a thunk: the enforcement result is in the composition
+/// root's hand at boot, the same way the boot verdict is, and re-running
+/// the gate at report time would answer "would be admitted NOW" rather
+/// than "was admitted at composition" — a different and much weaker
+/// claim.
+type ISeamAuthorityEvidence =
+    /// The composition's seam-authority posture. `None` when this
+    /// deployment neither declared grants nor ran the check.
+    abstract SeamAuthority: SeamAuthorityIntegrity option
+
 [<RequireQualifiedAccess>]
 module DeploymentVerificationEvidence =
+
+    /// Read the seam-authority member off an evidence value that carries
+    /// one. `None` for any evidence that does not implement the sibling
+    /// interface — which is every value built before Phase 693 and every
+    /// hand-written implementation that has not adopted it.
+    ///
+    /// The single read path: the gatherer and every wither go through
+    /// here, so "does this evidence carry seam authority" has one answer
+    /// rather than one per call site.
+    let seamAuthorityOf (evidence: IDeploymentVerificationEvidence) : SeamAuthorityIntegrity option =
+        match box evidence with
+        | :? ISeamAuthorityEvidence as source -> source.SeamAuthority
+        | _ -> None
 
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
@@ -216,6 +349,9 @@ module DeploymentVerificationEvidence =
             member _.Ledger = None
             member _.Certificates = None
             member _.AnswerJoins = None
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = None
         }
 
     /// Evidence naming whichever sources the composition root holds. Each
@@ -233,6 +369,9 @@ module DeploymentVerificationEvidence =
             member _.Ledger = ledger
             member _.Certificates = certificates
             member _.AnswerJoins = answerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = None
         }
 
     /// Replace the grounding-continuity member, preserving every other
@@ -243,15 +382,51 @@ module DeploymentVerificationEvidence =
         (continuity: GroundingContinuityIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
+        // Phase 693: the seam-authority member is carried THROUGH, not
+        // rebuilt as `None`. A wither that dropped a member it does not
+        // name would silently delete the sixth section for every root
+        // that supplies both — and `withDeploymentVerificationEvidence`
+        // calls this one unconditionally, so the loss would be the
+        // default rather than an edge case.
+        let seamAuthority = seamAuthorityOf evidence
+
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
             member _.GroundingContinuity = continuity
             member _.Ledger = evidence.Ledger
             member _.Certificates = evidence.Certificates
             member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
         }
 
-/// Phase 686 — gather the five sections, fold them into the report, and
+    /// Phase 693 — supply the seam-authority posture, preserving every
+    /// other source.
+    ///
+    /// A wither rather than a sixth argument to `create`: widening that
+    /// function's parameter list retypes it, which the public-API
+    /// approval gate reads as a REMOVAL of the five-argument form and
+    /// which breaks every existing call. The composition root builds its
+    /// evidence with `create` exactly as before and pipes it through
+    /// here, the same shape `withGroundingContinuity` already
+    /// established.
+    let withSeamAuthority
+        (seamAuthority: SeamAuthorityIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+        }
+
+/// Phase 686 — gather the sections, fold them into the report, and
 /// serve it. Separated from the evidence types above only by F# scoping:
 /// the types must sit at namespace level so `ServerApp` names them
 /// without opening this module, which would also drag every gatherer into
@@ -273,6 +448,13 @@ module DeploymentVerificationReport =
     /// How many recent issuance identifiers the certificate section carries.
     [<Literal>]
     let RecentIssuanceCap = 10
+
+    /// How many per-component seam-authority lines the section carries as
+    /// findings. A deployment can compose more modules than an operator
+    /// will read in one screen; the verdict already carries the counts,
+    /// and `SeamAuthoritySurface.toWire` is the surface for the whole set.
+    [<Literal>]
+    let SeamAuthorityComponentCap = 20
 
     let private section id title verdict findings : ReportSection = {
         Id = id
@@ -620,6 +802,154 @@ module DeploymentVerificationReport =
                         findings
     }
 
+    /// The seams one component reaches, rendered in the same
+    /// `{a,b}` shape `SeamGrant.render` uses for the declared set, so the
+    /// two halves of a finding line read against each other rather than
+    /// in two notations.
+    let private renderReach (reach: SeamId list) : string =
+        if List.isEmpty reach then
+            "nothing derived"
+        else
+            reach
+            |> List.map SeamId.value
+            |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+            |> String.concat ","
+            |> sprintf "{%s}"
+
+    /// One finding line per component: what it declared beside what its
+    /// registrations imply it reaches.
+    ///
+    /// Truncated at `SeamAuthorityComponentCap` with an explicit line
+    /// saying how many were withheld — a silent truncation would let a
+    /// large composition present as a small one, and the count is the
+    /// half a reader would otherwise have no way to notice was missing.
+    let private componentFindings (components: ComponentSeamAuthority list) : string list =
+        let rendered =
+            components
+            |> List.truncate SeamAuthorityComponentCap
+            |> List.map (fun entry ->
+                sprintf
+                    "%s: declared %s, reaches %s%s"
+                    (ComponentId.value entry.AuthorityComponent)
+                    (SeamGrant.render entry.DeclaredGrant)
+                    (renderReach entry.DerivedReach)
+                    (if entry.ComposedHere then
+                         ""
+                     else
+                         " — declared for a component this deployment does not compose"))
+
+        let withheld = components.Length - rendered.Length
+
+        if withheld > 0 then
+            rendered @ [ sprintf "(%d further component(s) not listed)" withheld ]
+        else
+            rendered
+
+    /// Module seam authority (Phase 688 / 691).
+    ///
+    /// **The section that must not overstate itself, in two independent
+    /// ways.** Declaring grants is not enforcing them, and enforcing them
+    /// over a composition that declared nothing admits everything by
+    /// construction. Either read as `Verified` would credit a deployment
+    /// for a bound it does not carry, so both land on `Observed` with the
+    /// reason spelled out. `Verified` needs the conjunction: the check
+    /// ran, something was declared, and every derived reach was admitted.
+    ///
+    /// Nothing here is hardcoded from the SDK's own posture. The gatherer
+    /// never says "Phase 691 shipped enforcement"; it says what THIS
+    /// deployment's composition did, which is the only question an
+    /// assessor holding a running deployment is asking.
+    let gatherSeamAuthority (evidence: IDeploymentVerificationEvidence) : ReportSection =
+        let title = "Module seam authority"
+
+        match DeploymentVerificationEvidence.seamAuthorityOf evidence with
+        | None ->
+            section
+                SeamAuthoritySection
+                title
+                (VerificationSectionVerdict.NotComposed
+                    "no seam-authority declaration or check is composed, so what substrate each module reaches is bounded only by what the container will hand it")
+                []
+        | Some integrity ->
+            let posture =
+                if integrity.DeclarationMandatory then
+                    "mandatory"
+                else
+                    "advisory"
+
+            let binding = sprintf "profile %s, seam declaration %s" integrity.Profile posture
+
+            let declared =
+                integrity.Components
+                |> List.filter (fun entry -> SeamGrant.isDeclared entry.DeclaredGrant)
+
+            let findings = componentFindings integrity.Components
+
+            match integrity.Verification with
+            | SeamAuthorityRefused(detail, refusalFindings) ->
+                section
+                    SeamAuthoritySection
+                    title
+                    (VerificationSectionVerdict.Failed(sprintf "%s (%s)" detail binding))
+                    (refusalFindings @ findings)
+            | SeamAuthorityUnenforced when List.isEmpty declared ->
+                section
+                    SeamAuthoritySection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "no component declares a seam set and no composition in this deployment routes through the seam gate — every module reaches whatever the container will hand it (%s)"
+                            binding
+                    ))
+                    findings
+            | SeamAuthorityUnenforced ->
+                // The state the phase exists to make legible. The SDK's
+                // enforcement is real and this deployment does not call
+                // it, so the grants are a statement about intent and
+                // nothing holds anything to them.
+                section
+                    SeamAuthoritySection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "%d of %d component(s) declare a seam set and no composition in this deployment routes through the seam gate, so the declarations bound nothing (%s)"
+                            declared.Length
+                            integrity.Components.Length
+                            binding
+                    ))
+                    findings
+            | SeamAuthorityAdmitted(components, seams) when List.isEmpty declared ->
+                // Vacuously true, exactly like continuity over an
+                // envelope that declares nothing. Every reach was
+                // admitted because every component resolved to
+                // `UnrestrictedSeams` — the Phase 688 additive floor —
+                // and reporting that as a verification would credit the
+                // deployment for a check that could not have refused.
+                section
+                    SeamAuthoritySection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "the gate admitted all %d derived reach(es) across %d component(s) and no component declared a seam set, so every reach was admitted by the unrestricted default — the additive floor, not a confinement result (%s)"
+                            seams
+                            components
+                            binding
+                    ))
+                    findings
+            | SeamAuthorityAdmitted(components, seams) ->
+                section
+                    SeamAuthoritySection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "the gate admitted all %d derived reach(es) across %d composed component(s); %d of them declare a seam set (%s)"
+                            seams
+                            components
+                            declared.Length
+                            binding
+                    ))
+                    findings
+
     // ─── What the report does not prove ──────────────────────────────────
 
     /// The not-proved statements, with the two that a composed substrate
@@ -700,6 +1030,25 @@ module DeploymentVerificationReport =
                         None
             }
             {
+                // Phase 693. `SeamAuthorityEnforcement`'s own header
+                // states this bound and the statement is lifted from it
+                // deliberately rather than softened: the derivation reads
+                // the registrations a module DECLARES, and a Giraffe
+                // handler is a closure whose reach is not enumerable. A
+                // refusal is therefore sound and an admission is a subset
+                // claim — and an enforcement layer believed to be a
+                // sandbox would be worse than none.
+                Id = "seam-reach-is-a-subset-claim"
+                Statement =
+                    "The seam-authority section reports the substrate each module's own registrations IMPLY it reaches. A module can still resolve substrate from the container by hand, and route handlers are closures whose reach is not enumerable, so a seam refusal is sound while an admission is a subset claim and never a proof of confinement."
+                Narrowing =
+                    if isComposed SeamAuthoritySection then
+                        Some
+                            "the section names each component's declared seam set beside the reach derived from its registrations, so the distance between what was declared and what is observable is visible rather than inferred. It does not shrink the bound: substrate resolved by hand sits outside both halves."
+                    else
+                        None
+            }
+            {
                 Id = "ledger-covers-what-reached-it"
                 Statement =
                     "A verified audit ledger proves that the records it holds are the records it was given, in order. It does not prove that every event which occurred reached it — a sink that was never composed, or an event emitted before the ledger was, leaves no gap the chain can see."
@@ -731,8 +1080,15 @@ module DeploymentVerificationReport =
             let! ledger = gatherLedger evidence
             let! certificates = gatherCertificates evidence
             let! answerJoins = gatherAnswerJoins evidence
+            let seamAuthority = gatherSeamAuthority evidence
 
-            let sections = [ bootSeal; continuity; ledger; certificates; answerJoins ]
+            // Phase 693 appends rather than inserting. Adding a section
+            // moves every deployment's verdict digest once, which is
+            // correct and expected — the report grew. Inserting it among
+            // the five would move the SECTION LINES of the ones after it
+            // too, so a reader diffing two canonical forms across the
+            // upgrade could not tell a re-ordering from a re-verdict.
+            let sections = [ bootSeal; continuity; ledger; certificates; answerJoins; seamAuthority ]
             let notProved = notProvedFor sections
 
             return {

@@ -108,6 +108,20 @@ removes it from `ToolUp.Platform.Server`'s public surface, which is a break rath
 invoke. Routing the client bridge through a gate needs the tier move, and that is a deliberate
 breaking-change decision for a future major, not something to do quietly.
 
+## Surfacing it (Phase 693)
+
+`SeamAuthorityEnforcement.deploymentVerificationEvidence` projects a composition's seam authority
+onto the deployment verification report's sixth section — per-component declared seam sets beside
+the reach derived here, the profile binding, and whether declaration is mandatory or advisory.
+
+The load-bearing part is that **"the SDK enforces" and "this deployment enforces" stay different
+facts**. `verify` is a function a composition root calls; nothing runs it by itself (GP 13). So the
+projection takes the `Result` the root already holds, and `None` — a root that never called it —
+reads as `Unenforced`: declared grants that bound nothing. Rendering that as enforcement would
+assert a bound nobody applied, which is the failure mode this phase's own header warns about one
+level up. Section list and verdict table:
+[`686-deployment-verification-report.md`](686-deployment-verification-report.md).
+
 ## See also
 
 - `src/ToolUp.Platform.Server/Server/SeamAuthorityEnforcement.fs` — the call site.

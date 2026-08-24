@@ -188,3 +188,103 @@ module SeamAuthorityEnforcement =
         | SeamAuthorityRefusal.Profile profileRefusal -> CompositionProfileRefusal.describe profileRefusal
         | SeamAuthorityRefusal.Reaches denials ->
             denials |> List.map _.Reason |> String.concat System.Environment.NewLine
+
+    // ─── Phase 693 — the deployment verification report's source ──────
+    //
+    // The report lives in `DeploymentVerificationReport.fs`, which
+    // compiles well before this file, so it cannot name
+    // `CompositionProfile`, `SeamAuthorityRefusal` or `CapabilityDenial`
+    // — the same tier-order constraint the boot verdict and the
+    // grounding walk already sit under. The mapping therefore lives
+    // HERE, beside the substrate that produced the verdict, exactly as
+    // `ChainedLedger.deploymentVerificationSource` and
+    // `AnswerVerifier.deploymentVerificationSource` do for their tiers.
+    // The report holds one mirror per substrate and never a second
+    // opinion about it.
+
+    /// The one-line summary and the per-refusal enumeration behind it —
+    /// the split the report's `Verdict` / `Findings` pair wants, which
+    /// `describeRefusal` deliberately does not draw (it joins).
+    let private refusalParts (refusal: SeamAuthorityRefusal) : string * string list =
+        match refusal with
+        | SeamAuthorityRefusal.Profile profileRefusal ->
+            "the composition could not be bound to the profile it declared, so no reach was checked",
+            [ CompositionProfileRefusal.describe profileRefusal ]
+        | SeamAuthorityRefusal.Reaches denials ->
+            sprintf "%d reach(es) were refused: a component reached a seam it did not declare" denials.Length,
+            denials |> List.map _.Reason
+
+    /// Project a composition's seam authority onto the deployment
+    /// verification report's tier-neutral mirror.
+    ///
+    /// **`outcome` is what makes the report's wired-vs-declared statement
+    /// runtime truth rather than a constant.** Phase 691 gave the gate a
+    /// production call site, but invoking it stays a per-deployment act
+    /// (GP 13) — so `None` here is a composition that never asked the
+    /// gate anything, and the section says so instead of borrowing the
+    /// SDK's posture. A root that calls `verify` / `verifyAudited` passes
+    /// the `Result` it already holds; one that does not passes `None`,
+    /// and the same code path reports both honestly.
+    ///
+    /// Everything else is DERIVED here rather than reported by the root:
+    /// the component roster and both counts come from `reach modules` and
+    /// the signature itself, so a root cannot overstate its coverage by
+    /// passing a flattering number. The only thing it supplies is the
+    /// verdict it was handed.
+    ///
+    /// Components declared in the signature but not composed as modules
+    /// are carried with `ComposedHere = false` rather than dropped: a
+    /// grant naming a component that has left the composition still reads
+    /// as governance on a review surface, and silently omitting it would
+    /// make a stale declaration invisible precisely where it is being
+    /// reviewed.
+    let deploymentVerificationEvidence
+        (profile: CompositionProfile)
+        (grants: SeamGrantSignature option)
+        (modules: ServerModule list)
+        (outcome: Result<unit, SeamAuthorityRefusal> option)
+        : SeamAuthorityIntegrity =
+        let signature = defaultArg grants Map.empty
+        let reaches = reach modules
+        let composedIds = reaches |> List.map _.ReachComponent |> Set.ofList
+
+        let composed =
+            reaches
+            |> List.map (fun entry -> {
+                AuthorityComponent = entry.ReachComponent
+                DeclaredGrant = SeamGrant.resolve signature entry.ReachComponent
+                DerivedReach = entry.ReachedSeams
+                ComposedHere = true
+            })
+
+        let orphaned =
+            signature
+            |> Map.toList
+            |> List.filter (fun (componentId, _) -> not (Set.contains componentId composedIds))
+            |> List.map (fun (componentId, grant) -> {
+                AuthorityComponent = componentId
+                DeclaredGrant = grant
+                DerivedReach = []
+                ComposedHere = false
+            })
+            |> List.sortWith (fun a b ->
+                System.String.CompareOrdinal(a.AuthorityComponent.Value, b.AuthorityComponent.Value))
+
+        let verification =
+            match outcome with
+            | None -> SeamAuthorityUnenforced
+            | Some(Ok()) ->
+                SeamAuthorityAdmitted(
+                    List.length reaches,
+                    reaches |> List.sumBy (fun entry -> List.length entry.ReachedSeams)
+                )
+            | Some(Error refusal) ->
+                let detail, findings = refusalParts refusal
+                SeamAuthorityRefused(detail, findings)
+
+        {
+            Profile = CompositionProfile.label profile
+            DeclarationMandatory = CompositionProfile.requiresSeamGrants profile
+            Components = composed @ orphaned
+            Verification = verification
+        }
