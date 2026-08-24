@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.TeamOwnershipTransferTests
 
 open System
-open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
@@ -27,31 +26,58 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // ─── Fakes ───────────────────────────────────────────────────────────
 
 type private CapturingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
+    let recorded = ResizeArray<string * AuditEvent>()
+    let gate = obj ()
 
-    member _.Recorded = recorded |> Seq.toList
+    member _.Recorded = lock gate (fun () -> List.ofSeq recorded)
 
-    member this.WaitForEventOfKind(eventTypeName: string, maxMs: int) : Async<AuditEvent option> = async {
-        let deadline = DateTime.UtcNow.AddMilliseconds(float maxMs)
+    /// The handler emits audit via `Async.Start` (fire-and-forget onto
+    /// the thread pool), so a test asserting on the row waits for a
+    /// write it deliberately did not await. Event-driven, not polled:
+    /// `Record` pulses the monitor, so this returns the instant the
+    /// matching row lands, and the cap only bites when the row is not
+    /// coming at all. A timeout fails HERE, naming what did arrive —
+    /// the deny-observer fixtures' 5s wall-clock poll expired under
+    /// machine load on 2026-08-24 and blamed the downstream audit
+    /// claim instead of the scheduler; this fixture's old 1s cap was
+    /// tighter still.
+    member _.WaitForEventOfKind(eventTypeName: string) : Async<AuditEvent> = async {
+        let cap = TimeSpan.FromSeconds 30.0
+        let sw = Diagnostics.Stopwatch.StartNew()
 
-        let rec loop () = async {
-            let hit =
-                this.Recorded
-                |> List.tryFind (fun (_, ev) -> AuditEvent.eventTypeName ev = eventTypeName)
+        return
+            lock gate (fun () ->
+                let find () =
+                    recorded
+                    |> Seq.tryFind (fun (_, ev) -> AuditEvent.eventTypeName ev = eventTypeName)
 
-            match hit with
-            | Some(_, ev) -> return Some ev
-            | None when DateTime.UtcNow < deadline ->
-                do! Async.Sleep 10
-                return! loop ()
-            | None -> return None
-        }
+                let mutable hit = find ()
 
-        return! loop ()
+                while hit.IsNone && sw.Elapsed < cap do
+                    let remaining = cap - sw.Elapsed
+
+                    if remaining > TimeSpan.Zero then
+                        Threading.Monitor.Wait(gate, remaining) |> ignore
+
+                    hit <- find ()
+
+                match hit with
+                | Some(_, ev) -> ev
+                | None ->
+                    failtestf
+                        "audit wait: no '%s' event within %.0fs (events that DID arrive: %A) — with an event-driven wait this long the handler's fire-and-forget write never happened (it is not merely late); the assertion after this wait has NOT been evaluated"
+                        eventTypeName
+                        cap.TotalSeconds
+                        (recorded |> Seq.map (fun (_, ev) -> AuditEvent.eventTypeName ev) |> List.ofSeq))
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () ->
+                recorded.Add((scopeId, audit))
+                Threading.Monitor.PulseAll gate)
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 // ─── Fixtures ────────────────────────────────────────────────────────
@@ -140,16 +166,15 @@ let tests =
             let api = PlatformApiHandler.teamApi teamConfig ctx
 
             let! _ = api.TransferOwnership("t1", "bob")
-            let! ev = auditLog.WaitForEventOfKind("TeamOwnershipTransferred", 1000)
+            let! ev = auditLog.WaitForEventOfKind "TeamOwnershipTransferred"
 
             match ev with
-            | Some(AuditEvent.TeamOwnershipTransferred p) ->
+            | AuditEvent.TeamOwnershipTransferred p ->
                 Expect.equal p.TeamId "t1" "audit records the team"
                 Expect.equal p.FromUserId "alice" "audit records the outgoing Owner"
                 Expect.equal p.ToUserId "bob" "audit records the incoming Owner"
                 Expect.equal p.ActorUserId "alice" "audit records the actor"
-            | Some other -> failtestf "expected TeamOwnershipTransferred, got %A" other
-            | None -> failtest "TeamOwnershipTransferred audit not emitted within 1000ms"
+            | other -> failtestf "expected TeamOwnershipTransferred, got %A" other
         }
 
         testCaseAsync "Non-Owner caller (Admin) is rejected; roles unchanged"

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.TeamCreationPolicyTests
 
 open System
-open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
@@ -34,37 +33,60 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Fakes ───────────────────────────────────────────────────────────
 
-/// Audit capture — same shape as `TransactionalDispatcherTests.CapturingAuditLog`.
-/// `Record` enqueues immediately; the production handler calls
-/// `Async.Start` on the recorder so tests poll briefly before
-/// asserting (the bootstrap path awaits records directly and needs
-/// no sleep).
+/// Audit capture. The production handler calls `Async.Start` on the
+/// recorder (fire-and-forget onto the thread pool), so a test asserting
+/// on the row waits for a write it deliberately did not await; the
+/// bootstrap path awaits records directly and needs no wait at all.
 type private CapturingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
+    let recorded = ResizeArray<string * AuditEvent>()
+    let gate = obj ()
 
-    member _.Recorded = recorded |> Seq.toList
+    member _.Recorded = lock gate (fun () -> List.ofSeq recorded)
 
-    member this.WaitForEventOfKind(eventTypeName: string, maxMs: int) : Async<AuditEvent option> = async {
-        let deadline = DateTime.UtcNow.AddMilliseconds(float maxMs)
+    /// Event-driven, not polled: `Record` pulses the monitor, so this
+    /// returns the instant the matching row lands, and the cap only
+    /// bites when the row is not coming at all. A timeout fails HERE,
+    /// naming what did arrive — the deny-observer fixtures' 5s
+    /// wall-clock poll expired under machine load on 2026-08-24 and
+    /// blamed the downstream audit claim instead of the scheduler; this
+    /// fixture's old 1s cap was tighter still.
+    member _.WaitForEventOfKind(eventTypeName: string) : Async<AuditEvent> = async {
+        let cap = TimeSpan.FromSeconds 30.0
+        let sw = Diagnostics.Stopwatch.StartNew()
 
-        let rec loop () = async {
-            let hit =
-                this.Recorded
-                |> List.tryFind (fun (_, ev) -> AuditEvent.eventTypeName ev = eventTypeName)
+        return
+            lock gate (fun () ->
+                let find () =
+                    recorded
+                    |> Seq.tryFind (fun (_, ev) -> AuditEvent.eventTypeName ev = eventTypeName)
 
-            match hit with
-            | Some(_, ev) -> return Some ev
-            | None when DateTime.UtcNow < deadline ->
-                do! Async.Sleep 10
-                return! loop ()
-            | None -> return None
-        }
+                let mutable hit = find ()
 
-        return! loop ()
+                while hit.IsNone && sw.Elapsed < cap do
+                    let remaining = cap - sw.Elapsed
+
+                    if remaining > TimeSpan.Zero then
+                        Threading.Monitor.Wait(gate, remaining) |> ignore
+
+                    hit <- find ()
+
+                match hit with
+                | Some(_, ev) -> ev
+                | None ->
+                    failtestf
+                        "audit wait: no '%s' event within %.0fs (events that DID arrive: %A) — with an event-driven wait this long the handler's fire-and-forget write never happened (it is not merely late); the assertion after this wait has NOT been evaluated"
+                        eventTypeName
+                        cap.TotalSeconds
+                        (recorded |> Seq.map (fun (_, ev) -> AuditEvent.eventTypeName ev) |> List.ofSeq))
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () ->
+                recorded.Add((scopeId, audit))
+                Threading.Monitor.PulseAll gate)
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// Silent `ILogger` for bootstrap tests (a real `ConsoleLogger` would
@@ -224,15 +246,15 @@ let tests =
 
             let! _ = api.CreateTeam "Marketing"
 
-            // Handler emits audit via `Async.Start`; poll briefly.
-            let! ev = auditLog.WaitForEventOfKind("TeamCreationDenied", 1000)
+            // Handler emits audit via `Async.Start`; the fixture's wait
+            // is event-driven and fails with attribution on a timeout.
+            let! ev = auditLog.WaitForEventOfKind "TeamCreationDenied"
 
             match ev with
-            | Some(AuditEvent.TeamCreationDenied payload) ->
+            | AuditEvent.TeamCreationDenied payload ->
                 Expect.equal payload.UserId "carol" "audit records the caller"
                 Expect.equal payload.AttemptedName "Marketing" "audit records the attempted team name verbatim"
-            | Some other -> failtestf "expected TeamCreationDenied, got %A" other
-            | None -> failtest "TeamCreationDenied audit not emitted within 1000ms"
+            | other -> failtestf "expected TeamCreationDenied, got %A" other
         }
 
         testCaseAsync "GetTeamCreationPolicy returns the configured value"
