@@ -1,6 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.AuditEventRegistryTests
 
 open System
+open System.IO
+open System.Reflection
+open System.Text.RegularExpressions
 open Expecto
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
@@ -121,6 +124,200 @@ let private pinnedLegacyWireNames = [
     "ModuleArtefactVerified", "ArtifactVerified"
     "ModuleArtefactRejected", "ArtifactRejected"
 ]
+
+
+// ─── Doc-projection plumbing ──────────────────────────────────────────
+
+/// Repo root (`toolup-forge`) resolved from the executing test
+/// assembly: `bin/<Config>/net10.0` → `ToolUp.Platform.Tests` → `src`.
+let private repoRoot () =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+    Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+let private auditEventReferencePath () =
+    Path.Combine(repoRoot (), "docs", "reference", "audit-event-reference.md")
+
+let private eventsDocPath () =
+    Path.Combine(repoRoot (), "docs", "platform", "events.md")
+
+/// Write the reference instead of comparing it — the `TOOLUP_APPROVE_API`
+/// / `TOOLUP_REGEN_CONFIG_REFERENCE` idiom.
+let private regenAuditReference () =
+    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE" with
+    | null
+    | "" -> false
+    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+
+let private normaliseEol (s: string) = s.Replace("\r\n", "\n")
+
+/// Fences the hand-written event names in `docs/platform/events.md`. The
+/// generated reference carries the exhaustive inventory; the summary in
+/// events.md stays prose, so these mark the part a test can hold to the
+/// union. HTML comments because they must be invisible when rendered.
+let private auditNamesBeginMarker = "<!-- audit-event-names:begin -->"
+let private auditNamesEndMarker = "<!-- audit-event-names:end -->"
+
+let private auditNameRegionPattern =
+    Regex(
+        Regex.Escape auditNamesBeginMarker + "(.*?)" + Regex.Escape auditNamesEndMarker,
+        RegexOptions.Singleline ||| RegexOptions.Compiled
+    )
+
+/// A backticked PascalCase token — the shape an audit-event name takes in
+/// the summary prose. Everything inside the fenced region is expected to
+/// be an event name, so type/interface names are kept outside it.
+let private backtickedIdentifierPattern =
+    Regex(@"`([A-Z][A-Za-z0-9]*)`", RegexOptions.Compiled)
+// ─── The generated audit-event inventory ──────────────────────────────
+//
+// `docs/reference/audit-event-reference.md` is PROJECTED from the union
+// plus the codec registry; it is never hand-maintained. It replaces the
+// prose bullet list that used to sit in `docs/platform/events.md`, which
+// had drifted on both axes at once: it named ~40 of the shipped cases,
+// and four of the names it did carry (`TeamMemberAdded`, `RoleAssigned`,
+// `RoleRevoked`, `ModulePermissionChanged`) had never been union cases at
+// all. A hand-synchronised inventory of a 162-case union is a list that
+// is wrong by default — every phase that adds a case has to remember a
+// doc in another directory, and nothing fails when it does not.
+//
+// So the inventory is generated and the golden test below fails the
+// build when it stops matching the union — the same escape the Phase 214
+// `ConfigReference` pack uses (`TOOLUP_REGEN_*`, byte-equality compare).
+// The renderer lives in the test pack rather than in the SDK because it
+// is a build-time projection with no runtime consumer, and because it
+// needs both `defaultValue` above and the `internal` registry.
+module private AuditEventReference =
+    open System.Text
+
+    /// F#-shaped name for a payload field type, so the reference reads
+    /// like the union does — "string option", not the CLR generic name.
+    let rec private typeName (t: Type) : string =
+        if t = typeof<string> then
+            "string"
+        elif t = typeof<bool> then
+            "bool"
+        elif t = typeof<int> then
+            "int"
+        elif t = typeof<int64> then
+            "int64"
+        elif t = typeof<float> then
+            "float"
+        elif t = typeof<decimal> then
+            "decimal"
+        elif t = typeof<Guid> then
+            "Guid"
+        elif t = typeof<DateTime> then
+            "DateTime"
+        elif t = typeof<DateTimeOffset> then
+            "DateTimeOffset"
+        elif t.IsGenericType then
+            let args = t.GetGenericArguments() |> Array.map typeName
+            let def = t.GetGenericTypeDefinition()
+
+            if def = typedefof<option<_>> then
+                args[0] + " option"
+            elif def = typedefof<list<_>> then
+                args[0] + " list"
+            else
+                sprintf "%s<%s>" (t.Name.Split('`')[0]) (String.concat ", " args)
+        else
+            t.Name
+
+    /// `(wireName, caseName, payload)` per union case in DECLARATION
+    /// order — which the registry deliberately follows too, and which
+    /// keeps each family contiguous. Alphabetising would scatter them.
+    let private rows () =
+        FSharpType.GetUnionCases typeof<AuditEvent>
+        |> Array.map (fun case ->
+            let fields = case.GetFields()
+            let fieldVals = fields |> Array.map (fun f -> defaultValue f.PropertyType)
+            let evt = FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent
+
+            let payload =
+                if fields.Length = 0 then
+                    "—"
+                else
+                    fields |> Array.map (fun f -> typeName f.PropertyType) |> String.concat " * "
+
+            AuditEvent.eventTypeName evt, case.Name, payload)
+        |> List.ofArray
+
+    /// Render the whole reference document.
+    let render () : string =
+        let all = rows ()
+        let sb = StringBuilder()
+
+        sb.AppendLine "# Audit event reference" |> ignore
+        sb.AppendLine "" |> ignore
+
+        sb
+            .AppendLine(
+                "<!-- GENERATED FILE — do not edit by hand. Regenerate with `dev-scripts/generate-audit-event-reference.ps1`"
+            )
+            .AppendLine(
+                "     (or `TOOLUP_REGEN_AUDIT_EVENT_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The"
+            )
+            .AppendLine(
+                "     sources of truth are the `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs and"
+            )
+            .AppendLine(
+                "     the codec registry `auditEventCodecs` in src/ToolUp.Platform.Server/Server/AuditLog.fs. -->"
+            )
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+
+        sb.AppendLine(
+            sprintf
+                "Every audit event the SDK emits (%d cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2)."
+                all.Length
+        )
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+
+        sb.AppendLine
+            "**Read the first column when you are writing a SIEM rule or querying an archive.** The wire `EventType` is what is persisted and replicated; the F# case identifier is what you pattern-match on in SDK code. They are equal for almost every event, and the exceptions are listed below — they are pinned deliberately, because a wire string that has already left for a third-party sink cannot be migrated."
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+
+        let divergent = all |> List.filter (fun (wire, case, _) -> wire <> case)
+
+        if not divergent.IsEmpty then
+            sb.AppendLine(
+                sprintf "Cases whose wire discriminator differs from the F# identifier (%d):" divergent.Length
+            )
+            |> ignore
+
+            sb.AppendLine "" |> ignore
+
+            for wire, case, _ in divergent do
+                sb.AppendLine(sprintf "- `%s` emits `%s`" case wire) |> ignore
+
+            sb.AppendLine "" |> ignore
+
+        sb.AppendLine
+            "> Note the near-collision: `ArtifactSigned` (module artefact signing) and `ArtefactSigned` (signing-key artefact) are two different events one letter apart. Alert rules must not glob them together."
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+        sb.AppendLine "| Event type (wire) | F# case | Payload |" |> ignore
+        sb.AppendLine "|---|---|---|" |> ignore
+
+        for wire, case, payload in all do
+            let caseCell = if wire = case then "—" else sprintf "`%s`" case
+            sb.AppendLine(sprintf "| `%s` | %s | `%s` |" wire caseCell payload) |> ignore
+
+        sb.AppendLine "" |> ignore
+
+        sb.AppendLine
+            "Payload record definitions live beside the union in `src/ToolUp.Platform.Core/Shared/AuditTypes.fs`; each case carries a doc comment explaining when it is emitted."
+        |> ignore
+
+        // Normalise to `\n` so the golden comparison is stable across
+        // platforms (`AppendLine` emits the platform newline).
+        sb.ToString().Replace("\r\n", "\n")
 
 [<Tests>]
 let tests =
@@ -291,5 +488,81 @@ let tests =
                 (AuditLog.tryDecodeAuditEvent "TenantProvisioned" json)
                 (Ok original)
                 "formerly-lost case round-trip"
+        }
+
+        // ─── The inventory doc cannot drift from the union ──────────────
+
+        test "docs/reference/audit-event-reference.md matches the union (regenerable, exhaustive)" {
+            let rendered = AuditEventReference.render ()
+            let path = auditEventReferencePath ()
+
+            if regenAuditReference () then
+                Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+                File.WriteAllText(path, rendered)
+            else
+                Expect.isTrue
+                    (File.Exists path)
+                    (sprintf "%s is missing. Generate it with `dev-scripts/generate-audit-event-reference.ps1`." path)
+
+                Expect.equal
+                    (File.ReadAllText path |> normaliseEol)
+                    (normaliseEol rendered)
+                    "docs/reference/audit-event-reference.md is stale — a case was added, removed or renamed without regenerating it. Run `dev-scripts/generate-audit-event-reference.ps1` and commit the result with the union change."
+        }
+
+        test "every audit event named in docs/platform/events.md is a real wire discriminator" {
+            // The reference above is generated, but the prose summary in
+            // events.md still names representative events by hand — and
+            // hand-written names are exactly what rotted before: that file
+            // carried `TeamMemberAdded`, `RoleAssigned`, `RoleRevoked` and
+            // `ModulePermissionChanged`, none of which were ever union
+            // cases (the real ones are `MemberAdded` and
+            // `PermissionChanged`). Prose is allowed to be selective; it is
+            // not allowed to be fictional, so every name inside the marked
+            // region must resolve.
+            let path = eventsDocPath ()
+            Expect.isTrue (File.Exists path) (sprintf "events doc not found: %s" path)
+
+            let text = File.ReadAllText path |> normaliseEol
+
+            let region =
+                let m = auditNameRegionPattern.Match text
+
+                if not m.Success then
+                    failtestf
+                        "%s no longer contains the `%s` / `%s` markers that fence the hand-written audit-event names. If the summary moved, move the markers with it — do not delete them."
+                        path
+                        auditNamesBeginMarker
+                        auditNamesEndMarker
+
+                m.Groups[1].Value
+
+            // Either spelling is legitimate in prose: the wire
+            // discriminator (what a SIEM rule matches) or the F# case
+            // identifier (what SDK code pattern-matches). They differ for
+            // the three `ModuleArtefact*` rows, and the reference table
+            // is where the mapping is stated.
+            let known =
+                Set.union
+                    (allCaseSamples |> List.map fst |> Set.ofList)
+                    (FSharpType.GetUnionCases typeof<AuditEvent> |> Array.map _.Name |> Set.ofArray)
+
+            let cited =
+                backtickedIdentifierPattern.Matches region
+                |> Seq.map (fun m -> m.Groups[1].Value)
+                |> Seq.distinct
+                |> List.ofSeq
+
+            Expect.isNonEmpty
+                cited
+                "the marked region cites no event names at all — the markers have probably drifted off the summary they are meant to fence"
+
+            let bogus = cited |> List.filter (fun name -> not (Set.contains name known))
+
+            Expect.isEmpty
+                bogus
+                (sprintf
+                    "docs/platform/events.md names audit events that do not exist: %s. Check them against `AuditEvent` in AuditTypes.fs (the full inventory is docs/reference/audit-event-reference.md). A backticked name in the fenced region that is a TYPE rather than an event belongs outside the markers."
+                    (String.concat ", " bogus))
         }
     ]

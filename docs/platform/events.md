@@ -79,21 +79,42 @@ type IAuditLog =
             Async<AuditEvent list>
 ```
 
-Audit events come from the SDK's own bookkeeping, not from module code. Shipped events:
+Audit events come from the SDK's own bookkeeping, not from module code. The exhaustive inventory is
+**[docs/reference/audit-event-reference.md](../reference/audit-event-reference.md)** — a generated projection
+of the `AuditEvent` union and the codec registry, refreshed by
+`dev-scripts/generate-audit-event-reference.ps1`. Do not keep a second copy of that list here: the summary
+below names families and representatives only, and a test holds every name in it to the union.
 
-- **Authentication**: `UserLoggedIn` (first-seen-this-session)
-- **Team operations**: `TeamCreated`, `TeamMemberAdded`, `TeamMemberRemoved`, `TeamMemberRoleChanged`, `ActiveTeamSet`
-- **Permission changes**: `RoleAssigned`, `RoleRevoked`, `ModulePermissionChanged`
-- **File operations**: `FileUploaded`, `FileDeleted`, `FileRecovered`
-- **Encryption**: `EncryptionKeyCreated`, `EncryptionKeyRotated` (reserved), `EncryptionKeyDestroyed`, `EncryptionKeyDestroyAcknowledged` (one per other replica, on cross-replica shred fanout)
-- **Jobs**: `JobRegistered`, `JobTriggered`, `JobSucceeded`, `JobFailed`, `JobDeadLettered`
-- **Data ingestion**: `IngestionRunStarted`, `IngestionRunCompleted`, `IngestionRunFailed`
+<!-- audit-event-names:begin -->
+- **Authentication + session**: `UserLoggedIn`, `PasskeyCredentialRegistered`, `PasskeyCredentialRemoved`, `AnonymousSessionMigrated`, `AuthScopeResolutionFailed`
+- **Teams + membership**: `TeamCreated`, `MemberAdded`, `MemberRemoved`, `MemberRoleChanged`, `TeamOwnershipTransferred`, `TeamArchived`, `TeamRestored`, `TeamDeleted`, and the `TeamInvite*` family
+- **Authorization + platform roles**: `PermissionChanged`, `AuthorizationDenied`, `SurfaceDenied`, `SchemaOnlyAccessAttempted`, `PlatformAdminAssigned`, `PlatformAdminRevoked`
+- **File operations**: `FileUploaded`, `FileDeleted`, `FileReprocessed`, `DataStoreReset`, `AnalysisRun`
 - **Entities**: `EntityCreated`, `EntityUpdated`, `EntityDeleted`
-- **Notifications**: `NotificationSent`, `NotificationDeliveryFailed`
-- **Audit replication**: `AuditSinkDelivered`, `AuditSinkFailed`, `AuditSinkDeadLettered`
-- **Health**: `HealthStateChanged` (when state-tracking is enabled)
+- **Encryption + artefact signing**: `EncryptionKeyCreated`, `EncryptionKeyRotated` (reserved), `EncryptionKeyDestroyed`, `EncryptionKeyDestroyAcknowledged` (one per other replica, on cross-replica shred fanout), `SigningKeyRotated`, `ArtefactSigned`, and the module-artefact trio `ModuleArtefactSigned` / `ModuleArtefactVerified` / `ModuleArtefactRejected`
+- **OAuth credentials**: `OAuthConnected`, `OAuthDisconnected`, `OAuthRefreshFailed`, plus the `OAuth1a*` and background-refresh `OAuthToken*` families
+- **Tenant lifecycle**: `TenantProvisioned`, `TenantDeprovisioned`, `TenantDataExported`, `TenantOffboardConfirmationRequested`, `TenantDeprovisionScheduled`
+- **Notifications**: `NotificationSent`, `NotificationDeliveryFailed`, `NotificationSilentlySkipped`
+- **Audit replication**: `AuditSinkDelivered`, `AuditSinkFailed`, `AuditSinkDeadLettered`, `AuditEventDecodeFailed`
+- **Knowledge base**: `KnowledgeOriginalRetrieved`, `KnowledgeOriginalRetrievalDenied`, `KnowledgeScopeErased`, `KnowledgeIngestionDropped`, `KnowledgeDocumentsPurged`
+- **Model lifecycle**: `ModelFitStarted`, `ModelFitCompleted`, `ModelArtifactRegistered`, `ModelArtifactPromoted`, `ModelScored`, `ModelEvaluated`
+- **Datasets + schema**: `DatasetSpillCreated`, `DatasetDeclassified`, `DatasetPolicyDenied`, `SchemaProposed`, `SchemaApproved`, `SchemaChanged`
+- **Grounding + verification**: `CompositionVerificationRecorded`, `CompositionCapabilityRefused`, `AnswerVerificationPassed`, `AnswerVerificationFlagged`, `FactImportAccepted`, `FactImportRefused`, `GroundingEnvelopeMutated`, `GroundingMutationRefused`, `CertificateIssued`, `DeploymentVerified`
+- **Peer + federation**: `PeerCallCompleted`, `PeerJobCompleted`, `PeerCleanRoomDecision`, `FederationRoundCompleted`, `FederationParticipantDropped`, `FederationRunAborted`
+- **Compliance + data protection**: `ConsentRecorded`, `DataSubjectRequest`, `ClassifiedFieldRead`, `ClassifiedFieldWritten`, `EgressBlocked`, `ContentScanned`
+- **Operations**: `HealthStateChanged`, `ConfigDrift`, `DiagnosticBundleAccessed`, `RateLimitWaited`, `RateLimitRefused`, `ComputeBudgetDenied`, `ComputeBudgetWarning`
+<!-- audit-event-names:end -->
 
 Every event carries the actor's userId, the affected userId (if different), the resource Id, and a server-side timestamp.
+
+> **Jobs and ingestion runs are NOT audit events.** The job scheduler and the data ingestor write to the same
+> `IEventStore`, but under their own reserved source modules — `_platform.jobs` (`JobScheduled`, `JobStarted`,
+> `JobCompleted`, `JobFailed`, `JobDeadLettered`, plus the `JobExternal*` reconciliation trio) and
+> `_platform.dataingestion` (`IngestionRunCompleted`, `IngestionRunFailed`). They are domain events, so they do
+> not pass through the audit codec registry, and the audit-sink replicator does not carry them — it filters on
+> `_platform.audit`. Revisions of this section before the inventory was generated listed both families as
+> shipped audit events, which they have never been. Wiring a SIEM alert for job failures means subscribing to
+> the job source module, not the audit feed.
 
 ## External audit replication
 

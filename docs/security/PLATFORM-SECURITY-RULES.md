@@ -880,15 +880,24 @@ section eliminates structurally.
 > application code choosing to record something.**
 > *Enablement:* Always on.
 > The audit log sits on top of the event store and records typed audit events
-> under a reserved platform namespace. The shipped event families cover
-> authentication, team operations, permission and role changes, file operations,
-> encryption key lifecycle, jobs, data ingestion, entity mutation,
-> notifications, audit-replication outcomes, and health-state transitions. Each
-> event carries the acting user, the affected user where different, the resource
-> id, and a server-side timestamp.
-> **Evidence:** `src/ToolUp.Platform.Core/Shared/AuditTypes.fs` (`IAuditLog`) ·
-> `src/ToolUp.Platform.Server/Server/AuditLog.fs` ·
-> `docs/platform/events.md` (§"Audit log" — the full event inventory)
+> under a reserved platform namespace (`_platform.audit`). The shipped families
+> cover authentication and session, team and membership changes, authorization
+> and platform-role grants, file operations, entity mutation, encryption-key and
+> artefact-signing lifecycle, OAuth credential lifecycle, tenant provisioning and
+> offboarding, notifications, audit-replication outcomes, knowledge-base access,
+> model and dataset lifecycle, grounding and answer verification, peer and
+> federation rounds, consent and classified-field access, and operational signals
+> (health-state, config drift, rate limiting, compute budget). Each event carries
+> the acting user, the affected user where different, the resource id, and a
+> server-side timestamp. Job-scheduler and data-ingestion events are NOT audit
+> events — they are domain events under their own source modules (`_platform.jobs`,
+> `_platform.dataingestion`), so they neither pass the audit codec registry nor
+> reach the audit sinks.
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/AuditTypes.fs` (`IAuditLog`,
+> `AuditEvent`) · `src/ToolUp.Platform.Server/Server/AuditLog.fs` ·
+> `docs/reference/audit-event-reference.md` (the generated, exhaustive inventory —
+> projected from the union, gated by `AuditEventRegistryTests`) ·
+> `docs/platform/events.md` (§"Audit log" — families and emission narrative)
 
 > **AU-2 — An audit event type that is not decodable for external replication
 > fails the build.**

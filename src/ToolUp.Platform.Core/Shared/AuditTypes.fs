@@ -4531,9 +4531,12 @@ type AuditEvent =
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
-    /// returned string matches the DU case name; persisted events use
-    /// this as the `ModuleEvent.EventType` field, so `IEventStore.ReadByType`
-    /// queries can target a single audit kind.
+    /// returned string matches the DU case name for every case EXCEPT the
+    /// three Phase 625 `ModuleArtefact*` cases, which keep emitting their
+    /// historical `Artifact*` strings. Persisted events use this as the
+    /// `ModuleEvent.EventType` field, so `IEventStore.ReadByType` queries can
+    /// target a single audit kind. The full mapping is projected into
+    /// `docs/reference/audit-event-reference.md`.
     let eventTypeName (audit: AuditEvent) : string =
         match audit with
         | UserLoggedIn _ -> "UserLoggedIn"
