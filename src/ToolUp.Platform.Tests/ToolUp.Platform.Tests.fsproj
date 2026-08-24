@@ -1028,6 +1028,13 @@
              real fact store and a real ledger is that they share one key
              story. -->
         <Compile Include="InProcess\GroundingSigningConvergenceTests.fs" />
+        <!-- Certificate-verified fact import: two real deployments, each
+             with its own key and its own store, exchanging a fact whose
+             content-addressed identity is re-derived and checked on
+             arrival. The disclosure floor in both directions, one distinct
+             refusal per failure class, and an empty store behind every one
+             of them. -->
+        <Compile Include="InProcess\FactImportTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

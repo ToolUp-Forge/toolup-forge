@@ -757,6 +757,8 @@ ToolUp.Platform.AuditEvent.IsEntityDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsExternalCallbackRejected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsExternalCallbackResolved : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsFactImportAccepted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsFactImportRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFederationParticipantDropped : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFederationRoundCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFederationRunAborted : System.Boolean { get }
@@ -972,6 +974,10 @@ ToolUp.Platform.AuditEvent+ExternalCallbackRejected (class)
 ToolUp.Platform.AuditEvent+ExternalCallbackRejected.Item : ToolUp.Platform.ExternalCallbackRejectedPayload { get }
 ToolUp.Platform.AuditEvent+ExternalCallbackResolved (class)
 ToolUp.Platform.AuditEvent+ExternalCallbackResolved.Item : ToolUp.Platform.ExternalCallbackResolvedPayload { get }
+ToolUp.Platform.AuditEvent+FactImportAccepted (class)
+ToolUp.Platform.AuditEvent+FactImportAccepted.Item : ToolUp.Platform.FactImportPayload { get }
+ToolUp.Platform.AuditEvent+FactImportRefused (class)
+ToolUp.Platform.AuditEvent+FactImportRefused.Item : ToolUp.Platform.FactImportPayload { get }
 ToolUp.Platform.AuditEvent+FederationParticipantDropped (class)
 ToolUp.Platform.AuditEvent+FederationParticipantDropped.Item : ToolUp.Platform.FederationParticipantDroppedPayload { get }
 ToolUp.Platform.AuditEvent+FederationRoundCompleted (class)
@@ -1189,6 +1195,8 @@ ToolUp.Platform.AuditEvent+Tags.EntityDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ExternalCallbackRejected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ExternalCallbackResolved : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.FactImportAccepted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.FactImportRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FederationParticipantDropped : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FederationRoundCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FederationRunAborted : System.Int32 (literal)
@@ -4194,6 +4202,20 @@ ToolUp.Platform.ExternalWorkSpecModule.withIdempotency(System.String, ToolUp.Pla
 ToolUp.Platform.ExternalWorkSpecModule.withProfile(ToolUp.Platform.ExecutionProfile, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withSubmitterClass(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withTimeout(System.TimeSpan, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
+ToolUp.Platform.FactImportPayload (class)
+ToolUp.Platform.FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FactImportPayload.CertificateRef : System.String { get }
+ToolUp.Platform.FactImportPayload.CertificateRoot : System.String { get }
+ToolUp.Platform.FactImportPayload.DeclaredDisclosure : System.String { get }
+ToolUp.Platform.FactImportPayload.DerivedFactId : System.String { get }
+ToolUp.Platform.FactImportPayload.EffectiveDisclosure : System.String { get }
+ToolUp.Platform.FactImportPayload.ImportedFactId : System.String { get }
+ToolUp.Platform.FactImportPayload.Metric : System.String { get }
+ToolUp.Platform.FactImportPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.FactImportPayload.PeerId : System.String { get }
+ToolUp.Platform.FactImportPayload.PeerKeyId : System.String { get }
+ToolUp.Platform.FactImportPayload.Reason : System.String { get }
+ToolUp.Platform.FactImportPayload.Subject : System.String { get }
 ToolUp.Platform.FactStoreMode (class)
 ToolUp.Platform.FactStoreMode.EnabledFactStore : ToolUp.Platform.FactStoreMode { get }
 ToolUp.Platform.FactStoreMode.IsEnabledFactStore : System.Boolean { get }

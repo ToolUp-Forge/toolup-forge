@@ -50,7 +50,9 @@ ToolUp.Facts.DisclosureMode+Tags (class)
 ToolUp.Facts.DisclosureMode+Tags.Plain : System.Int32 (literal)
 ToolUp.Facts.DisclosureMode+Tags.TaintPropagating : System.Int32 (literal)
 ToolUp.Facts.DisclosureModule (class)
+ToolUp.Facts.DisclosureModule.floor(ToolUp.Facts.Disclosure, ToolUp.Facts.Disclosure) : ToolUp.Facts.Disclosure
 ToolUp.Facts.DisclosureModule.toString(ToolUp.Facts.Disclosure) : System.String
+ToolUp.Facts.DisclosureModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Disclosure]
 ToolUp.Facts.DisclosurePolicy (class)
 ToolUp.Facts.DisclosurePolicy..ctor(System.String, ToolUp.Facts.DisclosureMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface])
 ToolUp.Facts.DisclosurePolicy.Mode : ToolUp.Facts.DisclosureMode { get }

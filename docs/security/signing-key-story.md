@@ -63,6 +63,17 @@ instead, and claims `IsolatedSigner`. The distinction is about whether the priva
 process memory — not about how well-guarded the place it is fetched from is. A key read out of a
 hardened store to sign locally is still a key the host can leak.
 
+**A PEER's key is the one thing that does not live in the secret store, and that is deliberate.**
+Everything above is about keys this deployment *signs* with. Verifying a document another deployment
+signed needs the opposite: a public key, and no relationship to this deployment's key material at
+all. Those anchors are composition-time DATA — `PeerTrustAnchor`, one per peer, handed to
+`FactsCompose.withFactImport` — rather than entries in a store. The reason is that a store is
+searchable: a verifier that resolves keys by looking them up will verify anything signed by any key
+it can find, and there is then no answer to "whose fact is this". An anchor list makes the set of
+peers a deployment accepts facts from readable in one place, and makes the absence of an anchor a
+refusal rather than a fallback. See
+[the fact-import migration note](../migrations/683-certificate-verified-fact-import.md).
+
 ## Composing it
 
 One provider, one signer, and the adapters that put every other artefact on it:

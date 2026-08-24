@@ -202,6 +202,44 @@ ToolUp.Facts.FactEvents (class)
 ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
+ToolUp.Facts.FactImport (class)
+ToolUp.Facts.FactImport.CertificateRefPrefix : System.String (literal)
+ToolUp.Facts.FactImport.certificateRef(ToolUp.Facts.GroundingCertificate) : System.String
+ToolUp.Facts.FactImport.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.IAuditLog) : ToolUp.Facts.IFactImportDoor
+ToolUp.Facts.FactImportRefusal (class)
+ToolUp.Facts.FactImportRefusal.IsImportContentIdMismatch : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportRejectedByStore : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportRootNotAFact : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportStanceUnreadable : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportUntrustedPeer : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportUnverifiable : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportWithheldByPeer : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch (class)
+ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch.certificateRoot : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch.derived : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportRejectedByStore (class)
+ToolUp.Facts.FactImportRefusal+ImportRejectedByStore.reason : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportRootNotAFact (class)
+ToolUp.Facts.FactImportRefusal+ImportRootNotAFact.kind : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportStanceUnreadable (class)
+ToolUp.Facts.FactImportRefusal+ImportStanceUnreadable.stance : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportUntrustedPeer (class)
+ToolUp.Facts.FactImportRefusal+ImportUntrustedPeer.peerId : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportUnverifiable (class)
+ToolUp.Facts.FactImportRefusal+ImportUnverifiable.verdict : ToolUp.Platform.EnvelopeVerdict { get }
+ToolUp.Facts.FactImportRefusal+ImportWithheldByPeer (class)
+ToolUp.Facts.FactImportRefusal+ImportWithheldByPeer.policyRef : System.String { get }
+ToolUp.Facts.FactImportRefusal+Tags (class)
+ToolUp.Facts.FactImportRefusal+Tags.ImportContentIdMismatch : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportRejectedByStore : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportRootNotAFact : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportStanceUnreadable : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportUntrustedPeer : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportUnverifiable : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportWithheldByPeer : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusalModule (class)
+ToolUp.Facts.FactImportRefusalModule.describe(ToolUp.Facts.FactImportRefusal) : System.String
 ToolUp.Facts.FactInvalidation (class)
 ToolUp.Facts.FactInvalidation.deriveFreshness(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
 ToolUp.Facts.FactInvalidation.invalidatedHeads(ToolUp.Facts.IFactStore, System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
@@ -256,6 +294,7 @@ ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.GroundingCertificate (class)
 ToolUp.Facts.GroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.ArtefactSignature)
@@ -287,6 +326,8 @@ ToolUp.Facts.IAnswerPlanner.Plan(System.String, System.String, System.String) : 
 ToolUp.Facts.IAnswerPlanner.Record(System.String, System.String, ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.IAttestedGroundingCertificateIssuer (interface)
 ToolUp.Facts.IAttestedGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Facts.CertificateError]]
+ToolUp.Facts.IFactImportDoor (interface)
+ToolUp.Facts.IFactImportDoor.Import(System.String, System.String, ToolUp.Facts.ImportedFactOffer, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, ToolUp.Facts.FactImportRefusal]]
 ToolUp.Facts.IFactRecomputer (interface)
 ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)
@@ -297,6 +338,18 @@ ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : M
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
 ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
+ToolUp.Facts.ImportedFactOffer (class)
+ToolUp.Facts.ImportedFactOffer..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence])
+ToolUp.Facts.ImportedFactOffer.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }
+ToolUp.Facts.ImportedFactOffer.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ImportedFactOffer.Method : ToolUp.Facts.MethodRef { get }
+ToolUp.Facts.ImportedFactOffer.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.ImportedFactOffer.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.ImportedFactOffer.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.ImportedFactOffer.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.ImportedFactOfferModule (class)
+ToolUp.Facts.ImportedFactOfferModule.derivedFactId(ToolUp.Facts.ImportedFactOffer) : System.String
+ToolUp.Facts.ImportedFactOfferModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.ImportedFactOffer
 ToolUp.Facts.InvalidationOutcome (class)
 ToolUp.Facts.InvalidationOutcome.IsDeferredToQuery : System.Boolean { get }
 ToolUp.Facts.InvalidationOutcome.IsEnqueued : System.Boolean { get }
@@ -320,6 +373,14 @@ ToolUp.Facts.InvalidationOutcome+Tags.ScheduleFailed : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.SurfacedOnly : System.Int32 (literal)
 ToolUp.Facts.NoFactRecomputer (class)
 ToolUp.Facts.NoFactRecomputer..ctor()
+ToolUp.Facts.PeerTrustAnchor (class)
+ToolUp.Facts.PeerTrustAnchor..ctor(System.String, ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Facts.Disclosure)
+ToolUp.Facts.PeerTrustAnchor.DisclosureCeiling : ToolUp.Facts.Disclosure { get }
+ToolUp.Facts.PeerTrustAnchor.PeerId : System.String { get }
+ToolUp.Facts.PeerTrustAnchor.PublicKey : ToolUp.ArtefactSigning.PublicKeyMetadata { get }
+ToolUp.Facts.PeerTrustAnchorModule (class)
+ToolUp.Facts.PeerTrustAnchorModule.create(System.String, ToolUp.ArtefactSigning.PublicKeyMetadata) : ToolUp.Facts.PeerTrustAnchor
+ToolUp.Facts.PeerTrustAnchorModule.withCeiling(ToolUp.Facts.Disclosure, ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
 ToolUp.Facts.ReactiveDataChange (class)

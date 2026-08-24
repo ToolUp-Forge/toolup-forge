@@ -3646,6 +3646,64 @@ type IAnswerProvenanceAnchors =
     abstract TryCertificateRef:
         scopeId: string * conversationId: Guid * citedFactIds: string list -> Async<string option>
 
+/// Phase 683 — one attempt to import a fact from a peer deployment under a
+/// grounding certificate, accepted or refused.
+///
+/// **Recorded on the accepted verdict too**, the Phase 657 / 680
+/// discipline: a trail carrying only refusals cannot distinguish a
+/// deployment whose imports were all sound from one whose import door was
+/// never composed, and those are the two states an auditor most needs to
+/// tell apart.
+///
+/// **PII-free by construction.** Identifiers, a metric id, a rendered
+/// subject reference, and disclosure stances. The imported fact's VALUE
+/// never rides this row — nor does it appear in the certificate, which
+/// carries chain structure only.
+///
+/// **Both stances are recorded because the pair is the claim.** `Declared`
+/// is what the peer sealed into its certificate; `Effective` is what the
+/// fact landed under. An import may narrow and may never widen, so a row
+/// where `Effective` is more permissive than `Declared` is a defect
+/// visible from the trail alone, with no access to the door's code.
+type FactImportPayload = {
+    /// The peer whose key material the certificate was checked against —
+    /// the name the importing deployment composed the anchor under, not a
+    /// value read out of the offered document.
+    PeerId: string
+    /// The signing-key id the peer's anchor names.
+    PeerKeyId: string
+    /// The root the peer's certificate is issued over. Empty when the
+    /// certificate could not be read at all.
+    CertificateRoot: string
+    /// The content-addressed reference recorded as the imported fact's
+    /// provenance (`MethodRef.Imported`). Empty on a refusal that never
+    /// reached a readable certificate.
+    CertificateRef: string
+    /// The content-addressed fact id the door re-derived from the offered
+    /// identity tuple — the value compared against `CertificateRoot`.
+    DerivedFactId: string
+    /// The id of the fact actually asserted locally. Differs from
+    /// `DerivedFactId` by construction: the local assertion's method is
+    /// `Imported`, which participates in the content address. Empty on
+    /// every refusal path, where nothing was asserted.
+    ImportedFactId: string
+    /// Readable subject reference (`hierarchy/level>level`).
+    Subject: string
+    /// Registered metric id of the offered fact.
+    Metric: string
+    /// The stance the peer sealed into the certificate
+    /// (`Surfaceable` / `Internal` / `Restricted(policy)`). Empty when the
+    /// certificate was never read.
+    DeclaredDisclosure: string
+    /// The stance the import landed under — the conservative floor of the
+    /// declared stance and the anchor's ceiling. Never wider than
+    /// `DeclaredDisclosure`. Empty on a refusal.
+    EffectiveDisclosure: string
+    /// The typed refusal, rendered. Empty on an accepted import.
+    Reason: string
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4277,6 +4335,14 @@ type AuditEvent =
     /// scope. The grounding refusal, on the same chained path as every
     /// other audited refusal.
     | AnswerVerificationFlagged of AnswerVerificationPayload
+    /// Phase 683 — a fact offered by a peer verified against that peer's
+    /// certificate, re-derived to the id the certificate names, and landed
+    /// under a stance no wider than the one the peer declared.
+    | FactImportAccepted of FactImportPayload
+    /// Phase 683 — an offered fact was refused at the import door and
+    /// nothing was asserted. The unverifiable / tampered / id-mismatched
+    /// signal, on the same audited path as every other refusal.
+    | FactImportRefused of FactImportPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4449,6 +4515,8 @@ module AuditEvent =
         | CompositionCapabilityRefused _ -> "CompositionCapabilityRefused"
         | AnswerVerificationPassed _ -> "AnswerVerificationPassed"
         | AnswerVerificationFlagged _ -> "AnswerVerificationFlagged"
+        | FactImportAccepted _ -> "FactImportAccepted"
+        | FactImportRefused _ -> "FactImportRefused"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

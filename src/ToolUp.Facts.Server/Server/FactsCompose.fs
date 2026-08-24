@@ -394,6 +394,68 @@ module FactsCompose =
             }
             |> ServerApp.withRegisteredPurposes (registeredPurposes config)
 
+    // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
+    //
+    // A separate, explicit opt-in on top of the fact store, and separate
+    // for a sharper reason than symmetry with the two opt-ins around it:
+    // the door needs KEY MATERIAL, and folding it into `withFactStore`
+    // would compose a trust decision into every deployment that wanted a
+    // fact base. The set of peers a deployment accepts facts from is
+    // exactly the kind of thing that must be written down in one place and
+    // read off the page (GP 13) — never acquired by default.
+    //
+    // An empty anchor list is legal and inert: the door composes and
+    // refuses every import with `ImportUntrustedPeer`. That is a
+    // deployment that has declared it trusts nobody, which is a different
+    // statement from one that never composed a door at all — and the audit
+    // trail tells them apart.
+
+    /// Compose the certificate-verified fact import door with the peer
+    /// anchors this deployment accepts facts from. Registers
+    /// `IFactImportDoor` over the composed `IFactStore` + `IAuditLog`; a
+    /// `NoFactStore` deployment (or one that never calls this) is
+    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
+    /// `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withFactImport [ PeerTrustAnchor.create "partner-a" partnerKey ]
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// Each anchor carries one peer's public key — the whole of what
+    /// offline verification needs — and, optionally, a ceiling narrowing
+    /// what an import from that peer may disclose
+    /// (`PeerTrustAnchor.withCeiling`). No key is discovered, so no key is
+    /// implicitly trusted.
+    let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.AddSingleton<IFactImportDoor>(
+                    Func<IServiceProvider, IFactImportDoor>(fun sp ->
+                        FactImport.create
+                            (sp.GetRequiredService<IFactStore>())
+                            anchors
+                            (sp.GetRequiredService<IAuditLog>()))
+                )
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //
     // A separate, explicit opt-in on top of the fact store: the standing

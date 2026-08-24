@@ -1544,6 +1544,26 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> AnswerVerificationFlagged(fromAuditJson<AnswerVerificationPayload> j)
     }
+    // Phase 683 — certificate-verified fact import, both verdicts. Two
+    // event types over one payload, for the reason the pair above gives:
+    // "an import was refused" is the row a SIEM rule alerts on, and it must
+    // be selectable without decoding every accepted import to read a flag.
+    {
+        EventType = "FactImportAccepted"
+        TryEncode =
+            (function
+            | FactImportAccepted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FactImportAccepted(fromAuditJson<FactImportPayload> j)
+    }
+    {
+        EventType = "FactImportRefused"
+        TryEncode =
+            (function
+            | FactImportRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FactImportRefused(fromAuditJson<FactImportPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

@@ -835,6 +835,12 @@ let allTests =
         // across deploy records, certificates and ledger heads, rotation
         // continuity, and each transplant refused as what it is.
         GroundingSigningConvergenceTests.tests
+        // Certificate-verified fact import — the consuming half of the
+        // imported-fact provenance case. Issue on one deployment, import on
+        // another, re-certify; the conservative disclosure floor in both
+        // directions; one distinct refusal per failure class, each leaving
+        // the store empty.
+        FactImportTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

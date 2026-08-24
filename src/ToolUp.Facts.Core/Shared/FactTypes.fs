@@ -190,6 +190,62 @@ module Disclosure =
         | Internal -> "Internal"
         | Restricted policyRef -> sprintf "Restricted(%s)" policyRef
 
+    /// The exact inverse of `toString`. `None` for anything this build does
+    /// not recognise — a stance it cannot read is never silently defaulted,
+    /// because every default is either a widening (unsafe) or a narrowing
+    /// that misreports what the source actually said. The caller refuses.
+    ///
+    /// Lives beside `toString` deliberately: a stance rendered into a
+    /// signed artefact by one deployment is read back by another, and a
+    /// parser written at the reading end would be a second definition of
+    /// the wire shape, free to drift from the one that writes it.
+    let tryParse (s: string) : Disclosure option =
+        if isNull s then
+            None
+        else
+            match s.Trim() with
+            | "Surfaceable" -> Some Surfaceable
+            | "Internal" -> Some Internal
+            | t when
+                t.StartsWith("Restricted(", StringComparison.Ordinal)
+                && t.EndsWith(")", StringComparison.Ordinal)
+                ->
+                // A policy ref may itself contain parentheses; take
+                // everything between the FIRST '(' and the LAST ')'.
+                Some(Restricted(t.Substring(11, t.Length - 12)))
+            | _ -> None
+
+    /// The **conservative floor** (the meet) of two stances — the more
+    /// restrictive of the two, under the Phase 525 egress predicate's own
+    /// ordering:
+    ///
+    ///   `Internal`  ≤  `Restricted p`  ≤  `Surfaceable`
+    ///
+    /// `Internal` is the bottom because it is denied at every surface
+    /// unconditionally, while a `Restricted` policy MAY permit some
+    /// surface; `Surfaceable` is the top because it is permitted at every
+    /// surface subject only to composition policy above.
+    ///
+    /// **Two `Restricted` stances under DIFFERENT policy refs meet at
+    /// `Internal`**, not at either ref. They are incomparable: nothing
+    /// tells this deployment that satisfying one policy satisfies the
+    /// other, and picking either would assert a permission neither source
+    /// granted. Collapsing to the bottom is the only answer that cannot
+    /// widen — and because the choice is recorded wherever the meet is
+    /// taken, it is a visible narrowing rather than a silent one.
+    ///
+    /// Commutative, associative, idempotent, with `Surfaceable` as the
+    /// identity — so a boundary that imposes no ceiling of its own is
+    /// byte-for-byte the stance it was handed (GP 11).
+    let floor (a: Disclosure) (b: Disclosure) : Disclosure =
+        match a, b with
+        | Internal, _
+        | _, Internal -> Internal
+        | Surfaceable, other
+        | other, Surfaceable -> other
+        | Restricted p, Restricted q when p = q -> Restricted p
+        | Restricted _, Restricted _ -> Internal
+
 /// Canonical display rendering of a `FactValue` under a metric's declared
 /// `DisplayFormat` (a .NET numeric format string, or "" for verbatim) —
 /// THE display form an answer quotes verbatim, shared by the retrieval
