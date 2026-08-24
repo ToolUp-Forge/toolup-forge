@@ -847,6 +847,13 @@ let allTests =
         // surface, and a suppressed issuance probed against a real chained
         // ledger the 658 verifier flags.
         CertificateIssuanceTransparencyTests.tests
+        // The one-command deployment verification report — the composed
+        // five-section artefact. Probes the composition rather than the
+        // five verifiers it composes: absence exits zero without reading
+        // as a pass, a seeded failure lands in its own section and no
+        // other, and the read-but-unaffirmed states stay distinct from
+        // the verified ones.
+        DeploymentVerificationReportTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

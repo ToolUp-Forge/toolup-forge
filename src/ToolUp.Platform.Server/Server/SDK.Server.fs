@@ -1076,6 +1076,48 @@ let compose
             resolvedLogger.Error(ex.Message, None)
             exit 1
 
+    | StartupModes.VerifyDeployment ->
+        // Phase 686 — the CI-invokable deployment verification report.
+        // Composes whatever evidence the deployment registered, renders
+        // the typed per-section verdicts + the not-proved statements, and
+        // exits with the report's own exit code: NON-zero only when a
+        // COMPOSED section failed or would not answer. A bare deployment
+        // reports five `NotComposed` sections and exits 0 — a CI job that
+        // reddened on the absence of an optional substrate would be
+        // reporting the deployment's shape as a defect, and would be
+        // switched off.
+        //
+        // A provider is built here because the report reads registered
+        // services (the evidence, the grounding mutator, the audit log)
+        // and the host's own provider does not exist until
+        // `buildAndRunHost`. Ordinarily a second provider is a hazard —
+        // two sets of singletons — but this arm terminates the process
+        // without binding a listener, so there is never a second set
+        // alive alongside the first. Disposed on the way out so the
+        // audited-read row's sink flushes.
+        //
+        // Not gated on `ServerConfig.DeploymentVerification`: that field
+        // mounts the ROUTE, and a deployment is entitled to verify itself
+        // in CI without exposing the report on the wire.
+        try
+            use provider = services.BuildServiceProvider()
+
+            let report =
+                DeploymentVerificationReport.run provider StartupModes.CliVerificationActor
+                |> Async.RunSynchronously
+
+            resolvedLogger.Info(DeploymentVerification.render report)
+            Console.Out.Flush()
+            exit (DeploymentVerification.exitCode report)
+        with ex ->
+            // The gatherers are total, so reaching here means the
+            // container itself could not be built. Report it as the
+            // failure it is rather than as a report nobody can trust.
+            resolvedLogger.Error(sprintf "--verify-deployment could not run: %s" ex.Message, Some ex)
+
+            Console.Out.Flush()
+            exit 1
+
     | StartupModes.NormalBoot ->
         // Phase 9m — companion config preflight (extracted to
         // `ComposeBootstrap.runConfigPreflight`). Runs every registered

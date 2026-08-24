@@ -571,3 +571,80 @@ let createSigned
     (signer: ILedgerHeadSigner)
     : IAuditSink =
     ChainedLedgerAuditSink(name, settings, blobStorage, Some signer) :> _
+
+// ─── Phase 686 — the deployment verification report's ledger source ──
+//
+// The report composes five verifiers and reaches none of them by
+// package reference: it sits in `ToolUp.Platform.Server`, upstream of
+// this assembly, so a reference in that direction would invert the
+// graph and nail every deployment composing the report to this ledger
+// (GP 1). The seam is a thunk, and this is the adapter that fills it.
+//
+// It performs NO verification of its own — it calls `verify` above and
+// re-labels the answer. The single discrimination it adds is the one
+// the report's section verdict needs and `LedgerVerification` does not
+// happen to draw: an untrusted head splits into one that was REJECTED
+// (a signature present and not valid; a head pointer disagreeing with
+// the chain) and one that could not be JUDGED (signed with no verifier
+// supplied; head pointer missing). Folding those together would let a
+// deployment silence a bad head signature simply by withholding the
+// verifier, which would be the cheapest possible attack on the report.
+
+let private breakKindLabel (kind: LedgerBreakKind) : string =
+    match kind with
+    | TamperedRecord -> "tampered-record"
+    | DroppedRecord -> "dropped-record"
+    | ReorderedRecord -> "reordered-record"
+    | BrokenLink -> "broken-link"
+    | TornTail -> "torn-tail"
+
+let private signatureLabel (status: HeadSignatureStatus) : string =
+    match status with
+    | HeadUnsigned -> "unsigned"
+    | HeadSignatureValid(keyId, algorithm) -> sprintf "valid (%s / %s)" keyId algorithm
+    | HeadSignatureInvalid(keyId, algorithm) -> sprintf "INVALID (%s / %s)" keyId algorithm
+    | HeadSignatureUnverifiable(algorithm, reason) -> sprintf "unverifiable (%s): %s" algorithm reason
+
+/// Map one `LedgerVerification` onto the report's tier-neutral mirror.
+/// Exposed separately from the thunk below so a test can assert the
+/// mapping without standing up storage.
+let toLedgerIntegrity (verification: LedgerVerification) : LedgerIntegrity =
+    match verification with
+    | LedgerVerified(records, headDigest, signature) ->
+        LedgerChainVerified(records, headDigest, signatureLabel signature)
+    | LedgerHeadUntrusted(records, headDigest, HeadSignatureUnverifiable(algorithm, reason)) ->
+        // The head's trust could not be ESTABLISHED. Not a finding
+        // against the ledger, and emphatically not a pass: the read is
+        // incomplete, and the report exits non-zero on it.
+        LedgerHeadUnverifiable(records, headDigest, sprintf "%s (%s)" reason algorithm)
+    | LedgerHeadUntrusted(records, headDigest, signature) ->
+        // Everything else that reaches `LedgerHeadUntrusted` is a
+        // positive finding: a signature that is present and does not
+        // verify, or a head pointer that disagrees with the chain the
+        // walk actually built.
+        LedgerHeadRejected(records, headDigest, signatureLabel signature)
+    | LedgerBroken ledgerBreak ->
+        LedgerChainBroken(ledgerBreak.Position, breakKindLabel ledgerBreak.Kind, ledgerBreak.Detail)
+
+/// The deployment verification report's ledger source, over the settings
+/// and storage the composition root already holds.
+///
+/// The composition root must retain `settings` and `blobStorage` itself —
+/// `IAuditSink` exposes neither, deliberately, so there is no way to
+/// recover them from a registered sink. Close over the same values passed
+/// to `create` / `createSigned`.
+///
+/// **Pass the verifier whenever the head is signed.** Omitting it against
+/// a signed head does not quietly pass: `verify` reports the head as
+/// unverifiable and the report's section reads `Unreadable` and exits
+/// non-zero.
+let deploymentVerificationSource
+    (settings: ChainedLedgerSettings)
+    (blobStorage: IBlobStorage)
+    (headVerifier: ILedgerHeadVerifier option)
+    : unit -> Async<Result<LedgerIntegrity, string>> =
+    fun () -> async {
+        let! outcome = verify settings blobStorage headVerifier
+
+        return outcome |> Result.map toLedgerIntegrity
+    }

@@ -1334,6 +1334,34 @@ type DeploymentReadinessMode =
     | NoReadinessReport
     | EnabledReadinessReport
 
+/// Phase 686 — opt-in deployment verification report. The read composes
+/// the evidence verifiers a deployment already wired — the boot
+/// verification verdict, the grounding-envelope continuity walk, the
+/// hash-chained audit ledger walk, the certificate issuance log, the
+/// answer-verification provenance join — into one artefact with a typed
+/// verdict per section and an explicit statement of what it does not
+/// prove.
+///
+///   * `NoDeploymentVerification` (default, GP 11/13) — the
+///     `IDeploymentVerificationApi` route is not mounted, the
+///     `--verify-deployment` startup mode is still available (it needs no
+///     route), and the deployment is byte-for-byte unchanged.
+///   * `EnabledDeploymentVerification` — mounts the Platform-Admin-gated
+///     read. Each section is independently `NotComposed` when its
+///     substrate is absent, so enabling this over a deployment that wired
+///     none of them yields an honest empty report rather than a
+///     fabricated pass or an error.
+///
+/// **Distinct from `DeploymentReadinessMode`, and not a superset of it.**
+/// Readiness asks whether the deployment can serve *right now* and runs
+/// live probes to find out. Verification asks whether the evidence the
+/// deployment has already produced still holds, and runs no probe against
+/// anything live. A deployment can be ready and unverifiable, or verified
+/// and unhealthy.
+type DeploymentVerificationMode =
+    | NoDeploymentVerification
+    | EnabledDeploymentVerification
+
 /// Phase 53 — `IConversationStore` substrate opt-in. Promotes AI
 /// assistant conversations from ephemeral `AIAssistantHandler` state
 /// to a first-class persisted record so conversations are auditable,
@@ -3092,6 +3120,18 @@ type ServerConfig = {
     /// `ServerApp.withDeploymentReadiness`. Pure projection over existing
     /// signals — zero cost when not enabled.
     DeploymentReadiness: DeploymentReadinessMode
+    /// Phase 686 — opt-in deployment verification report. Default
+    /// `NoDeploymentVerification` (GP 11/13) leaves the
+    /// `IDeploymentVerificationApi` route unmounted (the surface 404s,
+    /// the deployment is byte-for-byte unchanged).
+    /// `EnabledDeploymentVerification` mounts the Platform-Admin-gated
+    /// read that composes the boot-verification verdict, the
+    /// grounding-envelope continuity walk, the audit-ledger walk, the
+    /// certificate issuance log and the answer-verification join into one
+    /// artefact carrying a typed verdict per section. Set via
+    /// `ServerApp.withDeploymentVerification`. Reads only — the report
+    /// mutates nothing and runs no live probe.
+    DeploymentVerification: DeploymentVerificationMode
     /// Phase 179 — the locales this deployment declares support for.
     /// Default `[ LocaleCode.en ]`. Read by the translation-coverage
     /// gate (`I18nCoverage.validator`) when `I18nCoverageMode` is on, so
@@ -3527,6 +3567,7 @@ module ServerConfig =
         TenantLifecycle = NoTenantLifecycle
         TenantOffboardConfirmation = NoConfirmation
         DeploymentReadiness = NoReadinessReport
+        DeploymentVerification = NoDeploymentVerification
         RegisteredLocales = [ LocaleCode.en ]
         I18nCoverageMode = NoCoverageCheck
         Presence = NoPresence
@@ -4326,6 +4367,13 @@ module ServerConfig =
                         NoReadinessReport
                         EnabledReadinessReport
                         defaults.DeploymentReadiness
+                DeploymentVerification =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_DEPLOYMENT_VERIFICATION"
+                        NoDeploymentVerification
+                        EnabledDeploymentVerification
+                        defaults.DeploymentVerification
                 AssetStore =
                     parseEnabledDisabled logger "TOOLUP_ASSET_STORE" NoAssetStore EnabledAssetStore defaults.AssetStore
                 ConsentAudit =

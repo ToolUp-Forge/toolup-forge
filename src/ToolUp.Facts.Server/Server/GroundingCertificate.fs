@@ -1024,3 +1024,72 @@ module GroundingCertificate =
         (certificate: AttestedGroundingCertificate)
         : Async<CertificateInclusionVerdict> =
         checkInclusionOfDigest log scopeId (certificateDigest certificate.Body)
+    // ─── Phase 686 — the deployment verification report's source ─────
+    //
+    // The report lives in `ToolUp.Platform.Server`, upstream of this
+    // assembly, so it cannot reach `listIssued` by reference without
+    // inverting the dependency graph (GP 1). Its seam is a thunk, and
+    // these are the adapters that fill it: they call `listIssued` and
+    // re-shape the answer, verifying nothing themselves.
+    //
+    // **Two entry points rather than one with a flag, so the flag cannot
+    // lie.** `CertificateIssuanceIntegrity.LogIntegrityChecked` decides
+    // whether the report's section reads `Verified` or `Observed` — an
+    // enumeration behind no integrity gate is the deployment's own
+    // assertion about itself, and crediting it as a verification would
+    // hand out the property nobody checked. `ICertificateIssuanceLog`
+    // erases which constructor built it, so a single function taking the
+    // log plus a boolean would let a caller claim a gate it never wired.
+    // Here the shape of the call IS the claim. (Separate arities are also
+    // what Phase 685 chose for the audited issuers, and for the same
+    // public-surface reason.)
+
+    /// How many issuance identifiers the report's section carries. The
+    /// report truncates as well; this bounds the read.
+    [<Literal>]
+    let DeploymentVerificationRecentCap = 10
+
+    let private issuanceIntegrity (integrityChecked: bool) (issuances: CertificateIssuance list) =
+        let recent =
+            issuances
+            |> List.sortByDescending _.IssuedAt
+            |> List.truncate DeploymentVerificationRecentCap
+            |> List.map (fun i -> sprintf "%s  %s  (%s, key %s)" i.Digest i.Subject i.Seal i.KeyId)
+
+        {
+            Issued = issuances.Length
+            Recent = recent
+            LogIntegrityChecked = integrityChecked
+        }
+
+    /// The report's certificate source over a log that claims NO
+    /// integrity — the plain audit-trail log. The section reads
+    /// `Observed`: the enumeration is real and is not tamper-evident.
+    let deploymentVerificationSource
+        (audit: IAuditLog)
+        (scopeId: string)
+        : unit -> Async<Result<CertificateIssuanceIntegrity, string>> =
+        fun () -> async {
+            let! issued = listIssued (auditTrailLog audit) scopeId
+
+            return issued |> Result.map (issuanceIntegrity false)
+        }
+
+    /// The report's certificate source over an integrity-gated log. The
+    /// section reads `Verified` on success, and `Unreadable` — never
+    /// "issued nothing" — when the gate refuses.
+    ///
+    /// `integrity` is the same thunk `auditTrailLogWithIntegrity` takes:
+    /// typically the chained ledger's own walk, which is why a deployment
+    /// composing both substrates gets a certificate section whose
+    /// trustworthiness rests on the ledger section directly above it.
+    let deploymentVerificationSourceWithIntegrity
+        (audit: IAuditLog)
+        (integrity: unit -> Async<Result<unit, string>>)
+        (scopeId: string)
+        : unit -> Async<Result<CertificateIssuanceIntegrity, string>> =
+        fun () -> async {
+            let! issued = listIssued (auditTrailLogWithIntegrity audit integrity) scopeId
+
+            return issued |> Result.map (issuanceIntegrity true)
+        }

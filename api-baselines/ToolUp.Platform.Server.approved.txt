@@ -141,6 +141,12 @@ ToolUp.Platform.AnonymousSessionMigration+AnonymousSessionMigrationMiddleware..c
 ToolUp.Platform.AnonymousSessionMigration+AnonymousSessionMigrationMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.AnonymousSessionMigrator (class)
 ToolUp.Platform.AnonymousSessionMigrator.compose(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IAnonymousSessionMigrator]) : ToolUp.Platform.IAnonymousSessionMigrator
+ToolUp.Platform.AnswerJoinIntegrity (class)
+ToolUp.Platform.AnswerJoinIntegrity..ctor(System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32)
+ToolUp.Platform.AnswerJoinIntegrity.Mismatched : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AnswerJoinIntegrity.Rejoined : System.Int32 { get }
+ToolUp.Platform.AnswerJoinIntegrity.Rows : System.Int32 { get }
+ToolUp.Platform.AnswerJoinIntegrity.Unanchored : System.Int32 { get }
 ToolUp.Platform.Api (class)
 ToolUp.Platform.Api.make`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RouteInfo`1[Microsoft.AspNetCore.Http.HttpContext], ToolUp.Remoting.Server.ErrorResult]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, T], ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, T]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ForgeAuthContext]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingTelemetry]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.ApplianceBootPosture (class)
@@ -610,6 +616,29 @@ ToolUp.Platform.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobSto
 ToolUp.Platform.BlobWorkerKeyRegistry.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWorkerKeyRegistry]
 ToolUp.Platform.BlobXmlRepository (class)
 ToolUp.Platform.BlobXmlRepository..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.BootSealIntegrity (class)
+ToolUp.Platform.BootSealIntegrity.IsBootSealRejected : System.Boolean { get }
+ToolUp.Platform.BootSealIntegrity.IsBootSealUnsealed : System.Boolean { get }
+ToolUp.Platform.BootSealIntegrity.IsBootSealVerified : System.Boolean { get }
+ToolUp.Platform.BootSealIntegrity.Tag : System.Int32 { get }
+ToolUp.Platform.BootSealIntegrity+BootSealRejected (class)
+ToolUp.Platform.BootSealIntegrity+BootSealRejected.detail : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealRejected.findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.BootSealIntegrity+BootSealRejected.policy : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealRejected.profile : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealRejected.refusedStart : System.Boolean { get }
+ToolUp.Platform.BootSealIntegrity+BootSealUnsealed (class)
+ToolUp.Platform.BootSealIntegrity+BootSealUnsealed.policy : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealUnsealed.profile : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealUnsealed.reason : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealVerified (class)
+ToolUp.Platform.BootSealIntegrity+BootSealVerified.detail : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealVerified.policy : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealVerified.profile : System.String { get }
+ToolUp.Platform.BootSealIntegrity+Tags (class)
+ToolUp.Platform.BootSealIntegrity+Tags.BootSealRejected : System.Int32 (literal)
+ToolUp.Platform.BootSealIntegrity+Tags.BootSealUnsealed : System.Int32 (literal)
+ToolUp.Platform.BootSealIntegrity+Tags.BootSealVerified : System.Int32 (literal)
 ToolUp.Platform.BootVerificationOptions (class)
 ToolUp.Platform.BootVerificationOptions..ctor(ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy, ToolUp.Platform.IDeployRecordSealer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedCompositionBinding], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String)
 ToolUp.Platform.BootVerificationOptions.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
@@ -726,6 +755,11 @@ ToolUp.Platform.CapacityGrant (class)
 ToolUp.Platform.CapacityGrant..ctor(System.String, System.Int64)
 ToolUp.Platform.CapacityGrant.Dimension : System.String { get }
 ToolUp.Platform.CapacityGrant.Limit : System.Int64 { get }
+ToolUp.Platform.CertificateIssuanceIntegrity (class)
+ToolUp.Platform.CertificateIssuanceIntegrity..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
+ToolUp.Platform.CertificateIssuanceIntegrity.Issued : System.Int32 { get }
+ToolUp.Platform.CertificateIssuanceIntegrity.LogIntegrityChecked : System.Boolean { get }
+ToolUp.Platform.CertificateIssuanceIntegrity.Recent : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ChampionChallengerGate (class)
 ToolUp.Platform.ChampionChallengerGate..ctor(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelEvaluationRunner, ToolUp.Platform.IAuditLog, ToolUp.Platform.ChampionChallengerPolicy)
 ToolUp.Platform.ChampionChallengerGate.PromoteChallenger(System.String, System.String, System.String, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.PromotionError]]
@@ -2211,6 +2245,25 @@ ToolUp.Platform.DeployRecords+DeployRecordVerificationFailureModule.describe(Too
 ToolUp.Platform.DeploymentReadinessReport (class)
 ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport]
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi
+ToolUp.Platform.DeploymentVerificationEvidence (class)
+ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
+ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationReport (class)
+ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
+ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.buildReport(ToolUp.Platform.IDeploymentVerificationEvidence, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
+ToolUp.Platform.DeploymentVerificationReport.deploymentVerificationApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentVerificationApi
+ToolUp.Platform.DeploymentVerificationReport.gatherAnswerJoins(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherBootSeal(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
+ToolUp.Platform.DeploymentVerificationReport.gatherCertificates(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
+ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
+ToolUp.Platform.DeploymentVerificationReport.recordRead(System.IServiceProvider, ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.DeploymentVerificationReport.resolveEvidence(System.IServiceProvider) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationReport.run(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
+ToolUp.Platform.DeploymentVerificationReport.verdictDigest(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]) : System.String
 ToolUp.Platform.DescriptorError (class)
 ToolUp.Platform.DescriptorError.IsUnfilledHoles : System.Boolean { get }
 ToolUp.Platform.DescriptorError.IsUnknownComponents : System.Boolean { get }
@@ -3453,6 +3506,22 @@ ToolUp.Platform.GrantPremiumApiHandler.routes : Microsoft.FSharp.Collections.FSh
 ToolUp.Platform.GroundingContinuity (class)
 ToolUp.Platform.GroundingContinuity.verify(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
 ToolUp.Platform.GroundingContinuity.verifyAgainst(ToolUp.Platform.GroundingEnvelope, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
+ToolUp.Platform.GroundingContinuityIntegrity (class)
+ToolUp.Platform.GroundingContinuityIntegrity.IsGroundingContinuous : System.Boolean { get }
+ToolUp.Platform.GroundingContinuityIntegrity.IsGroundingDiverged : System.Boolean { get }
+ToolUp.Platform.GroundingContinuityIntegrity.Tag : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingContinuous (class)
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingContinuous.declarations : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingContinuous.digest : System.String { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingContinuous.seal : System.String { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingContinuous.steps : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingDiverged (class)
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingDiverged.declarations : System.Int32 { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingDiverged.detail : System.String { get }
+ToolUp.Platform.GroundingContinuityIntegrity+GroundingDiverged.seal : System.String { get }
+ToolUp.Platform.GroundingContinuityIntegrity+Tags (class)
+ToolUp.Platform.GroundingContinuityIntegrity+Tags.GroundingContinuous : System.Int32 (literal)
+ToolUp.Platform.GroundingContinuityIntegrity+Tags.GroundingDiverged : System.Int32 (literal)
 ToolUp.Platform.GroundingContinuityVerdict (class)
 ToolUp.Platform.GroundingContinuityVerdict.IsContinuous : System.Boolean { get }
 ToolUp.Platform.GroundingContinuityVerdict.IsDiverged : System.Boolean { get }
@@ -3918,6 +3987,12 @@ ToolUp.Platform.IDeployPipeline.GetDeployState(System.String) : Microsoft.FSharp
 ToolUp.Platform.IDeployPipeline.Rollback(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPlanner (interface)
 ToolUp.Platform.IDeployPlanner.PlanDeploy(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.IDeploymentVerificationEvidence (interface)
+ToolUp.Platform.IDeploymentVerificationEvidence.AnswerJoins : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]] { get }
+ToolUp.Platform.IDeploymentVerificationEvidence.BootSeal : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity] { get }
+ToolUp.Platform.IDeploymentVerificationEvidence.Certificates : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]] { get }
+ToolUp.Platform.IDeploymentVerificationEvidence.GroundingContinuity : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity] { get }
+ToolUp.Platform.IDeploymentVerificationEvidence.Ledger : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]] { get }
 ToolUp.Platform.IDiodeTransmissionLog (interface)
 ToolUp.Platform.IDiodeTransmissionLog.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DiodeTransmissionRecord] { get }
 ToolUp.Platform.IDiodeTransmissionLog.Record(ToolUp.Platform.DiodeTransmissionRecord) : System.Void
@@ -4899,6 +4974,33 @@ ToolUp.Platform.LedgerDisposition.Tag : System.Int32 { get }
 ToolUp.Platform.LedgerDisposition+Tags (class)
 ToolUp.Platform.LedgerDisposition+Tags.Completed : System.Int32 (literal)
 ToolUp.Platform.LedgerDisposition+Tags.Skipped : System.Int32 (literal)
+ToolUp.Platform.LedgerIntegrity (class)
+ToolUp.Platform.LedgerIntegrity.IsLedgerChainBroken : System.Boolean { get }
+ToolUp.Platform.LedgerIntegrity.IsLedgerChainVerified : System.Boolean { get }
+ToolUp.Platform.LedgerIntegrity.IsLedgerHeadRejected : System.Boolean { get }
+ToolUp.Platform.LedgerIntegrity.IsLedgerHeadUnverifiable : System.Boolean { get }
+ToolUp.Platform.LedgerIntegrity.Tag : System.Int32 { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainBroken (class)
+ToolUp.Platform.LedgerIntegrity+LedgerChainBroken.detail : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainBroken.kind : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainBroken.position : System.Int64 { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainVerified (class)
+ToolUp.Platform.LedgerIntegrity+LedgerChainVerified.headDigest : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainVerified.records : System.Int64 { get }
+ToolUp.Platform.LedgerIntegrity+LedgerChainVerified.signature : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadRejected (class)
+ToolUp.Platform.LedgerIntegrity+LedgerHeadRejected.detail : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadRejected.headDigest : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadRejected.records : System.Int64 { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadUnverifiable (class)
+ToolUp.Platform.LedgerIntegrity+LedgerHeadUnverifiable.headDigest : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadUnverifiable.reason : System.String { get }
+ToolUp.Platform.LedgerIntegrity+LedgerHeadUnverifiable.records : System.Int64 { get }
+ToolUp.Platform.LedgerIntegrity+Tags (class)
+ToolUp.Platform.LedgerIntegrity+Tags.LedgerChainBroken : System.Int32 (literal)
+ToolUp.Platform.LedgerIntegrity+Tags.LedgerChainVerified : System.Int32 (literal)
+ToolUp.Platform.LedgerIntegrity+Tags.LedgerHeadRejected : System.Int32 (literal)
+ToolUp.Platform.LedgerIntegrity+Tags.LedgerHeadUnverifiable : System.Int32 (literal)
 ToolUp.Platform.LifecycleJobHandler (class)
 ToolUp.Platform.LifecycleJobHandler.create(System.IServiceProvider) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.LifecycleJobHandler+LifecycleJobHandler (class)
@@ -7074,6 +7176,7 @@ ToolUp.Platform.ServerAppDescriptorExtensions.ServerApp.ofManifest.Static(ToolUp
 ToolUp.Platform.ServerAppModule (class)
 ToolUp.Platform.ServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.bootSealEvidence(Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BootVerificationResult, ToolUp.Platform.BootVerificationResult]) : ToolUp.Platform.BootSealIntegrity
 ToolUp.Platform.ServerAppModule.componentIdForModule(System.String, ToolUp.Platform.ServerApp) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.ServerAppModule.compositionManifest(ToolUp.Platform.ServerApp) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.ServerAppModule.compositionReferences(ToolUp.Platform.ServerApp) : ToolUp.Platform.CompositionReferences
@@ -7099,6 +7202,8 @@ ToolUp.Platform.ServerAppModule.withCspSourceMode(ToolUp.Platform.SecurityHarden
 ToolUp.Platform.ServerAppModule.withDataExporter(ToolUp.Platform.IDataExporter+IDataExporter, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withDeploymentVerification(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withDeploymentVerificationEvidence(ToolUp.Platform.IDeploymentVerificationEvidence, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityGraphProjection(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityOutbox(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -7414,8 +7519,10 @@ ToolUp.Platform.StampedRuleVersion..ctor(System.String, ToolUp.Platform.RuleVers
 ToolUp.Platform.StampedRuleVersion.StampedRuleCode : System.String { get }
 ToolUp.Platform.StampedRuleVersion.StampedRuleSemVer : ToolUp.Platform.RuleVersion { get }
 ToolUp.Platform.StartupModes (class)
+ToolUp.Platform.StartupModes.CliVerificationActor : System.String (literal)
 ToolUp.Platform.StartupModes.PrintConfigFlag : System.String (literal)
 ToolUp.Platform.StartupModes.ValidateConfigFlag : System.String (literal)
+ToolUp.Platform.StartupModes.VerifyDeploymentFlag : System.String (literal)
 ToolUp.Platform.StartupModes.current() : ToolUp.Platform.StartupModes+StartupMode
 ToolUp.Platform.StartupModes.detect(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.StartupModes+StartupMode
 ToolUp.Platform.StartupModes.effectiveValue(ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor) : System.String
@@ -7427,14 +7534,17 @@ ToolUp.Platform.StartupModes+StartupMode (class)
 ToolUp.Platform.StartupModes+StartupMode.IsNormalBoot : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.IsPrintConfig : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.IsValidateConfig : System.Boolean { get }
+ToolUp.Platform.StartupModes+StartupMode.IsVerifyDeployment : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.NormalBoot : ToolUp.Platform.StartupModes+StartupMode { get }
 ToolUp.Platform.StartupModes+StartupMode.PrintConfig : ToolUp.Platform.StartupModes+StartupMode { get }
 ToolUp.Platform.StartupModes+StartupMode.Tag : System.Int32 { get }
 ToolUp.Platform.StartupModes+StartupMode.ValidateConfig : ToolUp.Platform.StartupModes+StartupMode { get }
+ToolUp.Platform.StartupModes+StartupMode.VerifyDeployment : ToolUp.Platform.StartupModes+StartupMode { get }
 ToolUp.Platform.StartupModes+StartupMode+Tags (class)
 ToolUp.Platform.StartupModes+StartupMode+Tags.NormalBoot : System.Int32 (literal)
 ToolUp.Platform.StartupModes+StartupMode+Tags.PrintConfig : System.Int32 (literal)
 ToolUp.Platform.StartupModes+StartupMode+Tags.ValidateConfig : System.Int32 (literal)
+ToolUp.Platform.StartupModes+StartupMode+Tags.VerifyDeployment : System.Int32 (literal)
 ToolUp.Platform.StaticPathBehaviourValidator (class)
 ToolUp.Platform.StaticPathBehaviourValidator+StaticPathBehaviourValidator (class)
 ToolUp.Platform.StaticPathBehaviourValidator+StaticPathBehaviourValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

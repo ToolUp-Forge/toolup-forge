@@ -40,6 +40,12 @@ type StartupMode =
     | NormalBoot
     | PrintConfig
     | ValidateConfig
+    /// Phase 686 — run the deployment verification report and exit with
+    /// its exit code, without binding a listener. The CI-invokable form
+    /// of the Platform-Admin read: one command, a rendered report on
+    /// stdout, non-zero only when a COMPOSED section failed or would not
+    /// answer.
+    | VerifyDeployment
 
 [<Literal>]
 let PrintConfigFlag = "--print-config"
@@ -47,9 +53,21 @@ let PrintConfigFlag = "--print-config"
 [<Literal>]
 let ValidateConfigFlag = "--validate-config"
 
-/// Detect the mode from a process argv. Pure + testable. `--print-config`
-/// wins if both flags are somehow present (printing is the
-/// safe-side, never-fails action). Any unrecognised argv ⇒ `NormalBoot`,
+[<Literal>]
+let VerifyDeploymentFlag = "--verify-deployment"
+
+/// The actor recorded on a `--verify-deployment` audited read. A CI
+/// invocation has no authenticated principal, and naming one would be a
+/// claim the process cannot support — so the row says plainly which
+/// surface the read came through.
+[<Literal>]
+let CliVerificationActor = "cli:--verify-deployment"
+
+/// Detect the mode from a process argv. Pure + testable. Precedence when
+/// more than one flag is somehow present: `--print-config`, then
+/// `--validate-config`, then `--verify-deployment` — safest-and-never-
+/// fails first, so a confused invocation degrades toward the action that
+/// cannot report a false verdict. Any unrecognised argv ⇒ `NormalBoot`,
 /// so the flags an SDK consumer's own composition root may already parse
 /// pass straight through.
 let detect (argv: string seq) : StartupMode =
@@ -59,6 +77,7 @@ let detect (argv: string seq) : StartupMode =
 
     if has PrintConfigFlag then PrintConfig
     elif has ValidateConfigFlag then ValidateConfig
+    elif has VerifyDeploymentFlag then VerifyDeployment
     else NormalBoot
 
 /// The live process mode, read from `Environment.GetCommandLineArgs()`.

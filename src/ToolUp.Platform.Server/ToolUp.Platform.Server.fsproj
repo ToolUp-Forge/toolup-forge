@@ -841,6 +841,16 @@
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
         <!-- Phase 177 — deployment-readiness scorecard gatherer + handler. -->
         <Compile Include="Server\DeploymentReadinessReport.fs" />
+        <!-- Phase 686 — one-command deployment verification report: the
+             tier-neutral evidence mirrors, the five section gatherers, the
+             not-proved statements, the verdict digest and the
+             Platform-Admin-gated handler. After DeploymentReadinessReport
+             (same AccessContext gate idiom) and before BuildRouteHandlers
+             (which mounts it). Deliberately references NO downstream tier —
+             every source arrives through IDeploymentVerificationEvidence,
+             which is why this compiles here rather than after the seal
+             substrates it reports on (GP 1). -->
+        <Compile Include="Server\DeploymentVerificationReport.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
         <!-- Phase 178 — alert-rule / threshold engine (pure evaluator +
              BackgroundService). After HealthStateTracker (shares the tick

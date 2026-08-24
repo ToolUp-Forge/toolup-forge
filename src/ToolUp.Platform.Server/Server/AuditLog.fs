@@ -1601,6 +1601,21 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> CertificateIssued(fromAuditJson<CertificateIssuedPayload> j)
     }
+    // Phase 686 — one run of the deployment verification report. An
+    // audited READ, which is why there is one event type and no refusal
+    // counterpart: the report cannot be refused, only gated, and a gated
+    // caller never reaches the gatherer. The row is written on every
+    // outcome including the clean one — a trail carrying only adverse
+    // runs cannot distinguish a deployment nobody verified from one that
+    // was verified and was fine.
+    {
+        EventType = "DeploymentVerified"
+        TryEncode =
+            (function
+            | DeploymentVerified p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DeploymentVerified(fromAuditJson<DeploymentVerifiedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

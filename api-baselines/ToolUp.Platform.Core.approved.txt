@@ -747,6 +747,7 @@ ToolUp.Platform.AuditEvent.IsDatasetPolicyDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDatasetRevintaged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDatasetSpillCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDatasetSpillDeleted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsDeploymentVerified : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDiagnosticBundleAccessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEgressBlocked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyCreated : System.Boolean { get }
@@ -957,6 +958,8 @@ ToolUp.Platform.AuditEvent+DatasetSpillCreated (class)
 ToolUp.Platform.AuditEvent+DatasetSpillCreated.Item : ToolUp.Platform.DatasetSpillCreatedPayload { get }
 ToolUp.Platform.AuditEvent+DatasetSpillDeleted (class)
 ToolUp.Platform.AuditEvent+DatasetSpillDeleted.Item : ToolUp.Platform.DatasetSpillDeletedPayload { get }
+ToolUp.Platform.AuditEvent+DeploymentVerified (class)
+ToolUp.Platform.AuditEvent+DeploymentVerified.Item : ToolUp.Platform.DeploymentVerifiedPayload { get }
 ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed (class)
 ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed.Item : ToolUp.Platform.DiagnosticBundleAccessedPayload { get }
 ToolUp.Platform.AuditEvent+EgressBlocked (class)
@@ -1194,6 +1197,7 @@ ToolUp.Platform.AuditEvent+Tags.DatasetPolicyDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DatasetRevintaged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DatasetSpillCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DatasetSpillDeleted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.DeploymentVerified : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DiagnosticBundleAccessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EgressBlocked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyCreated : System.Int32 (literal)
@@ -3480,6 +3484,72 @@ ToolUp.Platform.DeploymentReadinessMode.Tag : System.Int32 { get }
 ToolUp.Platform.DeploymentReadinessMode+Tags (class)
 ToolUp.Platform.DeploymentReadinessMode+Tags.EnabledReadinessReport : System.Int32 (literal)
 ToolUp.Platform.DeploymentReadinessMode+Tags.NoReadinessReport : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerification (class)
+ToolUp.Platform.DeploymentVerification.AnswerJoinSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.AuditLedgerSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.BootSealSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.CertificateIssuanceSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
+ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerification.canonicalForm(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]) : System.String
+ToolUp.Platform.DeploymentVerification.exitCode(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : System.Int32
+ToolUp.Platform.DeploymentVerification.outcomeOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : ToolUp.Platform.DeploymentVerificationOutcome
+ToolUp.Platform.DeploymentVerification.render(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : System.String
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport (class)
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport..ctor(System.Int32, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement], ToolUp.Platform.DeploymentVerificationOutcome, System.String)
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.Actor : System.String { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.GeneratedAt : System.DateTime { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.NotProved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement] { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.Outcome : ToolUp.Platform.DeploymentVerificationOutcome { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.Sections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection] { get }
+ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport.VerdictDigest : System.String { get }
+ToolUp.Platform.DeploymentVerification+NotProvedStatement (class)
+ToolUp.Platform.DeploymentVerification+NotProvedStatement..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DeploymentVerification+NotProvedStatement.Id : System.String { get }
+ToolUp.Platform.DeploymentVerification+NotProvedStatement.Narrowing : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeploymentVerification+NotProvedStatement.Statement : System.String { get }
+ToolUp.Platform.DeploymentVerification+ReportSection (class)
+ToolUp.Platform.DeploymentVerification+ReportSection..ctor(System.String, System.String, ToolUp.Platform.VerificationSectionVerdict, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DeploymentVerification+ReportSection.Findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DeploymentVerification+ReportSection.Id : System.String { get }
+ToolUp.Platform.DeploymentVerification+ReportSection.Title : System.String { get }
+ToolUp.Platform.DeploymentVerification+ReportSection.Verdict : ToolUp.Platform.VerificationSectionVerdict { get }
+ToolUp.Platform.DeploymentVerificationMode (class)
+ToolUp.Platform.DeploymentVerificationMode.EnabledDeploymentVerification : ToolUp.Platform.DeploymentVerificationMode { get }
+ToolUp.Platform.DeploymentVerificationMode.IsEnabledDeploymentVerification : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationMode.IsNoDeploymentVerification : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationMode.NoDeploymentVerification : ToolUp.Platform.DeploymentVerificationMode { get }
+ToolUp.Platform.DeploymentVerificationMode.Tag : System.Int32 { get }
+ToolUp.Platform.DeploymentVerificationMode+Tags (class)
+ToolUp.Platform.DeploymentVerificationMode+Tags.EnabledDeploymentVerification : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationMode+Tags.NoDeploymentVerification : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationOutcome (class)
+ToolUp.Platform.DeploymentVerificationOutcome.AllComposedVerified : ToolUp.Platform.DeploymentVerificationOutcome { get }
+ToolUp.Platform.DeploymentVerificationOutcome.FailuresPresent : ToolUp.Platform.DeploymentVerificationOutcome { get }
+ToolUp.Platform.DeploymentVerificationOutcome.IsAllComposedVerified : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationOutcome.IsFailuresPresent : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationOutcome.IsNothingComposed : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationOutcome.IsPartiallyVerified : System.Boolean { get }
+ToolUp.Platform.DeploymentVerificationOutcome.NothingComposed : ToolUp.Platform.DeploymentVerificationOutcome { get }
+ToolUp.Platform.DeploymentVerificationOutcome.PartiallyVerified : ToolUp.Platform.DeploymentVerificationOutcome { get }
+ToolUp.Platform.DeploymentVerificationOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.DeploymentVerificationOutcome+Tags (class)
+ToolUp.Platform.DeploymentVerificationOutcome+Tags.AllComposedVerified : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationOutcome+Tags.FailuresPresent : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationOutcome+Tags.NothingComposed : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationOutcome+Tags.PartiallyVerified : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationOutcomeModule (class)
+ToolUp.Platform.DeploymentVerificationOutcomeModule.label(ToolUp.Platform.DeploymentVerificationOutcome) : System.String
+ToolUp.Platform.DeploymentVerifiedPayload (class)
+ToolUp.Platform.DeploymentVerifiedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.DateTimeOffset)
+ToolUp.Platform.DeploymentVerifiedPayload.Actor : System.String { get }
+ToolUp.Platform.DeploymentVerifiedPayload.ExitCode : System.Int32 { get }
+ToolUp.Platform.DeploymentVerifiedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.DeploymentVerifiedPayload.Outcome : System.String { get }
+ToolUp.Platform.DeploymentVerifiedPayload.Sections : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DeploymentVerifiedPayload.VerdictDigest : System.String { get }
 ToolUp.Platform.DeterminismFactor (class)
 ToolUp.Platform.DeterminismFactor.ClockFactor : ToolUp.Platform.DeterminismFactor { get }
 ToolUp.Platform.DeterminismFactor.ExternalStateFactor : ToolUp.Platform.DeterminismFactor { get }
@@ -4786,6 +4856,9 @@ ToolUp.Platform.IDeployRecordSealer.VerifySeal(System.Byte[], ToolUp.Platform.De
 ToolUp.Platform.IDeploymentReadinessApi (class)
 ToolUp.Platform.IDeploymentReadinessApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport, System.String]]])
 ToolUp.Platform.IDeploymentReadinessApi.GetReadinessReport : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport, System.String]]] { get }
+ToolUp.Platform.IDeploymentVerificationApi (class)
+ToolUp.Platform.IDeploymentVerificationApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport, System.String]]])
+ToolUp.Platform.IDeploymentVerificationApi.GetVerificationReport : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport, System.String]]] { get }
 ToolUp.Platform.IDevDiagnosticsContributor (interface)
 ToolUp.Platform.IDevDiagnosticsContributor.Contribute() : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, System.Object]]
 ToolUp.Platform.IEventStore (interface)
@@ -8162,7 +8235,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
@@ -8205,6 +8278,7 @@ ToolUp.Platform.ServerConfig.DeclaredDataSchemas : Microsoft.FSharp.Collections.
 ToolUp.Platform.ServerConfig.DefaultTeamStorageQuotaBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Platform.ServerConfig.DeployPlane : ToolUp.Platform.DeployPlaneMode { get }
 ToolUp.Platform.ServerConfig.DeploymentReadiness : ToolUp.Platform.DeploymentReadinessMode { get }
+ToolUp.Platform.ServerConfig.DeploymentVerification : ToolUp.Platform.DeploymentVerificationMode { get }
 ToolUp.Platform.ServerConfig.EnableCitationDevEndpoint : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.Platform.ServerConfig.EnableDevEndpoints : System.Boolean { get }
 ToolUp.Platform.ServerConfig.EntityGraphProjection : ToolUp.Platform.EntityGraphProjectionMode { get }
@@ -9705,6 +9779,34 @@ ToolUp.Platform.VectorisationTypes+VectorisationHandler..ctor(System.String, Mic
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.DataTypeId : System.String { get }
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.Summarise : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]]] { get }
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.Vectorise : Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]] { get }
+ToolUp.Platform.VerificationSectionVerdict (class)
+ToolUp.Platform.VerificationSectionVerdict.IsFailed : System.Boolean { get }
+ToolUp.Platform.VerificationSectionVerdict.IsNotComposed : System.Boolean { get }
+ToolUp.Platform.VerificationSectionVerdict.IsObserved : System.Boolean { get }
+ToolUp.Platform.VerificationSectionVerdict.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.VerificationSectionVerdict.IsVerified : System.Boolean { get }
+ToolUp.Platform.VerificationSectionVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.VerificationSectionVerdict+Failed (class)
+ToolUp.Platform.VerificationSectionVerdict+Failed.detail : System.String { get }
+ToolUp.Platform.VerificationSectionVerdict+NotComposed (class)
+ToolUp.Platform.VerificationSectionVerdict+NotComposed.reason : System.String { get }
+ToolUp.Platform.VerificationSectionVerdict+Observed (class)
+ToolUp.Platform.VerificationSectionVerdict+Observed.detail : System.String { get }
+ToolUp.Platform.VerificationSectionVerdict+Tags (class)
+ToolUp.Platform.VerificationSectionVerdict+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.VerificationSectionVerdict+Tags.NotComposed : System.Int32 (literal)
+ToolUp.Platform.VerificationSectionVerdict+Tags.Observed : System.Int32 (literal)
+ToolUp.Platform.VerificationSectionVerdict+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.VerificationSectionVerdict+Tags.Verified : System.Int32 (literal)
+ToolUp.Platform.VerificationSectionVerdict+Unreadable (class)
+ToolUp.Platform.VerificationSectionVerdict+Unreadable.reason : System.String { get }
+ToolUp.Platform.VerificationSectionVerdict+Verified (class)
+ToolUp.Platform.VerificationSectionVerdict+Verified.detail : System.String { get }
+ToolUp.Platform.VerificationSectionVerdictModule (class)
+ToolUp.Platform.VerificationSectionVerdictModule.detail(ToolUp.Platform.VerificationSectionVerdict) : System.String
+ToolUp.Platform.VerificationSectionVerdictModule.isAdverse(ToolUp.Platform.VerificationSectionVerdict) : System.Boolean
+ToolUp.Platform.VerificationSectionVerdictModule.isAffirmative(ToolUp.Platform.VerificationSectionVerdict) : System.Boolean
+ToolUp.Platform.VerificationSectionVerdictModule.label(ToolUp.Platform.VerificationSectionVerdict) : System.String
 ToolUp.Platform.VersioningPolicy (class)
 ToolUp.Platform.VersioningPolicy.IsStrictlyVersioned : System.Boolean { get }
 ToolUp.Platform.VersioningPolicy.IsUnversioned : System.Boolean { get }

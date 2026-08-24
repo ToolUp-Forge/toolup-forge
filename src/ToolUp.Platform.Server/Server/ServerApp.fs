@@ -1733,6 +1733,149 @@ module ServerApp =
             }
     }
 
+    /// Phase 686 — mount the Platform-Admin-gated deployment
+    /// verification report. Flips `ServerConfig.DeploymentVerification`
+    /// to `EnabledDeploymentVerification` so `compose` mounts
+    /// `IDeploymentVerificationApi`, the one read that composes the boot
+    /// verification verdict, the grounding-envelope continuity walk, the
+    /// audit-ledger walk, the certificate issuance log and the
+    /// answer-verification provenance join into a single artefact with a
+    /// typed verdict per section.
+    ///
+    /// **This mounts the route; it supplies no evidence.** Every section
+    /// reads `NotComposed` until the deployment registers what it holds
+    /// with `withDeploymentVerificationEvidence` — which is the honest
+    /// state for a deployment that composed none of those substrates, and
+    /// exactly what the report should say about it. A deployment that
+    /// never calls this stays `NoDeploymentVerification` and is
+    /// byte-for-byte unchanged (GP 11 / GP 13).
+    ///
+    /// The `--verify-deployment` CI entry point does NOT require this
+    /// call: it needs no route, so a deployment can run the report in CI
+    /// without exposing it on the wire at all.
+    let withDeploymentVerification (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    DeploymentVerification = EnabledDeploymentVerification
+            }
+    }
+
+    /// Phase 686 — register the evidence the deployment verification
+    /// report composes.
+    ///
+    /// **The composition root is the only place that can supply this, and
+    /// that is structural rather than inconvenient.** The boot verdict is
+    /// a value Phase 657 deliberately registers nowhere, and the audit
+    /// ledger, certificate issuance log and answer-verification join all
+    /// live in packages DOWNSTREAM of `ToolUp.Platform.Server` — so the
+    /// report cannot reach any of them by reference without inverting the
+    /// dependency graph (GP 1). The root closes over what it built and
+    /// hands over a thunk per section.
+    ///
+    /// Build the value with `DeploymentVerificationEvidence.create`,
+    /// passing `None` for every source this deployment does not hold; the
+    /// corresponding section then reads `NotComposed` with a reason
+    /// naming what would have to be composed:
+    ///
+    /// ```fsharp
+    /// let! bootVerdict = ServerApp.verifyComposition bootOptions app
+    ///
+    /// let evidence =
+    ///     DeploymentVerificationEvidence.create
+    ///         (Some(ServerApp.bootSealEvidence bootVerdict))
+    ///         None                  // filled in from the container, below
+    ///         (Some ledgerWalk)     // closes over settings + storage + head verifier
+    ///         (Some issuanceRead)   // closes over the integrity-gated issuance log
+    ///         None                  // no answer-verification join composed
+    ///
+    /// app
+    /// |> ServerApp.withDeploymentVerificationEvidence evidence
+    /// |> ServerApp.withDeploymentVerification
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// **The grounding-continuity member is derived here, not supplied.**
+    /// It is the one section whose substrate IS in the container — the
+    /// Phase 684 `IGroundingEnvelopeMutator` — so this registers a factory
+    /// that resolves it and walks continuity at report time. Passing
+    /// `Some` for that member overrides the derivation, which is what a
+    /// test wants and a composition root does not. A deployment that
+    /// composed no seal resolves nothing and the section reads
+    /// `NotComposed`, with no action required of the root.
+    let withDeploymentVerificationEvidence (evidence: IDeploymentVerificationEvidence) (app: ServerApp) : ServerApp =
+        let register (services: IServiceCollection) =
+            services.AddSingleton<IDeploymentVerificationEvidence>(
+                Func<IServiceProvider, IDeploymentVerificationEvidence>(fun sp ->
+                    match evidence.GroundingContinuity with
+                    | Some _ -> evidence
+                    | None ->
+                        let derived =
+                            match sp.GetService(typeof<IGroundingEnvelopeMutator>) with
+                            | :? IGroundingEnvelopeMutator as mutator ->
+                                let declarations = mutator.Current.Declarations |> List.length
+
+                                match mutator.Continuity() with
+                                | GroundingContinuityVerdict.Continuous(steps, digest) ->
+                                    Some(GroundingContinuous(mutator.Seal, declarations, steps, digest))
+                                | GroundingContinuityVerdict.Diverged _ as diverged ->
+                                    Some(
+                                        GroundingDiverged(
+                                            mutator.Seal,
+                                            declarations,
+                                            GroundingContinuityVerdict.describe diverged
+                                        )
+                                    )
+                            | _ -> None
+
+                        DeploymentVerificationEvidence.withGroundingContinuity derived evidence)
+            )
+
+        let serviceConfig =
+            match app.Extensions.ServiceConfig with
+            | None -> Some register
+            | Some existing -> Some(fun s -> register (existing s))
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig = serviceConfig
+                }
+        }
+
+    /// Phase 686 — map a boot verification outcome onto the report's
+    /// tier-neutral `BootSealIntegrity`.
+    ///
+    /// **Takes the `Result` whole, and both arms carry a verdict.**
+    /// `Error` means the policy refused the start, not that the check
+    /// produced nothing — a report that dropped the refused arm would
+    /// omit its single most important section precisely when it matters
+    /// most. `RefusedStart` rides through, so the section can say whether
+    /// the deployment stopped or is serving under log-and-serve.
+    let bootSealEvidence (outcome: Result<BootVerificationResult, BootVerificationResult>) : BootSealIntegrity =
+        let result =
+            match outcome with
+            | Ok r -> r
+            | Error r -> r
+
+        let profile = CompositionProfile.label result.Profile
+        let policy = BootVerificationPolicy.label result.Policy
+
+        match result.Verdict with
+        | BootVerificationVerdict.Verified ->
+            BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict)
+        | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
+        | BootVerificationVerdict.VerificationFailed _
+        | BootVerificationVerdict.Drifted _ ->
+            BootSealRejected(
+                profile,
+                policy,
+                BootVerificationVerdict.describe result.Verdict,
+                BootVerificationVerdict.findings result.Verdict,
+                result.RefusedStart
+            )
+
     /// Phase 7c — compose the data-object orphan-blob sweep. Registers the
     /// policy as a DI singleton and, when it can actually reclaim
     /// something, schedules the `platform.data-object-orphan-sweep` job on

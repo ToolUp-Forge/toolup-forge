@@ -302,6 +302,13 @@
              `IDeploymentReadinessApi` read surface. Pure / BCL-only so it
              ships in the Fable-packed source. -->
         <Compile Include="Shared\DeploymentReadiness.fs" />
+        <!-- Phase 686 — deployment verification report: the five-section
+             wire shape + the typed per-section verdict union + the pure
+             outcome / exit-code / canonical-form folds, plus the opt-in
+             `IDeploymentVerificationApi` read surface. Pure / BCL-only (the
+             SHA over the canonical form is taken server-side), so it ships
+             in the Fable-packed source alongside DeploymentReadiness.fs. -->
+        <Compile Include="Shared\DeploymentVerification.fs" />
         <Compile Include="Shared\IDevDiagnosticsContributor.fs" />
         <Compile Include="Shared\NarrativeTypes.fs" />
         <!-- Phase 521 — pure fact-reference walk over narrative spans. -->

@@ -1039,6 +1039,13 @@
              the three inclusion verdicts, the enumeration surface, and the
              suppressed-issuance probe against a real chained ledger. -->
         <Compile Include="InProcess\CertificateIssuanceTransparencyTests.fs" />
+        <!-- Phase 686 — the one-command deployment verification report: the
+             full/bare/seeded-failure probes over the composed five sections,
+             the outcome + exit-code + canonical-form folds, the CLI flag, and
+             the three composition-root mappers. After
+             CertificateIssuanceTransparencyTests, whose chained-ledger
+             perturbation harness it follows. -->
+        <Compile Include="InProcess\DeploymentVerificationReportTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

@@ -854,3 +854,118 @@ let runVerificationStage
         providerName
         providerModel
         logger
+// ─── Phase 686 — the deployment verification report's join source ────
+//
+// The report lives in `ToolUp.Platform.Server`, upstream of this
+// assembly, so it cannot reach `provenanceChainHead` by reference
+// without inverting the dependency graph (GP 1). Its seam is a thunk,
+// and this is the adapter that fills it.
+//
+// **What the check actually establishes, stated precisely because the
+// section's verdict is only worth its precision.** Phase 680 records, on
+// one row, both the distinct fact ids an answer's verified figures cite
+// AND the provenance head derived from exactly those ids. So the head
+// RECOMPUTES from the ids on its own row, by the same function that
+// derived it — and a row where it does not is a row whose join was
+// written by something other than this code path.
+//
+// It is an internal-consistency check over recorded evidence, and it is
+// not a claim that the answer was correct, that the cited facts were
+// true, or that no answer went unrecorded. The report's own not-proved
+// statements carry those bounds; this adapter's job is to be exactly as
+// strong as the join it re-derives, and no stronger.
+
+/// The wire `EventType` discriminators Phase 680 records answer
+/// verifications under. BOTH are read: a flagged answer is still an
+/// answer whose join must hold, and reading only the passing rows would
+/// skip precisely the turns an assessor cares most about.
+let private answerVerificationEventTypes = [ "AnswerVerificationPassed"; "AnswerVerificationFlagged" ]
+
+/// Re-join one recorded answer-verification payload against the
+/// provenance it names. `Ok ()` when the head recomputes (including the
+/// honest `None`-for-no-facts case); `Error` describing the row when it
+/// does not.
+///
+/// Pure and total — no I/O, no clock — so an auditor holding the exported
+/// rows reaches the same verdict this process does.
+let rejoinAnswerVerification (payload: AnswerVerificationPayload) : Result<unit, string> =
+    // A row persisted before a field existed deserialises its list as
+    // `null` on the STJ path, and a null F# list faults on every list
+    // operation. Coerce before touching it.
+    let citedFactIds =
+        if isNull (box payload.CitedFactIds) then
+            []
+        else
+            payload.CitedFactIds
+
+    let recomputed = provenanceChainHead citedFactIds
+
+    match recomputed, payload.ProvenanceChainHead with
+    | Some computed, Some recorded when computed = recorded -> Ok()
+    | None, None -> Ok()
+    | Some computed, Some recorded ->
+        Error(
+            sprintf
+                "task %O: the row records provenance head '%s' and its %d cited fact id(s) recompute to '%s'"
+                payload.TaskId
+                recorded
+                citedFactIds.Length
+                computed
+        )
+    | Some computed, None ->
+        Error(
+            sprintf
+                "task %O: the row cites %d fact id(s) recomputing to '%s' and records no provenance head"
+                payload.TaskId
+                citedFactIds.Length
+                computed
+        )
+    | None, Some recorded ->
+        Error(sprintf "task %O: the row records provenance head '%s' and cites no fact id" payload.TaskId recorded)
+
+/// The deployment verification report's answer-join source, over the
+/// composed audit log.
+///
+/// Reads the recorded answer-verification rows for `scopeId` and
+/// re-derives each row's provenance head from its own cited fact ids.
+/// A deployment that composed the Phase 680 join but has served no
+/// verified answer yet reports zero rows, which the report's section
+/// renders as `Observed` rather than as a pass.
+let deploymentVerificationSource
+    (auditLog: IAuditLog)
+    (scopeId: string)
+    : unit -> Async<Result<AnswerJoinIntegrity, string>> =
+    fun () -> async {
+        let! rowSets =
+            answerVerificationEventTypes
+            |> List.map (fun eventType -> auditLog.GetAuditTrail(scopeId, None, Some eventType))
+            |> Async.Parallel
+
+        let payloads =
+            rowSets
+            |> Array.toList
+            |> List.collect id
+            |> List.choose (function
+                | AnswerVerificationPassed p
+                | AnswerVerificationFlagged p -> Some p
+                | _ -> None)
+
+        let results = payloads |> List.map rejoinAnswerVerification
+
+        let mismatched =
+            results
+            |> List.choose (function
+                | Error detail -> Some detail
+                | Ok() -> None)
+
+        let unanchored =
+            payloads |> List.filter (fun p -> p.ProvenanceChainHead.IsNone) |> List.length
+
+        return
+            Ok {
+                Rows = payloads.Length
+                Rejoined = payloads.Length - mismatched.Length
+                Mismatched = mismatched
+                Unanchored = unanchored
+            }
+    }

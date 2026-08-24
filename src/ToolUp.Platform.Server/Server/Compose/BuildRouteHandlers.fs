@@ -372,6 +372,19 @@ let buildRouteHandlers
         | NoReadinessReport -> []
         | EnabledReadinessReport -> [ makeApi (DeploymentReadinessReport.deploymentReadinessApi config) ]
 
+    // Phase 686 — deployment verification report. Same opt-in shape as
+    // the readiness scorecard above, and mounted independently of it:
+    // readiness asks whether the deployment can serve now, verification
+    // asks whether the evidence it has already produced still holds. The
+    // handler takes no `ServerConfig` because every section resolves from
+    // the request's own service provider (the composed evidence, the
+    // grounding mutator, the audit log) — an absent source reads as an
+    // honestly `NotComposed` section rather than an error.
+    let deploymentVerificationApiHandler: HttpHandler list =
+        match config.DeploymentVerification with
+        | NoDeploymentVerification -> []
+        | EnabledDeploymentVerification -> [ makeApi DeploymentVerificationReport.deploymentVerificationApi ]
+
     // Usage admin route. Auto-injected unconditionally so the client
     // dashboard's `IUsageQueryApi` proxy never 404s in mode-mismatched
     // deployments. The default `ClientConfig.UsageDashboard =
@@ -699,6 +712,7 @@ let buildRouteHandlers
             @ healthMonitorApiHandler
             @ serviceStatusBoardApiHandler
             @ deploymentReadinessApiHandler
+            @ deploymentVerificationApiHandler
             @ usageQueryApiHandler
             @ homeOverviewApiHandler
             @ encryptionAdminHandler

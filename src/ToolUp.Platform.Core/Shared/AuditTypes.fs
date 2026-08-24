@@ -3829,6 +3829,50 @@ type CertificateIssuedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 686 — one run of the deployment verification report.
+///
+/// **Verification leaves a trace without mutating anything.** The report
+/// reads five verifiers and writes nothing back; this row is the only
+/// artefact it produces. Recording it turns "who has checked this
+/// deployment, and what did it say when they did" into a question the
+/// trail answers — and under a chained ledger the answer is
+/// tamper-evident, so a run whose findings someone would rather nobody
+/// saw cannot be quietly removed.
+///
+/// **The digest, not the report.** The row carries the verdict digest
+/// and the per-section verdict labels, never the section detail. That is
+/// deliberate: the detail names ledger positions, envelope digests and
+/// certificate counts — a deployment-wide evidence summary — and the
+/// audit trail has its own readership and its own export paths. The
+/// digest is sufficient to prove two runs said the same thing, and
+/// insufficient to be a second copy of the report.
+///
+/// **Recorded on every outcome, including the clean one.** A row written
+/// only when something failed cannot distinguish a deployment nobody
+/// checked from one that was checked and was fine — the Phase 657
+/// discipline, and those are the two states an assessor most needs to
+/// tell apart.
+type DeploymentVerifiedPayload = {
+    /// Who ran the report.
+    Actor: string
+    /// Top-line outcome label: `"nothing-composed"`,
+    /// `"all-composed-verified"`, `"partially-verified"` or
+    /// `"failures-present"`.
+    Outcome: string
+    /// SHA-256 over the report's canonical form — the verdict SET, with
+    /// the clock and the actor excluded, so two runs against an unchanged
+    /// deployment produce the same digest and drift is visible as a
+    /// change rather than inferred from prose.
+    VerdictDigest: string
+    /// One `"<section-id>=<verdict-label>"` entry per section, in report
+    /// order. The shape a SIEM rule cuts on without parsing the report.
+    Sections: string list
+    /// The process exit code this run would return in CI: non-zero when
+    /// any composed section was failed or unreadable.
+    ExitCode: int
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4480,6 +4524,10 @@ type AuditEvent =
     /// the row that makes issuance enumerable and a suppressed
     /// certificate visible.
     | CertificateIssued of CertificateIssuedPayload
+    /// Phase 686 — the deployment verification report was run. An audited
+    /// READ: nothing moved, and the row records who asked, what the
+    /// verdict set was, and the digest that commits to it.
+    | DeploymentVerified of DeploymentVerifiedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4657,6 +4705,7 @@ module AuditEvent =
         | GroundingEnvelopeMutated _ -> "GroundingEnvelopeMutated"
         | GroundingMutationRefused _ -> "GroundingMutationRefused"
         | CertificateIssued _ -> "CertificateIssued"
+        | DeploymentVerified _ -> "DeploymentVerified"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
