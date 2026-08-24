@@ -3,6 +3,15 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.ArtefactSigning.ApplicationKeyedSigning (class)
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.SchemeFamily : System.String (literal)
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.decodeEnvelope(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, System.String]
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.encodeEnvelope(ToolUp.ArtefactSigning.SignedPayloadEnvelope) : System.Byte[]
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.scheme(ToolUp.ArtefactSigning.AttestationLevel) : System.String
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.signer(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.IKeyedByteSigner
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.tryParseScheme(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.AttestationLevel]
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.verifier(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.IKeyedByteVerifier
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.verifyRecorded(System.String, ToolUp.ArtefactSigning.IApplicationSigner, System.String, System.String, System.Byte[], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.ArtefactSigning.KeyedVerificationFailure]]
 ToolUp.ArtefactSigning.ApplicationPayload (class)
 ToolUp.ArtefactSigning.ApplicationPayload.FramingVersion : System.String (literal)
 ToolUp.ArtefactSigning.ApplicationPayload.canonicalBytes(System.String, ToolUp.ArtefactSigning.AttestationLevel, System.Byte[]) : System.Byte[]
@@ -112,6 +121,33 @@ ToolUp.ArtefactSigning.JwsBuilder.base64UrlEncode(System.Byte[]) : System.String
 ToolUp.ArtefactSigning.JwsBuilder.derEcdsaToP1363(System.Byte[], System.Int32) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
 ToolUp.ArtefactSigning.JwsBuilder.protectedHeaderEncoded(ToolUp.ArtefactSigning.SigningAlgorithm, System.String) : System.String
 ToolUp.ArtefactSigning.JwsBuilder.signingInput(System.String, System.Byte[]) : System.Byte[]
+ToolUp.ArtefactSigning.KeyedVerificationFailure (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure.IsKeyedKeyIdMismatch : System.Boolean { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure.IsKeyedPayloadRejected : System.Boolean { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure.IsKeyedSchemeMismatch : System.Boolean { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure.IsKeyedSchemeUnrecognised : System.Boolean { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure.IsKeyedSignatureMalformed : System.Boolean { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedKeyIdMismatch (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedKeyIdMismatch.recorded : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedKeyIdMismatch.signed : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedPayloadRejected (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedPayloadRejected.Item : ToolUp.ArtefactSigning.PayloadVerificationError { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSchemeMismatch (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSchemeMismatch.carried : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSchemeMismatch.recorded : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSchemeUnrecognised (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSchemeUnrecognised.scheme : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSignatureMalformed (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+KeyedSignatureMalformed.reason : System.String { get }
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags.KeyedKeyIdMismatch : System.Int32 (literal)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags.KeyedPayloadRejected : System.Int32 (literal)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags.KeyedSchemeMismatch : System.Int32 (literal)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags.KeyedSchemeUnrecognised : System.Int32 (literal)
+ToolUp.ArtefactSigning.KeyedVerificationFailure+Tags.KeyedSignatureMalformed : System.Int32 (literal)
+ToolUp.ArtefactSigning.KeyedVerificationFailureModule (class)
+ToolUp.ArtefactSigning.KeyedVerificationFailureModule.describe(ToolUp.ArtefactSigning.KeyedVerificationFailure) : System.String
 ToolUp.ArtefactSigning.ModuleBindingAnchor (class)
 ToolUp.ArtefactSigning.ModuleBindingAnchor.IsAsymmetricAnchor : System.Boolean { get }
 ToolUp.ArtefactSigning.ModuleBindingAnchor.IsSymmetricAnchor : System.Boolean { get }

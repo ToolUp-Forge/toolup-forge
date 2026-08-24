@@ -1020,6 +1020,14 @@
              against the public key alone, and the distinct refusals
              (tamper / wrong subject / transplanted signature). -->
         <Compile Include="InProcess\CertificateEnvelopeTests.fs" />
+        <!-- Grounding-tier signing convergence: one composed application
+             signer covering a deploy record, a grounding certificate and a
+             chained-ledger head, rotation continuity across all three, and
+             the transplant refusals. An integration pack by necessity —
+             the adapters are unit-tested where they live; what needs a
+             real fact store and a real ledger is that they share one key
+             story. -->
+        <Compile Include="InProcess\GroundingSigningConvergenceTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

@@ -55,6 +55,13 @@
          here for the same dependency-direction reason as the two adapters
          above — plus Ed25519, which only this package carries. -->
     <Compile Include="Server\DsseEnvelopeSigning.fs" />
+    <!-- Keyed byte signing, crypto half: fills the IKeyedByteSigner /
+         IKeyedByteVerifier seam declared in ToolUp.Platform.Server from
+         the application signing seam, so a recording substrate that keeps
+         its own local head-signing interface still signs under the
+         deployment's one composed key story. After ApplicationSigning.fs,
+         which it is written over. -->
+    <Compile Include="Server\ApplicationKeyedSigning.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

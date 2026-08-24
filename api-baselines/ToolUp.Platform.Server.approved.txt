@@ -3994,6 +3994,12 @@ ToolUp.Platform.IJobStore.ListScopesWithJobs() : Microsoft.FSharp.Control.FSharp
 ToolUp.Platform.IJobStore.RecordRun(ToolUp.Platform.JobRun) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IJobStore.Save(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IJobStore.Update(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IKeyedByteSigner (interface)
+ToolUp.Platform.IKeyedByteSigner.KeyId() : System.String
+ToolUp.Platform.IKeyedByteSigner.Scheme() : System.String
+ToolUp.Platform.IKeyedByteSigner.Sign(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
+ToolUp.Platform.IKeyedByteVerifier (interface)
+ToolUp.Platform.IKeyedByteVerifier.Verify(System.String, System.String, System.Byte[], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, System.String]]
 ToolUp.Platform.ILayoutCatalog (interface)
 ToolUp.Platform.ILayoutCatalog.ListLayoutNames() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.ILifecycleLedger (interface)
@@ -4724,6 +4730,9 @@ ToolUp.Platform.JsonFrameDatasetCodec..ctor()
 ToolUp.Platform.KeyDestroyAckCoverageValidator (class)
 ToolUp.Platform.KeyDestroyAckCoverageValidator+KeyDestroyAckCoverageValidator (class)
 ToolUp.Platform.KeyDestroyAckCoverageValidator+KeyDestroyAckCoverageValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.KeyedByteSigning (class)
+ToolUp.Platform.KeyedByteSigning.BindingVersion : System.String (literal)
+ToolUp.Platform.KeyedByteSigning.bindKeyId(System.String, System.Byte[]) : System.Byte[]
 ToolUp.Platform.Lease (class)
 ToolUp.Platform.Lease..ctor(System.String, System.Int64, System.DateTime, System.DateTime)
 ToolUp.Platform.Lease.AcquiredAt : System.DateTime { get }

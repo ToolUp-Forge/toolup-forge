@@ -159,6 +159,79 @@ type IGroundingCertificateIssuer =
         scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<GroundingCertificate, CertificateError>>
 
+// ─── Certificates on the application signing seam ────────────────────────
+//
+// The certificate above signs through `IArtefactSigner` — the byte-level
+// primitive — because that was the only signing surface when it was
+// written. The signature is sound, and it leaves one thing unstated that a
+// relying party needs: what the signing key's custody entitles the
+// signature to CLAIM. "Valid provenance, signed by a key that may have sat
+// in a file beside the process" and "valid provenance, signed by a key the
+// signing host could not read" are different assertions, and a signature
+// over bytes alone cannot tell them apart.
+//
+// The application signing seam carries that claim and binds it into the
+// signed bytes. The types below are the certificate issued through it.
+// They are ADDITIVE: `GroundingCertificate`, its issuer, its verifier and
+// its wire format are untouched, and a deployment composing the direct
+// path is byte-for-byte what it was (GP 11). Both paths seal the SAME
+// canonical body over the SAME bytes, so the interchange format has not
+// forked — what differs is only what travels alongside the signature.
+
+/// A grounding certificate sealed through the application signing seam.
+///
+/// The body is the identical `GroundingCertificateBody` the direct path
+/// produces, canonicalised the same way and signed over the same bytes.
+/// What changes is the seal: an envelope carrying the purpose the
+/// certificate was signed AS and the attestation level the signature
+/// claims, both framed into the signed bytes rather than recorded beside
+/// them.
+///
+/// **Key id and level are both inside the signature.** The key id is in
+/// the body (`DeploymentKeyId`), which is the signed payload; the level is
+/// in the seam's framing. Editing either fails verification, so neither is
+/// a label a holder has to take on trust.
+type AttestedGroundingCertificate = {
+    Body: GroundingCertificateBody
+    Envelope: SignedPayloadEnvelope
+}
+
+/// What verifying an attested certificate found.
+///
+/// The subject case is separate from the rejection case on purpose. "A
+/// correctly-signed certificate about a different answer" and "this does
+/// not verify" send a holder to entirely different places — the first is a
+/// filing error somewhere upstream, the second is tampering — and a
+/// verdict that flattened them would send half of its readers to the wrong
+/// one.
+type AttestedCertificateVerdict =
+    /// The signature verifies and, where a root was expected, the
+    /// certificate is about it.
+    | AttestedCertificateValid
+    /// The application signing seam refused: a purpose replay, a revoked
+    /// key, or a signature that does not verify over the body.
+    | AttestedCertificateRejected of PayloadVerificationError
+    /// Correctly signed, and about something else. Reachable only AFTER
+    /// the signature verified — see `verifyAttestedFor`.
+    | AttestedCertificateSubjectMismatch of expected: string * actual: string
+
+module AttestedCertificateVerdict =
+    let describe =
+        function
+        | AttestedCertificateValid -> "certificate verified"
+        | AttestedCertificateRejected e -> PayloadVerificationError.describe e
+        | AttestedCertificateSubjectMismatch(expected, actual) ->
+            $"certificate is validly signed but issued over '{actual}', not '{expected}'"
+
+/// Issues certificates sealed through the application signing seam. A
+/// deployment with no composed `IApplicationSigner` refuses with
+/// `SigningUnavailable`, exactly as the direct issuer does with no
+/// `IArtefactSigner` (GP 13).
+type IAttestedGroundingCertificateIssuer =
+    abstract Issue:
+        scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
+            Async<Result<AttestedGroundingCertificate, CertificateError>>
+
 module GroundingCertificate =
 
     /// The open interchange format version. Do not change without a
@@ -253,17 +326,22 @@ module GroundingCertificate =
 
     // ── issuer ──────────────────────────────────────────────────────────
 
-    /// The one issuer implementation. Materialises the subject's provenance
-    /// chain (Phase 524), applies the disclosure predicate to fact nodes at
-    /// the `FactExport` surface (Phase 525), projects to a structure-only
-    /// body, and seals it with the composed `IArtefactSigner`.
-    type private DefaultIssuer
+    /// Everything an issuer does BEFORE it signs: materialises the
+    /// subject's provenance chain (Phase 524), applies the disclosure
+    /// predicate to fact nodes at the `FactExport` surface (Phase 525), and
+    /// projects it to a structure-only canonical body.
+    ///
+    /// Shared by both issue paths, and shared rather than duplicated for a
+    /// reason that outlives the convenience: the disclosure projection is
+    /// the part of certificate issuance that can leak, so two copies of it
+    /// would be two places a withheld fact's method could start surviving
+    /// into a certificate. One body builder, two seals.
+    type private CertificateBuilder
         (
             graph: IProvenanceGraph,
             store: IFactStore,
             gate: IFactDisclosureGate,
             events: IEventStore,
-            signer: IArtefactSigner option,
             clock: unit -> DateTime
         ) =
 
@@ -392,61 +470,97 @@ module GroundingCertificate =
                         None
             }
 
+        /// The canonical body for `subject`, ready to seal. `keyId` is the
+        /// id the sealing key will sign under, bound into the body so it is
+        /// covered by whichever signature follows.
+        member _.BuildBody
+            (scopeId: string, principal: string, subject: CertificateSubject, depth: int, keyId: string)
+            : Async<Result<GroundingCertificateBody, CertificateError>> =
+            async {
+                let! root, chain = materialise scopeId subject depth
+
+                if List.isEmpty chain.Nodes then
+                    return Error EmptyChain
+                else
+                    // The disclosure predicate over the fact nodes at
+                    // the export egress surface (Phase 525): one gate
+                    // call, fact ids only.
+                    let factIds =
+                        chain.Nodes
+                        |> List.choose (fun n ->
+                            match n.Kind with
+                            | FactNode -> Some n.Id
+                            | _ -> None)
+
+                    let! verdicts =
+                        if List.isEmpty factIds then
+                            async { return Map.empty }
+                        else
+                            gate.Check(scopeId, principal, FactExport, factIds)
+
+                    let! projected = chain.Nodes |> List.map (projectNode scopeId verdicts) |> Async.Parallel
+
+                    let nodes = projected |> Array.map fst |> Array.toList
+
+                    let policyRefs =
+                        projected |> Array.choose snd |> Array.toList |> List.distinct |> List.sort
+
+                    let edges =
+                        chain.Edges
+                        |> List.map (fun e -> {
+                            From = e.From
+                            To = e.To
+                            Kind = edgeKindString e.Kind
+                        })
+
+                    return
+                        Ok(
+                            canonicalise {
+                                Format = Format
+                                Root = root
+                                IssuedAt = DateTimeOffset(DateTime.SpecifyKind(clock (), DateTimeKind.Utc))
+                                DeploymentKeyId = keyId
+                                Nodes = nodes
+                                Edges = edges
+                                PolicyRefs = policyRefs
+                            }
+                        )
+            }
+
+    /// The direct-path issuer: seals the built body with the composed
+    /// `IArtefactSigner`. Behaviour is unchanged from before the body
+    /// builder was extracted — same body, same bytes, same signature.
+    type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option) =
+
         interface IGroundingCertificateIssuer with
             member _.Issue(scopeId, principal, subject, depth) = async {
                 match signer with
                 | None -> return Error SigningUnavailable
                 | Some signer ->
-                    let! root, chain = materialise scopeId subject depth
-
-                    if List.isEmpty chain.Nodes then
-                        return Error EmptyChain
-                    else
-                        // The disclosure predicate over the fact nodes at
-                        // the export egress surface (Phase 525): one gate
-                        // call, fact ids only.
-                        let factIds =
-                            chain.Nodes
-                            |> List.choose (fun n ->
-                                match n.Kind with
-                                | FactNode -> Some n.Id
-                                | _ -> None)
-
-                        let! verdicts =
-                            if List.isEmpty factIds then
-                                async { return Map.empty }
-                            else
-                                gate.Check(scopeId, principal, FactExport, factIds)
-
-                        let! projected = chain.Nodes |> List.map (projectNode scopeId verdicts) |> Async.Parallel
-
-                        let nodes = projected |> Array.map fst |> Array.toList
-
-                        let policyRefs =
-                            projected |> Array.choose snd |> Array.toList |> List.distinct |> List.sort
-
-                        let edges =
-                            chain.Edges
-                            |> List.map (fun e -> {
-                                From = e.From
-                                To = e.To
-                                Kind = edgeKindString e.Kind
-                            })
-
-                        let body =
-                            canonicalise {
-                                Format = Format
-                                Root = root
-                                IssuedAt = DateTimeOffset(DateTime.SpecifyKind(clock (), DateTimeKind.Utc))
-                                DeploymentKeyId = signer.KeyId()
-                                Nodes = nodes
-                                Edges = edges
-                                PolicyRefs = policyRefs
-                            }
-
+                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.KeyId()) with
+                    | Error e -> return Error e
+                    | Ok body ->
                         match! signer.Sign(canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok signature -> return Ok { Body = body; Signature = signature }
+            }
+
+    /// The attested issuer: seals the built body through the application
+    /// signing seam, so the purpose and the signer's attestation level are
+    /// framed into the signed bytes alongside the body.
+    type private AttestedIssuer(builder: CertificateBuilder, signer: IApplicationSigner option) =
+
+        interface IAttestedGroundingCertificateIssuer with
+            member _.Issue(scopeId, principal, subject, depth) = async {
+                match signer with
+                | None -> return Error SigningUnavailable
+                | Some signer ->
+                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.ActiveKeyId()) with
+                    | Error e -> return Error e
+                    | Ok body ->
+                        match! signer.SignPayload(Format, canonicalBytes body) with
+                        | Error e -> return Error(SigningFailed(SigningError.describe e))
+                        | Ok envelope -> return Ok { Body = body; Envelope = envelope }
             }
 
     /// Construct the issuer over the composed collaborators. `signer` is
@@ -460,7 +574,7 @@ module GroundingCertificate =
         (signer: IArtefactSigner option)
         (clock: unit -> DateTime)
         : IGroundingCertificateIssuer =
-        DefaultIssuer(graph, store, gate, events, signer, clock) :> IGroundingCertificateIssuer
+        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer) :> IGroundingCertificateIssuer
 
     /// The issuer with a UTC wall-clock — the composition default.
     let createIssuer
@@ -471,3 +585,85 @@ module GroundingCertificate =
         (signer: IArtefactSigner option)
         : IGroundingCertificateIssuer =
         createIssuerWithClock graph store gate events signer (fun () -> DateTime.UtcNow)
+
+    // ── the attested path ───────────────────────────────────────────────
+
+    /// The purpose an attested certificate is signed as. Deliberately the
+    /// format discriminator itself: the purpose exists to stop a signature
+    /// minted for one kind of payload being replayed as another, and the
+    /// format string is precisely the name of this kind of payload.
+    /// Inventing a second string would be one more thing that could drift
+    /// out of step with the first.
+    let AttestationPurpose = Format
+
+    /// Construct the attested issuer. `signer` is `None` when no
+    /// `IApplicationSigner` is composed — issuance then refuses with
+    /// `SigningUnavailable` (GP 13). `clock` stamps `IssuedAt`.
+    let createAttestedIssuerWithClock
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IApplicationSigner option)
+        (clock: unit -> DateTime)
+        : IAttestedGroundingCertificateIssuer =
+        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer)
+        :> IAttestedGroundingCertificateIssuer
+
+    /// The attested issuer with a UTC wall-clock — the composition default.
+    let createAttestedIssuer
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IApplicationSigner option)
+        : IAttestedGroundingCertificateIssuer =
+        createAttestedIssuerWithClock graph store gate events signer (fun () -> DateTime.UtcNow)
+
+    /// Verify an attested certificate's seal.
+    ///
+    /// Covers, in the seam's own order: the envelope was minted as a
+    /// grounding certificate and not replayed from another use; the signing
+    /// key has not been revoked; the body's exact bytes verify under the
+    /// key the envelope NAMES — which may be a key that has since been
+    /// rotated out, and still verifies, because the key that signed is
+    /// resolved by id rather than assumed to be the active one. That last
+    /// property is what makes a certificate outlive a rotation.
+    ///
+    /// This says nothing about WHICH answer the certificate is about. When
+    /// the caller holds an expectation, use `verifyAttestedFor`.
+    let verifyAttested
+        (signer: IApplicationSigner)
+        (certificate: AttestedGroundingCertificate)
+        : Async<AttestedCertificateVerdict> =
+        async {
+            match! signer.VerifyPayload(AttestationPurpose, canonicalBytes certificate.Body, certificate.Envelope) with
+            | Ok() -> return AttestedCertificateValid
+            | Error e -> return AttestedCertificateRejected e
+        }
+
+    /// Verify an attested certificate against the root the caller
+    /// independently holds.
+    ///
+    /// **The signature is checked FIRST, then the subject**, and the order
+    /// is load-bearing rather than incidental. `AttestedCertificateSubjectMismatch`
+    /// claims "a correctly-signed certificate about a different answer" —
+    /// a claim that would be false if the root were compared before anyone
+    /// established the certificate was signed at all. A holder told their
+    /// certificate is about the wrong answer draws a very different
+    /// conclusion from one told it does not verify, and an unsigned
+    /// document can be made to say anything about anything.
+    let verifyAttestedFor
+        (signer: IApplicationSigner)
+        (expectedRoot: string)
+        (certificate: AttestedGroundingCertificate)
+        : Async<AttestedCertificateVerdict> =
+        async {
+            match! verifyAttested signer certificate with
+            | AttestedCertificateValid ->
+                if certificate.Body.Root = expectedRoot then
+                    return AttestedCertificateValid
+                else
+                    return AttestedCertificateSubjectMismatch(expectedRoot, certificate.Body.Root)
+            | verdict -> return verdict
+        }

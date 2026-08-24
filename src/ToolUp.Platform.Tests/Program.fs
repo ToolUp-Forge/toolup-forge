@@ -831,6 +831,10 @@ let allTests =
         // offline verify against the public key alone, and one distinct
         // refusal per failure mode.
         CertificateEnvelopeTests.tests
+        // Grounding-tier signing convergence — one composed key story
+        // across deploy records, certificates and ledger heads, rotation
+        // continuity, and each transplant refused as what it is.
+        GroundingSigningConvergenceTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

@@ -20,6 +20,27 @@ ToolUp.Facts.AnswerPlannerModule.createWithClock(ToolUp.Facts.IFactStore, ToolUp
 ToolUp.Facts.AnswerPlannerModule.noCompiler(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], System.String]]
 ToolUp.Facts.AnswerPlannerModule.structuredCompiler(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], System.String]]
 ToolUp.Facts.AnswerPlannerModule.vocabularyPrompt(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : System.String
+ToolUp.Facts.AttestedCertificateVerdict (class)
+ToolUp.Facts.AttestedCertificateVerdict.AttestedCertificateValid : ToolUp.Facts.AttestedCertificateVerdict { get }
+ToolUp.Facts.AttestedCertificateVerdict.IsAttestedCertificateRejected : System.Boolean { get }
+ToolUp.Facts.AttestedCertificateVerdict.IsAttestedCertificateSubjectMismatch : System.Boolean { get }
+ToolUp.Facts.AttestedCertificateVerdict.IsAttestedCertificateValid : System.Boolean { get }
+ToolUp.Facts.AttestedCertificateVerdict.Tag : System.Int32 { get }
+ToolUp.Facts.AttestedCertificateVerdict+AttestedCertificateRejected (class)
+ToolUp.Facts.AttestedCertificateVerdict+AttestedCertificateRejected.Item : ToolUp.ArtefactSigning.PayloadVerificationError { get }
+ToolUp.Facts.AttestedCertificateVerdict+AttestedCertificateSubjectMismatch (class)
+ToolUp.Facts.AttestedCertificateVerdict+AttestedCertificateSubjectMismatch.actual : System.String { get }
+ToolUp.Facts.AttestedCertificateVerdict+AttestedCertificateSubjectMismatch.expected : System.String { get }
+ToolUp.Facts.AttestedCertificateVerdict+Tags (class)
+ToolUp.Facts.AttestedCertificateVerdict+Tags.AttestedCertificateRejected : System.Int32 (literal)
+ToolUp.Facts.AttestedCertificateVerdict+Tags.AttestedCertificateSubjectMismatch : System.Int32 (literal)
+ToolUp.Facts.AttestedCertificateVerdict+Tags.AttestedCertificateValid : System.Int32 (literal)
+ToolUp.Facts.AttestedCertificateVerdictModule (class)
+ToolUp.Facts.AttestedCertificateVerdictModule.describe(ToolUp.Facts.AttestedCertificateVerdict) : System.String
+ToolUp.Facts.AttestedGroundingCertificate (class)
+ToolUp.Facts.AttestedGroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.SignedPayloadEnvelope)
+ToolUp.Facts.AttestedGroundingCertificate.Body : ToolUp.Facts.GroundingCertificateBody { get }
+ToolUp.Facts.AttestedGroundingCertificate.Envelope : ToolUp.ArtefactSigning.SignedPayloadEnvelope { get }
 ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
@@ -250,15 +271,22 @@ ToolUp.Facts.GroundingCertificateBody.Nodes : Microsoft.FSharp.Collections.FShar
 ToolUp.Facts.GroundingCertificateBody.PolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.GroundingCertificateBody.Root : System.String { get }
 ToolUp.Facts.GroundingCertificateModule (class)
+ToolUp.Facts.GroundingCertificateModule.AttestationPurpose : System.String { get }
 ToolUp.Facts.GroundingCertificateModule.Format : System.String (literal)
 ToolUp.Facts.GroundingCertificateModule.canonicalBytes(ToolUp.Facts.GroundingCertificateBody) : System.Byte[]
 ToolUp.Facts.GroundingCertificateModule.canonicalise(ToolUp.Facts.GroundingCertificateBody) : ToolUp.Facts.GroundingCertificateBody
+ToolUp.Facts.GroundingCertificateModule.createAttestedIssuer(ToolUp.Platform.IProvenanceGraph, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IApplicationSigner]) : ToolUp.Facts.IAttestedGroundingCertificateIssuer
+ToolUp.Facts.GroundingCertificateModule.createAttestedIssuerWithClock(ToolUp.Platform.IProvenanceGraph, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IApplicationSigner], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IAttestedGroundingCertificateIssuer
 ToolUp.Facts.GroundingCertificateModule.createIssuer(ToolUp.Platform.IProvenanceGraph, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner]) : ToolUp.Facts.IGroundingCertificateIssuer
 ToolUp.Facts.GroundingCertificateModule.createIssuerWithClock(ToolUp.Platform.IProvenanceGraph, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IGroundingCertificateIssuer
 ToolUp.Facts.GroundingCertificateModule.verify(ToolUp.ArtefactSigning.IArtefactVerifier, ToolUp.Facts.GroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.ArtefactSigning.VerificationError]]
+ToolUp.Facts.GroundingCertificateModule.verifyAttested(ToolUp.ArtefactSigning.IApplicationSigner, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AttestedCertificateVerdict]
+ToolUp.Facts.GroundingCertificateModule.verifyAttestedFor(ToolUp.ArtefactSigning.IApplicationSigner, System.String, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AttestedCertificateVerdict]
 ToolUp.Facts.IAnswerPlanner (interface)
 ToolUp.Facts.IAnswerPlanner.Plan(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
 ToolUp.Facts.IAnswerPlanner.Record(System.String, System.String, ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Facts.IAttestedGroundingCertificateIssuer (interface)
+ToolUp.Facts.IAttestedGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Facts.CertificateError]]
 ToolUp.Facts.IFactRecomputer (interface)
 ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)

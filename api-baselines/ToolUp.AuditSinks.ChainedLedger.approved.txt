@@ -123,3 +123,6 @@ ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord.Sequence : System.Int64 { ge
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord.SubjectKind : System.String { get }
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule (class)
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule.decodePayload`1(System.Text.Json.JsonSerializerOptions, ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
+ToolUp.Platform.AuditSinks.LedgerHeadSigning (class)
+ToolUp.Platform.AuditSinks.LedgerHeadSigning.ofKeyedSigner(ToolUp.Platform.IKeyedByteSigner) : ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner
+ToolUp.Platform.AuditSinks.LedgerHeadSigning.verifierOfKeyed(ToolUp.Platform.IKeyedByteVerifier) : ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier

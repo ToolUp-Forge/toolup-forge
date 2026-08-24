@@ -19,6 +19,7 @@ let allTests =
         ApplicationSigningTests.tests
         SigningProviderConformanceTests.tests
         DeployRecordSealingTests.tests
+        ApplicationKeyedSigningTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

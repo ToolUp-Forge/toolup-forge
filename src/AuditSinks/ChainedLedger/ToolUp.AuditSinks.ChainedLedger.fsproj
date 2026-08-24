@@ -13,6 +13,12 @@
   <ItemGroup>
     <Compile Include="LedgerChain.fs" />
     <Compile Include="ChainedLedgerAuditSink.fs" />
+    <!-- Bridge from the crypto-free IKeyedByteSigner / IKeyedByteVerifier
+         seam (ToolUp.Platform.Server, already referenced) onto the local
+         head-signing seam declared above. Pure re-shaping: no new
+         dependency, no crypto, and the local seam plus the unsigned
+         default are untouched. -->
+    <Compile Include="LedgerHeadSigning.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
