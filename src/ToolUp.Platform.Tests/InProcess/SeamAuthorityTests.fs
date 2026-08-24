@@ -63,21 +63,44 @@ let private teamCtx: AccessContext = {
 
 type private RecordingAuditLog() =
     let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
+    let gate = obj ()
+    member _.Events = lock gate (fun () -> List.ofSeq recorded)
 
-    /// The deny observer is fire-and-forget by contract, so a test
-    /// asserting on the row waits for a write it deliberately did not
-    /// await. Bounded rather than slept: returns the instant the row
-    /// lands, and a genuine regression still fails rather than hangs.
+    /// The deny observer is fire-and-forget by contract (`Async.Start`
+    /// onto the thread pool), so a test asserting on the rows waits for
+    /// writes it deliberately did not await. Event-driven, not polled:
+    /// `Record` pulses the monitor, so this returns the instant the
+    /// `count`-th row lands, and the cap only bites when the rows are
+    /// not coming at all. A timeout fails HERE, naming what did arrive
+    /// — a 5s wall-clock poll once expired under machine load and the
+    /// failure blamed the ledger claim instead of the scheduler
+    /// (2026-08-24, VerifyAll beside a second pack).
     member _.WaitFor(count: int) =
-        let deadline = DateTime.UtcNow.AddSeconds 5.0
+        let cap = TimeSpan.FromSeconds 30.0
+        let sw = Diagnostics.Stopwatch.StartNew()
 
-        while recorded.Count < count && DateTime.UtcNow < deadline do
-            Threading.Thread.Sleep 5
+        lock gate (fun () ->
+            while recorded.Count < count && sw.Elapsed < cap do
+                let remaining = cap - sw.Elapsed
+
+                if remaining > TimeSpan.Zero then
+                    Threading.Monitor.Wait(gate, remaining) |> ignore
+
+            if recorded.Count < count then
+                failtestf
+                    "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the deny observer's write never happened (it is not merely late); the ledger assertion after this wait has NOT been evaluated"
+                    recorded.Count
+                    count
+                    cap.TotalSeconds)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () ->
+                recorded.Add(scopeId, audit)
+                Threading.Monitor.PulseAll gate)
+        }
+
+        member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }
 
 let private grant (componentId: ComponentId) (seams: SeamGrant) : ComponentSeamGrant = {
     GrantComponent = componentId
