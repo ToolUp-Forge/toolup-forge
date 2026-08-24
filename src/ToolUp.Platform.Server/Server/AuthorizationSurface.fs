@@ -822,3 +822,280 @@ module AuthorizationSurface =
             Access = AccessClassification.ofLabel entry.Classification
         })
         |> assemble
+
+// ─── Phase 688 — the OUTBOUND half of the same manifest ───────────────
+//
+// Everything above is the INBOUND surface: what a component exposes and
+// who may reach it. The question a review opens with has a second half —
+// what does the component itself reach? — and until Phase 688 the answer
+// was "whatever DI will hand it", recoverable only by reading its code.
+//
+// A component's declared reachable-seam set (Phase 688's `SeamGrant`,
+// keyed by the same `ComponentId`) makes that a value too, and this
+// section gives it the same treatment the exposed surface gets: a
+// deterministic projection, a key-based diff, a severity, a readable
+// delta, and a plain-string wire form a golden file can hold. A grant-set
+// change is then a reviewable CI diff rather than code archaeology.
+//
+// **A sibling projection rather than fields grown onto
+// `AuthorizationSurface`** — the rule this file already records against
+// `AuthorizationSurfaceDelta`, and which `ClassifiedCompositionRule`,
+// `EventTopologyDelta` and `DataFootprintDelta` all follow: growing a
+// shipped F# record breaks its constructor. The projections join on
+// `ComponentId`, which every one of them carries.
+
+/// One component's declared outbound authority: which seams it may
+/// resolve. Field names are `Grant*`-prefixed for the Phase 431
+/// field-inference reason recorded on `AuthorizationSurface.Exposed` —
+/// F#'s last-declared-wins inference re-points every unannotated
+/// construction sharing a full field-name set at whichever record
+/// compiled later, and `Component` alone is shared with `ExposedSurface`.
+type ComponentSeamGrant = {
+    /// The stable Phase 279 identity of the declaring component.
+    GrantComponent: ComponentId
+    /// What it declared it reaches — `UnrestrictedSeams` when it declared
+    /// nothing (the pre-688 posture).
+    GrantedSeams: SeamGrant
+}
+
+/// The derived outbound authority of a composition: every component's
+/// declared reachable-seam set, in a deterministic `ComponentId` order,
+/// so two compositions that declared the same grants in a different
+/// order produce the same surface.
+type SeamAuthoritySurface = { Granted: ComponentSeamGrant list }
+
+/// The structural difference between two seam-authority surfaces, keyed
+/// by `ComponentId` — never by list position.
+type SeamAuthorityDelta = {
+    GrantsAdded: ComponentSeamGrant list
+    GrantsRemoved: ComponentSeamGrant list
+    /// `(before, after)` pairs whose reachable-seam set grew — the class
+    /// a security review must never miss, and the outbound twin of
+    /// `RequirementsWeakened`.
+    GrantsWidened: (ComponentSeamGrant * ComponentSeamGrant) list
+    /// `(before, after)` pairs whose reachable-seam set shrank.
+    GrantsNarrowed: (ComponentSeamGrant * ComponentSeamGrant) list
+}
+
+/// A component's grant projected to plain strings — the shape a golden
+/// file persists, so it never depends on the `Set` / union shapes
+/// round-tripping through a serialiser.
+type SeamAuthorityWireEntry = {
+    GrantComponentIdentity: string
+    /// `"unrestricted"` or `"declared"`.
+    GrantKind: string
+    /// The declared seam identities, sorted ordinally. Empty for
+    /// `unrestricted` AND for a declaration of no seams — `GrantKind` is
+    /// what distinguishes them, which is why both fields are persisted.
+    GrantSeams: string list
+}
+
+/// Derivation, diff and projection over a composition's declared
+/// outbound seam authority. Pure over an already-composed
+/// `SeamGrantSignature`; nothing is built until a caller asks (GP 13),
+/// and nothing is registered into DI ever.
+module SeamAuthoritySurface =
+
+    /// The surface of a composition that declares no grants.
+    let empty: SeamAuthoritySurface = { Granted = [] }
+
+    let private compareOrdinal (a: string) (b: string) = String.CompareOrdinal(a, b)
+
+    let private ordered (entries: ComponentSeamGrant list) : ComponentSeamGrant list =
+        entries
+        |> List.sortWith (fun a b -> compareOrdinal a.GrantComponent.Value b.GrantComponent.Value)
+
+    /// Derive the surface from a composed `SeamGrantSignature`. Components
+    /// absent from the signature are absent here too — an absent entry
+    /// resolves to `UnrestrictedSeams` at the gate, and listing every
+    /// undeclared component as "unrestricted" would bury the declared ones
+    /// in a roster of non-declarations.
+    let ofSignature (signature: SeamGrantSignature) : SeamAuthoritySurface = {
+        Granted =
+            signature
+            |> Map.toList
+            |> List.map (fun (componentId, grant) -> {
+                GrantComponent = componentId
+                GrantedSeams = grant
+            })
+            |> ordered
+    }
+
+    /// The grant a named component declared — `UnrestrictedSeams` when it
+    /// is absent, matching what the gate resolves.
+    let grantOf (componentId: ComponentId) (surface: SeamAuthoritySurface) : SeamGrant =
+        surface.Granted
+        |> List.tryFind (fun entry -> entry.GrantComponent = componentId)
+        |> Option.map _.GrantedSeams
+        |> Option.defaultValue UnrestrictedSeams
+
+    /// A single grant rendered for a human — the line the readable delta
+    /// and any external report print.
+    let describe (entry: ComponentSeamGrant) : string =
+        sprintf "reaches %s" (SeamGrant.render entry.GrantedSeams)
+
+    // ── diff ──────────────────────────────────────────────────────────
+
+    /// The empty delta — what an identical pair projects to.
+    let emptyDelta: SeamAuthorityDelta = {
+        GrantsAdded = []
+        GrantsRemoved = []
+        GrantsWidened = []
+        GrantsNarrowed = []
+    }
+
+    /// Direction of a grant change: `-1` WIDENED (reaches more), `0`
+    /// unchanged, `+1` narrowed. The single definition of "widened", so
+    /// the diff and the severity can never disagree.
+    ///
+    /// Two sets that are neither a subset nor a superset of one another
+    /// count as WIDENED, deliberately — the same conservative reading
+    /// `comparePosture` takes for a swapped role or claim. A grant set
+    /// that traded `IAuditSink` for `ISecretStore` is not provably at
+    /// most what it replaced, and a security gate that guessed otherwise
+    /// would wave through exactly the change it exists to catch.
+    let private compareGrant (before: ComponentSeamGrant) (after: ComponentSeamGrant) : int =
+        if before.GrantedSeams = after.GrantedSeams then
+            0
+        elif SeamGrant.covers before.GrantedSeams after.GrantedSeams then
+            1
+        else
+            -1
+
+    /// Structurally diff two seam-authority surfaces. `before` is the
+    /// reference (or prior) composition, `after` the candidate — so
+    /// "added" means present in `after` and not in `before`. Keyed by
+    /// `ComponentId`, so the result never depends on declaration order.
+    let diff (before: SeamAuthoritySurface) (after: SeamAuthoritySurface) : SeamAuthorityDelta =
+        let key (entry: ComponentSeamGrant) = entry.GrantComponent.Value
+        let beforeByKey = before.Granted |> List.map (fun e -> key e, e) |> Map.ofList
+        let afterByKey = after.Granted |> List.map (fun e -> key e, e) |> Map.ofList
+
+        let changed =
+            after.Granted
+            |> List.choose (fun candidate ->
+                beforeByKey
+                |> Map.tryFind (key candidate)
+                |> Option.bind (fun reference ->
+                    match compareGrant reference candidate with
+                    | 0 -> None
+                    | direction -> Some(reference, candidate, direction)))
+
+        {
+            GrantsAdded =
+                after.Granted
+                |> List.filter (fun e -> not (beforeByKey.ContainsKey(key e)))
+                |> ordered
+            GrantsRemoved =
+                before.Granted
+                |> List.filter (fun e -> not (afterByKey.ContainsKey(key e)))
+                |> ordered
+            GrantsWidened =
+                changed
+                |> List.filter (fun (_, _, direction) -> direction < 0)
+                |> List.map (fun (reference, candidate, _) -> reference, candidate)
+            GrantsNarrowed =
+                changed
+                |> List.filter (fun (_, _, direction) -> direction > 0)
+                |> List.map (fun (reference, candidate, _) -> reference, candidate)
+        }
+
+    /// `true` when two seam-authority surfaces are structurally identical.
+    let isEmptyDelta (d: SeamAuthorityDelta) : bool =
+        List.isEmpty d.GrantsAdded
+        && List.isEmpty d.GrantsRemoved
+        && List.isEmpty d.GrantsWidened
+        && List.isEmpty d.GrantsNarrowed
+
+    /// How loud a delta is, in the same vocabulary the inbound surface
+    /// uses. A widened grant set, or a newly-declared component that
+    /// declares itself UNRESTRICTED, is critical — both grow what the
+    /// composition can reach, and the second is the outbound twin of a
+    /// new anonymous-reachable endpoint. Everything else that moved is
+    /// reviewable.
+    let severity (d: SeamAuthorityDelta) : AuthorizationDriftSeverity =
+        let unrestrictedAdded =
+            d.GrantsAdded
+            |> List.exists (fun e -> not (SeamGrant.isDeclared e.GrantedSeams))
+
+        if unrestrictedAdded || not (List.isEmpty d.GrantsWidened) then
+            CriticalAuthorizationDrift
+        elif isEmptyDelta d then
+            NoAuthorizationDrift
+        else
+            ReviewableAuthorizationDrift
+
+    /// A deterministic, human-readable rendering of a delta — the message
+    /// a composition golden-file CI gate prints on a grant mismatch. The
+    /// severity leads and the widening is marked inline, so the reviewer's
+    /// eye lands on the authority that grew.
+    let renderDelta (d: SeamAuthorityDelta) : string =
+        if isEmptyDelta d then
+            "(no seam-authority differences)"
+        else
+            let section title (lines: string list) =
+                if List.isEmpty lines then
+                    []
+                else
+                    [ sprintf "%s:" title; yield! lines ]
+
+            let addedLines =
+                d.GrantsAdded
+                |> List.map (fun e ->
+                    let marker =
+                        if SeamGrant.isDeclared e.GrantedSeams then
+                            "  + "
+                        else
+                            "  + [CRITICAL unrestricted] "
+
+                    marker + ComponentId.value e.GrantComponent + " " + describe e)
+
+            let removedLines =
+                d.GrantsRemoved
+                |> List.map (fun e -> "  - " + ComponentId.value e.GrantComponent + " " + describe e)
+
+            let changeLines marker (pairs: (ComponentSeamGrant * ComponentSeamGrant) list) =
+                pairs
+                |> List.map (fun (before, after) ->
+                    sprintf
+                        "  %s %s %s  ->  %s"
+                        marker
+                        (ComponentId.value after.GrantComponent)
+                        (describe before)
+                        (describe after))
+
+            [
+                sprintf "Severity: %s" (AuthorizationSurface.severityLabel (severity d))
+                yield! section "Seam grants added" addedLines
+                yield! section "Seam grants removed" removedLines
+                yield! section "Seam grants WIDENED (critical)" (changeLines "!" d.GrantsWidened)
+                yield! section "Seam grants narrowed" (changeLines "^" d.GrantsNarrowed)
+            ]
+            |> String.concat "\n"
+
+    // ── wire projection ───────────────────────────────────────────────
+
+    /// Project a seam-authority surface to plain strings for persistence.
+    /// Deterministic — components in `ComponentId` order, seam identities
+    /// sorted ordinally within each.
+    let toWire (surface: SeamAuthoritySurface) : SeamAuthorityWireEntry list =
+        surface.Granted
+        |> ordered
+        |> List.map (fun entry -> {
+            GrantComponentIdentity = ComponentId.value entry.GrantComponent
+            GrantKind = SeamGrant.kindLabel entry.GrantedSeams
+            GrantSeams = SeamGrant.seamLabels entry.GrantedSeams
+        })
+
+    /// Read a persisted wire projection back. Round-trips `toWire`
+    /// exactly, which is what lets the golden-file gate compare a
+    /// committed baseline against a live derivation through `diff`.
+    let ofWire (entries: SeamAuthorityWireEntry list) : SeamAuthoritySurface = {
+        Granted =
+            entries
+            |> List.map (fun entry -> {
+                GrantComponent = ComponentId.create entry.GrantComponentIdentity
+                GrantedSeams = SeamGrant.ofWireParts entry.GrantKind entry.GrantSeams
+            })
+            |> ordered
+    }

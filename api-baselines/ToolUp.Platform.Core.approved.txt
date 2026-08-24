@@ -8157,6 +8157,40 @@ ToolUp.Platform.SealedDeployRecord (class)
 ToolUp.Platform.SealedDeployRecord..ctor(ToolUp.Platform.DeployRecord, ToolUp.Platform.DeployRecordSeal)
 ToolUp.Platform.SealedDeployRecord.Record : ToolUp.Platform.DeployRecord { get }
 ToolUp.Platform.SealedDeployRecord.Seal : ToolUp.Platform.DeployRecordSeal { get }
+ToolUp.Platform.SeamGrant (class)
+ToolUp.Platform.SeamGrant.IsDeclaredSeams : System.Boolean { get }
+ToolUp.Platform.SeamGrant.IsUnrestrictedSeams : System.Boolean { get }
+ToolUp.Platform.SeamGrant.Tag : System.Int32 { get }
+ToolUp.Platform.SeamGrant.UnrestrictedSeams : ToolUp.Platform.SeamGrant { get }
+ToolUp.Platform.SeamGrant+DeclaredSeams (class)
+ToolUp.Platform.SeamGrant+DeclaredSeams.Item : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.SeamId] { get }
+ToolUp.Platform.SeamGrant+Tags (class)
+ToolUp.Platform.SeamGrant+Tags.DeclaredSeams : System.Int32 (literal)
+ToolUp.Platform.SeamGrant+Tags.UnrestrictedSeams : System.Int32 (literal)
+ToolUp.Platform.SeamGrantModule (class)
+ToolUp.Platform.SeamGrantModule.covers(ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamGrant) : System.Boolean
+ToolUp.Platform.SeamGrantModule.isDeclared(ToolUp.Platform.SeamGrant) : System.Boolean
+ToolUp.Platform.SeamGrantModule.join(ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamGrant) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamGrantModule.kindLabel(ToolUp.Platform.SeamGrant) : System.String
+ToolUp.Platform.SeamGrantModule.ofInterfaces(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamGrantModule.ofSeams(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.SeamId]) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamGrantModule.ofWireParts(System.String, System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamGrantModule.permits(ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamId) : System.Boolean
+ToolUp.Platform.SeamGrantModule.render(ToolUp.Platform.SeamGrant) : System.String
+ToolUp.Platform.SeamGrantModule.resolve(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant], ToolUp.Platform.ComponentId) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamGrantModule.seamLabels(ToolUp.Platform.SeamGrant) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.SeamGrantModule.seams(ToolUp.Platform.SeamGrant) : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.SeamId]
+ToolUp.Platform.SeamGrantModule.unrestricted : ToolUp.Platform.SeamGrant { get }
+ToolUp.Platform.SeamId (class)
+ToolUp.Platform.SeamId.Item : System.String { get }
+ToolUp.Platform.SeamId.Tag : System.Int32 { get }
+ToolUp.Platform.SeamId.ToString() : System.String
+ToolUp.Platform.SeamId.Value : System.String { get }
+ToolUp.Platform.SeamIdModule (class)
+ToolUp.Platform.SeamIdModule.create(System.String) : ToolUp.Platform.SeamId
+ToolUp.Platform.SeamIdModule.ofInterface(System.String) : ToolUp.Platform.SeamId
+ToolUp.Platform.SeamIdModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamId]
+ToolUp.Platform.SeamIdModule.value(ToolUp.Platform.SeamId) : System.String
 ToolUp.Platform.SecretClass (class)
 ToolUp.Platform.SecretClass.ApiKeySecret : ToolUp.Platform.SecretClass { get }
 ToolUp.Platform.SecretClass.CertificateSecret : ToolUp.Platform.SecretClass { get }

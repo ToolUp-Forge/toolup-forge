@@ -184,3 +184,170 @@ module CompositionCapabilityGate =
             | CapabilityGateDecision.Denied denial -> return HostCapabilityOutcome.Denied denial.Reason
             | CapabilityGateDecision.Granted -> return! registry.Invoke capability args ctx
         }
+
+// ─── Phase 688 — seam-granularity module authority grants ─────────────
+//
+// `ICompositionCapabilityGate.Check` above is the EFFECT half: "may this
+// component do effecting work at all", over a two-point lattice. A
+// component that clears it may then resolve every seam the composition
+// will hand it, so "review the grants, not the code" holds for what a
+// module EXPOSES (Phase 438/554) and not for what it REACHES.
+//
+// The seam gate closes that. It INHERITS the Phase 300 interface rather
+// than growing it: adding a member to a shipped F# interface is a source
+// break for every implementer, and F# cannot author a default
+// implementation to soften it. Inheriting costs nothing — an
+// `ISeamAuthorityGate` IS an `ICompositionCapabilityGate`, so it drops
+// into every hole the shipped one fits, and no existing implementation
+// changes.
+//
+// **The refusal reuses `CapabilityDenial` deliberately.** The Phase 657
+// `auditingObserver` already turns one into an
+// `AuditEvent.CompositionCapabilityRefused`, which the Phase 658
+// hash-chained ledger already carries. A second denial record would have
+// meant a second audit event, a second observer, and a second thing to
+// remember to compose — for a refusal that belongs on exactly the same
+// path. The seam is named in the `Reason`, which is the field the audit
+// payload renders.
+
+/// A capability gate that additionally holds each component to its
+/// declared **reachable-seam set** (Phase 688). Inherits
+/// `ICompositionCapabilityGate` rather than growing it, so every existing
+/// implementation and every existing consumer of the Phase 300 interface
+/// is untouched — a seam gate drops into any hole an
+/// `ICompositionCapabilityGate` fits, and a composition that never asks
+/// for one is byte-for-byte unchanged (GP 11/13).
+type ISeamAuthorityGate =
+    inherit ICompositionCapabilityGate
+
+    /// Whether `componentId` may resolve `seam` while requiring
+    /// `required`. Both halves must clear: the Phase 300 effect envelope
+    /// FIRST (so an existing denial still reads as an effect denial, with
+    /// its existing reason), then the Phase 688 seam set. Any non-grant is
+    /// a `Denied` carrying a `CapabilityDenial` — never an exception, and
+    /// never silent.
+    abstract CheckSeam:
+        componentId: ComponentId -> seam: SeamId -> required: CompanionCapability -> CapabilityGateDecision
+
+[<RequireQualifiedAccess>]
+module SeamAuthorityGate =
+
+    /// Whether `seam` may be resolved under `declared` — `UnrestrictedSeams`
+    /// permits every seam (the undeclared, pre-688 posture); a declared set
+    /// permits exactly its members, and `DeclaredSeams Set.empty` permits
+    /// none. The seam analogue of `CompositionCapabilityGate.permits`.
+    let permitsSeam (declared: SeamGrant) (seam: SeamId) : bool = SeamGrant.permits declared seam
+
+    /// The readable, component-named seam-refusal reason. Names the seam
+    /// that was refused AND the set the component did declare, so the
+    /// remedy is in the message rather than in the source — the same shape
+    /// as the Phase 300 effect denial, and the string the Phase 657 audit
+    /// payload carries onto the Phase 658 ledger.
+    let refusalReason (componentId: ComponentId) (declared: SeamGrant) (seam: SeamId) : string =
+        sprintf
+            "composition seam authority: component '%s' attempted to resolve seam '%s', which is outside its declared reachable-seam set %s. Add the seam to the component's SeamGrant (Phase 688) to permit it, or the resolution stays refused (default-deny)."
+            (ComponentId.value componentId)
+            (SeamId.value seam)
+            (SeamGrant.render declared)
+
+    /// Lift any Phase 300 gate to a seam gate that grants every seam —
+    /// the additive floor. A composition with no `SeamGrantSignature`
+    /// resolves exactly the decisions its underlying gate resolved, so
+    /// lifting `CompositionCapabilityGate.disabled` grants everything and
+    /// lifting an enabled gate changes nothing about its effect checks.
+    let unrestricted (inner: ICompositionCapabilityGate) : ISeamAuthorityGate =
+        { new ISeamAuthorityGate with
+            member _.Check componentId required = inner.Check componentId required
+            member _.CheckSeam componentId _seam required = inner.Check componentId required
+        }
+
+    /// The off state: grants every check and every seam. What a
+    /// deployment that composes nothing uses — byte-for-byte the pre-688
+    /// and pre-300 posture.
+    let disabled: ISeamAuthorityGate = unrestricted CompositionCapabilityGate.disabled
+
+    /// The enabled seam gate over a Phase 296 `CapabilitySignature` and a
+    /// Phase 688 `SeamGrantSignature`.
+    ///
+    /// `Check` is the underlying Phase 300 gate, unchanged — the effect
+    /// envelope is not re-derived here, so a deployment that adds seam
+    /// grants keeps exactly the effect decisions it had. `CheckSeam` runs
+    /// that check first and only then the seam set, so a component that
+    /// fails both is reported against the axis it was already failing.
+    /// A component absent from the grant signature resolves to
+    /// `UnrestrictedSeams` and every seam resolution it makes is granted
+    /// (GP 11) — the verified profile, not this constructor, is what makes
+    /// declaration mandatory.
+    let create
+        (onDeny: CapabilityDenial -> unit)
+        (signature: CapabilitySignature)
+        (grants: SeamGrantSignature)
+        : ISeamAuthorityGate =
+        let inner = CompositionCapabilityGate.create onDeny signature
+
+        { new ISeamAuthorityGate with
+            member _.Check componentId required = inner.Check componentId required
+
+            member _.CheckSeam componentId seam required =
+                match inner.Check componentId required with
+                | CapabilityGateDecision.Denied denial -> CapabilityGateDecision.Denied denial
+                | CapabilityGateDecision.Granted ->
+                    let declared = SeamGrant.resolve grants componentId
+
+                    if SeamGrant.permits declared seam then
+                        CapabilityGateDecision.Granted
+                    else
+                        let denial = {
+                            Component = componentId
+                            Required = required
+                            Declared = CompanionCapability.resolve signature componentId
+                            Reason = refusalReason componentId declared seam
+                        }
+
+                        onDeny denial
+                        CapabilityGateDecision.Denied denial
+        }
+
+    /// **The seam-resolution choke point.** Resolve a seam through the
+    /// gate: the factory runs only when the component is permitted to
+    /// reach it, and a refusal returns the typed, already-observed
+    /// `CapabilityDenial` rather than throwing. Fail-closed by
+    /// construction — there is no path through this function that
+    /// produces a `'T` without a grant.
+    ///
+    /// A `Result` rather than an option because the caller almost always
+    /// needs the reason: it is what a composition root logs, what a
+    /// preflight reports, and what the Phase 657 audit payload already
+    /// knows how to render.
+    let resolveSeam
+        (gate: ISeamAuthorityGate)
+        (owner: ComponentId)
+        (seam: SeamId)
+        (required: CompanionCapability)
+        (resolve: unit -> 'T)
+        : Result<'T, CapabilityDenial> =
+        match gate.CheckSeam owner seam required with
+        | CapabilityGateDecision.Denied denial -> Error denial
+        | CapabilityGateDecision.Granted -> Ok(resolve ())
+
+    /// The Phase 266 registry bridge with the seam named — `guardInvoke`
+    /// plus the Phase 688 check. A capability invocation now clears THREE
+    /// gates in order: the declared effect envelope (300), the declared
+    /// seam set (688), then the registry's own default-deny authorizer
+    /// (266). The registry is never reached when either composition-level
+    /// gate refuses.
+    let guardSeamInvoke
+        (gate: ISeamAuthorityGate)
+        (owner: ComponentId)
+        (seam: SeamId)
+        (required: CompanionCapability)
+        (registry: IHostCapabilityRegistry)
+        (capability: CapabilityId)
+        (args: HostCapabilityArgs)
+        (ctx: AccessContext)
+        : Async<HostCapabilityOutcome> =
+        async {
+            match gate.CheckSeam owner seam required with
+            | CapabilityGateDecision.Denied denial -> return HostCapabilityOutcome.Denied denial.Reason
+            | CapabilityGateDecision.Granted -> return! registry.Invoke capability args ctx
+        }

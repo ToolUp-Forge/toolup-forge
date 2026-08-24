@@ -423,6 +423,13 @@
              disabled gate grants all (byte-identical off); guardInvoke
              enforces the envelope in front of the Phase 266 registry. -->
         <Compile Include="InProcess\CompositionCapabilityGateTests.fs" />
+        <!-- Phase 688 — seam-granularity module authority grants: the
+             additive floor (no declaration => byte-identical to Phase 300)
+             proved over the cross-product; a declared set refuses every
+             seam outside it, fail-closed and audited; the grant sets diff
+             by ComponentId with a widening as CRITICAL; and the Phase 657
+             verified profile makes declaration mandatory. -->
+        <Compile Include="InProcess\SeamAuthorityTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->

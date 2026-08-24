@@ -323,6 +323,8 @@ let allTests =
         EffectJoinTests.tests
         // Phase 300 — composition capability sandbox (runtime default-deny).
         CompositionCapabilityGateTests.tests
+        // Phase 688 — seam-granularity module authority grants.
+        SeamAuthorityTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

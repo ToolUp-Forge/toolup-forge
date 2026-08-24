@@ -292,3 +292,221 @@ module CompanionCapability =
     /// surfaces (opt-in) as the composition's effect class.
     let composedEffect (signature: CapabilitySignature) : CompanionCapability =
         signature |> Map.toSeq |> Seq.map snd |> joinAll
+
+// ─── Phase 688 — seam-granularity authority grants ────────────────────
+//
+// The three axes above are an EFFECT LATTICE. They answer "may this
+// component do effecting work at all", over a two-point order — they do
+// not answer "which seams may it reach". So a component holding any
+// effecting grant may resolve every seam the composition will hand it,
+// `IEntityStore` and `ISecretStore` and `IAuditSink` alike, and reviewing
+// what a module CAN reach still means reading its code. A declared
+// reachable-seam set closes that half: "I reach `IEntityStore` and
+// `IAuditSink`, nothing else", held to by the Phase 300 gate.
+//
+// **Why a sibling value rather than a fourth field on
+// `CompanionCapability`.** This is a lattice property, not a
+// compatibility dodge. Each of the three axes has its *identity* at the
+// BOTTOM (pure / deterministic / distributed-ready), which is exactly
+// what lets an undeclared companion contribute `identity` and change no
+// join (GP 11). A seam set's behaviour-preserving value is the OPPOSITE
+// end: an undeclared component must keep reaching everything, which is
+// the TOP of the subset order. Folding an inverted axis into
+// `CompanionCapability.join` would stop `identity` being the join
+// identity and quietly break the Phase 296 laws the manifest, the
+// preflight and the gate all rest on. So the grant is a separate value
+// in a separate signature map, joined to the capability by the same
+// stable `ComponentId` key — the same "deltas join on `ComponentId`"
+// discipline the Phase 438 surface records.
+//
+// **Absent ⇒ unrestricted (GP 11).** A component with no entry in a
+// `SeamGrantSignature` resolves to `UnrestrictedSeams`: byte-for-byte the
+// pre-688 posture, no seam refused. Declaration is the opt-in; absence is
+// the no-op. Under the Phase 657 verified profile that inverts — there,
+// absence is refused rather than defaulted, because a mandatory
+// seam-authority check with nothing declared would permit everything
+// while presenting as enforcement.
+//
+// **Generic substrate (GP 1), zero cost when unread (GP 13).** A string
+// id, a two-case union and a set: no vendor or domain type, nothing built
+// until a caller asks.
+
+/// The stable identity of a **seam** — an SDK interface / DI service a
+/// component may resolve (`IEntityStore`, `IAuditSink`, `ISecretStore`).
+/// A value-typed `string` wrapper with structural comparison, so it is
+/// safe as a set member, a map key, and across the wire (portability
+/// rule 1). Deliberately its own type rather than a `ComponentId`: a
+/// `ComponentId` names a composed UNIT, a `SeamId` names the CONTRACT
+/// that unit reaches through, and the two key spaces must not be
+/// interchangeable.
+type SeamId =
+    | SeamId of string
+
+    /// The raw underlying seam identity string.
+    member this.Value =
+        let (SeamId v) = this
+        v
+
+    override this.ToString() = this.Value
+
+/// A component's declared reachable-seam authority. Two cases, and the
+/// distinction between the second one's EMPTY set and the first case is
+/// the whole security property:
+///
+///   • `UnrestrictedSeams` — nothing was declared. The pre-688 posture:
+///     every seam resolves. What an absent signature entry means.
+///   • `DeclaredSeams s`   — exactly `s` resolves, everything else is
+///     refused. `DeclaredSeams Set.empty` is a real declaration meaning
+///     "this component reaches no seam at all", NOT a synonym for
+///     unrestricted — which is why `ofSeams` does not normalise the
+///     empty set away the way `DeterminismSource.ofFactors` does.
+type SeamGrant =
+    /// No declaration — every seam resolves (GP 11: absence is the no-op).
+    | UnrestrictedSeams
+    /// Exactly these seams resolve; any other resolution is refused.
+    | DeclaredSeams of Set<SeamId>
+
+/// Declared seam authority per composed unit, keyed by the same stable
+/// `ComponentId` the Phase 296 `CapabilitySignature`, the Phase 280
+/// manifest and the Phase 438 surface use. An absent id resolves to
+/// `UnrestrictedSeams`, so a composition that declares nothing is
+/// unchanged (GP 11).
+type SeamGrantSignature = Map<ComponentId, SeamGrant>
+
+[<RequireQualifiedAccess>]
+module SeamId =
+
+    let private normalise (raw: string) : string =
+        if System.String.IsNullOrWhiteSpace raw then
+            ""
+        else
+            raw.Trim()
+
+    /// The raw underlying seam identity string.
+    let value (SeamId v) : string = v
+
+    /// Construct a `SeamId` from a raw identity (trimmed). Raises
+    /// `ArgumentException` on a null / empty / whitespace input — an
+    /// unnamed seam can never be granted or refused, and silently
+    /// accepting one would put an unmatchable member in a grant set.
+    let create (raw: string) : SeamId =
+        let v = normalise raw
+
+        if v = "" then
+            invalidArg "raw" "SeamId cannot be null, empty, or whitespace."
+
+        SeamId v
+
+    /// `create` as an option — `None` for a null / empty / whitespace
+    /// input rather than a raise.
+    let tryCreate (raw: string) : SeamId option =
+        let v = normalise raw
+        if v = "" then None else Some(SeamId v)
+
+    /// The seam a component reaches through an SDK interface, named by
+    /// the interface's own name (`IEntityStore`). The conventional
+    /// derivation — a seam IS its contract, so the contract's name is its
+    /// stable identity, independent of which implementation is composed
+    /// behind it.
+    let ofInterface (interfaceName: string) : SeamId = create interfaceName
+
+[<RequireQualifiedAccess>]
+module SeamGrant =
+
+    /// The undeclared posture — every seam resolves. What an absent
+    /// signature entry means, and the value a pre-688 composition has
+    /// everywhere (GP 11).
+    let unrestricted: SeamGrant = UnrestrictedSeams
+
+    /// Declare exactly these seams. An EMPTY sequence produces
+    /// `DeclaredSeams Set.empty` — "reaches nothing" — and is deliberately
+    /// NOT folded to `UnrestrictedSeams`: the two are opposite ends of the
+    /// order, and normalising one into the other would turn the tightest
+    /// possible declaration into the loosest.
+    let ofSeams (seams: SeamId seq) : SeamGrant = DeclaredSeams(Set.ofSeq seams)
+
+    /// Declare exactly these seams, named by their interface names — the
+    /// declaration shape a companion author writes by hand.
+    let ofInterfaces (interfaceNames: string seq) : SeamGrant =
+        DeclaredSeams(interfaceNames |> Seq.map SeamId.ofInterface |> Set.ofSeq)
+
+    /// The declared seam set — empty for `UnrestrictedSeams`, which
+    /// declares no set at all. Read it together with `isDeclared`: an
+    /// empty result means "unrestricted" or "reaches nothing" depending
+    /// on which case produced it.
+    let seams (grant: SeamGrant) : Set<SeamId> =
+        match grant with
+        | UnrestrictedSeams -> Set.empty
+        | DeclaredSeams s -> s
+
+    /// Whether the component declared a seam set at all. `false` is the
+    /// undeclared posture the verified profile refuses.
+    let isDeclared (grant: SeamGrant) : bool =
+        match grant with
+        | UnrestrictedSeams -> false
+        | DeclaredSeams _ -> true
+
+    /// Whether `seam` may be resolved under this grant. Unrestricted
+    /// permits everything; a declared set permits exactly its members.
+    let permits (grant: SeamGrant) (seam: SeamId) : bool =
+        match grant with
+        | UnrestrictedSeams -> true
+        | DeclaredSeams s -> Set.contains seam s
+
+    /// Whether `grant` permits everything `other` permits — the
+    /// containment order used to decide whether a grant-set change WIDENED
+    /// a component's authority. `UnrestrictedSeams` covers everything;
+    /// nothing but itself covers `UnrestrictedSeams`.
+    let covers (grant: SeamGrant) (other: SeamGrant) : bool =
+        match grant, other with
+        | UnrestrictedSeams, _ -> true
+        | DeclaredSeams _, UnrestrictedSeams -> false
+        | DeclaredSeams a, DeclaredSeams b -> Set.isSubset b a
+
+    /// Join two grants for the same component: the union of what each
+    /// permits, with `UnrestrictedSeams` absorbing (it is the TOP of this
+    /// order, not the bottom — see the header note on why this is not a
+    /// fourth `CompanionCapability` axis). Associative, commutative,
+    /// idempotent; `DeclaredSeams Set.empty` is the identity.
+    let join (a: SeamGrant) (b: SeamGrant) : SeamGrant =
+        match a, b with
+        | UnrestrictedSeams, _
+        | _, UnrestrictedSeams -> UnrestrictedSeams
+        | DeclaredSeams x, DeclaredSeams y -> DeclaredSeams(Set.union x y)
+
+    /// Look a component's declared grant up in a `SeamGrantSignature`,
+    /// falling back to `UnrestrictedSeams` for an absent id — so an
+    /// undeclared component keeps reaching every seam (GP 11).
+    let resolve (signature: SeamGrantSignature) (componentId: ComponentId) : SeamGrant =
+        signature |> Map.tryFind componentId |> Option.defaultValue UnrestrictedSeams
+
+    /// The stable kind label — `"unrestricted"` / `"declared"` — for
+    /// manifest wire projections and refusal messages. Never positional.
+    let kindLabel (grant: SeamGrant) : string =
+        match grant with
+        | UnrestrictedSeams -> "unrestricted"
+        | DeclaredSeams _ -> "declared"
+
+    /// The declared seam identities, sorted ordinally — the deterministic
+    /// projection a golden file persists.
+    let seamLabels (grant: SeamGrant) : string list =
+        seams grant
+        |> Set.toList
+        |> List.map SeamId.value
+        |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+
+    /// A readable one-line rendering: `unrestricted`, `declared{}`, or
+    /// `declared{IAuditSink,IEntityStore}`.
+    let render (grant: SeamGrant) : string =
+        match grant with
+        | UnrestrictedSeams -> "unrestricted"
+        | DeclaredSeams _ -> "declared{" + String.concat "," (seamLabels grant) + "}"
+
+    /// Rebuild a grant from its persisted kind label + seam labels. An
+    /// unrecognised kind reads as `unrestricted` — the pre-688 posture,
+    /// never a fabricated restriction that would refuse resolutions the
+    /// composition never declared against.
+    let ofWireParts (kind: string) (labels: string seq) : SeamGrant =
+        match (if isNull kind then "" else kind.Trim()) with
+        | "declared" -> DeclaredSeams(labels |> Seq.choose SeamId.tryCreate |> Set.ofSeq)
+        | _ -> UnrestrictedSeams

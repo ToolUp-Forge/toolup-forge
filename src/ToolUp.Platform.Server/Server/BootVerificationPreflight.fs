@@ -294,6 +294,16 @@ module CompositionProfile =
         | CompositionProfile.Standard -> policy
         | CompositionProfile.Verified -> BootVerificationPolicy.RefuseOnDrift
 
+    /// Phase 688 — whether declared reachable-seam sets are required
+    /// rather than optional. Same ladder as `requiresCapabilityGate`, and
+    /// deliberately a separate predicate: a deployment reading the profile
+    /// to decide what to demand should not have to know that the two
+    /// happen to move together today.
+    let requiresSeamGrants =
+        function
+        | CompositionProfile.Standard -> false
+        | CompositionProfile.Verified -> true
+
     /// Whether an enabled capability gate is required rather than
     /// optional.
     let requiresCapabilityGate =
@@ -311,11 +321,22 @@ type CompositionProfileRefusal =
     /// The verified profile was declared and a backend asked to run
     /// isolated work does not assert the clauses that make it isolating.
     | IsolationPostureShortfall of backend: string * missing: string list
+    /// Phase 688 — the verified profile was declared and one or more
+    /// components declared no reachable-seam set, so their outbound
+    /// authority is bound to nothing. An EMPTY component list means no
+    /// `SeamGrantSignature` was supplied at all.
+    | SeamGrantsUndeclared of components: string list
 
 [<RequireQualifiedAccess>]
 module CompositionProfileRefusal =
     let describe =
         function
+        | SeamGrantsUndeclared [] ->
+            "the verified composition profile requires a SeamGrantSignature: each component's outbound authority is bound to the seams it declared it reaches, and a composition that declares no seam sets has nothing to bind. Declare the components' SeamGrant values and compose the signature, or run CompositionProfile.Standard."
+        | SeamGrantsUndeclared components ->
+            let named = String.concat "; " components
+
+            $"the verified composition profile requires every component to declare the seams it reaches, and these declare none: {named}. Add a SeamGrant for each (SeamGrant.ofInterfaces [ \"IEntityStore\"; … ]), or run CompositionProfile.Standard."
         | CapabilityGateUndeclared ->
             "the verified composition profile requires a CapabilitySignature: each component's runtime authority is bound to its declared envelope, and a composition that declares no envelopes has nothing to bind. Declare the components' CompanionCapability values and compose the signature, or run CompositionProfile.Standard."
         | IsolationPostureShortfall(backend, missing) ->
@@ -790,6 +811,68 @@ module VerifiedCompositionProfile =
         (signature: CapabilitySignature option)
         : Result<ICompositionCapabilityGate, CompositionProfileRefusal> =
         resolveGate profile (auditingObserver auditLog scopeId profile) signature
+
+    // ─── Phase 688 — the seam-authority arm of the profile ────────────
+
+    /// Every component that appears in the capability signature but has
+    /// declared no reachable-seam set, ordinally sorted so the refusal
+    /// message is deterministic.
+    ///
+    /// The signature is the roster deliberately: it is the set of
+    /// components the composition has already declared an envelope for,
+    /// so "declared an effect envelope but no seam set" is exactly the
+    /// half-declared state the verified profile must not accept. A
+    /// component absent from both is invisible to the effect gate too,
+    /// and Phase 300's default-deny already covers it.
+    let undeclaredSeamComponents (signature: CapabilitySignature) (grants: SeamGrantSignature) : string list =
+        signature
+        |> Map.toList
+        |> List.map fst
+        |> List.filter (fun componentId -> not (SeamGrant.isDeclared (SeamGrant.resolve grants componentId)))
+        |> List.map ComponentId.value
+        |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+
+    /// Resolve the **seam-authority** gate a composition runs under.
+    ///
+    /// Under `Standard` this is additive by construction: with no grant
+    /// signature the returned gate grants every seam, so its decisions are
+    /// exactly `resolveGate`'s and a composition that declares nothing is
+    /// byte-for-byte unchanged (GP 11). Under `Verified` a missing grant
+    /// signature — or a component in the envelope that declared no seams —
+    /// is **refused**, for the same reason `CapabilityGateUndeclared`
+    /// exists: a mandatory seam check with nothing declared would permit
+    /// every seam while presenting as enforcement, which is worse than no
+    /// check because it is believed.
+    let resolveSeamGate
+        (profile: CompositionProfile)
+        (onDeny: CapabilityDenial -> unit)
+        (signature: CapabilitySignature option)
+        (grants: SeamGrantSignature option)
+        : Result<ISeamAuthorityGate, CompositionProfileRefusal> =
+        match profile, signature, grants with
+        | CompositionProfile.Standard, None, _ -> Ok SeamAuthorityGate.disabled
+        | CompositionProfile.Standard, Some declared, None ->
+            Ok(SeamAuthorityGate.unrestricted (CompositionCapabilityGate.create onDeny declared))
+        | CompositionProfile.Standard, Some declared, Some declaredSeams ->
+            Ok(SeamAuthorityGate.create onDeny declared declaredSeams)
+        | CompositionProfile.Verified, None, _ -> Error CapabilityGateUndeclared
+        | CompositionProfile.Verified, Some _, None -> Error(SeamGrantsUndeclared [])
+        | CompositionProfile.Verified, Some declared, Some declaredSeams ->
+            match undeclaredSeamComponents declared declaredSeams with
+            | [] -> Ok(SeamAuthorityGate.create onDeny declared declaredSeams)
+            | undeclared -> Error(SeamGrantsUndeclared undeclared)
+
+    /// The mandatory seam gate with its refusals already on the audit path
+    /// — the one call a verified composition makes for the outbound half,
+    /// mirroring `auditedGate` for the effect half.
+    let auditedSeamGate
+        (auditLog: IAuditLog)
+        (scopeId: string)
+        (profile: CompositionProfile)
+        (signature: CapabilitySignature option)
+        (grants: SeamGrantSignature option)
+        : Result<ISeamAuthorityGate, CompositionProfileRefusal> =
+        resolveSeamGate profile (auditingObserver auditLog scopeId profile) signature grants
 
     /// Bind an external-compute dispatcher to the profile.
     ///

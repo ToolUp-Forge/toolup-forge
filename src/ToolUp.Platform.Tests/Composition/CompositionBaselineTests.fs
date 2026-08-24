@@ -87,6 +87,18 @@ let private footprintBaselinePath () =
 let private authorizationBaselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "authorization-surface-baseline.json")
 
+// Phase 688 deliberately adds NO sixth baseline here. Its
+// `SeamAuthoritySurface` is derived from a composed `SeamGrantSignature`,
+// which — exactly like Phase 434's `ScaleDeclarations` — is
+// composition-call-site data with no `ServerApp` field to read it from,
+// so the reference composition declares no grants and never can until a
+// later phase gives it somewhere to declare them. A golden file over an
+// input nothing can reach is a gate that cannot fail, which is worse
+// than no gate: it reads as coverage. The projection, its diff, its
+// severity and its wire round-trip are pinned in
+// `InProcess/SeamAuthorityTests.fs`, and the consumer-side golden file
+// is the five lines in `docs/migrations/688-seam-authority-grants.md`.
+
 /// Phase 597 — the rule-manifest half of the same gate. Unlike the other
 /// four this one is not derived from the reference *composition* at all:
 /// it pins the **prover**, not the proven. A rule added, removed,

@@ -969,6 +969,10 @@ ToolUp.Platform.ComponentScaleModule.meetAll(System.Collections.Generic.IEnumera
 ToolUp.Platform.ComponentScaleModule.needs(ToolUp.Platform.ComponentScale) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.ComponentScaleModule.ofNeeds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]) : ToolUp.Platform.ComponentScale
 ToolUp.Platform.ComponentScaleModule.ofReadiness(ToolUp.Platform.Readiness) : ToolUp.Platform.ComponentScale
+ToolUp.Platform.ComponentSeamGrant (class)
+ToolUp.Platform.ComponentSeamGrant..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant)
+ToolUp.Platform.ComponentSeamGrant.GrantComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.ComponentSeamGrant.GrantedSeams : ToolUp.Platform.SeamGrant { get }
 ToolUp.Platform.ComponentSelection (class)
 ToolUp.Platform.ComponentSelection..ctor(ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ComponentSelection.Id : ToolUp.Platform.ComponentId { get }
@@ -1340,17 +1344,22 @@ ToolUp.Platform.CompositionProfileModule (class)
 ToolUp.Platform.CompositionProfileModule.effectivePolicy(ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy) : ToolUp.Platform.BootVerificationPolicy
 ToolUp.Platform.CompositionProfileModule.label(ToolUp.Platform.CompositionProfile) : System.String
 ToolUp.Platform.CompositionProfileModule.requiresCapabilityGate(ToolUp.Platform.CompositionProfile) : System.Boolean
+ToolUp.Platform.CompositionProfileModule.requiresSeamGrants(ToolUp.Platform.CompositionProfile) : System.Boolean
 ToolUp.Platform.CompositionProfileRefusal (class)
 ToolUp.Platform.CompositionProfileRefusal.CapabilityGateUndeclared : ToolUp.Platform.CompositionProfileRefusal { get }
 ToolUp.Platform.CompositionProfileRefusal.IsCapabilityGateUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsIsolationPostureShortfall : System.Boolean { get }
+ToolUp.Platform.CompositionProfileRefusal.IsSeamGrantsUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall (class)
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.backend : System.String { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared (class)
+ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared.components : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionProfileRefusal+Tags (class)
 ToolUp.Platform.CompositionProfileRefusal+Tags.CapabilityGateUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.IsolationPostureShortfall : System.Int32 (literal)
+ToolUp.Platform.CompositionProfileRefusal+Tags.SeamGrantsUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusalModule (class)
 ToolUp.Platform.CompositionProfileRefusalModule.describe(ToolUp.Platform.CompositionProfileRefusal) : System.String
 ToolUp.Platform.CompositionReferences (class)
@@ -4487,6 +4496,8 @@ ToolUp.Platform.IRetrievalTracer+RetrievalTrace.StageTimings : Microsoft.FSharp.
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopK : System.Int32 { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopScore : System.Double { get }
+ToolUp.Platform.ISeamAuthorityGate (interface)
+ToolUp.Platform.ISeamAuthorityGate.CheckSeam(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId, ToolUp.Platform.CompanionCapability) : ToolUp.Platform.CapabilityGateDecision
 ToolUp.Platform.ISeedPack (interface)
 ToolUp.Platform.ISeedPack.Apply(ToolUp.Platform.SeedContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SeedReport]
 ToolUp.Platform.ISeedPack.Name : System.String { get }
@@ -7037,6 +7048,40 @@ ToolUp.Platform.SealedCompositionBinding (class)
 ToolUp.Platform.SealedCompositionBinding..ctor(ToolUp.Platform.CompositionBinding, ToolUp.Platform.DeployRecordSeal)
 ToolUp.Platform.SealedCompositionBinding.Binding : ToolUp.Platform.CompositionBinding { get }
 ToolUp.Platform.SealedCompositionBinding.Seal : ToolUp.Platform.DeployRecordSeal { get }
+ToolUp.Platform.SeamAuthorityDelta (class)
+ToolUp.Platform.SeamAuthorityDelta..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]])
+ToolUp.Platform.SeamAuthorityDelta.GrantsAdded : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant] { get }
+ToolUp.Platform.SeamAuthorityDelta.GrantsNarrowed : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]] { get }
+ToolUp.Platform.SeamAuthorityDelta.GrantsRemoved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant] { get }
+ToolUp.Platform.SeamAuthorityDelta.GrantsWidened : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]] { get }
+ToolUp.Platform.SeamAuthorityGate (class)
+ToolUp.Platform.SeamAuthorityGate.create(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityDenial, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]) : ToolUp.Platform.ISeamAuthorityGate
+ToolUp.Platform.SeamAuthorityGate.disabled : ToolUp.Platform.ISeamAuthorityGate { get }
+ToolUp.Platform.SeamAuthorityGate.guardSeamInvoke(ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId, ToolUp.Platform.CompanionCapability, ToolUp.Platform.IHostCapabilityRegistry, ToolUp.Platform.CapabilityId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostCapabilityOutcome]
+ToolUp.Platform.SeamAuthorityGate.permitsSeam(ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamId) : System.Boolean
+ToolUp.Platform.SeamAuthorityGate.refusalReason(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant, ToolUp.Platform.SeamId) : System.String
+ToolUp.Platform.SeamAuthorityGate.resolveSeam`1(ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId, ToolUp.Platform.CompanionCapability, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, T]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.CapabilityDenial]
+ToolUp.Platform.SeamAuthorityGate.unrestricted(ToolUp.Platform.ICompositionCapabilityGate) : ToolUp.Platform.ISeamAuthorityGate
+ToolUp.Platform.SeamAuthoritySurface (class)
+ToolUp.Platform.SeamAuthoritySurface..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant])
+ToolUp.Platform.SeamAuthoritySurface.Granted : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant] { get }
+ToolUp.Platform.SeamAuthoritySurfaceModule (class)
+ToolUp.Platform.SeamAuthoritySurfaceModule.describe(ToolUp.Platform.ComponentSeamGrant) : System.String
+ToolUp.Platform.SeamAuthoritySurfaceModule.diff(ToolUp.Platform.SeamAuthoritySurface, ToolUp.Platform.SeamAuthoritySurface) : ToolUp.Platform.SeamAuthorityDelta
+ToolUp.Platform.SeamAuthoritySurfaceModule.empty : ToolUp.Platform.SeamAuthoritySurface { get }
+ToolUp.Platform.SeamAuthoritySurfaceModule.emptyDelta : ToolUp.Platform.SeamAuthorityDelta { get }
+ToolUp.Platform.SeamAuthoritySurfaceModule.grantOf(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamAuthoritySurface) : ToolUp.Platform.SeamGrant
+ToolUp.Platform.SeamAuthoritySurfaceModule.isEmptyDelta(ToolUp.Platform.SeamAuthorityDelta) : System.Boolean
+ToolUp.Platform.SeamAuthoritySurfaceModule.ofSignature(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]) : ToolUp.Platform.SeamAuthoritySurface
+ToolUp.Platform.SeamAuthoritySurfaceModule.ofWire(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamAuthorityWireEntry]) : ToolUp.Platform.SeamAuthoritySurface
+ToolUp.Platform.SeamAuthoritySurfaceModule.renderDelta(ToolUp.Platform.SeamAuthorityDelta) : System.String
+ToolUp.Platform.SeamAuthoritySurfaceModule.severity(ToolUp.Platform.SeamAuthorityDelta) : ToolUp.Platform.AuthorizationDriftSeverity
+ToolUp.Platform.SeamAuthoritySurfaceModule.toWire(ToolUp.Platform.SeamAuthoritySurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamAuthorityWireEntry]
+ToolUp.Platform.SeamAuthorityWireEntry (class)
+ToolUp.Platform.SeamAuthorityWireEntry..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.SeamAuthorityWireEntry.GrantComponentIdentity : System.String { get }
+ToolUp.Platform.SeamAuthorityWireEntry.GrantKind : System.String { get }
+ToolUp.Platform.SeamAuthorityWireEntry.GrantSeams : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.SecondaryIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex.create`2(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[TKey, System.String], Microsoft.FSharp.Core.FSharpFunc`2[TValue, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[TValue]]) : ToolUp.Platform.SecondaryIndex+BlobIndex`2[TKey, TValue]
@@ -8103,12 +8148,15 @@ ToolUp.Platform.VectorStoreErasureHandler+VectorStoreErasureHandler (class)
 ToolUp.Platform.VectorStoreErasureHandler+VectorStoreErasureHandler..ctor(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ISparseIndex+ISparseIndex])
 ToolUp.Platform.VerifiedCompositionProfile (class)
 ToolUp.Platform.VerifiedCompositionProfile.auditedGate(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ICompositionCapabilityGate, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.Platform.VerifiedCompositionProfile.auditedSeamGate(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.CompositionProfileRefusal]
 ToolUp.Platform.VerifiedCompositionProfile.auditingObserver(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.CompositionProfile, ToolUp.Platform.CapabilityDenial) : System.Void
 ToolUp.Platform.VerifiedCompositionProfile.enforceExecutionProfile(ToolUp.Platform.CompositionProfile, ToolUp.Platform.IExternalComputeDispatcher) : ToolUp.Platform.IExternalComputeDispatcher
 ToolUp.Platform.VerifiedCompositionProfile.recordRefusal(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.CompositionProfile, ToolUp.Platform.CapabilityDenial) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.VerifiedCompositionProfile.refusalPayload(ToolUp.Platform.CompositionProfile, ToolUp.Platform.CapabilityDenial) : ToolUp.Platform.CompositionCapabilityRefusedPayload
 ToolUp.Platform.VerifiedCompositionProfile.renderCapability(ToolUp.Platform.CompanionCapability) : System.String
 ToolUp.Platform.VerifiedCompositionProfile.resolveGate(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityDenial, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ICompositionCapabilityGate, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.Platform.VerifiedCompositionProfile.resolveSeamGate(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityDenial, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.Platform.VerifiedCompositionProfile.undeclaredSeamComponents(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.VerifiedCompositionProfile.verifyIsolation(ToolUp.Platform.CompositionProfile, System.String, ToolUp.Platform.ExecutionProfile, ToolUp.Platform.IsolationPosture) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CompositionProfileRefusal]
 ToolUp.Platform.VersionedBuildError (class)
 ToolUp.Platform.VersionedBuildError.IsBuildFailed : System.Boolean { get }
