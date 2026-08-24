@@ -2366,10 +2366,12 @@ let manifestBindable: Set<string> =
         Names.acceptUnboundAudienceInAuthMode
         Names.acceptUnsignedPublishable
         Names.adAnalytics
+        Names.allowDevAdminBootstrap
         Names.assetStore
         Names.auditFailurePolicy
         Names.auditLog
         Names.authCookieIssuance
+        Names.authMode
         Names.backfillMissedTicks
         Names.columnMapping
         Names.computeBudget
@@ -2390,6 +2392,9 @@ let manifestBindable: Set<string> =
         Names.eventTriggerCatchUp
         Names.healthStateTracking
         Names.includePlatformDefaults
+        Names.initialPlatformAdmin
+        Names.initialTeamId
+        Names.initialTeamName
         Names.jobScheduler
         Names.lineage
         Names.logLevel
@@ -2400,7 +2405,10 @@ let manifestBindable: Set<string> =
         Names.migrateWebhookSecretsAtRest
         Names.moduleBindingAllowUnbound
         Names.moduleFilter
+        Names.oauthRedirectBase
         Names.oauthRefresher
+        Names.oidcAudience
+        Names.oidcIssuer
         Names.peerRoutePrefixes
         Names.platformKnowledgeBase
         Names.platformSurfaces

@@ -32,11 +32,14 @@ open ToolUp.Platform.ConfigValidation
 [<Literal>]
 let private AdminTokenEnvVar = ConfigKeys.Names.adminToken
 
+// Phase 698 — through the Phase-696 `ConfigResolution` seam. The key is a
+// SECRET, so a manifest can never supply it (the loader refuses one with no
+// hatch) and this stays an environment-only read in practice. It goes
+// through the seam anyway so that `--print-config` and the deployment
+// report attribute it from the one place that knows, rather than from a
+// reader that has its own private answer.
 let private isAdminTokenSet () =
-    match Environment.GetEnvironmentVariable AdminTokenEnvVar with
-    | null
-    | "" -> false
-    | _ -> true
+    ConfigResolution.tryValue AdminTokenEnvVar |> Option.isSome
 
 /// Gap #8 — config validator that warns when `PerScopeKeyResolver` is
 /// registered (auto-mounting the crypto-shred admin endpoint) but

@@ -208,7 +208,12 @@ let bootstrap
     (store: IPlatformAdminStore)
     =
     async {
-        let envValue = Environment.GetEnvironmentVariable initialAdminEnvVar
+        // Phase 698 — through the Phase-696 `ConfigResolution` seam. `tryResolve`
+        // rather than `tryValue` because this bootstrap RECORDS where the
+        // elevated identity came from, and "env var TOOLUP_INITIAL_PLATFORM_ADMIN"
+        // would be a false statement about a manifest-declared admin — on the one
+        // audit line that says who was granted platform-wide privilege.
+        let resolvedAdmin = ConfigResolution.tryResolve initialAdminEnvVar
 
         // Phase 230 — the dev fallback only elevates in an auth-requiring
         // deployment when TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP is explicitly set.
@@ -225,9 +230,9 @@ let bootstrap
                 // ENABLED — an operator setting `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP=false`
                 // to turn the dev-admin bootstrap OFF got the opposite, keeping
                 // a first-sign-in privilege-escalation path open.
-                match Environment.GetEnvironmentVariable allowDevAdminBootstrapEnvVar with
-                | null -> false
-                | v ->
+                match ConfigResolution.tryValue allowDevAdminBootstrapEnvVar with
+                | None -> false
+                | Some v ->
                     match v.Trim().ToLowerInvariant() with
                     | "1"
                     | "true"
@@ -236,9 +241,14 @@ let bootstrap
                     | _ -> false
 
         let target =
-            if not (String.IsNullOrWhiteSpace envValue) then
-                Some(envValue.Trim(), sprintf "env var %s" initialAdminEnvVar, false)
-            else
+            match resolvedAdmin with
+            | Some(value, source) when not (String.IsNullOrWhiteSpace value) ->
+                Some(
+                    value.Trim(),
+                    sprintf "%s %s" (ConfigResolution.ConfigSource.label source) initialAdminEnvVar,
+                    false
+                )
+            | _ ->
                 match autoBootstrapDevAdmin with
                 | Some id when not (System.String.IsNullOrWhiteSpace id) ->
                     if devFallbackAllowed then

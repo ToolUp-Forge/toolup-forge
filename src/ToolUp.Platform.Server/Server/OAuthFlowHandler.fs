@@ -66,11 +66,8 @@ let private redirectBaseFromRequest (ctx: HttpContext) : string =
 /// to the request's resolved scheme + host. Trailing `/` trimmed so
 /// concatenation is safe.
 let private resolveRedirectBase (ctx: HttpContext) : string =
-    let envValue =
-        match Environment.GetEnvironmentVariable RedirectBaseEnvVar with
-        | null
-        | "" -> None
-        | v -> Some v
+    // Phase 698 — through the Phase-696 `ConfigResolution` seam.
+    let envValue = ConfigResolution.tryValue RedirectBaseEnvVar
 
     let raw = envValue |> Option.defaultWith (fun () -> redirectBaseFromRequest ctx)
     raw.TrimEnd('/')

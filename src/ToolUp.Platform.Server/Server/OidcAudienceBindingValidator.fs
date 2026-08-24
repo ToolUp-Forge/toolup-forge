@@ -39,11 +39,11 @@ let private AuthModeEnvVar = ConfigKeys.Names.authMode
 [<Literal>]
 let private OidcAudienceEnvVar = ConfigKeys.Names.oidcAudience
 
-let private envValue (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some(v.Trim())
+// Phase 698 — resolved through the Phase-696 `ConfigResolution` seam, so
+// a manifest-declared value is seen by the preflight that refuses on it.
+// A validator left on a direct environment read would pass a deployment
+// whose manifest sets the very key it checks, which is worse than not
+// checking: the refusal is what the operator is trusting.
 
 /// Config validator that refuses an authenticated `Mode` running OIDC
 /// (`TOOLUP_AUTH_MODE=oidc`) without `TOOLUP_OIDC_AUDIENCE`, unless the
@@ -63,9 +63,13 @@ type OidcAudienceBindingValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
 
-            let authMode = envValue AuthModeEnvVar |> Option.map _.ToLowerInvariant()
+            let authMode =
+                ConfigResolution.tryValue AuthModeEnvVar
+                |> Option.map (fun v -> v.Trim().ToLowerInvariant())
 
-            let oidcAudience = envValue OidcAudienceEnvVar
+            let oidcAudience =
+                ConfigResolution.tryValue OidcAudienceEnvVar |> Option.map _.Trim()
+
             let escapeHatch = config.AcceptUnboundAudienceWhenAuthRequired
 
             if requiresAuth && authMode = Some "oidc" && oidcAudience.IsNone && not escapeHatch then

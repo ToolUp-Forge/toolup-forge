@@ -46,10 +46,12 @@ type TeamCreationPolicyValidator(config: ServerConfig, platformAdminStore: IPlat
             | true, PlatformAdminOnly ->
                 let! admins = platformAdminStore.ListPlatformAdmins()
 
+                // Phase 698 — through the Phase-696 `ConfigResolution` seam, so a
+                // manifest-declared initial admin counts as a configured admin
+                // here exactly as an environment-declared one does.
                 let envSet =
-                    Environment.GetEnvironmentVariable BootstrapTeam.initialAdminEnvVar
-                    |> String.IsNullOrWhiteSpace
-                    |> not
+                    ConfigResolution.tryValue BootstrapTeam.initialAdminEnvVar
+                    |> Option.exists (String.IsNullOrWhiteSpace >> not)
 
                 if List.isEmpty admins && not envSet then
                     return

@@ -34,11 +34,10 @@ open ToolUp.Platform.ConfigValidation
 [<Literal>]
 let private RedirectBaseEnvVar = ConfigKeys.Names.oauthRedirectBase
 
+// Phase 698 — through the Phase-696 `ConfigResolution` seam, so the
+// validator judges the same redirect base the handler will actually use.
 let private readEnv () : string option =
-    match Environment.GetEnvironmentVariable RedirectBaseEnvVar with
-    | null
-    | "" -> None
-    | v -> Some(v.Trim())
+    ConfigResolution.tryValue RedirectBaseEnvVar |> Option.map _.Trim()
 
 let private isAbsoluteHttpUri (raw: string) : bool =
     match Uri.TryCreate(raw, UriKind.Absolute) with

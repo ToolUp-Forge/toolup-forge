@@ -59,11 +59,11 @@ let private AdminTokenHeader = "X-Admin-Token"
 [<Literal>]
 let private ActorHeader = "X-Actor-UserId"
 
+// Phase 698 — through the Phase-696 `ConfigResolution` seam. Secret key, so
+// the manifest lane is refused outright and this remains an environment
+// read; the seam is what keeps the provenance answer single-sourced.
 let private readEnvToken () =
-    match Environment.GetEnvironmentVariable AdminTokenEnvVar with
-    | null
-    | "" -> None
-    | value -> Some value
+    ConfigResolution.tryValue AdminTokenEnvVar
 
 let private readHeader (ctx: HttpContext) (name: string) : string option =
     match ctx.Request.Headers.TryGetValue name with

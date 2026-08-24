@@ -101,10 +101,13 @@ type OidcIssuerCspContributor() =
 
     interface ICspContributor with
         member _.RequiredSources =
-            match Environment.GetEnvironmentVariable OidcIssuerCspContributor.EnvVar with
-            | null
-            | "" -> []
-            | issuer ->
+            // Phase 698 — through the Phase-696 `ConfigResolution` seam, so a
+            // manifest-declared issuer contributes its origin to the CSP. A
+            // header that omitted it would block the sign-in redirect the
+            // manifest just configured.
+            match ConfigResolution.tryValue OidcIssuerCspContributor.EnvVar with
+            | None -> []
+            | Some issuer ->
                 let trimmed = issuer.Trim()
 
                 let connectSrc =

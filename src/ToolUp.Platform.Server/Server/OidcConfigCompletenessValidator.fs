@@ -37,11 +37,8 @@ let private AuthModeEnvVar = ConfigKeys.Names.authMode
 [<Literal>]
 let private OidcIssuerEnvVar = ConfigKeys.Names.oidcIssuer
 
-let private envValue (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some(v.Trim())
+// Phase 698 — resolved through the Phase-696 `ConfigResolution` seam, so
+// a manifest-declared value reaches the preflight that refuses on it.
 
 /// Gap #4 — config validator that refuses startup when
 /// `TOOLUP_AUTH_MODE=oidc` is set without `TOOLUP_OIDC_ISSUER`.
@@ -59,9 +56,11 @@ type OidcConfigCompletenessValidator(?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let authMode = envValue AuthModeEnvVar |> Option.map _.ToLowerInvariant()
+            let authMode =
+                ConfigResolution.tryValue AuthModeEnvVar
+                |> Option.map (fun v -> v.Trim().ToLowerInvariant())
 
-            let oidcIssuer = envValue OidcIssuerEnvVar
+            let oidcIssuer = ConfigResolution.tryValue OidcIssuerEnvVar |> Option.map _.Trim()
 
             match authMode, oidcIssuer with
             | Some "oidc", None ->

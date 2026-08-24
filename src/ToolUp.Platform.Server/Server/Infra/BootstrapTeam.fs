@@ -47,6 +47,9 @@ let initialTeamIdEnvVar = ConfigKeys.Names.initialTeamId
 [<Literal>]
 let initialAdminEnvVar = ConfigKeys.Names.initialPlatformAdmin
 
+// Phase 698 — the three bootstrap keys resolve through the Phase-696
+// `ConfigResolution` seam, so a manifest can declare the initial team the
+// same way it declares every other deployment-shape key.
 let private trimOrNone (value: string) =
     if String.IsNullOrWhiteSpace value then
         None
@@ -79,7 +82,8 @@ let private trimOrNone (value: string) =
 /// **No-op conditions:** env var unset; team store non-empty;
 /// admin env var unset (logged at `Error`).
 let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : Async<unit> = async {
-    let nameOpt = Environment.GetEnvironmentVariable initialTeamNameEnvVar |> trimOrNone
+    let nameOpt =
+        ConfigResolution.tryValue initialTeamNameEnvVar |> Option.bind trimOrNone
 
     match nameOpt with
     | None ->
@@ -94,7 +98,8 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
             // Already-populated — bootstrap is one-shot.
             return ()
         else
-            let adminOpt = Environment.GetEnvironmentVariable initialAdminEnvVar |> trimOrNone
+            let adminOpt =
+                ConfigResolution.tryValue initialAdminEnvVar |> Option.bind trimOrNone
 
             match adminOpt with
             | None ->
@@ -112,8 +117,8 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                 return ()
             | Some adminUserId ->
                 let teamId =
-                    Environment.GetEnvironmentVariable initialTeamIdEnvVar
-                    |> trimOrNone
+                    ConfigResolution.tryValue initialTeamIdEnvVar
+                    |> Option.bind trimOrNone
                     |> Option.defaultWith (fun () -> Guid.NewGuid().ToString("N")[..7])
 
                 let! createResult = teamStore.CreateTeam(teamId, teamName)

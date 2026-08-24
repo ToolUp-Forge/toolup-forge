@@ -59,10 +59,12 @@ type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan
             // The disable spellings (false/no/off) must read as "not set" so
             // the validator's Warning/Error branch matches what the bootstrap
             // gate will actually do.
+            // Phase 698 — through the Phase-696 `ConfigResolution` seam, so this
+            // validator and the gate it mirrors read the same value.
             let optInSet =
-                match Environment.GetEnvironmentVariable PlatformAdminStore.allowDevAdminBootstrapEnvVar with
-                | null -> false
-                | v ->
+                match ConfigResolution.tryValue PlatformAdminStore.allowDevAdminBootstrapEnvVar with
+                | None -> false
+                | Some v ->
                     match v.Trim().ToLowerInvariant() with
                     | "1"
                     | "true"

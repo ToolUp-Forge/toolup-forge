@@ -43,9 +43,9 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
 | `TOOLUP_ADMIN_TOKEN` | string | — | yes | never | Bearer token guarding the crypto-shred encryption-admin endpoints. Unset leaves those endpoints unmounted (preflight warns if the surface is composed). |
-| `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP` | bool | false | no | pending | When true in an auth-requiring mode, the first sign-in auto-promotes to Platform Admin (privilege-escalation surface; preflight warns). |
+| `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP` | bool | false | no | yes | When true in an auth-requiring mode, the first sign-in auto-promotes to Platform Admin (privilege-escalation surface; preflight warns). |
 | `TOOLUP_AUTH_COOKIE_ISSUANCE` | enum: enabled, disabled | disabled | no | yes | Issues the platform auth cookie alongside the bearer token, so SSE can authenticate without a query parameter. |
-| `TOOLUP_AUTH_MODE` | enum: oidc | (unset — dev HeaderAuthProvider) | no | pending | Selects the IAuthProvider. Unset uses the dev-only HeaderAuthProvider (trusts X-User-Id); 'oidc' requires TOOLUP_OIDC_ISSUER. An unrecognised value refuses startup. |
+| `TOOLUP_AUTH_MODE` | enum: oidc | (unset — dev HeaderAuthProvider) | no | yes | Selects the IAuthProvider. Unset uses the dev-only HeaderAuthProvider (trusts X-User-Id); 'oidc' requires TOOLUP_OIDC_ISSUER. An unrecognised value refuses startup. |
 | `TOOLUP_ENTRA_DIRECTORY_ENABLED` | bool | false | no | pending | Enables the Entra directory companion for user lookup and invitation via Microsoft Graph. |
 | `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT` | string | — | no | pending | Microsoft Graph endpoint override for the Entra directory companion. |
 | `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` | string | — | no | pending | Object id of the principal used as the sender for directory invitations. |
@@ -61,9 +61,9 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | `TOOLUP_GITHUB_CACHE_TTL_SECONDS` | int | — | no | pending | Seconds a resolved GitHub identity is cached. |
 | `TOOLUP_GITHUB_FETCH_PRIMARY_EMAIL` | bool | false | no | pending | Additionally fetches the primary email address, which requires the user:email scope. |
 | `TOOLUP_GITHUB_USER_AGENT` | string | — | no | pending | User-Agent sent on GitHub API calls. |
-| `TOOLUP_INITIAL_PLATFORM_ADMIN` | string | — | no | pending | User id (OIDC sub/oid) granted Platform Admin on first boot when no admin exists yet. |
-| `TOOLUP_INITIAL_TEAM_ID` | string | — | no | pending | Stable id of the bootstrap team created on first boot. |
-| `TOOLUP_INITIAL_TEAM_NAME` | string | — | no | pending | Display name of the bootstrap team created on first boot. |
+| `TOOLUP_INITIAL_PLATFORM_ADMIN` | string | — | no | yes | User id (OIDC sub/oid) granted Platform Admin on first boot when no admin exists yet. |
+| `TOOLUP_INITIAL_TEAM_ID` | string | — | no | yes | Stable id of the bootstrap team created on first boot. |
+| `TOOLUP_INITIAL_TEAM_NAME` | string | — | no | yes | Display name of the bootstrap team created on first boot. |
 | `TOOLUP_LDAP_ALLOW_PLAINTEXT` | bool | false | no | pending | Allows an unencrypted LDAP connection, which sends bind credentials in the clear. |
 | `TOOLUP_LDAP_ALLOW_UNTRUSTED_CERT` | bool | false | no | pending | Skips LDAP server certificate validation. |
 | `TOOLUP_LDAP_AUTH` | bool | false | no | pending | Enables the LDAP / Active Directory auth provider. |
@@ -83,9 +83,9 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | `TOOLUP_LDAP_TIMEOUT_SECONDS` | int | — | no | pending | LDAP operation timeout, in seconds. |
 | `TOOLUP_LDAP_USER_ID_ATTR` | string | — | no | pending | LDAP attribute the stable user id is read from. |
 | `TOOLUP_LDAP_USER_OBJECTCLASS` | string | — | no | pending | objectClass used to filter user entries. |
-| `TOOLUP_OAUTH_REDIRECT_BASE` | string | — | no | pending | Absolute base URL used to build OAuth-connector redirect URIs (must match the provider's registered callback origin). |
-| `TOOLUP_OIDC_AUDIENCE` | string | — | no | pending | Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes). |
-| `TOOLUP_OIDC_ISSUER` | string | — | no | pending | OIDC provider discovery URL. Required when TOOLUP_AUTH_MODE=oidc; missing issuer refuses startup. |
+| `TOOLUP_OAUTH_REDIRECT_BASE` | string | — | no | yes | Absolute base URL used to build OAuth-connector redirect URIs (must match the provider's registered callback origin). |
+| `TOOLUP_OIDC_AUDIENCE` | string | — | no | yes | Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes). |
+| `TOOLUP_OIDC_ISSUER` | string | — | no | yes | OIDC provider discovery URL. Required when TOOLUP_AUTH_MODE=oidc; missing issuer refuses startup. |
 | `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` | int | — | no | pending | Milliseconds the OIDC preflight waits for the issuer discovery document. |
 | `TOOLUP_SSE_AUTH` | enum: cookie, cookies, cookieonly | (unset — bearer header only) | no | yes | When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only. |
 | `TOOLUP_TEAM_CREATION_POLICY` | enum: platformadminonly, anyauthenticateduser | platformadminonly | no | yes | Who may create a team: platform admins only, or any authenticated user. |

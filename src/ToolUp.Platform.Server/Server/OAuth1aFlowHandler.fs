@@ -60,10 +60,10 @@ let private redirectBaseFromRequest (ctx: HttpContext) : string =
     sprintf "%s://%s" ctx.Request.Scheme (string ctx.Request.Host)
 
 let private resolveRedirectBase (ctx: HttpContext) : string =
-    match Environment.GetEnvironmentVariable RedirectBaseEnvVar with
-    | null
-    | "" -> (redirectBaseFromRequest ctx).TrimEnd('/')
-    | v -> v.TrimEnd('/')
+    // Phase 698 — through the Phase-696 `ConfigResolution` seam.
+    match ConfigResolution.tryValue RedirectBaseEnvVar with
+    | None -> (redirectBaseFromRequest ctx).TrimEnd('/')
+    | Some v -> v.TrimEnd('/')
 
 let private callbackUriFor (ctx: HttpContext) (flowName: string) : string =
     sprintf "%s/api/oauth1a/%s/callback" (resolveRedirectBase ctx) flowName

@@ -38,13 +38,14 @@ type BootstrapTeamValidator(?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let nameValue =
-                Environment.GetEnvironmentVariable BootstrapTeam.initialTeamNameEnvVar
+            // Phase 698 — through the Phase-696 `ConfigResolution` seam, so the
+            // validator sees the same pair the bootstrap itself will read.
+            let nameValue = ConfigResolution.tryValue BootstrapTeam.initialTeamNameEnvVar
 
-            let adminValue = Environment.GetEnvironmentVariable BootstrapTeam.initialAdminEnvVar
+            let adminValue = ConfigResolution.tryValue BootstrapTeam.initialAdminEnvVar
 
-            let nameSet = not (String.IsNullOrWhiteSpace nameValue)
-            let adminSet = not (String.IsNullOrWhiteSpace adminValue)
+            let nameSet = nameValue |> Option.exists (String.IsNullOrWhiteSpace >> not)
+            let adminSet = adminValue |> Option.exists (String.IsNullOrWhiteSpace >> not)
 
             if nameSet && not adminSet then
                 return
@@ -52,7 +53,7 @@ type BootstrapTeamValidator(?timeout: TimeSpan) =
                         sprintf
                             "%s = '%s' is set but %s is unset. BootstrapTeam needs both: the team-name env var tells it which team to create, and the admin env var tells it which user to add as Owner. A team without an Owner is unmanageable, so the bootstrap path refuses to create one. Fix: set %s=<userId>, or unset %s to skip the bootstrap entirely."
                             BootstrapTeam.initialTeamNameEnvVar
-                            (nameValue.Trim())
+                            ((nameValue |> Option.defaultValue "").Trim())
                             BootstrapTeam.initialAdminEnvVar
                             BootstrapTeam.initialAdminEnvVar
                             BootstrapTeam.initialTeamNameEnvVar

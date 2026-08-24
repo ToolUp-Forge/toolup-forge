@@ -23,11 +23,12 @@ type OidcAuthBuilder = ILogger option -> AuthConfig -> IAuthProvider
 /// pipeline.
 type OidcAuthBuilderMetered = ILogger option -> IMetricsSink option -> AuthConfig -> IAuthProvider
 
-let private envVar (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some v
+// Phase 698 — every key below resolves through `ConfigResolution`, the
+// Phase-696 seam, rather than through a private `Environment.GetEnvironment
+// Variable` wrapper. With no manifest installed the seam IS that wrapper
+// (read the variable, fold null/empty to `None`), so an existing
+// deployment resolves byte-for-byte as before (GP 11); with one installed,
+// a declared value is honoured instead of silently ignored.
 
 // Gap audit 2026-06-12 Auth G6 — explicit misconfiguration refuses at
 // startup instead of silently degrading to the spoofable
@@ -57,7 +58,10 @@ let private unrecognisedModeMessage (other: string) =
 /// `BearerHeader`-only behaviour — deployments that don't use SSE pay
 /// nothing for the fallback (GP 11 + GP 13).
 let private tokenLocationFromEnv () : TokenLocation =
-    match envVar ConfigKeys.Names.sseAuth |> Option.map _.ToLowerInvariant() with
+    match
+        ConfigResolution.tryValue ConfigKeys.Names.sseAuth
+        |> Option.map _.ToLowerInvariant()
+    with
     | Some "cookie"
     | Some "cookies"
     | Some "cookieonly" ->
@@ -122,14 +126,17 @@ let private buildAuthConfig (issuer: string) (audience: string option) : AuthCon
 /// metrics. Use `fromEnvMetered` to thread an `IMetricsSink` resolved
 /// from the compose-time service collection into the OIDC builder.
 let fromEnv (logger: ILogger) (oidcBuilder: OidcAuthBuilder) : IAuthProvider =
-    match envVar ConfigKeys.Names.authMode |> Option.map _.ToLowerInvariant() with
+    match
+        ConfigResolution.tryValue ConfigKeys.Names.authMode
+        |> Option.map _.ToLowerInvariant()
+    with
     | Some "oidc" ->
-        match envVar ConfigKeys.Names.oidcIssuer with
+        match ConfigResolution.tryValue ConfigKeys.Names.oidcIssuer with
         | None ->
             logger.Error(missingIssuerMessage, None)
             invalidOp missingIssuerMessage
         | Some issuer ->
-            let audience = envVar ConfigKeys.Names.oidcAudience
+            let audience = ConfigResolution.tryValue ConfigKeys.Names.oidcAudience
             let authConfig = buildAuthConfig issuer audience
             let audienceLabel = audience |> Option.defaultValue "(any)"
             logger.Info $"Auth provider: OIDC (issuer={issuer}, audience={audienceLabel})"
@@ -156,14 +163,17 @@ let fromEnvMetered
     (metrics: IMetricsSink option)
     (oidcBuilder: OidcAuthBuilderMetered)
     : IAuthProvider =
-    match envVar ConfigKeys.Names.authMode |> Option.map _.ToLowerInvariant() with
+    match
+        ConfigResolution.tryValue ConfigKeys.Names.authMode
+        |> Option.map _.ToLowerInvariant()
+    with
     | Some "oidc" ->
-        match envVar ConfigKeys.Names.oidcIssuer with
+        match ConfigResolution.tryValue ConfigKeys.Names.oidcIssuer with
         | None ->
             logger.Error(missingIssuerMessage, None)
             invalidOp missingIssuerMessage
         | Some issuer ->
-            let audience = envVar ConfigKeys.Names.oidcAudience
+            let audience = ConfigResolution.tryValue ConfigKeys.Names.oidcAudience
             let authConfig = buildAuthConfig issuer audience
             let audienceLabel = audience |> Option.defaultValue "(any)"
             logger.Info $"Auth provider: OIDC (issuer={issuer}, audience={audienceLabel})"
