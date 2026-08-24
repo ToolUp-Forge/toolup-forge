@@ -2,7 +2,38 @@
 
 Single-source reference for the environment variables `ServerConfig.fromEnv` (and adjacent seams) read. This page grows as the [Phase 71.A](../migrations/71a-runtime-config-lifts.md) runtime-config lifts land; today it covers the config-resolution variables. A deployment that sets none of these resolves byte-for-byte from `ServerConfig.defaults` + the supplied overrides record (GP 11).
 
-**Precedence (every lifted field):** consumer-authored literal (`{ ServerConfig.defaults with X = ... }`) > env var > library-default override-record value (`ServerConfigOverrides.referenceApp`) > `defaults.X`.
+**Precedence (every lifted field):** consumer-authored literal (`{ ServerConfig.defaults with X = ... }`) > env var > **deployment configuration manifest** > library-default override-record value (`ServerConfigOverrides.referenceApp`) > `defaults.X`.
+
+## The deployment configuration manifest
+
+A deployment is otherwise 30–50 flat strings smeared across a hosting blade, a compose file and CI secrets: no reviewable artefact, no diff between staging and production, and a typo boots a different subsystem without a murmur. The manifest adds a **declared layer beneath the environment** — one JSON file, hashable and diffable, bound through the same config-key registry this page is generated from. Environment variables stay exactly what they are good at: secrets, per-instance values, and orchestrator injection.
+
+```json
+{
+  "$schema": "./toolup.config.schema.json",
+  "TOOLUP_PLATFORM_SURFACES": "team",
+  "TOOLUP_REPLICA_COUNT": 3,
+  "TOOLUP_REQUIRE_HTTPS": true,
+  "TOOLUP_EVENT_STORE": "persistent"
+}
+```
+
+**Keys are the canonical environment-variable names, flat.** There is no nested section scheme and no second naming convention: grep finds a key in the file, in the environment, in source and in the generated reference by the same string.
+
+**Discovery.** `TOOLUP_CONFIG_FILE` names the file when set — and the named file **must exist**, or startup refuses; silently falling back would be the "declared but not applied" failure the whole layer exists to prevent. Unset, `./toolup.config.json` is probed at the content root and used when present. With neither, nothing is loaded and every value resolves exactly as it did before the manifest existed (GP 11).
+
+**Refusals.** Two, both at startup, both naming what to do instead:
+
+- An **unknown key** refuses. Everything in a hand-written file is intentional, so a typo there is unambiguous — unlike the environment, which carries platform noise a hard refusal would false-positive on. `$schema` is the one tolerated non-registry key, so an editor can validate the file as it is typed.
+- A **secret key** refuses, naming the environment variable to set instead. There is deliberately **no acceptance hatch**: the manifest's whole value is that it is shareable, committable and hashable, and one secret in it destroys all three.
+
+**Hash.** SHA-256 over the **raw file bytes**, logged at boot and printed by `--print-config`. No canonicalisation — the artefact being attested is the file as deployed, and a normaliser's bugs would become attestation bugs, so "this exact byte sequence" is the honest claim. Reformatting the file changes the hash; that is the intended behaviour, not a defect.
+
+**Partial coverage is declared, not latent.** A key is manifest-bindable only once its reader resolves through the shared config-resolution seam. The generated [configuration reference](../reference/config-reference.md) carries a **Manifest** column saying which state each key is in — `yes`, `pending` (registered, reader not yet migrated), `never` (a secret), `n/a` — and a manifest that sets a `pending` key **warns at startup naming it**, because a key the file states and nothing reads is worse than no file at all. `ServerConfig.fromEnv`'s cluster (87 keys — everything on this page's tables below) is bindable today; the remaining `*FromEnv` readers migrate in family batches.
+
+**Wiring.** `ConsoleLogger.fromEnv ()` discovers and installs the manifest before it builds the logger, so a composition root that already calls it needs no change at all. The ordering is deliberate: `TOOLUP_LOG_LEVEL` is itself a bindable key, so a manifest read any later could not configure the logger it configures. A composition root that builds its **own** logger calls `ConfigResolver.installFromCurrentDirectory ()` itself, before `ServerConfig.fromEnv` — and is warned at compose time if a manifest is sitting on disk unread.
+
+**Inspecting it.** `--print-config` prints every key with the layer its value came from (`env` / `manifest` / `default`) plus the manifest path and hash; `--print-config --diff` prints only the keys some layer actually set, which is the review artefact rather than the dump. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above the resolution seam and reads as `default` there.
 
 ## Core deployment shape
 
@@ -93,6 +124,7 @@ Client (Vite defines) — **off-direction only**; enabling carries a structured 
 | `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | `MaxSseConnectionsPerScope` | `10` (positive int or `none`) |
 | `TOOLUP_SLOW_REQUEST_MS` | `SlowRequestThreshold` | `1000` |
 | `TOOLUP_REPLICA_COUNT` | `ReplicaCount` | `1` |
+| `TOOLUP_CONFIG_FILE` | _(none — names the manifest)_ | unset (probes `./toolup.config.json`); a named file that does not exist refuses startup |
 
 ## `Accept*` escape-hatch flags
 

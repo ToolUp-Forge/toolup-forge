@@ -442,6 +442,7 @@ let allTests =
         TenantCompositionPresetTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
+        ConfigResolverTests.tests
         HealthStateTrackerTests.tests
         AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests

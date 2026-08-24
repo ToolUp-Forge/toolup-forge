@@ -225,6 +225,9 @@ module Names =
 
     // Deployment shape
     [<Literal>]
+    let configFile = "TOOLUP_CONFIG_FILE"
+
+    [<Literal>]
     let replicaCount = "TOOLUP_REPLICA_COUNT"
 
     [<Literal>]
@@ -918,6 +921,15 @@ let all: ConfigKeyDescriptor list = [
     }
 
     // ─── Deployment shape ───────────────────────────────────────────
+    {
+        EnvVar = Names.configFile
+        Description =
+            "Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded."
+        Type = StringKey
+        Default = Some "(unset — probes ./toolup.config.json)"
+        IsSecret = false
+        Category = "Deployment shape"
+    }
     {
         EnvVar = Names.replicaCount
         Description =
@@ -2248,6 +2260,128 @@ let all: ConfigKeyDescriptor list = [
     }
 ]
 
+/// The keys a deployment configuration manifest may bind, declared.
+///
+/// A key is manifest-bindable only once its reader resolves through the
+/// `ConfigResolution` seam; until then the manifest could state it and
+/// nothing would consult it — worse than having no manifest at all.
+/// Declaring the set makes that partial coverage *visible*: the generated
+/// reference carries a column, `--print-config` labels each key's source,
+/// and a manifest naming a registered-but-unbindable key warns at startup
+/// naming the migration it waits on.
+///
+/// This is the Phase 71.A `ServerConfig.fromEnv` cluster — the largest
+/// single reader in the SDK, migrated wholesale because its ~40 private
+/// parsers all funnel through one env-read helper. The remaining
+/// `*FromEnv` readers and env-reading validators migrate in family
+/// batches, each flipping its own keys into this list; the coverage test
+/// holds the list to what the readers actually do, in both directions, so
+/// the sweep terminates instead of decaying.
+///
+/// Two kinds of key are absent by construction and never join the list.
+/// **Secrets**: the loader refuses them outright and no acceptance hatch
+/// lowers that, so declaring one bindable would be a claim nothing can
+/// honour — `TOOLUP_MODULE_BINDING_ANCHORS` resolves through the seam but
+/// may carry an inline symmetric key, and is excluded for exactly that
+/// reason. **`TOOLUP_CONFIG_FILE`**: a manifest cannot name its own
+/// location, which is already resolved by the time the file is read, so
+/// the loader refuses that key by name rather than warning about a
+/// migration that will never come.
+let manifestBindable: Set<string> =
+    Set.ofList [
+        Names.acceptEphemeralRagIndex
+        Names.acceptForwardedHeadersFromAnyProxy
+        Names.acceptHeaderAuthInAuthMode
+        Names.acceptInMemoryOAuthStateMultiInstance
+        Names.acceptInMemoryShareTokenRateLimiterMultiInstance
+        Names.acceptInProcessIngestionMultiInstance
+        Names.acceptInProcessSchedulerMultiInstance
+        Names.acceptInviteByEmailWithoutDirectory
+        Names.acceptLocalEmbedderAtScale
+        Names.acceptNoRateLimitInAuthMode
+        Names.acceptPendingInviteStoreMultiInstance
+        Names.acceptPlaintextSecretsInAuthMode
+        Names.acceptQueryParamSseAuthInAuthMode
+        Names.acceptSameSiteOnlyCsrfInAuthMode
+        Names.acceptSharedEmbeddingCacheInTeamMode
+        Names.acceptStickyRoutedAiMultiInstance
+        Names.acceptUnboundAudienceInAuthMode
+        Names.acceptUnsignedPublishable
+        Names.adAnalytics
+        Names.assetStore
+        Names.auditFailurePolicy
+        Names.auditLog
+        Names.authCookieIssuance
+        Names.backfillMissedTicks
+        Names.columnMapping
+        Names.computeBudget
+        Names.configDriftDetection
+        Names.consentAudit
+        Names.consentStateStore
+        Names.conversationStore
+        Names.dataIngestion
+        Names.dataSubjectRequests
+        Names.defaultStorageQuotaBytes
+        Names.deploymentReadiness
+        Names.deploymentVerification
+        Names.enableCitationDevEndpoint
+        Names.enableDevEndpoints
+        Names.entityOutbox
+        Names.entityStore
+        Names.eventStore
+        Names.eventTriggerCatchUp
+        Names.healthStateTracking
+        Names.includePlatformDefaults
+        Names.jobScheduler
+        Names.lineage
+        Names.logLevel
+        Names.mappingDryRunBlock
+        Names.maxRequestBodyBytes
+        Names.maxSseConnectionsPerScope
+        Names.metricsEndpoint
+        Names.migrateWebhookSecretsAtRest
+        Names.moduleBindingAllowUnbound
+        Names.moduleFilter
+        Names.oauthRefresher
+        Names.peerRoutePrefixes
+        Names.platformKnowledgeBase
+        Names.platformSurfaces
+        Names.processProfile
+        Names.publicBaseUrl
+        Names.publicPath
+        Names.publicRendering
+        Names.rateLimitPermits
+        Names.rateLimitQueue
+        Names.rateLimitStore
+        Names.rateLimitWindowSeconds
+        Names.rateLimiter
+        Names.replicaCount
+        Names.requireHttps
+        Names.resultStore
+        Names.securityHardening
+        Names.serverlessHost
+        Names.shareTokenStore
+        Names.skipPreflight
+        Names.slowRateLimitMs
+        Names.slowRequestMs
+        Names.smokeTest
+        Names.sseAuth
+        Names.staticPathBehaviour
+        Names.storeEvictionMinutes
+        Names.teamCreationPolicy
+        Names.traceCategories
+        Names.trustForwardedHeaders
+        Names.trustedProxyCidrs
+        Names.usageMetering
+        Names.webhookUrlAllowedHosts
+        Names.webhooks
+    ]
+
+/// Whether `envVar` may be supplied by a deployment configuration
+/// manifest. Drives the generated reference's column and the loader's
+/// registered-but-not-yet-bindable warning.
+let isManifestBindable (envVar: string) : bool = Set.contains envVar manifestBindable
+
 /// Project the registry to `docs/reference/config-reference.md`. Pure —
 /// the same input always yields the same bytes, so the golden-file test
 /// can compare the committed doc against a fresh render.
@@ -2304,7 +2438,7 @@ module ReferenceDoc =
 
         sb.AppendLine(
             sprintf
-                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value of each on a running deployment, or `--validate-config` to run the startup preflight without booting."
+                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.\n\nThe **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the manifest cannot name its own location). Precedence is consumer literal > environment variable > manifest > override record > default."
                 keys.Length
         )
         |> ignore
@@ -2314,8 +2448,11 @@ module ReferenceDoc =
         for category in orderedCategories keys do
             sb.AppendLine(sprintf "## %s" category) |> ignore
             sb.AppendLine "" |> ignore
-            sb.AppendLine "| Env var | Type | Default | Secret | Description |" |> ignore
-            sb.AppendLine "|---|---|---|---|---|" |> ignore
+
+            sb.AppendLine "| Env var | Type | Default | Secret | Manifest | Description |"
+            |> ignore
+
+            sb.AppendLine "|---|---|---|---|---|---|" |> ignore
 
             let inCategory =
                 keys |> List.filter (fun k -> k.Category = category) |> List.sortBy _.EnvVar
@@ -2328,13 +2465,25 @@ module ReferenceDoc =
 
                 let secretCell = if k.IsSecret then "yes" else "no"
 
+                // A secret key can never appear in a manifest (the file's
+                // value IS that it is shareable and committable), so the
+                // column says "never" rather than "no" — the two are
+                // different facts and an operator reading "no" would
+                // reasonably wait for a migration that will never come.
+                let manifestCell =
+                    if k.EnvVar = Names.configFile then "n/a"
+                    elif k.IsSecret then "never"
+                    elif isManifestBindable k.EnvVar then "yes"
+                    else "pending"
+
                 sb.AppendLine(
                     sprintf
-                        "| `%s` | %s | %s | %s | %s |"
+                        "| `%s` | %s | %s | %s | %s | %s |"
                         k.EnvVar
                         (cell (typeLabel k.Type))
                         defaultCell
                         secretCell
+                        manifestCell
                         (cell k.Description)
                 )
                 |> ignore

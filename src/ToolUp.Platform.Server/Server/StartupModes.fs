@@ -56,6 +56,23 @@ let ValidateConfigFlag = "--validate-config"
 [<Literal>]
 let VerifyDeploymentFlag = "--verify-deployment"
 
+/// Phase 696 — modifier for `--print-config`: print only the keys some
+/// layer actually supplied a value for, dropping every key still sitting
+/// on its declared default. On a surface of several hundred keys that is
+/// the difference between a dump an operator scrolls past and a review
+/// artefact they can read.
+///
+/// A modifier rather than a mode of its own: it never changes what is
+/// resolved, only how much of it is printed, and `detect` stays a total
+/// function over argv with the same four answers it had before.
+[<Literal>]
+let DiffFlag = "--diff"
+
+/// Whether `--diff` accompanies `--print-config` in this argv.
+let diffRequested (argv: string seq) : bool =
+    argv
+    |> Seq.exists (fun a -> String.Equals(a, DiffFlag, StringComparison.OrdinalIgnoreCase))
+
 /// The actor recorded on a `--verify-deployment` audited read. A CI
 /// invocation has no authenticated principal, and naming one would be a
 /// claim the process cannot support — so the row says plainly which
@@ -89,30 +106,73 @@ let current () : StartupMode =
 [<Literal>]
 let private RedactedMarker = "<redacted>"
 
-/// The effective value of one config key for `--print-config`: the env
-/// value when set, else the declared default tagged `(default)`, else
-/// `(unset)`. Secrets that are *set* are redacted; an unset secret shows
-/// its (non-sensitive) default / unset marker so the operator still sees
-/// whether it took effect.
+/// The effective value of one config key for `--print-config`: whatever
+/// the resolution seam supplies (an environment variable, else the
+/// deployment configuration manifest), else the declared default tagged
+/// `(default)`, else `(unset)`. Secrets that are *set* are redacted; an
+/// unset secret shows its (non-sensitive) default / unset marker so the
+/// operator still sees whether it took effect.
 let effectiveValue (d: ConfigKeyDescriptor) : string =
-    match Environment.GetEnvironmentVariable d.EnvVar with
-    | null
-    | "" ->
+    match ConfigResolution.tryValue d.EnvVar with
+    | None ->
         match d.Default with
         | Some def -> sprintf "%s  (default)" def
         | None -> "(unset)"
-    | _ when d.IsSecret -> RedactedMarker
-    | v -> v
+    | Some _ when d.IsSecret -> RedactedMarker
+    | Some v -> v
+
+/// Phase 696 — the value and the layer that supplied it. Provenance
+/// answers the question `--print-config` was always really being asked:
+/// not "what is this set to" but "why is it set to that".
+///
+/// Only the two layers this process can observe are reported — a
+/// consumer literal never traverses a reader at all, and an overrides
+/// record is applied above the seam by the reader that owns it, so
+/// neither is visible from here. Saying `default` where a literal in
+/// fact won would be a false claim, so the trailing note on the report
+/// says plainly what the column does and does not cover.
+let effectiveEntry (d: ConfigKeyDescriptor) : string * ConfigResolution.ConfigSource =
+    effectiveValue d, ConfigResolution.sourceOf d.EnvVar
 
 /// Render the effective-config dump grouped by category (same section
-/// order as the reference doc). Pure so a test can assert on it.
-let renderEffectiveConfig (keys: ConfigKeyDescriptor list) : string =
+/// order as the reference doc), each key carrying the layer its value
+/// came from. Pure with respect to its argument so a test can assert on
+/// it; it reads the installed manifest, which a test installs and clears.
+///
+/// `diffOnly` drops every key still sitting on its declared default,
+/// leaving exactly the deployment's stated deviations from stock.
+let renderConfigReport (diffOnly: bool) (keys: ConfigKeyDescriptor list) : string =
     let sb = StringBuilder()
-    sb.AppendLine "── Effective configuration (--print-config) ──" |> ignore
+
+    sb.AppendLine(
+        if diffOnly then
+            "── Effective configuration, non-defaults only (--print-config --diff) ──"
+        else
+            "── Effective configuration (--print-config) ──"
+    )
+    |> ignore
+
     sb.AppendLine "" |> ignore
 
+    match ConfigResolution.snapshot () with
+    | Some m ->
+        sb.AppendLine(sprintf "Manifest: %s" m.Path) |> ignore
+        sb.AppendLine(sprintf "Manifest sha256: %s" m.Hash) |> ignore
+    | None ->
+        sb.AppendLine "Manifest: none loaded (every value below came from the environment or a declared default)."
+        |> ignore
+
+    sb.AppendLine "" |> ignore
+
+    let shown =
+        if diffOnly then
+            keys
+            |> List.filter (fun k -> ConfigResolution.sourceOf k.EnvVar <> ConfigResolution.DefaultConfigSource)
+        else
+            keys
+
     let orderedCategories =
-        keys
+        shown
         |> List.fold
             (fun acc k ->
                 if List.contains k.Category acc then
@@ -121,18 +181,35 @@ let renderEffectiveConfig (keys: ConfigKeyDescriptor list) : string =
                     acc @ [ k.Category ])
             []
 
-    for category in orderedCategories do
-        sb.AppendLine(sprintf "[%s]" category) |> ignore
-
-        for k in keys |> List.filter (fun k -> k.Category = category) |> List.sortBy _.EnvVar do
-            sb.AppendLine(sprintf "  %s = %s" k.EnvVar (effectiveValue k)) |> ignore
+    if shown.IsEmpty then
+        sb.AppendLine "  (no key is set by any layer — this deployment runs entirely on declared defaults.)"
+        |> ignore
 
         sb.AppendLine "" |> ignore
 
-    sb.AppendLine "Secrets are shown as <redacted>. Values marked (default) are not set in the environment."
+    for category in orderedCategories do
+        sb.AppendLine(sprintf "[%s]" category) |> ignore
+
+        for k in shown |> List.filter (fun k -> k.Category = category) |> List.sortBy _.EnvVar do
+            let value, source = effectiveEntry k
+
+            sb.AppendLine(sprintf "  %s = %s  [%s]" k.EnvVar value (ConfigResolution.ConfigSource.label source))
+            |> ignore
+
+        sb.AppendLine "" |> ignore
+
+    sb.AppendLine "Secrets are shown as <redacted>. Values marked (default) are not set by any layer."
+    |> ignore
+
+    sb.AppendLine
+        "The [source] column reports the layer this process resolved the value from: env, manifest, or default. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above this seam and reads as 'default' here."
     |> ignore
 
     sb.ToString()
+
+/// Render the full effective-config dump. Preserved shape for callers
+/// that predate the `--diff` modifier.
+let renderEffectiveConfig (keys: ConfigKeyDescriptor list) : string = renderConfigReport false keys
 
 /// Render the preflight outcome summary for `--validate-config`. Lists
 /// every validator's status; pure for testability.
@@ -172,6 +249,12 @@ let renderValidationSummary (outcomes: ValidatorOutcome list) : string =
 /// after.
 let printEffectiveConfig (logger: ILogger) (keys: ConfigKeyDescriptor list) : unit =
     logger.Info(renderEffectiveConfig keys)
+    Console.Out.Flush()
+
+/// Print the effective config, honouring the `--diff` modifier (the
+/// `--print-config` action as of Phase 696).
+let printConfigReport (logger: ILogger) (diffOnly: bool) (keys: ConfigKeyDescriptor list) : unit =
+    logger.Info(renderConfigReport diffOnly keys)
     Console.Out.Flush()
 
 /// Print the validation summary (the success branch of

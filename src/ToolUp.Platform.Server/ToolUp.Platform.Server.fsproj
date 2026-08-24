@@ -102,6 +102,14 @@
         <Compile Include="Server\IActivitySink.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
+        <!-- Phase 696 — the deployment configuration manifest loader:
+             discovery, strict JSON parse, unknown/secret-key refusals,
+             SHA-256 over the raw bytes, and installation into Core's
+             `ConfigResolution` seam. Server-side because Core ships its
+             source for Fable consumers and cannot carry System.IO. Before
+             ConsoleLogger.fs, which installs the manifest before building
+             the logger — the log level is itself a bindable key. -->
+        <Compile Include="Server\ConfigResolver.fs" />
         <Compile Include="Server\Infra\ConsoleLogger.fs" />
         <Compile Include="Server\Infra\JsonConsoleLogger.fs" />
         <Compile Include="Server\Api.fs" />

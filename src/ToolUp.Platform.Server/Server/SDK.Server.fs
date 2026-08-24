@@ -294,6 +294,34 @@ let compose
             else
                 ConsoleLogger.ConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger)
 
+    // ─── Phase 696 — declared-intent statement in the boot log ─────────
+    //
+    // The hash of the manifest as deployed, logged through the real
+    // resolved logger (an app-supplied logger sees it too, which the
+    // `ConsoleLogger.fromEnv` line cannot reach). Silent when no manifest
+    // is loaded, so an existing deployment's boot log is unchanged.
+    //
+    // The second arm is the wiring guard for this layer's principal
+    // failure mode. `ConsoleLogger.fromEnv` installs the manifest before
+    // `ServerConfig.fromEnv` reads a key; a composition root that builds
+    // its own logger skips that, and a manifest sitting on disk would then
+    // be silently ignored — declared and not applied, which is worse than
+    // having no manifest at all. Discovery having never run by the time
+    // compose is reached is exactly that case, so it is named here rather
+    // than left to be discovered as "my setting had no effect".
+    if ConfigResolver.hasLoaded () then
+        ConfigResolver.bootLine () |> Option.iter resolvedLogger.Info
+    else
+        match ConfigResolver.discover (System.IO.Directory.GetCurrentDirectory()) with
+        | Ok(Some path) ->
+            resolvedLogger.Warn(
+                sprintf
+                    "A deployment configuration manifest exists at %s but was never loaded, so none of its values took effect — this composition root builds its own logger and did not call ConfigResolver.installFromCurrentDirectory () before ServerConfig.fromEnv. Call it there, or use ConsoleLogger.fromEnv (), which does it for you."
+                    path
+            )
+        | Ok None -> ()
+        | Error message -> resolvedLogger.Warn message
+
     // The resolved logger is later folded into `FileManagementRuntime`
     // (built and DI-registered further down in this function). The
     // post-save hook dispatch site reads it from the runtime.
@@ -1052,7 +1080,13 @@ let compose
         // Print BEFORE preflight so a config that would fail validation is
         // still dumped — diagnosing a bad config is the whole point. No
         // server boot; secrets redacted via the descriptor's IsSecret flag.
-        StartupModes.printEffectiveConfig resolvedLogger ConfigKeys.all
+        // Phase 696 — each key carries the layer it resolved from, and
+        // `--diff` narrows the dump to the deployment's stated deviations.
+        StartupModes.printConfigReport
+            resolvedLogger
+            (StartupModes.diffRequested (Environment.GetCommandLineArgs()))
+            ConfigKeys.all
+
         exit 0
 
     | StartupModes.ValidateConfig ->

@@ -1623,6 +1623,27 @@ ToolUp.Platform.ConfigKnobSchema (class)
 ToolUp.Platform.ConfigKnobSchema..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ConfigKnobSchema.Name : System.String { get }
 ToolUp.Platform.ConfigKnobSchema.Values : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigResolver (class)
+ToolUp.Platform.ConfigResolver.DefaultManifestFileName : System.String (literal)
+ToolUp.Platform.ConfigResolver.SchemaKey : System.String (literal)
+ToolUp.Platform.ConfigResolver.bootLine() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigResolver.discover(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]
+ToolUp.Platform.ConfigResolver.hasLoaded() : System.Boolean
+ToolUp.Platform.ConfigResolver.hashBytes(System.Byte[]) : System.String
+ToolUp.Platform.ConfigResolver.installFromCurrentDirectory() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolver+ManifestLoad]
+ToolUp.Platform.ConfigResolver.installOnce(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolver+ManifestLoad]
+ToolUp.Platform.ConfigResolver.load(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolver+ManifestLoad], System.String]
+ToolUp.Platform.ConfigResolver.parseBytes(System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigResolver+ManifestLoad, System.String]
+ToolUp.Platform.ConfigResolver.reset() : System.Void
+ToolUp.Platform.ConfigResolver+ConfigManifestException (class)
+ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor()
+ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
+ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor(System.String)
+ToolUp.Platform.ConfigResolver+ConfigManifestException.message : System.String { get }
+ToolUp.Platform.ConfigResolver+ManifestLoad (class)
+ToolUp.Platform.ConfigResolver+ManifestLoad..ctor(ToolUp.Platform.ConfigResolution+ManifestSnapshot, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ConfigResolver+ManifestLoad.Snapshot : ToolUp.Platform.ConfigResolution+ManifestSnapshot { get }
+ToolUp.Platform.ConfigResolver+ManifestLoad.Warnings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ConfigSeedLifecycle (class)
 ToolUp.Platform.ConfigSeedLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.ConfigSeedLifecycle+ConfigSeedLifecycle (class)
@@ -7517,14 +7538,19 @@ ToolUp.Platform.StampedRuleVersion.StampedRuleCode : System.String { get }
 ToolUp.Platform.StampedRuleVersion.StampedRuleSemVer : ToolUp.Platform.RuleVersion { get }
 ToolUp.Platform.StartupModes (class)
 ToolUp.Platform.StartupModes.CliVerificationActor : System.String (literal)
+ToolUp.Platform.StartupModes.DiffFlag : System.String (literal)
 ToolUp.Platform.StartupModes.PrintConfigFlag : System.String (literal)
 ToolUp.Platform.StartupModes.ValidateConfigFlag : System.String (literal)
 ToolUp.Platform.StartupModes.VerifyDeploymentFlag : System.String (literal)
 ToolUp.Platform.StartupModes.current() : ToolUp.Platform.StartupModes+StartupMode
 ToolUp.Platform.StartupModes.detect(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.StartupModes+StartupMode
+ToolUp.Platform.StartupModes.diffRequested(System.Collections.Generic.IEnumerable`1[System.String]) : System.Boolean
+ToolUp.Platform.StartupModes.effectiveEntry(ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor) : System.Tuple`2[System.String, ToolUp.Platform.ConfigResolution+ConfigSource]
 ToolUp.Platform.StartupModes.effectiveValue(ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor) : System.String
+ToolUp.Platform.StartupModes.printConfigReport(ToolUp.Platform.ILogger, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.Void
 ToolUp.Platform.StartupModes.printEffectiveConfig(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.Void
 ToolUp.Platform.StartupModes.printValidationSummary(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : System.Void
+ToolUp.Platform.StartupModes.renderConfigReport(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.StartupModes.renderEffectiveConfig(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.StartupModes.renderValidationSummary(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : System.String
 ToolUp.Platform.StartupModes+StartupMode (class)

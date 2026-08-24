@@ -173,6 +173,91 @@ let tests =
                     "These ConfigKeys.Names bindings have no matching descriptor in ConfigKeys.all, so a reader citing them is undocumented and absent from --print-config: %s"
                     (orphaned |> Set.toList |> String.concat ", "))
 
+        testCase "declared manifest-bindability matches the reader that actually resolves through the seam"
+        <| fun _ ->
+            // Phase 696 — the ratchet that makes the reader-migration sweep
+            // terminate instead of decay. `ConfigKeys.manifestBindable` is a
+            // DECLARATION: a manifest key is honoured only if some reader
+            // resolves it through `ConfigResolution`. If the declaration
+            // over-claims, an operator writes a key that is silently ignored
+            // — the failure mode this whole layer exists to prevent. If it
+            // under-claims, a key that WOULD work warns pointlessly and the
+            // generated reference tells the operator to use the environment
+            // instead.
+            //
+            // The claim is checked against source rather than behaviour
+            // because behaviour would need one boot per key. The seam is a
+            // single private helper inside `ServerConfig`'s `fromEnv`
+            // region, so every key that region cites is bindable by
+            // construction, and the region's `ConfigKeys.Names.*` citations
+            // ARE the set. A reader that stops citing `Names.*` and inlines
+            // a literal is already caught by the first arm of this file.
+            let root = repoRoot ()
+
+            let sharedPath =
+                Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "SDK.Shared.fs")
+
+            Expect.isTrue (File.Exists sharedPath) (sprintf "ServerConfig source not found: %s" sharedPath)
+
+            let text = File.ReadAllText sharedPath
+
+            // The `fromEnv` region: everything from the server-only guard
+            // (where the env helpers begin) to the end of the file.
+            let regionStart = text.IndexOf "#if !FABLE_COMPILER"
+
+            Expect.isGreaterThan regionStart -1 "the server-only `fromEnv` region was not found in SDK.Shared.fs"
+
+            let region = text.Substring regionStart
+
+            // `Names.foo` → the literal it binds, parsed from the registry
+            // source (the same parse the arm above uses).
+            let registrySource =
+                Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "Types", "ConfigKeyDescriptor.fs")
+                |> File.ReadAllText
+
+            let namesModule =
+                let start = registrySource.IndexOf "module Names ="
+                let stop = registrySource.IndexOf "let all: ConfigKeyDescriptor list ="
+                registrySource.Substring(start, stop - start)
+
+            let bindingToVar =
+                Regex.Matches(namesModule, "let\\s+(\\w+)\\s*=\\s*\"(TOOLUP_[A-Z0-9_]+)\"")
+                |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
+                |> Map.ofSeq
+
+            // Secrets are excluded on both sides: they resolve through the
+            // seam like any other key, but the loader refuses them in a
+            // manifest with no hatch, so declaring one bindable would be a
+            // claim nothing can honour.
+            let secrets = all |> List.filter _.IsSecret |> List.map _.EnvVar |> Set.ofList
+
+            let resolvedThroughSeam =
+                Regex.Matches(region, "ConfigKeys\\.Names\\.(\\w+)")
+                |> Seq.choose (fun m -> Map.tryFind m.Groups[1].Value bindingToVar)
+                |> Set.ofSeq
+                |> fun s -> Set.difference s secrets
+
+            Expect.isGreaterThan
+                (Set.count resolvedThroughSeam)
+                50
+                "parsed suspiciously few keys out of the fromEnv region — the region bounds are probably wrong, and an empty parse passes vacuously in both directions"
+
+            let overClaimed = Set.difference manifestBindable resolvedThroughSeam
+
+            Expect.isEmpty
+                overClaimed
+                (sprintf
+                    "These keys are declared manifest-bindable but no reader resolves them through ConfigResolution, so a manifest setting them would be silently ignored: %s"
+                    (overClaimed |> Set.toList |> String.concat ", "))
+
+            let underClaimed = Set.difference resolvedThroughSeam manifestBindable
+
+            Expect.isEmpty
+                underClaimed
+                (sprintf
+                    "These keys resolve through ConfigResolution but are not declared in ConfigKeys.manifestBindable, so the manifest would refuse to honour a value it can in fact bind: %s"
+                    (underClaimed |> Set.toList |> String.concat ", "))
+
         testCase "registry is well-formed (unique, TOOLUP_-prefixed, described)"
         <| fun _ ->
             let names = all |> List.map _.EnvVar

@@ -3585,11 +3585,19 @@ module ServerConfig =
 // only the `ServerConfig` type + `defaults` value above.
 
 #if !FABLE_COMPILER
-    let private envVar (name: string) =
-        match Environment.GetEnvironmentVariable name with
-        | null
-        | "" -> None
-        | v -> Some v
+    /// Phase 696 — every key this reader consults now resolves through the
+    /// `ConfigResolution` seam rather than reading the environment
+    /// directly, so a deployment configuration manifest can supply the
+    /// declared base and the environment stays the per-instance override
+    /// lane. The seam's env arm folds null/empty to `None` exactly as this
+    /// helper always did, so with no manifest installed — the ordinary
+    /// state — `fromEnv` resolves byte-for-byte as before (GP 11).
+    ///
+    /// This one helper is why the whole Phase 71.A cluster (87 keys)
+    /// migrates in a single change: the ~40 private parsers below all
+    /// funnel through it. `ConfigKeys.manifestBindable` declares that set,
+    /// and the coverage test holds the declaration to this call graph.
+    let private envVar (name: string) = ConfigResolution.tryValue name
 
     let private envFlag (name: string) =
         match envVar name |> Option.map _.ToLowerInvariant() with

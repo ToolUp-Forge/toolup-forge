@@ -619,6 +619,10 @@
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
         <Compile Include="InProcess\ConfigStartupModeTests.fs" />
+        <!-- Phase 696 — the deployment configuration manifest: precedence,
+             discovery, the unknown-key and secret-key refusals, hash
+             stability, provenance labels, and the no-manifest gate. -->
+        <Compile Include="InProcess\ConfigResolverTests.fs" />
         <!-- Phase 9m.A — TOOLUP_AI_PROVIDER / TOOLUP_AI_MODEL env-var
              typo catchers. Always-on validators that self-skip with Ok
              when the env var is unset. Pure-function tests; no

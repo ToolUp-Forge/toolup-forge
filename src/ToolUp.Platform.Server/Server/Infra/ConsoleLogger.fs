@@ -65,11 +65,12 @@ type ConsoleLogger(level: LogLevel, traceCategories: Set<string>) =
 // `eprintfn` — the logger we'd want to use for the warning is being
 // constructed in the same call.
 
-let private envVar (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some v
+/// Phase 696 — resolved through the config-resolution seam (environment
+/// first, then the deployment configuration manifest) so the two log keys
+/// answer the same way here as they do in `ServerConfig.fromEnv`. With no
+/// manifest installed this is the identical null/empty-is-unset env read
+/// it always was (GP 11).
+let private envVar (name: string) = ConfigResolution.tryValue name
 
 /// Parse `TOOLUP_LOG_LEVEL` + `TOOLUP_TRACE_CATEGORIES`. Exposed
 /// separately so `ServerConfig.fromEnv` can mirror the same resolved
@@ -107,8 +108,29 @@ let envSettings () : LogLevel * Set<string> =
 /// startup log carries a clear SDK identifier above the per-substrate
 /// "Auth provider:", "Blob storage:", "Secret store:", "Notification
 /// channel:" lines that follow.
+/// Phase 696 — the deployment configuration manifest is discovered and
+/// installed HERE, before the logger is built, and that ordering is
+/// load-bearing rather than convenient: `TOOLUP_LOG_LEVEL` is itself a
+/// manifest-bindable key, so a manifest read after this point could not
+/// affect the logger it configures. This is also the first SDK entry
+/// point every composition root reaches, which is what lets an existing
+/// deployment adopt the manifest without editing a line of its own code.
+///
+/// A refused manifest (unknown key, secret key, malformed file, named
+/// file absent) raises out of here and the process does not boot — a
+/// deployment whose declared intent cannot be honoured must not run
+/// pretending it was. The hash and any partial-coverage warnings are
+/// emitted through the logger as soon as it exists.
 let fromEnv () : ILogger =
+    let manifest = ConfigResolver.installFromCurrentDirectory ()
     let level, categories = envSettings ()
     let logger = ConsoleLogger(level, categories) :> ILogger
     logger.Info "Powered by ToolUp-Forge — https://toolup-forge.io"
+
+    ConfigResolver.bootLine () |> Option.iter logger.Info
+
+    match manifest with
+    | Some loaded -> loaded.Warnings |> List.iter logger.Warn
+    | None -> ()
+
     logger

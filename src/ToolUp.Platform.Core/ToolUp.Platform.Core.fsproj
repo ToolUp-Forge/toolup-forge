@@ -276,6 +276,13 @@
              generated reference. Before BrandingTypes.fs (BrandingKeys) and
              SDK.Shared.fs (fromEnv). -->
         <Compile Include="Shared\Types\ConfigKeyDescriptor.fs" />
+        <!-- Phase 696 — the per-key resolution seam (env-then-manifest, with
+             provenance). Dependency-free and Fable-safe: the loader that
+             discovers, parses and hashes the manifest file is server-side
+             (System.IO cannot appear in packed source). After
+             ConfigKeyDescriptor.fs and before SDK.Shared.fs, whose
+             `ServerConfig.fromEnv` resolves every key through it. -->
+        <Compile Include="Shared\Types\ConfigResolution.fs" />
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
