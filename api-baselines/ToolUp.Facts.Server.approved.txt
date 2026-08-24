@@ -55,16 +55,28 @@ ToolUp.Facts.CertificateEdge.From : System.String { get }
 ToolUp.Facts.CertificateEdge.Kind : System.String { get }
 ToolUp.Facts.CertificateEdge.To : System.String { get }
 ToolUp.Facts.CertificateEnvelope (class)
+ToolUp.Facts.CertificateEnvelope.AttestationLevelField : System.String (literal)
+ToolUp.Facts.CertificateEnvelope.AttestedPredicateType : System.String (literal)
+ToolUp.Facts.CertificateEnvelope.CertificateField : System.String (literal)
 ToolUp.Facts.CertificateEnvelope.ContentAddressedDigestKey : System.String (literal)
 ToolUp.Facts.CertificateEnvelope.OpaqueIdDigestKey : System.String (literal)
 ToolUp.Facts.CertificateEnvelope.PredicateType : System.String (literal)
+ToolUp.Facts.CertificateEnvelope.PurposeField : System.String (literal)
+ToolUp.Facts.CertificateEnvelope.SigningKeyIdField : System.String (literal)
+ToolUp.Facts.CertificateEnvelope.attestedExpectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Facts.CertificateEnvelope.attestedPredicateJson(ToolUp.Facts.AttestedGroundingCertificate) : System.String
+ToolUp.Facts.CertificateEnvelope.attestedSealedBytes(ToolUp.Facts.AttestedGroundingCertificate) : System.Byte[]
+ToolUp.Facts.CertificateEnvelope.attestedStatementJson(ToolUp.Facts.AttestedGroundingCertificate) : System.String
 ToolUp.Facts.CertificateEnvelope.expectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
 ToolUp.Facts.CertificateEnvelope.export(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Facts.GroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
+ToolUp.Facts.CertificateEnvelope.exportAttested(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
 ToolUp.Facts.CertificateEnvelope.predicateJson(ToolUp.Facts.GroundingCertificate) : System.String
 ToolUp.Facts.CertificateEnvelope.sealedBytes(ToolUp.Facts.GroundingCertificate) : System.Byte[]
 ToolUp.Facts.CertificateEnvelope.statementJson(ToolUp.Facts.GroundingCertificate) : System.String
 ToolUp.Facts.CertificateEnvelope.subjectFor(System.String) : ToolUp.Platform.InTotoSubject
 ToolUp.Facts.CertificateEnvelope.verifyAndRead(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Facts.CertificateEnvelope.verifyAndReadAttested(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Facts.CertificateEnvelope.verifyAndReadAttestedJson(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
 ToolUp.Facts.CertificateEnvelope.verifyAndReadJson(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
 ToolUp.Facts.CertificateError (class)
 ToolUp.Facts.CertificateError.EmptyChain : ToolUp.Facts.CertificateError { get }
