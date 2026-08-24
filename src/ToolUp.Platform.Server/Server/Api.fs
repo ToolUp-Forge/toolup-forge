@@ -315,9 +315,10 @@ module internal ApiSeams =
     /// dispatcher refuses startup (compliance-edition deployments).
     let auditAdminRequired =
         lazy
-            (match System.Environment.GetEnvironmentVariable ConfigKeys.Names.auditAdminRequired with
-             | null -> false
-             | v ->
+            // Phase 698 — through the Phase-696 `ConfigResolution` seam.
+            (match ConfigResolution.tryValue ConfigKeys.Names.auditAdminRequired with
+             | None -> false
+             | Some v ->
                  let v = v.Trim()
                  v.Equals("true", System.StringComparison.OrdinalIgnoreCase) || v = "1")
 

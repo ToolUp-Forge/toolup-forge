@@ -284,10 +284,13 @@ let compose
             // byte-identical (GP 11/13). Mirrors the existing
             // `TOOLUP_LOG_LEVEL` / `TOOLUP_TRACE_CATEGORIES` env-override
             // model for default-logger configuration.
+            // Phase 698 — through the Phase-696 `ConfigResolution` seam. The
+            // manifest is installed by `ConsoleLogger.fromEnv` before this
+            // point precisely so the log format itself can be declared in it.
             let wantsJson =
-                match System.Environment.GetEnvironmentVariable ConfigKeys.Names.logFormat with
-                | null -> false
-                | s -> s.Trim().ToLowerInvariant() = "json"
+                match ConfigResolution.tryValue ConfigKeys.Names.logFormat with
+                | None -> false
+                | Some s -> s.Trim().ToLowerInvariant() = "json"
 
             if wantsJson then
                 JsonConsoleLogger.JsonConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger

@@ -544,10 +544,10 @@ let registerFileManagementRuntime
     // falls back to the default. Operators raising the limit for large uploads no
     // longer need a code change + repack.
     let maxFileBytes: int64 option =
-        match System.Environment.GetEnvironmentVariable ConfigKeys.Names.maxFileBytes with
-        | null
-        | "" -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
-        | raw ->
+        // Phase 698 — through the Phase-696 `ConfigResolution` seam.
+        match ConfigResolution.tryValue ConfigKeys.Names.maxFileBytes with
+        | None -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
+        | Some raw ->
             match System.Int64.TryParse raw with
             | true, n when n > 0L -> Some n
             | true, _ -> None // 0 / negative disables the ceiling

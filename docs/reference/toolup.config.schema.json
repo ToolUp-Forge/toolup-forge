@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
   "title": "ToolUp deployment configuration manifest",
-  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the 95 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the 105 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -52,6 +52,11 @@
     },
     "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE": {
       "description": "Allows the local embedding provider at a corpus size it is not built for. Lowers a startup preflight refusal to a warning.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
+    "TOOLUP_ACCEPT_LOCAL_FALLBACK": {
+      "description": "Acknowledge a cloud-declared blob backend silently falling back to local storage (downgrades the refusal to a warning).",
       "type": [ "boolean", "string" ],
       "default": false
     },
@@ -111,11 +116,20 @@
       "type": [ "boolean", "string" ],
       "default": false
     },
+    "TOOLUP_APP_NAME": {
+      "description": "Display name the platform shell and startup banner present for this deployment.",
+      "type": "string"
+    },
     "TOOLUP_ASSET_STORE": {
       "description": "Enables the IAssetStore substrate for uploaded media and derivative rendering.",
       "type": "string",
       "enum": [ "enabled", "disabled" ],
       "default": "disabled"
+    },
+    "TOOLUP_AUDIT_ADMIN_REQUIRED": {
+      "description": "When true, audit-log read endpoints require Platform Admin rather than team-level access.",
+      "type": [ "boolean", "string" ],
+      "default": false
     },
     "TOOLUP_AUDIT_FAILURE_POLICY": {
       "description": "What happens when an audit sink write fails: log and continue, refuse the action, or degrade to a local file.",
@@ -144,6 +158,12 @@
       "description": "On startup, runs schedule ticks that were missed while the process was down.",
       "type": [ "boolean", "string" ],
       "default": false
+    },
+    "TOOLUP_BLOB_STORAGE": {
+      "description": "Selects the IBlobStorage backend. Unrecognised / cloud-without-credentials values warn and fall back to local.",
+      "type": "string",
+      "enum": [ "local", "azure", "s3", "gcs" ],
+      "default": "local"
     },
     "TOOLUP_COLUMN_MAPPING": {
       "description": "Enables the column-mapping subsystem for uploaded tabular data.",
@@ -209,6 +229,12 @@
       "type": "string",
       "enum": [ "enabled", "disabled" ],
       "default": "disabled"
+    },
+    "TOOLUP_DISTRIBUTED_LOCK": {
+      "description": "Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into.",
+      "type": "string",
+      "enum": [ "inprocess", "redis" ],
+      "default": "inprocess"
     },
     "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT": {
       "description": "Exposes the RAG citation inspection dev endpoint.",
@@ -277,6 +303,12 @@
       "enum": [ "enabled", "disabled" ],
       "default": "disabled"
     },
+    "TOOLUP_LOG_FORMAT": {
+      "description": "Selects the default logger's output shape: human-readable text or structured JSON lines.",
+      "type": "string",
+      "enum": [ "text", "json" ],
+      "default": "text"
+    },
     "TOOLUP_LOG_LEVEL": {
       "description": "Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info.",
       "type": "string",
@@ -288,6 +320,11 @@
       "type": "string",
       "enum": [ "enabled", "disabled" ],
       "default": "disabled"
+    },
+    "TOOLUP_MAX_FILE_BYTES": {
+      "description": "Maximum accepted upload size in bytes for file-management endpoints.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
     },
     "TOOLUP_MAX_REQUEST_BODY_BYTES": {
       "description": "Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default.",
@@ -319,6 +356,12 @@
       "description": "Allows modules that carry no signed binding manifest to load.",
       "type": [ "boolean", "string" ],
       "default": false
+    },
+    "TOOLUP_NOTIFICATION_CHANNEL": {
+      "description": "Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel.",
+      "type": "string",
+      "enum": [ "inmemory", "redis" ],
+      "default": "inmemory"
     },
     "TOOLUP_OAUTH_REDIRECT_BASE": {
       "description": "Absolute base URL used to build OAuth-connector redirect URIs (must match the provider's registered callback origin).",
@@ -416,6 +459,16 @@
       "type": "string",
       "enum": [ "no", "inmemory", "persistent" ],
       "default": "no"
+    },
+    "TOOLUP_SECRETS_PATH": {
+      "description": "Filesystem path the file/encrypted secret store reads and writes secrets under.",
+      "type": "string"
+    },
+    "TOOLUP_SECRET_STORE": {
+      "description": "Selects the ISecretStore backend. Cloud values require their companion's own env vars; unset uses the encrypted local file store.",
+      "type": "string",
+      "enum": [ "encrypted", "file", "env", "azure-key-vault", "aws-secrets-manager", "gcp-secret-manager", "vault" ],
+      "default": "encrypted"
     },
     "TOOLUP_SECURITY_HARDENING": {
       "description": "Security-header and hardening posture applied to every response.",

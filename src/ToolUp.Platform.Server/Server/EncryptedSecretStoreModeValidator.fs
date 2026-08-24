@@ -54,10 +54,12 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
     // EncryptedSecretStore wrapping; `TOOLUP_SECRETS_MASTER_KEY`
     // becomes irrelevant and the master-key gate is skipped.
     let isCloudKmsBacked () =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.secretStore with
-        | null
-        | "" -> false
-        | s ->
+        // Phase 698 — through the Phase-696 `ConfigResolution` seam, so a
+        // manifest-declared cloud KMS backend skips the master-key gate
+        // exactly as an environment-declared one does.
+        match ConfigResolution.tryValue ConfigKeys.Names.secretStore with
+        | None -> false
+        | Some s ->
             match s.ToLowerInvariant() with
             | "azure-key-vault"
             | "aws-secrets-manager"

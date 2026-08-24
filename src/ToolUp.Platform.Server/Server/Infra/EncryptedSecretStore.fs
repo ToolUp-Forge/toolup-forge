@@ -124,10 +124,13 @@ let parseMasterKey (base64: string) : byte[] option =
 /// Returns `Unset` when the env var is unset / empty, `Malformed reason`
 /// when set but unparseable / wrong length, `Valid bytes` when ready.
 let masterKeyFromEnvironmentDetailed () : MasterKeyResolution =
-    match Environment.GetEnvironmentVariable ConfigKeys.Names.secretsMasterKey with
-    | null
-    | "" -> Unset
-    | value -> parseMasterKeyDetailed value
+    // Phase 698 — through the Phase-696 `ConfigResolution` seam. The key is
+    // a SECRET, so the manifest lane is refused with no hatch and this stays
+    // an environment read; going through the seam keeps one answer to "where
+    // did this value come from" rather than one per reader.
+    match ConfigResolution.tryValue ConfigKeys.Names.secretsMasterKey with
+    | None -> Unset
+    | Some value -> parseMasterKeyDetailed value
 
 /// Read the master key from the `TOOLUP_SECRETS_MASTER_KEY` env var.
 /// Returns `None` when the env var is unset, empty, not valid base64,

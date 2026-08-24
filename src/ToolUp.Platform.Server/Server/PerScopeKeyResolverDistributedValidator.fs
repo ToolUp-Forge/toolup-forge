@@ -90,14 +90,12 @@ let private ReplicaCountEnvVar = ConfigKeys.Names.replicaCount
 [<Literal>]
 let private NotificationChannelEnvVar = ConfigKeys.Names.notificationChannel
 
-let private envValue (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some(v.Trim())
-
+// Phase 698 — both keys resolve through the Phase-696 `ConfigResolution`
+// seam. This validator gates a tenant's crypto-erasure guarantee on the
+// declared topology, so reading a different value from the one the
+// deployment actually runs on is the failure that matters here.
 let private envReplicaCount () =
-    match envValue ReplicaCountEnvVar with
+    match ConfigResolution.tryValue ReplicaCountEnvVar |> Option.map _.Trim() with
     | None -> 1
     | Some v ->
         match Int32.TryParse v with
@@ -113,7 +111,10 @@ let internal declaredReplicaCount (config: ServerConfig) =
     max config.ReplicaCount (envReplicaCount ())
 
 let private isDistributedChannelEnv () =
-    match envValue NotificationChannelEnvVar |> Option.map _.ToLowerInvariant() with
+    match
+        ConfigResolution.tryValue NotificationChannelEnvVar
+        |> Option.map (fun v -> v.Trim().ToLowerInvariant())
+    with
     | Some "inprocess"
     | None -> false
     | Some _ -> true

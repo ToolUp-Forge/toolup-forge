@@ -24,11 +24,9 @@ type CloudBlobStorageResolver = {
     Resolve: unit -> IBlobStorage option
 }
 
-let private envVar (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some v
+// Phase 698 — resolved through the Phase-696 `ConfigResolution` seam, so a
+// manifest can declare which backend the deployment runs on. Absent a
+// manifest the seam is the environment read it replaces (GP 11).
 
 /// Build the deployment's `IBlobStorage` from `TOOLUP_BLOB_STORAGE`.
 /// Recognised values:
@@ -61,7 +59,9 @@ let fromEnv (logger: ILogger) (cloudResolvers: CloudBlobStorageResolver list) : 
 
             defaultLocal ()
 
-    let chosen = envVar ConfigKeys.Names.blobStorage |> Option.map _.ToLowerInvariant()
+    let chosen =
+        ConfigResolution.tryValue ConfigKeys.Names.blobStorage
+        |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

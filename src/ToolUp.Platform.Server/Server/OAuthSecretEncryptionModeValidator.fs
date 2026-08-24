@@ -45,10 +45,10 @@ open ToolUp.Platform.ConfigValidation
 /// passthrough mode, reports `false`.
 let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
     let cloudKmsBacked =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.secretStore with
-        | null
-        | "" -> false
-        | s ->
+        // Phase 698 — through the Phase-696 `ConfigResolution` seam.
+        match ConfigResolution.tryValue ConfigKeys.Names.secretStore with
+        | None -> false
+        | Some s ->
             match s.ToLowerInvariant() with
             | "azure-key-vault"
             | "aws-secrets-manager"

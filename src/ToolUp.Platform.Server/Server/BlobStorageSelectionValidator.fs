@@ -34,14 +34,15 @@ let private EscapeHatchEnvVar = ConfigKeys.Names.acceptLocalFallback
 
 let private cloudBackends = Set.ofList [ "azure"; "s3"; "gcs" ]
 
-let private envValue (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some(v.Trim().ToLowerInvariant())
+// Phase 698 — both keys resolve through the Phase-696 `ConfigResolution`
+// seam. The escape hatch matters as much as the selection here: an
+// operator who declares the fallback acceptable in the manifest, and finds
+// the deployment refusing to start anyway, has been told the manifest
+// binds a key it does not.
+let private normalised (value: string) = value.Trim().ToLowerInvariant()
 
 let private isEscapeHatchSet () =
-    match envValue EscapeHatchEnvVar with
+    match ConfigResolution.tryValue EscapeHatchEnvVar |> Option.map normalised with
     | Some("1" | "true" | "yes" | "on") -> true
     | _ -> false
 
@@ -56,7 +57,7 @@ type BlobStorageSelectionValidator(storage: IBlobStorage, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            match envValue BlobStorageEnvVar with
+            match ConfigResolution.tryValue BlobStorageEnvVar |> Option.map normalised with
             | Some declared when Set.contains declared cloudBackends ->
                 let isLocal = storage.GetType() = typeof<LocalFileStorage.LocalFileStorage>
 

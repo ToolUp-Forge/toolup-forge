@@ -154,11 +154,11 @@ type NotificationChannelResolver = {
     ConnectionEnvVar: string
 }
 
-let private envVar (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some v
+// Phase 698 — through the Phase-696 `ConfigResolution` seam. The per-resolver
+// CONNECTION variable rides the same helper: it is a secret, so a manifest can
+// never supply it, but resolving it here keeps one answer to where a value came
+// from rather than one per reader.
+let private envVar (name: string) = ConfigResolution.tryValue name
 
 /// Build the deployment's notification-channel triple from
 /// `TOOLUP_NOTIFICATION_CHANNEL`. The triple `(channel, healthProbe,
@@ -186,7 +186,8 @@ let fromEnv
         InMemoryNotificationChannel(Some logger) :> INotificationChannel, None, None
 
     let chosen =
-        envVar ConfigKeys.Names.notificationChannel |> Option.map _.ToLowerInvariant()
+        ConfigResolution.tryValue ConfigKeys.Names.notificationChannel
+        |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

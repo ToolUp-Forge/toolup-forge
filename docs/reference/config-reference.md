@@ -6,7 +6,7 @@
 
 Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (184 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
-The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the manifest cannot name its own location). Precedence is consumer literal > environment variable > manifest > override record > default.
+The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or the variable naming the manifest's own location). Precedence is consumer literal > environment variable > manifest > override record > default.
 
 A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:
 
@@ -29,14 +29,14 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | `TOOLUP_AWS_SECRETS_REGION` | string | — | no | pending | AWS region for the Secrets Manager secret-store companion. |
 | `TOOLUP_AZURE_KEY_VAULT_URL` | string | — | no | pending | Vault URL for the Azure Key Vault secret-store companion. |
 | `TOOLUP_AZURE_STORAGE_CONNECTION_STRING` | string | — | yes | never | Azure Blob Storage connection string used when TOOLUP_BLOB_STORAGE=azure. |
-| `TOOLUP_BLOB_STORAGE` | enum: local, azure, s3, gcs | local | no | pending | Selects the IBlobStorage backend. Unrecognised / cloud-without-credentials values warn and fall back to local. |
+| `TOOLUP_BLOB_STORAGE` | enum: local, azure, s3, gcs | local | no | yes | Selects the IBlobStorage backend. Unrecognised / cloud-without-credentials values warn and fall back to local. |
 | `TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES` | int | — | no | yes | Default per-team storage quota in bytes. Unset means unlimited. |
 | `TOOLUP_GCP_PROJECT_ID` | string | — | no | pending | GCP project id for the Secret Manager and Cloud Storage companions. |
 | `TOOLUP_GCS_BUCKET` | string | — | no | pending | Target Google Cloud Storage bucket name used when TOOLUP_BLOB_STORAGE=gcs. |
 | `TOOLUP_GCS_CREDENTIALS_JSON` | string | — | yes | never | Service-account credentials JSON for the Google Cloud Storage companion. |
 | `TOOLUP_SECRETS_MASTER_KEY` | string | — | yes | never | Base64-encoded 32-byte master key for the encrypted local secret store. Unset stores secrets as plaintext at rest (preflight warns). |
-| `TOOLUP_SECRETS_PATH` | string | — | no | pending | Filesystem path the file/encrypted secret store reads and writes secrets under. |
-| `TOOLUP_SECRET_STORE` | enum: encrypted, file, env, azure-key-vault, aws-secrets-manager, gcp-secret-manager, vault | encrypted | no | pending | Selects the ISecretStore backend. Cloud values require their companion's own env vars; unset uses the encrypted local file store. |
+| `TOOLUP_SECRETS_PATH` | string | — | no | yes | Filesystem path the file/encrypted secret store reads and writes secrets under. |
+| `TOOLUP_SECRET_STORE` | enum: encrypted, file, env, azure-key-vault, aws-secrets-manager, gcp-secret-manager, vault | encrypted | no | yes | Selects the ISecretStore backend. Cloud values require their companion's own env vars; unset uses the encrypted local file store. |
 
 ## Auth & identity
 
@@ -94,9 +94,9 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
-| `TOOLUP_APP_NAME` | string | — | no | pending | Display name the platform shell and startup banner present for this deployment. |
+| `TOOLUP_APP_NAME` | string | — | no | yes | Display name the platform shell and startup banner present for this deployment. |
 | `TOOLUP_HEALTH_STATE_TRACKING` | bool | false | no | yes | Tracks health-check state transitions, so a probe can report how long a component has been unhealthy. |
-| `TOOLUP_LOG_FORMAT` | enum: text, json | text | no | pending | Selects the default logger's output shape: human-readable text or structured JSON lines. |
+| `TOOLUP_LOG_FORMAT` | enum: text, json | text | no | yes | Selects the default logger's output shape: human-readable text or structured JSON lines. |
 | `TOOLUP_LOG_LEVEL` | enum: Debug, Info, Warn, Error | Info | no | yes | Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info. |
 | `TOOLUP_METRICS_ENDPOINT` | enum: enabled, disabled | disabled | no | yes | Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink. |
 | `TOOLUP_SLOW_REQUEST_MS` | int | 1000 | no | yes | Milliseconds above which a request is logged as slow. |
@@ -106,17 +106,17 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
-| `TOOLUP_AUDIT_ADMIN_REQUIRED` | bool | false | no | pending | When true, audit-log read endpoints require Platform Admin rather than team-level access. |
+| `TOOLUP_AUDIT_ADMIN_REQUIRED` | bool | false | no | yes | When true, audit-log read endpoints require Platform Admin rather than team-level access. |
 | `TOOLUP_COMPONENT__` | string | — | no | pending | Prefix for per-component config overrides, spelled TOOLUP_COMPONENT__ComponentId__Key. Not read as a variable in its own right. |
 | `TOOLUP_CONFIG_FILE` | string | (unset — probes ./toolup.config.json) | no | n/a | Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded. |
-| `TOOLUP_DISTRIBUTED_LOCK` | enum: inprocess, redis | inprocess | no | pending | Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into. |
+| `TOOLUP_DISTRIBUTED_LOCK` | enum: inprocess, redis | inprocess | no | yes | Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into. |
 | `TOOLUP_ENABLE_DEV_ENDPOINTS` | bool | false | no | yes | Exposes the /dev/* inspection endpoints. Should stay off in production. |
 | `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | bool | true | no | yes | Merges the SDK platform default config schema into the composed surface. |
-| `TOOLUP_MAX_FILE_BYTES` | int | — | no | pending | Maximum accepted upload size in bytes for file-management endpoints. |
+| `TOOLUP_MAX_FILE_BYTES` | int | — | no | yes | Maximum accepted upload size in bytes for file-management endpoints. |
 | `TOOLUP_MAX_REQUEST_BODY_BYTES` | int | — | no | yes | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
 | `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | int | 10 | no | yes | Maximum concurrent SSE connections per scope. |
 | `TOOLUP_MODULE` | string | — | no | yes | Restricts the composed surface to a single named module. Intended for local iteration. |
-| `TOOLUP_NOTIFICATION_CHANNEL` | enum: inmemory, redis | inmemory | no | pending | Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel. |
+| `TOOLUP_NOTIFICATION_CHANNEL` | enum: inmemory, redis | inmemory | no | yes | Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel. |
 | `TOOLUP_PEER_ROUTE_PREFIXES` | string | — | no | yes | Comma-separated route prefixes served by the cross-deployment peer substrate. |
 | `TOOLUP_PLATFORM_SURFACES` | string | — | no | yes | Comma-separated surface profiles the deployment exposes, for example anonymous, user, multi-team or claim-bearer. |
 | `TOOLUP_PROCESS_PROFILE` | enum: allinone, web, worker, dispatcher | allinone | no | yes | Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only. |
@@ -146,7 +146,7 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | `TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE` | bool | false | no | yes | Allows the in-process job scheduler when ReplicaCount is above 1, so scheduled jobs run on every instance. Lowers a startup preflight refusal to a warning. |
 | `TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY` | bool | false | no | yes | Acknowledge a team invite-by-email surface mounted with no IUserDirectory (emails silently never send). |
 | `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE` | bool | false | no | yes | Allows the local embedding provider at a corpus size it is not built for. Lowers a startup preflight refusal to a warning. |
-| `TOOLUP_ACCEPT_LOCAL_FALLBACK` | bool | false | no | pending | Acknowledge a cloud-declared blob backend silently falling back to local storage (downgrades the refusal to a warning). |
+| `TOOLUP_ACCEPT_LOCAL_FALLBACK` | bool | false | no | yes | Acknowledge a cloud-declared blob backend silently falling back to local storage (downgrades the refusal to a warning). |
 | `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge an internet-facing authenticated deployment with no rate limiting. |
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | bool | false | no | yes | Acknowledge the in-memory pending-invite store under a multi-instance deployment (per-replica drift). |
 | `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | bool | false | no | yes | Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning. |
@@ -255,13 +255,13 @@ These keys are read by the build, the test run or the analyzer, never by a runni
 
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
-| `TOOLUP_APPROVE_API` | bool | false | no | pending | Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment. |
-| `TOOLUP_BEIR_CACHE` | string | — | no | pending | Benchmark-only: directory the BEIR retrieval corpus is cached in. |
-| `TOOLUP_COOKBOOK_PATH` | string | — | no | pending | Overrides the path the AG Charts AI cookbook is loaded from. |
-| `TOOLUP_EMIT_SBOM` | bool | false | no | pending | Build-time: emits a CycloneDX SBOM alongside the packed artefacts. |
-| `TOOLUP_ENTERPRISE_COOKBOOK_PATH` | string | — | no | pending | Overrides the path the AG Grid Enterprise AI cookbook is loaded from. |
-| `TOOLUP_PUBLISH_SOURCE` | string | — | no | pending | Build-time: overrides the NuGet source the Publish target pushes to. |
-| `TOOLUP_REGEN_CONFIG_REFERENCE` | bool | false | no | pending | Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment. |
-| `TOOLUP_REMOTING_ANALYZER_AUDIT` | bool | false | no | pending | Analyzer-time: emits an audit report of remoting API classification. |
-| `TOOLUP_TEST_ARGS` | string | — | no | pending | Build-time: extra arguments passed to each Expecto test pack. |
+| `TOOLUP_APPROVE_API` | bool | false | no | n/a | Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment. |
+| `TOOLUP_BEIR_CACHE` | string | — | no | n/a | Benchmark-only: directory the BEIR retrieval corpus is cached in. |
+| `TOOLUP_COOKBOOK_PATH` | string | — | no | n/a | Overrides the path the AG Charts AI cookbook is loaded from. |
+| `TOOLUP_EMIT_SBOM` | bool | false | no | n/a | Build-time: emits a CycloneDX SBOM alongside the packed artefacts. |
+| `TOOLUP_ENTERPRISE_COOKBOOK_PATH` | string | — | no | n/a | Overrides the path the AG Grid Enterprise AI cookbook is loaded from. |
+| `TOOLUP_PUBLISH_SOURCE` | string | — | no | n/a | Build-time: overrides the NuGet source the Publish target pushes to. |
+| `TOOLUP_REGEN_CONFIG_REFERENCE` | bool | false | no | n/a | Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment. |
+| `TOOLUP_REMOTING_ANALYZER_AUDIT` | bool | false | no | n/a | Analyzer-time: emits an audit report of remoting API classification. |
+| `TOOLUP_TEST_ARGS` | string | — | no | n/a | Build-time: extra arguments passed to each Expecto test pack. |
 

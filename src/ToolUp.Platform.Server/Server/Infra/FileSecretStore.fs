@@ -82,9 +82,13 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                     // Override mode: no per-scope file sources
                     Map.empty
                 | None ->
-                    match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.secretsPath with
-                    | null
-                    | "" ->
+                    // Phase 698 — the secrets PATH resolves through the
+                    // Phase-696 `ConfigResolution` seam; the per-scope
+                    // `TOOLUP_{SCOPE}_{KEY}` reads below stay direct, being an
+                    // open-ended family the registry does not enumerate and a
+                    // manifest therefore cannot name.
+                    match ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
+                    | None ->
                         let dir = resolvedBaseDir ()
 
                         let platformFile =
@@ -115,8 +119,8 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                             |> fun merged -> platformFile |> Map.fold (fun acc k v -> acc |> Map.add k v) merged
                         else
                             scopedFile
-                    | p when scopeId = "_platform" -> loadFile p
-                    | _ -> Map.empty
+                    | Some p when scopeId = "_platform" -> loadFile p
+                    | Some _ -> Map.empty
 
             // Serialise the cache mutation against concurrent loads and
             // SetSecret/DeleteSecret invalidations; double-check inside the
@@ -137,9 +141,9 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     let writePathFor scopeId =
         let dir = resolvedBaseDir ()
 
-        match path, Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.secretsPath with
+        match path, ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
         | Some p, _ when scopeId = "_platform" -> Some p
-        | _, p when scopeId = "_platform" && not (String.IsNullOrEmpty p) -> Some p
+        | _, Some p when scopeId = "_platform" && not (String.IsNullOrEmpty p) -> Some p
         | _ when scopeId = "_platform" -> Some(Path.Combine(dir, "secrets.json"))
         | _, _ -> Some(Path.Combine(dir, $"secrets-{scopeId}.json"))
 

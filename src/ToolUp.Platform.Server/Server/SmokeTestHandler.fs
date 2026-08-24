@@ -42,11 +42,11 @@ let private SmokeTokenEnvVar = ConfigKeys.Names.smokeToken
 [<Literal>]
 let private SmokeTokenHeader = "X-Smoke-Token"
 
+// Phase 698 — through the Phase-696 `ConfigResolution` seam. Secret key,
+// so the manifest lane is refused outright and this stays an environment
+// read; the seam keeps the provenance answer single-sourced.
 let private readEnvToken () =
-    match Environment.GetEnvironmentVariable SmokeTokenEnvVar with
-    | null
-    | "" -> None
-    | value -> Some value
+    ConfigResolution.tryValue SmokeTokenEnvVar
 
 let private readHeader (ctx: HttpContext) (name: string) : string option =
     match ctx.Request.Headers.TryGetValue name with

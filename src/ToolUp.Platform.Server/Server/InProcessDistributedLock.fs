@@ -189,11 +189,11 @@ module DistributedLockSelection =
     [<Literal>]
     let EnvVar = ConfigKeys.Names.distributedLock
 
-    let private envVar (name: string) =
-        match Environment.GetEnvironmentVariable name with
-        | null
-        | "" -> None
-        | v -> Some v
+    // Phase 698 — through the Phase-696 `ConfigResolution` seam. The
+    // per-resolver CONNECTION variable rides the same helper: it is a
+    // secret, so a manifest can never supply it, but resolving it here
+    // keeps one answer to where a value came from.
+    let private envVar (name: string) = ConfigResolution.tryValue name
 
     /// Resolve the deployment's `IDistributedLock` from
     /// `TOOLUP_DISTRIBUTED_LOCK`.
@@ -218,7 +218,7 @@ module DistributedLockSelection =
             logger.Info "Distributed lock: in-process (InProcessDistributedLock) — exclusion does not cross replicas"
             InProcessDistributedLock.shared
 
-        match envVar EnvVar |> Option.map _.ToLowerInvariant() with
+        match ConfigResolution.tryValue EnvVar |> Option.map _.ToLowerInvariant() with
         | None
         | Some "inprocess"
         | Some "in-process" -> inProcess ()

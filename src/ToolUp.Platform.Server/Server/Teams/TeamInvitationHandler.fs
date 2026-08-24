@@ -576,17 +576,18 @@ let teamInvitationApi
                                     // "ToolUp" fallback so the email's brand line
                                     // matches whatever the deployment surfaces to
                                     // its users.
+                                    // Phase 698 — through the Phase-696
+                                    // `ConfigResolution` seam.
                                     let appName =
-                                        match System.Environment.GetEnvironmentVariable ConfigKeys.Names.appName with
-                                        | null
-                                        | "" ->
+                                        match ConfigResolution.tryValue ConfigKeys.Names.appName with
+                                        | None ->
                                             let host = ctx.Request.Host.Value
 
                                             if System.String.IsNullOrWhiteSpace host then
                                                 "ToolUp"
                                             else
                                                 host
-                                        | n -> n
+                                        | Some n -> n
 
                                     let redirectUrl =
                                         // Server has no first-class knowledge of

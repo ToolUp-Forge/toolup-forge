@@ -26,11 +26,9 @@ type CloudSecretStoreResolver = {
     Resolve: unit -> ISecretStore option
 }
 
-let private envVar (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> None
-    | v -> Some v
+// Phase 698 — resolved through the Phase-696 `ConfigResolution` seam, so a
+// manifest can declare which backend the deployment runs on. Absent a
+// manifest the seam is the environment read it replaces (GP 11).
 
 /// Build the deployment's `ISecretStore` from `TOOLUP_SECRET_STORE`.
 /// Recognised values:
@@ -75,7 +73,9 @@ let fromEnv (logger: ILogger) (cloudResolvers: CloudSecretStoreResolver list) : 
 
             defaultStore ()
 
-    let chosen = envVar ConfigKeys.Names.secretStore |> Option.map _.ToLowerInvariant()
+    let chosen =
+        ConfigResolution.tryValue ConfigKeys.Names.secretStore
+        |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

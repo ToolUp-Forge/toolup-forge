@@ -2356,6 +2356,7 @@ let manifestBindable: Set<string> =
         Names.acceptInProcessSchedulerMultiInstance
         Names.acceptInviteByEmailWithoutDirectory
         Names.acceptLocalEmbedderAtScale
+        Names.acceptLocalFallback
         Names.acceptNoRateLimitInAuthMode
         Names.acceptPendingInviteStoreMultiInstance
         Names.acceptPlaintextSecretsInAuthMode
@@ -2367,12 +2368,15 @@ let manifestBindable: Set<string> =
         Names.acceptUnsignedPublishable
         Names.adAnalytics
         Names.allowDevAdminBootstrap
+        Names.appName
         Names.assetStore
+        Names.auditAdminRequired
         Names.auditFailurePolicy
         Names.auditLog
         Names.authCookieIssuance
         Names.authMode
         Names.backfillMissedTicks
+        Names.blobStorage
         Names.columnMapping
         Names.computeBudget
         Names.configDriftDetection
@@ -2384,6 +2388,7 @@ let manifestBindable: Set<string> =
         Names.defaultStorageQuotaBytes
         Names.deploymentReadiness
         Names.deploymentVerification
+        Names.distributedLock
         Names.enableCitationDevEndpoint
         Names.enableDevEndpoints
         Names.entityOutbox
@@ -2397,14 +2402,17 @@ let manifestBindable: Set<string> =
         Names.initialTeamName
         Names.jobScheduler
         Names.lineage
+        Names.logFormat
         Names.logLevel
         Names.mappingDryRunBlock
+        Names.maxFileBytes
         Names.maxRequestBodyBytes
         Names.maxSseConnectionsPerScope
         Names.metricsEndpoint
         Names.migrateWebhookSecretsAtRest
         Names.moduleBindingAllowUnbound
         Names.moduleFilter
+        Names.notificationChannel
         Names.oauthRedirectBase
         Names.oauthRefresher
         Names.oidcAudience
@@ -2424,6 +2432,8 @@ let manifestBindable: Set<string> =
         Names.replicaCount
         Names.requireHttps
         Names.resultStore
+        Names.secretStore
+        Names.secretsPath
         Names.securityHardening
         Names.serverlessHost
         Names.shareTokenStore
@@ -2535,7 +2545,7 @@ module ReferenceDoc =
 
         sb.AppendLine(
             sprintf
-                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.\n\nThe **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the manifest cannot name its own location). Precedence is consumer literal > environment variable > manifest > override record > default."
+                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.\n\nThe **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or the variable naming the manifest's own location). Precedence is consumer literal > environment variable > manifest > override record > default."
                 keys.Length
         )
         |> ignore
@@ -2592,10 +2602,19 @@ module ReferenceDoc =
                 // column says "never" rather than "no" — the two are
                 // different facts and an operator reading "no" would
                 // reasonably wait for a migration that will never come.
+                // Phase 698 — a TOOLING key reads `n/a`, not `pending`.
+                // `pending` promises a reader that will migrate; for a key
+                // the build, the test run or the analyzer reads and no
+                // server ever does, no such reader exists and the promise
+                // is simply false. The sweep that closed `pending` for the
+                // Platform-side keys is what made the distinction visible:
+                // what remained was not a queue of unmigrated readers but
+                // three different reasons a key cannot be declared.
                 let manifestCell =
                     if k.EnvVar = Names.configFile then "n/a"
                     elif k.IsSecret then "never"
                     elif isManifestBindable k.EnvVar then "yes"
+                    elif isToolingKey k.EnvVar then "n/a"
                     else "pending"
 
                 sb.AppendLine(
