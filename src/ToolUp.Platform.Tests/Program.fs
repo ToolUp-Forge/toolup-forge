@@ -325,6 +325,8 @@ let allTests =
         CompositionCapabilityGateTests.tests
         // Phase 688 — seam-granularity module authority grants.
         SeamAuthorityTests.tests
+        // Phase 691 — the seam gate's first production call site.
+        SeamAuthorityEnforcementTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

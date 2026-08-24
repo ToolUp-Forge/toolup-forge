@@ -1126,6 +1126,15 @@
              ServerApp (reads / reflects ServerModule) and beside the Phase 293
              platform-level ComposableSurface it mirrors one level down. -->
         <Compile Include="Server\ModuleSurface.fs" />
+        <!-- Phase 691 — the seam-authority gate's production call site: for
+             each composed module, the substrate seams its registrations imply
+             are checked through the Phase 688 ISeamAuthorityGate, with
+             refusals riding the Phase 657 audited observer onto the Phase 658
+             ledger. After ModuleSurface.fs (whose Needs projection IS the
+             reach derivation, so the SDK carries one declaration-to-substrate
+             map rather than two) and after BootVerificationPreflight.fs
+             (whose VerifiedCompositionProfile builds the audited gate). -->
+        <Compile Include="Server\SeamAuthorityEnforcement.fs" />
         <!-- Phase 431 — event-topology manifest: the inter-module messaging
              graph as data (per-ComponentId Emits / SubscribesTo), derived from
              live registrations — OnEvent job triggers (IEventStore

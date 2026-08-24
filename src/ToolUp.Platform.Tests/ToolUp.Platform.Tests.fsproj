@@ -430,6 +430,14 @@
              by ComponentId with a widening as CRITICAL; and the Phase 657
              verified profile makes declaration mandatory. -->
         <Compile Include="InProcess\SeamAuthorityTests.fs" />
+        <!-- Phase 691 — the seam gate's first production call site: the reach
+             derivation IS the shipped ModuleSurface Needs projection (not a
+             second map); the additive floor probed over a composition of
+             eight real module shapes under every no-declaration gate; one
+             perturbation per reached seam, derived from the reach rather than
+             listed; and the verified profile refusing before any reach is
+             checked, with real refusals landing on the Phase 658 ledger. -->
+        <Compile Include="InProcess\SeamAuthorityEnforcementTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->
