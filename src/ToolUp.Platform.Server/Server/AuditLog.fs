@@ -1585,6 +1585,22 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> GroundingMutationRefused(fromAuditJson<GroundingMutationRefusedPayload> j)
     }
+    // Phase 685 — certificate issuance. ONE event type, and the asymmetry
+    // with the three pairs above is the point rather than an oversight:
+    // those record a verdict over an attempt, so the refusal is a row a
+    // SIEM rule cuts on. An issuance has no refused counterpart to
+    // discriminate against — a certificate that failed to seal was never
+    // issued, and recording that it nearly was would put documents on the
+    // log that no holder can ever present. What this log answers is "what
+    // exists", so the only rows on it are things that do.
+    {
+        EventType = "CertificateIssued"
+        TryEncode =
+            (function
+            | CertificateIssued p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> CertificateIssued(fromAuditJson<CertificateIssuedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

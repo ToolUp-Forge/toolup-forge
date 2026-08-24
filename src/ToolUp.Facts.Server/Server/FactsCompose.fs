@@ -151,6 +151,22 @@ module FactsCompose =
             // `IEventStore`-backed lineage view over the same store — always
             // buildable so a certificate can be issued the moment a signer
             // is present.
+            //
+            // Phase 685 — the issuer logs each issuance through the
+            // composed `IAuditLog`, so the audit trail becomes the
+            // deployment's certificate log and a certificate stops being
+            // unlisted. The log is looked up as an OPTION and not
+            // required: a deployment somehow without one issues exactly as
+            // it did before rather than failing to compose (GP 11 /
+            // GP 13), and a deployment that never issues records nothing
+            // either way.
+            //
+            // Note what this does NOT do: Phase 682's attested issuer
+            // stays uncomposed here, deliberately (GP 13). Its logging
+            // constructor exists for a composition root that wires it by
+            // hand — the emission is on the issuer, not on this
+            // registration, so the log's claim to enumerate issuance does
+            // not depend on which path a deployment chose.
             .AddSingleton<IGroundingCertificateIssuer>(
                 Func<IServiceProvider, IGroundingCertificateIssuer>(fun sp ->
                     let events = sp.GetRequiredService<IEventStore>()
@@ -168,12 +184,12 @@ module FactsCompose =
                         | :? ToolUp.ArtefactSigning.IArtefactSigner as s -> Some s
                         | _ -> None
 
-                    GroundingCertificate.createIssuer
-                        graph
-                        (sp.GetRequiredService<IFactStore>())
-                        (sp.GetRequiredService<IFactDisclosureGate>())
-                        events
-                        signer)
+                    let store = sp.GetRequiredService<IFactStore>()
+                    let gate = sp.GetRequiredService<IFactDisclosureGate>()
+
+                    match tryService<IAuditLog> sp with
+                    | Some audit -> GroundingCertificate.createIssuerAudited graph store gate events signer audit
+                    | None -> GroundingCertificate.createIssuer graph store gate events signer)
             )
 
     // ─── Phase 623 — activate reactive recomputation ──────────────────

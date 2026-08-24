@@ -1035,6 +1035,10 @@
              refusal per failure class, and an empty store behind every one
              of them. -->
         <Compile Include="InProcess\FactImportTests.fs" />
+        <!-- Phase 685 — certificate issuance transparency: the issuance row,
+             the three inclusion verdicts, the enumeration surface, and the
+             suppressed-issuance probe against a real chained ledger. -->
+        <Compile Include="InProcess\CertificateIssuanceTransparencyTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

@@ -3786,6 +3786,49 @@ type GroundingMutationRefusedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 685 — one grounding certificate was issued.
+///
+/// **The issuance log is what makes a certificate enumerable.** A holder
+/// has always been able to verify the certificate in their hand; nobody
+/// could ask the other question — *what has this deployment certified?* —
+/// and a certificate that was issued and then quietly disowned left no
+/// trace at all. One row per issuance turns the audit trail into the
+/// deployment's own certificate log, and under a chained ledger that log
+/// is tamper-evident: a suppressed issuance is a break the chain verifier
+/// positions, not an absence nobody can see.
+///
+/// **Identifiers only — never the body.** A digest, the subject content
+/// id, the signing-key id, and which seal was used. That is deliberate
+/// and it is the whole reason this row is safe to keep: the certificate
+/// body carries a provenance chain filtered through the disclosure
+/// predicate, and copying any of it onto an audit row would move that
+/// content to a surface the predicate never ran at. The digest is
+/// sufficient for inclusion — a holder recomputes it from the bytes they
+/// hold — and insufficient for anything else, which is exactly the
+/// property wanted.
+type CertificateIssuedPayload = {
+    /// Lowercase-hex SHA-256 over the certificate's canonical signed bytes
+    /// — the same digest a holder recomputes from the document they hold,
+    /// so an inclusion check needs nothing from the issuer to run.
+    Digest: string
+    /// The subject the certificate is issued over: the answer message id
+    /// or the fact content id at the chain root.
+    Subject: string
+    /// The signing-key id bound into the signed body. Names WHICH key
+    /// sealed it, so a rotation leaves the log still readable.
+    KeyId: string
+    /// Which issue path sealed it: `"detached-jws"` (the direct
+    /// `IArtefactSigner` path) or `"application-seal"` (the attested path,
+    /// whose envelope also carries the purpose and attestation level).
+    /// A discriminator rather than a lookup, because the two make
+    /// different claims and an enumerator should not have to fetch the
+    /// document to tell them apart.
+    Seal: string
+    /// The certificate interchange format version the body declared.
+    Format: string
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4432,6 +4475,11 @@ type AuditEvent =
     /// Phase 684 — a grounding-envelope mutation was refused under the
     /// verified composition profile and nothing moved.
     | GroundingMutationRefused of GroundingMutationRefusedPayload
+    /// Phase 685 — a grounding certificate was issued. Identifiers only:
+    /// the certificate digest, its subject, the sealing key id. This is
+    /// the row that makes issuance enumerable and a suppressed
+    /// certificate visible.
+    | CertificateIssued of CertificateIssuedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4608,6 +4656,7 @@ module AuditEvent =
         | FactImportRefused _ -> "FactImportRefused"
         | GroundingEnvelopeMutated _ -> "GroundingEnvelopeMutated"
         | GroundingMutationRefused _ -> "GroundingMutationRefused"
+        | CertificateIssued _ -> "CertificateIssued"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

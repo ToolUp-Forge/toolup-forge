@@ -232,6 +232,98 @@ type IAttestedGroundingCertificateIssuer =
         scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<AttestedGroundingCertificate, CertificateError>>
 
+// ─── Issuance transparency (Phase 685) ───────────────────────────────────
+//
+// Both issuers above produce a document that verifies in the holder's hand
+// and is otherwise unlisted. That leaves one question unanswerable and
+// another one answerable dishonestly: an assessor cannot ask *what has this
+// deployment certified?*, and a deployment that issued a certificate it
+// later regrets can behave as though it never did — there is nothing to
+// contradict it. Verification and enumeration are different properties, and
+// only the first was ever built.
+//
+// The audit trail closes it, by reuse rather than by new machinery. Each
+// issuance appends one `CertificateIssued` row — digest, subject, key id,
+// seal — and under the chained audit ledger that trail is tamper-evident,
+// so a *suppressed* issuance is not an absence but a chain break the
+// verifier positions. The deployment's own log is the first rung of the
+// registry the certificate format was always designed for: open format,
+// key registry, no closure needed at either end.
+//
+// **The inclusion check is additive and stays that way.** `verify` is
+// untouched and needs no log, because a certificate that only verifies
+// against a reachable issuance log is not offline-verifiable at all — and
+// offline verifiability is the property that lets a certificate outlive the
+// deployment that issued it. Inclusion answers a *second* question, for a
+// holder who has log access: not "is this genuine" but "does the issuer
+// admit to it".
+
+/// One recorded certificate issuance, as an enumerator reads it back.
+///
+/// Identity by value (GP 12 rule 1) and identifiers only — the same four
+/// fields the audit row carries. There is deliberately no accessor from
+/// here back to the certificate body: the log knows that a document with
+/// this digest was issued, and nothing about what it said.
+type CertificateIssuance = {
+    /// Lowercase-hex SHA-256 over the certificate's canonical signed bytes.
+    Digest: string
+    /// The answer message id or fact content id at the certificate's root.
+    Subject: string
+    /// The signing-key id bound into the signed body.
+    KeyId: string
+    /// `"detached-jws"` or `"application-seal"`.
+    Seal: string
+    /// The certificate's own `IssuedAt` stamp — the row records the
+    /// document's time, not the log write's, so the two never disagree.
+    IssuedAt: DateTimeOffset
+}
+
+/// What an inclusion check found.
+///
+/// **Three verdicts, and the third is not a variety of the second.** "The
+/// log says nothing was issued" and "the log could not be trusted to say"
+/// send a holder to completely different places: the first is evidence
+/// against the certificate, the second is evidence against the log. A
+/// check that collapsed them would let a deployment answer an
+/// inconvenient inclusion query by breaking its own ledger, and read as
+/// though the certificate were the forgery.
+type CertificateInclusionVerdict =
+    /// The issuance is on the log, and here is the row.
+    | CertificateIncluded of issuance: CertificateIssuance
+    /// The log verified and carries no issuance with this digest. Under a
+    /// chained ledger this is a real negative; under a plain audit trail
+    /// it is only as strong as the trail.
+    | CertificateNotIssued
+    /// The log's own integrity could not be established, so it has no
+    /// standing to say either way.
+    | IssuanceLogUnverifiable of reason: string
+
+module CertificateInclusionVerdict =
+    let describe =
+        function
+        | CertificateIncluded issuance -> $"issuance recorded at {issuance.IssuedAt:o} under key '{issuance.KeyId}'"
+        | CertificateNotIssued -> "no issuance with this digest is recorded on the log"
+        | IssuanceLogUnverifiable reason -> $"the issuance log could not be verified: {reason}"
+
+/// The log an inclusion check reads, and the enumeration surface.
+///
+/// Deliberately narrower than `IAuditLog` and deliberately fallible. One
+/// read-only operation returning a `Result`, because "the log is intact and
+/// empty" and "the log cannot be trusted" are the two answers a caller must
+/// be able to tell apart, and a bare list cannot express the second.
+///
+/// **The integrity half is a seam, not an implementation.** Tamper evidence
+/// belongs to whatever ledger a deployment composed — the chained audit
+/// ledger is the shipped one — and this tier takes no dependency on it (GP
+/// 1). `GroundingCertificate.auditTrailLog` is the honest floor: it reads
+/// the ordinary audit path and claims no integrity beyond it.
+/// `auditTrailLogWithIntegrity` is where a deployment supplies its ledger's
+/// own verifier.
+type ICertificateIssuanceLog =
+    /// Every issuance recorded in `scopeId`, most recent first, or the
+    /// reason the log's integrity could not be established.
+    abstract Issued: scopeId: string -> Async<Result<CertificateIssuance list, string>>
+
 module GroundingCertificate =
 
     /// The open interchange format version. Do not change without a
@@ -312,6 +404,62 @@ module GroundingCertificate =
     let canonicalBytes (body: GroundingCertificateBody) : byte[] =
         JsonSerializer.Serialize(canonicalise body, jsonOptions)
         |> Encoding.UTF8.GetBytes
+
+    // ── issuance transparency (Phase 685) ───────────────────────────────
+
+    /// The seal discriminator for the direct `IArtefactSigner` path.
+    [<Literal>]
+    let DetachedJwsSeal = "detached-jws"
+
+    /// The seal discriminator for the application-signing-seam path, whose
+    /// envelope frames the purpose and attestation level into the signed
+    /// bytes alongside the body.
+    [<Literal>]
+    let ApplicationSeal = "application-seal"
+
+    /// The certificate's content-addressed digest — SHA-256 over the exact
+    /// canonical bytes the seal covers, lowercase hex.
+    ///
+    /// The same value on both issue paths, because both seal the same
+    /// canonical body, and the same value a holder recomputes from the
+    /// document they hold. That is what lets an inclusion check run with
+    /// nothing supplied by the issuer, and it is the identity the import
+    /// door's `cert:sha256:` ref already names.
+    let certificateDigest (body: GroundingCertificateBody) : string =
+        DsseEnvelope.sha256Hex (canonicalBytes body)
+
+    /// Append the issuance row. Called on the success path of both
+    /// issuers, and only there: a certificate that failed to seal was never
+    /// issued, so recording it would put documents on the log that no
+    /// holder can ever present.
+    ///
+    /// `None` records nothing — a deployment with no composed `IAuditLog`
+    /// is byte-for-byte what it was (GP 11 / GP 13). `OccurredAt` is the
+    /// certificate's OWN `IssuedAt`, not the log write's clock, so the row
+    /// and the document can never disagree about when the thing happened.
+    let private recordIssuance
+        (audit: IAuditLog option)
+        (scopeId: string)
+        (seal: string)
+        (body: GroundingCertificateBody)
+        : Async<unit> =
+        async {
+            match audit with
+            | None -> return ()
+            | Some audit ->
+                return!
+                    audit.Record(
+                        scopeId,
+                        AuditEvent.CertificateIssued {
+                            Digest = certificateDigest body
+                            Subject = body.Root
+                            KeyId = body.DeploymentKeyId
+                            Seal = seal
+                            Format = body.Format
+                            OccurredAt = body.IssuedAt
+                        }
+                    )
+        }
 
     /// Verify a certificate **offline** (Phase 565.C): needs only the
     /// certificate and a verifier that can resolve the public key for the
@@ -530,7 +678,13 @@ module GroundingCertificate =
     /// The direct-path issuer: seals the built body with the composed
     /// `IArtefactSigner`. Behaviour is unchanged from before the body
     /// builder was extracted — same body, same bytes, same signature.
-    type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option) =
+    ///
+    /// Phase 685: `audit` is where the issuance row lands. Both issuers
+    /// carry it because both ARE issue choke points — the attested path is
+    /// not composed by `FactsCompose` today (GP 13), and an issuance that
+    /// happened to travel the path a composition root wired by hand would
+    /// otherwise be the one issuance the log could not see.
+    type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option, audit: IAuditLog option) =
 
         interface IGroundingCertificateIssuer with
             member _.Issue(scopeId, principal, subject, depth) = async {
@@ -542,13 +696,16 @@ module GroundingCertificate =
                     | Ok body ->
                         match! signer.Sign(canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
-                        | Ok signature -> return Ok { Body = body; Signature = signature }
+                        | Ok signature ->
+                            do! recordIssuance audit scopeId DetachedJwsSeal body
+                            return Ok { Body = body; Signature = signature }
             }
 
     /// The attested issuer: seals the built body through the application
     /// signing seam, so the purpose and the signer's attestation level are
     /// framed into the signed bytes alongside the body.
-    type private AttestedIssuer(builder: CertificateBuilder, signer: IApplicationSigner option) =
+    type private AttestedIssuer(builder: CertificateBuilder, signer: IApplicationSigner option, audit: IAuditLog option)
+        =
 
         interface IAttestedGroundingCertificateIssuer with
             member _.Issue(scopeId, principal, subject, depth) = async {
@@ -560,7 +717,9 @@ module GroundingCertificate =
                     | Ok body ->
                         match! signer.SignPayload(Format, canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
-                        | Ok envelope -> return Ok { Body = body; Envelope = envelope }
+                        | Ok envelope ->
+                            do! recordIssuance audit scopeId ApplicationSeal body
+                            return Ok { Body = body; Envelope = envelope }
             }
 
     /// Construct the issuer over the composed collaborators. `signer` is
@@ -574,7 +733,8 @@ module GroundingCertificate =
         (signer: IArtefactSigner option)
         (clock: unit -> DateTime)
         : IGroundingCertificateIssuer =
-        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer) :> IGroundingCertificateIssuer
+        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, None)
+        :> IGroundingCertificateIssuer
 
     /// The issuer with a UTC wall-clock — the composition default.
     let createIssuer
@@ -585,6 +745,40 @@ module GroundingCertificate =
         (signer: IArtefactSigner option)
         : IGroundingCertificateIssuer =
         createIssuerWithClock graph store gate events signer (fun () -> DateTime.UtcNow)
+
+    /// The direct-path issuer, logging every issuance to `audit` (Phase
+    /// 685). Identical in every other respect to `createIssuerWithClock`:
+    /// same body, same bytes, same signature, same refusals.
+    ///
+    /// A SEPARATE entry point rather than an optional argument on the one
+    /// above, and that is a compatibility decision rather than a stylistic
+    /// one — an added optional constructor argument folds the existing
+    /// arity away and reads to the public-surface gate as a removal, which
+    /// is exactly what it would be for anyone calling it.
+    let createIssuerWithClockAudited
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IArtefactSigner option)
+        (audit: IAuditLog)
+        (clock: unit -> DateTime)
+        : IGroundingCertificateIssuer =
+        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, Some audit)
+        :> IGroundingCertificateIssuer
+
+    /// The logging direct-path issuer with a UTC wall-clock — what
+    /// `FactsCompose.withFactStore` composes when the deployment has an
+    /// `IAuditLog`.
+    let createIssuerAudited
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IArtefactSigner option)
+        (audit: IAuditLog)
+        : IGroundingCertificateIssuer =
+        createIssuerWithClockAudited graph store gate events signer audit (fun () -> DateTime.UtcNow)
 
     // ── the attested path ───────────────────────────────────────────────
 
@@ -607,7 +801,7 @@ module GroundingCertificate =
         (signer: IApplicationSigner option)
         (clock: unit -> DateTime)
         : IAttestedGroundingCertificateIssuer =
-        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer)
+        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, None)
         :> IAttestedGroundingCertificateIssuer
 
     /// The attested issuer with a UTC wall-clock — the composition default.
@@ -619,6 +813,36 @@ module GroundingCertificate =
         (signer: IApplicationSigner option)
         : IAttestedGroundingCertificateIssuer =
         createAttestedIssuerWithClock graph store gate events signer (fun () -> DateTime.UtcNow)
+
+    /// The attested issuer, logging every issuance to `audit` (Phase 685).
+    ///
+    /// The attested path is not composed by `FactsCompose` — that is Phase
+    /// 682's deliberate posture (GP 13), and this phase does not disturb
+    /// it. A composition root that wires the attested issuer by hand gets
+    /// the logging entry point here, so the log's claim to enumerate
+    /// issuance holds on both paths rather than only the composed one.
+    let createAttestedIssuerWithClockAudited
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IApplicationSigner option)
+        (audit: IAuditLog)
+        (clock: unit -> DateTime)
+        : IAttestedGroundingCertificateIssuer =
+        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, Some audit)
+        :> IAttestedGroundingCertificateIssuer
+
+    /// The logging attested issuer with a UTC wall-clock.
+    let createAttestedIssuerAudited
+        (graph: IProvenanceGraph)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (events: IEventStore)
+        (signer: IApplicationSigner option)
+        (audit: IAuditLog)
+        : IAttestedGroundingCertificateIssuer =
+        createAttestedIssuerWithClockAudited graph store gate events signer audit (fun () -> DateTime.UtcNow)
 
     /// Verify an attested certificate's seal.
     ///
@@ -667,3 +891,136 @@ module GroundingCertificate =
                     return AttestedCertificateSubjectMismatch(expectedRoot, certificate.Body.Root)
             | verdict -> return verdict
         }
+
+    // ── the issuance log: enumeration + inclusion (Phase 685) ───────────
+
+    /// Project the recorded rows for one scope. Reads only
+    /// `CertificateIssued` events, so a caller handing over an unfiltered
+    /// trail gets the same answer as one whose store honoured the type
+    /// filter.
+    let private issuancesOf (events: AuditEvent list) : CertificateIssuance list =
+        events
+        |> List.choose (function
+            | AuditEvent.CertificateIssued p ->
+                Some {
+                    Digest = p.Digest
+                    Subject = p.Subject
+                    KeyId = p.KeyId
+                    Seal = p.Seal
+                    IssuedAt = p.OccurredAt
+                }
+            | _ -> None)
+
+    /// The issuance log over the ordinary audit read path, scope-filtered
+    /// exactly as every other audit query is (GP 4 — the scope isolation
+    /// is the store's, not a filter this tier remembers to apply).
+    ///
+    /// **It claims no integrity, and says so by always returning `Ok`.**
+    /// A plain audit trail is a record, not a proof: it can enumerate what
+    /// was issued and it cannot demonstrate that nothing was removed. That
+    /// is a real and useful answer — it is what closes the "issued and
+    /// later denied" gap for a cooperative deployment — but a holder
+    /// verifying against an ADVERSARIAL one needs the tamper evidence, and
+    /// for that the deployment composes a chained ledger and supplies its
+    /// verifier through `auditTrailLogWithIntegrity`.
+    let auditTrailLog (audit: IAuditLog) : ICertificateIssuanceLog =
+        { new ICertificateIssuanceLog with
+            member _.Issued(scopeId) = async {
+                let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                return Ok(issuancesOf events)
+            }
+        }
+
+    /// The issuance log over the audit read path, gated on the
+    /// deployment's own ledger-integrity check.
+    ///
+    /// `integrity` is whatever verifies the trail this log reads — for the
+    /// shipped chained audit ledger, a call to its verifier mapping a
+    /// break or an untrusted head to `Error`. The seam is a function
+    /// rather than a package reference on purpose: tamper evidence belongs
+    /// to the sink that owns the chain, and the fact tier taking a
+    /// dependency on one would nail every deployment to that choice (GP 1).
+    ///
+    /// **Integrity is checked BEFORE the rows are read, and a failure
+    /// short-circuits.** The order is load-bearing: a not-found verdict
+    /// derived from rows a broken log supplied would be an assertion about
+    /// the certificate drawn from evidence already known to be worthless —
+    /// precisely the confusion the third verdict exists to prevent.
+    let auditTrailLogWithIntegrity
+        (audit: IAuditLog)
+        (integrity: unit -> Async<Result<unit, string>>)
+        : ICertificateIssuanceLog =
+        { new ICertificateIssuanceLog with
+            member _.Issued(scopeId) = async {
+                match! integrity () with
+                | Error reason -> return Error reason
+                | Ok() ->
+                    let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                    return Ok(issuancesOf events)
+            }
+        }
+
+    /// **The enumeration surface**: every certificate this deployment has
+    /// issued in `scopeId`, most recent first — digest and subject, with
+    /// the key id and seal that produced them.
+    ///
+    /// This is the question a certificate could not answer before: not
+    /// "is the document in my hand genuine" but "what has this deployment
+    /// certified". Scope-filtered by the ordinary audit read path, so an
+    /// enumerator sees exactly the scopes their audit access already
+    /// covers and no more.
+    let listIssued (log: ICertificateIssuanceLog) (scopeId: string) : Async<Result<CertificateIssuance list, string>> =
+        log.Issued scopeId
+
+    /// Is a certificate with this digest on the issuance log?
+    ///
+    /// The digest-only form, for a holder who has already computed it (or
+    /// read it off an `Imported` fact's `cert:sha256:` ref) and does not
+    /// hold the document.
+    let checkInclusionOfDigest
+        (log: ICertificateIssuanceLog)
+        (scopeId: string)
+        (digest: string)
+        : Async<CertificateInclusionVerdict> =
+        async {
+            match! log.Issued scopeId with
+            | Error reason -> return IssuanceLogUnverifiable reason
+            | Ok issuances ->
+                match issuances |> List.tryFind (fun i -> i.Digest = digest) with
+                | Some issuance -> return CertificateIncluded issuance
+                | None -> return CertificateNotIssued
+        }
+
+    /// **The optional inclusion check.** Given log access, confirm this
+    /// certificate's issuance is recorded.
+    ///
+    /// Strictly additive to `verify`, which is untouched and still needs
+    /// nothing but the certificate and a public key. The two answer
+    /// different questions and a holder wants both where both are
+    /// available: `verify` says the document is intact and genuinely
+    /// sealed by the named key; this says the issuer's own log admits to
+    /// having sealed it.
+    ///
+    /// **Never call this INSTEAD of verifying.** Inclusion is computed
+    /// from a digest over bytes nobody has checked a signature on, so on
+    /// its own it establishes only that a document with these bytes was
+    /// issued — which is not a claim about the document in your hand until
+    /// the seal has been verified.
+    let checkInclusion
+        (log: ICertificateIssuanceLog)
+        (scopeId: string)
+        (certificate: GroundingCertificate)
+        : Async<CertificateInclusionVerdict> =
+        checkInclusionOfDigest log scopeId (certificateDigest certificate.Body)
+
+    /// The inclusion check for a certificate sealed through the
+    /// application signing seam. Same digest, because both paths seal the
+    /// same canonical body — so one log serves both, and a deployment that
+    /// migrated from one seal to the other has one issuance history rather
+    /// than two.
+    let checkInclusionAttested
+        (log: ICertificateIssuanceLog)
+        (scopeId: string)
+        (certificate: AttestedGroundingCertificate)
+        : Async<CertificateInclusionVerdict> =
+        checkInclusionOfDigest log scopeId (certificateDigest certificate.Body)

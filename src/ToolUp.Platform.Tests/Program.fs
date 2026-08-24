@@ -841,6 +841,12 @@ let allTests =
         // directions; one distinct refusal per failure class, each leaving
         // the store empty.
         FactImportTests.tests
+        // Certificate issuance transparency — the audit trail as the
+        // deployment's own certificate log. One identifier-only row per
+        // issuance, three distinct inclusion verdicts, the enumeration
+        // surface, and a suppressed issuance probed against a real chained
+        // ledger the 658 verifier flags.
+        CertificateIssuanceTransparencyTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

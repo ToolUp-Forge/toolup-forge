@@ -724,6 +724,7 @@ ToolUp.Platform.AuditEvent.IsAuditSinkFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAuthScopeResolutionFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAuthorizationDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsBeaconRejected : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsCertificateIssued : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldWritten : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsCompositionCapabilityRefused : System.Boolean { get }
@@ -910,6 +911,8 @@ ToolUp.Platform.AuditEvent+AuthorizationDenied (class)
 ToolUp.Platform.AuditEvent+AuthorizationDenied.Item : ToolUp.Platform.AuthorizationDeniedPayload { get }
 ToolUp.Platform.AuditEvent+BeaconRejected (class)
 ToolUp.Platform.AuditEvent+BeaconRejected.Item : ToolUp.Platform.BeaconRejectedPayload { get }
+ToolUp.Platform.AuditEvent+CertificateIssued (class)
+ToolUp.Platform.AuditEvent+CertificateIssued.Item : ToolUp.Platform.CertificateIssuedPayload { get }
 ToolUp.Platform.AuditEvent+ClassifiedFieldRead (class)
 ToolUp.Platform.AuditEvent+ClassifiedFieldRead.Item : ToolUp.Platform.ClassifiedFieldReadPayload { get }
 ToolUp.Platform.AuditEvent+ClassifiedFieldWritten (class)
@@ -1168,6 +1171,7 @@ ToolUp.Platform.AuditEvent+Tags.AuditSinkFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AuthScopeResolutionFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AuthorizationDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.BeaconRejected : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.CertificateIssued : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldWritten : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.CompositionCapabilityRefused : System.Int32 (literal)
@@ -1864,6 +1868,14 @@ ToolUp.Platform.CapabilityId.Value : System.String { get }
 ToolUp.Platform.CapabilityIdModule (class)
 ToolUp.Platform.CapabilityIdModule.ofString(System.String) : ToolUp.Platform.CapabilityId
 ToolUp.Platform.CapabilityIdModule.value(ToolUp.Platform.CapabilityId) : System.String
+ToolUp.Platform.CertificateIssuedPayload (class)
+ToolUp.Platform.CertificateIssuedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.CertificateIssuedPayload.Digest : System.String { get }
+ToolUp.Platform.CertificateIssuedPayload.Format : System.String { get }
+ToolUp.Platform.CertificateIssuedPayload.KeyId : System.String { get }
+ToolUp.Platform.CertificateIssuedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.CertificateIssuedPayload.Seal : System.String { get }
+ToolUp.Platform.CertificateIssuedPayload.Subject : System.String { get }
 ToolUp.Platform.ClaimBearerConfig (class)
 ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
