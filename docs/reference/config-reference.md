@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (181 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (184 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the manifest cannot name its own location). Precedence is consumer literal > environment variable > manifest > override record > default.
 
@@ -118,6 +118,7 @@ The **Manifest** column says whether a deployment configuration manifest may sup
 | `TOOLUP_SMOKE_TOKEN` | string | — | yes | never | Bearer token guarding the post-deploy smoke-test endpoint (GET /api/_internal/smoke). |
 | `TOOLUP_STATIC_PATH_BEHAVIOUR` | enum: warn, require, skip | warn | no | yes | How a missing static-content path is treated at boot: warn, refuse to start, or skip silently. |
 | `TOOLUP_STORE_EVICTION_MINUTES` | int | 60 | no | yes | Idle minutes before an ephemeral in-memory store entry is evicted. |
+| `TOOLUP_STRICT_CONFIG` | bool | false | no | yes | Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot. |
 | `TOOLUP_TRUSTED_PROXY_CIDRS` | string | — | no | yes | Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted. |
 | `TOOLUP_TRUST_FORWARDED_HEADERS` | bool | false | no | yes | When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps). |
 
@@ -239,13 +240,17 @@ The **Manifest** column says whether a deployment configuration manifest may sup
 
 ## Build & tooling
 
+These keys are read by the build, the test run or the analyzer, never by a running server. The startup unknown-key preflight guard classifies them as tooling and never reports them, so a development machine that has run a build or a test pack does not warn on its own leftovers.
+
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
+| `TOOLUP_APPROVE_API` | bool | false | no | pending | Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment. |
 | `TOOLUP_BEIR_CACHE` | string | — | no | pending | Benchmark-only: directory the BEIR retrieval corpus is cached in. |
 | `TOOLUP_COOKBOOK_PATH` | string | — | no | pending | Overrides the path the AG Charts AI cookbook is loaded from. |
 | `TOOLUP_EMIT_SBOM` | bool | false | no | pending | Build-time: emits a CycloneDX SBOM alongside the packed artefacts. |
 | `TOOLUP_ENTERPRISE_COOKBOOK_PATH` | string | — | no | pending | Overrides the path the AG Grid Enterprise AI cookbook is loaded from. |
 | `TOOLUP_PUBLISH_SOURCE` | string | — | no | pending | Build-time: overrides the NuGet source the Publish target pushes to. |
+| `TOOLUP_REGEN_CONFIG_REFERENCE` | bool | false | no | pending | Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment. |
 | `TOOLUP_REMOTING_ANALYZER_AUDIT` | bool | false | no | pending | Analyzer-time: emits an audit report of remoting API classification. |
 | `TOOLUP_TEST_ARGS` | string | — | no | pending | Build-time: extra arguments passed to each Expecto test pack. |
 

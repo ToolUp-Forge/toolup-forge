@@ -186,12 +186,26 @@ let tests =
             // instead.
             //
             // The claim is checked against source rather than behaviour
-            // because behaviour would need one boot per key. The seam is a
-            // single private helper inside `ServerConfig`'s `fromEnv`
-            // region, so every key that region cites is bindable by
-            // construction, and the region's `ConfigKeys.Names.*` citations
-            // ARE the set. A reader that stops citing `Names.*` and inlines
-            // a literal is already caught by the first arm of this file.
+            // because behaviour would need one boot per key. There are two
+            // shapes of reader and the parse has to see both:
+            //
+            //   1. `ServerConfig.fromEnv` funnels ~90 keys through ONE
+            //      private seam helper, so no key there names
+            //      `ConfigResolution` itself. The whole `fromEnv` region is
+            //      therefore the unit, and its `ConfigKeys.Names.*`
+            //      citations ARE the bindable set.
+            //   2. A reader elsewhere calls the seam directly, one key at a
+            //      time — `ConfigResolution.tryValue Names.foo`. Phase 695's
+            //      preflight guard is the first (it resolves its own strict
+            //      -mode key), and it lives in `Platform.Server`, which the
+            //      region parse structurally cannot see. Anchoring the
+            //      pattern on the seam CALL rather than on the `Names.*`
+            //      citation is what keeps this arm from claiming every key a
+            //      file happens to mention: that same guard cites the two
+            //      declared prefixes without resolving either.
+            //
+            // A reader that stops citing `Names.*` and inlines a literal is
+            // already caught by the first arm of this file.
             let root = repoRoot ()
 
             let sharedPath =
@@ -231,16 +245,32 @@ let tests =
             // claim nothing can honour.
             let secrets = all |> List.filter _.IsSecret |> List.map _.EnvVar |> Set.ofList
 
-            let resolvedThroughSeam =
+            let fromEnvRegionKeys =
                 Regex.Matches(region, "ConfigKeys\\.Names\\.(\\w+)")
                 |> Seq.choose (fun m -> Map.tryFind m.Groups[1].Value bindingToVar)
                 |> Set.ofSeq
-                |> fun s -> Set.difference s secrets
 
             Expect.isGreaterThan
-                (Set.count resolvedThroughSeam)
+                (Set.count fromEnvRegionKeys)
                 50
                 "parsed suspiciously few keys out of the fromEnv region — the region bounds are probably wrong, and an empty parse passes vacuously in both directions"
+
+            // Direct seam calls anywhere in shipped source. Anchored on the
+            // seam function so a file that merely mentions `Names.*` for
+            // another purpose contributes nothing.
+            let seamCallKeys =
+                shippedSourceFiles root
+                |> List.collect (fun full ->
+                    Regex.Matches(
+                        File.ReadAllText full,
+                        "ConfigResolution\\.(?:tryValue|tryResolve|sourceOf)\\s+(?:ConfigKeys\\.)?Names\\.(\\w+)"
+                    )
+                    |> Seq.choose (fun m -> Map.tryFind m.Groups[1].Value bindingToVar)
+                    |> List.ofSeq)
+                |> Set.ofList
+
+            let resolvedThroughSeam =
+                Set.union fromEnvRegionKeys seamCallKeys |> fun s -> Set.difference s secrets
 
             let overClaimed = Set.difference manifestBindable resolvedThroughSeam
 

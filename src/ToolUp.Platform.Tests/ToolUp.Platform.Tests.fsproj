@@ -623,6 +623,10 @@
              discovery, the unknown-key and secret-key refusals, hash
              stability, provenance labels, and the no-manifest gate. -->
         <Compile Include="InProcess\ConfigResolverTests.fs" />
+        <!-- Phase 695 — the unknown-config-key preflight guard: the
+             suggestion, the three exclusion classes, the strict-mode
+             escalation, and the silent no-finding case. -->
+        <Compile Include="InProcess\UnknownConfigKeyValidatorTests.fs" />
         <!-- Phase 9m.A — TOOLUP_AI_PROVIDER / TOOLUP_AI_MODEL env-var
              typo catchers. Always-on validators that self-skip with Ok
              when the env var is unset. Pure-function tests; no

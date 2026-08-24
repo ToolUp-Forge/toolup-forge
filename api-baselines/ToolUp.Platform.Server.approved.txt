@@ -8018,6 +8018,19 @@ ToolUp.Platform.TreePatchReceipt+Tags.Duplicate : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceipt+Tags.Gap : System.Int32 (literal)
 ToolUp.Platform.TreePatchReceiver (class)
 ToolUp.Platform.TreePatchReceiver.classify(System.Int64, ToolUp.Platform.TreePatchEnvelope) : ToolUp.Platform.TreePatchReceipt
+ToolUp.Platform.UnknownConfigKeyValidator (class)
+ToolUp.Platform.UnknownConfigKeyValidator.KeyPrefix : System.String (literal)
+ToolUp.Platform.UnknownConfigKeyValidator.declaredPrefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.UnknownConfigKeyValidator.editDistance(System.String, System.String) : System.Int32
+ToolUp.Platform.UnknownConfigKeyValidator.environmentNameEnumerator() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.UnknownConfigKeyValidator.evaluate(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.UnknownConfigKeyValidator.strictModeEnabled() : System.Boolean
+ToolUp.Platform.UnknownConfigKeyValidator.suggestionFor(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.UnknownConfigKeyValidator.unrecognisedNames(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.UnknownConfigKeyValidator.validator() : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.Platform.UnknownConfigKeyValidator+UnknownConfigKeyValidator (class)
+ToolUp.Platform.UnknownConfigKeyValidator+UnknownConfigKeyValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.UnknownConfigKeyValidator+UnknownConfigKeyValidator.Name : System.String { get }
 ToolUp.Platform.UnprovisionedPosture (class)
 ToolUp.Platform.UnprovisionedPosture.IsReducedWhenUnprovisioned : System.Boolean { get }
 ToolUp.Platform.UnprovisionedPosture.IsUnlockedWhenUnprovisioned : System.Boolean { get }

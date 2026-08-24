@@ -44,6 +44,13 @@ let registerFirstPartyConfigValidators
         services.AddSingleton<ConfigValidation.IConfigValidator>(v :> ConfigValidation.IConfigValidator)
         |> ignore
 
+    // Registered first, deliberately: a mistyped variable name is the
+    // cause of whatever the value-level validators below go on to report,
+    // so its message should be the one the operator reads first. Prepending
+    // leaves every existing relative order — including the interleaved
+    // health check — exactly as it was.
+    addConfigValidator (UnknownConfigKeyValidator.validator ()) // Phase 695 — warn (refuse under TOOLUP_STRICT_CONFIG) on set TOOLUP_* variables that name no config key the SDK reads
+
     addConfigValidator (ConfigValidator.BlobStorageValidator(resolvedBlobStorage)) // blob storage reachable
     addConfigValidator (BlobStorageSelectionValidator.BlobStorageSelectionValidator(resolvedBlobStorage)) // refuse cloud-declared backend that silently fell back to LocalFileStorage
     addConfigValidator (ConfigValidator.SecretStoreValidator(secretStore)) // secret store reachable

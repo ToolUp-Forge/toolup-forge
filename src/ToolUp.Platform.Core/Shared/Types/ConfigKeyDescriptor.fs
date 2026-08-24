@@ -152,6 +152,18 @@ type ConfigKeyDescriptor = {
     Category: string
 }
 
+/// The category naming the keys that are read by the build, test and
+/// analyzer tooling rather than by a running server.
+///
+/// It is a `Category` rather than a second flag on `ConfigKeyDescriptor`
+/// because the grouping already existed and already carried exactly this
+/// meaning — adding a parallel boolean would have created two statements
+/// of one fact, and the two would drift the first time someone added a
+/// descriptor to the section without setting the flag. Derived membership
+/// (`toolingKeys` below) cannot drift from the section a reader sees.
+[<Literal>]
+let ToolingCategory = "Build & tooling"
+
 /// Canonical env-var name constants. The `*FromEnv` readers reference
 /// these instead of inlining the string literal, so a rename is a
 /// compile error that the reference doc can never silently lag behind.
@@ -226,6 +238,9 @@ module Names =
     // Deployment shape
     [<Literal>]
     let configFile = "TOOLUP_CONFIG_FILE"
+
+    [<Literal>]
+    let strictConfig = "TOOLUP_STRICT_CONFIG"
 
     [<Literal>]
     let replicaCount = "TOOLUP_REPLICA_COUNT"
@@ -720,6 +735,12 @@ module Names =
     [<Literal>]
     let remotingAnalyzerAudit = "TOOLUP_REMOTING_ANALYZER_AUDIT"
 
+    [<Literal>]
+    let approveApi = "TOOLUP_APPROVE_API"
+
+    [<Literal>]
+    let regenConfigReference = "TOOLUP_REGEN_CONFIG_REFERENCE"
+
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader
 /// gains a new env var; the coverage test fails if a reader consults a
 /// var with no descriptor, and the golden-file test fails until the
@@ -927,6 +948,15 @@ let all: ConfigKeyDescriptor list = [
             "Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded."
         Type = StringKey
         Default = Some "(unset — probes ./toolup.config.json)"
+        IsSecret = false
+        Category = "Deployment shape"
+    }
+    {
+        EnvVar = Names.strictConfig
+        Description =
+            "Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot."
+        Type = BoolKey
+        Default = Some "false"
         IsSecret = false
         Category = "Deployment shape"
     }
@@ -2208,7 +2238,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.publishSource
@@ -2216,7 +2246,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.testArgs
@@ -2224,7 +2254,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.cookbookPath
@@ -2232,7 +2262,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.enterpriseCookbookPath
@@ -2240,7 +2270,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.beirCache
@@ -2248,7 +2278,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
     }
     {
         EnvVar = Names.remotingAnalyzerAudit
@@ -2256,7 +2286,25 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Build & tooling"
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.approveApi
+        Description =
+            "Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.regenConfigReference
+        Description =
+            "Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = ToolingCategory
     }
 ]
 
@@ -2368,6 +2416,7 @@ let manifestBindable: Set<string> =
         Names.sseAuth
         Names.staticPathBehaviour
         Names.storeEvictionMinutes
+        Names.strictConfig
         Names.teamCreationPolicy
         Names.traceCategories
         Names.trustForwardedHeaders
@@ -2381,6 +2430,36 @@ let manifestBindable: Set<string> =
 /// manifest. Drives the generated reference's column and the loader's
 /// registered-but-not-yet-bindable warning.
 let isManifestBindable (envVar: string) : bool = Set.contains envVar manifestBindable
+
+/// The keys read by the build, test and analyzer tooling rather than by a
+/// running server — **derived** from `ToolingCategory`, never listed a
+/// second time.
+///
+/// The unknown-key preflight guard quantifies over the environment a
+/// server process actually has, and a developer box legitimately carries
+/// these: a build that emitted an SBOM, a test run that regenerated a
+/// baseline. Warning about them would train an operator to scroll past the
+/// one class of finding the guard exists to surface, so they are excluded
+/// by name and the generated reference says so under the section heading.
+///
+/// Note the exclusion is belt-and-braces rather than load-bearing today:
+/// every key here also carries a descriptor, so the guard's registry arm
+/// already covers it. That is forced rather than incidental — the coverage
+/// test demands a descriptor for any `TOOLUP_*` literal appearing in
+/// shipped source, and naming a tooling key anywhere in the SDK (including
+/// in this file) is exactly such a literal. What the classification adds is
+/// that the exclusion is *stated*: a later reader can tell that a tooling
+/// key is out of scope by intent, not by the accident of being registered.
+let toolingKeys: Set<string> =
+    all
+    |> List.filter (fun k -> k.Category = ToolingCategory)
+    |> List.map _.EnvVar
+    |> Set.ofList
+
+/// Whether `envVar` is a build / test / analyzer key rather than one a
+/// running server reads. Drives the unknown-key preflight guard's
+/// exclusion and the generated reference's section note.
+let isToolingKey (envVar: string) : bool = Set.contains envVar toolingKeys
 
 /// Project the registry to `docs/reference/config-reference.md`. Pure —
 /// the same input always yields the same bytes, so the golden-file test
@@ -2448,6 +2527,19 @@ module ReferenceDoc =
         for category in orderedCategories keys do
             sb.AppendLine(sprintf "## %s" category) |> ignore
             sb.AppendLine "" |> ignore
+
+            // The tooling classification, rendered where it is acted on.
+            // These keys belong to the build, the test run and the
+            // analyzer, so the startup unknown-key guard deliberately
+            // never reports them — an operator reading a preflight
+            // warning needs to know which names are out of its scope.
+            if category = ToolingCategory then
+                sb.AppendLine(
+                    "These keys are read by the build, the test run or the analyzer, never by a running server. The startup unknown-key preflight guard classifies them as tooling and never reports them, so a development machine that has run a build or a test pack does not warn on its own leftovers."
+                )
+                |> ignore
+
+                sb.AppendLine "" |> ignore
 
             sb.AppendLine "| Env var | Type | Default | Secret | Manifest | Description |"
             |> ignore

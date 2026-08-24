@@ -636,6 +636,7 @@
         <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
         <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
         <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
+        <Compile Include="Server\UnknownConfigKeyValidator.fs" />
         <Compile Include="Server\CsrfDefaultModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
         <Compile Include="Server\SurfaceCoherenceValidator.fs" />

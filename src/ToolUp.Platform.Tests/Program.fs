@@ -443,6 +443,7 @@ let allTests =
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         ConfigResolverTests.tests
+        UnknownConfigKeyValidatorTests.tests
         HealthStateTrackerTests.tests
         AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests
