@@ -352,6 +352,7 @@ let private referenceTool: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private referenceServer () : ServerModule =

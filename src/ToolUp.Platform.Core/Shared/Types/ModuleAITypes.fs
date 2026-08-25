@@ -77,6 +77,53 @@ type ActionDeclaration = {
     PayloadSchema: string option
 }
 
+/// Phase 709 — per-tool **context budget** for the JSON result a tool
+/// returns to the agent loop. A tool result is serialised straight into
+/// model context, so a tool whose contract is "return the matching
+/// records" floods the conversation at high cardinality: 10⁵ records
+/// JSON-encoded into the prompt, every turn, until the provider refuses
+/// the request. The budget is a context-hygiene ceiling on ONE tool
+/// result, and it is deliberately NOT a member of the resource-
+/// *exhaustion* budget family — compute (`ComputeBudget`), AI tokens,
+/// monetary cost — that Phase 689 sets out to unify behind one seam.
+///
+/// Keeping the two shapes apart is a decision, not an oversight, and it
+/// is worth stating before that seam lands so nobody folds this in on
+/// the strength of the shared word "budget". An exhaustion budget meters
+/// a consumable somebody is billed for: it accrues over a declared
+/// period, is scoped to a submitter class, needs a store to remember
+/// what has been spent, and its answer is allow / warn / REFUSE. This
+/// budget meters one payload against one prompt: it holds no state,
+/// spans no period, bills nobody, and never refuses — it substitutes a
+/// steer and lets the turn continue. A single seam covering both would
+/// have to make period, store and submitter class optional, at which
+/// point it has stopped saying anything.
+///
+/// The unit is **characters of the returned JSON**, not tokens and not
+/// UTF-8 bytes. Forge owns no tokenizer, and characters are the currency
+/// every sibling bound in this area already speaks (RAG's
+/// `SnippetCharLimit`, the fact-clause rendering) — a second unit here
+/// would make two budgets incomparable for no gain in fidelity.
+///
+/// `DefaultResultBudget` is what every pre-709 tool carries, and it
+/// resolves to a deliberately generous SDK ceiling
+/// (`AIToolRegistry.DefaultToolResultBudgetChars`) that no well-behaved
+/// tool result approaches — an existing deployment is byte-for-byte
+/// unchanged (GP 11).
+type AIToolResultBudget =
+    /// Use the SDK-wide default ceiling. The value every tool declared
+    /// before Phase 709 carries.
+    | DefaultResultBudget
+    /// This tool's own ceiling, in characters of the returned JSON.
+    /// Must be positive; `AIToolRegistry.createTool` refuses a
+    /// non-positive declaration at compose time rather than silently
+    /// reading it as "unbounded".
+    | ResultBudgetChars of int
+    /// This tool's contract is legitimately large — never elide its
+    /// result. The escape hatch for an export / bulk-transfer tool whose
+    /// whole point is the payload.
+    | NoResultBudget
+
 /// A tool that an AI agent can invoke. Registered by modules.
 /// Contains metadata only — the Execute function is server-only and lives
 /// in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime.
@@ -139,4 +186,16 @@ type AIToolDefinition = {
     /// framing, and a server-resident tool that merely happened to start
     /// with `_platform.ui.` wrongly tripped it.
     IsLiveInterface: bool
+    /// Phase 709 — the per-tool context budget applied to this tool's
+    /// JSON result at agent-loop dispatch. `DefaultResultBudget` (the
+    /// value every pre-709 tool carries) resolves to the generous
+    /// SDK-wide ceiling and changes no existing behaviour (GP 11).
+    ///
+    /// Declared here rather than at the registration seam because the
+    /// module that authors the tool is the party that knows whether its
+    /// result is bounded by construction — a coverage listing emitting
+    /// one row per (metric × hierarchy) knows its own cardinality
+    /// exposure; the composition root that calls
+    /// `AIToolRegistry.createTool` does not.
+    ResultBudget: AIToolResultBudget
 }

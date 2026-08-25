@@ -783,9 +783,16 @@ let private runFullAgentLoop
 
                             let mutable resolvedLocation = ServerSide
 
+                            // Phase 709: resolved once, up here, because the
+                            // post-dispatch budget guard below needs the same
+                            // entry the execution branch does. A pure list
+                            // lookup — no side effect, and `None` still takes
+                            // the `UnknownTool` path exactly as before.
+                            let toolOpt = registry.FindByName tc.Name
+
                             let! result = async {
                                 try
-                                    match registry.FindByName tc.Name with
+                                    match toolOpt with
                                     | Some tool ->
                                         // Phase 6g.A: route by `Location`. ServerResident
                                         // — existing path (HttpContext + argsJson →
@@ -899,10 +906,76 @@ let private runFullAgentLoop
                                 | ex -> return Error(ToolThrew(tc.Name, ex.Message))
                             }
 
-                            let content =
+                            let rawContent =
                                 match result with
                                 | Ok r -> r
                                 | Error err -> ToolInvocationError.toToolResultContent err
+
+                            // ─── Phase 709 — result context budget ───────
+                            //
+                            // The single choke point every tool result passes
+                            // through on its way into model context, applied
+                            // to the SUCCESS payload only: an invocation
+                            // error is our own short prose rendering and has
+                            // nothing to bound, and passing it through the
+                            // budget would risk one failure mode being
+                            // reported as another.
+                            //
+                            // Placed here rather than at the ServerResident
+                            // branch so a ClientResident result — JSON POSTed
+                            // back from the browser, and no less capable of
+                            // flooding context — is bounded by the same
+                            // declaration. The tool's `ResultBudget` means
+                            // the same thing wherever its body ran.
+                            //
+                            // Strictly after execution, so every disclosure
+                            // gate inside the tool has already decided what
+                            // may be shown. The budget can only ever remove;
+                            // it never selects a substitute, so freed budget
+                            // cannot surface something a policy withheld.
+                            let content =
+                                match result, toolOpt with
+                                | Ok _, Some tool ->
+                                    let payload, elided =
+                                        ToolResultBudget.apply
+                                            tool.Definition.Name
+                                            tool.Definition.ResultBudget
+                                            rawContent
+
+                                    match elided with
+                                    | None -> ()
+                                    | Some elidedChars ->
+                                        // Always counted, once per elision.
+                                        match metricsSinkOpt with
+                                        | None -> ()
+                                        | Some sink ->
+                                            try
+                                                sink.Increment(
+                                                    AILatencyMetrics.ToolResultElided,
+                                                    Map.ofList [ "tool", tool.Definition.Name ]
+                                                )
+                                            with ex ->
+                                                // Same posture as the latency
+                                                // emission — telemetry never
+                                                // crashes the loop, but a
+                                                // defective sink stays visible.
+                                                logger.Warn
+                                                    $"AI tool-result budget IMetricsSink.Increment failed (tool={tool.Definition.Name}): {ex.Message}. Metric dropped; elision still applied."
+
+                                        // Logged once per tool per registry —
+                                        // the operator signal is a property of
+                                        // the tool, not of the turn.
+                                        if registry.TryClaimBudgetWarning tool.Definition.Name then
+                                            let ceiling =
+                                                match ToolResultBudget.limitFor tool.Definition.ResultBudget with
+                                                | Some l -> string l
+                                                | None -> "unbounded"
+
+                                            logger.Warn
+                                                $"AI tool '{tool.Definition.Name}' returned {elidedChars} characters, over its {ceiling}-character result budget; the result was replaced by the elision marker and the model was steered to narrow the request (conversation={conversationId}). This tool needs an aggregate or paginated shape, or a deliberate ResultBudget declaration. Logged once per tool; every occurrence is counted on {AILatencyMetrics.ToolResultElided}."
+
+                                    payload
+                                | _ -> rawContent
 
                             onEvent (ToolCallCompleted(conversationId, tcId, content))
 

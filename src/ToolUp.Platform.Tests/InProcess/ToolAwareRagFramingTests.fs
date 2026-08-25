@@ -34,6 +34,7 @@ let private mkTool (name: string) (location: ToolLocation) : AIToolDefinition = 
     Location = location
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 /// Stub pipeline whose `Retrieve` always returns `[]` — exercises the
@@ -65,6 +66,7 @@ let private mkContext () : PromptContext = {
 let private declaredLiveInterfaceTool = {
     mkTool "acme_host.read_active_view" ServerResident with
         IsLiveInterface = true
+        ResultBudget = DefaultResultBudget
 }
 
 let private uiInspectTool =

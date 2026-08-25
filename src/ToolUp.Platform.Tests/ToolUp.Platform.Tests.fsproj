@@ -1050,6 +1050,13 @@
              guard, and reuse-not-recompute behind the plan id. Compiled
              after the planner pack it builds on. -->
         <Compile Include="InProcess\FactClauseFeederTests.fs" />
+        <!-- Phase 709 — the AI tool-result context budget: the knob and its
+             refusal of a nonsensical declaration, byte-identical
+             pass-through under the ceiling, the typed elision marker (valid
+             JSON, names the tool and both sizes, never a truncation), and
+             the two things the marker must NOT be confusable with — a
+             policy withhold and a tool invocation error. -->
+        <Compile Include="InProcess\AIToolResultBudgetTests.fs" />
         <!-- Phase 565 — grounding certificates: sealed, selective provenance
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->

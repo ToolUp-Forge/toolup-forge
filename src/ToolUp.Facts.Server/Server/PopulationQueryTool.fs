@@ -206,6 +206,7 @@ module PopulationQueryTool =
         Location = ServerResident
         Surface = Both
         IsLiveInterface = false
+        ResultBudget = DefaultResultBudget
     }
 
     // ── Argument parsing + validation (703.A / 703.D) ──────────────

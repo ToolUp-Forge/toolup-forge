@@ -43,6 +43,7 @@ let private stubTool
         Location = ServerResident
         Surface = Both
         IsLiveInterface = false
+        ResultBudget = DefaultResultBudget
     },
     (fun _ _ -> async { return "" })
 

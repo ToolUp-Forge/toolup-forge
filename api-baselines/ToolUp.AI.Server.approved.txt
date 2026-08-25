@@ -98,6 +98,7 @@ ToolUp.AI.AILatencyHandler (class)
 ToolUp.AI.AILatencyHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.AI.AILatencyMetrics (class)
 ToolUp.AI.AILatencyMetrics.CachedPromptRatio : System.String (literal)
+ToolUp.AI.AILatencyMetrics.ToolResultElided : System.String (literal)
 ToolUp.AI.AILatencyMetrics.TtftMs : System.String (literal)
 ToolUp.AI.AILatencyMetrics.TurnDurationMs : System.String (literal)
 ToolUp.AI.AILatencyMetrics.cachedPromptRatioBuckets : Microsoft.FSharp.Collections.FSharpList`1[System.Double] { get }
@@ -164,6 +165,7 @@ ToolUp.AI.AISurfaceDerivationMode+Tags (class)
 ToolUp.AI.AISurfaceDerivationMode+Tags.DeriveFromCookie : System.Int32 (literal)
 ToolUp.AI.AISurfaceDerivationMode+Tags.TrustClient : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry (class)
+ToolUp.AI.AIToolRegistry.DefaultToolResultBudgetChars : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry.createTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
 ToolUp.AI.AIToolRegistry.isToolVisibleOnSurface(ToolUp.AI.AISurface, ToolUp.Platform.AIToolDefinition) : System.Boolean
 ToolUp.AI.AIToolRegistry.toProviderDef(ToolUp.Platform.AIToolDefinition) : ToolUp.Platform.AI.AIProviderToolDef
@@ -172,11 +174,16 @@ ToolUp.AI.AIToolRegistry+AIToolRegistry..ctor()
 ToolUp.AI.AIToolRegistry+AIToolRegistry.FindByName(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.GetAll() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.RegisterAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]) : System.Void
+ToolUp.AI.AIToolRegistry+AIToolRegistry.TryClaimBudgetWarning(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry+RegisteredTool (class)
 ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, ToolUp.Platform.AI.AIProviderToolDef, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]])
 ToolUp.AI.AIToolRegistry+RegisteredTool.Definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.Execute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.ProviderDef : ToolUp.Platform.AI.AIProviderToolDef { get }
+ToolUp.AI.AIToolRegistry+ToolResultBudget (class)
+ToolUp.AI.AIToolRegistry+ToolResultBudget.apply(System.String, ToolUp.Platform.AIToolResultBudget, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]
+ToolUp.AI.AIToolRegistry+ToolResultBudget.elisionMarker(System.String, System.Int32, System.Int32) : System.String
+ToolUp.AI.AIToolRegistry+ToolResultBudget.limitFor(ToolUp.Platform.AIToolResultBudget) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.AI.ActiveAiProbe (class)
 ToolUp.AI.ActiveAiProbe.create(ToolUp.AI.IAIProviderFactory) : ToolUp.Platform.IActiveAiProbe
 ToolUp.AI.AnswerVerifier (class)

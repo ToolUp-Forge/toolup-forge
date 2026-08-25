@@ -129,6 +129,7 @@ module FactQueryTool =
         Location = ServerResident
         Surface = Both
         IsLiveInterface = false
+        ResultBudget = DefaultResultBudget
     }
 
     // ── Argument parsing + validation (559.A / 559.D) ─────────────

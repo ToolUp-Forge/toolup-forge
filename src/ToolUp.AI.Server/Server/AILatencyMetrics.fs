@@ -46,6 +46,16 @@ let TtftMs = "toolup.ai.ttft.ms"
 [<Literal>]
 let CachedPromptRatio = "toolup.ai.cached_prompt_ratio"
 
+/// Phase 709 — count of tool results replaced by the over-budget
+/// elision marker, one per elided result. The `tool` tag is what makes
+/// the metric actionable: the operator's question is "which tool needs
+/// an aggregate shape", and the answer is the tool name. Cardinality is
+/// the registered tool count — bounded at compose time and small — so
+/// the tag multiplies series by a constant, the same admissibility test
+/// the triage `outcome` tag passes.
+[<Literal>]
+let ToolResultElided = "toolup.ai.tool.result.elided"
+
 /// 0..1 bucket boundaries for the cached-prompt-ratio histogram.
 /// Sized to make "what fraction of turns are >= 80% cached?" answerable
 /// at a glance — caching's value is concentrated in the long-prefix
@@ -135,6 +145,29 @@ let registrations: MetricRegistration list = [
             Description = "Tier-3 fast-path triage attempt duration in milliseconds (provider call included)"
             Unit = "ms"
             Tags = [ "provider"; "model" ]
+        }
+    }
+    // ── Phase 709 — per-tool result context budget ─────────────────
+    //
+    // Appended to this one list for the same reason the triage series
+    // were: `AIServerApp.create` folds exactly one AI list into
+    // `ServerApp.MetricRegistrations`, and an unregistered series fails
+    // by silently dropping emissions rather than by erroring.
+    //
+    // A deployment whose tools all stay under budget allocates the
+    // series and never emits into it — which is the point. The series
+    // sitting at zero is the evidence that nothing is flooding context;
+    // a series that does not exist is indistinguishable from one that
+    // was never checked.
+    {
+        Module = None
+        Definition = {
+            Name = ToolResultElided
+            Kind = Counter
+            Description =
+                "AI tool results replaced by the over-budget elision marker (one per elided result, tagged by tool)"
+            Unit = "1"
+            Tags = [ "tool" ]
         }
     }
 ]

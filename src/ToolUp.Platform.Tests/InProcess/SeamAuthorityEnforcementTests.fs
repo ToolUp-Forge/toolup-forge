@@ -80,6 +80,7 @@ let private toolDefinition (name: string) : AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private configSchema: ModuleConfigSchema = {

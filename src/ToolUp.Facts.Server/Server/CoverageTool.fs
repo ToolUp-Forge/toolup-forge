@@ -143,6 +143,7 @@ module CoverageTool =
         Location = ServerResident
         Surface = Both
         IsLiveInterface = false
+        ResultBudget = DefaultResultBudget
     }
 
     // ── Argument parsing ──────────────────────────────────────────

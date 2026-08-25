@@ -130,6 +130,7 @@ let private buildToolRegistry (toolName: string) : AIToolRegistry.AIToolRegistry
         Location = ClientResident
         Surface = Both
         IsLiveInterface = false
+        ResultBudget = DefaultResultBudget
     }
 
     let executor _ctx _argsJson = async {

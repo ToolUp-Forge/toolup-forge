@@ -868,6 +868,13 @@ let allTests =
         // bounded compile degrading to no clause, and the plan reused for
         // provenance rather than recompiled.
         FactClauseFeederTests.tests
+        // Phase 709 — the AI tool-result context budget, the last guard of
+        // the population arc: a generous default that changes nothing, a
+        // per-tool override and a NoBudget escape, and an over-budget
+        // result replaced by a typed JSON marker that names the tool and
+        // the elided size — visible rather than silently truncated, and
+        // deliberately unlike both a policy withhold and a tool error.
+        AIToolResultBudgetTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

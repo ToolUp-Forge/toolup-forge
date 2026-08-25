@@ -380,15 +380,29 @@ ToolUp.Platform.AISurfaceFilter+Tags.Both : System.Int32 (literal)
 ToolUp.Platform.AISurfaceFilter+Tags.FullPageOnly : System.Int32 (literal)
 ToolUp.Platform.AISurfaceFilter+Tags.SidePanelOnly : System.Int32 (literal)
 ToolUp.Platform.AIToolDefinition (class)
-ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean)
+ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean, ToolUp.Platform.AIToolResultBudget)
 ToolUp.Platform.AIToolDefinition.Description : System.String { get }
 ToolUp.Platform.AIToolDefinition.EmitsActions : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]] { get }
 ToolUp.Platform.AIToolDefinition.IsLiveInterface : System.Boolean { get }
 ToolUp.Platform.AIToolDefinition.Location : ToolUp.Platform.ToolLocation { get }
 ToolUp.Platform.AIToolDefinition.Name : System.String { get }
 ToolUp.Platform.AIToolDefinition.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema] { get }
+ToolUp.Platform.AIToolDefinition.ResultBudget : ToolUp.Platform.AIToolResultBudget { get }
 ToolUp.Platform.AIToolDefinition.SourceModule : System.String { get }
 ToolUp.Platform.AIToolDefinition.Surface : ToolUp.Platform.AISurfaceFilter { get }
+ToolUp.Platform.AIToolResultBudget (class)
+ToolUp.Platform.AIToolResultBudget.DefaultResultBudget : ToolUp.Platform.AIToolResultBudget { get }
+ToolUp.Platform.AIToolResultBudget.IsDefaultResultBudget : System.Boolean { get }
+ToolUp.Platform.AIToolResultBudget.IsNoResultBudget : System.Boolean { get }
+ToolUp.Platform.AIToolResultBudget.IsResultBudgetChars : System.Boolean { get }
+ToolUp.Platform.AIToolResultBudget.NoResultBudget : ToolUp.Platform.AIToolResultBudget { get }
+ToolUp.Platform.AIToolResultBudget.Tag : System.Int32 { get }
+ToolUp.Platform.AIToolResultBudget+ResultBudgetChars (class)
+ToolUp.Platform.AIToolResultBudget+ResultBudgetChars.Item : System.Int32 { get }
+ToolUp.Platform.AIToolResultBudget+Tags (class)
+ToolUp.Platform.AIToolResultBudget+Tags.DefaultResultBudget : System.Int32 (literal)
+ToolUp.Platform.AIToolResultBudget+Tags.NoResultBudget : System.Int32 (literal)
+ToolUp.Platform.AIToolResultBudget+Tags.ResultBudgetChars : System.Int32 (literal)
 ToolUp.Platform.AccessContext (class)
 ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
 ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }

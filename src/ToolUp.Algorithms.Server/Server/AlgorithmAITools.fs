@@ -415,6 +415,7 @@ let definitionFor (info: AlgorithmInfo) : AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 /// The catalog-enumeration tool definition.
@@ -439,6 +440,7 @@ let listDefinition: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private resolveCatalog (ctx: HttpContext) : IAlgorithmCatalog option =

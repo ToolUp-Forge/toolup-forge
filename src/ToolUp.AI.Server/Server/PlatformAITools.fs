@@ -168,6 +168,7 @@ let private listAccessibleModulesDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -226,6 +227,7 @@ let private listDataTypesDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -303,6 +305,7 @@ let private queryModuleDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -515,6 +518,7 @@ let private queryEntityDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -633,6 +637,7 @@ let private listResultsDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private resultTypeOf (moduleName: string) (objectId: string) : string =
@@ -734,6 +739,7 @@ let private getLatestResultDef: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 
 let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async<string> = async {
