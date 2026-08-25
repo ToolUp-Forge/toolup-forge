@@ -107,6 +107,11 @@ let allTests =
         // audit emission + freshness derivation.
         FactStoreTests.tests
         FactStoreTests.auditAndFreshnessTests
+        // Phase 704 — batch fact assertion: the semantics ride the contract
+        // pack above (both read models); this is the summarised-audit half —
+        // one FactBatchAsserted row per batch, the per-fact shape kept for
+        // scalar Assert, and the deliberate audit of an all-idempotent batch.
+        FactStoreTests.batchAssertTests
         // Phase 701 — population fact query: the registry-directed half of the
         // IFactStore population contract (DirectionOfBetter ordering, the
         // Neutral / unregistered refusals, D19 canonical-vs-all selection) plus

@@ -46,6 +46,29 @@ let private assertOk label (store: IFactStore) scope d = async {
     | Error e -> return failtestf "%s: expected Ok, got %s" label e
 }
 
+let private assertBatchOk label (store: IFactStore) scope drafts = async {
+    let! r = store.AssertBatch(scope, drafts)
+
+    match r with
+    | Ok receipt -> return receipt
+    | Error e -> return failtestf "%s: expected Ok, got %s" label e
+}
+
+/// The whole of a scope's fact base, current heads and superseded alike —
+/// the state two write paths have to agree on.
+let private wholeStore (store: IFactStore) scope = async {
+    let! facts =
+        store.Query(
+            scope,
+            {
+                FactQuery.all with
+                    IncludeSuperseded = true
+            }
+        )
+
+    return facts
+}
+
 // ─── Population read fixtures (Phase 701) ────────────────────────────
 
 /// A draft at an arbitrary subject path. The point-read `draft` above is
@@ -265,6 +288,238 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let asOfs = chain |> List.map _.AsOf
             Expect.equal asOfs (List.sort asOfs) "ordered by AsOf ascending"
             Expect.equal (List.head chain).FactId f1.FactId "earliest first"
+        }
+
+        // ─── Batch assertion (Phase 704) ──────────────────────────────
+
+        testCaseAsync "re-asserting an unchanged population is all-idempotent and writes no new facts"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let drafts = [
+                for i in 1..12 -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (Scalar(decimal i))
+            ]
+
+            let! first = assertBatchOk "first" store scopeA drafts
+            Expect.equal first.DraftCount 12 "every draft accounted for"
+            Expect.equal first.AssertedCount 12 "all twelve are new"
+            Expect.equal first.SupersedingCount 0 "an empty scope has nothing to supersede"
+            Expect.equal first.IdempotentCount 0 "and nothing to skip"
+
+            let! second = assertBatchOk "second" store scopeA drafts
+            Expect.equal second.IdempotentCount 12 "re-running an unchanged population is a no-op (D1)"
+            Expect.equal second.AssertedCount 0 "no new facts"
+            Expect.equal second.SupersedingCount 0 "and none superseded"
+
+            Expect.notEqual
+                second.Digest
+                first.Digest
+                "the digest covers the outcomes too, so the same drafts twice are two distinguishable batches"
+
+            let! stored = wholeStore store scopeA
+            Expect.equal stored.Length 12 "twelve facts, not twenty-four"
+        }
+
+        testCaseAsync "a mixed batch reports new, unchanged and superseding drafts apart"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let a = popDraft [ "eu"; "a" ] "h-a" (Scalar 1m)
+            let b = popDraft [ "eu"; "b" ] "h-b" (Scalar 2m)
+            let! _ = assertBatchOk "seed" store scopeA [ a; b ]
+
+            // `a` unchanged, `b` recomputed from a new input (so it
+            // supersedes within its lineage), `c` brand new.
+            let bPrime = popDraft [ "eu"; "b" ] "h-b2" (Scalar 22m)
+            let c = popDraft [ "eu"; "c" ] "h-c" (Scalar 3m)
+            let! mixed = assertBatchOk "mixed" store scopeA [ a; bPrime; c ]
+
+            Expect.equal mixed.DraftCount 3 "three drafts submitted"
+            Expect.equal mixed.IdempotentCount 1 "the unchanged draft is skipped"
+            Expect.equal mixed.SupersedingCount 1 "the recomputed one supersedes"
+            Expect.equal mixed.AssertedCount 1 "the new one is asserted"
+
+            Expect.equal
+                (mixed.AssertedCount + mixed.SupersedingCount + mixed.IdempotentCount)
+                mixed.DraftCount
+                "the three counts partition the batch"
+
+            let! heads = store.Query(scopeA, FactQuery.forSubjectMetric bPrime.Subject bPrime.Metric)
+
+            match heads with
+            | [ head ] ->
+                Expect.equal mixed.SupersedingFactIds [ head.FactId ] "the receipt names the superseding fact"
+                Expect.isSome head.Supersedes "which carries a derived supersession edge, exactly as Assert derives it"
+            | other -> failtestf "expected one current head for b, got %d" (List.length other)
+        }
+
+        testCaseAsync "a batch and the same drafts asserted one by one leave the same store state"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+
+            let drafts = [
+                popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
+                popDraft [ "eu"; "uk" ] "h-uk-1" (Scalar 15m)
+                // Same lineage as the draft above — it must supersede it
+                // WITHIN the batch, which is the case a naive batch
+                // implementation gets wrong by deriving every head from
+                // one pre-batch snapshot of the log.
+                popDraft [ "eu"; "uk" ] "h-uk-2" (Scalar 30m)
+                popDraft [ "na"; "us" ] "h-us" (Categorical "not measured")
+            ]
+
+            let! _ = assertBatchOk "batch" store scopeA drafts
+
+            for d in drafts do
+                let! _ = assertOk "scalar" store scopeB d
+                ()
+
+            let identity (facts: Fact list) =
+                facts
+                |> List.map (fun f -> f.FactId, f.Supersedes, f.Value)
+                |> List.sortBy (fun (factId, _, _) -> factId)
+
+            let! batched = wholeStore store scopeA
+            let! scalar = wholeStore store scopeB
+
+            Expect.equal (identity batched) (identity scalar) "same facts, same derived supersession edges"
+
+            let! batchedHeads = store.Query(scopeA, FactQuery.all)
+            let! scalarHeads = store.Query(scopeB, FactQuery.all)
+
+            Expect.equal
+                (batchedHeads |> List.map _.FactId |> List.sort)
+                (scalarHeads |> List.map _.FactId |> List.sort)
+                "and the same current heads"
+
+            // Stated directly as well as by equivalence: the in-batch
+            // supersession left one head at the later value.
+            let! uk = store.Query(scopeA, FactQuery.forSubjectMetric drafts[1].Subject drafts[1].Metric)
+            Expect.equal (uk |> List.map _.Value) [ Scalar 30m ] "the batch's later draft is the current head"
+        }
+
+        testCaseAsync "a batch is confined to its scope"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+
+            let drafts = [ popDraft [ "eu" ] "h-eu" (Scalar 10m); popDraft [ "na" ] "h-na" (Scalar 40m) ]
+
+            let! _ = assertBatchOk "batch" store scopeA drafts
+
+            let! inB = wholeStore store scopeB
+            Expect.isEmpty inB "the other scope sees nothing (GP 4)"
+
+            // Content addresses are deployment- and scope-independent;
+            // *presence* is not. The same batch in a second scope is
+            // entirely new work there.
+            let! again = assertBatchOk "same batch, other scope" store scopeB drafts
+            Expect.equal again.AssertedCount 2 "the same drafts are new facts in a second scope"
+            Expect.equal again.IdempotentCount 0 "presence is per-scope"
+        }
+
+        testCaseAsync "one malformed draft refuses the whole batch and commits none of it"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let good1 = popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
+            let good2 = popDraft [ "eu"; "uk" ] "h-uk" (Scalar 30m)
+
+            // A degenerate valid-time extent: no period-overlap clause can
+            // ever match `[From, From)`, so the fact would be written and
+            // then invisible to every read that filters by period.
+            let malformed = {
+                popDraft [ "eu"; "de" ] "h-de" (Scalar 40m) with
+                    Period = { q2 with To = q2.From }
+            }
+
+            let! r = store.AssertBatch(scopeA, [ good1; malformed; good2 ])
+
+            match r with
+            | Ok receipt -> failtestf "expected a refusal, got a receipt over %d drafts" receipt.DraftCount
+            | Error message ->
+                Expect.stringContains message "#1" "the refusal names the offender by position"
+                Expect.stringContains message "geography/eu>de" "and by subject"
+                Expect.stringContains message "half-open" "and says what is wrong with it"
+
+            let! stored = wholeStore store scopeA
+            Expect.isEmpty stored "a rejected batch writes nothing at all — not even its well-formed drafts"
+        }
+
+        testCaseAsync "a batch keeps the population read model current"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let! _ =
+                assertBatchOk "seed" store scopeA [
+                    popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
+                    popDraft [ "na"; "us" ] "h-us" (Scalar 60m)
+                ]
+
+            // Read FIRST, so an implementation that maintains a derived
+            // read model has actually built one — otherwise the batch
+            // below would be maintaining nothing and this case would pass
+            // without touching the path it exists for.
+            let! before = store.QueryPopulation(scopeA, level2Descending)
+            Expect.equal (scalars (okResult "before" before).Ranked) [ 60m; 20m ] "the seeded population"
+
+            // One supersession of a member already in the model, one
+            // subject the model has never seen.
+            let! _ =
+                assertBatchOk "second" store scopeA [
+                    popDraft [ "eu"; "fr" ] "h-fr-2" (Scalar 99m)
+                    popDraft [ "na"; "ca" ] "h-ca" (Scalar 5m)
+                ]
+
+            let! after = store.QueryPopulation(scopeA, level2Descending)
+
+            Expect.equal
+                (scalars (okResult "after" after).Ranked)
+                [ 99m; 60m; 5m ]
+                "the superseded value is gone and the new subject is in — whichever read model answered"
+        }
+
+        testCaseAsync "an empty batch is an answer, not a failure"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! receipt = assertBatchOk "empty" store scopeA []
+            Expect.equal receipt BatchAssertReceipt.empty "the empty receipt"
+            Expect.isFalse receipt.Truncated "nothing to truncate"
+        }
+
+        testCaseAsync "the receipt caps its id lists and says so, and its digest pins the full set"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+            let size = BatchAssertReceipt.IdListCap + 5
+
+            let drafts = [
+                for i in 1..size -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (Scalar(decimal i))
+            ]
+
+            let! receipt = assertBatchOk "capped" store scopeA drafts
+            Expect.equal receipt.AssertedCount size "every draft asserted"
+
+            Expect.equal
+                receipt.AssertedFactIds.Length
+                BatchAssertReceipt.IdListCap
+                "the id list stops at the cap rather than becoming the batch again"
+
+            Expect.isTrue receipt.Truncated "and the receipt says so rather than leaving a reader to infer it"
+
+            // The digest is recomputable by a producer holding the drafts:
+            // content addresses are scope-independent, so the identical
+            // batch in a fresh scope digests identically.
+            let! elsewhere = assertBatchOk "same batch, fresh scope" store scopeB drafts
+            Expect.equal elsewhere.Digest receipt.Digest "the same batch digests the same anywhere"
+
+            // Order is part of the batch's identity — two drafts in one
+            // lineage supersede in submission order, so a digest blind to
+            // order would call two different batches the same.
+            let synthetic = [ BatchAsserted, "a"; BatchSuperseding, "b" ]
+
+            Expect.notEqual
+                (BatchAssertReceipt.digest synthetic)
+                (BatchAssertReceipt.digest (List.rev synthetic))
+                "submission order is significant"
         }
 
         // ─── Field round-trips ────────────────────────────────────────

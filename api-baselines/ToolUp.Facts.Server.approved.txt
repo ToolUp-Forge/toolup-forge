@@ -48,6 +48,36 @@ ToolUp.Facts.AttestedGroundingCertificate (class)
 ToolUp.Facts.AttestedGroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.SignedPayloadEnvelope)
 ToolUp.Facts.AttestedGroundingCertificate.Body : ToolUp.Facts.GroundingCertificateBody { get }
 ToolUp.Facts.AttestedGroundingCertificate.Envelope : ToolUp.ArtefactSigning.SignedPayloadEnvelope { get }
+ToolUp.Facts.BatchAssertOutcome (class)
+ToolUp.Facts.BatchAssertOutcome.BatchAsserted : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.BatchIdempotent : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.BatchSuperseding : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchAsserted : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchIdempotent : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchSuperseding : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.BatchAssertOutcome+Tags (class)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchAsserted : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchIdempotent : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchSuperseding : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcomeModule (class)
+ToolUp.Facts.BatchAssertOutcomeModule.toString(ToolUp.Facts.BatchAssertOutcome) : System.String
+ToolUp.Facts.BatchAssertReceipt (class)
+ToolUp.Facts.BatchAssertReceipt..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, System.String)
+ToolUp.Facts.BatchAssertReceipt.AssertedCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.AssertedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.Digest : System.String { get }
+ToolUp.Facts.BatchAssertReceipt.DraftCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.IdempotentCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.IdempotentFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.SupersedingCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.SupersedingFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.Truncated : System.Boolean { get }
+ToolUp.Facts.BatchAssertReceiptModule (class)
+ToolUp.Facts.BatchAssertReceiptModule.IdListCap : System.Int32 (literal)
+ToolUp.Facts.BatchAssertReceiptModule.digest(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : System.String
+ToolUp.Facts.BatchAssertReceiptModule.empty : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.BatchAssertReceiptModule.ofDispositions(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : ToolUp.Facts.BatchAssertReceipt
 ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
@@ -226,6 +256,10 @@ ToolUp.Facts.FactAssertedEvent.FactId : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Method : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Metric : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Subject : System.String { get }
+ToolUp.Facts.FactBatchAssertedEvent (class)
+ToolUp.Facts.FactBatchAssertedEvent..ctor(ToolUp.Facts.BatchAssertReceipt, System.DateTime)
+ToolUp.Facts.FactBatchAssertedEvent.AsOf : System.DateTime { get }
+ToolUp.Facts.FactBatchAssertedEvent.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
 ToolUp.Facts.FactDerivationGraph (class)
 ToolUp.Facts.FactDerivationGraph..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Facts.FactDerivationGraph.Facts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact] { get }
@@ -247,8 +281,11 @@ ToolUp.Facts.FactDraft.Metric : ToolUp.Facts.MetricRef { get }
 ToolUp.Facts.FactDraft.Period : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.FactDraft.Subject : ToolUp.Facts.SubjectRef { get }
 ToolUp.Facts.FactDraft.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactDraftModule (class)
+ToolUp.Facts.FactDraftModule.defects(ToolUp.Facts.FactDraft) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactEvents (class)
 ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
+ToolUp.Facts.FactEvents.BatchAssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
 ToolUp.Facts.FactImport (class)
@@ -413,6 +450,7 @@ ToolUp.Facts.IFactRecomputer (interface)
 ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)
 ToolUp.Facts.IFactStore.Assert(System.String, ToolUp.Facts.FactDraft) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, System.String]]
+ToolUp.Facts.IFactStore.AssertBatch(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.BatchAssertReceipt, System.String]]
 ToolUp.Facts.IFactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.Query(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QueryPopulation(System.String, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PopulationResult, System.String]]

@@ -342,6 +342,7 @@ let egressTests =
 type private LeakyStore(leaked: Fact list) =
     interface IFactStore with
         member _.Assert(_, _) = async { return Error "read-only double" }
+        member _.AssertBatch(_, _) = async { return Error "read-only double" }
         member _.Get(_, _) = async { return None }
         member _.Query(_, _) = async { return leaked }
 

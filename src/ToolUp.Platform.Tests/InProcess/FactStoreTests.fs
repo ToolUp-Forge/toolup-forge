@@ -322,6 +322,211 @@ let populationScaleTests =
         }
     ]
 
+// ─── Batch assertion — the summarised audit (Phase 704) ──────────────
+//
+// The contract pack holds the *semantics* (idempotency, in-batch
+// supersession, scalar equivalence, scope isolation, the malformed-batch
+// refusal) against every implementation. What lives here is the half a
+// generic contract cannot see: which audit rows a batch emits, and which
+// it deliberately does not. Audit capture is construction-specific —
+// these need the store's `IEventStore` in hand.
+
+let private batchDrafts count =
+    [ for i in 1..count -> scalarDraft (sprintf "hash-%d" i) (decimal (i * 10)) ]
+    |> List.mapi (fun i d -> {
+        d with
+            Subject = {
+                Hierarchy = "geography"
+                Path = [ sprintf "m%d" i ]
+            }
+    })
+
+let private factRows (rows: ModuleEvent list) =
+    rows
+    |> List.filter (fun e -> e.EventType = FactEvents.AssertedType || e.EventType = FactEvents.SupersededType)
+
+let private batchRows (rows: ModuleEvent list) =
+    rows |> List.filter (fun e -> e.EventType = FactEvents.BatchAssertedType)
+
+/// The batch size the phase's acceptance names. Large enough that the
+/// per-fact path's cost (one full log scan per assert) would be
+/// quadratic, which is the whole reason this member exists.
+[<Literal>]
+let private AcceptanceBatchSize = 10_000
+
+let batchAssertTests =
+    testList "BlobFactStore batch assertion (Phase 704)" [
+
+        // The acceptance sentence, run at the cardinality it names. The
+        // "same store state as asserting each draft once" half is proved
+        // by the contract pack's scalar/batch equivalence case at a size
+        // where BOTH paths are runnable — 10,000 sequential `Assert`s each
+        // re-scan the whole log, so the comparison at this size would
+        // measure the enumeration, not the equivalence. What is measured
+        // here is what only shows up at size: the counts, the census, and
+        // that a re-run is genuinely a no-op rather than a cheap-looking
+        // rewrite.
+        testCaseAsync "a 10,000-draft batch asserted twice: 10,000 facts, two audit rows, 10,000 idempotent skips"
+        <| async {
+            let store, events = newStore ()
+            let scope = newScope ()
+
+            let drafts = [
+                for i in 1..AcceptanceBatchSize ->
+                    {
+                        scalarDraft (sprintf "hash-%06d" i) (decimal i) with
+                            Subject = {
+                                Hierarchy = "geography"
+                                Path = [ "eu"; sprintf "sku-%06d" i ]
+                            }
+                    }
+            ]
+
+            let firstRun = Diagnostics.Stopwatch.StartNew()
+            let! r1 = store.AssertBatch(scope, drafts)
+            firstRun.Stop()
+
+            let secondRun = Diagnostics.Stopwatch.StartNew()
+            let! r2 = store.AssertBatch(scope, drafts)
+            secondRun.Stop()
+
+            printfn
+                "Phase 704: %d drafts asserted in %dms; the unchanged re-run in %dms"
+                AcceptanceBatchSize
+                firstRun.ElapsedMilliseconds
+                secondRun.ElapsedMilliseconds
+
+            match r1, r2 with
+            | Ok first, Ok second ->
+                Expect.equal first.AssertedCount AcceptanceBatchSize "every draft asserted the first time"
+                Expect.equal first.IdempotentCount 0 "and none skipped"
+
+                Expect.equal second.IdempotentCount AcceptanceBatchSize "the whole re-run is idempotent skips"
+                Expect.equal second.AssertedCount 0 "no fact was written the second time"
+                Expect.equal second.SupersedingCount 0 "and nothing superseded"
+
+                let! stored = store.Query(scope, FactQuery.all)
+                Expect.equal stored.Length AcceptanceBatchSize "the store holds one fact per draft, not two"
+
+                let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+                Expect.equal (List.length (batchRows rows)) 2 "one summarised audit row per batch"
+
+                Expect.isEmpty
+                    (factRows rows)
+                    "and not 10,000 per-fact rows — that is the audit cost this member removes"
+            | Error e, _
+            | _, Error e -> failtestf "expected Ok from both batches, got %s" e
+        }
+
+
+        testCaseAsync "a batch emits ONE summarised row and no per-fact rows"
+        <| async {
+            let store, events = newStore ()
+            let scope = newScope ()
+
+            let! r = store.AssertBatch(scope, batchDrafts 20)
+
+            match r with
+            | Error e -> failtestf "expected Ok, got %s" e
+            | Ok receipt ->
+                let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+                Expect.equal
+                    (List.length (batchRows rows))
+                    1
+                    "one FactBatchAsserted row for the batch — not one per fact (GP 6, summarised)"
+
+                Expect.isEmpty
+                    (factRows rows)
+                    "and none of the per-fact shape, which stays the scalar path's (task 704.C)"
+
+                // The row carries the receipt the caller was told, so the
+                // audit trail and the return value cannot disagree.
+                let payload =
+                    JsonSerializer.Deserialize<FactBatchAssertedEvent>(
+                        (List.head (batchRows rows)).Payload,
+                        FableConverters.create ()
+                    )
+
+                Expect.equal payload.Receipt.Digest receipt.Digest "the audited digest is the receipt's digest"
+                Expect.equal payload.Receipt.DraftCount 20 "over all twenty drafts"
+                Expect.equal payload.Receipt.AssertedCount 20 "all newly asserted"
+        }
+
+        testCaseAsync "the scalar path keeps the per-fact shape beside it"
+        <| async {
+            let store, events = newStore ()
+            let scope = newScope ()
+
+            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(scope, scalarDraft "hashB" 110m)
+            let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+            Expect.equal (List.length (factRows rows)) 3 "two FactAsserted plus the one FactSuperseded"
+            Expect.isEmpty (batchRows rows) "and no batch row — Assert is a batch of one internally, not externally"
+        }
+
+        testCaseAsync "a superseding batch audits the supersession through the receipt, not through per-fact rows"
+        <| async {
+            let store, events = newStore ()
+            let scope = newScope ()
+
+            let first = batchDrafts 5
+            let! _ = store.AssertBatch(scope, first)
+
+            // Same subjects, changed inputs — every draft supersedes.
+            let second =
+                first
+                |> List.mapi (fun i d -> {
+                    d with
+                        Evidence = {
+                            d.Evidence with
+                                InputHashes = [ sprintf "hash-%d-v2" i ]
+                        }
+                })
+
+            let! r = store.AssertBatch(scope, second)
+
+            match r with
+            | Error e -> failtestf "expected Ok, got %s" e
+            | Ok receipt ->
+                Expect.equal receipt.SupersedingCount 5 "every draft superseded its predecessor"
+                Expect.equal receipt.AssertedCount 0 "none of them was new to its lineage"
+
+                let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+                Expect.isEmpty
+                    (factRows rows)
+                    "no FactSuperseded rows — the supersession is attributable through the batch digest"
+
+                Expect.equal (List.length (batchRows rows)) 2 "one summarised row per batch"
+        }
+
+        testCaseAsync "an all-idempotent batch still audits one row — 'it re-ran and nothing moved' is a claim"
+        <| async {
+            let store, events = newStore ()
+            let scope = newScope ()
+
+            let drafts = batchDrafts 4
+            let! _ = store.AssertBatch(scope, drafts)
+            let! r = store.AssertBatch(scope, drafts)
+
+            match r with
+            | Error e -> failtestf "expected Ok, got %s" e
+            | Ok receipt ->
+                Expect.equal receipt.IdempotentCount 4 "nothing was written"
+
+                let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+                // Deliberately UNLIKE the scalar idempotent re-assert,
+                // which audits nothing: a scalar caller learns "no state
+                // changed" from its own return value, while a
+                // population-scale producer needs durable evidence that
+                // the run happened and found nothing to do.
+                Expect.equal (List.length (batchRows rows)) 2 "the second, empty-handed batch is audited too"
+        }
+    ]
+
 let auditAndFreshnessTests =
     testList "BlobFactStore audit + freshness (Phase 520)" [
 
