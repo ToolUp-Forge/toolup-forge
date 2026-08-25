@@ -76,6 +76,10 @@
         <Compile Include="Server\Api\Deps.fs" />
         <Compile Include="Server\Api\Documents.fs" />
         <Compile Include="Server\Api\Narrative.fs" />
+        <!-- Phase 707 — the request-free door onto the file above, for a
+             server-side producer with a resolved scope and a document but
+             no request. Compiled straight after the path it adapts. -->
+        <Compile Include="Server\Api\NarrativeIngestor.fs" />
         <Compile Include="Server\Api\Notes.fs" />
         <Compile Include="Server\Api\AIContext.fs" />
         <Compile Include="Server\PlatformAdmin.fs" />

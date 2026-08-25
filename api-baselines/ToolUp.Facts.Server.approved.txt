@@ -246,6 +246,74 @@ ToolUp.Facts.CoherenceJobHandler..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp
 ToolUp.Facts.CoherenceJobHandlerModule (class)
 ToolUp.Facts.CoherenceJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Facts.CoherenceJobHandlerModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.CoverageNarrative (class)
+ToolUp.Facts.CoverageNarrative.ModuleId : System.String (literal)
+ToolUp.Facts.CoverageNarrative.bandLabel(System.Int32) : System.String
+ToolUp.Facts.CoverageNarrative.bandOf(ToolUp.Facts.CoverageNarrative+MetricCoverage) : ToolUp.Facts.CoverageNarrative+CoverageBand
+ToolUp.Facts.CoverageNarrative.cardinalityBand(System.Int32) : System.Int32
+ToolUp.Facts.CoverageNarrative.decorate(ToolUp.Facts.IFactStore, System.IServiceProvider, ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.ILogger) : ToolUp.Facts.IFactStore
+ToolUp.Facts.CoverageNarrative.generate(System.DateTimeOffset, ToolUp.Facts.CoverageNarrative+MetricCoverage) : ToolUp.Platform.Narrative.NarrativeDocument
+ToolUp.Facts.CoverageNarrative.isMaterialChange(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.CoverageNarrative+CoverageBand], ToolUp.Facts.CoverageNarrative+CoverageBand) : System.Boolean
+ToolUp.Facts.CoverageNarrative.readCoverage(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, ToolUp.Platform.Grounding.MetricDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CoverageNarrative+MetricCoverage]
+ToolUp.Facts.CoverageNarrative.readHierarchy(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, System.String, ToolUp.Platform.Grounding.SubjectDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.CoverageNarrative+HierarchyCoverage]]
+ToolUp.Facts.CoverageNarrative.settingsKey(System.String) : System.String
+ToolUp.Facts.CoverageNarrative.shouldCommit(ToolUp.Facts.CoverageNarrative+MetricCoverage) : System.Boolean
+ToolUp.Facts.CoverageNarrative+CitedFact (class)
+ToolUp.Facts.CoverageNarrative+CitedFact..ctor(System.String, System.String, System.String)
+ToolUp.Facts.CoverageNarrative+CitedFact.FactId : System.String { get }
+ToolUp.Facts.CoverageNarrative+CitedFact.Period : System.String { get }
+ToolUp.Facts.CoverageNarrative+CitedFact.Subject : System.String { get }
+ToolUp.Facts.CoverageNarrative+CoverageBand (class)
+ToolUp.Facts.CoverageNarrative+CoverageBand..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+HierarchyBand])
+ToolUp.Facts.CoverageNarrative+CoverageBand.Declaration : System.String { get }
+ToolUp.Facts.CoverageNarrative+CoverageBand.Metric : System.String { get }
+ToolUp.Facts.CoverageNarrative+CoverageBand.Populations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+HierarchyBand] { get }
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeFactStore (class)
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeFactStore..ctor(ToolUp.Facts.IFactStore, System.IServiceProvider, ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeFactStore.WaitIdle() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions (class)
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]], System.String)
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions.CommitScope : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]] { get }
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions.Principal : System.String { get }
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptionsModule (class)
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptionsModule.forScopes(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.StorageScope]) : ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions
+ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptionsModule.sameContainer(System.String) : ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions
+ToolUp.Facts.CoverageNarrative+CoveragePosture (class)
+ToolUp.Facts.CoverageNarrative+CoveragePosture.IsDescribable : System.Boolean { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture.IsUnprobed : System.Boolean { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture.IsWhollyRestricted : System.Boolean { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture.Tag : System.Int32 { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture.Unprobed : ToolUp.Facts.CoverageNarrative+CoveragePosture { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Describable (class)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Describable.withheldPolicies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Tags (class)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Tags.Describable : System.Int32 (literal)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Tags.Unprobed : System.Int32 (literal)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+Tags.WhollyRestricted : System.Int32 (literal)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+WhollyRestricted (class)
+ToolUp.Facts.CoverageNarrative+CoveragePosture+WhollyRestricted.policies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand (class)
+ToolUp.Facts.CoverageNarrative+HierarchyBand..ctor(System.String, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.CoverageNarrative+HierarchyBand.ComparableBand : System.Int32 { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.FactBand : System.Int32 { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.Hierarchy : System.String { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.Methods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.NonComparableBand : System.Int32 { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.PeriodFrom : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.Policies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.Posture : System.String { get }
+ToolUp.Facts.CoverageNarrative+HierarchyBand.SubjectBand : System.Int32 { get }
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage (class)
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage..ctor(ToolUp.Platform.Grounding.SubjectDefinition, ToolUp.Facts.CoverageNarrative+CoveragePosture, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PopulationStats], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+CitedFact])
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage.Cited : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+CitedFact] { get }
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage.Hierarchy : ToolUp.Platform.Grounding.SubjectDefinition { get }
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage.Posture : ToolUp.Facts.CoverageNarrative+CoveragePosture { get }
+ToolUp.Facts.CoverageNarrative+HierarchyCoverage.Stats : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PopulationStats] { get }
+ToolUp.Facts.CoverageNarrative+MetricCoverage (class)
+ToolUp.Facts.CoverageNarrative+MetricCoverage..ctor(ToolUp.Platform.Grounding.MetricDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+HierarchyCoverage])
+ToolUp.Facts.CoverageNarrative+MetricCoverage.Definition : ToolUp.Platform.Grounding.MetricDefinition { get }
+ToolUp.Facts.CoverageNarrative+MetricCoverage.Populations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoverageNarrative+HierarchyCoverage] { get }
 ToolUp.Facts.CoverageTool (class)
 ToolUp.Facts.CoverageTool.DisclosureProbeK : System.Int32 (literal)
 ToolUp.Facts.CoverageTool.definition : ToolUp.Platform.AIToolDefinition { get }
@@ -399,6 +467,7 @@ ToolUp.Facts.FactWithCompetition.Fact : ToolUp.Facts.Fact { get }
 ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withCoverageNarratives(ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

@@ -4335,6 +4335,8 @@ ToolUp.Platform.IModuleVisibilityStore (interface)
 ToolUp.Platform.IModuleVisibilityStore.ClearProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IModuleVisibilityStore.GetProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile]]
 ToolUp.Platform.IModuleVisibilityStore.SetProfile(ToolUp.Platform.FlagScope, ToolUp.Platform.ModuleVisibilityProfile) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.INarrativeIngestor (interface)
+ToolUp.Platform.INarrativeIngestor.Ingest(ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeIngestOutcome]
 ToolUp.Platform.INarrativePagePublisher (interface)
 ToolUp.Platform.INarrativePagePublisher.PublishAsync(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
 ToolUp.Platform.INarrativeStore (interface)
@@ -5833,6 +5835,21 @@ ToolUp.Platform.NarrativeEntryInfo.PublishedAt : System.DateTime { get }
 ToolUp.Platform.NarrativeEntryInfo.Subtitle : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.NarrativeEntryInfo.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NarrativeEntryInfo.Title : System.String { get }
+ToolUp.Platform.NarrativeIngestOutcome (class)
+ToolUp.Platform.NarrativeIngestOutcome.IsNarrativeIngestFailed : System.Boolean { get }
+ToolUp.Platform.NarrativeIngestOutcome.IsNarrativeIngestRefused : System.Boolean { get }
+ToolUp.Platform.NarrativeIngestOutcome.IsNarrativeIngested : System.Boolean { get }
+ToolUp.Platform.NarrativeIngestOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngestFailed (class)
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngestFailed.reason : System.String { get }
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngestRefused (class)
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngestRefused.reason : System.String { get }
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngested (class)
+ToolUp.Platform.NarrativeIngestOutcome+NarrativeIngested.documentId : System.String { get }
+ToolUp.Platform.NarrativeIngestOutcome+Tags (class)
+ToolUp.Platform.NarrativeIngestOutcome+Tags.NarrativeIngestFailed : System.Int32 (literal)
+ToolUp.Platform.NarrativeIngestOutcome+Tags.NarrativeIngestRefused : System.Int32 (literal)
+ToolUp.Platform.NarrativeIngestOutcome+Tags.NarrativeIngested : System.Int32 (literal)
 ToolUp.Platform.NarrativeNotifications (class)
 ToolUp.Platform.NarrativeNotifications.PublishedKey : System.String (literal)
 ToolUp.Platform.NarrativeNotifications.ScopeResetKey : System.String (literal)

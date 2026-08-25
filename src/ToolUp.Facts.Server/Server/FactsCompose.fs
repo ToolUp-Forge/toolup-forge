@@ -644,6 +644,106 @@ module FactsCompose =
                     }
             }
 
+    // ─── Phase 707 — coverage narratives (opt-in) ─────────────────────
+    //
+    // A separate, explicit opt-in on top of the fact store — the shape
+    // every opt-in above takes, and here for two reasons rather than one.
+    //
+    // The ordinary reason first: this WRITES to the deployment's knowledge
+    // base. Folding it into `withFactStore` would mean that composing a
+    // fact base silently started publishing documents into a retrieval
+    // corpus, which is not a thing a storage knob may decide.
+    //
+    // The sharper reason is the second argument `withCoverageNarratives`
+    // takes. A coverage narrative is a STANDING document, readable by
+    // everyone who can retrieve from the scope it lands in, and the
+    // disclosure gate judges it once — against the principal named here,
+    // at commit time — rather than per reader at read time. That is a
+    // deliberate and load-bearing narrowing: it means the named principal
+    // must be a FLOOR on what the scope may see, not a service identity
+    // that can see everything. There is no defensible default for that,
+    // so there is no default.
+
+    let private registerCoverageNarratives
+        (options: CoverageNarrative.CoverageNarrativeOptions)
+        (services: IServiceCollection)
+        : IServiceCollection =
+        // The inner store is taken from the descriptor already in the
+        // collection, never from the built provider — by then `IFactStore`
+        // resolves to this decorator and the factory would recurse. Same
+        // shape (and same reason) as the Phase 623.C data-object
+        // decoration above.
+        let innerDescriptor =
+            services
+            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<IFactStore>)
+            |> Seq.tryLast
+
+        let inner: (IServiceProvider -> IFactStore) option =
+            match innerDescriptor with
+            | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
+                let factory = descriptor.ImplementationFactory
+                Some(fun sp -> factory.Invoke sp :?> IFactStore)
+            | Some descriptor when (descriptor.ImplementationInstance :? IFactStore) ->
+                let instance = descriptor.ImplementationInstance :?> IFactStore
+                Some(fun _ -> instance)
+            | _ -> None
+
+        match inner with
+        // No fact store descriptor at all. Left untouched rather than
+        // registering a decorator with nothing to decorate — a deployment
+        // in that state has a composition defect the fact tier's own
+        // registrations will surface far more clearly.
+        | None -> services
+        | Some resolveInner ->
+            services.AddSingleton<IFactStore>(
+                Func<IServiceProvider, IFactStore>(fun sp ->
+                    CoverageNarrative.decorate (resolveInner sp) sp options (sp.GetRequiredService<ILogger>()))
+            )
+
+    /// Compose the coverage-narrative trigger (Phase 707): decorate the
+    /// composed `IFactStore` so that assertion activity recomputes a
+    /// metric's coverage and, when it has moved MATERIALLY (a cardinality
+    /// band, the period reach, the method mix — not every assertion),
+    /// commits one narrative per populated metric into the deployment's
+    /// knowledge base through the ordinary ingestion path.
+    ///
+    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// byte-for-byte unchanged (GP 11 / GP 13), and a deployment that
+    /// calls it without composing a knowledge base is inert: the trigger
+    /// probes for `INarrativeIngestor` before it reads anything, so
+    /// arming the knob with nowhere to commit costs one DI lookup per
+    /// coalesced regeneration and no store work.
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withCoverageNarratives
+    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScope ])
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// Insert AFTER `withFactStore` — it decorates what that registered,
+    /// and finds nothing to decorate if it runs first.
+    let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register = registerCoverageNarratives options
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //
     // A separate, explicit opt-in on top of the fact store: the standing

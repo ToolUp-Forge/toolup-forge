@@ -87,6 +87,7 @@ KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VersioningPolicy : SharedTypes+Know
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule (class)
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule.guardResolvedScope(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule.resolve(Microsoft.AspNetCore.Http.HttpContext) : KnowledgeBase.ServerApiDeps+KnowledgeApiDeps
+KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule.resolveFrom(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope], System.String) : KnowledgeBase.ServerApiDeps+KnowledgeApiDeps
 KnowledgeBase.ServerApiDocuments (class)
 KnowledgeBase.ServerApiDocuments.deleteDocument(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 KnowledgeBase.ServerApiDocuments.getDocumentVersions(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
@@ -105,6 +106,10 @@ KnowledgeBase.ServerApiDocuments.uploadDocumentCore(System.Boolean, KnowledgeBas
 KnowledgeBase.ServerApiNarrative (class)
 KnowledgeBase.ServerApiNarrative.ingestNarrative(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+IngestNarrativeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, SharedTypes+IngestNarrativeError]]
 KnowledgeBase.ServerApiNarrative.resetIndex(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+KnowledgeBase.ServerApiNarrativeIngestor (class)
+KnowledgeBase.ServerApiNarrativeIngestor.create(System.IServiceProvider) : ToolUp.Platform.INarrativeIngestor
+KnowledgeBase.ServerApiNarrativeIngestor+KnowledgeNarrativeIngestor (class)
+KnowledgeBase.ServerApiNarrativeIngestor+KnowledgeNarrativeIngestor..ctor(System.IServiceProvider)
 KnowledgeBase.ServerApiNotes (class)
 KnowledgeBase.ServerApiNotes.addNote(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+AddNoteRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]
 KnowledgeBase.ServerApiNotes.updateNote(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps, SharedTypes+UpdateNoteRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String]]

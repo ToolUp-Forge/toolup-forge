@@ -1040,6 +1040,10 @@
              ceiling, and the population-scale disclosure posture. -->
         <Compile Include="InProcess\PopulationQueryToolTests.fs" />
         <Compile Include="InProcess\CoverageToolTests.fs" />
+        <!-- Phase 707 — the coverage narrative: one knowledge chunk per
+             populated metric, superseded on a material coverage change,
+             committed through the ordinary narrative-ingestion path. -->
+        <Compile Include="InProcess\CoverageNarrativeTests.fs" />
         <!-- Phase 560 — the grounded answer planner (question → triples → typed
              PlanStep resolution → the plan in the provenance chain). -->
         <Compile Include="InProcess\AnswerPlannerTests.fs" />

@@ -194,21 +194,39 @@ type KnowledgeApiDeps = {
 
 module KnowledgeApiDeps =
 
-    /// Resolve all DI values + build the four local closures for the
-    /// current request. Mirrors the original `knowledgeApi` prelude
-    /// exactly — no behaviour change.
-    let resolve (ctx: HttpContext) : KnowledgeApiDeps =
-        let storage = ctx.RequestServices.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+    /// Resolve all DI values + build the four local closures, given the
+    /// service provider and the caller's already-extracted identity.
+    ///
+    /// Phase 707 — the request-free core `resolve` now delegates to. Every
+    /// dependency this record holds comes from DI or from the two identity
+    /// values below, so the only thing an `HttpContext` was ever supplying
+    /// was those three: the provider, the resolved `StorageScope`, and the
+    /// user id. Naming that split is what lets a server-side producer with
+    /// no request (`INarrativeIngestor`) reach the SAME ingestion path
+    /// rather than a parallel one — the alternative, a second deps
+    /// construction beside this one, is how two paths that must agree stop
+    /// agreeing.
+    ///
+    /// `resolvedScope` is `Some` when the caller genuinely resolved a scope
+    /// (middleware, or a programmatic caller handing one over) and `None`
+    /// when it did not — the distinction the destructive handlers fail
+    /// closed on (`ScopeResolvedFromRequest`). The fallback synthesis and
+    /// its loud logging are unchanged.
+    let resolveFrom
+        (services: IServiceProvider)
+        (resolvedScope: StorageScope option)
+        (userId: string)
+        : KnowledgeApiDeps =
+        let storage = services.GetService(typeof<IBlobStorage>) :?> IBlobStorage
 
-        let queue =
-            ctx.RequestServices.GetService(typeof<IngestionQueue>) :?> IngestionQueue
+        let queue = services.GetService(typeof<IngestionQueue>) :?> IngestionQueue
 
         // Telemetry sink resolved per-request so KB enqueue paths feed the
         // same `/health/rag` snapshot as the post-save vectorisation hook.
         // Falls back to a no-op when `composeWithRAG` hasn't registered one
         // (deployments using KB without RAG, or test harnesses).
         let ragTelemetry =
-            match ctx.RequestServices.GetService(typeof<ToolUp.Platform.IRagTelemetry.IRagTelemetry>) with
+            match services.GetService(typeof<ToolUp.Platform.IRagTelemetry.IRagTelemetry>) with
             | :? ToolUp.Platform.IRagTelemetry.IRagTelemetry as t -> t
             | _ -> ToolUp.RAG.RagTelemetry.createNoOp ()
 
@@ -221,20 +239,20 @@ module KnowledgeApiDeps =
         // table extractor before composeWithRAG runs and the no-ops are
         // skipped. Either way `GetService` returns a non-null implementation.
         let ocrProvider =
-            match ctx.RequestServices.GetService(typeof<IOcrProvider>) with
+            match services.GetService(typeof<IOcrProvider>) with
             | :? IOcrProvider as p -> p
             | _ -> ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
 
         let tableExtractor =
-            match ctx.RequestServices.GetService(typeof<ITableExtractor>) with
+            match services.GetService(typeof<ITableExtractor>) with
             | :? ITableExtractor as t -> t
             | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
 
         let notifications =
-            ctx.RequestServices.GetService(typeof<INotificationChannel>) :?> INotificationChannel
+            services.GetService(typeof<INotificationChannel>) :?> INotificationChannel
 
         let logger =
-            match ctx.RequestServices.GetService(typeof<ILogger>) with
+            match services.GetService(typeof<ILogger>) with
             | :? ILogger as l -> l
             | _ ->
                 { new ILogger with
@@ -252,17 +270,7 @@ module KnowledgeApiDeps =
         // isn't wired for this path and every unscoped caller lands in one
         // KB scope: surfaced loudly here, and the destructive handlers fail
         // closed on it (see `ScopeResolvedFromRequest`).
-        let resolvedScope =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> Some s
-            | _ -> None
-
         let scopeResolvedFromRequest = Option.isSome resolvedScope
-
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
 
         let scope =
             match resolvedScope with
@@ -305,7 +313,7 @@ module KnowledgeApiDeps =
         // and AI-context paths need them, and tests bypassing `composeWithRAG`
         // may not have them registered. `box _ <> null` guards each use.
         let vectorStore =
-            match ctx.RequestServices.GetService(typeof<IVectorStore>) with
+            match services.GetService(typeof<IVectorStore>) with
             | :? IVectorStore as v -> Some v
             | _ -> None
 
@@ -316,7 +324,7 @@ module KnowledgeApiDeps =
         // vector-only wrapper so the handlers have exactly one deletion
         // path — never the raw `vs.DeleteChunk` loop.
         let indexLifecycle =
-            match ctx.RequestServices.GetService(typeof<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>) with
+            match services.GetService(typeof<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>) with
             | :? ToolUp.Platform.IIndexLifecycle.IIndexLifecycle as il -> Some il
             | _ ->
                 vectorStore
@@ -325,7 +333,7 @@ module KnowledgeApiDeps =
                     :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle)
 
         let eventStore =
-            match ctx.RequestServices.GetService(typeof<IEventStore>) with
+            match services.GetService(typeof<IEventStore>) with
             | :? IEventStore as e -> Some e
             | _ -> None
 
@@ -334,12 +342,12 @@ module KnowledgeApiDeps =
         // forwards the scope-keyed capability, so probing the resolved
         // singleton is equivalent to probing what the operator composed.
         let embeddingProvider =
-            match ctx.RequestServices.GetService(typeof<IEmbeddingProvider>) with
+            match services.GetService(typeof<IEmbeddingProvider>) with
             | :? IEmbeddingProvider as e -> Some e
             | _ -> None
 
         let narrativeStore =
-            match ctx.RequestServices.GetService(typeof<INarrativeStore>) with
+            match services.GetService(typeof<INarrativeStore>) with
             | :? INarrativeStore as n -> Some n
             | _ -> None
 
@@ -348,37 +356,33 @@ module KnowledgeApiDeps =
         // resolver registered before compose wins; otherwise the
         // per-`KnowledgeSource` default applies.
         let originalResolver =
-            match
-                ctx.RequestServices.GetService(
-                    typeof<KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver>
-                )
-            with
+            match services.GetService(typeof<KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver>) with
             | :? KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver as r -> r
             | _ -> KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
 
         let auditLog =
-            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            match services.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as a -> Some a
             | _ -> None
 
         // Phase 119 — upload policy registered by `withUploadPolicy`;
         // the permissive default when absent (no caps, pre-119 behaviour).
         let uploadPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeUploadPolicy>) with
+            match services.GetService(typeof<KnowledgeUploadPolicy>) with
             | :? KnowledgeUploadPolicy as p -> p
             | _ -> KnowledgeUploadPolicy.permissive
 
         // Phase 14x — dedup policy registered by `withDocumentDedup`;
         // dedup enabled when absent.
         let dedupPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeDedupPolicy>) with
+            match services.GetService(typeof<KnowledgeDedupPolicy>) with
             | :? KnowledgeDedupPolicy as p -> p
             | _ -> KnowledgeDedupPolicy.enabled
 
         // Phase 510 — versioning policy registered by
         // `withDocumentVersioning`; OFF when absent (pre-510 behaviour).
         let versioningPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeVersioningPolicy>) with
+            match services.GetService(typeof<KnowledgeVersioningPolicy>) with
             | :? KnowledgeVersioningPolicy as p -> p
             | _ -> KnowledgeVersioningPolicy.disabled
 
@@ -388,7 +392,7 @@ module KnowledgeApiDeps =
         // silently move every existing deployment's originals on
         // upgrade. Un-opted-in ⇒ `None` ⇒ no store call on any path.
         let objectRetentionPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeObjectRetentionPolicy>) with
+            match services.GetService(typeof<KnowledgeObjectRetentionPolicy>) with
             | :? KnowledgeObjectRetentionPolicy as p -> p
             | _ -> KnowledgeObjectRetentionPolicy.disabled
 
@@ -396,7 +400,7 @@ module KnowledgeApiDeps =
             if not objectRetentionPolicy.RetainOriginalsInObjectStore then
                 None
             else
-                match ctx.RequestServices.GetService(typeof<IDataObjectStore>) with
+                match services.GetService(typeof<IDataObjectStore>) with
                 | :? IDataObjectStore as s -> Some s
                 | _ ->
                     logger.Warn(
@@ -409,12 +413,12 @@ module KnowledgeApiDeps =
         // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
         // retain-forever defaults when absent.
         let quotaPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeQuotaPolicy>) with
+            match services.GetService(typeof<KnowledgeQuotaPolicy>) with
             | :? KnowledgeQuotaPolicy as p -> p
             | _ -> KnowledgeQuotaPolicy.unlimited
 
         let retentionPolicy =
-            match ctx.RequestServices.GetService(typeof<KnowledgeRetentionPolicy>) with
+            match services.GetService(typeof<KnowledgeRetentionPolicy>) with
             | :? KnowledgeRetentionPolicy as p -> p
             | _ -> KnowledgeRetentionPolicy.retainForever
 
@@ -423,19 +427,19 @@ module KnowledgeApiDeps =
         // called `withContentScanning` has no scanner singleton at all,
         // and the upload path skips the whole branch (GP 13).
         let contentScanner =
-            match ctx.RequestServices.GetService(typeof<IContentScanner>) with
+            match services.GetService(typeof<IContentScanner>) with
             | :? IContentScanner as s -> Some s
             | _ -> None
 
         let scanPolicy =
-            match ctx.RequestServices.GetService(typeof<ContentScanPolicy>) with
+            match services.GetService(typeof<ContentScanPolicy>) with
             | :? ContentScanPolicy as p -> p
             | _ -> ContentScanPolicy.defaults
 
         // Phase 525.D — the fact-disclosure egress gate, present exactly
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
-            match ctx.RequestServices.GetService(typeof<IFactDisclosureGate>) with
+            match services.GetService(typeof<IFactDisclosureGate>) with
             | :? IFactDisclosureGate as g -> Some g
             | _ -> None
 
@@ -445,22 +449,22 @@ module KnowledgeApiDeps =
         // uncomposed deployment cannot fetch anything and no transport is
         // resolved for it either.
         let archiveImportPolicy =
-            match ctx.RequestServices.GetService(typeof<ArchiveImportPolicy>) with
+            match services.GetService(typeof<ArchiveImportPolicy>) with
             | :? ArchiveImportPolicy as p -> p
             | _ -> ArchiveImportPolicy.defaults
 
         let urlIngestionPolicy =
-            match ctx.RequestServices.GetService(typeof<UrlIngestionPolicy>) with
+            match services.GetService(typeof<UrlIngestionPolicy>) with
             | :? UrlIngestionPolicy as p -> p
             | _ -> UrlIngestionPolicy.disabled
 
         let urlFetcher =
-            match ctx.RequestServices.GetService(typeof<KnowledgeBase.ServerBulkImport.IUrlContentFetcher>) with
+            match services.GetService(typeof<KnowledgeBase.ServerBulkImport.IUrlContentFetcher>) with
             | :? KnowledgeBase.ServerBulkImport.IUrlContentFetcher as f -> Some f
             | _ -> None
 
         let accessContext =
-            match ctx.RequestServices.GetService(typeof<AccessContext>) with
+            match services.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
             | _ -> AccessContext.unrestricted (AnonymousSession userId)
 
@@ -503,7 +507,7 @@ module KnowledgeApiDeps =
         let ensureContextWriteAllowed () : Async<Result<unit, string>> = async {
             match accessContext.Subject with
             | TeamMember(userId, teamId) ->
-                match ctx.RequestServices.GetService(typeof<ITeamStore>) with
+                match services.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as ts ->
                     let! role = ts.GetMemberRole(teamId, userId)
 
@@ -554,6 +558,23 @@ module KnowledgeApiDeps =
             UrlIngestionPolicy = urlIngestionPolicy
             UrlFetcher = urlFetcher
         }
+
+    /// Resolve all DI values + build the four local closures for the
+    /// current request. Mirrors the original `knowledgeApi` prelude
+    /// exactly — no behaviour change. Extracts the three request-borne
+    /// values `resolveFrom` needs and does nothing else.
+    let resolve (ctx: HttpContext) : KnowledgeApiDeps =
+        let resolvedScope =
+            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+            | true, (:? StorageScope as s) -> Some s
+            | _ -> None
+
+        let userId =
+            match ctx.Items.TryGetValue "ToolUp.UserId" with
+            | true, (:? string as id) -> id
+            | _ -> "anonymous"
+
+        resolveFrom ctx.RequestServices resolvedScope userId
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`
     /// when scope resolution collapsed onto the shared `user-anonymous`

@@ -824,6 +824,12 @@
         <Compile Include="Server\Files\FileManagement.fs" />
         <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />
+        <!-- Phase 707 — the request-free door onto the narrative-ingestion
+             path, for a server-side producer that has a resolved scope and
+             a document but no request. Declared here because the producing
+             companion and the ingesting companion do not reference each
+             other; both reference this assembly. -->
+        <Compile Include="Server\INarrativeIngestor.fs" />
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
         <Compile Include="Server\NotifyingNarrativeStore.fs" />

@@ -855,6 +855,13 @@ let allTests =
         // counts-never-values boundary between discovery and the
         // population read.
         CoverageToolTests.tests
+        // Phase 707 — the coverage narrative: the pure generator (bands,
+        // never exact counts; the registry context quoted; no value), the
+        // material-change predicate and what is deliberately outside it,
+        // the 705.B disclosure posture through Phase 706's shared fold,
+        // the assertion trigger's one-commit-per-metric invariant across
+        // both assertion doors, and the real knowledge-base commit door.
+        CoverageNarrativeTests.tests
         // Phase 560 — the grounded answer planner: compiler table (refusal
         // over fabrication), per-branch resolution (UseFact / RefreshFact /
         // ComputeFact / RequestData / Refuse), disclosure interplay, the

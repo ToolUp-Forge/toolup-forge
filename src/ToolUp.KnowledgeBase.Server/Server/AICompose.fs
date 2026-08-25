@@ -268,14 +268,31 @@ let register (app: AIServerApp) : AIServerApp =
             s.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> KnowledgeBaseLifecycle.create sp)
         | NoTenantLifecycle -> s
 
+    // Phase 707 — the request-free narrative-commit door. Registered
+    // unconditionally with the knowledge base, on the same argument the
+    // fact companion registers its disclosure gate by: a deployment
+    // cannot compose the knowledge base and then find the programmatic
+    // door missing. It is a lazy factory over the container and holds no
+    // state, so a deployment where nothing ever commits programmatically
+    // pays one unused singleton and no call (GP 13). Its ABSENCE is what
+    // makes every programmatic producer dormant on a deployment with no
+    // knowledge base — which is the other half of that double gate, and
+    // it is enforced by there being no other registration site.
+    let registerNarrativeIngestor (s: IServiceCollection) : IServiceCollection =
+        s.AddSingleton<INarrativeIngestor>(fun (sp: IServiceProvider) ->
+            KnowledgeBase.ServerApiNarrativeIngestor.create sp)
+
     let baseWithLifecycle = {
         baseWithValidator with
             Extensions = {
                 baseWithValidator.Extensions with
                     ServiceConfig =
+                        let register (s: IServiceCollection) =
+                            registerNarrativeIngestor (registerLifecycleHook s)
+
                         match baseWithValidator.Extensions.ServiceConfig with
-                        | None -> Some registerLifecycleHook
-                        | Some baseFn -> Some(fun s -> registerLifecycleHook (baseFn s))
+                        | None -> Some register
+                        | Some baseFn -> Some(fun s -> register (baseFn s))
             }
     }
 

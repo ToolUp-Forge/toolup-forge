@@ -54,6 +54,14 @@
              guessed. Compiled after both, and declared by the same
              compose knob. -->
         <Compile Include="Server\CoverageTool.fs" />
+        <!-- Phase 707 — the standing, retrievable twin of the tool above.
+             `list_metric_coverage` answers a model that already thought to
+             ask; this commits one knowledge chunk per populated metric so
+             plain vector retrieval steers a model that did not. Compiled
+             after the tool because it reuses its disclosure-probe depth,
+             and declared by its own compose knob, never by
+             `withFactStore`. -->
+        <Compile Include="Server\CoverageNarrative.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <!-- Phase 708 — the feeder the Phase 522 push path never had:
              projects the planner's `UseFact` steps back into the generic
