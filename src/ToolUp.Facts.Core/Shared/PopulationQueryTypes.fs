@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Population query (Phase 701) ────────────────────────────────────
 //
@@ -662,3 +663,94 @@ module PopulationStats =
         facts
         |> List.map (fun f -> PopulationMember.ofFact f, freshnessOf f)
         |> ofMembersWithFreshness
+
+/// What the disclosure gate left of a population ranking (Phase 703,
+/// lifted to shared ground by Phase 706).
+///
+/// **There is one population door's worth of disclosure logic, and both
+/// doors call it.** A population read reaches an answer surface two ways —
+/// the `query_metric_population` AI tool, and the answer planner's
+/// `UseAggregate` step — and each faces the identical problem: per-member
+/// gating at population scale, plus the magnitude-statistics leak. Two
+/// implementations of that would agree for a while and then quietly not,
+/// which at this seam means one store disclosing differently through two
+/// doors. So the fold lives here, once, above both.
+type PopulationDisclosure = {
+    /// The disclosable members paired with their **true** rank — the
+    /// position in the store's ranking, kept through the gate so a
+    /// withheld member leaves a visible gap rather than silently promoting
+    /// the member below it. A contiguous renumbering would have a caller
+    /// report the third-best as the second-best: a correctness defect
+    /// dressed as tidiness.
+    Disclosable: (int * Fact) list
+    /// How many ranked members the gate withheld.
+    WithheldCount: int
+    /// Withheld members as a **count grouped by policy ref**, ordered by
+    /// ref. Existence disclosed, identity and value never: at population
+    /// scale a per-member refusal marker would be a listing of the
+    /// restricted population wearing a refusal's clothes (the 559.B
+    /// posture at the scale a population forces).
+    WithheldByPolicy: (string * int) list
+}
+
+module PopulationDisclosure =
+
+    /// Canonical wording for the suppressed magnitude block. One string,
+    /// so the two doors cannot explain the same suppression differently.
+    [<Literal>]
+    let MagnitudesWithheldReason =
+        "The population's minimum, maximum and mean are withheld because it contains members you are not permitted to see — a minimum or maximum is a member's own value. The counts, period coverage and freshness above describe the whole matched population."
+
+    /// Partition a ranking by the gate's verdicts. `verdictFor` is total —
+    /// a caller supplies the conservative deny for an id the gate returned
+    /// nothing for, so the door never fails open.
+    let fold (verdictFor: string -> FactDisclosureVerdict) (ranked: Fact list) : PopulationDisclosure =
+        let judged = ranked |> List.mapi (fun i fact -> i + 1, fact, verdictFor fact.FactId)
+
+        let disclosable =
+            judged
+            |> List.filter (fun (_, _, verdict) -> verdict = FactDisclosable)
+            |> List.map (fun (rank, fact, _) -> rank, fact)
+
+        let withheldPolicies =
+            judged
+            |> List.choose (fun (_, _, verdict) ->
+                match verdict with
+                | FactDisclosable -> None
+                | FactNotDisclosable policyRef -> Some policyRef)
+
+        {
+            Disclosable = disclosable
+            WithheldCount = List.length withheldPolicies
+            WithheldByPolicy = withheldPolicies |> List.countBy id |> List.sortBy fst
+        }
+
+    /// Whether the magnitude block must be suppressed — i.e. whether
+    /// anything was withheld from the ranking.
+    let valuesWithheld (disclosure: PopulationDisclosure) : bool = disclosure.WithheldCount > 0
+
+    /// The summary a caller may report, given what the gate withheld.
+    ///
+    /// `Minimum` and `Maximum` are individual members' values wearing an
+    /// aggregate's clothes: over a partly-restricted population they can
+    /// round-trip exactly the value the gate refused, and `Mean` narrows it
+    /// further. So the magnitude block is gated *with* the members, while
+    /// the counts, the period coverage, the freshness histogram and the
+    /// method mix are existence-level and ride regardless.
+    ///
+    /// The residual is stated rather than hidden: a caller sees disclosure
+    /// only for the members it was returned, so a restricted member ranked
+    /// *below* the ceiling still contributes to the store's `Mean` and can
+    /// *be* its `Minimum` under a highest-first ranking. This is a floor,
+    /// not a proof; a whole-population disclosure probe is a different (and,
+    /// at 10^5 members, a differently-priced) capability.
+    let disclosedStats (disclosure: PopulationDisclosure) (stats: PopulationStats) : PopulationStats =
+        if valuesWithheld disclosure then
+            {
+                stats with
+                    Minimum = None
+                    Maximum = None
+                    Mean = None
+            }
+        else
+            stats

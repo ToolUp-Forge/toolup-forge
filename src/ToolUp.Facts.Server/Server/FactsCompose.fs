@@ -143,13 +143,19 @@ module FactsCompose =
                         | :? Grounding.IMetricRegistry as r -> Some r
                         | _ -> None
 
+                    // Phase 706 — the question seam: one 67b call compiles
+                    // point triples AND population triples, so superlative
+                    // and aggregate questions reach a `UseAggregate` step
+                    // instead of degrading to an unanswerable point lookup.
+                    // A deployment with no provider refuses with the same
+                    // typed missing-compiler reason it always did.
                     let compiler =
                         match sp.GetService(typeof<ToolUp.Platform.AI.IAIProvider>) with
                         | :? ToolUp.Platform.AI.IAIProvider as provider ->
-                            AnswerPlanner.structuredCompiler provider registry
-                        | _ -> AnswerPlanner.noCompiler
+                            AnswerPlanner.structuredQuestionCompiler provider registry
+                        | _ -> AnswerPlanner.noQuestionCompiler
 
-                    AnswerPlanner.create
+                    AnswerPlanner.createCompiling
                         (sp.GetRequiredService<IFactStore>())
                         (sp.GetRequiredService<IFactDisclosureGate>())
                         registry

@@ -62,8 +62,13 @@ let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact
 
 /// A real (Phase 519) registry: the `revenue` metric plus the two-level
 /// `brand` subject hierarchy — the vocabulary the compiler-table tests
-/// resolve against.
-let private registryWith (staleness: StalenessPolicy) (producingOp: string option) : IMetricRegistry =
+/// resolve against. `direction` is the Phase 706 axis: it is what
+/// `best_first` resolves through, and `Neutral` is what makes it refuse.
+let private registryDirected
+    (direction: DirectionOfBetter)
+    (staleness: StalenessPolicy)
+    (producingOp: string option)
+    : IMetricRegistry =
     MetricRegistry.build [
         {
             Module = "TestModule"
@@ -72,7 +77,7 @@ let private registryWith (staleness: StalenessPolicy) (producingOp: string optio
                 Name = "Revenue"
                 Unit = "GBP"
                 Dimensionality = "currency"
-                Direction = HigherIsBetter
+                Direction = direction
                 DisplayFormat = "N0"
                 Staleness = staleness
                 ProducingOperation = producingOp
@@ -93,6 +98,9 @@ let private registryWith (staleness: StalenessPolicy) (producingOp: string optio
             }
         }
     ]
+
+let private registryWith (staleness: StalenessPolicy) (producingOp: string option) : IMetricRegistry =
+    registryDirected HigherIsBetter staleness producingOp
 
 let private candidate (hierarchy: string) (path: string list) (metric: string) : TripleCandidate = {
     SubjectHierarchy = hierarchy
@@ -122,10 +130,60 @@ let private plannerWith
 
 let private utcNow () = DateTime.UtcNow
 
+// ── Phase 706 harness: populations ────────────────────────────────
+
+/// A draft for one named brand — several distinct subjects give a
+/// population several *current* heads (one lineage each), which is what a
+/// ranking needs.
+let private brandDraft (brand: string) (value: FactValue) : FactDraft = {
+    draft "revenue" [ "h1" ] value with
+        Subject = {
+            Hierarchy = "brand"
+            Path = [ brand ]
+        }
+}
+
+/// A deterministic compiler emitting fixed population triples — the
+/// Phase 706 seam driven without an LLM.
+let private populationCompilerOf (populations: PopulationTriple list) : QuestionCompiler =
+    fun _ -> async {
+        return
+            Ok {
+                Triples = []
+                Populations = populations
+            }
+    }
+
+let private plannerCompiling
+    (registry: IMetricRegistry option)
+    (compiler: QuestionCompiler)
+    (clock: unit -> DateTime)
+    : IAnswerPlanner * IFactStore * IEventStore =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+    // The registry reaches the STORE here, not only the planner: a
+    // population's ordering is resolved inside `QueryPopulation` against
+    // the metric's declared direction-of-better, so a registry-less store
+    // refuses every `best_first` however well the planner knows the
+    // vocabulary. (Which is the point of the refusal — but it is not what
+    // these cases are testing.)
+    let store =
+        BlobFactStore.createWithRegistryAndClock (InMemoryBlobStorage()) events registry clock
+
+    let gate = FactDisclosureGate.create store events
+
+    AnswerPlanner.createCompilingWithClock store gate registry events compiler clock, store, events
+
 let private plan (planner: IAnswerPlanner) (scope: string) (question: string) : AnswerPlan =
     planner.Plan(scope, "user-1", question) |> Async.RunSynchronously
 
 let private stepsOf (p: AnswerPlan) : PlanStep list = p.Steps |> List.map _.Step
+
+/// The single `UseAggregate` a population plan resolved to.
+let private aggregateOf (p: AnswerPlan) : AggregatePlan =
+    match stepsOf p with
+    | [ UseAggregate aggregate ] -> aggregate
+    | other -> failtestf "expected one UseAggregate step, got %A" other
 
 // ── The compiler table (560.B) ────────────────────────────────────
 
@@ -438,6 +496,510 @@ let disclosureTests =
         }
     ]
 
+// ── Phase 706 — the population compiler table (706.B) ─────────────
+
+let populationCompilerTests =
+    testList "Phase 706 population compiler table" [
+
+        test "a superlative question plans one UseAggregate citing the real top-k fact ids, best-first" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+            let beta = assertFact store scope (brandDraft "beta" (Scalar 200m))
+            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let result = plan planner scope "which brand has the highest revenue?"
+            let aggregate = aggregateOf result
+
+            Expect.equal aggregate.Direction HighestFirst "higher-is-better resolves best_first to HighestFirst"
+
+            Expect.equal
+                aggregate.Ranked
+                [
+                    { Rank = 1; FactId = acme.FactId }
+                    { Rank = 2; FactId = beta.FactId }
+                    { Rank = 3; FactId = gamma.FactId }
+                ]
+                "the ranking cites real fact ids at their true ranks"
+
+            Expect.equal
+                (AnswerPlan.citedFactIds result)
+                [ acme.FactId; beta.FactId; gamma.FactId ]
+                "every ranked member is a cited fact — the chain walk reaches the ranking"
+
+            Expect.equal aggregate.Stats.SubjectCount 3 "the summary describes what was ranked over"
+            Expect.equal aggregate.Stats.Maximum (Some 300m) "nothing withheld ⇒ the magnitude block rides"
+            Expect.isFalse aggregate.ValueStatisticsWithheld "no suppression on a wholly disclosable population"
+            Expect.isNone aggregate.FreshnessCaveat "an UntilSuperseded population of current heads is fresh"
+        }
+
+        test "a lower-is-better metric ranks best_first ASCENDING — a registry fact, never a model judgement" {
+            let registry = Some(registryDirected LowerIsBetter UntilSuperseded None)
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let aggregate = aggregateOf (plan planner scope "which brand is best on revenue?")
+
+            Expect.equal aggregate.Direction LowestFirst "lower-is-better resolves best_first to LowestFirst"
+
+            Expect.equal
+                (aggregate.Ranked |> List.map _.FactId |> List.head)
+                gamma.FactId
+                "the smallest value ranks first"
+        }
+
+        test "a top-k question applies the k and reports the truncation rather than implying it saw everything" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    TopK = 2
+            }
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+            assertFact store scope (brandDraft "beta" (Scalar 200m)) |> ignore
+            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let aggregate = aggregateOf (plan planner scope "top 2 brands by revenue?")
+
+            Expect.equal (List.length aggregate.Ranked) 2 "the ranking is bounded by k"
+            Expect.equal aggregate.EffectiveTopK 2 "the k the store applied"
+            Expect.isFalse aggregate.TopKCapped "2 is under the ceiling, so nothing was capped"
+            Expect.isTrue aggregate.Truncated "comparable members exist below the ceiling — said, not implied"
+            Expect.equal aggregate.Stats.ComparableCount 3 "the summary still describes the whole matched population"
+        }
+
+        test "a count-above question filters the population BEFORE the statistics" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    ValueAtLeast = Some 150m
+            }
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+            assertFact store scope (brandDraft "beta" (Scalar 200m)) |> ignore
+            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let aggregate =
+                aggregateOf (plan planner scope "how many brands reach at least 150?")
+
+            Expect.equal aggregate.Stats.FactCount 2 "'how many' is answered by the filtered population's count"
+            Expect.equal aggregate.Stats.Minimum (Some 200m) "the summary describes the population the query matched"
+            Expect.equal (List.length aggregate.Ranked) 2 "and the ranking is the same filtered set"
+        }
+
+        test "an unrecognised ordering token refuses, naming the gap and the vocabulary — never a guessed sort order" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    Ordering = "sideways"
+            }
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            let result = plan planner scope "rank the brands sideways?"
+
+            Expect.equal (stepsOf result) [ Refuse(UnrecognisedOrdering "sideways") ] "typed ordering refusal (GP 9)"
+
+            let described = PlanRefusalReason.describe (UnrecognisedOrdering "sideways")
+            Expect.stringContains described "sideways" "names what was unrecognised"
+            Expect.stringContains described "best_first" "and enumerates the accepted vocabulary"
+        }
+
+        test "a Neutral direction-of-better refuses best_first, carrying Phase 701's own remedy verbatim" {
+            let registry = Some(registryDirected Neutral UntilSuperseded None)
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            match stepsOf (plan planner scope "which brand is best on revenue?") with
+            | [ Refuse(PopulationNotOrderable(metricId, detail)) ] ->
+                Expect.equal metricId "revenue" "names the metric"
+                Expect.stringContains detail "Neutral" "the store's refusal reaches the plan verbatim"
+                Expect.stringContains detail "Ascending" "including its remedy"
+
+                Expect.equal
+                    (PlanRefusalReason.describe (PopulationNotOrderable(metricId, detail)))
+                    detail
+                    "no second wording of one refusal"
+            | other -> failtestf "expected PopulationNotOrderable, got %A" other
+        }
+
+        test "an explicit descending ordering ranks a Neutral metric — the caller's own choice needs no registry" {
+            let registry = Some(registryDirected Neutral UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    Ordering = "descending"
+            }
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let aggregate = aggregateOf (plan planner scope "brands by revenue, largest first")
+
+            Expect.equal aggregate.Direction HighestFirst "explicit descending resolves without the registry"
+            Expect.equal (aggregate.Ranked |> List.map _.FactId |> List.head) acme.FactId "largest first"
+        }
+
+        test "an unregistered metric or hierarchy on a population refuses exactly as a point triple does" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let planner, _, _ =
+                plannerCompiling
+                    registry
+                    (populationCompilerOf [
+                        PopulationTriple.create "brand" "share_of_voice"
+                        PopulationTriple.create "geography" "revenue"
+                    ])
+                    utcNow
+
+            Expect.equal
+                (stepsOf (plan planner (newScope ()) "?"))
+                [
+                    Refuse(UnrecognisedMetric "share_of_voice")
+                    Refuse(UnrecognisedSubject "geography")
+                ]
+                "vocabulary validation is the same deterministic step on both forms"
+        }
+
+        test "a path prefix deeper than the declared levels refuses, typed" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    PathPrefix = [ "acme"; "widget-x"; "extra" ]
+            }
+
+            let planner, _, _ =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            Expect.equal
+                (stepsOf (plan planner (newScope ()) "?"))
+                [ Refuse(InvalidSubjectPath("brand", [ "acme"; "widget-x"; "extra" ])) ]
+                "a three-segment prefix under a two-level hierarchy refuses"
+        }
+
+        test "point and population triples compile side by side in one plan" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let compiler: QuestionCompiler =
+                fun _ -> async {
+                    return
+                        Ok {
+                            Triples = [ candidate "brand" [ "acme" ] "revenue" ]
+                            Populations = [ PopulationTriple.create "brand" "revenue" ]
+                        }
+                }
+
+            let planner, store, _ = plannerCompiling registry compiler utcNow
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+
+            match stepsOf (plan planner scope "acme's revenue, and who is highest?") with
+            | [ UseFact factId; UseAggregate aggregate ] ->
+                Expect.equal factId acme.FactId "the point triple resolves as it always did"
+                Expect.equal (aggregate.Ranked |> List.map _.FactId) [ acme.FactId ] "the population resolves beside it"
+            | other -> failtestf "expected a point step then an aggregate step, got %A" other
+        }
+
+        test "a point-only TripleCompiler plans byte-for-byte as it did — the 706 seam is additive (GP 11)" {
+            let registry = Some(registryWith UntilSuperseded None)
+            let candidates = [ candidate "brand" [ "acme" ] "revenue" ]
+
+            let viaTriples, storeA, _ = plannerWith registry (compilerOf candidates) utcNow
+
+            let viaQuestion, storeB, _ =
+                plannerCompiling registry (QuestionCompiler.ofTriples (compilerOf candidates)) utcNow
+
+            let scope = newScope ()
+            let a = assertFact storeA scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+            let b = assertFact storeB scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+            Expect.equal a.FactId b.FactId "harness sanity: content-addressed, so the same fact id both sides"
+
+            Expect.equal
+                (stepsOf (plan viaTriples scope "acme revenue?"))
+                (stepsOf (plan viaQuestion scope "acme revenue?"))
+                "the lifted compiler produces the identical step list"
+        }
+    ]
+
+// ── Phase 706 — population resolution branches (706.C) ────────────
+
+let populationResolutionTests =
+    testList "Phase 706 population resolution branches" [
+
+        test "a wholly stale population keeps its ranking and carries the refresh in the RefreshFact shape" {
+            let mutable nowRef = DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)
+            let window = TimeSpan.FromHours 1.0
+            let registry = Some(registryDirected HigherIsBetter (FreshFor window) None)
+
+            let planner, store, _ =
+                plannerCompiling
+                    registry
+                    (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ])
+                    (fun () -> nowRef)
+
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            nowRef <- nowRef.AddHours 2.0
+
+            let aggregate =
+                aggregateOf (plan planner scope "which brand has the highest revenue?")
+
+            Expect.equal
+                (List.length aggregate.Ranked)
+                2
+                "the ranking survives — a stale population is quotable with a caveat"
+
+            Expect.equal
+                aggregate.Refresh
+                (Some {
+                    FactId = acme.FactId
+                    StaleSince = min (acme.AsOf + window) (gamma.AsOf + window)
+                })
+                "the deferred refresh names the top-ranked member and the earliest derived stale-since"
+
+            match aggregate.FreshnessCaveat with
+            | Some caveat -> Expect.stringContains caveat "every one of the 2" "the caveat names the whole ranking"
+            | None -> failtest "a wholly stale ranking must carry a caveat"
+        }
+
+        test "a partially stale population resolves with a freshness caveat and no refresh" {
+            let mutable nowRef = DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)
+            let window = TimeSpan.FromHours 3.0
+            let registry = Some(registryDirected HigherIsBetter (FreshFor window) None)
+
+            let planner, store, _ =
+                plannerCompiling
+                    registry
+                    (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ])
+                    (fun () -> nowRef)
+
+            let scope = newScope ()
+            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            // Four hours on, the first fact is past its window; assert the
+            // second here so it is still inside its own.
+            nowRef <- nowRef.AddHours 4.0
+            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let aggregate =
+                aggregateOf (plan planner scope "which brand has the highest revenue?")
+
+            Expect.isNone aggregate.Refresh "a partly fresh ranking plans no blanket refresh"
+
+            match aggregate.FreshnessCaveat with
+            | Some caveat -> Expect.stringContains caveat "1 of the 2" "the caveat counts what is stale"
+            | None -> failtest "a partly stale ranking must carry a caveat"
+        }
+
+        test "an empty population with a producing operation plans ComputeFact — 560's miss rule, unchanged" {
+            let registry =
+                Some(registryDirected HigherIsBetter UntilSuperseded (Some "rollup-op"))
+
+            let planner, _, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            Expect.equal
+                (stepsOf (plan planner (newScope ()) "which brand has the highest revenue?"))
+                [ ComputeFact "rollup-op" ]
+                "nothing recorded anywhere in the hierarchy, but the metric is computable"
+        }
+
+        test "an empty population with no computation path plans RequestData naming the hierarchy" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let planner, _, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            match stepsOf (plan planner (newScope ()) "which brand has the highest revenue?") with
+            | [ RequestData(metricId, detail) ] ->
+                Expect.equal metricId "revenue" "names the metric"
+                Expect.stringContains detail "brand" "and the hierarchy that has nothing in it"
+            | other -> failtestf "expected one RequestData, got %A" other
+        }
+
+        test "a population of non-comparable values is an aggregate answer, not a gap" {
+            let registry =
+                Some(registryDirected HigherIsBetter UntilSuperseded (Some "rollup-op"))
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+
+            assertFact store scope (brandDraft "acme" (Absent "no data loaded for this period"))
+            |> ignore
+
+            assertFact store scope (brandDraft "gamma" (Categorical "unavailable"))
+            |> ignore
+
+            let aggregate =
+                aggregateOf (plan planner scope "which brand has the highest revenue?")
+
+            Expect.isEmpty aggregate.Ranked "nothing carries a magnitude, so nothing is ordered (GP 9)"
+            Expect.equal aggregate.Stats.NonComparableCount 2 "but both are counted — the queryable gaps stay visible"
+            Expect.equal aggregate.Stats.FactCount 2 "the population matched real facts, so it is not a miss"
+        }
+    ]
+
+// ── Phase 706 — disclosure interplay at population scale (706.E) ──
+
+let populationDisclosureTests =
+    testList "Phase 706 population disclosure interplay" [
+
+        testCaseAsync
+            "a restricted member is a withheld COUNT, leaves its rank as a gap, and suppresses the magnitude block"
+        <| async {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let planner, store, events =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+
+            assertFact store scope {
+                brandDraft "beta" (Scalar 200m) with
+                    Disclosure = Internal
+            }
+            |> ignore
+
+            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let! result = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
+            let aggregate = aggregateOf result
+
+            Expect.equal
+                aggregate.Ranked
+                [ { Rank = 1; FactId = acme.FactId }; { Rank = 3; FactId = gamma.FactId } ]
+                "true ranks kept — the withheld member leaves a gap, never promotes the one below it"
+
+            Expect.equal aggregate.WithheldCount 1 "existence disclosed"
+            Expect.equal aggregate.WithheldByPolicy [ "Internal", 1 ] "…as a count grouped by policy, never an id"
+
+            Expect.isTrue aggregate.ValueStatisticsWithheld "the magnitude block is gated with the members"
+            Expect.isNone aggregate.Stats.Minimum "a minimum IS some member's own value"
+            Expect.isNone aggregate.Stats.Maximum "so is a maximum"
+            Expect.isNone aggregate.Stats.Mean "and a mean narrows it further"
+
+            Expect.equal aggregate.Stats.SubjectCount 3 "counts are existence-level and ride regardless"
+            Expect.equal aggregate.Stats.Freshness.FreshCount 3 "so is the freshness histogram"
+
+            Expect.equal
+                (AnswerPlan.citedFactIds result)
+                [ acme.FactId; gamma.FactId ]
+                "the withheld member is cited nowhere — it was never in the ranking"
+
+            let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+            let denies =
+                rows |> List.filter (fun e -> e.EventType = DisclosureEvents.DeniedType)
+
+            Expect.equal (List.length denies) 1 "the gate audited the plan-time deny (GP 6)"
+        }
+
+        test "a wholly restricted population discloses counts and policies — never a fact id, never a value" {
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let planner, store, _ =
+                plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
+
+            let scope = newScope ()
+
+            for brand, value in [ "acme", 300m; "gamma", 100m ] do
+                assertFact store scope {
+                    brandDraft brand (Scalar value) with
+                        Disclosure = Restricted "licence-x"
+                }
+                |> ignore
+
+            let aggregate =
+                aggregateOf (plan planner scope "which brand has the highest revenue?")
+
+            Expect.isEmpty aggregate.Ranked "nothing is quotable"
+            Expect.equal aggregate.WithheldByPolicy [ "licence-x", 2 ] "both withheld under the one policy"
+            Expect.isNone aggregate.Stats.Maximum "and the magnitudes go with them"
+            Expect.equal aggregate.Stats.SubjectCount 2 "the population's existence is not itself a secret"
+            Expect.isNone aggregate.Refresh "an empty ranking plans no refresh"
+        }
+
+        test "the planner and the query_metric_population tool run the SAME disclosure fold" {
+            // Not a re-derivation: the point is that both doors reduce to
+            // `PopulationDisclosure.fold`, so one store cannot disclose
+            // differently depending on which one the question came through.
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+            let scope = newScope ()
+
+            let ranked =
+                [ "acme", 300m; "beta", 200m; "gamma", 100m ]
+                |> List.map (fun (brand, value) -> assertFact store scope (brandDraft brand (Scalar value)))
+
+            let restricted = ranked[1].FactId
+
+            let verdictFor (factId: string) =
+                if factId = restricted then
+                    FactNotDisclosable "licence-x"
+                else
+                    FactDisclosable
+
+            let folded = PopulationDisclosure.fold verdictFor ranked
+
+            Expect.equal (folded.Disclosable |> List.map fst) [ 1; 3 ] "true ranks, gap preserved"
+            Expect.equal folded.WithheldByPolicy [ "licence-x", 1 ] "policy-grouped count"
+
+            Expect.isTrue
+                (PopulationDisclosure.valuesWithheld folded)
+                "and the magnitude gate is one predicate, not two"
+
+            let stats =
+                PopulationDisclosure.disclosedStats folded {
+                    PopulationStats.empty with
+                        Minimum = Some 100m
+                        Maximum = Some 300m
+                        Mean = Some 200m
+                        SubjectCount = 3
+                }
+
+            Expect.equal (stats.Minimum, stats.Maximum, stats.Mean) (None, None, None) "magnitudes suppressed"
+            Expect.equal stats.SubjectCount 3 "counts untouched"
+        }
+    ]
+
 // ── Plan-node round-trip through the chain walk (560.D) ───────────
 
 let chainTests =
@@ -541,6 +1103,74 @@ let chainTests =
             let! plain = graph.GetChainForMessage(scope, "msg-1", [], 5)
 
             Expect.equal composed plain "no plan node, no extra edge — byte-identical chain"
+        }
+
+        testCaseAsync
+            "a recorded UseAggregate round-trips the population query + gated digest, and cites its ranking in the chain"
+        <| async {
+            // 706.D — "how was this ranking produced?" must be answerable
+            // from the record alone: the triple that ran, the direction,
+            // the ceiling, the ids cited, what was withheld, and the
+            // summary. And NOT the member list.
+            let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+            let triple = {
+                PopulationTriple.create "brand" "revenue" with
+                    TopK = 2
+                    ValueAtLeast = Some 50m
+            }
+
+            let planner, store, events =
+                plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
+
+            let scope = newScope ()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let! compiled = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
+            do! planner.Record(scope, "msg-agg", compiled)
+
+            let! recorded = AnswerPlanProvenance.recordedFor events scope "msg-agg"
+
+            match recorded |> List.map _.Steps with
+            | [ [ { Step = UseAggregate aggregate } ] ] ->
+                Expect.equal aggregate.Population triple "the population triple that ran, recorded verbatim"
+                Expect.equal aggregate.Direction HighestFirst "the resolved direction survives the round-trip"
+                Expect.equal aggregate.EffectiveTopK 2 "so does the ceiling that applied"
+
+                Expect.equal
+                    aggregate.Ranked
+                    [ { Rank = 1; FactId = acme.FactId }; { Rank = 2; FactId = gamma.FactId } ]
+                    "and the cited ranking"
+
+                Expect.equal aggregate.Stats.SubjectCount 2 "the stats digest deserialises"
+                Expect.equal aggregate.Stats.Mean (Some 200m) "decimals included"
+
+                Expect.equal
+                    (aggregate.Stats.MethodMix |> List.map fst)
+                    [ "computed:rollup:1:p0" ]
+                    "and the method mix — a list of tuples, which is where a wire format usually gives up"
+            | other -> failtestf "expected one recorded UseAggregate step, got %A" other
+
+            // The chain walk cites every ranked member.
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+
+            let graph =
+                ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
+
+            let! chain = AnswerPlanProvenance.chainForMessage graph events scope "msg-agg" 5
+
+            let hasEdge f t k =
+                chain.Edges |> List.exists (fun e -> e.From = f && e.To = t && e.Kind = k)
+
+            Expect.isTrue (hasEdge "msg-agg" compiled.PlanId PlannedBy) "message --PlannedBy--> plan"
+            Expect.isTrue (hasEdge compiled.PlanId acme.FactId CitesFact) "plan --CitesFact--> the top-ranked fact"
+            Expect.isTrue (hasEdge compiled.PlanId gamma.FactId CitesFact) "plan --CitesFact--> the second-ranked fact"
+
+            Expect.isTrue
+                (chain.Nodes
+                 |> List.exists (fun n -> n.Id = compiled.PlanId && n.Kind = AnswerPlanNode))
+                "the ranking-backed plan is a typed plan node, exactly as a point plan is"
         }
 
         testCaseAsync "a plan recorded in one scope is unreachable from another (GP 4)"
@@ -720,11 +1350,116 @@ let composeTests =
         }
     ]
 
+// ── Phase 706 — the 67b question compiler through compose ─────────
+
+let populationComposeTests =
+    testList "Phase 706 question compiler through compose" [
+
+        testCaseAsync "a composed IAIProvider compiles a superlative question to a population, end to end"
+        <| async {
+            let stub =
+                StubStructuredProvider(
+                    """{"triples":[],"populations":[{"subject_hierarchy":"brand","metric":"revenue","ordering":"best_first","top_k":2}]}"""
+                )
+
+            let _, sp =
+                composedUnder
+                    EnabledFactStore
+                    (Some(registryDirected HigherIsBetter UntilSuperseded None))
+                    (Some(stub :> IAIProvider))
+
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let planner = sp.GetRequiredService<IAnswerPlanner>()
+            let! result = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
+
+            match result.Steps |> List.map _.Step with
+            | [ UseAggregate aggregate ] ->
+                Expect.equal aggregate.Population.Metric "revenue" "the compiled population triple reached the planner"
+                Expect.equal aggregate.Population.TopK 2 "including its k"
+                Expect.equal (aggregate.Ranked |> List.map _.FactId |> List.head) acme.FactId "and it resolved"
+            | other -> failtestf "expected one UseAggregate, got %A" other
+
+            match stub.LastSystemPrompt with
+            | Some prompt ->
+                Expect.stringContains
+                    prompt
+                    "POPULATION question"
+                    "the compiler is told what a population triple is for"
+
+                Expect.stringContains
+                    prompt
+                    "higher is better"
+                    "and which way each metric's declared direction points — a registry fact, not a guess"
+            | None -> failtest "no system prompt reached the provider"
+        }
+
+        testCaseAsync "a compiler that emits no 'populations' key compiles exactly as it did before (GP 11)"
+        <| async {
+            let stub =
+                StubStructuredProvider(
+                    """{"triples":[{"subject_hierarchy":"brand","subject_path":["acme"],"metric":"revenue"}]}"""
+                )
+
+            let _, sp =
+                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let planner = sp.GetRequiredService<IAnswerPlanner>()
+            let! result = planner.Plan(scope, "user-1", "what was acme revenue?")
+
+            Expect.equal (result.Steps |> List.map _.Step) [ UseFact fact.FactId ] "the pre-706 document still compiles"
+        }
+
+        testCaseAsync "a malformed 'populations' array is a typed refusal, never a partial salvage"
+        <| async {
+            let stub =
+                StubStructuredProvider """{"triples":[],"populations":"the top ten brands"}"""
+
+            let _, sp =
+                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+
+            let planner = sp.GetRequiredService<IAnswerPlanner>()
+            let! result = planner.Plan(newScope (), "user-1", "top brands?")
+
+            match result.Refusal with
+            | Some(QuestionNotCompiled detail) ->
+                Expect.stringContains detail "'populations' is not an array" "the shape violation is named"
+            | other -> failtestf "expected QuestionNotCompiled, got %A" other
+        }
+
+        testCaseAsync "an empty compilation — neither triples nor populations — is the unanswerable-question refusal"
+        <| async {
+            let stub = StubStructuredProvider """{"triples":[],"populations":[]}"""
+
+            let _, sp =
+                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+
+            let planner = sp.GetRequiredService<IAnswerPlanner>()
+            let! result = planner.Plan(newScope (), "user-1", "what is the meaning of life?")
+
+            match result.Refusal with
+            | Some(QuestionNotCompiled detail) ->
+                Expect.stringContains detail "no registered subject or metric" "the refusal names the gap"
+            | other -> failtestf "expected QuestionNotCompiled, got %A" other
+        }
+    ]
+
 let tests =
     testList "Phase 560 grounded answer planner" [
         compilerTests
         resolutionTests
         disclosureTests
+        populationCompilerTests
+        populationResolutionTests
+        populationDisclosureTests
         chainTests
         composeTests
+        populationComposeTests
     ]

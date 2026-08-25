@@ -465,32 +465,21 @@ module PopulationQueryTool =
                         |> Map.tryFind factId
                         |> Option.defaultValue (FactNotDisclosable "unknown-fact")
 
-                    // True ranks: position in the store's ranking, kept
+                    // The shared population disclosure fold (Phase 706
+                    // lifted it out of this executor): true ranks kept
                     // through the gate so a withheld member leaves a gap
-                    // rather than promoting the member below it.
-                    let ranked =
-                        result.Ranked |> List.mapi (fun i fact -> i + 1, fact, verdictFor fact.FactId)
+                    // rather than promoting the member below it, and
+                    // withheld members folded into a COUNT grouped by
+                    // policy ref — never an id, never a subject, never a
+                    // value. The answer planner's `UseAggregate` step runs
+                    // the identical fold, so one store cannot disclose
+                    // differently through its two population doors.
+                    let disclosure = PopulationDisclosure.fold verdictFor result.Ranked
 
-                    let disclosable =
-                        ranked |> List.filter (fun (_, _, verdict) -> verdict = FactDisclosable)
+                    let disclosable = disclosure.Disclosable
 
-                    let withheld =
-                        ranked |> List.filter (fun (_, _, verdict) -> verdict <> FactDisclosable)
-
-                    // Withheld members at population scale: a COUNT grouped
-                    // by policy ref. Never an id, never a subject, never a
-                    // value — 10^5 per-member markers would be a listing of
-                    // the restricted population, which is the thing the
-                    // classification exists to prevent.
                     let withheldByPolicy =
-                        withheld
-                        |> List.map (fun (_, _, verdict) ->
-                            match verdict with
-                            | FactNotDisclosable policyRef -> policyRef
-                            | FactDisclosable -> "unknown-fact" // unreachable — filtered above
-                        )
-                        |> List.countBy id
-                        |> List.sortBy fst
+                        disclosure.WithheldByPolicy
                         |> List.map (fun (policyRef, count) -> {|
                             policyRef = policyRef
                             count = count
@@ -517,7 +506,7 @@ module PopulationQueryTool =
                     // the summary.
                     let projected =
                         disclosable
-                        |> List.map (fun (rank, fact, _) ->
+                        |> List.map (fun (rank, fact) ->
                             let freshness, staleSince =
                                 match Freshness.deriveAt policy fact.AsOf true now with
                                 | Fresh -> "Fresh", None
@@ -538,20 +527,18 @@ module PopulationQueryTool =
                                 method = Fact.methodIdentity fact.Method
                             |})
 
-                    let stats = result.Stats
-
                     // The magnitude block is gated with the members: a
                     // minimum or a maximum IS some member's value, so over
                     // a partly-restricted population it can round-trip
                     // exactly what the gate refused. Counts and coverage
-                    // are existence-level and ride regardless.
-                    let valuesWithheld = not (List.isEmpty withheld)
+                    // are existence-level and ride regardless. Both the
+                    // gating and its wording live on the shared fold.
+                    let stats = PopulationDisclosure.disclosedStats disclosure result.Stats
+
+                    let valuesWithheld = PopulationDisclosure.valuesWithheld disclosure
 
                     let renderStat (value: decimal option) =
-                        if valuesWithheld then
-                            None
-                        else
-                            value |> Option.map (fun d -> FactRendering.render displayFormat (Scalar d))
+                        value |> Option.map (fun d -> FactRendering.render displayFormat (Scalar d))
 
                     let directionLabel =
                         match result.Direction with
@@ -560,8 +547,7 @@ module PopulationQueryTool =
 
                     let withheldReason =
                         if valuesWithheld then
-                            Some
-                                "The population's minimum, maximum and mean are withheld because it contains members you are not permitted to see — a minimum or maximum is a member's own value. The counts, period coverage and freshness above describe the whole matched population."
+                            Some PopulationDisclosure.MagnitudesWithheldReason
                         else
                             None
 
@@ -586,7 +572,7 @@ module PopulationQueryTool =
                             topKCapped = args.RequestedTopK > result.EffectiveTopK
                             truncated = result.Truncated
                             ranked = projected
-                            withheldCount = List.length withheld
+                            withheldCount = disclosure.WithheldCount
                             withheld = withheldByPolicy
                             population = {|
                                 subjectCount = stats.SubjectCount

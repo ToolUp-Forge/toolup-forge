@@ -3,6 +3,24 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.AggregatePlan (class)
+ToolUp.Facts.AggregatePlan..ctor(ToolUp.Facts.PopulationTriple, ToolUp.Facts.RankDirection, System.Int32, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RankedFactRef], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], ToolUp.Facts.PopulationStats, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AggregateRefresh], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.AggregatePlan.Direction : ToolUp.Facts.RankDirection { get }
+ToolUp.Facts.AggregatePlan.EffectiveTopK : System.Int32 { get }
+ToolUp.Facts.AggregatePlan.FreshnessCaveat : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.AggregatePlan.Population : ToolUp.Facts.PopulationTriple { get }
+ToolUp.Facts.AggregatePlan.Ranked : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RankedFactRef] { get }
+ToolUp.Facts.AggregatePlan.Refresh : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AggregateRefresh] { get }
+ToolUp.Facts.AggregatePlan.Stats : ToolUp.Facts.PopulationStats { get }
+ToolUp.Facts.AggregatePlan.TopKCapped : System.Boolean { get }
+ToolUp.Facts.AggregatePlan.Truncated : System.Boolean { get }
+ToolUp.Facts.AggregatePlan.ValueStatisticsWithheld : System.Boolean { get }
+ToolUp.Facts.AggregatePlan.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
+ToolUp.Facts.AggregatePlan.WithheldCount : System.Int32 { get }
+ToolUp.Facts.AggregateRefresh (class)
+ToolUp.Facts.AggregateRefresh..ctor(System.String, System.DateTime)
+ToolUp.Facts.AggregateRefresh.FactId : System.String { get }
+ToolUp.Facts.AggregateRefresh.StaleSince : System.DateTime { get }
 ToolUp.Facts.AnswerPlan (class)
 ToolUp.Facts.AnswerPlan..ctor(System.String, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PlannedTriple], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PlanRefusalReason])
 ToolUp.Facts.AnswerPlan.CompiledAt : System.DateTime { get }
@@ -13,6 +31,14 @@ ToolUp.Facts.AnswerPlan.Steps : Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Facts.AnswerPlanModule (class)
 ToolUp.Facts.AnswerPlanModule.citedFactIds(ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.AnswerPlanModule.refusals(ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PlanRefusalReason]
+ToolUp.Facts.CompiledQuestion (class)
+ToolUp.Facts.CompiledQuestion..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationTriple])
+ToolUp.Facts.CompiledQuestion.Populations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationTriple] { get }
+ToolUp.Facts.CompiledQuestion.Triples : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate] { get }
+ToolUp.Facts.CompiledQuestionModule (class)
+ToolUp.Facts.CompiledQuestionModule.empty : ToolUp.Facts.CompiledQuestion { get }
+ToolUp.Facts.CompiledQuestionModule.isEmpty(ToolUp.Facts.CompiledQuestion) : System.Boolean
+ToolUp.Facts.CompiledQuestionModule.ofTriples(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate]) : ToolUp.Facts.CompiledQuestion
 ToolUp.Facts.Confidence (class)
 ToolUp.Facts.Confidence..ctor(System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Confidence.Basis : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -198,27 +224,36 @@ ToolUp.Facts.MetricRef.Tag : System.Int32 { get }
 ToolUp.Facts.MetricRef.Value : System.String { get }
 ToolUp.Facts.PlanRefusalReason (class)
 ToolUp.Facts.PlanRefusalReason.IsInvalidSubjectPath : System.Boolean { get }
+ToolUp.Facts.PlanRefusalReason.IsPopulationNotOrderable : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.IsQuestionNotCompiled : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.IsUndisclosableFact : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.IsUnrecognisedMetric : System.Boolean { get }
+ToolUp.Facts.PlanRefusalReason.IsUnrecognisedOrdering : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.IsUnrecognisedSubject : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.Tag : System.Int32 { get }
 ToolUp.Facts.PlanRefusalReason+InvalidSubjectPath (class)
 ToolUp.Facts.PlanRefusalReason+InvalidSubjectPath.hierarchyId : System.String { get }
 ToolUp.Facts.PlanRefusalReason+InvalidSubjectPath.path : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PlanRefusalReason+PopulationNotOrderable (class)
+ToolUp.Facts.PlanRefusalReason+PopulationNotOrderable.detail : System.String { get }
+ToolUp.Facts.PlanRefusalReason+PopulationNotOrderable.metricId : System.String { get }
 ToolUp.Facts.PlanRefusalReason+QuestionNotCompiled (class)
 ToolUp.Facts.PlanRefusalReason+QuestionNotCompiled.detail : System.String { get }
 ToolUp.Facts.PlanRefusalReason+Tags (class)
 ToolUp.Facts.PlanRefusalReason+Tags.InvalidSubjectPath : System.Int32 (literal)
+ToolUp.Facts.PlanRefusalReason+Tags.PopulationNotOrderable : System.Int32 (literal)
 ToolUp.Facts.PlanRefusalReason+Tags.QuestionNotCompiled : System.Int32 (literal)
 ToolUp.Facts.PlanRefusalReason+Tags.UndisclosableFact : System.Int32 (literal)
 ToolUp.Facts.PlanRefusalReason+Tags.UnrecognisedMetric : System.Int32 (literal)
+ToolUp.Facts.PlanRefusalReason+Tags.UnrecognisedOrdering : System.Int32 (literal)
 ToolUp.Facts.PlanRefusalReason+Tags.UnrecognisedSubject : System.Int32 (literal)
 ToolUp.Facts.PlanRefusalReason+UndisclosableFact (class)
 ToolUp.Facts.PlanRefusalReason+UndisclosableFact.factId : System.String { get }
 ToolUp.Facts.PlanRefusalReason+UndisclosableFact.policyRef : System.String { get }
 ToolUp.Facts.PlanRefusalReason+UnrecognisedMetric (class)
 ToolUp.Facts.PlanRefusalReason+UnrecognisedMetric.metricId : System.String { get }
+ToolUp.Facts.PlanRefusalReason+UnrecognisedOrdering (class)
+ToolUp.Facts.PlanRefusalReason+UnrecognisedOrdering.ordering : System.String { get }
 ToolUp.Facts.PlanRefusalReason+UnrecognisedSubject (class)
 ToolUp.Facts.PlanRefusalReason+UnrecognisedSubject.hierarchyId : System.String { get }
 ToolUp.Facts.PlanRefusalReasonModule (class)
@@ -228,6 +263,7 @@ ToolUp.Facts.PlanStep.IsComputeFact : System.Boolean { get }
 ToolUp.Facts.PlanStep.IsRefreshFact : System.Boolean { get }
 ToolUp.Facts.PlanStep.IsRefuse : System.Boolean { get }
 ToolUp.Facts.PlanStep.IsRequestData : System.Boolean { get }
+ToolUp.Facts.PlanStep.IsUseAggregate : System.Boolean { get }
 ToolUp.Facts.PlanStep.IsUseFact : System.Boolean { get }
 ToolUp.Facts.PlanStep.Tag : System.Int32 { get }
 ToolUp.Facts.PlanStep+ComputeFact (class)
@@ -245,13 +281,26 @@ ToolUp.Facts.PlanStep+Tags.ComputeFact : System.Int32 (literal)
 ToolUp.Facts.PlanStep+Tags.RefreshFact : System.Int32 (literal)
 ToolUp.Facts.PlanStep+Tags.Refuse : System.Int32 (literal)
 ToolUp.Facts.PlanStep+Tags.RequestData : System.Int32 (literal)
+ToolUp.Facts.PlanStep+Tags.UseAggregate : System.Int32 (literal)
 ToolUp.Facts.PlanStep+Tags.UseFact : System.Int32 (literal)
+ToolUp.Facts.PlanStep+UseAggregate (class)
+ToolUp.Facts.PlanStep+UseAggregate.aggregate : ToolUp.Facts.AggregatePlan { get }
 ToolUp.Facts.PlanStep+UseFact (class)
 ToolUp.Facts.PlanStep+UseFact.factId : System.String { get }
 ToolUp.Facts.PlannedTriple (class)
 ToolUp.Facts.PlannedTriple..ctor(ToolUp.Facts.TripleCandidate, ToolUp.Facts.PlanStep)
 ToolUp.Facts.PlannedTriple.Candidate : ToolUp.Facts.TripleCandidate { get }
 ToolUp.Facts.PlannedTriple.Step : ToolUp.Facts.PlanStep { get }
+ToolUp.Facts.PopulationDisclosure (class)
+ToolUp.Facts.PopulationDisclosure..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.Fact]], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]])
+ToolUp.Facts.PopulationDisclosure.Disclosable : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.Fact]] { get }
+ToolUp.Facts.PopulationDisclosure.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
+ToolUp.Facts.PopulationDisclosure.WithheldCount : System.Int32 { get }
+ToolUp.Facts.PopulationDisclosureModule (class)
+ToolUp.Facts.PopulationDisclosureModule.MagnitudesWithheldReason : System.String (literal)
+ToolUp.Facts.PopulationDisclosureModule.disclosedStats(ToolUp.Facts.PopulationDisclosure, ToolUp.Facts.PopulationStats) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationDisclosureModule.fold(Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationDisclosure
+ToolUp.Facts.PopulationDisclosureModule.valuesWithheld(ToolUp.Facts.PopulationDisclosure) : System.Boolean
 ToolUp.Facts.PopulationMember (class)
 ToolUp.Facts.PopulationMember..ctor(System.String, ToolUp.Facts.SubjectRef, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.DateTime, System.DateTime, System.DateTime, System.String)
 ToolUp.Facts.PopulationMember.AsOf : System.DateTime { get }
@@ -340,6 +389,25 @@ ToolUp.Facts.PopulationStatsModule.empty : ToolUp.Facts.PopulationStats { get }
 ToolUp.Facts.PopulationStatsModule.ofMembers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : ToolUp.Facts.PopulationStats
 ToolUp.Facts.PopulationStatsModule.ofMembersWithFreshness(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness]]) : ToolUp.Facts.PopulationStats
 ToolUp.Facts.PopulationStatsModule.ofPopulation(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Fact, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationTriple (class)
+ToolUp.Facts.PopulationTriple..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal])
+ToolUp.Facts.PopulationTriple.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.PopulationTriple.Metric : System.String { get }
+ToolUp.Facts.PopulationTriple.Ordering : System.String { get }
+ToolUp.Facts.PopulationTriple.PathPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PopulationTriple.PeriodFrom : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.PopulationTriple.PeriodLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.PopulationTriple.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.PopulationTriple.SubjectHierarchy : System.String { get }
+ToolUp.Facts.PopulationTriple.TopK : System.Int32 { get }
+ToolUp.Facts.PopulationTriple.ValueAtLeast : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationTriple.ValueAtMost : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationTripleModule (class)
+ToolUp.Facts.PopulationTripleModule.OrderingVocabulary : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PopulationTripleModule.create(System.String, System.String) : ToolUp.Facts.PopulationTriple
+ToolUp.Facts.PopulationTripleModule.threshold(ToolUp.Facts.PopulationTriple) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold]
+ToolUp.Facts.PopulationTripleModule.toCandidate(ToolUp.Facts.PopulationTriple) : ToolUp.Facts.TripleCandidate
+ToolUp.Facts.PopulationTripleModule.tryOrdering(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PopulationOrdering]
 ToolUp.Facts.PopulationValue (class)
 ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Facts.PurposeTaxonomy (class)
@@ -355,6 +423,10 @@ ToolUp.Facts.RankDirection.Tag : System.Int32 { get }
 ToolUp.Facts.RankDirection+Tags (class)
 ToolUp.Facts.RankDirection+Tags.HighestFirst : System.Int32 (literal)
 ToolUp.Facts.RankDirection+Tags.LowestFirst : System.Int32 (literal)
+ToolUp.Facts.RankedFactRef (class)
+ToolUp.Facts.RankedFactRef..ctor(System.Int32, System.String)
+ToolUp.Facts.RankedFactRef.FactId : System.String { get }
+ToolUp.Facts.RankedFactRef.Rank : System.Int32 { get }
 ToolUp.Facts.SubjectRef (class)
 ToolUp.Facts.SubjectRef..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
