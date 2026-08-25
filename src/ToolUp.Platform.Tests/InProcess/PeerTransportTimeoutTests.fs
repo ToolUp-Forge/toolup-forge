@@ -45,11 +45,18 @@ open ToolUp.InterPlatform
 /// One outbound request as the wire saw it. `TokenFired` is the whole
 /// measurement: it is written in a `finally` around the wait, so it
 /// records the token's state at the moment the request stopped, whatever
-/// stopped it.
+/// stopped it. `Stopped` completes at that same moment — answered,
+/// aborted, or the hang elapsing — so a test can AWAIT the request's own
+/// end rather than polling a wall clock for it.
 type private CallProbe(url: string) =
+    let stopped =
+        TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
     member _.Url = url
     member val TokenFired = false with get, set
     member val Answered = false with get, set
+    member _.Stopped: Task<unit> = stopped.Task
+    member _.MarkStopped() = stopped.TrySetResult(()) |> ignore
 
 /// Stub transport routing by host:
 ///   * `fast.test`  — answers at once,
@@ -60,11 +67,35 @@ type private CallProbe(url: string) =
 /// The slow wait is BOUNDED (`hangFor`). An unbounded one would turn a
 /// regression — the token never reaching `SendAsync` — into a hung suite
 /// rather than a red one, and a hang is the least actionable failure a
-/// test can produce.
-type private ProbeHandler(hangFor: TimeSpan) =
+/// test can produce. The bound must sit far ABOVE `eventCap`, never at
+/// it (see `hangBudget`): equal budgets race, and the loser is a red run
+/// with no regression behind it.
+///
+/// `fastAnswersAfterArrivalOf` orders the fixture for early-return
+/// cases: the fast answer is held until the named host's request is
+/// genuinely on the wire. `DefaultPeerFanout` launches children with
+/// `Async.Start` and cancels a still-QUEUED child before it ever
+/// launches (documented behaviour — it lands as not-awaited and sends
+/// nothing), so without this ordering the fast answer can win the
+/// launch race on a loaded scheduler and the slow request then NEVER
+/// reaches the wire: there is nothing on the socket to cancel, and a
+/// test asserting cancellation-reach burns its whole budget waiting for
+/// a request that does not exist. That launch race — not slow
+/// cancellation delivery — was the original ~10 s flake.
+type private ProbeHandler(hangFor: TimeSpan, ?fastAnswersAfterArrivalOf: string) =
     inherit HttpMessageHandler()
 
     let probes = ConcurrentBag<CallProbe>()
+
+    // Per-host arrival events, so a test can await "a request for this
+    // host reached the wire" instead of polling the probe bag for it.
+    let arrivals = ConcurrentDictionary<string, TaskCompletionSource<CallProbe>>()
+
+    let arrivalFor (host: string) =
+        arrivals.GetOrAdd(
+            host,
+            fun _ -> TaskCompletionSource<CallProbe>(TaskCreationOptions.RunContinuationsAsynchronously)
+        )
 
     let respond (body: string) =
         let response = new HttpResponseMessage(HttpStatusCode.OK)
@@ -76,29 +107,53 @@ type private ProbeHandler(hangFor: TimeSpan) =
     member this.ProbeFor(host: string) =
         this.Probes |> List.tryFind (fun p -> p.Url.Contains host)
 
+    /// Completes the moment the first request for `host` reaches the
+    /// stub transport, carrying that request's probe.
+    member _.Arrived(host: string) : Task<CallProbe> = (arrivalFor host).Task
+
     override _.SendAsync(request: HttpRequestMessage, ct: CancellationToken) : Task<HttpResponseMessage> = task {
         let url = request.RequestUri.ToString()
         let probe = CallProbe(url)
         probes.Add probe
+        (arrivalFor request.RequestUri.Host).TrySetResult probe |> ignore
 
-        if url.Contains "fail.test" then
-            probe.Answered <- true
+        try
+            if url.Contains "fail.test" then
+                probe.Answered <- true
 
-            return
-                respond (JsonRpc.serialize (JsonRpc.failure "root-312" (PeerHandler "the receiver's handler failed")))
-        elif url.Contains "slow.test" then
-            try
-                do! Task.Delay(hangFor, ct)
-            finally
-                // The measurement. Written whether the wait elapsed
-                // or was aborted, so the two are distinguishable.
-                probe.TokenFired <- ct.IsCancellationRequested
+                return
+                    respond (
+                        JsonRpc.serialize (JsonRpc.failure "root-312" (PeerHandler "the receiver's handler failed"))
+                    )
+            elif url.Contains "slow.test" then
+                try
+                    do! Task.Delay(hangFor, ct)
+                finally
+                    // The measurement. Written whether the wait elapsed
+                    // or was aborted, so the two are distinguishable.
+                    probe.TokenFired <- ct.IsCancellationRequested
 
-            probe.Answered <- true
-            return respond (JsonRpc.serialize (JsonRpc.success "root-312" "slow-answer"))
-        else
-            probe.Answered <- true
-            return respond (JsonRpc.serialize (JsonRpc.success "root-312" "fast-answer"))
+                probe.Answered <- true
+                return respond (JsonRpc.serialize (JsonRpc.success "root-312" "slow-answer"))
+            else
+                // The opt-in ordering (see the type doc): make "the slow
+                // request is in flight when the early return fires" true
+                // by construction. Bounded by `hangFor` under `ct`, so a
+                // slow child that never launches at all still produces a
+                // red run rather than a hung one.
+                match fastAnswersAfterArrivalOf with
+                | Some host ->
+                    let! _ = Task.WhenAny((arrivalFor host).Task :> Task, Task.Delay(hangFor, ct))
+                    ()
+                | None -> ()
+
+                probe.Answered <- true
+                return respond (JsonRpc.serialize (JsonRpc.success "root-312" "fast-answer"))
+        finally
+            // Outside the slow leg's own `finally`, so `TokenFired` is
+            // already written by the time an awaiter of `Stopped`
+            // resumes — an abort completes the event too.
+            probe.MarkStopped()
     }
 
 /// Mints a token without a secret store — the auth leg is not what these
@@ -141,19 +196,37 @@ let private payload: PeerWirePayload = {
     Arguments = "[]"
 }
 
-/// Poll a condition to a generous deadline and report whether it held.
-/// Ordering, not wall-clock: every case here asserts that something
-/// eventually happened, never that it happened within a tight window —
-/// which is the difference between a regression signal and a flake.
-let private waitUntil (predicate: unit -> bool) = async {
-    let deadline = DateTime.UtcNow.AddSeconds 10.0
-    let mutable held = predicate ()
+/// How long a hanging peer holds its socket open. Deliberately far
+/// longer than `eventCap` below — the two durations must never be close
+/// enough to race. When both were 10 s, a loaded machine could delay
+/// cancellation just past the hang's own expiry: the delay then
+/// completed normally, `TokenFired` was never set, and the (then
+/// polling) observer burned its whole budget and reported false — a
+/// ~10.0 s flake with no regression behind it. An abandoned hang never
+/// outlives its test: every case disposes its `HttpClient`, which
+/// cancels pending requests.
+let private hangBudget = TimeSpan.FromSeconds 60.0
 
-    while not held && DateTime.UtcNow < deadline do
-        do! Async.Sleep 20
-        held <- predicate ()
+/// The cap on every fixture-event await below. Generous, because its
+/// only job is to turn a genuine liveness failure into a red run rather
+/// than a hung suite — it is never the measurement itself. Must stay
+/// comfortably SHORTER than `hangBudget`, so a hang elapsing on its own
+/// can never masquerade as the event it guards.
+let private eventCap = TimeSpan.FromSeconds 30.0
 
-    return held
+/// Await an event the fixture itself completes — event-driven, never a
+/// polled wall clock, so a saturated scheduler delays the await instead
+/// of failing it. On cap expiry the failure attributes to DELIVERY —
+/// the event never fired, so the claim under test was never measured at
+/// all — and deliberately does not restate that claim.
+let private awaited (whatNeverHappened: string) (event: Task<'T>) : Async<'T> = async {
+    let! winner = Task.WhenAny(event :> Task, Task.Delay eventCap) |> Async.AwaitTask
+
+    if not (obj.ReferenceEquals(winner, event)) then
+        failtest
+            $"%s{whatNeverHappened} within %.0f{eventCap.TotalSeconds} s — the fixture event never fired, so cancellation (or the scheduler) never delivered it; a liveness stall, not a measured verdict on the behaviour under test"
+
+    return! Async.AwaitTask event
 }
 
 let private transportOn (handler: ProbeHandler) (policy: PeerTransportPolicy) =
@@ -167,7 +240,7 @@ let deadlineTests =
 
         testCaseAsync "a deadline expiry reaches the socket and reports as a TIMEOUT"
         <| async {
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
 
             let client, transport =
                 transportOn
@@ -191,15 +264,16 @@ let deadlineTests =
             // phase the socket stayed held for the client's 100 s
             // default and this assertion is what goes red if the token
             // stops reaching `SendAsync`.
-            let! aborted =
-                waitUntil (fun () ->
-                    handler.ProbeFor "slow.test"
-                    |> Option.map _.TokenFired
-                    |> Option.defaultValue false)
+            let! slow =
+                handler.Arrived "slow.test"
+                |> awaited "the request never reached the stub transport"
 
-            Expect.isTrue aborted "the deadline cancelled the in-flight request — the handler's own token fired"
+            do!
+                slow.Stopped
+                |> awaited
+                    "the hanging request never stopped — the deadline's cancellation was never delivered to the socket"
 
-            let slow = handler.ProbeFor "slow.test" |> Option.get
+            Expect.isTrue slow.TokenFired "the deadline cancelled the in-flight request — the handler's own token fired"
             Expect.isFalse slow.Answered "…and the aborted request never completed its response"
         }
 
@@ -208,7 +282,7 @@ let deadlineTests =
             // Without this, "the slow peer timed out" would pass just as
             // happily against a transport that had started cancelling
             // everything.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
 
             let client, transport =
                 transportOn
@@ -234,7 +308,7 @@ let deadlineTests =
             // The third leg of the trichotomy. A receiver that answers
             // with a structured error must not be reclassified by the
             // deadline machinery.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
 
             let client, transport =
                 transportOn
@@ -261,7 +335,7 @@ let deadlineTests =
             // GP 11 as a compile-AND-behaviour claim: the constructor
             // every existing call site uses is still there, and the
             // default policy does not cancel an ordinary call.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
             use client = new HttpClient(handler)
             let transport = HttpPeerClient(client, StubAuth(), localId) :> IPeerClient
 
@@ -274,7 +348,7 @@ let deadlineTests =
 
         testCaseAsync "the poll leg is bounded on the same terms as the invoke leg"
         <| async {
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
 
             let client, transport =
                 transportOn
@@ -304,7 +378,7 @@ let cancellationTests =
             // request is the caller's own token, so the measurement
             // below cannot be satisfied by the deadline machinery
             // instead.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
             let client, transport = transportOn handler PeerTransportPolicy.unbounded
             use _client = client
             use cts = new CancellationTokenSource()
@@ -318,18 +392,18 @@ let cancellationTests =
             // Cancel only once the request is genuinely on the wire —
             // otherwise the probe could pass by cancelling before
             // anything was sent, which proves nothing about reach.
-            let! onWire = waitUntil (fun () -> (handler.ProbeFor "slow.test").IsSome)
-            Expect.isTrue onWire "the request reached the stub transport"
+            let! slow =
+                handler.Arrived "slow.test"
+                |> awaited "the request never reached the stub transport"
 
             cts.Cancel()
 
-            let! aborted =
-                waitUntil (fun () ->
-                    handler.ProbeFor "slow.test"
-                    |> Option.map _.TokenFired
-                    |> Option.defaultValue false)
+            do!
+                slow.Stopped
+                |> awaited
+                    "the hanging request never stopped — the caller's cancellation was never delivered to the socket"
 
-            Expect.isTrue aborted "the caller's cancellation reached the socket — the handler's own token fired"
+            Expect.isTrue slow.TokenFired "the caller's cancellation reached the socket — the handler's own token fired"
 
             // …and the computation completed as CANCELLED. Not `Ok`, not
             // `Error`: a cancelled call is not an answer, and one that
@@ -357,7 +431,7 @@ let cancellationTests =
             // token without running under it (an ASP.NET handler's
             // `RequestAborted`). The ambient token here is untouched, so
             // only the explicit one can act.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            let handler = new ProbeHandler(hangBudget)
             let client, transport = transportOn handler PeerTransportPolicy.unbounded
             use _client = client
             use cts = new CancellationTokenSource()
@@ -397,7 +471,14 @@ let fanoutReachTests =
             // only have come from `DefaultPeerFanout`'s own `cts` —
             // reaching the socket through the ambient token, which is
             // the coupling this phase makes real.
-            let handler = new ProbeHandler(TimeSpan.FromSeconds 10.0)
+            //
+            // The fast answer is held until the slow request is ON the
+            // wire, because the claim is about cancelling an IN-FLIGHT
+            // request: the fan-out legitimately cancels a still-queued
+            // child before launch, and a fast peer that wins that launch
+            // race outright leaves nothing on the socket to measure.
+            let handler = new ProbeHandler(hangBudget, fastAnswersAfterArrivalOf = "slow.test")
+
             let client, transport = transportOn handler PeerTransportPolicy.unbounded
             use _client = client
 
@@ -422,16 +503,19 @@ let fanoutReachTests =
 
             // The measurement. The fan-out returns the instant the fast
             // peer answers, so the abort is necessarily observed after
-            // the call above — assert that it eventually happens rather
-            // than that it happened by any particular instant.
-            let! aborted =
-                waitUntil (fun () ->
-                    handler.ProbeFor "slow.test"
-                    |> Option.map _.TokenFired
-                    |> Option.defaultValue false)
+            // the call above — await the request's own end rather than
+            // asserting it happened by any particular instant.
+            let! slow =
+                handler.Arrived "slow.test"
+                |> awaited "the hanging peer's request never reached the stub transport"
+
+            do!
+                slow.Stopped
+                |> awaited
+                    "the hanging peer's request never stopped — the fan-out's early-return cancellation was never delivered to the socket"
 
             Expect.isTrue
-                aborted
+                slow.TokenFired
                 "the early return cancelled the hanging peer's request instead of leaving its socket held for the client's default timeout"
         }
 
