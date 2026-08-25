@@ -211,6 +211,93 @@ type BlobFactStore
         |> List.filter (fun identity -> identity <> ownMethod)
         |> List.distinct
 
+    // ─── Population read (Phase 701) ──────────────────────────────────
+    //
+    // The reference implementation of the cross-subject read: enumerate
+    // the scope's heads, filter to the query's subject set, rank, and
+    // summarise. **Correct at any size, efficient at small** — which is
+    // the deliberate division of labour: this is one O(n) pass over the
+    // same blobs `Query` already walks, and an indexed current-heads read
+    // model is the scale path behind the same contract. A deployment that
+    // never asks a population question pays nothing for it (GP 13).
+    //
+    // Every decidable step is shared with `PopulationQueryTypes` rather
+    // than re-implemented here — the subject predicate, the threshold,
+    // the ordering resolution, the ranking and the statistics fold — so
+    // an indexed implementation over the same heads is byte-for-byte
+    // equivalent by construction rather than by a second reading of the
+    // spec.
+    let runPopulation (scopeId: string) (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
+        let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric query.Metric.Value)
+
+        // Resolve the ordering FIRST: a refusal (GP 9 — an unresolvable
+        // direction is never guessed) costs no store read, and the caller
+        // gets the same answer whether or not the population exists.
+        match PopulationOrdering.resolve query.Metric.Value query.Ordering (metricDef |> Option.map _.Direction) with
+        | Error refusal -> return Error refusal
+        | Ok direction ->
+            let! all = loadAll scopeId
+            let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+
+            let scoped =
+                all
+                |> List.filter (fun f ->
+                    f.Metric = query.Metric
+                    && PopulationQuery.matchesSubject query f.Subject
+                    && (query.PeriodOverlaps |> Option.forall (fun p -> periodsOverlap p f.Period)))
+
+            // Law L4: the heads current at `t`. There is no
+            // `IncludeSuperseded` on the population shape — a ranking
+            // that mixed a value with the value that replaced it would
+            // rank one subject twice and mean nothing.
+            let heads = visibleAt t scoped
+
+            // D19: competing methods are never merged, so a population
+            // admitting every method would rank one subject once per
+            // method. `CanonicalMethodOnly` is the default and reuses the
+            // exact selection `Query` applies to a method-less read.
+            let selected =
+                match query.Methods with
+                | AllCompetingMethods -> heads
+                | OneMethod m ->
+                    heads
+                    |> List.filter (fun f -> Fact.methodIdentity m = Fact.methodIdentity f.Method)
+                | CanonicalMethodOnly -> selectCanonical heads
+
+            // The threshold narrows the POPULATION, not just the ranking,
+            // so the statistics describe what the query matched.
+            let population =
+                match query.Threshold with
+                | None -> selected
+                | Some threshold -> selected |> List.filter (fun f -> ValueThreshold.satisfies threshold f.Value)
+
+            // Freshness is derived per the metric's declared staleness
+            // policy (an undeclared metric reads as `UntilSuperseded`, the
+            // shared default across every fact surface), at the query
+            // instant — so an `AsOf` replay reports the freshness that
+            // held THEN, not now. Every member is a current head at `t` by
+            // construction of `visibleAt`.
+            let policy =
+                metricDef
+                |> Option.map _.Staleness
+                |> Option.defaultValue Grounding.UntilSuperseded
+
+            let stats =
+                PopulationStats.ofPopulation (fun f -> Freshness.derive policy f true t) population
+
+            let k = PopulationQuery.effectiveTopK query
+            let ranked = PopulationRanking.rank direction population
+
+            return
+                Ok {
+                    Ranked = ranked |> List.truncate k
+                    Direction = direction
+                    EffectiveTopK = k
+                    Truncated = List.length ranked > k
+                    Stats = stats
+                }
+    }
+
     // GP 6 audit — one ModuleEvent under the reserved `_facts` source
     // module per state change (assert / supersession).
     let writeEvent (scopeId: string) (occurredAt: DateTime) (eventType: string) (payload: string) : Async<unit> =
@@ -343,6 +430,9 @@ type BlobFactStore
                     CompetingMethods = competingMethods heads f
                 })
         }
+
+        member _.QueryPopulation(scopeId: string, query: PopulationQuery) : Async<Result<PopulationResult, string>> =
+            runPopulation scopeId query
 
         member _.QuerySupersessionChain(scopeId: string, factId: string) : Async<Fact list> = async {
             let! target = load scopeId factId

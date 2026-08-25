@@ -170,6 +170,10 @@ ToolUp.Facts.FactValue+Tags.Scalar : System.Int32 (literal)
 ToolUp.Facts.FactValue+Tags.Series : System.Int32 (literal)
 ToolUp.Facts.Freshness (class)
 ToolUp.Facts.Freshness.derive(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
+ToolUp.Facts.FreshnessHistogram (class)
+ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
+ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
+ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
 ToolUp.Facts.MethodRef (class)
 ToolUp.Facts.MethodRef.IsComputed : System.Boolean { get }
 ToolUp.Facts.MethodRef.IsHumanAsserted : System.Boolean { get }
@@ -247,10 +251,90 @@ ToolUp.Facts.PlannedTriple (class)
 ToolUp.Facts.PlannedTriple..ctor(ToolUp.Facts.TripleCandidate, ToolUp.Facts.PlanStep)
 ToolUp.Facts.PlannedTriple.Candidate : ToolUp.Facts.TripleCandidate { get }
 ToolUp.Facts.PlannedTriple.Step : ToolUp.Facts.PlanStep { get }
+ToolUp.Facts.PopulationMethodSelection (class)
+ToolUp.Facts.PopulationMethodSelection.AllCompetingMethods : ToolUp.Facts.PopulationMethodSelection { get }
+ToolUp.Facts.PopulationMethodSelection.CanonicalMethodOnly : ToolUp.Facts.PopulationMethodSelection { get }
+ToolUp.Facts.PopulationMethodSelection.IsAllCompetingMethods : System.Boolean { get }
+ToolUp.Facts.PopulationMethodSelection.IsCanonicalMethodOnly : System.Boolean { get }
+ToolUp.Facts.PopulationMethodSelection.IsOneMethod : System.Boolean { get }
+ToolUp.Facts.PopulationMethodSelection.Tag : System.Int32 { get }
+ToolUp.Facts.PopulationMethodSelection+OneMethod (class)
+ToolUp.Facts.PopulationMethodSelection+OneMethod.Item : ToolUp.Facts.MethodRef { get }
+ToolUp.Facts.PopulationMethodSelection+Tags (class)
+ToolUp.Facts.PopulationMethodSelection+Tags.AllCompetingMethods : System.Int32 (literal)
+ToolUp.Facts.PopulationMethodSelection+Tags.CanonicalMethodOnly : System.Int32 (literal)
+ToolUp.Facts.PopulationMethodSelection+Tags.OneMethod : System.Int32 (literal)
+ToolUp.Facts.PopulationOrdering (class)
+ToolUp.Facts.PopulationOrdering.Ascending : ToolUp.Facts.PopulationOrdering { get }
+ToolUp.Facts.PopulationOrdering.Descending : ToolUp.Facts.PopulationOrdering { get }
+ToolUp.Facts.PopulationOrdering.IsAscending : System.Boolean { get }
+ToolUp.Facts.PopulationOrdering.IsDescending : System.Boolean { get }
+ToolUp.Facts.PopulationOrdering.IsRegistryDirection : System.Boolean { get }
+ToolUp.Facts.PopulationOrdering.RegistryDirection : ToolUp.Facts.PopulationOrdering { get }
+ToolUp.Facts.PopulationOrdering.Tag : System.Int32 { get }
+ToolUp.Facts.PopulationOrdering+Tags (class)
+ToolUp.Facts.PopulationOrdering+Tags.Ascending : System.Int32 (literal)
+ToolUp.Facts.PopulationOrdering+Tags.Descending : System.Int32 (literal)
+ToolUp.Facts.PopulationOrdering+Tags.RegistryDirection : System.Int32 (literal)
+ToolUp.Facts.PopulationOrderingModule (class)
+ToolUp.Facts.PopulationOrderingModule.resolve(System.String, ToolUp.Facts.PopulationOrdering, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.DirectionOfBetter]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RankDirection, System.String]
+ToolUp.Facts.PopulationQuery (class)
+ToolUp.Facts.PopulationQuery..ctor(ToolUp.Facts.MetricRef, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold], ToolUp.Facts.PopulationOrdering, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Facts.PopulationMethodSelection)
+ToolUp.Facts.PopulationQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.PopulationQuery.Hierarchy : System.String { get }
+ToolUp.Facts.PopulationQuery.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.PopulationQuery.Methods : ToolUp.Facts.PopulationMethodSelection { get }
+ToolUp.Facts.PopulationQuery.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.PopulationQuery.Ordering : ToolUp.Facts.PopulationOrdering { get }
+ToolUp.Facts.PopulationQuery.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Facts.PopulationQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.PopulationQuery.Threshold : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold] { get }
+ToolUp.Facts.PopulationQuery.TopK : System.Int32 { get }
+ToolUp.Facts.PopulationQueryModule (class)
+ToolUp.Facts.PopulationQueryModule.MaxTopK : System.Int32 (literal)
+ToolUp.Facts.PopulationQueryModule.asOf(System.DateTime, ToolUp.Facts.PopulationQuery) : ToolUp.Facts.PopulationQuery
+ToolUp.Facts.PopulationQueryModule.create(ToolUp.Facts.MetricRef, System.String) : ToolUp.Facts.PopulationQuery
+ToolUp.Facts.PopulationQueryModule.effectiveTopK(ToolUp.Facts.PopulationQuery) : System.Int32
+ToolUp.Facts.PopulationQueryModule.matchesSubject(ToolUp.Facts.PopulationQuery, ToolUp.Facts.SubjectRef) : System.Boolean
+ToolUp.Facts.PopulationRanking (class)
+ToolUp.Facts.PopulationRanking.rank(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]
+ToolUp.Facts.PopulationResult (class)
+ToolUp.Facts.PopulationResult..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.RankDirection, System.Int32, System.Boolean, ToolUp.Facts.PopulationStats)
+ToolUp.Facts.PopulationResult.Direction : ToolUp.Facts.RankDirection { get }
+ToolUp.Facts.PopulationResult.EffectiveTopK : System.Int32 { get }
+ToolUp.Facts.PopulationResult.Ranked : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
+ToolUp.Facts.PopulationResult.Stats : ToolUp.Facts.PopulationStats { get }
+ToolUp.Facts.PopulationResult.Truncated : System.Boolean { get }
+ToolUp.Facts.PopulationStats (class)
+ToolUp.Facts.PopulationStats..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], ToolUp.Facts.FreshnessHistogram)
+ToolUp.Facts.PopulationStats.ComparableCount : System.Int32 { get }
+ToolUp.Facts.PopulationStats.FactCount : System.Int32 { get }
+ToolUp.Facts.PopulationStats.Freshness : ToolUp.Facts.FreshnessHistogram { get }
+ToolUp.Facts.PopulationStats.Maximum : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationStats.Mean : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationStats.Minimum : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationStats.NonComparableCount : System.Int32 { get }
+ToolUp.Facts.PopulationStats.PeriodFrom : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.PopulationStats.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.PopulationStats.SubjectCount : System.Int32 { get }
+ToolUp.Facts.PopulationStatsModule (class)
+ToolUp.Facts.PopulationStatsModule.empty : ToolUp.Facts.PopulationStats { get }
+ToolUp.Facts.PopulationStatsModule.ofPopulation(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Fact, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationValue (class)
+ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Facts.PurposeTaxonomy (class)
 ToolUp.Facts.PurposeTaxonomy..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePurpose])
 ToolUp.Facts.PurposeTaxonomy.Purposes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePurpose] { get }
 ToolUp.Facts.PurposeTaxonomy.Version : System.String { get }
+ToolUp.Facts.RankDirection (class)
+ToolUp.Facts.RankDirection.HighestFirst : ToolUp.Facts.RankDirection { get }
+ToolUp.Facts.RankDirection.IsHighestFirst : System.Boolean { get }
+ToolUp.Facts.RankDirection.IsLowestFirst : System.Boolean { get }
+ToolUp.Facts.RankDirection.LowestFirst : ToolUp.Facts.RankDirection { get }
+ToolUp.Facts.RankDirection.Tag : System.Int32 { get }
+ToolUp.Facts.RankDirection+Tags (class)
+ToolUp.Facts.RankDirection+Tags.HighestFirst : System.Int32 (literal)
+ToolUp.Facts.RankDirection+Tags.LowestFirst : System.Int32 (literal)
 ToolUp.Facts.SubjectRef (class)
 ToolUp.Facts.SubjectRef..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
@@ -270,3 +354,21 @@ ToolUp.Facts.TripleCandidate.PeriodLabel : Microsoft.FSharp.Core.FSharpOption`1[
 ToolUp.Facts.TripleCandidate.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Facts.TripleCandidate.SubjectHierarchy : System.String { get }
 ToolUp.Facts.TripleCandidate.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ValueThreshold (class)
+ToolUp.Facts.ValueThreshold.IsAtLeast : System.Boolean { get }
+ToolUp.Facts.ValueThreshold.IsAtMost : System.Boolean { get }
+ToolUp.Facts.ValueThreshold.IsBetween : System.Boolean { get }
+ToolUp.Facts.ValueThreshold.Tag : System.Int32 { get }
+ToolUp.Facts.ValueThreshold+AtLeast (class)
+ToolUp.Facts.ValueThreshold+AtLeast.Item : System.Decimal { get }
+ToolUp.Facts.ValueThreshold+AtMost (class)
+ToolUp.Facts.ValueThreshold+AtMost.Item : System.Decimal { get }
+ToolUp.Facts.ValueThreshold+Between (class)
+ToolUp.Facts.ValueThreshold+Between.high : System.Decimal { get }
+ToolUp.Facts.ValueThreshold+Between.low : System.Decimal { get }
+ToolUp.Facts.ValueThreshold+Tags (class)
+ToolUp.Facts.ValueThreshold+Tags.AtLeast : System.Int32 (literal)
+ToolUp.Facts.ValueThreshold+Tags.AtMost : System.Int32 (literal)
+ToolUp.Facts.ValueThreshold+Tags.Between : System.Int32 (literal)
+ToolUp.Facts.ValueThresholdModule (class)
+ToolUp.Facts.ValueThresholdModule.satisfies(ToolUp.Facts.ValueThreshold, ToolUp.Facts.FactValue) : System.Boolean

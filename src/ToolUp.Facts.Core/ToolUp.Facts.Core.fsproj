@@ -13,6 +13,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\FactTypes.fs" />
+        <Compile Include="Shared\PopulationQueryTypes.fs" />
         <Compile Include="Shared\DisclosureTypes.fs" />
         <Compile Include="Shared\PlanTypes.fs" />
     </ItemGroup>

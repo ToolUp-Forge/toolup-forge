@@ -200,3 +200,19 @@ type IFactStore =
     /// ascending. A single-fact lineage returns just that fact; an unknown
     /// id returns the empty list.
     abstract QuerySupersessionChain: scopeId: string * factId: string -> Async<Fact list>
+
+    /// The **cross-subject** read (Phase 701): rank one metric across a
+    /// subject population and summarise what was ranked over. Resolves
+    /// over the current heads visible at `PopulationQuery.AsOf` (law L4
+    /// — a superseded value never ranks), honours the D19 canonical /
+    /// all-competing method selection, and clamps the ranking to
+    /// `PopulationQuery.MaxTopK`: the answer is a ranking plus a summary,
+    /// never the population.
+    ///
+    /// `Error` is a **typed refusal, not a failure** — the ordering could
+    /// not be resolved (a `RegistryDirection` request against a metric
+    /// that is unregistered or declared `Neutral`), so the store declines
+    /// to invent a sort order (GP 9). An empty population is `Ok` with an
+    /// empty ranking and the empty summary; "nothing matched" is an
+    /// answer.
+    abstract QueryPopulation: scopeId: string * query: PopulationQuery -> Async<Result<PopulationResult, string>>

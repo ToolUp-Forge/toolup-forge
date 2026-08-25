@@ -76,6 +76,101 @@ event to `IEventStore` under the reserved `_facts` source module
 pattern, queryable via `IEventStore.ReadBySource scope "_facts"`); an
 idempotent re-assertion changes no state and emits nothing.
 
+## Point reads vs population reads
+
+`IFactStore` has two shapes of read, and they answer different questions.
+
+| | Point read (`Query`) | Population read (`QueryPopulation`) |
+|---|---|---|
+| Asks | "what is metric M for subject S in period P?" | "which subjects rank highest/lowest on M, and what does that population look like?" |
+| Subject | one instance (or an open filter) | a **set** — hierarchy + optional depth + optional path prefix |
+| Returns | every matching fact, unordered, unbounded | a **bounded ranking** plus a **summary** |
+| Ordering | none | declared — registry direction, or the caller's explicit choice |
+| History | `IncludeSuperseded` available | deliberately absent |
+
+Reach for the point read when the answer *is* a number. Reach for the
+population read when the answer is a *comparison* — a superlative, a
+top-k, a count above a threshold, or "what is even in here".
+
+```fsharp skip=fragment
+open ToolUp.Facts
+
+// "Which SKUs are the most elastic?" — direction comes from the metric
+// registry, never from the caller's intuition.
+let! result =
+    store.QueryPopulation(
+        scopeId,
+        { PopulationQuery.create (MetricRef "elasticity") "product_hierarchy" with
+            Level = Some 2          // leaf SKUs only, not the brand roll-ups
+            Ordering = RegistryDirection
+            TopK = 20 })
+
+match result with
+| Ok population ->
+    population.Ranked                 // the top 20 facts, best first
+    population.Stats.SubjectCount     // how many subjects were ranked over
+    population.Stats.Mean             // ... without materialising them
+| Error refusal ->
+    // e.g. the metric is unregistered, or declares Neutral — the store
+    // declines to invent a sort order rather than guessing one (GP 9).
+    ()
+```
+
+### The ceiling is the contract, not a courtesy
+
+`PopulationQuery.TopK` is clamped into `[1, PopulationQuery.MaxTopK]` by
+every implementation. **A population read returns a ranking and a summary
+— never the population.** That bound is deliberate on three counts:
+
+- The caller that wants "all 300,000" wants a *different thing* — an
+  export, a batch job, a report — and should say so through a surface
+  built for it. Letting a read grow without bound turns every consumer
+  (a tool result, an answer prompt, an HTTP response) into an accidental
+  bulk channel.
+- The summary is what makes the bound tolerable. `PopulationStats`
+  answers "what does this population look like?" — cardinality, period
+  coverage, extremes, mean, freshness distribution — so the questions a
+  full listing would have been used for are answered without one.
+- A bound that lives in the *contract* cannot be forgotten at a call
+  site. `PopulationResult.EffectiveTopK` and `Truncated` report what was
+  applied, so a caller is told about the ceiling rather than left to
+  infer it from a suspiciously round result count.
+
+### What ranks, and what is only counted
+
+Only a `Scalar` value carries a single magnitude, so only `Scalar`
+members are ranked. `Categorical`, `Absent`, `Series`, `Distribution` and
+`Interval` members are part of the population and appear in
+`PopulationStats.NonComparableCount` — counted, never ordered. An
+`Interval` is the interesting case: it asserts *bounds*, and ranking it by
+its low bound, its high bound, or its midpoint would each encode an
+optimism the assertion never contained (GP 9 — ordering is declared, never
+guessed).
+
+Ordering itself is registry-resolved. `RegistryDirection` reads the
+metric's `Grounding.DirectionOfBetter`, so "most elastic" on a
+negatively-signed metric is a registry fact rather than a model judgment.
+Two situations refuse rather than guess, with separate messages because
+they have separate remedies: the metric is **unregistered** (register it,
+or rank explicitly), or it declares **`Neutral`** (there is no better
+direction — say `Ascending` or `Descending`). An explicit ordering always
+works, registry or not.
+
+The read resolves over the **current heads visible at `AsOf`** (law L4), so
+a superseded value never ranks and an `AsOf` dated before a supersession
+ranks the head that was current then. Competing methods (D19) default to
+the metric's canonical method and surface every competitor on request
+(`PopulationMethodSelection`) — a population that admitted every method by
+default would rank one subject once per method.
+
+The default `BlobFactStore` implements this by enumerating the scope's
+heads: correct at any size, efficient at small. An indexed current-heads
+read model behind the same contract is the scale path; the decidable parts
+of the pipeline (the subject predicate, the threshold, the ordering
+resolution, the ranking and the statistics fold) live in
+`PopulationQueryTypes` and are shared, so an indexed implementation is
+equivalent by construction rather than by a second reading of this page.
+
 ## Fact vs result vs model artifact
 
 The fact store sits **above** the analysis-result and model-artifact

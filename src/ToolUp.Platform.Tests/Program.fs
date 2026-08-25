@@ -107,6 +107,12 @@ let allTests =
         // audit emission + freshness derivation.
         FactStoreTests.tests
         FactStoreTests.auditAndFreshnessTests
+        // Phase 701 — population fact query: the registry-directed half of the
+        // IFactStore population contract (DirectionOfBetter ordering, the
+        // Neutral / unregistered refusals, D19 canonical-vs-all selection) plus
+        // the population pipeline measured at the requirement's cardinality.
+        FactStoreTests.populationRegistryTests
+        FactStoreTests.populationScaleTests
         // Phase 566 — canonical-method selection for competing facts: selector
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.

@@ -344,6 +344,8 @@ type private LeakyStore(leaked: Fact list) =
 
         member _.QuerySupersessionChain(_, _) = async { return [] }
 
+        member _.QueryPopulation(_, _) = async { return Error "read-only double: no population read" }
+
 let auditAndScopeTests =
     testList "Phase 559 query_facts audit + scope isolation" [
 
