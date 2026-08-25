@@ -198,6 +198,28 @@ module DeploymentVerification =
     [<Literal>]
     let SeamAuthoritySection = "seam-authority"
 
+    /// Phase 699 — the seventh section: what this deployment DECLARED its
+    /// configuration to be, beside what each key actually resolved to.
+    ///
+    /// The one section whose subject is the operator's own statement
+    /// rather than a substrate's recorded evidence, which is exactly the
+    /// gap it fills — a deployment could previously be described in full
+    /// without anything saying what it was meant to be.
+    [<Literal>]
+    let ConfigConformanceSection = "config-conformance"
+
+    /// Phase 699 — the eighth section: the preflight refusals this
+    /// deployment has acknowledged and lowered, in one place.
+    ///
+    /// Separate from the conformance section beside it because the two
+    /// answer different questions and have different remedies: one is
+    /// "did the declared configuration take effect", the other is "what
+    /// safety refusals were waived, and why did someone think that was
+    /// acceptable". A single "configuration" section carrying both would
+    /// let an accepted risk read as a routine settings line.
+    [<Literal>]
+    let AcceptedAcknowledgementSection = "accepted-acknowledgements"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

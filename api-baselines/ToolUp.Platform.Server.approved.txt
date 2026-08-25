@@ -2286,14 +2286,17 @@ ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.I
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
+ToolUp.Platform.DeploymentVerificationReport.ConfigConformanceKeyCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityComponentCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.buildReport(ToolUp.Platform.IDeploymentVerificationEvidence, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
 ToolUp.Platform.DeploymentVerificationReport.deploymentVerificationApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentVerificationApi
+ToolUp.Platform.DeploymentVerificationReport.gatherAcceptedAcknowledgements() : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherAnswerJoins(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherBootSeal(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherCertificates(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherConfigConformance() : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection

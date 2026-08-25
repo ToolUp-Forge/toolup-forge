@@ -2227,6 +2227,7 @@ ToolUp.Platform.ConfigFieldSchema.Key : System.String { get }
 ToolUp.Platform.ConfigFieldSchema.Kind : ToolUp.Platform.ConfigFieldKind { get }
 ToolUp.Platform.ConfigFieldSchema.Required : System.Boolean { get }
 ToolUp.Platform.ConfigKeys (class)
+ToolUp.Platform.ConfigKeys.EscapeHatchCategory : System.String (literal)
 ToolUp.Platform.ConfigKeys.ManifestProfileProperty : System.String (literal)
 ToolUp.Platform.ConfigKeys.ManifestSchemaProperty : System.String (literal)
 ToolUp.Platform.ConfigKeys.NotificationPrefsModuleKey : System.String (literal)
@@ -2234,6 +2235,7 @@ ToolUp.Platform.ConfigKeys.PlatformModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.ToolingCategory : System.String (literal)
 ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys.builtInProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile] { get }
+ToolUp.Platform.ConfigKeys.escapeHatchKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys.isManifestBindable(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.isToolingKey(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.manifestBindable : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -3783,10 +3785,12 @@ ToolUp.Platform.DeploymentReadinessMode+Tags (class)
 ToolUp.Platform.DeploymentReadinessMode+Tags.EnabledReadinessReport : System.Int32 (literal)
 ToolUp.Platform.DeploymentReadinessMode+Tags.NoReadinessReport : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerification (class)
+ToolUp.Platform.DeploymentVerification.AcceptedAcknowledgementSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.AnswerJoinSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.AuditLedgerSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.BootSealSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.CertificateIssuanceSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.ConfigConformanceSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
 ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)

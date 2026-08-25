@@ -25,6 +25,8 @@ break, which means nothing in the type system will remind you.
 | `certificate-issuance` | the certificate issuance log | no certificate substrate is composed | 686 |
 | `answer-verification-join` | the answer-verification provenance join | no answer-verification audit join is composed | 686 |
 | `seam-authority` | each module's declared reachable-seam set beside the reach its registrations imply, and whether the composition was checked against it | no seam-authority declaration or check is composed | 693 |
+| `config-conformance` | the deployment configuration manifest's hash, and a per-key comparison of the value it declares against the value that resolved at this boot | no manifest is declared and no configuration profile is in force | 699 |
+| `accepted-acknowledgements` | the preflight escape hatches in force, each with the registry's own description of the refusal it lowers | no escape hatch is set | 699 |
 
 New sections are **appended**, never inserted. Adding one moves every deployment's verdict digest
 once, which is correct — the report grew. Inserting one among the others would move the section
@@ -117,6 +119,47 @@ The verdicts, and why two plausible-looking states are deliberately *not* `Verif
 | the verified profile could not be bound (no signature, half-declared grants) | `Failed` | a mandatory check answered by withholding its input is not an absence |
 | no seam evidence supplied at all | `NotComposed` | the deployment's own boundary |
 
+### The two configuration sections (Phase 699)
+
+**Nothing to wire.** Both read the configuration resolution seam — the same seam every `*FromEnv`
+reader resolves through — which is ambient process state installed at boot, upstream of this
+assembly, and not a substrate a composition root hands over. A deployment that writes a
+configuration manifest gets the conformance section by having written it; one that sets an escape
+hatch gets the acknowledgement section by having set it.
+
+That is a deliberate departure from "every section's evidence arrives through one seam", and the
+reason is the failure it avoids. The evidence seam exists for substrates that live downstream of
+this assembly or compile after it; the resolution seam is neither. Routing it through the evidence
+interface would buy nothing and would let a composition root that forgot to pass its manifest
+produce a report reading *this deployment declares no configuration manifest* for a deployment that
+declares one — the exact declared-but-not-applied failure the declared layer exists to prevent,
+reproduced inside the artefact that exists to detect it.
+
+The conformance verdicts:
+
+| State | Verdict | Why |
+|---|---|---|
+| every declared key resolves from the manifest or is overridden by the environment | `Verified` | the declared intent is accounted for at every key |
+| a declared key that no reader resolves through the seam, or a declaration supplying no value | `Failed` | the file reads as the configuration and is not — the finding the section exists for |
+| a manifest declaring no key | `Observed` | conformance over an empty file holds trivially and proves nothing |
+| a profile in force with no manifest | `Observed` | the intent is a profile name, with no key/value lines to compare and no file hash to quote |
+| no manifest and no profile | `NotComposed` | nothing was declared, stated rather than omitted |
+
+**An environment override is never a finding.** Environment sits above the manifest by design, so a
+key the environment wins is reported with *both* values and the winning layer, and it does not move
+the verdict or the exit code. Only an ignored key does.
+
+The acknowledgement section is **never `Verified` and never `Failed`**. An inventory is not a
+verification — nothing in it is checked — and an acknowledged hatch is a considered operator
+decision, so a report that reddened on one would redden on every deployment that made a trade-off
+deliberately, and a gate that is red for that is a gate that gets switched off. A hatch that is
+*set to a value that does not read as on* is reported too, saying that the refusal it names still
+stands: silence there is the operator's trap.
+
+The enumerated hatch set is the registry's own escape-hatch **category**, not a name-prefix match.
+Most members are spelled `TOOLUP_ACCEPT_*` and not all are, so a prefix filter would produce an
+inventory of accepted risk that is silently short — which is worse than no inventory.
+
 ## Reading it
 
 Three surfaces, one gatherer:
@@ -178,6 +221,10 @@ registered, and the `--verify-deployment` flag on a deployment that registered n
 a `NotComposed` section per row of the table above and exits 0. Dropping only the seam-authority
 member (stop calling `withSeamAuthority`) rolls back that section alone.
 
+The two configuration sections have no wiring to withdraw, so there is nothing to roll back: a
+deployment that declares no manifest, imports no profile and sets no escape hatch reads
+`NotComposed` on both, which is the state every deployment was in before this phase.
+
 ## What this report does not prove
 
 Carried as data on every report (`NotProved`), not only stated here — a bound that lives in a
@@ -201,3 +248,13 @@ migration doc is not available to the person reading the report:
   handlers are closures whose reach is not enumerable — so a refusal is sound while an admission is
   never a proof of confinement. Composing the section narrows this to "the distance between what was
   declared and what is observable is visible rather than inferred"; it does not close it.
+- **Declared configuration is not observed behaviour.** The conformance section compares what the
+  manifest declares against what the resolution seam reports as effective. It observes no reader
+  consuming a value — a subsystem that read a key once and cached it, one composed with a literal
+  above the seam, or one never composed at all, is outside the comparison. Composing the section
+  narrows this to "every declared key no reader resolves through the seam is named as ignored"; it
+  does not make a conforming manifest a statement about behaviour.
+- **Accepted acknowledgements are an inventory, not a waiver record.** The section names the hatches
+  in force, not the refusals they lowered. A hatch set against a condition this deployment does not
+  meet is inert and is still listed, and nothing here says which refusals would have fired without
+  them.

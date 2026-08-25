@@ -164,6 +164,23 @@ type ConfigKeyDescriptor = {
 [<Literal>]
 let ToolingCategory = "Build & tooling"
 
+/// The category naming the keys that each ACKNOWLEDGE a specific preflight
+/// refusal — the escape hatches an operator opens to say "I meant that".
+///
+/// A `Category` for the same reason `ToolingCategory` is: the grouping
+/// already existed and already carried exactly this meaning, so a parallel
+/// flag would be a second statement of one fact and the two would drift.
+/// Derived membership (`escapeHatchKeys` below) cannot drift from the
+/// section a reader sees in the generated reference.
+///
+/// **Not a name-prefix rule, and the difference is load-bearing.** Most
+/// members are spelled `TOOLUP_ACCEPT_*`, but not all are, so a projection
+/// that filtered on the prefix would silently omit the ones that are not —
+/// and an inventory of accepted risk that is silently short is worse than
+/// no inventory. The registry's own classification is the authority.
+[<Literal>]
+let EscapeHatchCategory = "Security preflight escape hatches"
+
 /// The one non-registry property a deployment configuration manifest may
 /// carry: the pointer an editor follows to validate the file as it is
 /// typed. The loader skips it rather than binding it.
@@ -1089,7 +1106,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptHeaderAuthInAuthMode
@@ -1098,7 +1115,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptUnboundAudienceInAuthMode
@@ -1106,7 +1123,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptSameSiteOnlyCsrfInAuthMode
@@ -1114,7 +1131,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptNoRateLimitInAuthMode
@@ -1122,7 +1139,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptQueryParamSseAuthInAuthMode
@@ -1131,7 +1148,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptInviteByEmailWithoutDirectory
@@ -1140,7 +1157,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptPendingInviteStoreMultiInstance
@@ -1149,7 +1166,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptInMemoryOAuthStateMultiInstance
@@ -1158,7 +1175,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     // --- Platform subsystems ---
     {
@@ -2004,7 +2021,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptInProcessSchedulerMultiInstance
@@ -2013,7 +2030,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptUnsignedPublishable
@@ -2022,7 +2039,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptInMemoryShareTokenRateLimiterMultiInstance
@@ -2031,7 +2048,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptInProcessIngestionMultiInstance
@@ -2040,7 +2057,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptSharedEmbeddingCacheInTeamMode
@@ -2049,7 +2066,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptEphemeralRagIndex
@@ -2058,7 +2075,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptLocalEmbedderAtScale
@@ -2067,7 +2084,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptStickyRoutedAiMultiInstance
@@ -2076,7 +2093,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.acceptForwardedHeadersFromAnyProxy
@@ -2085,7 +2102,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.moduleBindingAllowUnbound
@@ -2093,7 +2110,7 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     {
         EnvVar = Names.moduleBindingAnchors
@@ -2102,7 +2119,7 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = true
-        Category = "Security preflight escape hatches"
+        Category = EscapeHatchCategory
     }
     // --- Storage & secrets ---
     {
@@ -2516,6 +2533,25 @@ let toolingKeys: Set<string> =
 /// running server reads. Drives the unknown-key preflight guard's
 /// exclusion and the generated reference's section note.
 let isToolingKey (envVar: string) : bool = Set.contains envVar toolingKeys
+
+/// Every key that acknowledges a preflight refusal — **derived** from
+/// `EscapeHatchCategory`, never listed a second time, and carrying the
+/// whole descriptor rather than only the name.
+///
+/// The descriptor rather than the name because the one consumer that
+/// needs this set needs the `Description` beside it: the deployment
+/// verification report's accepted-acknowledgement section states each
+/// active hatch's meaning in the same line as its name, so an assessor
+/// reads what was accepted rather than a variable to go and look up. The
+/// `Type` comes along for the same reason — a boolean hatch is active
+/// only when its value reads as on, and that is a fact about the
+/// descriptor, not about the name.
+///
+/// Sorted by name, so the same deployment always renders the same order.
+let escapeHatchKeys: ConfigKeyDescriptor list =
+    all
+    |> List.filter (fun k -> k.Category = EscapeHatchCategory)
+    |> List.sortBy _.EnvVar
 
 // ─── Phase 700 — configuration profiles ──────────────────────────────
 //

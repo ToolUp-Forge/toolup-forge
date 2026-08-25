@@ -11,10 +11,12 @@ open ToolUp.Platform.DeploymentVerification
 
 // ─── Phase 686 — composing the verifiers into one report ─────────────
 //
-// Five at Phase 686; six since Phase 693 added module seam authority.
-// The section id set was declared open for exactly this — a literal per
-// section rather than a closed union — so the sixth is an addition
-// rather than a break, and this header counts them nowhere else.
+// Five at Phase 686; six since Phase 693 added module seam authority;
+// eight since Phase 699 added declared-configuration conformance and the
+// accepted-acknowledgement record. The section id set was declared open
+// for exactly this — a literal per section rather than a closed union —
+// so each addition is an addition rather than a break, and this header
+// counts them nowhere else.
 //
 // The verifiers this gathers already exist and are already tested. This
 // file mints NO verification logic: it takes each substrate's own verdict
@@ -950,6 +952,405 @@ module DeploymentVerificationReport =
                     ))
                     findings
 
+    // ─── Phase 699 — declared intent, and accepted risk ──────────────────
+    //
+    // Six sections describe what this deployment IS. Neither of the two
+    // below does: one states what the operator SAID it should be and where
+    // reality differs, the other states which safety refusals were waived
+    // to let it start. Together they close the assessor triangle — a
+    // capability manifest says what the composition may do, the six
+    // sections above say what it is, and until now nothing said what it
+    // was meant to be.
+    //
+    // **The claims discipline, stated once and honoured in every string
+    // below.** The conformance section attests: *this file, this hash, was
+    // the declared intent at this boot, and here is where reality
+    // differed.* It never attests that the deployment BEHAVED per the
+    // file. The distinction is not pedantry — the section compares
+    // declared values against what the resolution seam reports as
+    // effective, which is one layer below any reader's use of the value,
+    // and the corresponding not-proved statement says so rather than
+    // leaving a reader to infer it.
+    //
+    // **Why these two read the resolution seam DIRECTLY rather than
+    // arriving through `IDeploymentVerificationEvidence`.** The header at
+    // the top of this file gives two reasons for the evidence seam, and
+    // neither applies here. The first is dependency direction: the ledger,
+    // the issuance log and the answer join live in assemblies DOWNSTREAM
+    // of this one. The second is compile order: the boot verdict, the
+    // continuity walk and the seam-authority posture live in this assembly
+    // but compile after the route table that mounts this report.
+    // `ConfigResolution` is neither — it is `Platform.Core`, upstream of
+    // everything, and it is ambient process state installed at boot in the
+    // same way the environment itself is.
+    //
+    // Routing it through the evidence seam would therefore buy nothing and
+    // cost the one property that matters most here: a composition root
+    // that forgot to hand its manifest over would produce a report reading
+    // "this deployment declares no configuration manifest" for a
+    // deployment that declares one — which is precisely the
+    // declared-but-not-applied failure the whole declared layer exists to
+    // make impossible, reproduced inside the artefact that exists to
+    // detect it. Reading the seam directly cannot be forgotten.
+
+    /// How many per-key conformance lines the section carries. Same
+    /// reasoning as `SeamAuthorityComponentCap`: a manifest may legitimately
+    /// declare more keys than an operator reads in one screen, the verdict
+    /// already carries the counts, and the truncation is stated rather than
+    /// silent. Findings are ordered so that nothing an assessor must act on
+    /// is ever the part that gets withheld.
+    [<Literal>]
+    let ConfigConformanceKeyCap = 40
+
+    /// The marker a set secret is shown as, spelled exactly as
+    /// `--print-config` spells it so an operator comparing the two reads
+    /// one vocabulary. Restated rather than shared because the module that
+    /// owns it compiles after this file.
+    [<Literal>]
+    let private RedactedValue = "<redacted>"
+
+    /// How one key the manifest declares actually fared at this boot.
+    ///
+    /// The two `Ignored*` cases are separate because their remedies are:
+    /// one waits on a reader migrating to the seam, the other is a line in
+    /// the file that states nothing. Folding them would produce a finding
+    /// an operator could not act on.
+    type private DeclaredKeyOutcome =
+        /// The declared value is the effective value, supplied by the
+        /// manifest itself. The conforming case.
+        | HonouredFromManifest of effective: string
+        /// The environment supplies a different value. Legitimate and
+        /// documented — env sits ABOVE the manifest by design — so it is
+        /// reported with both values and never counted as a finding.
+        | OverriddenByEnv of effective: string
+        /// No reader resolves this key through the seam, so the declared
+        /// value reaches nothing.
+        | IgnoredUnbindable
+        /// The key is bindable and the manifest still supplies no value
+        /// for it — an empty declaration, which states nothing — so the
+        /// key falls through to whatever layer is named.
+        | IgnoredNoLayer of ConfigResolution.ConfigSource
+
+    /// Whether the registry marks `key` secret. A secret key cannot reach
+    /// a manifest through the shipped loader, which refuses it outright —
+    /// so this is defence for the paths that bypass the loader (a
+    /// hand-installed snapshot in a test, a future loader) rather than a
+    /// case the ordinary flow reaches. Redacting something that cannot be
+    /// there costs one comparison; printing something that can be is
+    /// unrecoverable.
+    let private isSecretKey (key: string) : bool =
+        ConfigKeys.all |> List.exists (fun d -> d.EnvVar = key && d.IsSecret)
+
+    let private renderValue (secret: bool) (value: string) : string = if secret then RedactedValue else value
+
+    /// Classify one declared key.
+    ///
+    /// **Bindability is checked FIRST and that ordering is load-bearing.**
+    /// The seam reads the manifest's value table without consulting
+    /// bindability, so an unbindable key resolves with source `manifest`
+    /// and would classify as honoured — reporting a key nothing reads as
+    /// the conforming case, which is the single most misleading line this
+    /// section could emit.
+    let private classifyDeclared (key: string) : DeclaredKeyOutcome =
+        if not (ConfigKeys.isManifestBindable key) then
+            IgnoredUnbindable
+        else
+            match ConfigResolution.tryResolve key with
+            | Some(effective, ConfigResolution.ManifestConfigSource) -> HonouredFromManifest effective
+            | Some(effective, ConfigResolution.EnvConfigSource) -> OverriddenByEnv effective
+            | Some(_, source) -> IgnoredNoLayer source
+            | None -> IgnoredNoLayer ConfigResolution.DefaultConfigSource
+
+    /// The profile context lines, if a profile is in force. Reported in
+    /// this section rather than a seventh of its own because a profile IS
+    /// declared intent — the rung directly below the manifest — and an
+    /// operator reading which of their declared keys took effect needs the
+    /// bundle that supplied the rest in the same place.
+    let private profileFindings () : string list =
+        match ConfigResolution.profile () with
+        | None -> []
+        | Some p ->
+            let header =
+                sprintf
+                    "profile '%s' is in force, selected by %s, supplying %d key(s) one rung below the manifest"
+                    p.Name
+                    (ConfigResolution.ProfileSelection.describe p.SelectedBy)
+                    (Map.count p.Values)
+
+            match ConfigResolution.profileShadowedKeys () with
+            | [] -> [ header ]
+            | taken -> [
+                header
+                sprintf
+                    "%d profile key(s) are taken back by a higher layer and do not take effect from the profile: %s"
+                    taken.Length
+                    (String.concat ", " taken)
+              ]
+
+    /// Declared configuration conformance (Phase 696 / 700 declared, 699
+    /// reported).
+    ///
+    /// Three shapes of absence, and none of them is silence. A deployment
+    /// with no manifest and no profile has declared nothing and the section
+    /// says so; one with a profile but no manifest has declared a posture
+    /// with no hashable artefact behind it and the section says THAT; and a
+    /// manifest declaring no key is a committed file stating no intent,
+    /// which is `Observed` for the same reason continuity over an empty
+    /// envelope is — a comparison with nothing to compare has verified
+    /// nothing.
+    let gatherConfigConformance () : ReportSection =
+        let title = "Declared configuration conformance"
+
+        match ConfigResolution.snapshot () with
+        | None ->
+            match ConfigResolution.profile () with
+            | None ->
+                section
+                    ConfigConformanceSection
+                    title
+                    (VerificationSectionVerdict.NotComposed
+                        "this deployment declares no configuration manifest, so there is no stated intent to compare the effective configuration against — every value came from the environment, an imported profile, or a declared default")
+                    []
+            | Some p ->
+                section
+                    ConfigConformanceSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "no configuration manifest is declared and profile '%s' is in force, so this deployment's stated intent is a profile name rather than a file — there are no declared key/value lines to compare against, and no manifest hash to quote"
+                            p.Name
+                    ))
+                    (profileFindings ())
+        | Some manifest ->
+            let declared = manifest.Values |> Map.toList |> List.sortBy fst
+
+            let classified =
+                declared |> List.map (fun (key, value) -> key, value, classifyDeclared key)
+
+            let pick chooser =
+                classified |> List.filter (fun (_, _, outcome) -> chooser outcome)
+
+            let ignored =
+                pick (function
+                    | IgnoredUnbindable
+                    | IgnoredNoLayer _ -> true
+                    | _ -> false)
+
+            let overridden =
+                pick (function
+                    | OverriddenByEnv _ -> true
+                    | _ -> false)
+
+            let honoured =
+                pick (function
+                    | HonouredFromManifest _ -> true
+                    | _ -> false)
+
+            let line (key: string, value: string, outcome: DeclaredKeyOutcome) =
+                let show = renderValue (isSecretKey key)
+
+                match outcome with
+                | HonouredFromManifest effective ->
+                    sprintf "%s: declared %s, effective %s [manifest]" key (show value) (show effective)
+                | OverriddenByEnv effective ->
+                    sprintf
+                        "%s: declared %s, effective %s [env] — the environment overrides the manifest, which is the documented precedence and is not a finding"
+                        key
+                        (show value)
+                        (show effective)
+                | IgnoredUnbindable ->
+                    sprintf
+                        "%s: declared %s — IGNORED: no reader resolves this key through the configuration seam, so the declared value takes effect nowhere. Set the %s environment variable instead until its reader migrates."
+                        key
+                        (show value)
+                        key
+                | IgnoredNoLayer source ->
+                    sprintf
+                        "%s: declared %s — IGNORED: the declaration supplies no value (an empty entry states nothing), so the key resolves from [%s] instead."
+                        key
+                        (show value)
+                        (ConfigResolution.ConfigSource.label source)
+
+            // Findings an assessor must act on lead, so the cap can only
+            // ever withhold conforming lines.
+            let keyLines = (ignored @ overridden @ honoured) |> List.map line
+            let shown = keyLines |> List.truncate ConfigConformanceKeyCap
+            let withheld = keyLines.Length - shown.Length
+
+            let findings =
+                profileFindings ()
+                @ shown
+                @ (if withheld > 0 then
+                       [
+                           sprintf
+                               "(%d further declared key(s) not listed; the verdict's counts are over all %d)"
+                               withheld
+                               keyLines.Length
+                       ]
+                   else
+                       [])
+
+            let header = sprintf "the manifest at %s (sha256:%s)" manifest.Path manifest.Hash
+
+            let verdict =
+                match declared, ignored with
+                | [], _ ->
+                    VerificationSectionVerdict.Observed(
+                        sprintf
+                            "%s declares no configuration key, so conformance over it holds trivially — this deployment has committed a manifest and stated no intent in it"
+                            header
+                    )
+                | _, [] ->
+                    VerificationSectionVerdict.Verified(
+                        sprintf
+                            "%s declares %d key(s) and every one is accounted for at this boot: %d resolve from the manifest and %d are overridden by the environment, which is the documented precedence"
+                            header
+                            declared.Length
+                            honoured.Length
+                            overridden.Length
+                    )
+                | _, _ ->
+                    // The finding the section exists for. A declared value
+                    // that reaches nothing is worse than an undeclared one:
+                    // the file reads as the configuration and is not.
+                    VerificationSectionVerdict.Failed(
+                        sprintf
+                            "%s declares %d key(s) and %d of them take effect nowhere, so this deployment is not running the configuration it declares"
+                            header
+                            declared.Length
+                            ignored.Length
+                    )
+
+            section ConfigConformanceSection title verdict findings
+
+    /// The values a boolean acknowledgement reads as ON — exactly the set
+    /// every `*FromEnv` boolean reader recognises, case-insensitively.
+    ///
+    /// Matching the readers is the whole requirement. A section that
+    /// applied a more generous rule would list a hatch as accepted that
+    /// the preflight does not honour, and one that applied a stricter rule
+    /// would omit a hatch that is genuinely lowering a refusal. Either way
+    /// the inventory would describe a deployment other than this one.
+    let private isOnValue (value: string) : bool =
+        match value.ToLowerInvariant() with
+        | "1"
+        | "true"
+        | "yes"
+        | "on" -> true
+        | _ -> false
+
+    /// What one escape hatch is doing at this boot.
+    type private HatchState =
+        /// Set, and reads as on — the refusal it names is lowered.
+        | HatchActive of ConfigResolution.ConfigSource
+        /// Set to a value that does NOT read as on. Reported rather than
+        /// dropped: silence here is the operator's trap — they set the
+        /// hatch, the deployment still refuses, and nothing anywhere says
+        /// the value was the problem.
+        | HatchSetNotInForce of source: ConfigResolution.ConfigSource * value: string
+        /// No layer supplies a value. The ordinary state.
+        | HatchInactive
+
+    let private hatchState (d: ConfigKeys.ConfigKeyDescriptor) : HatchState =
+        match ConfigResolution.tryResolve d.EnvVar with
+        | None -> HatchInactive
+        | Some(value, source) ->
+            match d.Type with
+            | ConfigKeys.BoolKey when not (isOnValue value) -> HatchSetNotInForce(source, value)
+            // A non-boolean member of the category is in force by virtue
+            // of being supplied at all; there is no "on" to read.
+            | _ -> HatchActive source
+
+    /// Accepted acknowledgements (Phase 699).
+    ///
+    /// **Never `Verified` and never `Failed`, and both halves are
+    /// deliberate.** An inventory is not a verification — nothing here is
+    /// checked, the section enumerates what the deployment has accepted.
+    /// And an acknowledged hatch is an operator's decision, legitimately
+    /// taken: a report that reddened on one would redden on every
+    /// deployment that made a considered trade-off, and a gate that is red
+    /// for making considered trade-offs is a gate that gets turned off.
+    /// The section's whole job is to make the set READABLE in one place,
+    /// which is what an assessor could not previously get at all.
+    ///
+    /// The enumerated set is the registry's own escape-hatch category, not
+    /// a name-prefix match — see `ConfigKeys.EscapeHatchCategory` for why
+    /// the two differ and why the category is the authority.
+    let gatherAcceptedAcknowledgements () : ReportSection =
+        let title = "Accepted acknowledgements"
+        let hatches = ConfigKeys.escapeHatchKeys
+        let states = hatches |> List.map (fun d -> d, hatchState d)
+
+        let active =
+            states
+            |> List.choose (fun (d, state) ->
+                match state with
+                | HatchActive source -> Some(d, source)
+                | _ -> None)
+
+        let misset =
+            states
+            |> List.choose (fun (d, state) ->
+                match state with
+                | HatchSetNotInForce(source, value) -> Some(d, source, value)
+                | _ -> None)
+
+        let activeLines =
+            active
+            |> List.map (fun (d, source) ->
+                sprintf "%s [%s]: %s" d.EnvVar (ConfigResolution.ConfigSource.label source) d.Description)
+
+        let missetLines =
+            misset
+            |> List.map (fun (d, source, value) ->
+                sprintf
+                    "%s [%s]: SET AND NOT IN FORCE — the value %s does not read as on (recognised: 1, true, yes, on), so the refusal it would lower still stands. %s"
+                    d.EnvVar
+                    (ConfigResolution.ConfigSource.label source)
+                    (renderValue d.IsSecret value)
+                    d.Description)
+
+        match active, misset with
+        | [], [] ->
+            section
+                AcceptedAcknowledgementSection
+                title
+                (VerificationSectionVerdict.NotComposed(
+                    sprintf
+                        "none of the %d escape hatch(es) the configuration registry declares is set in this deployment, so no preflight refusal has been acknowledged and lowered — every refusal the preflight can raise still stands"
+                        hatches.Length
+                ))
+                []
+        | [], _ ->
+            section
+                AcceptedAcknowledgementSection
+                title
+                (VerificationSectionVerdict.Observed(
+                    sprintf
+                        "no escape hatch is in force at this boot, and %d of the %d the configuration registry declares are set to a value that does not read as on — each of those refusals still stands, which is unlikely to be what the operator who set them intended"
+                        misset.Length
+                        hatches.Length
+                ))
+                missetLines
+        | _, _ ->
+            let missetNote =
+                if List.isEmpty misset then
+                    ""
+                else
+                    sprintf ", and %d further are set to a value that does not read as on" misset.Length
+
+            section
+                AcceptedAcknowledgementSection
+                title
+                (VerificationSectionVerdict.Observed(
+                    sprintf
+                        "%d of the %d escape hatch(es) the configuration registry declares are in force at this boot%s; each names one preflight refusal this deployment has accepted rather than resolved"
+                        active.Length
+                        hatches.Length
+                        missetNote
+                ))
+                (missetLines @ activeLines)
+
     // ─── What the report does not prove ──────────────────────────────────
 
     /// The not-proved statements, with the two that a composed substrate
@@ -1054,6 +1455,46 @@ module DeploymentVerificationReport =
                     "A verified audit ledger proves that the records it holds are the records it was given, in order. It does not prove that every event which occurred reached it — a sink that was never composed, or an event emitted before the ledger was, leaves no gap the chain can see."
                 Narrowing = None
             }
+            {
+                // Phase 699 appends, for the reason `buildReport` appends
+                // its sections: the canonical form is order-sensitive, so
+                // inserting among the existing statements would move the
+                // lines of every statement after it and a reader diffing
+                // two canonical forms across the upgrade could not tell a
+                // re-ordering from a re-statement.
+                //
+                // The claims-discipline statement, and the one this phase
+                // would be dishonest without. The conformance
+                // section compares two things the resolution seam can see;
+                // a reader's USE of a value is a third thing it cannot,
+                // and the distance between "the declared value is the
+                // effective value" and "the deployment behaved per the
+                // file" is exactly that third thing.
+                Id = "declared-config-is-not-observed-behaviour"
+                Statement =
+                    "The configuration conformance section compares what the manifest DECLARES against what the resolution seam reports as EFFECTIVE at this boot. It observes no reader consuming a value: a subsystem that read a key once at startup and cached it, one that was composed with a literal above the seam, or one that was never composed at all, is outside what this comparison can see. A conforming manifest is a statement about declared intent reaching the seam, never a statement that the deployment behaved per the file."
+                Narrowing =
+                    if isComposed ConfigConformanceSection then
+                        Some
+                            "every declared key that no reader resolves through the seam is named above as ignored, so the gap between declaration and consumption is enumerated key by key rather than assumed away. What remains unobserved is what each reader then did with the value it was handed."
+                    else
+                        None
+            }
+            {
+                // Phase 699. An inventory of accepted risk invites exactly
+                // one wrong reading — that the list is what was waived —
+                // and the section cannot tell the difference from where it
+                // stands, so the bound is stated rather than guessed at.
+                Id = "hatches-are-an-inventory-not-a-waiver-record"
+                Statement =
+                    "The accepted-acknowledgement section names the escape hatches that are IN FORCE, not the refusals they actually lowered. A hatch set against a condition this deployment does not meet is inert and is still listed, and the section cannot say which preflight refusals would have fired without them. Read it as the set of risks this deployment has pre-accepted, not as a record of what was waived."
+                Narrowing =
+                    if isComposed AcceptedAcknowledgementSection then
+                        Some
+                            "each hatch above carries the registry's own description of the refusal it lowers and the configuration layer that set it, so what was accepted and by which lane is legible without reading the source. Whether the corresponding refusal would have fired is still not established here."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -1082,13 +1523,36 @@ module DeploymentVerificationReport =
             let! answerJoins = gatherAnswerJoins evidence
             let seamAuthority = gatherSeamAuthority evidence
 
+            // Phase 699. The two sections that take no evidence argument —
+            // they read the configuration resolution seam, which is
+            // ambient `Platform.Core` state installed at boot rather than
+            // a substrate a composition root hands over. The header above
+            // `gatherConfigConformance` gives the reasoning; the short
+            // version is that a root which forgot to pass its manifest
+            // would produce a report claiming the deployment declares
+            // none, which is the exact failure the declared layer exists
+            // to prevent.
+            let configConformance = gatherConfigConformance ()
+            let acknowledgements = gatherAcceptedAcknowledgements ()
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
             // the five would move the SECTION LINES of the ones after it
             // too, so a reader diffing two canonical forms across the
             // upgrade could not tell a re-ordering from a re-verdict.
-            let sections = [ bootSeal; continuity; ledger; certificates; answerJoins; seamAuthority ]
+            // Phase 699 appends its two for the same reason.
+            let sections = [
+                bootSeal
+                continuity
+                ledger
+                certificates
+                answerJoins
+                seamAuthority
+                configConformance
+                acknowledgements
+            ]
+
             let notProved = notProvedFor sections
 
             return {

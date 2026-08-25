@@ -10,6 +10,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.AuditSinks.ChainedLedger
 
@@ -122,7 +123,9 @@ let private sectionOf (report: DeploymentVerificationReport) (id: string) =
 let private labelOf (report: DeploymentVerificationReport) (id: string) =
     VerificationSectionVerdict.label (sectionOf report id).Verdict
 
-let private allSectionIds = [
+/// The sections whose evidence arrives through `IDeploymentVerification
+/// Evidence` — the ones a probe can drive by handing over a source.
+let private evidenceSectionIds = [
     BootSealSection
     GroundingContinuitySection
     AuditLedgerSection
@@ -134,6 +137,72 @@ let private allSectionIds = [
     // something other than what it reads as.
     SeamAuthoritySection
 ]
+
+/// Phase 699. The two sections that read the configuration resolution
+/// seam directly rather than taking evidence, so no `healthyEvidence`
+/// arrangement can move them — they are driven by installing a manifest,
+/// a profile or an escape hatch. Kept a separate list precisely because
+/// of that: the probes below that assert "every section verified" are
+/// assertions about the evidence seam, and folding these two in would
+/// have made those probes silently untrue rather than newly-failing.
+let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgementSection ]
+
+let private allSectionIds = evidenceSectionIds @ configSectionIds
+
+// ─── Phase 699 — process state for the two configuration sections ────
+//
+// These three arrange the configuration resolution seam, which is
+// process-wide by construction (it layers under the environment, which is
+// itself one ambient table). Every one of them restores what it found:
+// the sections above read the same seam, so a leaked manifest or profile
+// would not fail the case that leaked it — it would fail a sibling.
+
+/// Run `body` with one environment variable temporarily set.
+let private withEnv (name: string) (value: string option) (body: unit -> unit) =
+    let prior = Environment.GetEnvironmentVariable name
+
+    try
+        Environment.SetEnvironmentVariable(name, Option.toObj value)
+        body ()
+    finally
+        Environment.SetEnvironmentVariable(name, prior)
+
+/// Run `body` with a manifest installed, then return to the no-manifest
+/// state. The hash is a fixed stand-in — these probes are about the
+/// conformance projection, and Phase 696's own pack owns the hashing.
+let private withManifest (values: (string * string) list) (body: unit -> unit) =
+    let priorProfile = ConfigResolution.profile ()
+
+    try
+        ConfigResolution.install {
+            Path = "test://manifest"
+            Hash = "1111111111111111111111111111111111111111111111111111111111111111"
+            Values = Map.ofList values
+            PendingKeys = []
+            Profile = None
+        }
+
+        body ()
+    finally
+        // `clear ()` drops BOTH rungs, so a nested `withProfile` outside
+        // this call would be silently unwound by it. Restoring the profile
+        // this call found keeps the two helpers composable in either
+        // nesting order.
+        ConfigResolution.clear ()
+        priorProfile |> Option.iter ConfigResolution.installProfile
+
+/// Run `body` with a configuration profile in force.
+let private withProfile (values: (string * string) list) (body: unit -> unit) =
+    try
+        ConfigResolution.installProfile {
+            Name = "probe-profile"
+            Values = Map.ofList values
+            SelectedBy = ConfigResolution.EnvProfileSelection
+        }
+
+        body ()
+    finally
+        ConfigResolution.clearProfile ()
 
 // ─── Healthy sources ─────────────────────────────────────────────────
 
@@ -318,9 +387,19 @@ let tests =
                 let report = runReport (healthyEvidence ()) None
 
                 Expect.equal
-                    (allSectionIds |> List.map (labelOf report))
+                    (evidenceSectionIds |> List.map (labelOf report))
                     [ "verified"; "verified"; "verified"; "verified"; "verified"; "verified" ]
                     "every composed and healthy section verifies"
+
+                // Phase 699. Health of the evidence seam says nothing
+                // about the two configuration sections, which read
+                // process state this probe does not arrange — and a
+                // deployment declaring no manifest and opening no hatch
+                // is exactly the state they should call absent.
+                Expect.equal
+                    (configSectionIds |> List.map (labelOf report))
+                    [ "not-composed"; "not-composed" ]
+                    "supplying evidence does not make a deployment declare configuration it has not declared"
 
                 Expect.equal
                     report.Outcome
@@ -360,7 +439,8 @@ let tests =
 
                     Expect.equal
                         payload.Sections
-                        (allSectionIds |> List.map (fun id -> sprintf "%s=verified" id))
+                        ((evidenceSectionIds |> List.map (fun id -> sprintf "%s=verified" id))
+                         @ (configSectionIds |> List.map (fun id -> sprintf "%s=not-composed" id)))
                         "the row carries one id=label entry per section"
                 | other -> failtestf "expected exactly one DeploymentVerified row, got %A" other
             }
@@ -414,14 +494,7 @@ let tests =
 
                 Expect.equal
                     (allSectionIds |> List.map (labelOf report))
-                    [
-                        "not-composed"
-                        "not-composed"
-                        "not-composed"
-                        "not-composed"
-                        "not-composed"
-                        "not-composed"
-                    ]
+                    (allSectionIds |> List.map (fun _ -> "not-composed"))
                     "an unregistered evidence seam degrades to absent sections throughout, not an error"
 
                 Expect.equal
@@ -1239,7 +1312,7 @@ let tests =
                     |> fun evidence -> runReport evidence None
 
                 Expect.equal
-                    (allSectionIds |> List.map (labelOf report))
+                    (evidenceSectionIds |> List.map (labelOf report))
                     [ "verified"; "verified"; "verified"; "verified"; "verified"; "verified" ]
                     "the seam wither replaces exactly one member and preserves the rest"
             }
@@ -1449,4 +1522,427 @@ let tests =
                     "and a real refusal reddens the section end to end"
             }
         ]
+
+        // ── Phase 699: declared configuration, and accepted risk ──────
+        //
+        // The two sections that read the configuration resolution seam
+        // rather than the evidence seam, so every probe here arranges
+        // PROCESS state — an installed manifest, a selected profile, a set
+        // environment variable — and restores it on the way out. Sequenced
+        // for that reason: the seam is process-wide (as the environment it
+        // layers under is), so a leaked manifest would not fail these
+        // cases, it would contaminate the bare-deployment probe above and
+        // fail THAT, which is the hardest kind of red to read.
+
+        testSequenced (
+            testList "the configuration conformance section" [
+                test "a deployment declaring no manifest says so rather than omitting the section" {
+                    let report = runReport (healthyEvidence ()) None
+                    let verdict = (sectionOf report ConfigConformanceSection).Verdict
+
+                    Expect.equal
+                        (VerificationSectionVerdict.label verdict)
+                        "not-composed"
+                        "no declared manifest is an absence, not a failure and not a pass"
+
+                    // The honesty requirement from the phase: an absent
+                    // manifest must be STATED. A section that vanished
+                    // when there was nothing to say would let a
+                    // deployment with no declared intent read identically
+                    // to one whose intent was never checked.
+                    Expect.stringContains
+                        (VerificationSectionVerdict.detail verdict)
+                        "declares no configuration manifest"
+                        "the absence names itself in the operator's own vocabulary"
+
+                    Expect.equal
+                        report.Outcome
+                        DeploymentVerificationOutcome.AllComposedVerified
+                        "and an absent configuration section does not depress a healthy deployment's outcome"
+                }
+
+                test "a manifest key the environment overrides renders as an override, not a failure" {
+                    withManifest [ Names.replicaCount, "3" ] (fun () ->
+                        withEnv Names.replicaCount (Some "9") (fun () ->
+                            let report = runReport (healthyEvidence ()) None
+                            let s = sectionOf report ConfigConformanceSection
+
+                            Expect.equal
+                                (VerificationSectionVerdict.label s.Verdict)
+                                "verified"
+                                "env above manifest is the documented precedence — a legitimate override is never a finding"
+
+                            Expect.equal (exitCode report) 0 "and it does not redden the run"
+
+                            let line = s.Findings |> List.find (fun f -> f.StartsWith(Names.replicaCount + ":"))
+
+                            // Both values and the winning source, per the
+                            // phase: an operator who sees only the
+                            // effective value cannot tell an override from
+                            // a manifest that never said anything.
+                            Expect.stringContains line "declared 3" "the declared value is quoted"
+                            Expect.stringContains line "effective 9" "beside the effective one"
+                            Expect.stringContains line "[env]" "and the layer that won is named"))
+                }
+
+                test "a manifest key nothing reads is a finding, and it reddens the run" {
+                    // A registered key that is NOT manifest-bindable: the
+                    // manifest states it and no reader resolves it, which
+                    // is the failure the whole declared layer exists to
+                    // make impossible to have silently.
+                    let unbindable =
+                        all
+                        |> List.tryFind (fun k -> not k.IsSecret && not (isManifestBindable k.EnvVar))
+
+                    match unbindable with
+                    | None ->
+                        // The Phase 698 sweep ended with every registered
+                        // key bindable, which is the intended end state —
+                        // so there is no ignored case to construct and
+                        // nothing here to assert. Skipping silently would
+                        // leave a test that passes by measuring nothing.
+                        skiptest
+                            "every registered key is manifest-bindable, so an ignored key cannot be constructed from the registry"
+                    | Some key ->
+                        withManifest [ key.EnvVar, "declared-but-unread" ] (fun () ->
+                            withEnv key.EnvVar None (fun () ->
+                                let report = runReport (healthyEvidence ()) None
+                                let s = sectionOf report ConfigConformanceSection
+
+                                Expect.equal
+                                    (VerificationSectionVerdict.label s.Verdict)
+                                    "failed"
+                                    "a declared value that reaches nothing is a conformance failure"
+
+                                Expect.equal
+                                    (exitCode report)
+                                    1
+                                    "and per the phase's exit-code posture an ignored key moves the verdict"
+
+                                Expect.isTrue
+                                    (s.Findings
+                                     |> List.exists (fun f -> f.Contains key.EnvVar && f.Contains "IGNORED"))
+                                    "the offending key is named, not merely counted"))
+                }
+
+                test "an empty declaration is ignored rather than read as a conforming value" {
+                    // The edge the classification catches that a
+                    // membership test would not: the key IS in the
+                    // manifest's value table, so a "does the manifest
+                    // mention it" check would call it honoured — but an
+                    // empty value supplies nothing, exactly as an empty
+                    // environment variable does, so the key silently falls
+                    // through to a lower layer.
+                    withManifest [ Names.replicaCount, "" ] (fun () ->
+                        withEnv Names.replicaCount None (fun () ->
+                            let report = runReport (healthyEvidence ()) None
+                            let s = sectionOf report ConfigConformanceSection
+
+                            Expect.equal
+                                (VerificationSectionVerdict.label s.Verdict)
+                                "failed"
+                                "a line that states nothing is not a line that took effect"
+
+                            Expect.isTrue
+                                (s.Findings
+                                 |> List.exists (fun f -> f.Contains Names.replicaCount && f.Contains "IGNORED"))
+                                "and it is named as ignored"))
+                }
+
+                test "a conforming manifest quotes its hash and every declared key" {
+                    withManifest [ Names.replicaCount, "3"; Names.logLevel, "Debug" ] (fun () ->
+                        withEnv Names.replicaCount None (fun () ->
+                            withEnv Names.logLevel None (fun () ->
+                                let report = runReport (healthyEvidence ()) None
+                                let s = sectionOf report ConfigConformanceSection
+                                let detail = VerificationSectionVerdict.detail s.Verdict
+
+                                Expect.equal
+                                    (VerificationSectionVerdict.label s.Verdict)
+                                    "verified"
+                                    "every declared key accounted for is the conforming case"
+
+                                Expect.stringContains
+                                    detail
+                                    "sha256:"
+                                    "the attested artefact is named by the hash of the bytes as deployed"
+
+                                // The claims discipline, asserted rather
+                                // than trusted to review: the verdict must
+                                // not read as a statement about behaviour.
+                                Expect.isFalse
+                                    (detail.Contains "behaved")
+                                    "the verdict states what was declared and resolved, never how the deployment behaved"
+
+                                for key in [ Names.replicaCount; Names.logLevel ] do
+                                    Expect.isTrue
+                                        (s.Findings |> List.exists (fun f -> f.StartsWith(key + ":")))
+                                        (sprintf "the per-key table covers %s" key))))
+                }
+
+                test "a manifest declaring nothing is observed, never verified" {
+                    withManifest [] (fun () ->
+                        let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+
+                        // Same discipline as continuity over an envelope
+                        // declaring nothing: a comparison with nothing to
+                        // compare has verified nothing, and crediting it
+                        // would be the report's cheapest false positive.
+                        Expect.equal
+                            (VerificationSectionVerdict.label s.Verdict)
+                            "observed"
+                            "conformance over an empty file holds trivially and proves nothing")
+                }
+
+                test "a profile in force is named here, with the keys taken back from it" {
+                    withProfile [ Names.replicaCount, "5"; Names.logLevel, "Warning" ] (fun () ->
+                        withManifest [ Names.replicaCount, "3" ] (fun () ->
+                            withEnv Names.replicaCount None (fun () ->
+                                let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+                                let joined = String.Join(" ", s.Findings)
+
+                                Expect.stringContains joined "probe-profile" "the profile in force is named"
+
+                                Expect.stringContains
+                                    joined
+                                    "taken back"
+                                    "and the keys a higher layer takes back from it are stated"
+
+                                Expect.stringContains
+                                    joined
+                                    Names.replicaCount
+                                    "naming the key the manifest reclaimed")))
+                }
+
+                test "a profile with no manifest is stated honestly rather than as an absence" {
+                    withProfile [ Names.logLevel, "Warning" ] (fun () ->
+                        let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+
+                        Expect.equal
+                            (VerificationSectionVerdict.label s.Verdict)
+                            "observed"
+                            "a deployment importing a posture HAS declared intent, even with no file to hash"
+
+                        Expect.stringContains
+                            (VerificationSectionVerdict.detail s.Verdict)
+                            "no configuration manifest is declared"
+                            "and the absence of the file is still stated plainly")
+                }
+
+                test "composing the section narrows the declared-intent bound without deleting it" {
+                    let bare =
+                        (runReport (healthyEvidence ()) None).NotProved
+                        |> List.find (fun st -> st.Id = "declared-config-is-not-observed-behaviour")
+
+                    Expect.isNone bare.Narrowing "with no manifest declared, nothing narrows the bound"
+
+                    withManifest [ Names.replicaCount, "3" ] (fun () ->
+                        withEnv Names.replicaCount None (fun () ->
+                            let declared =
+                                (runReport (healthyEvidence ()) None).NotProved
+                                |> List.find (fun st -> st.Id = "declared-config-is-not-observed-behaviour")
+
+                            Expect.isSome declared.Narrowing "declaring a manifest narrows what the report cannot see"
+
+                            Expect.isTrue
+                                (declared.Statement.Length > 0)
+                                "narrowing does not delete the statement — the bound is smaller, not gone"))
+                }
+            ]
+        )
+
+        testSequenced (
+            testList "the accepted-acknowledgement section" [
+                test "a deployment opening no hatch renders an explicit none" {
+                    let s =
+                        sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+
+                    Expect.equal
+                        (VerificationSectionVerdict.label s.Verdict)
+                        "not-composed"
+                        "no hatch open is an absence of accepted risk, not a verification of anything"
+
+                    Expect.stringContains
+                        (VerificationSectionVerdict.detail s.Verdict)
+                        "still stands"
+                        "the explicit 'none' says what that MEANS — every refusal is still in force"
+
+                    Expect.isEmpty s.Findings "and there is nothing to enumerate"
+                }
+
+                test "an active hatch is named with the registry's own description of what it lowers" {
+                    withEnv Names.acceptLocalFallback (Some "1") (fun () ->
+                        let report = runReport (healthyEvidence ()) None
+                        let s = sectionOf report AcceptedAcknowledgementSection
+
+                        Expect.equal
+                            (VerificationSectionVerdict.label s.Verdict)
+                            "observed"
+                            "an inventory is read, never verified — nothing here is checked"
+
+                        // Per the phase's exit-code posture: only ignored
+                        // config keys move the verdict. An acknowledged
+                        // hatch is a considered operator decision, and a
+                        // gate that reddened on one would be turned off.
+                        Expect.equal (exitCode report) 0 "an accepted acknowledgement is not a failure"
+
+                        let line = s.Findings |> List.find (fun f -> f.StartsWith Names.acceptLocalFallback)
+
+                        Expect.stringContains line "[env]" "the layer that set it is named"
+
+                        let registered = all |> List.find (fun k -> k.EnvVar = Names.acceptLocalFallback)
+
+                        Expect.stringContains
+                            line
+                            registered.Description
+                            "and the registry's description rides along, so the hatch's meaning is in the same line as its name")
+                }
+
+                test "a hatch set from the manifest is named with the manifest as its layer" {
+                    withManifest [ Names.acceptLocalFallback, "true" ] (fun () ->
+                        withEnv Names.acceptLocalFallback None (fun () ->
+                            let s =
+                                sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+
+                            Expect.isTrue
+                                (s.Findings
+                                 |> List.exists (fun f ->
+                                     f.StartsWith Names.acceptLocalFallback && f.Contains "[manifest]"))
+                                "a hatch accepted in the declared file is attributed to the file, not to the environment"))
+                }
+
+                test "a hatch set to a value that does not read as on is reported, not silently dropped" {
+                    // The operator's trap: they set the hatch, the
+                    // deployment still refuses, and nothing anywhere says
+                    // the VALUE was the problem. The section agrees with
+                    // the readers about what counts as on — so it must
+                    // also say when a set hatch is not counting.
+                    withEnv Names.acceptLocalFallback (Some "yes-please") (fun () ->
+                        let s =
+                            sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+
+                        Expect.equal
+                            (VerificationSectionVerdict.label s.Verdict)
+                            "observed"
+                            "there is something to read even though no hatch is in force"
+
+                        let line = s.Findings |> List.find (fun f -> f.StartsWith Names.acceptLocalFallback)
+
+                        Expect.stringContains line "NOT IN FORCE" "the state is named, not implied"
+
+                        Expect.stringContains
+                            line
+                            "still stands"
+                            "and the consequence is spelled out — the refusal was not lowered")
+                }
+
+                test "the enumerated set is the registry's category, not a name-prefix match" {
+                    // Two members of the escape-hatch category are not
+                    // spelled TOOLUP_ACCEPT_*. A projection that filtered
+                    // on the prefix would drop them silently, and an
+                    // inventory of accepted risk that is silently short is
+                    // worse than no inventory at all.
+                    Expect.isNonEmpty escapeHatchKeys "the category is populated"
+
+                    Expect.isTrue
+                        (escapeHatchKeys |> List.forall (fun k -> k.Category = EscapeHatchCategory))
+                        "membership is derived from the category and cannot drift from the reference doc"
+
+                    let bySuffix =
+                        escapeHatchKeys |> List.filter (fun k -> k.EnvVar.StartsWith "TOOLUP_ACCEPT_")
+
+                    Expect.notEqual
+                        bySuffix.Length
+                        escapeHatchKeys.Length
+                        "the two sets genuinely differ today — this is the assertion that keeps the choice deliberate"
+                }
+
+                test "a secret hatch never renders its value" {
+                    match escapeHatchKeys |> List.tryFind _.IsSecret with
+                    | None -> skiptest "no escape hatch is registered secret, so there is no redaction path to exercise"
+                    | Some secret ->
+                        withEnv secret.EnvVar (Some "super-secret-anchor-material") (fun () ->
+                            let s =
+                                sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+
+                            Expect.isFalse
+                                (String.Join(" ", s.Findings).Contains "super-secret-anchor-material")
+                                "a set secret's value never reaches the report"
+
+                            Expect.isTrue
+                                (s.Findings |> List.exists (fun f -> f.StartsWith secret.EnvVar))
+                                "but that it is in force is still stated")
+                }
+
+                test "composing the section narrows the inventory bound without deleting it" {
+                    let bare =
+                        (runReport (healthyEvidence ()) None).NotProved
+                        |> List.find (fun st -> st.Id = "hatches-are-an-inventory-not-a-waiver-record")
+
+                    Expect.isNone bare.Narrowing "with no hatch open, nothing narrows the bound"
+
+                    withEnv Names.acceptLocalFallback (Some "1") (fun () ->
+                        let opened =
+                            (runReport (healthyEvidence ()) None).NotProved
+                            |> List.find (fun st -> st.Id = "hatches-are-an-inventory-not-a-waiver-record")
+
+                        Expect.isSome opened.Narrowing "an enumerated hatch set narrows what the reader must infer"
+
+                        Expect.stringContains
+                            opened.Statement
+                            "not as a record of what was waived"
+                            "and the bound that remains is still stated in full")
+                }
+            ]
+        )
+
+        // ── Phase 699: the GP 11 gate ─────────────────────────────────
+
+        testSequenced (
+            testList "the two new sections cost an undeclared deployment nothing" [
+                test "every section 686 and 693 shipped is byte-identical with no manifest and no hatch" {
+                    let report = runReport (healthyEvidence ()) None
+
+                    // The GP 11 assertion the phase asks for, stated over
+                    // the four fields the canonical form is taken across:
+                    // a deployment that declares nothing must read exactly
+                    // as it did before this phase in every section that
+                    // existed before this phase.
+                    for id in evidenceSectionIds do
+                        let s = sectionOf report id
+
+                        Expect.equal
+                            (VerificationSectionVerdict.label s.Verdict)
+                            "verified"
+                            (sprintf "section '%s' keeps its verdict" id)
+
+                    Expect.equal (exitCode report) 0 "the exit code is unchanged for an undeclared deployment"
+
+                    Expect.equal
+                        report.Outcome
+                        DeploymentVerificationOutcome.AllComposedVerified
+                        "and so is the top-line outcome"
+                }
+
+                test "a bare deployment still reports nothing-composed and exits zero" {
+                    // The single most important pin in this file: the two
+                    // new sections must not make `NothingComposed`
+                    // unreachable. Rendering an empty hatch set or an
+                    // absent manifest as `Observed` would have retired
+                    // that outcome for every deployment in existence — a
+                    // top-line regression no section-level assertion would
+                    // have caught.
+                    let report =
+                        DeploymentVerificationReport.run (servicesWith None None) "probe"
+                        |> Async.RunSynchronously
+
+                    Expect.equal
+                        report.Outcome
+                        DeploymentVerificationOutcome.NothingComposed
+                        "declaring nothing and accepting nothing is still an empty report"
+
+                    Expect.equal (exitCode report) 0 "and it still exits zero"
+                }
+            ]
+        )
     ]
