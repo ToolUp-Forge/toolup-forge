@@ -55,6 +55,13 @@
              compose knob. -->
         <Compile Include="Server\CoverageTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
+        <!-- Phase 708 — the feeder the Phase 522 push path never had:
+             projects the planner's `UseFact` steps back into the generic
+             `FactClause` the retrieval pipeline speaks, and retains the
+             plan so the answer's provenance recording reuses it rather
+             than recompiling the question. Compiled straight after the
+             planner it adapts. -->
+        <Compile Include="Server\AnswerPlanClausePlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
         <!-- Grounding certificate exported as a DSSE-wrapped in-toto
              Statement — the standard-interop projection over the

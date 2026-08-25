@@ -162,6 +162,33 @@ module FactsCompose =
                         (sp.GetRequiredService<IEventStore>())
                         compiler)
             )
+            // Phase 708 — the fact-clause feeder, on the SAME knob again.
+            // Phase 522 built the push path (facts resolved ahead of
+            // vector search, merged at score 1.0 under the verbatim-
+            // quoting contract) and Phase 558 wired its resolver in; what
+            // was missing was anything that ever PRODUCED a clause, so the
+            // path was dormant in every composed deployment and facts
+            // reached the model only when it thought to call a tool. This
+            // registration closes that loop: `RAGCompose` probes for the
+            // seam exactly as it probes for the resolver, and a
+            // deployment with no fact store registers neither (GP 13).
+            //
+            // One instance, registered under BOTH faces. The planner and
+            // the recorder share the retained plans by construction —
+            // registering two would give the recorder an empty retention
+            // and make 708.B's "reuse, don't recompute" quietly false.
+            .AddSingleton<AnswerPlanClausePlanner>(
+                Func<IServiceProvider, AnswerPlanClausePlanner>(fun sp ->
+                    AnswerPlanClausePlanner.create (sp.GetRequiredService<IAnswerPlanner>()))
+            )
+            .AddSingleton<IFactClausePlanner>(
+                Func<IServiceProvider, IFactClausePlanner>(fun sp ->
+                    sp.GetRequiredService<AnswerPlanClausePlanner>() :> IFactClausePlanner)
+            )
+            .AddSingleton<IPlannedAnswerRecorder>(
+                Func<IServiceProvider, IPlannedAnswerRecorder>(fun sp ->
+                    sp.GetRequiredService<AnswerPlanClausePlanner>() :> IPlannedAnswerRecorder)
+            )
             // Phase 565 — the grounding-certificate issuer rides the same
             // knob. It seals an answer's provenance chain (Phase 524) with
             // the composed `IArtefactSigner` (Phase 40): a signed,

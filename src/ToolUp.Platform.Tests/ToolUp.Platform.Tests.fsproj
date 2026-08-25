@@ -1043,6 +1043,13 @@
         <!-- Phase 560 — the grounded answer planner (question → triples → typed
              PlanStep resolution → the plan in the provenance chain). -->
         <Compile Include="InProcess\AnswerPlannerTests.fs" />
+        <!-- Phase 708 — the fact-clause feeder: the production producer the
+             Phase 522 push path never had. Plan-step projection, the prompt
+             path pushing a fact ahead of the chunks, byte-identity for a
+             non-resolving turn and a planner-less composition, the latency
+             guard, and reuse-not-recompute behind the plan id. Compiled
+             after the planner pack it builds on. -->
+        <Compile Include="InProcess\FactClauseFeederTests.fs" />
         <!-- Phase 565 — grounding certificates: sealed, selective provenance
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->

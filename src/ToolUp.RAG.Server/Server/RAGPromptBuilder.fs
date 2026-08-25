@@ -337,11 +337,66 @@ let private emptyRetrievalMessage (toolFraming: ToolFraming) : string =
 /// framing the miss as a dead end (see `emptyRetrievalMessage`). Pass
 /// `ToolFraming.none` (as the back-compat `withRetrieval` wrapper does) for
 /// the historical knowledge-base-first empty message.
-let withRetrievalToolAware
+///
+/// Phase 708 — `clausePlanner` is the fact-clause feeder. See
+/// `withRetrievalPlanned` below, which this delegates to with no planner;
+/// the behaviour of this entry point is byte-identical to its pre-708 self.
+let rec withRetrievalToolAware
     (defaults: RetrievalDefaults)
     (telemetry: IRagTelemetry option)
     (tracer: IRetrievalTracer option)
     (toolFraming: ToolFraming)
+    (pipeline: IRetrievalPipeline)
+    : SystemPromptBuilder =
+    // Eta-expanded for the same reason `withRetrieval` below is: a
+    // point-free delegation reflects as a different arity and trips the
+    // public-API baseline gate.
+    fun ctx ->
+        withRetrievalPlanned defaults telemetry tracer toolFraming None FactClausePlanOptions.disabled pipeline ctx
+
+/// The retrieval builder with the Phase 708 fact-clause feeder attached.
+///
+/// Everything `withRetrievalToolAware` documents holds; what is added is
+/// one stage in front of the retrieval request. When a deployment composed
+/// the fact tier, `clausePlanner` is the seam over the Phase 560 answer
+/// planner: the user's turn is compiled into (subject, metric, period)
+/// clauses, and the first resolvable one populates
+/// `RetrievalRequest.FactClause`, so a question naming registered
+/// vocabulary gets its facts **pushed** into the prompt — ahead of the
+/// chunks, at score 1.0, under the verbatim-quoting contract — without a
+/// tool round-trip. This is the production feeder the Phase 522 push path
+/// never had; before it, every non-test request left the field `None` and
+/// the whole path was dormant.
+///
+/// Three properties are load-bearing:
+///
+/// - **Dormant without the substrate (GP 13).** No planner, or
+///   `Enabled = false`, and not a single line below runs: the request is
+///   the one `withRetrievalToolAware` always built, no telemetry is
+///   recorded, and the composition is byte-for-byte its pre-708 self.
+/// - **Bounded, and it degrades rather than fails (708.B).** The compile
+///   can cost a provider round-trip and it sits in front of retrieval,
+///   which sits in front of the answering call — so an unbounded compile
+///   stalls the user's whole turn. It runs under
+///   `FactClausePlanOptions.TimeoutMs`; on overrun *or any exception* the
+///   turn proceeds with no clause and a `FactClausePlanTimeout` stage mark
+///   is recorded. A push is an enhancement over a path that already works;
+///   it must never be able to break it.
+/// - **No guessing enters retrieval (GP 9).** The planner refuses
+///   unrecognised vocabulary with a typed reason rather than reaching for
+///   a nearest match, so a question that resolves nothing produces no
+///   clause — not an approximate one.
+///
+/// The plan id lands in `ctx.PlannedAnswerId` so the answer's provenance
+/// recording names the plan computed here instead of recompiling the same
+/// question (560.D).
+and withRetrievalPlanned
+    (defaults: RetrievalDefaults)
+    (telemetry: IRagTelemetry option)
+    (tracer: IRetrievalTracer option)
+    (toolFraming: ToolFraming)
+    (clausePlanner: IFactClausePlanner option)
+    (planOptions: FactClausePlanOptions)
     (pipeline: IRetrievalPipeline)
     : SystemPromptBuilder =
     fun ctx -> async {
@@ -359,9 +414,89 @@ let withRetrievalToolAware
                 | Some teamId -> [ Platform; Deployment; Team teamId ]
                 | None -> [ Platform; Deployment; User ctx.Access.UserId ]
 
+            // Phase 708 — the fact-clause feeder. Runs BEFORE the request
+            // is built, because its whole output is one field on it.
+            //
+            // The scope handed to the planner is the caller's own fact
+            // scope, derived exactly as `RetrievalPipeline` derives the one
+            // it hands `IFactResolver` (`TeamId`, else `UserId`) — the two
+            // must agree or the planner would resolve a triple in one scope
+            // and the pipeline re-resolve it in another, quietly pushing
+            // nothing. `principal` is the acting user, so the planner's
+            // disclosure gate (Phase 525) judges under the same identity
+            // the pipeline's egress door will.
+            let! planned =
+                match clausePlanner with
+                | Some planner when planOptions.Enabled -> async {
+                    let opts = FactClausePlanOptions.clamp planOptions
+                    let factScopeId = ctx.Access.TeamId |> Option.defaultValue ctx.Access.UserId
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
+
+                    // `Async.StartChild` bounds the wait, not the work: a
+                    // compile whose provider call is still in flight keeps
+                    // running and is abandoned. That is the honest limit of
+                    // a caller-side bound (the same one the Phase 506
+                    // query-rewrite stage lives with) — the guarantee owed
+                    // to the user is that the turn proceeds.
+                    let bounded = async {
+                        let! child =
+                            Async.StartChild(planner.PlanClauses(factScopeId, ctx.Access.UserId, query), opts.TimeoutMs)
+
+                        return! child
+                    }
+
+                    let! outcome = Async.Catch bounded
+                    sw.Stop()
+                    let elapsedMs = sw.Elapsed.TotalMilliseconds
+
+                    // The mark rides `RecordRetrievalStages` rather than a
+                    // new `IRagTelemetry` member: the interface has shipped
+                    // implementations outside this repo, and a stage entry
+                    // is exactly what this is — one named, timed step of
+                    // the retrieval path, surfacing in `/health/rag`'s
+                    // per-stage P50/P95 beside the others.
+                    let mark (stage: string) =
+                        match telemetry with
+                        | None -> ()
+                        | Some t -> t.RecordRetrievalStages [ stage, elapsedMs ]
+
+                    match outcome with
+                    | Choice1Of2 planned when not (PlannedFactClauses.isEmpty planned) ->
+                        mark "FactClausePlan"
+                        ctx.PlannedAnswerId.Value <- Some planned.PlanId
+                        return planned
+                    | Choice1Of2 _ ->
+                        // Ran, resolved nothing. Still worth a mark — the
+                        // difference between "the feeder is costing us a
+                        // round-trip per turn and never firing" and "the
+                        // feeder is off" is otherwise invisible.
+                        mark "FactClausePlanEmpty"
+                        return PlannedFactClauses.none
+                    | Choice2Of2 _ ->
+                        // Timeout or planner fault. Never rethrown: the
+                        // turn proceeds exactly as a fact-less one would.
+                        mark "FactClausePlanTimeout"
+                        return PlannedFactClauses.none
+                  }
+                | _ -> async.Return PlannedFactClauses.none
+
             let request = {
                 RetrievalRequest.create query scopes defaults.TopK defaults.Merge with
                     OriginFilter = defaults.OriginFilter
+                    // Phase 708 — the clause the planner produced, or
+                    // `None` on every turn that planned nothing, which is
+                    // byte-identical to every request built before 708.
+                    //
+                    // The FIRST clause, because `RetrievalRequest` carries
+                    // one: Phase 522 shaped the field as a single
+                    // (subject, metric, period) query and the resolver
+                    // seam answers exactly that. A multi-triple question
+                    // therefore pushes its leading triple and leaves the
+                    // rest to the tool door — a narrowing, not a silent
+                    // drop, and the natural place to widen it is the
+                    // budgeting work that owns how much fact material a
+                    // turn may carry at all.
+                    FactClause = List.tryHead planned.Clauses
                     // Phase 502.D — the metadata-equality scope for this
                     // turn. This is the wiring that makes `Filters` reachable
                     // from the prompt path at all: 502.A taught the default

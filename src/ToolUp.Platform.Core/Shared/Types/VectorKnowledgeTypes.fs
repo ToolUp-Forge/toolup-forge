@@ -435,6 +435,80 @@ type ResolvedFact = {
 type IFactResolver =
     abstract Resolve: scopeId: string * clause: FactClause -> Async<ResolvedFact list>
 
+// ─── Fact-clause planning seam (Phase 708) ───────────────────────────
+//
+// `IFactResolver` above answers a clause; nothing in the request pipeline
+// ever *produced* one. Every non-test construction of `RetrievalRequest`
+// left `FactClause = None`, so the Phase 522 push path — facts entering
+// the prompt ahead of chunks at score 1.0, under the verbatim-quoting
+// contract — was wired end-to-end and permanently dormant, and facts
+// reached the model only when it thought to call a tool.
+//
+// The seam below is the feeder, and it is deliberately the SAME shape as
+// `IFactResolver`: fact-companion-free (opaque id strings + the generic
+// `FactClause`), so the RAG tier compiles a user turn into clauses
+// without a compile-time edge on the fact store's typed plan model
+// (GP 1). The concrete implementation lives in the fact companion over
+// the Phase 560 answer planner, whose refusal-over-fabrication posture
+// (GP 9) is what keeps similarity guessing out of retrieval: a question
+// naming no registered vocabulary yields no clause, never a nearest
+// match.
+
+/// The clauses one user turn compiled to, plus the identity of the plan
+/// that produced them (Phase 708).
+///
+/// **The plan id is the reuse handle.** Compiling a question is the one
+/// expensive step on this path — it can cost a provider round-trip — so
+/// the answer's provenance recording must consume the plan computed here
+/// rather than recompiling the same question a second time (560.D). The
+/// id names that retained plan; the plan itself never crosses this seam,
+/// because it is a fact-companion type and this seam exists precisely so
+/// the RAG tier does not see one.
+type PlannedFactClauses = {
+    /// Stable identity of the plan these clauses came from, for the
+    /// provenance recording that follows the answer. Empty when nothing
+    /// was planned.
+    PlanId: string
+    /// The resolvable clauses, in plan order. Empty ⇒ the turn named no
+    /// registered vocabulary (or the planner declined), and retrieval is
+    /// byte-identical to a clause-less request (GP 11).
+    Clauses: FactClause list
+}
+
+module PlannedFactClauses =
+    /// The "nothing was planned" value — what an unwired, refusing, or
+    /// timed-out planner contributes. Distinguished from a planner that
+    /// ran and resolved nothing only by the telemetry mark the caller
+    /// records, never by the request it produces.
+    let none: PlannedFactClauses = { PlanId = ""; Clauses = [] }
+
+    /// Whether anything is pushable. A plan that compiled to refusals
+    /// only is `false` here — a refusal is an honest answer, not a clause.
+    let isEmpty (planned: PlannedFactClauses) : bool = List.isEmpty planned.Clauses
+
+/// Question-to-clause compilation seam (Phase 708). Implemented in the
+/// fact companion over the Phase 560 answer planner; the AI request
+/// pipeline consumes it as an optional dependency (`None` ⇒ dormant, and
+/// the composition is byte-for-byte its fact-less self — GP 13).
+///
+/// `scopeId` is the caller's resolved fact scope and `principal` the
+/// acting user, both threaded so the implementation resolves and
+/// disclosure-gates under the caller's own identity (GP 4) — never a
+/// caller-supplied one. The call is expected to be *bounded by its
+/// caller*: it sits in front of retrieval, which sits in front of the
+/// answering call, so an unbounded compile stalls the user's whole turn.
+///
+/// GP 12 audit: identity by value (strings + value records); async at the
+/// boundary; no callbacks; stateless between calls apart from the plan
+/// retention the id names; scope is the shard key with no cross-scope
+/// ordering promise; no timing primitives (the bound is the caller's).
+type IFactClausePlanner =
+    /// Compile `question` into pushable clauses under the caller's scope.
+    /// Never throws for an unanswerable question — an unresolvable turn
+    /// returns `PlannedFactClauses.none`, exactly as a turn that named no
+    /// vocabulary does.
+    abstract PlanClauses: scopeId: string * principal: string * question: string -> Async<PlannedFactClauses>
+
 // ─── Disclosure egress seam (Phase 525) ──────────────────────────────
 //
 // The fact-level `Disclosure` classification (carried on every fact from
@@ -881,4 +955,45 @@ module RetrievalDefaults =
             TopK = max 1 d.TopK
             MinScore = d.MinScore |> Option.map (fun t -> max 0.0 (min 0.99 t))
             SnippetCharLimit = max 16 d.SnippetCharLimit
+    }
+
+/// Per-deployment control over the Phase 708 fact-clause feeder — whether
+/// the AI request pipeline compiles each user turn into a `FactClause`
+/// before retrieval, and how long it may spend doing so.
+///
+/// **Why this is a knob and not a constant.** Compiling a question is the
+/// one step on the retrieval path that can cost a provider round-trip, and
+/// it runs per chat turn. A deployment that composed the fact tier for its
+/// tool surface alone — and does not want a second model call in front of
+/// every turn — turns the feeder off here and keeps the `query_facts` door
+/// exactly as it was. The whole block is inert without a composed clause
+/// planner, so a deployment with no fact store pays nothing either way
+/// (GP 13).
+type FactClausePlanOptions = {
+    /// Whether a composed `IFactClausePlanner` is consulted at all.
+    /// Default `true` — composing the fact tier IS the opt-in, and the
+    /// push path existing but never firing is the defect Phase 708 closes.
+    Enabled: bool
+    /// Wall-clock budget for the compile, in milliseconds. On overrun the
+    /// turn proceeds with no clause and the caller records a telemetry
+    /// mark — a stalled compile must never become a stalled chat turn.
+    /// Default 3,000 (a little above the 2,000 the query-rewrite stage
+    /// allows: this call may compile several triples in one round-trip).
+    TimeoutMs: int
+}
+
+module FactClausePlanOptions =
+    /// Feeder on, three-second budget.
+    let defaults: FactClausePlanOptions = { Enabled = true; TimeoutMs = 3_000 }
+
+    /// Feeder off — the Phase 522 push path stays dormant and facts reach
+    /// the model only through the tool door, exactly as before Phase 708.
+    let disabled: FactClausePlanOptions = { Enabled = false; TimeoutMs = 3_000 }
+
+    /// Clamp to a sane budget: at least 1 ms (`Async.StartChild` rejects a
+    /// non-positive timeout), at most 30 s (beyond that the bound is not
+    /// meaningfully bounding a chat turn).
+    let clamp (o: FactClausePlanOptions) : FactClausePlanOptions = {
+        o with
+            TimeoutMs = max 1 (min 30_000 o.TimeoutMs)
     }

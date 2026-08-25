@@ -658,6 +658,13 @@ let aiAssistantApi
                 // a provider call; checked after the builder resolves.
                 let shortCircuitCell: string option ref = ref None
 
+                // Phase 708 — the id of the answer plan compiled for this
+                // turn's fact-first retrieval, when the fact tier is
+                // composed. Fresh cell per request, same lifecycle as the
+                // two above; stays `None` in every composition without a
+                // clause planner and on every turn that planned nothing.
+                let plannedAnswerCell: string option ref = ref None
+
                 // Phase 506 — prior turns for the query-rewrite stage. Read
                 // only when a prompt builder is actually going to run, and
                 // only when the conversation substrate is composed; `[]`
@@ -688,6 +695,7 @@ let aiAssistantApi
                             RetrievalFilters = request.RetrievalFilters
                             RetrievedSources = retrievedSourcesCell
                             ShortCircuit = shortCircuitCell
+                            PlannedAnswerId = plannedAnswerCell
                         }
                     | None -> async { return "" }
 

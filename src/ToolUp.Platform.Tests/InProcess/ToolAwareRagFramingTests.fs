@@ -56,6 +56,7 @@ let private mkContext () : PromptContext = {
     RetrievalFilters = None
     RetrievedSources = ref []
     ShortCircuit = ref None
+    PlannedAnswerId = ref None
 }
 
 /// Phase 538 — a tool that DECLARES the live-interface capability. Named

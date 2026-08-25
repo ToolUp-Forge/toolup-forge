@@ -78,6 +78,21 @@ type PromptContext = {
     /// that never short-circuit leave it `None`. Fresh cell per
     /// request (same lifecycle as `RetrievedSources`).
     ShortCircuit: string option ref
+    /// Phase 708 — the answer plan compiled for this turn, named by id.
+    /// `RAGPromptBuilder`'s planned-retrieval path sets it when a
+    /// composed `IFactClausePlanner` produced clauses; it stays `None`
+    /// on every turn that planned nothing and in every composition
+    /// without the fact tier (GP 11 / GP 13).
+    ///
+    /// The channel exists so the plan is **reused, not recomputed**
+    /// (560.D): compiling a question can cost a provider round-trip, so
+    /// the provenance recording that follows the answer names the
+    /// already-computed plan by this id rather than re-compiling the
+    /// same question. Only the id crosses — the plan itself is a
+    /// fact-companion type, retained by the planner that made it.
+    /// Same mutable-cell lifecycle as `RetrievedSources` / `ShortCircuit`
+    /// (fresh cell per request).
+    PlannedAnswerId: string option ref
 }
 
 /// Builds the system prompt sent to the AI provider for a given request.

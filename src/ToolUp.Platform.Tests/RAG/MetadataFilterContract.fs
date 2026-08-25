@@ -294,6 +294,7 @@ let private promptContextWith (perRequest: Map<string, string> option) : ToolUp.
     RetrievalFilters = perRequest
     RetrievedSources = ref []
     ShortCircuit = ref None
+    PlannedAnswerId = ref None
 }
 
 /// Run the tool-aware builder with the given deployment + per-request

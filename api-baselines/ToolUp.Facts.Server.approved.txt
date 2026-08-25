@@ -3,6 +3,13 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.AnswerPlanClausePlanner (class)
+ToolUp.Facts.AnswerPlanClausePlanner..ctor(ToolUp.Facts.IAnswerPlanner, System.Int32)
+ToolUp.Facts.AnswerPlanClausePlanner.TryPlan(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AnswerPlan]
+ToolUp.Facts.AnswerPlanClausePlannerModule (class)
+ToolUp.Facts.AnswerPlanClausePlannerModule.DefaultRetention : System.Int32 (literal)
+ToolUp.Facts.AnswerPlanClausePlannerModule.create(ToolUp.Facts.IAnswerPlanner) : ToolUp.Facts.AnswerPlanClausePlanner
+ToolUp.Facts.AnswerPlanClausePlannerModule.createWithRetention(ToolUp.Facts.IAnswerPlanner, System.Int32) : ToolUp.Facts.AnswerPlanClausePlanner
 ToolUp.Facts.AnswerPlanProvenance (class)
 ToolUp.Facts.AnswerPlanProvenance.chainForMessage(ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.IEventStore, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
 ToolUp.Facts.AnswerPlanProvenance.recordedFor(ToolUp.Platform.IEventStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AnswerPlan]]
@@ -458,6 +465,8 @@ ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : M
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
 ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
+ToolUp.Facts.IPlannedAnswerRecorder (interface)
+ToolUp.Facts.IPlannedAnswerRecorder.RecordPlanned(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Facts.ImportedFactOffer (class)
 ToolUp.Facts.ImportedFactOffer..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence])
 ToolUp.Facts.ImportedFactOffer.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }

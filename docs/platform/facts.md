@@ -224,3 +224,26 @@ is blob-backed, append-only, and stateless between calls — distributed-ready
 by construction (the content-addressed id makes concurrent writes
 idempotent); a large deployment swaps in an indexed implementation behind
 the same six-rule-audited `IFactStore` contract.
+
+### Facts reach the model two ways, and only one needs the model's consent
+
+Composing the store arms **both** doors, on that one knob:
+
+- **The tool door.** `query_facts` / `query_metric_population` /
+  `list_metric_coverage` — the model asks, and gets an answer. Reliable,
+  but it fires only when the model thinks to reach for it.
+- **The push door.** Each user turn is compiled into a
+  `RetrievalRequest.FactClause` by the answer planner, resolved ahead of
+  vector search, and merged into the prompt ahead of the similarity
+  chunks under the verbatim-quoting contract. A question naming a
+  registered metric and subject therefore arrives with its facts already
+  in context — no tool round-trip, and nothing for the model to decide.
+
+The push door refuses rather than guesses: unregistered vocabulary
+compiles to a typed refusal, never a nearest match, so a question that
+resolves nothing produces no clause and retrieval is exactly what it
+would have been. The compile can cost a provider call, so it is bounded
+(default 3 s) and degrades to no clause on overrun or fault — a turn is
+never blocked by planning. Turn it off with
+`RAGServerApp.withFactClausePlanning false` when the store is composed
+for its tool surface alone.

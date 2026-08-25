@@ -146,6 +146,16 @@ RAG-specific builders:
 - `withSnippetCharLimit: int -> RAGServerApp -> RAGServerApp` (default 1500)
 - `withOriginFilter: ChunkOrigin list option -> RAGServerApp -> RAGServerApp` (default `None`)
 - `withGroundingMode: GroundingMode -> RAGServerApp -> RAGServerApp` (default `Permissive`)
+- `withFactClausePlanning: bool -> RAGServerApp -> RAGServerApp` (default `true`)
+- `withFactClausePlanOptions: FactClausePlanOptions -> RAGServerApp -> RAGServerApp` (default on, 3,000 ms budget)
+
+> The two fact-clause builders are inert unless the deployment composed the fact tier, which is what
+> registers the `IFactClausePlanner` they control. With it composed, each user turn is compiled into a
+> `RetrievalRequest.FactClause` before retrieval, so a question naming registered vocabulary gets its
+> facts resolved and pushed into the prompt ahead of the similarity chunks — no tool round-trip. The
+> compile can cost a provider call, so it runs under the options' budget and degrades to no clause on
+> overrun or fault; pass `withFactClausePlanning false` when the fact tier is composed for its tool
+> surface alone and a second model call per chat turn is not wanted.
 - `withIngestionConcurrency: int -> RAGServerApp -> RAGServerApp` (default 2)
 - `withIngestionQueueCapacity: int option -> RAGServerApp -> RAGServerApp` (default `None` = unbounded)
 - `withTelemetry: IRagTelemetry -> RAGServerApp -> RAGServerApp`

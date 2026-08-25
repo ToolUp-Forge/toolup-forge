@@ -861,6 +861,13 @@ let allTests =
         // plan-node round-trip through the provenance chain walk, compose
         // registration.
         AnswerPlannerTests.tests
+        // Phase 708 — the fact-clause feeder that finally FIRES the Phase
+        // 522 push path in production: plan steps projected into a
+        // `RetrievalRequest.FactClause`, the fact leading the prompt under
+        // the verbatim contract, byte-identity where nothing resolved, the
+        // bounded compile degrading to no clause, and the plan reused for
+        // provenance rather than recompiled.
+        FactClauseFeederTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

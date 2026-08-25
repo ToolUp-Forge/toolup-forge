@@ -9932,6 +9932,14 @@ ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodFrom : Microsoft.FSharp.Co
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectHierarchy : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions..ctor(System.Boolean, System.Int32)
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions.Enabled : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions.TimeoutMs : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptionsModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptionsModule.clamp(ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions) : ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptionsModule.defaults : ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptionsModule.disabled : ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.FactDisclosable : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.IsFactDisclosable : System.Boolean { get }
@@ -9979,6 +9987,8 @@ ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactFresh : System.I
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactStale : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress.permittedFactIds(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner (interface)
+ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner.PlanClauses(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses]
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)
@@ -9999,6 +10009,13 @@ ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.FileName : System.Strin
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.FileType : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.Location : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator] { get }
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.SizeBytes : System.Int64 { get }
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses (class)
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactClause])
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses.Clauses : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactClause] { get }
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses.PlanId : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClausesModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClausesModule.isEmpty(ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses) : System.Boolean
+ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClausesModule.none : ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses { get }
 ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact (class)
 ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact..ctor(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.FactId : System.String { get }

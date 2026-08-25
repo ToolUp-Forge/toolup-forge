@@ -319,6 +319,7 @@ let tests =
                 RetrievalFilters = None
                 RetrievedSources = sources
                 ShortCircuit = ref None
+                PlannedAnswerId = ref None
             }
 
             let builder =
@@ -382,6 +383,7 @@ let tests =
                 RetrievalFilters = None
                 RetrievedSources = sources
                 ShortCircuit = ref None
+                PlannedAnswerId = ref None
             }
 
             // A high MinScore that would drop any real chunk.

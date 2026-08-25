@@ -748,6 +748,15 @@ type RAGServerApp = {
     /// `StrictlyGrounded` (refuse to answer without a retrieval hit).
     /// Tune via `withGroundingMode`.
     GroundingMode: GroundingMode
+    /// Phase 708 — whether the AI request pipeline compiles each user turn
+    /// into a `RetrievalRequest.FactClause` before retrieval, and how long
+    /// it may spend doing so. Defaults to on with a 3-second budget; inert
+    /// unless the deployment composed the fact tier, which registers the
+    /// `IFactClausePlanner` this reads (GP 13). Turn it off with
+    /// `withFactClausePlanning false` when the fact tier is composed for
+    /// its tool surface alone and a second model call per chat turn is not
+    /// wanted. Tune via `withFactClausePlanning` / `withFactClausePlanOptions`.
+    FactClausePlan: FactClausePlanOptions
     /// Master switch for document-level summary chunks (WS4.1). When
     /// `true` (default), `VectorisationHandler.Summarise` is called for
     /// every document and the resulting chunk is indexed under
@@ -1050,12 +1059,26 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let pipelineRef: IRetrievalPipeline option ref = ref None
     let tracerRef: IRetrievalTracer option ref = ref None
 
+    // Phase 708 — the fact-clause feeder, resolved the same deferred way
+    // the pipeline and tracer are (the DI probe lives in the service-config
+    // callback below, which runs before any request arrives). `None` when
+    // the deployment did not compose the fact tier — the builder then takes
+    // the pre-708 path with no planning stage at all (GP 13).
+    let clausePlannerRef: IFactClausePlanner option ref = ref None
+
     let ragBuilder: SystemPromptBuilder =
         fun ctx -> async {
             match pipelineRef.Value with
             | Some pipeline ->
                 let! block =
-                    (withRetrievalToolAware app.RetrievalDefaults (Some telemetry) tracerRef.Value toolFraming pipeline)
+                    (withRetrievalPlanned
+                        app.RetrievalDefaults
+                        (Some telemetry)
+                        tracerRef.Value
+                        toolFraming
+                        clausePlannerRef.Value
+                        app.FactClausePlan
+                        pipeline)
                         ctx
 
                 // Server-side strict-grounding guard. Under `StrictlyGrounded`,
@@ -1390,6 +1413,16 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // and miss diagnostics land in the same event-store stream.
         pipelineRef.Value <- Some pipeline
         tracerRef.Value <- Some retrievalTracer
+
+        // Phase 708 — fill the feeder from the same probe. Present exactly
+        // when the fact tier is composed (`FactsCompose.withFactStore`
+        // registers it beside the resolver and the gate), so this needs no
+        // knob of its own to arm — `app.FactClausePlan` only decides
+        // whether an armed feeder is consulted.
+        clausePlannerRef.Value <-
+            match probe.GetService(typeof<IFactClausePlanner>) with
+            | :? IFactClausePlanner as p -> Some p
+            | _ -> None
 
         // Resolve usage-metering + quota substrate from the single probe (G10)
         // so embedding spend is attributed per scope and pre-flight-gated like
@@ -1860,6 +1893,7 @@ module RAGServerApp =
             RetrievalDefaults = RetrievalDefaults.defaults
             IndexConversations = false
             GroundingMode = Preferred
+            FactClausePlan = FactClausePlanOptions.defaults
             EnableDocumentSummaries = true
             CitationPolicy = ToolUp.RAG.CitationNormaliser.Strict
             RetrievalDefaultsClampLog = []
@@ -1906,6 +1940,7 @@ module RAGServerApp =
             RetrievalDefaults = RetrievalDefaults.defaults
             IndexConversations = false
             GroundingMode = Preferred
+            FactClausePlan = FactClausePlanOptions.defaults
             EnableDocumentSummaries = true
             CitationPolicy = ToolUp.RAG.CitationNormaliser.Strict
             RetrievalDefaultsClampLog = []
@@ -2497,6 +2532,30 @@ module RAGServerApp =
     /// `StrictlyGrounded` works best paired with `withMinScore (Some x)`
     /// so the model only refuses on genuinely-thin retrievals.
     let withGroundingMode (mode: GroundingMode) (app: RAGServerApp) : RAGServerApp = { app with GroundingMode = mode }
+
+    /// Phase 708 — turn the fact-clause feeder on or off, keeping the
+    /// current budget. On (the default) and with the fact tier composed,
+    /// each user turn is compiled into a `FactClause` so a question naming
+    /// registered vocabulary gets its facts pushed into the prompt ahead
+    /// of the chunks, without a tool round-trip. Off restores the pre-708
+    /// behaviour exactly: the push path stays dormant and facts reach the
+    /// model only through `query_facts`.
+    let withFactClausePlanning (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            FactClausePlan = {
+                app.FactClausePlan with
+                    Enabled = enabled
+            }
+    }
+
+    /// Phase 708 — replace the whole fact-clause-planning options record
+    /// (enabled flag + compile budget). Clamped into `[1 ms, 30 s]`: a
+    /// non-positive budget is not a bound `Async.StartChild` will accept,
+    /// and a budget past half a minute is not bounding a chat turn.
+    let withFactClausePlanOptions (options: FactClausePlanOptions) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            FactClausePlan = FactClausePlanOptions.clamp options
+    }
 
     /// Toggle document-level summary chunks. Default `true` — when a
     /// `VectorisationHandler` defines `Summarise`, the SDK calls it after
