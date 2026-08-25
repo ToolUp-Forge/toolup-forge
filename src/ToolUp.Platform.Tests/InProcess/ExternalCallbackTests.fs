@@ -619,10 +619,24 @@ let private scheduleAndHandOff (fixture: Fixture) (handler: IJobHandler) : strin
     | Error e -> failtestf "TriggerOnce failed: %s" e
 
     // Wait for the hand-off to land. `AwaitingExternal` is written before
-    // the lease is released, so polling the row is the settle signal.
-    let deadline = DateTime.UtcNow.AddSeconds 5.0
+    // the lease is released, so the row is the FIRST settle signal — but
+    // not the last write of the hand-off. The production ordering is
+    // deliberate (see the `HandedOff` arm in `JobScheduler.fs`): the row
+    // is made durable first so a crash degrades to poll-based resolution,
+    // and the handle-store registration, the credential push and the
+    // `JobExternalHandedOff` event all land AFTER it. A settle wait that
+    // trusts the row alone can observe the row and race ahead of the
+    // handle registration — a load-sensitive flake, observed 2026-08-25.
+    // The event is emitted after every other write in the hand-off, so IT
+    // is the signal that the whole hand-off has settled.
+    //
+    // Bounded polls rather than a monitor wait: the stores here are the
+    // real implementations, not fixtures we can pulse. Each timeout names
+    // the write that was missing, so a slow machine fails attributed to
+    // the settle wait — never misreported as the domain claim under test.
+    let deadline = DateTime.UtcNow.AddSeconds 15.0
 
-    let rec await () =
+    let rec awaitRow () =
         let latest =
             fixture.Store.GetRecentRuns(scope, jobId, 20)
             |> Async.RunSynchronously
@@ -632,10 +646,29 @@ let private scheduleAndHandOff (fixture: Fixture) (handler: IJobHandler) : strin
         | Some r when r.Status = AwaitingExternal -> r
         | _ when DateTime.UtcNow < deadline ->
             System.Threading.Thread.Sleep 25
-            await ()
-        | _ -> failtest "the run never reached AwaitingExternal"
+            awaitRow ()
+        | _ ->
+            failtest
+                "settle wait: the run never reached AwaitingExternal within 15s — the hand-off's row write is missing"
 
-    let run = await ()
+    let run = awaitRow ()
+
+    let rec awaitHandedOffEvent () =
+        let emitted =
+            fixture.EventStore.ReadAll scope
+            |> Async.RunSynchronously
+            |> List.exists (fun e -> e.EventType = "JobExternalHandedOff")
+
+        if emitted then
+            ()
+        elif DateTime.UtcNow < deadline then
+            System.Threading.Thread.Sleep 25
+            awaitHandedOffEvent ()
+        else
+            failtest
+                "settle wait: the run reached AwaitingExternal but JobExternalHandedOff never arrived within 15s — the hand-off's post-row writes (handle registration / credential push / event emit) did not settle; this is the settle wait timing out, not the domain claim under test"
+
+    awaitHandedOffEvent ()
     scope, jobId, run
 
 let private eventTypes (fixture: Fixture) (scope: string) =
