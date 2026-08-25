@@ -136,6 +136,43 @@ let private aliasesIn (text: string) =
     |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
     |> Map.ofSeq
 
+/// One shipped source file, with everything the arms below ask of it.
+type private ShippedSource = {
+    /// Repo-relative, forward-slashed — the form findings are reported in.
+    RelPath: string
+    Text: string
+    Aliases: Map<string, string>
+    PlatformSide: bool
+}
+
+/// Every shipped source file, read ONCE for the whole pack.
+///
+/// The two arms below and the alias map each used to walk the tree
+/// independently, so one test pack made roughly four passes over 1,413
+/// files. That is wasteful on its own terms, and it is a poor neighbour:
+/// Expecto runs cases in parallel, and a burst of file I/O from a test
+/// that is merely READING SOURCE is no reason to perturb one that is
+/// measuring a race. (The Phase 312 fan-out test next door decides a
+/// cancellation against a ten-second budget; it is flaky for its own
+/// reasons, but this pack should not be adding to the noise.)
+let private shippedSources =
+    lazy
+        (let root = repoRoot ()
+
+         shippedSourceFiles root
+         |> List.map (fun full ->
+             let text = File.ReadAllText full
+             let norm = full.Replace('\\', '/')
+
+             {
+                 RelPath = norm.Substring(norm.IndexOf "src/")
+                 Text = text
+                 Aliases = aliasesIn text
+                 PlatformSide =
+                     norm.Contains "/src/ToolUp.Platform.Core/"
+                     || norm.Contains "/src/ToolUp.Platform.Server/"
+             }))
+
 /// Alias → the binding(s) it names, across every shipped file. Needed
 /// because a reader legitimately cites another module's alias
 /// (`BootstrapTeam.initialAdminEnvVar` from two different validators),
@@ -145,14 +182,15 @@ let private aliasesIn (text: string) =
 /// files to two different keys. An ambiguous alias resolves file-locally
 /// or not at all — guessing between two keys is exactly how a sweep
 /// declares a key bindable that nothing reads.
-let private globalAliases (files: string list) =
-    files
-    |> List.collect (fun f -> aliasesIn (File.ReadAllText f) |> Map.toList)
-    |> List.fold
-        (fun acc (alias, binding) ->
-            let existing = acc |> Map.tryFind alias |> Option.defaultValue Set.empty
-            Map.add alias (Set.add binding existing) acc)
-        Map.empty
+let private globalAliases =
+    lazy
+        (shippedSources.Value
+         |> List.collect (fun f -> Map.toList f.Aliases)
+         |> List.fold
+             (fun acc (alias, binding) ->
+                 let existing = acc |> Map.tryFind alias |> Option.defaultValue Set.empty
+                 Map.add alias (Set.add binding existing) acc)
+             Map.empty)
 
 /// Resolve an expression appearing in argument position — `Names.foo`,
 /// `ConfigKeys.Names.foo`, a fully-qualified `ToolUp.Platform.ConfigKeys
@@ -301,8 +339,7 @@ let tests =
         testCase "every TOOLUP_ env var in shipped source has a descriptor"
         <| fun _ ->
             let registered = all |> List.map _.EnvVar |> Set.ofList
-            let root = repoRoot ()
-            let files = shippedSourceFiles root
+            let files = shippedSources.Value
 
             Expect.isGreaterThan
                 (List.length files)
@@ -311,9 +348,8 @@ let tests =
 
             let readVars =
                 files
-                |> List.collect (fun full ->
-                    File.ReadAllText full
-                    |> envVarLiteralPattern.Matches
+                |> List.collect (fun f ->
+                    envVarLiteralPattern.Matches f.Text
                     |> Seq.map (fun m -> m.Groups[1].Value)
                     |> List.ofSeq)
                 |> Set.ofList
@@ -445,17 +481,13 @@ let tests =
             //
             // Phase 698 widened the ARGUMENT the pattern accepts (a local
             // alias, or another module's) without widening the anchor.
-            let files = shippedSourceFiles root
-            let global' = globalAliases files
+            let global' = globalAliases.Value
 
             let seamCallKeys =
-                files
-                |> List.collect (fun full ->
-                    let text = File.ReadAllText full
-                    let fileAliases = aliasesIn text
-
-                    seamCallPattern.Matches text
-                    |> Seq.choose (fun m -> resolveKeyExpression bindingToVar fileAliases global' m.Groups[1].Value)
+                shippedSources.Value
+                |> List.collect (fun f ->
+                    seamCallPattern.Matches f.Text
+                    |> Seq.choose (fun m -> resolveKeyExpression bindingToVar f.Aliases global' m.Groups[1].Value)
                     |> List.ofSeq)
                 |> Set.ofList
 
@@ -502,16 +534,8 @@ let tests =
             let root = repoRoot ()
             let varOfBinding = bindingToVar root
             let registered = all |> List.map _.EnvVar |> Set.ofList
-            let allFiles = shippedSourceFiles root
-            let global' = globalAliases allFiles
-
-            let platformFiles =
-                allFiles
-                |> List.filter (fun f ->
-                    let norm = f.Replace('\\', '/')
-
-                    norm.Contains "/src/ToolUp.Platform.Core/"
-                    || norm.Contains "/src/ToolUp.Platform.Server/")
+            let global' = globalAliases.Value
+            let platformFiles = shippedSources.Value |> List.filter _.PlatformSide
 
             Expect.isGreaterThan
                 (List.length platformFiles)
@@ -542,15 +566,14 @@ let tests =
 
             let findings =
                 platformFiles
-                |> List.collect (fun full ->
-                    let rel = full.Replace('\\', '/')
-                    let relFromRoot = rel.Substring(rel.IndexOf "src/")
+                |> List.collect (fun file ->
+                    let relFromRoot = file.RelPath
 
                     if Set.contains relFromRoot allowedDirectReaders then
                         []
                     else
-                        let text = File.ReadAllText full
-                        let fileAliases = aliasesIn text
+                        let text = file.Text
+                        let fileAliases = file.Aliases
 
                         let resolveKey (expr: string) =
                             if expr.StartsWith "\"" then
