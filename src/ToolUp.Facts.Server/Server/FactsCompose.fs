@@ -363,11 +363,22 @@ module FactsCompose =
                     // population and summarises what it ranked over. One
                     // knob declares both, so no deployment can arm the
                     // point read and miss the population read.
+                    //
+                    // Phase 705 — and `list_metric_coverage` beside them,
+                    // for a sharper version of the same argument. Both
+                    // read tools take ids and neither can list them, so a
+                    // deployment that armed the reads WITHOUT the
+                    // discovery surface would leave the model guessing
+                    // metric ids — and a guessed id is refused, not
+                    // approximated. Arming discovery separately would make
+                    // that misconfiguration possible; one knob makes it
+                    // unreachable.
                     AITools =
                         app.AITools
                         @ [
                             FactQueryTool.definition, FactQueryTool.execute
                             PopulationQueryTool.definition, PopulationQueryTool.execute
+                            CoverageTool.definition, CoverageTool.execute
                         ]
             }
 

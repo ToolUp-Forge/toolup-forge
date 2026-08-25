@@ -843,6 +843,13 @@ let allTests =
         // grouped count, true rank gaps, gated magnitudes), the two typed
         // ordering refusals, and the end-to-end demo.
         PopulationQueryToolTests.tests
+        // Phase 705 — metric context + coverage discovery: the
+        // `list_metric_coverage` entry point (registry declarations with
+        // their Context, per-hierarchy cardinality / period reach /
+        // freshness / method mix), the disclosure folding, and the
+        // counts-never-values boundary between discovery and the
+        // population read.
+        CoverageToolTests.tests
         // Phase 560 — the grounded answer planner: compiler table (refusal
         // over fabrication), per-branch resolution (UseFact / RefreshFact /
         // ComputeFact / RequestData / Refuse), disclosure interplay, the

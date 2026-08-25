@@ -26,6 +26,7 @@ let private metric id (op: string option) : MetricDefinition = {
     CanonicalMethod = None
     RecomputePolicy = None
     RollUp = None
+    Context = None
 }
 
 let private subject id (levels: string list) : SubjectDefinition = {
@@ -75,6 +76,40 @@ let tests =
                 "hit subject"
 
             Expect.isNone (r.TryGetSubject "unknown") "miss subject"
+        }
+
+        // ─── Context (Phase 705) ──────────────────────────────────────
+
+        test "Context round-trips through the registry, and is optional" {
+            // Declared once with the METRIC, not once per subject: the
+            // whole point of the field is that a discovery surface can
+            // explain `elasticity` without a hand-authored chunk repeating
+            // the same sentence beside every value.
+            let narrative =
+                "Price elasticity of demand, estimated weekly. Negative by convention."
+
+            let r =
+                MetricRegistry.build [
+                    reg "modA" {
+                        metric "elasticity" None with
+                            Context = Some narrative
+                    }
+                    reg "modA" (metric "plain" None)
+                ] []
+
+            Expect.equal
+                (r.TryGetMetric "elasticity" |> Option.bind _.Context)
+                (Some narrative)
+                "the declared narrative survives the fan-in verbatim"
+
+            Expect.isNone
+                (r.TryGetMetric "plain" |> Option.bind _.Context)
+                "an undeclared context stays None — nothing is invented for a metric that declared none (GP 11)"
+
+            Expect.equal
+                (r.Metrics |> List.filter (fun d -> d.Context.IsSome) |> List.length)
+                1
+                "and the field is per-metric, not per-registry"
         }
 
         test "MetricsByModule returns only that module's metrics" {

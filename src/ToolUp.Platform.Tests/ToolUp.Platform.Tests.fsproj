@@ -1039,6 +1039,7 @@
              cross-subject ranking + population summary, its server-side
              ceiling, and the population-scale disclosure posture. -->
         <Compile Include="InProcess\PopulationQueryToolTests.fs" />
+        <Compile Include="InProcess\CoverageToolTests.fs" />
         <!-- Phase 560 — the grounded answer planner (question → triples → typed
              PlanStep resolution → the plan in the provenance chain). -->
         <Compile Include="InProcess\AnswerPlannerTests.fs" />

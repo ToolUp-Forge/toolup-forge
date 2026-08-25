@@ -568,6 +568,17 @@ module PopulationQueryTool =
                     return
                         serialize {|
                             metric = args.Metric
+                            // Phase 705 — the metric family's declared
+                            // interpretation, carried beside the numbers
+                            // it explains. An answer that quotes a
+                            // rendering verbatim (which this tool exists
+                            // to make possible) still needs the reader to
+                            // know what the quantity IS, and the
+                            // alternative is the model supplying that
+                            // sentence from its own priors. `None` where
+                            // the deployment declared none, exactly as
+                            // before.
+                            metricContext = metricDef |> Option.bind _.Context
                             hierarchy = args.Hierarchy
                             direction = directionLabel
                             requestedTopK = args.RequestedTopK
@@ -586,6 +597,23 @@ module PopulationQueryTool =
                                 periodTo = stats.PeriodTo |> Option.map (fun t -> t.ToUniversalTime().ToString "o")
                                 freshCount = stats.Freshness.FreshCount
                                 staleCount = stats.Freshness.StaleCount
+                                // Phase 705 — how the population was
+                                // computed, counted by method identity.
+                                // Existence-level like the counts beside
+                                // it (a method identity names a procedure,
+                                // never a value), so it rides regardless
+                                // of the magnitude suppression below: one
+                                // estimator over the whole population and
+                                // three competing ones are different
+                                // answers to "how much should I trust the
+                                // spread", and both are answerable without
+                                // disclosing a number.
+                                methods =
+                                    stats.MethodMix
+                                    |> List.map (fun (identity, count) -> {|
+                                        method = identity
+                                        factCount = count
+                                    |})
                                 minimum = renderStat stats.Minimum
                                 maximum = renderStat stats.Maximum
                                 mean = renderStat stats.Mean

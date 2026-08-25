@@ -516,6 +516,7 @@ let private elasticityMetric (canonical: string option) : MetricDefinition = {
     CanonicalMethod = canonical
     RecomputePolicy = None
     RollUp = None
+    Context = None
 }
 
 let private surfaceRegistry: IMetricRegistry =

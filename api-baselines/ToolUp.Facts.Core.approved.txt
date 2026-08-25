@@ -323,12 +323,13 @@ ToolUp.Facts.PopulationResult.Truncated : System.Boolean { get }
 ToolUp.Facts.PopulationSelection (class)
 ToolUp.Facts.PopulationSelection.canonicalHeads`2(Microsoft.FSharp.Core.FSharpFunc`2[a, k], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
 ToolUp.Facts.PopulationStats (class)
-ToolUp.Facts.PopulationStats..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], ToolUp.Facts.FreshnessHistogram)
+ToolUp.Facts.PopulationStats..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], ToolUp.Facts.FreshnessHistogram, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]])
 ToolUp.Facts.PopulationStats.ComparableCount : System.Int32 { get }
 ToolUp.Facts.PopulationStats.FactCount : System.Int32 { get }
 ToolUp.Facts.PopulationStats.Freshness : ToolUp.Facts.FreshnessHistogram { get }
 ToolUp.Facts.PopulationStats.Maximum : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
 ToolUp.Facts.PopulationStats.Mean : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationStats.MethodMix : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
 ToolUp.Facts.PopulationStats.Minimum : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
 ToolUp.Facts.PopulationStats.NonComparableCount : System.Int32 { get }
 ToolUp.Facts.PopulationStats.PeriodFrom : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }

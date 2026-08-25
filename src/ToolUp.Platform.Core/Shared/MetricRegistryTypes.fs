@@ -213,6 +213,27 @@ type MetricDefinition = {
     /// byte-for-byte unchanged (GP 11 / GP 13). Comparability is derived
     /// wholly from this registry declaration, never configured per fact.
     RollUp: RollUp option
+    /// Optional **interpretive context** for the metric family (Phase 705)
+    /// — the analyst's narrative for what this quantity means, how it is
+    /// computed, and how to read its sign and magnitude. Declared once
+    /// *with the metric*, so a discovery surface can say what `elasticity`
+    /// IS without a hand-authored knowledge chunk per subject repeating
+    /// the same sentence.
+    ///
+    /// **Prose about the FAMILY, never a value.** This field is
+    /// interpretation, not data. A number — a level, a ranking, a
+    /// "currently around X" — belongs in a fact, where it is bitemporal,
+    /// superseded when it changes, disclosure-classified, and carries its
+    /// provenance. A value copied here is none of those things: it is a
+    /// claim nothing can supersede, on a compose-time declaration readable
+    /// by anything that resolves `IMetricRegistry`, and it egresses
+    /// through surfaces the disclosure gate does not guard.
+    ///
+    /// Generic substrate (GP 1): opaque text the declaring module
+    /// supplies; nothing here parses or interprets it. `None` (the
+    /// default) leaves every existing surface byte-for-byte unchanged
+    /// (GP 11 / GP 13).
+    Context: string option
 }
 
 /// Matching semantics for a `MetricDefinition.CanonicalMethod` selector

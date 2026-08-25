@@ -656,6 +656,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
         CanonicalMethod = canonical
         RecomputePolicy = None
         RollUp = None
+        Context = None
     }
 
     let registryOf (direction: DirectionOfBetter) (canonical: string option) =

@@ -31,6 +31,7 @@ A `Grounding.MetricDefinition` describes one quantity:
 | `ProducingOperation` | Optional catalog-operation id that produces this metric. When present, a planner can map a missing fact → this operation → its input schema → the data catalog. |
 | `CanonicalMethod` | Optional canonical-method selector (Phase 566). When several methods compute this metric over one (subject, period), a *method-less* fact query resolves to this method's lineage by default — matched against method-identity strings (`computed:op:ver:hash` / `asserted:principal` / `imported:cert`), exactly or as a `:`-boundary prefix (`"computed:rollup"` matches every version of `rollup`). `None` = no default; every competing head surfaces. Competitors stay queryable either way, and the query surface discloses them (GP 9). |
 | `RecomputePolicy` | Optional reactive-recomputation policy (Phase 561). When an upstream data-object version a fact was computed from is superseded, the lineage walk marks the fact `InputsChanged` (derived, never a stored flag); this policy governs what executes — `Eager` enqueues a recompute job (through `IJobScheduler`) that re-asserts on the ordinary `Assert` path, `OnQuery` recomputes lazily at the next read, `Manual` surfaces the changed state only. `None` = `Manual` (nothing recomputes unbidden; the composition is byte-for-byte unchanged). |
+| `Context` | Optional interpretive prose for the metric **family** (Phase 705) — what the quantity means, how it is computed, how to read its sign and magnitude. Declared once with the metric rather than repeated per subject. Read by the `list_metric_coverage` discovery tool and carried on a population answer, so an assistant can explain a metric without a hand-authored knowledge chunk. `None` = the default; no surface changes. **Never a place to copy values** — see [Context is prose, never data](#context-is-prose-never-data). |
 | `RollUp` | Optional roll-up semantics (Phase 563). Declares how the metric aggregates across a subject hierarchy: `Additive tolerance` makes a parent's value comparable to the sum of its direct children's for the same metric and period, within `tolerance` (absolute, in the metric's unit), so the standing coherence check can flag a cross-level inconsistency — a mixed-vintage aggregate, a partial load, a unit slip. `NonAdditive` (a ratio, an average, a share, an index) excludes it: a parent is not the sum of its children, so there is no decidable relationship to test. `None` = the default, treated as non-additive, so a metric that declares nothing is never coherence-checked and the composition is byte-for-byte unchanged. Comparability is derived wholly from this declaration, never configured per fact. |
 
 A `Grounding.SubjectDefinition` declares a hierarchy — a *dimension* of
@@ -65,7 +66,8 @@ let serverModule =
           ProducingOperation = Some "sales.rollup"
           CanonicalMethod = None
           RecomputePolicy = None
-          RollUp = Some(Additive 0.01M) }
+          RollUp = Some(Additive 0.01M)
+          Context = Some "Net invoiced sales, excluding VAT and intra-group transfers, rolled up nightly from the ledger. A month-on-month move under 2% is inside normal seasonal noise." }
       ]
     |> ServerModule.declareSubjects [
         { Id = "product_hierarchy"
@@ -110,6 +112,46 @@ in one module to disambiguate.
 
 A *single* module re-declaring the same id twice is idempotent (collapsed
 to one entry), not a conflict.
+
+## Context is prose, never data
+
+*Phase 705.* `Context` is the one free-text field on a metric, and the
+temptation it creates is worth naming: it is a place a number will fit,
+and numbers must never go there.
+
+**What belongs in it** — the interpretation a reader needs before any
+value means anything: what the quantity is, what it excludes, how it is
+computed and how often, what its sign means, what size of move is
+ordinary. Written once for the metric FAMILY, in the vocabulary of the
+business that declared it.
+
+```fsharp skip=fragment
+Context = Some "Price elasticity of demand, estimated weekly from the last 52 weeks of \
+                promoted and base sales. Negative by convention: -1.8 means a 1% price rise \
+                loses 1.8% of volume. Values above -0.5 usually mean an underpowered promo \
+                window rather than genuinely inelastic demand."
+```
+
+**What does not** — any value, level, ranking, or "currently around X".
+Those belong in a fact, and the difference is not stylistic:
+
+| A fact | Context prose |
+|---|---|
+| Bitemporal — carries its valid time and its transaction time | Compose-time; has no time at all |
+| Superseded when it changes, with a derived edge | Changes only when someone edits code and redeploys |
+| Disclosure-classified; every egress passes the Phase 525 gate | Readable by anything that resolves `IMetricRegistry` |
+| Carries evidence, method identity, confidence | Carries none of that; it is an assertion by an author |
+
+A value copied into `Context` is therefore a claim that cannot go stale
+because nothing can supersede it, egressing through a door the disclosure
+gate does not guard. If a number is worth telling the model, assert it —
+`query_facts` and `query_metric_population` will find it, and it will
+carry its provenance when they do.
+
+**Length.** Context ships with every metric on every
+`list_metric_coverage` call, so it is charged to the context window once
+per metric per discovery call. A paragraph is right; a page is a
+knowledge-base document, and the knowledge base is where it belongs.
 
 ## When *not* to register
 

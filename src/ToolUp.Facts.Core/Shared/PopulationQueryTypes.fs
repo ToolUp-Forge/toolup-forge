@@ -186,6 +186,26 @@ type PopulationStats = {
     Mean: decimal option
     /// Derived freshness distribution at the query instant.
     Freshness: FreshnessHistogram
+    /// **How the population was computed** (Phase 705): `(methodIdentity,
+    /// count)` over the matched heads, ordered by identity (ordinal) so
+    /// two implementations of the same read report the same list rather
+    /// than the same set.
+    ///
+    /// Counts, never members — the `FreshnessHistogram` posture, for the
+    /// same reason: naming which subjects a given method produced is a
+    /// second listing of the population wearing a summary's clothes. What
+    /// the mix answers is the question a discovery surface must answer
+    /// before a value means anything — is this one estimator over the
+    /// whole population, or three, and how much of the population does
+    /// each account for. A single-entry mix says the population is
+    /// methodologically uniform; several entries under
+    /// `AllCompetingMethods` are the D19 competitors, made countable.
+    ///
+    /// Method identity is `Fact.methodIdentity` (`computed:op:ver:hash` /
+    /// `asserted:principal` / `imported:cert`) — a wire token, not a
+    /// value: it names how a number was produced and discloses nothing
+    /// about what the number is.
+    MethodMix: (string * int) list
 }
 
 /// The answer to a population question: a bounded ranking, plus the
@@ -537,6 +557,7 @@ module PopulationStats =
         Maximum = None
         Mean = None
         Freshness = { FreshCount = 0; StaleCount = 0 }
+        MethodMix = []
     }
 
     /// **The** population fold — over projected members already paired
@@ -600,10 +621,11 @@ module PopulationStats =
                     comparableCount <- comparableCount + 1
 
             {
-                // The one derivation left as its own pass: `List.distinct`
-                // is already hash-backed and linear, and hand-rolling a set
-                // here would mean reaching for a BCL collection this
-                // Fable-safe module deliberately does without.
+                // The two derivations left as their own passes:
+                // `List.distinct` / `List.countBy` are already hash-backed
+                // and linear, and hand-rolling a set or a dictionary here
+                // would mean reaching for a BCL collection this Fable-safe
+                // module deliberately does without.
                 SubjectCount = members |> List.map (fun (m, _) -> m.Subject) |> List.distinct |> List.length
                 FactCount = factCount
                 ComparableCount = comparableCount
@@ -621,6 +643,10 @@ module PopulationStats =
                     FreshCount = freshCount
                     StaleCount = factCount - freshCount
                 }
+                MethodMix =
+                    members
+                    |> List.countBy (fun (m, _) -> m.MethodIdentity)
+                    |> List.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
             }
 
     /// Fold projected members into their summary, deriving freshness per

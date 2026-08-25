@@ -51,6 +51,7 @@ let private metricDef (id: string) (rollup: RollUp option) : MetricDefinition = 
     CanonicalMethod = None
     RecomputePolicy = None
     RollUp = rollup
+    Context = None
 }
 
 let private subjectDef (id: string) (levels: string list) : SubjectDefinition = {

@@ -91,6 +91,7 @@ let private registryWith (direction: DirectionOfBetter) : IMetricRegistry =
                 CanonicalMethod = None
                 RecomputePolicy = None
                 RollUp = None
+                Context = None
             }
         }
     ] []
@@ -201,8 +202,8 @@ let registrationTests =
 
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
-                [ "query_facts"; "query_metric_population" ]
-                "the point read and the population read arrive together"
+                [ "query_facts"; "query_metric_population"; "list_metric_coverage" ]
+                "the point read, the population read and (Phase 705) the discovery surface arrive together"
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"
 
@@ -378,6 +379,89 @@ let rankingTests =
             Expect.equal (num population "factCount") 4 "the summary describes the FILTERED population"
             Expect.equal (str population "minimum") "1,021" ""
             Expect.equal (str population "maximum") "1,042" ""
+
+        // ── Phase 705 additions to this answer ────────────────────
+
+        testCase "the metric's declared Context rides the answer, beside the numbers it explains"
+        <| fun () ->
+            let narrative =
+                "Net invoiced sales excluding VAT, rolled up nightly from the ledger."
+
+            let registry =
+                MetricRegistry.build [
+                    {
+                        Module = "TestModule"
+                        Definition = {
+                            Id = "revenue"
+                            Name = "Revenue"
+                            Unit = "GBP"
+                            Dimensionality = "currency"
+                            Direction = HigherIsBetter
+                            DisplayFormat = "N0"
+                            Staleness = UntilSuperseded
+                            ProducingOperation = None
+                            CanonicalMethod = None
+                            RecomputePolicy = None
+                            RollUp = None
+                            Context = Some narrative
+                        }
+                    }
+                ] []
+
+            let _, sp = composedUnder EnabledFactStore (Some registry)
+            let scope = newScope ()
+            seedPopulation (sp.GetRequiredService<IFactStore>()) scope 3 |> ignore
+
+            let el = executeVia sp scope baseArgs
+
+            Expect.equal
+                (str el "metricContext")
+                narrative
+                "an answer that quotes a rendering verbatim still needs the reader to know what the quantity IS"
+
+            let _, spPlain = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let scopePlain = newScope ()
+
+            seedPopulation (spPlain.GetRequiredService<IFactStore>()) scopePlain 2 |> ignore
+
+            Expect.equal
+                ((executeVia spPlain scopePlain baseArgs).GetProperty("metricContext").ValueKind)
+                JsonValueKind.Null
+                "and a metric that declared none carries none — nothing is invented (GP 11)"
+
+        testCase "the population's method mix is reported, and rides regardless of the magnitude suppression"
+        <| fun () ->
+            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+
+            assertFact store scope (scalarDraft "sku-a" 100m) |> ignore
+
+            // A competing method over the same (subject, period) — D19:
+            // never merged, and now countable.
+            assertFact store scope {
+                draftFor [ "sku-a" ] (Scalar 105m) Surfaceable with
+                    Method = Computed("mmm", "2", "p9")
+            }
+            |> ignore
+
+            // …and a restricted member, so the magnitude block is
+            // suppressed and the mix can be seen to survive it.
+            assertFact store scope (draftFor [ "sku-shut" ] (Scalar 900m) Internal)
+            |> ignore
+
+            let el =
+                executeVia sp scope """{"metric":"revenue","subject_hierarchy":"brand","methods":"all_competing"}"""
+
+            let population = el.GetProperty "population"
+
+            Expect.isTrue (flag population "valueStatisticsWithheld") "a restricted member gates the magnitudes"
+
+            Expect.equal
+                (items population "methods"
+                 |> List.map (fun m -> str m "method", num m "factCount"))
+                [ "computed:mmm:2:p9", 1; "computed:rollup:1:p0", 2 ]
+                "how the population was computed is existence-level — a procedure name, never a value"
     ]
 
 // ── The ceiling (703.A) ───────────────────────────────────────────

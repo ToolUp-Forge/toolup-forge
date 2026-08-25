@@ -54,6 +54,7 @@ let private metric id canonical : MetricDefinition = {
     CanonicalMethod = canonical
     RecomputePolicy = None
     RollUp = None
+    Context = None
 }
 
 let private subject id : SubjectDefinition = {

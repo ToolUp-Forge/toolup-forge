@@ -47,6 +47,13 @@
              `query_metric_population` over Phase 701's QueryPopulation.
              Compiled beside it, and declared by the same compose knob. -->
         <Compile Include="Server\PopulationQueryTool.fs" />
+        <!-- Phase 705 — the discovery surface the two tools above assume
+             someone else provided: `list_metric_coverage` reports what
+             the registry declares and what the store holds under it, so a
+             model reaches for a metric id it has read rather than one it
+             guessed. Compiled after both, and declared by the same
+             compose knob. -->
+        <Compile Include="Server\CoverageTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
         <!-- Grounding certificate exported as a DSSE-wrapped in-toto

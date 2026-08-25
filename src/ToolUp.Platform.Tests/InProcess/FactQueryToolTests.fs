@@ -80,6 +80,7 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
                 CanonicalMethod = None
                 RecomputePolicy = None
                 RollUp = None
+                Context = None
             }
         }
     ] []
@@ -181,7 +182,7 @@ let registrationTests =
             // together, so no deployment can arm one and miss the other.
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
-                [ "query_facts"; "query_metric_population" ]
+                [ "query_facts"; "query_metric_population"; "list_metric_coverage" ]
                 "the fact tier's tool declarations, in compose order"
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"

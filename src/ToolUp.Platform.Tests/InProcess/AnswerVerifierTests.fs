@@ -40,6 +40,7 @@ let private shareMetric: MetricDefinition = {
     CanonicalMethod = None
     RecomputePolicy = None
     RollUp = None
+    Context = None
 }
 
 let private registry: IMetricRegistry =

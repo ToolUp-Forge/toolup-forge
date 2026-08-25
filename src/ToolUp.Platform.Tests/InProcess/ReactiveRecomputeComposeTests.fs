@@ -99,6 +99,7 @@ let private metricDef (id: string) (staleness: StalenessPolicy) (policy: Recompu
     CanonicalMethod = None
     RecomputePolicy = policy
     RollUp = None
+    Context = None
 }
 
 let private registryWith (defs: MetricDefinition list) : IMetricRegistry =

@@ -79,6 +79,7 @@ let private registryWith (staleness: StalenessPolicy) (producingOp: string optio
                 CanonicalMethod = None
                 RecomputePolicy = None
                 RollUp = None
+                Context = None
             }
         }
     ] [

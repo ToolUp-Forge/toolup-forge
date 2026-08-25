@@ -115,6 +115,7 @@ let private groundingMetric: Grounding.MetricDefinition = {
     CanonicalMethod = None
     RecomputePolicy = None
     RollUp = None
+    Context = None
 }
 
 let private groundingSubject: Grounding.SubjectDefinition = {
