@@ -1035,6 +1035,10 @@
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 559 — the query_facts AI tool (disclosure-gated fact reads). -->
         <Compile Include="InProcess\FactQueryToolTests.fs" />
+        <!-- Phase 703 — the query_metric_population AI tool: the bounded
+             cross-subject ranking + population summary, its server-side
+             ceiling, and the population-scale disclosure posture. -->
+        <Compile Include="InProcess\PopulationQueryToolTests.fs" />
         <!-- Phase 560 — the grounded answer planner (question → triples → typed
              PlanStep resolution → the plan in the provenance chain). -->
         <Compile Include="InProcess\AnswerPlannerTests.fs" />

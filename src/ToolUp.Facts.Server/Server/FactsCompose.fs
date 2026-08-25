@@ -49,9 +49,26 @@ module FactsCompose =
     // composed substrate).
     let private registerFactStore (services: IServiceCollection) : IServiceCollection =
         services
+            // Phase 703 — the store is composed WITH the metric registry.
+            // It was registry-less until now, and that was a wiring gap
+            // rather than a choice: a registry-less store resolves a
+            // Phase 701 `RegistryDirection` ordering to the refusal
+            // "metric '…' is not registered", which in a composed
+            // deployment that HAS registered the metric is not merely
+            // unhelpful but untrue — the store simply could not see the
+            // declaration. Task 703.C's "ordering comes from the
+            // registry's direction-of-better" is only true once the store
+            // holds the registry. The lookup is optional (`tryService`),
+            // so a deployment with no grounding declarations composes
+            // exactly as before, and a metric with no `CanonicalMethod`
+            // declaration keeps the pre-566 selection byte-for-byte
+            // (GP 11).
             .AddSingleton<IFactStore>(
                 Func<IServiceProvider, IFactStore>(fun sp ->
-                    BlobFactStore.create (sp.GetRequiredService<IBlobStorage>()) (sp.GetRequiredService<IEventStore>()))
+                    BlobFactStore.createWithRegistry
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (sp.GetRequiredService<IEventStore>())
+                        (tryService<Grounding.IMetricRegistry> sp))
             )
             .AddSingleton<IFactEvidenceSource>(
                 Func<IServiceProvider, IFactEvidenceSource>(fun sp ->
@@ -338,7 +355,20 @@ module FactsCompose =
                     // the fact store AND the AI companion are composed
                     // (GP 13): no fact store ⇒ never declared; no AI ⇒
                     // never registered, no route, no runtime cost.
-                    AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
+                    //
+                    // Phase 703 — `query_metric_population` rides the same
+                    // double gate beside it. The two are siblings, not
+                    // alternatives: `query_facts` answers about a subject,
+                    // `query_metric_population` ranks a metric across a
+                    // population and summarises what it ranked over. One
+                    // knob declares both, so no deployment can arm the
+                    // point read and miss the population read.
+                    AITools =
+                        app.AITools
+                        @ [
+                            FactQueryTool.definition, FactQueryTool.execute
+                            PopulationQueryTool.definition, PopulationQueryTool.execute
+                        ]
             }
 
     // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────

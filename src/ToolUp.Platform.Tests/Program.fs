@@ -837,6 +837,12 @@ let allTests =
         // registration, disclosure-gated results (allow / deny / unknown-id
         // markers), deny audit, scope isolation, parameter validation.
         FactQueryToolTests.tests
+        // Phase 703 — the query_metric_population AI tool: declaration +
+        // the one-knob double registration, the bounded ranking + summary,
+        // the reported ceiling, population-scale disclosure (a policy-
+        // grouped count, true rank gaps, gated magnitudes), the two typed
+        // ordering refusals, and the end-to-end demo.
+        PopulationQueryToolTests.tests
         // Phase 560 — the grounded answer planner: compiler table (refusal
         // over fabrication), per-branch resolution (UseFact / RefreshFact /
         // ComputeFact / RequestData / Refuse), disclosure interplay, the

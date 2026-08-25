@@ -453,6 +453,10 @@ ToolUp.Facts.PeerTrustAnchorModule.create(System.String, ToolUp.ArtefactSigning.
 ToolUp.Facts.PeerTrustAnchorModule.withCeiling(ToolUp.Facts.Disclosure, ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
+ToolUp.Facts.PopulationQueryTool (class)
+ToolUp.Facts.PopulationQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.PopulationQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.ReactiveDataChange (class)
 ToolUp.Facts.ReactiveDataChange.declaresReactivePolicy(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : System.Boolean
 ToolUp.Facts.ReactiveDataChange.decorate(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.ILogger) : ToolUp.Platform.IDataObjectStore

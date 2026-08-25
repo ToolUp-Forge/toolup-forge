@@ -176,7 +176,13 @@ let registrationTests =
         test "EnabledFactStore declares the tool on ServerApp.AITools alongside the store — one knob" {
             let app, sp = composedUnder EnabledFactStore None
 
-            Expect.equal (app.AITools |> List.map (fun (def, _) -> def.Name)) [ "query_facts" ] "one declaration"
+            // Phase 703 added `query_metric_population` to the SAME knob:
+            // one compose declares the point read and the population read
+            // together, so no deployment can arm one and miss the other.
+            Expect.equal
+                (app.AITools |> List.map (fun (def, _) -> def.Name))
+                [ "query_facts"; "query_metric_population" ]
+                "the fact tier's tool declarations, in compose order"
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"
 

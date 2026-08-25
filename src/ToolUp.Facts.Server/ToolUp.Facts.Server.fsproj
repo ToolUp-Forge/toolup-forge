@@ -43,6 +43,10 @@
         <Compile Include="Server\FactInvalidation.fs" />
         <Compile Include="Server\FactStoreFactResolver.fs" />
         <Compile Include="Server\FactQueryTool.fs" />
+        <!-- Phase 703 — the cross-subject counterpart to the tool above:
+             `query_metric_population` over Phase 701's QueryPopulation.
+             Compiled beside it, and declared by the same compose knob. -->
+        <Compile Include="Server\PopulationQueryTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
         <!-- Grounding certificate exported as a DSSE-wrapped in-toto
