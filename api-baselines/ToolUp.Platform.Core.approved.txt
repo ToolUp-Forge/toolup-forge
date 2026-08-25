@@ -2227,14 +2227,17 @@ ToolUp.Platform.ConfigFieldSchema.Key : System.String { get }
 ToolUp.Platform.ConfigFieldSchema.Kind : ToolUp.Platform.ConfigFieldKind { get }
 ToolUp.Platform.ConfigFieldSchema.Required : System.Boolean { get }
 ToolUp.Platform.ConfigKeys (class)
+ToolUp.Platform.ConfigKeys.ManifestProfileProperty : System.String (literal)
 ToolUp.Platform.ConfigKeys.ManifestSchemaProperty : System.String (literal)
 ToolUp.Platform.ConfigKeys.NotificationPrefsModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.PlatformModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.ToolingCategory : System.String (literal)
 ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
+ToolUp.Platform.ConfigKeys.builtInProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile] { get }
 ToolUp.Platform.ConfigKeys.isManifestBindable(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.isToolingKey(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.manifestBindable : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ConfigKeys.profileProblems(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile], ToolUp.Platform.ConfigKeys+ConfigProfile) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.ConfigKeys.toolingKeys : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ConfigKeys+BrandingKeys (class)
 ToolUp.Platform.ConfigKeys+BrandingKeys.AppName : System.String (literal)
@@ -2269,6 +2272,12 @@ ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.BoolKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.EnumKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.IntKey : System.Int32 (literal)
 ToolUp.Platform.ConfigKeys+ConfigKeyType+Tags.StringKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigProfile (class)
+ToolUp.Platform.ConfigKeys+ConfigProfile..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.ConfigKeys+ConfigProfile.Description : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigProfile.Name : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigProfile.Requires : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigProfile.Values : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.ConfigKeys+ConfigSchema (class)
 ToolUp.Platform.ConfigKeys+ConfigSchema.Dialect : System.String (literal)
 ToolUp.Platform.ConfigKeys+ConfigSchema.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
@@ -2405,6 +2414,7 @@ ToolUp.Platform.ConfigKeys+Names.peerRoutePrefixes : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformKnowledgeBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformSurfaces : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.processProfile : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.profile : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.publicBaseUrl : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.publicPath : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.publicRendering : System.String (literal)
@@ -2505,11 +2515,18 @@ ToolUp.Platform.ConfigRequirementModule.isRequired(ToolUp.Platform.ConfigRequire
 ToolUp.Platform.ConfigRequirementModule.required(System.String, ToolUp.Platform.ConfigKnobType, System.String) : ToolUp.Platform.ConfigRequirement
 ToolUp.Platform.ConfigResolution (class)
 ToolUp.Platform.ConfigResolution.clear() : System.Void
+ToolUp.Platform.ConfigResolution.clearProfile() : System.Void
 ToolUp.Platform.ConfigResolution.install(ToolUp.Platform.ConfigResolution+ManifestSnapshot) : System.Void
+ToolUp.Platform.ConfigResolution.installProfile(ToolUp.Platform.ConfigResolution+ProfileSnapshot) : System.Void
 ToolUp.Platform.ConfigResolution.isInstalled() : System.Boolean
+ToolUp.Platform.ConfigResolution.isProfileInstalled() : System.Boolean
+ToolUp.Platform.ConfigResolution.profile() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolution+ProfileSnapshot]
+ToolUp.Platform.ConfigResolution.profileContextLine() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigResolution.profileShadowedKeys() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.ConfigResolution.snapshot() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolution+ManifestSnapshot]
 ToolUp.Platform.ConfigResolution.sourceOf(System.String) : ToolUp.Platform.ConfigResolution+ConfigSource
 ToolUp.Platform.ConfigResolution.tryManifestValue(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigResolution.tryProfileValue(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ConfigResolution.tryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, ToolUp.Platform.ConfigResolution+ConfigSource]]
 ToolUp.Platform.ConfigResolution.tryValue(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ConfigResolution+ConfigSource (class)
@@ -2520,26 +2537,49 @@ ToolUp.Platform.ConfigResolution+ConfigSource.IsEnvConfigSource : System.Boolean
 ToolUp.Platform.ConfigResolution+ConfigSource.IsLiteralConfigSource : System.Boolean { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.IsManifestConfigSource : System.Boolean { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.IsOverrideConfigSource : System.Boolean { get }
+ToolUp.Platform.ConfigResolution+ConfigSource.IsProfileConfigSource : System.Boolean { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.LiteralConfigSource : ToolUp.Platform.ConfigResolution+ConfigSource { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.ManifestConfigSource : ToolUp.Platform.ConfigResolution+ConfigSource { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.OverrideConfigSource : ToolUp.Platform.ConfigResolution+ConfigSource { get }
 ToolUp.Platform.ConfigResolution+ConfigSource.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigResolution+ConfigSource+ProfileConfigSource (class)
+ToolUp.Platform.ConfigResolution+ConfigSource+ProfileConfigSource.profile : System.String { get }
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags (class)
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags.DefaultConfigSource : System.Int32 (literal)
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags.EnvConfigSource : System.Int32 (literal)
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags.LiteralConfigSource : System.Int32 (literal)
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags.ManifestConfigSource : System.Int32 (literal)
 ToolUp.Platform.ConfigResolution+ConfigSource+Tags.OverrideConfigSource : System.Int32 (literal)
+ToolUp.Platform.ConfigResolution+ConfigSource+Tags.ProfileConfigSource : System.Int32 (literal)
 ToolUp.Platform.ConfigResolution+ConfigSourceModule (class)
 ToolUp.Platform.ConfigResolution+ConfigSourceModule.label(ToolUp.Platform.ConfigResolution+ConfigSource) : System.String
 ToolUp.Platform.ConfigResolution+ManifestSnapshot (class)
-ToolUp.Platform.ConfigResolution+ManifestSnapshot..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ConfigResolution+ManifestSnapshot..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ConfigResolution+ManifestSnapshot.Hash : System.String { get }
 ToolUp.Platform.ConfigResolution+ManifestSnapshot.Path : System.String { get }
 ToolUp.Platform.ConfigResolution+ManifestSnapshot.PendingKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigResolution+ManifestSnapshot.Profile : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ConfigResolution+ManifestSnapshot.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ConfigResolution+ManifestSnapshotModule (class)
 ToolUp.Platform.ConfigResolution+ManifestSnapshotModule.none : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolution+ManifestSnapshot] { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection (class)
+ToolUp.Platform.ConfigResolution+ProfileSelection.EnvProfileSelection : ToolUp.Platform.ConfigResolution+ProfileSelection { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection.IsEnvProfileSelection : System.Boolean { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection.IsManifestProfileSelection : System.Boolean { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection.ManifestProfileSelection : ToolUp.Platform.ConfigResolution+ProfileSelection { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigResolution+ProfileSelection+Tags (class)
+ToolUp.Platform.ConfigResolution+ProfileSelection+Tags.EnvProfileSelection : System.Int32 (literal)
+ToolUp.Platform.ConfigResolution+ProfileSelection+Tags.ManifestProfileSelection : System.Int32 (literal)
+ToolUp.Platform.ConfigResolution+ProfileSelectionModule (class)
+ToolUp.Platform.ConfigResolution+ProfileSelectionModule.describe(ToolUp.Platform.ConfigResolution+ProfileSelection) : System.String
+ToolUp.Platform.ConfigResolution+ProfileSnapshot (class)
+ToolUp.Platform.ConfigResolution+ProfileSnapshot..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.ConfigResolution+ProfileSelection)
+ToolUp.Platform.ConfigResolution+ProfileSnapshot.Name : System.String { get }
+ToolUp.Platform.ConfigResolution+ProfileSnapshot.SelectedBy : ToolUp.Platform.ConfigResolution+ProfileSelection { get }
+ToolUp.Platform.ConfigResolution+ProfileSnapshot.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ConfigResolution+ProfileSnapshotModule (class)
+ToolUp.Platform.ConfigResolution+ProfileSnapshotModule.none : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolution+ProfileSnapshot] { get }
 ToolUp.Platform.ConfigValidation (class)
 ToolUp.Platform.ConfigValidation+IConfigValidator (interface)
 ToolUp.Platform.ConfigValidation+IConfigValidator.Name : System.String { get }

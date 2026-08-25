@@ -70,6 +70,15 @@ let DefaultManifestFileName = "toolup.config.json"
 [<Literal>]
 let SchemaKey = ConfigKeys.ManifestSchemaProperty
 
+/// Phase 700 — the second tolerated non-registry key: the name of the
+/// configuration profile this manifest imports. Recorded on the snapshot
+/// rather than bound, because a name is not a value: resolving it
+/// against the available profiles is a separate act with its own
+/// refusal. Aliased to the registry-side literal for the same reason
+/// `SchemaKey` is.
+[<Literal>]
+let ProfileKey = ConfigKeys.ManifestProfileProperty
+
 /// A manifest that failed to load. The message is the operator-facing
 /// refusal and names every problem found, not just the first — a file
 /// with three typos should take one edit to fix, not three boots.
@@ -156,6 +165,7 @@ let parseBytes (path: string) (bytes: byte[]) : Result<ManifestLoad, string> =
             let mutable values = Map.empty
             let mutable refusals = []
             let mutable pending = []
+            let mutable profile = None
 
             for prop in doc.RootElement.EnumerateObject() do
                 let key = prop.Name
@@ -164,6 +174,43 @@ let parseBytes (path: string) (bytes: byte[]) : Result<ManifestLoad, string> =
                     // Tolerated so an editor can validate the file while it
                     // is typed. Never bound.
                     ()
+                elif key = ProfileKey then
+                    // Phase 700 — recorded, not bound. A non-string here is
+                    // refused with the same message shape a config value
+                    // gets, so the file's two halves read alike.
+                    match prop.Value.ValueKind with
+                    | JsonValueKind.String ->
+                        match prop.Value.GetString() with
+                        | null
+                        | "" ->
+                            refusals <-
+                                refusals
+                                @ [
+                                    sprintf
+                                        "%s is empty. Name a configuration profile, or remove the line to import none."
+                                        key
+                                ]
+                        | name -> profile <- Some name
+                    | other ->
+                        refusals <-
+                            refusals
+                            @ [
+                                sprintf
+                                    "%s is a %s. It names a configuration profile, so its value must be a string."
+                                    key
+                                    (string other)
+                            ]
+                elif key = Names.profile then
+                    refusals <-
+                        refusals
+                        @ [
+                            sprintf
+                                "%s cannot be set in a manifest — a manifest names the profile it imports with the \"%s\" entry instead, and admitting both spellings would be two ways to say one thing. Use \"%s\": \"<profile-name>\", or set %s in the environment."
+                                key
+                                ProfileKey
+                                ProfileKey
+                                key
+                        ]
                 elif key = Names.configFile then
                     refusals <-
                         refusals
@@ -224,6 +271,7 @@ let parseBytes (path: string) (bytes: byte[]) : Result<ManifestLoad, string> =
                         Hash = hash
                         Values = values
                         PendingKeys = pending
+                        Profile = profile
                     }
                     Warnings = warnings
                 }
@@ -289,18 +337,36 @@ let mutable private attempted = false
 /// True once discovery has run in this process, whatever it found.
 let hasLoaded () : bool = attempted
 
-/// Reset the loader for tests. Pairs with `ConfigResolution.clear ()` —
-/// a suite exercising discovery must be able to return the process to its
-/// pre-boot state.
+/// Reset the loader for tests. Pairs with `ConfigResolution.clear ()`
+/// and `ConfigProfiles.reset ()` — a suite exercising discovery must be
+/// able to return the process to its pre-boot state, and a leaked
+/// consumer profile contaminates a sibling case exactly as a leaked
+/// manifest does.
 let reset () : unit =
     attempted <- false
     ConfigResolution.clear ()
+    ConfigProfiles.reset ()
 
-/// Discover and install the manifest, once per process. Raises
-/// `ConfigManifestException` on any refusal — an unknown key, a secret
-/// key, a malformed file, or a named file that is absent — because a
-/// deployment whose declared intent cannot be honoured must not boot
-/// pretending it was.
+/// The bootstrap read of the profile name from the environment.
+///
+/// Direct, like `TOOLUP_CONFIG_FILE` above it and for the identical
+/// reason: this is the variable that names WHAT TO LOAD, so it cannot be
+/// resolved through the thing it selects. Reading it through the seam
+/// would let a profile name itself, and the loader refuses the key
+/// inside a manifest precisely so the two lanes stay distinguishable.
+let private envProfileName () : string option =
+    match Environment.GetEnvironmentVariable Names.profile with
+    | null
+    | "" -> None
+    | v -> Some v
+
+/// Discover and install the manifest, then select and install the
+/// configuration profile, once per process. Raises
+/// `ConfigManifestException` on any manifest refusal — an unknown key, a
+/// secret key, a malformed file, or a named file that is absent — and
+/// `ConfigProfiles.ConfigProfileException` on an unrecognised profile
+/// name, because a deployment whose declared intent cannot be honoured
+/// must not boot pretending it was.
 ///
 /// Returns the load result so the caller can surface the hash and the
 /// warnings through whatever logger it has; a repeat call returns the
@@ -321,10 +387,28 @@ let installOnce (contentRoot: string) : ManifestLoad option =
 
         match load contentRoot with
         | Error message -> raise (ConfigManifestException message)
-        | Ok None -> None
-        | Ok(Some loaded) ->
-            ConfigResolution.install loaded.Snapshot
-            Some loaded
+        | Ok loaded ->
+            // Phase 700 — the profile rung. Selected AFTER the manifest,
+            // because the manifest's `"$profile"` entry is the winning
+            // lane, and installed BELOW it, so every line the manifest
+            // states still beats the bundle it imported.
+            //
+            // Both installs happen only once both acts have succeeded: a
+            // refusal aborts the boot either way, but leaving a manifest
+            // installed behind a failed selection would make the process
+            // state depend on which half failed, which a test suite (and
+            // a `--validate-config` run) can observe.
+            let selected =
+                ConfigProfiles.selectFrom (loaded |> Option.bind _.Snapshot.Profile) (envProfileName ())
+
+            ConfigProfiles.markSelected ()
+
+            match selected with
+            | Error message -> raise (ConfigProfiles.ConfigProfileException message)
+            | Ok profile ->
+                loaded |> Option.iter (fun l -> ConfigResolution.install l.Snapshot)
+                profile |> Option.iter ConfigResolution.installProfile
+                loaded
 
 /// `installOnce` against the process's current directory — the content
 /// root for every shipped host shape.

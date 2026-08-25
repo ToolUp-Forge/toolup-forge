@@ -46,6 +46,7 @@ let private withManifest (values: (string * string) list) (body: unit -> unit) =
             Hash = "0000000000000000000000000000000000000000000000000000000000000000"
             Values = Map.ofList values
             PendingKeys = []
+            Profile = None
         }
 
         body ()

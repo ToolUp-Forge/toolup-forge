@@ -1676,8 +1676,24 @@ ToolUp.Platform.ConfigKnobSchema (class)
 ToolUp.Platform.ConfigKnobSchema..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ConfigKnobSchema.Name : System.String { get }
 ToolUp.Platform.ConfigKnobSchema.Values : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigProfiles (class)
+ToolUp.Platform.ConfigProfiles.available() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile]
+ToolUp.Platform.ConfigProfiles.bootLine() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigProfiles.declare(ToolUp.Platform.ConfigKeys+ConfigProfile) : System.Void
+ToolUp.Platform.ConfigProfiles.declareAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile]) : System.Void
+ToolUp.Platform.ConfigProfiles.declared() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile]
+ToolUp.Platform.ConfigProfiles.markSelected() : System.Void
+ToolUp.Platform.ConfigProfiles.reset() : System.Void
+ToolUp.Platform.ConfigProfiles.selectFrom(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigResolution+ProfileSnapshot], System.String]
+ToolUp.Platform.ConfigProfiles.tryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigKeys+ConfigProfile]
+ToolUp.Platform.ConfigProfiles+ConfigProfileException (class)
+ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor()
+ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
+ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor(System.String)
+ToolUp.Platform.ConfigProfiles+ConfigProfileException.message : System.String { get }
 ToolUp.Platform.ConfigResolver (class)
 ToolUp.Platform.ConfigResolver.DefaultManifestFileName : System.String (literal)
+ToolUp.Platform.ConfigResolver.ProfileKey : System.String (literal)
 ToolUp.Platform.ConfigResolver.SchemaKey : System.String (literal)
 ToolUp.Platform.ConfigResolver.bootLine() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ConfigResolver.discover(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]

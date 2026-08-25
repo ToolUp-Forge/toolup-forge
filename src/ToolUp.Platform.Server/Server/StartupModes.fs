@@ -159,8 +159,24 @@ let renderConfigReport (diffOnly: bool) (keys: ConfigKeyDescriptor list) : strin
         sb.AppendLine(sprintf "Manifest: %s" m.Path) |> ignore
         sb.AppendLine(sprintf "Manifest sha256: %s" m.Hash) |> ignore
     | None ->
-        sb.AppendLine "Manifest: none loaded (every value below came from the environment or a declared default)."
+        sb.AppendLine
+            "Manifest: none loaded (every value below came from the environment, a profile, or a declared default)."
         |> ignore
+
+    // Phase 700 — the imported posture, in the header rather than only in
+    // the per-key `[source]` column: an operator scanning the report needs
+    // to know a profile is in force before they read a value it supplied.
+    match ConfigResolution.profile () with
+    | Some p ->
+        sb.AppendLine(
+            sprintf
+                "Profile: %s (selected by %s, %d key(s))"
+                p.Name
+                (ConfigResolution.ProfileSelection.describe p.SelectedBy)
+                (Map.count p.Values)
+        )
+        |> ignore
+    | None -> sb.AppendLine "Profile: none imported." |> ignore
 
     sb.AppendLine "" |> ignore
 
@@ -202,7 +218,7 @@ let renderConfigReport (diffOnly: bool) (keys: ConfigKeyDescriptor list) : strin
     |> ignore
 
     sb.AppendLine
-        "The [source] column reports the layer this process resolved the value from: env, manifest, or default. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above this seam and reads as 'default' here."
+        "The [source] column reports the layer this process resolved the value from: env, manifest, profile:<name>, or default. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above this seam and reads as 'default' here."
     |> ignore
 
     sb.ToString()
@@ -240,6 +256,13 @@ let renderValidationSummary (outcomes: ValidatorOutcome list) : string =
             (count "Error")
     )
     |> ignore
+
+    // Phase 700 — the same context the refusal summary carries, on the
+    // path that reports a PASS too. `--validate-config` is where an
+    // operator checks a profile before deploying it, so the run has to
+    // say which posture it just validated.
+    ConfigResolution.profileContextLine ()
+    |> Option.iter (fun line -> sb.AppendLine("").AppendLine(line) |> ignore)
 
     sb.ToString()
 

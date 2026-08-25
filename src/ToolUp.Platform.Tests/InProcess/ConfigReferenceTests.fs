@@ -317,7 +317,16 @@ let tests =
                 (Set.contains "$schema" properties)
                 "the manifest's own $schema pointer is tolerated by the loader, so the schema must admit it"
 
-            let declared = Set.remove "$schema" properties
+            // Phase 700 — the second tolerated non-registry property.
+            // `additionalProperties: false` means an omitted property is an
+            // editor error, so a schema without this one would flag the very
+            // profile selection the reference doc tells operators to write.
+            Expect.isTrue
+                (Set.contains ManifestProfileProperty properties)
+                "the manifest's $profile selector is tolerated by the loader, so the schema must admit it"
+
+            let declared =
+                properties |> Set.remove "$schema" |> Set.remove ManifestProfileProperty
 
             let expected =
                 all
@@ -547,11 +556,14 @@ let tests =
             // read the seam cannot serve, not a reader that has not got
             // round to migrating.
             //
-            //   * `ConfigResolver` performs the bootstrap read of
-            //     `TOOLUP_CONFIG_FILE` — the variable naming the manifest,
-            //     which by construction cannot be resolved THROUGH the
-            //     manifest. The loader refuses that key inside a manifest
-            //     for the same reason.
+            //   * `ConfigResolver` performs the two bootstrap reads —
+            //     `TOOLUP_CONFIG_FILE`, the variable naming the manifest,
+            //     and (Phase 700) `TOOLUP_PROFILE`, the variable naming the
+            //     configuration profile. Both name WHAT TO LOAD, so neither
+            //     can be resolved THROUGH the thing it selects: reading the
+            //     profile name through the seam would let a profile name
+            //     itself. The loader refuses both keys inside a manifest for
+            //     the same reason.
             //
             // Three further files read the environment and are NOT listed,
             // because their reads name no registered key and so never reach

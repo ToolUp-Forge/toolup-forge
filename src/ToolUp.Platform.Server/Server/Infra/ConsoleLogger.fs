@@ -128,6 +128,7 @@ let fromEnv () : ILogger =
     logger.Info "Powered by ToolUp-Forge — https://toolup-forge.io"
 
     ConfigResolver.bootLine () |> Option.iter logger.Info
+    ConfigProfiles.bootLine () |> Option.iter logger.Info
 
     match manifest with
     | Some loaded -> loaded.Warnings |> List.iter logger.Warn

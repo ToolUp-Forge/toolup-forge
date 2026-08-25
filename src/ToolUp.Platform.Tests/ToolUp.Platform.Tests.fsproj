@@ -623,6 +623,11 @@
              discovery, the unknown-key and secret-key refusals, hash
              stability, provenance labels, and the no-manifest gate. -->
         <Compile Include="InProcess\ConfigResolverTests.fs" />
+        <!-- Phase 700 — deployment configuration profiles: the rung below
+             the manifest, selection and its refusal, consumer declaration,
+             the built-in set, and the profile named on a preflight
+             refusal. -->
+        <Compile Include="InProcess\ConfigProfileTests.fs" />
         <!-- Phase 695 — the unknown-config-key preflight guard: the
              suggestion, the three exclusion classes, the strict-mode
              escalation, and the silent no-finding case. -->

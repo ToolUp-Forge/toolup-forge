@@ -4,9 +4,9 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (184 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (185 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
-The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or the variable naming the manifest's own location). Precedence is consumer literal > environment variable > manifest > override record > default.
+The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
 A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:
 
@@ -17,7 +17,60 @@ A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](to
 }
 ```
 
-The schema is the only non-registry property the loader tolerates; it is skipped, never bound.
+The schema pointer and `$profile` are the only non-registry properties the loader tolerates; neither is bound to a config key.
+
+## Configuration profiles
+
+A **profile** is a named bundle of the keys above, resolved one rung below the manifest — so importing a posture never takes a setting away from the deployment that imported it, and any explicit environment or manifest line still wins. Select one with a `"$profile"` entry in the manifest (which takes precedence) or with the `TOOLUP_PROFILE` environment variable; an unrecognised name refuses startup and lists the available profiles.
+
+A profile is a *claim*, not a bypass. Its values reach every reader through the same resolution seam an environment variable does, so the startup preflight validates the resolved combination exactly as if each key had been typed by hand — and a refusal names the profile in force. `--print-config` labels each value it supplied `profile:<name>`.
+
+No profile carries a secret: a bundle is shared across deployments by design, so a credential in one would be a credential in all of them. Where a posture depends on one, the profile says which variable the operator must set themselves under **Requires**.
+
+A consumer registers its own profiles before building the logger; the 3 below ship with the SDK.
+
+### `dev-single-instance`
+
+A developer machine: one instance, in-process substrates, verbose logs and the /dev/* inspection endpoints open.
+
+| Env var | Value |
+|---|---|
+| `TOOLUP_REPLICA_COUNT` | `1` |
+| `TOOLUP_NOTIFICATION_CHANNEL` | `inmemory` |
+| `TOOLUP_DISTRIBUTED_LOCK` | `inprocess` |
+| `TOOLUP_LOG_LEVEL` | `Debug` |
+| `TOOLUP_ENABLE_DEV_ENDPOINTS` | `true` |
+
+### `production-multi-instance`
+
+Several instances behind a load balancer: cross-instance channel, lock and rate-limit store, HTTPS enforced, hardened headers, structured logs.
+
+**Requires** (set these yourself — a profile cannot carry them): `TOOLUP_REDIS_CONNECTION`
+
+| Env var | Value |
+|---|---|
+| `TOOLUP_REPLICA_COUNT` | `2` |
+| `TOOLUP_NOTIFICATION_CHANNEL` | `redis` |
+| `TOOLUP_DISTRIBUTED_LOCK` | `redis` |
+| `TOOLUP_RATE_LIMITER` | `enabled` |
+| `TOOLUP_RATE_LIMIT_STORE` | `external` |
+| `TOOLUP_REQUIRE_HTTPS` | `true` |
+| `TOOLUP_SECURITY_HARDENING` | `strict` |
+| `TOOLUP_LOG_FORMAT` | `json` |
+
+### `serverless`
+
+A serverless host with no long-lived background services: nothing in-process survives an invocation, so state that must outlive one is persisted.
+
+**Requires** (set these yourself — a profile cannot carry them): `TOOLUP_BLOB_STORAGE`
+
+| Env var | Value |
+|---|---|
+| `TOOLUP_SERVERLESS_HOST` | `serverless` |
+| `TOOLUP_JOB_SCHEDULER` | `disabled` |
+| `TOOLUP_EVENT_STORE` | `persistent` |
+| `TOOLUP_RESULT_STORE` | `persistent` |
+| `TOOLUP_LOG_FORMAT` | `json` |
 
 ## Storage & secrets
 
@@ -120,6 +173,7 @@ The schema is the only non-registry property the loader tolerates; it is skipped
 | `TOOLUP_PEER_ROUTE_PREFIXES` | string | — | no | yes | Comma-separated route prefixes served by the cross-deployment peer substrate. |
 | `TOOLUP_PLATFORM_SURFACES` | string | — | no | yes | Comma-separated surface profiles the deployment exposes, for example anonymous, user, multi-team or claim-bearer. |
 | `TOOLUP_PROCESS_PROFILE` | enum: allinone, web, worker, dispatcher | allinone | no | yes | Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only. |
+| `TOOLUP_PROFILE` | string | (unset — no profile is imported) | no | n/a | Name of the configuration profile this deployment imports — a named bundle of keys resolved one rung BELOW the manifest, so any explicit environment or manifest line still wins. A manifest selects one with its "$profile" entry instead, which takes precedence over this variable; an unrecognised name refuses startup and lists the available profiles. |
 | `TOOLUP_REDIS_CONNECTION` | string | — | yes | never | Redis connection string for the distributed notification channel / caches / distributed lock used when TOOLUP_NOTIFICATION_CHANNEL=redis or TOOLUP_DISTRIBUTED_LOCK=redis. |
 | `TOOLUP_REPLICA_COUNT` | int | 1 | no | yes | Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates. |
 | `TOOLUP_REQUIRE_HTTPS` | bool | false | no | yes | When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces. |

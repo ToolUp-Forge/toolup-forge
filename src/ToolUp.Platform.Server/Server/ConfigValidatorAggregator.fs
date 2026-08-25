@@ -208,6 +208,16 @@ let private formatSummary (outcomes: ValidatorOutcome list) : string =
             | Warning msg -> sb.AppendLine(sprintf "  [WARN] %s: %s" o.Name msg) |> ignore
             | _ -> ()
 
+    // Phase 700 — name the imported posture on the refusal. A profile is
+    // a CLAIM the preflight checks, so a refusal evaluated against a
+    // combination a profile contributed to has to say which claim it is
+    // about; otherwise the operator reads a message about keys they never
+    // typed and concludes the refusal is about something else entirely.
+    // Silent when no profile is in force, so an existing deployment's
+    // refusal is byte-for-byte what it was (GP 11).
+    ConfigResolution.profileContextLine ()
+    |> Option.iter (fun line -> sb.AppendLine("").AppendLine(line) |> ignore)
+
     sb.ToString().TrimEnd()
 
 let private logOutcome (logger: ILogger option) (o: ValidatorOutcome) =

@@ -449,6 +449,7 @@ let allTests =
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         ConfigResolverTests.tests
+        ConfigProfileTests.tests
         UnknownConfigKeyValidatorTests.tests
         HealthStateTrackerTests.tests
         AlertRuleEngineTests.tests

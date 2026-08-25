@@ -314,6 +314,13 @@ let compose
     // than left to be discovered as "my setting had no effect".
     if ConfigResolver.hasLoaded () then
         ConfigResolver.bootLine () |> Option.iter resolvedLogger.Info
+
+        // Phase 700 — the imported posture, logged beside the manifest
+        // hash for the same reason: an app-supplied logger never saw the
+        // `ConsoleLogger.fromEnv` line, and "which profile is this
+        // running under" is the first question asked of a deployment
+        // whose behaviour surprises someone.
+        ConfigProfiles.bootLine () |> Option.iter resolvedLogger.Info
     else
         match ConfigResolver.discover (System.IO.Directory.GetCurrentDirectory()) with
         | Ok(Some path) ->

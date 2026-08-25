@@ -109,6 +109,12 @@
              source for Fable consumers and cannot carry System.IO. Before
              ConsoleLogger.fs, which installs the manifest before building
              the logger — the log level is itself a bindable key. -->
+        <!-- Phase 700 — the configuration-profile registry + selector.
+             Before ConfigResolver.fs, which selects the profile in the
+             same pass that installs the manifest. Depends only on Core
+             (the built-in bundles are registry data, the rung is the
+             resolution seam's), so it sits as early as the loader does. -->
+        <Compile Include="Server\ConfigProfiles.fs" />
         <Compile Include="Server\ConfigResolver.fs" />
         <Compile Include="Server\Infra\ConsoleLogger.fs" />
         <Compile Include="Server\Infra\JsonConsoleLogger.fs" />

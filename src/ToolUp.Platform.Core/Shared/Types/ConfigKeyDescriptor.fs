@@ -174,6 +174,19 @@ let ToolingCategory = "Build & tooling"
 [<Literal>]
 let ManifestSchemaProperty = "$schema"
 
+/// Phase 700 — the second non-registry property a deployment
+/// configuration manifest may carry: the name of the configuration
+/// profile it imports.
+///
+/// Selection is spelled `"$profile"` inside a manifest rather than
+/// `"TOOLUP_PROFILE"` because two spellings of one fact are two things
+/// to keep level. The loader refuses the env-var spelling by name and
+/// says which to use — the same treatment `TOOLUP_CONFIG_FILE` gets, and
+/// for the same reason: a manifest cannot coherently state the thing
+/// that was resolved in order to read it.
+[<Literal>]
+let ManifestProfileProperty = "$profile"
+
 /// Canonical env-var name constants. The `*FromEnv` readers reference
 /// these instead of inlining the string literal, so a rename is a
 /// compile error that the reference doc can never silently lag behind.
@@ -251,6 +264,9 @@ module Names =
 
     [<Literal>]
     let strictConfig = "TOOLUP_STRICT_CONFIG"
+
+    [<Literal>]
+    let profile = "TOOLUP_PROFILE"
 
     [<Literal>]
     let replicaCount = "TOOLUP_REPLICA_COUNT"
@@ -967,6 +983,15 @@ let all: ConfigKeyDescriptor list = [
             "Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot."
         Type = BoolKey
         Default = Some "false"
+        IsSecret = false
+        Category = "Deployment shape"
+    }
+    {
+        EnvVar = Names.profile
+        Description =
+            "Name of the configuration profile this deployment imports — a named bundle of keys resolved one rung BELOW the manifest, so any explicit environment or manifest line still wins. A manifest selects one with its \"$profile\" entry instead, which takes precedence over this variable; an unrecognised name refuses startup and lists the available profiles."
+        Type = StringKey
+        Default = Some "(unset — no profile is imported)"
         IsSecret = false
         Category = "Deployment shape"
     }
@@ -2336,7 +2361,7 @@ let all: ConfigKeyDescriptor list = [
 /// holds the list to what the readers actually do, in both directions, so
 /// the sweep terminates instead of decaying.
 ///
-/// Two kinds of key are absent by construction and never join the list.
+/// Three kinds of key are absent by construction and never join the list.
 /// **Secrets**: the loader refuses them outright and no acceptance hatch
 /// lowers that, so declaring one bindable would be a claim nothing can
 /// honour — `TOOLUP_MODULE_BINDING_ANCHORS` resolves through the seam but
@@ -2344,7 +2369,10 @@ let all: ConfigKeyDescriptor list = [
 /// reason. **`TOOLUP_CONFIG_FILE`**: a manifest cannot name its own
 /// location, which is already resolved by the time the file is read, so
 /// the loader refuses that key by name rather than warning about a
-/// migration that will never come.
+/// migration that will never come. **`TOOLUP_PROFILE`** (Phase 700): the
+/// same shape one rung lower — a manifest states the profile it imports
+/// with its `"$profile"` entry, and admitting the env-var spelling as
+/// well would be two ways to say one thing.
 let manifestBindable: Set<string> =
     Set.ofList [
         Names.acceptEphemeralRagIndex
@@ -2489,6 +2517,225 @@ let toolingKeys: Set<string> =
 /// exclusion and the generated reference's section note.
 let isToolingKey (envVar: string) : bool = Set.contains envVar toolingKeys
 
+// ─── Phase 700 — configuration profiles ──────────────────────────────
+//
+// The operator surface is ~180 keys. Almost none of them are chosen
+// independently: a deployment behind a load balancer needs a
+// cross-instance notification channel AND a cross-instance lock AND a
+// shared rate-limit store, and the existing preflight expresses that
+// coupling only NEGATIVELY — a refusal once you have got it wrong, plus
+// an acceptance hatch to say you meant it.
+//
+// A profile is the positive-space twin: a named bundle stating a posture
+// once, resolved one rung below the manifest, leaving the operator a
+// profile name plus their genuine deltas. It is a CLAIM the preflight
+// then checks, not a way around the preflight — see the header of
+// `ConfigResolution` for the precedence and the reasoning behind it.
+//
+// **A profile carries no secrets, and the built-in set is written to
+// make that visible rather than to work around it.** The manifest's
+// refusal of secret keys applies here for the same reason and with more
+// force: a bundle is shared across deployments, so a credential in one
+// would be a credential in all of them. `production-multi-instance`
+// therefore selects the Redis-backed channel and lock but cannot supply
+// `TOOLUP_REDIS_CONNECTION`, and says so in `Requires` — a machine
+// -checked field, not a sentence in a doc that can drift from the
+// bundle beside it.
+
+/// A named bundle of configuration keys — a posture a deployment can
+/// import by name instead of restating key by key.
+type ConfigProfile = {
+    /// The name a manifest's `"$profile"` entry or `TOOLUP_PROFILE`
+    /// selects. Matched case-insensitively, like every enum-valued
+    /// reader; this spelling is the canonical one reports use.
+    Name: string
+    /// What posture this profile claims, in one line. Rendered into the
+    /// generated reference, so it is operator-facing prose.
+    Description: string
+    /// Registered keys the operator must supply THEMSELVES for this
+    /// posture to work — secrets and per-deployment values a shareable
+    /// bundle structurally cannot carry. Declared rather than described
+    /// so it can be checked: every entry must name a registered key.
+    Requires: string list
+    /// The bundle, in authored order (which is the order the generated
+    /// reference renders). Keys are canonical env-var names; values are
+    /// strings, so a reader parses a profile value exactly as it parses
+    /// an environment one.
+    Values: (string * string) list
+}
+
+/// The built-in profiles. Deliberately small — three postures that
+/// recur in every deployment, each a combination the preflight already
+/// has an opinion about. A fourth is a design question, not a
+/// convenience: the value of the set is that a reader can hold all of it
+/// in their head.
+///
+/// Each bundle states either a value that DIFFERS from the key's default
+/// or one that IS the posture the name claims (`dev-single-instance`
+/// naming its single-instance substrates, for instance). Restating a
+/// default for any other reason is deliberately avoided — a profile
+/// cannot enforce anything, because every rung above it wins, so a
+/// default restated "for safety" is theatre that makes the bundle harder
+/// to read.
+let builtInProfiles: ConfigProfile list = [
+    {
+        Name = "dev-single-instance"
+        Description =
+            "A developer machine: one instance, in-process substrates, verbose logs and the /dev/* inspection endpoints open."
+        Requires = []
+        Values = [
+            Names.replicaCount, "1"
+            Names.notificationChannel, "inmemory"
+            Names.distributedLock, "inprocess"
+            Names.logLevel, "Debug"
+            Names.enableDevEndpoints, "true"
+        ]
+    }
+    {
+        Name = "production-multi-instance"
+        Description =
+            "Several instances behind a load balancer: cross-instance channel, lock and rate-limit store, HTTPS enforced, hardened headers, structured logs."
+        Requires = [ Names.redisConnection ]
+        Values = [
+            Names.replicaCount, "2"
+            Names.notificationChannel, "redis"
+            Names.distributedLock, "redis"
+            Names.rateLimiter, "enabled"
+            Names.rateLimitStore, "external"
+            Names.requireHttps, "true"
+            Names.securityHardening, "strict"
+            Names.logFormat, "json"
+        ]
+    }
+    {
+        Name = "serverless"
+        Description =
+            "A serverless host with no long-lived background services: nothing in-process survives an invocation, so state that must outlive one is persisted."
+        Requires = [ Names.blobStorage ]
+        Values = [
+            Names.serverlessHost, "serverless"
+            Names.jobScheduler, "disabled"
+            Names.eventStore, "persistent"
+            Names.resultStore, "persistent"
+            Names.logFormat, "json"
+        ]
+    }
+]
+
+/// The problems with `candidate`, measured against the registry and
+/// against the profiles already `available`. Empty means it may be
+/// declared.
+///
+/// Every rule here is one the loader already enforces for a manifest,
+/// applied to a bundle instead — because a profile is the same
+/// declarative act one rung lower, and a rule that held for the file but
+/// not for the bundle would be a way around it. A secret in a profile is
+/// worse than a secret in a manifest, not better: the bundle is shared
+/// across deployments by design.
+///
+/// Reports EVERY problem rather than the first, so a consumer fixing a
+/// profile declaration does it in one edit.
+let profileProblems (available: ConfigProfile list) (candidate: ConfigProfile) : string list =
+    let registered = all |> List.map _.EnvVar |> Set.ofList
+    let secrets = all |> List.filter _.IsSecret |> List.map _.EnvVar |> Set.ofList
+
+    let nameProblems =
+        if System.String.IsNullOrWhiteSpace candidate.Name then
+            [
+                "a profile must have a name — it is how a manifest or TOOLUP_PROFILE selects it."
+            ]
+        elif candidate.Name.Trim() <> candidate.Name then
+            [
+                sprintf
+                    "the profile name \"%s\" has leading or trailing whitespace, which no operator can type reliably."
+                    candidate.Name
+            ]
+        else
+            let lowered = candidate.Name.ToLowerInvariant()
+
+            available
+            |> List.filter (fun p -> p.Name.ToLowerInvariant() = lowered)
+            |> List.map (fun p ->
+                sprintf
+                    "the profile name \"%s\" is already taken by \"%s\". Profile names are the selection key, so a duplicate would make which bundle a deployment imported depend on registration order."
+                    candidate.Name
+                    p.Name)
+
+    let descriptionProblems =
+        if System.String.IsNullOrWhiteSpace candidate.Description then
+            [
+                sprintf
+                    "profile \"%s\" has no description. It is rendered into the generated configuration reference, where an operator chooses between profiles by reading it."
+                    candidate.Name
+            ]
+        else
+            []
+
+    let requiresProblems =
+        candidate.Requires
+        |> List.filter (fun key -> not (Set.contains key registered))
+        |> List.map (
+            sprintf "profile \"%s\" declares that it requires %s, which is not a recognised config key." candidate.Name
+        )
+
+    let duplicateKeys =
+        candidate.Values
+        |> List.map fst
+        |> List.groupBy id
+        |> List.filter (fun (_, occurrences) -> List.length occurrences > 1)
+        |> List.map (fun (key, _) ->
+            sprintf
+                "profile \"%s\" sets %s more than once, so which value it supplies is arbitrary."
+                candidate.Name
+                key)
+
+    let valueProblems =
+        candidate.Values
+        |> List.collect (fun (key, value) ->
+            if not (Set.contains key registered) then
+                [
+                    sprintf
+                        "profile \"%s\" sets %s, which is not a recognised config key. Every profile key must be a documented TOOLUP_* variable."
+                        candidate.Name
+                        key
+                ]
+            elif Set.contains key secrets then
+                [
+                    sprintf
+                        "profile \"%s\" sets %s, which is a secret. A profile is shared across deployments by design, so a credential in one is a credential in all of them — name it in Requires and let the operator set the environment variable."
+                        candidate.Name
+                        key
+                ]
+            elif key = Names.configFile || key = Names.profile then
+                [
+                    sprintf
+                        "profile \"%s\" sets %s, which selects what to load and is therefore already resolved by the time the bundle is read."
+                        candidate.Name
+                        key
+                ]
+            elif not (isManifestBindable key) then
+                [
+                    sprintf
+                        "profile \"%s\" sets %s, whose reader does not resolve through the config-resolution seam, so the value would never take effect."
+                        candidate.Name
+                        key
+                ]
+            elif System.String.IsNullOrEmpty value then
+                [
+                    sprintf
+                        "profile \"%s\" sets %s to the empty string, which every reader treats as unset — remove the entry instead."
+                        candidate.Name
+                        key
+                ]
+            else
+                [])
+
+    nameProblems
+    @ descriptionProblems
+    @ requiresProblems
+    @ duplicateKeys
+    @ valueProblems
+
 /// Project the registry to `docs/reference/config-reference.md`. Pure —
 /// the same input always yields the same bytes, so the golden-file test
 /// can compare the committed doc against a fresh render.
@@ -2545,7 +2792,7 @@ module ReferenceDoc =
 
         sb.AppendLine(
             sprintf
-                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.\n\nThe **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or the variable naming the manifest's own location). Precedence is consumer literal > environment variable > manifest > override record > default."
+                "Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (%d keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the \"Build & tooling\" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.\n\nThe **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default."
                 keys.Length
         )
         |> ignore
@@ -2557,12 +2804,57 @@ module ReferenceDoc =
         // beside that paragraph rather than in a section of its own.
         sb.AppendLine(
             sprintf
-                "A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:\n\n```json\n{\n  \"%s\": \"./toolup.config.schema.json\",\n  \"TOOLUP_PLATFORM_SURFACES\": \"team\"\n}\n```\n\nThe schema is the only non-registry property the loader tolerates; it is skipped, never bound."
+                "A manifest can be validated **as it is typed**: [`toolup.config.schema.json`](toolup.config.schema.json) beside this file is generated from the same registry and carries exactly the keys marked `yes` above, with `additionalProperties: false` — so an unknown key, a secret key, a `pending` key and an out-of-enum value are all flagged in the editor rather than at boot. Point at it from the top of the manifest:\n\n```json\n{\n  \"%s\": \"./toolup.config.schema.json\",\n  \"TOOLUP_PLATFORM_SURFACES\": \"team\"\n}\n```\n\nThe schema pointer and `%s` are the only non-registry properties the loader tolerates; neither is bound to a config key."
                 ManifestSchemaProperty
+                ManifestProfileProperty
         )
         |> ignore
 
         sb.AppendLine "" |> ignore
+
+        // Phase 700 — the profiles, rendered from the same registry data
+        // as everything else above. A bundle stated in a doc and defined
+        // in code would be two sources of truth for one fact; this is the
+        // projection of the definition.
+        sb.AppendLine "## Configuration profiles" |> ignore
+        sb.AppendLine "" |> ignore
+
+        sb.AppendLine(
+            sprintf
+                "A **profile** is a named bundle of the keys above, resolved one rung below the manifest — so importing a posture never takes a setting away from the deployment that imported it, and any explicit environment or manifest line still wins. Select one with a `\"%s\"` entry in the manifest (which takes precedence) or with the `%s` environment variable; an unrecognised name refuses startup and lists the available profiles.\n\nA profile is a *claim*, not a bypass. Its values reach every reader through the same resolution seam an environment variable does, so the startup preflight validates the resolved combination exactly as if each key had been typed by hand — and a refusal names the profile in force. `--print-config` labels each value it supplied `profile:<name>`.\n\nNo profile carries a secret: a bundle is shared across deployments by design, so a credential in one would be a credential in all of them. Where a posture depends on one, the profile says which variable the operator must set themselves under **Requires**.\n\nA consumer registers its own profiles before building the logger; the %d below ship with the SDK."
+                ManifestProfileProperty
+                Names.profile
+                builtInProfiles.Length
+        )
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+
+        for p in builtInProfiles do
+            sb.AppendLine(sprintf "### `%s`" p.Name) |> ignore
+            sb.AppendLine "" |> ignore
+            sb.AppendLine(cell p.Description) |> ignore
+            sb.AppendLine "" |> ignore
+
+            match p.Requires with
+            | [] -> ()
+            | required ->
+                sb.AppendLine(
+                    sprintf
+                        "**Requires** (set these yourself — a profile cannot carry them): %s"
+                        (required |> List.map (sprintf "`%s`") |> String.concat ", ")
+                )
+                |> ignore
+
+                sb.AppendLine "" |> ignore
+
+            sb.AppendLine "| Env var | Value |" |> ignore
+            sb.AppendLine "|---|---|" |> ignore
+
+            for key, value in p.Values do
+                sb.AppendLine(sprintf "| `%s` | `%s` |" key (cell value)) |> ignore
+
+            sb.AppendLine "" |> ignore
 
         for category in orderedCategories keys do
             sb.AppendLine(sprintf "## %s" category) |> ignore
@@ -2611,11 +2903,16 @@ module ReferenceDoc =
                 // what remained was not a queue of unmigrated readers but
                 // three different reasons a key cannot be declared.
                 let manifestCell =
-                    if k.EnvVar = Names.configFile then "n/a"
-                    elif k.IsSecret then "never"
-                    elif isManifestBindable k.EnvVar then "yes"
-                    elif isToolingKey k.EnvVar then "n/a"
-                    else "pending"
+                    if k.EnvVar = Names.configFile || k.EnvVar = Names.profile then
+                        "n/a"
+                    elif k.IsSecret then
+                        "never"
+                    elif isManifestBindable k.EnvVar then
+                        "yes"
+                    elif isToolingKey k.EnvVar then
+                        "n/a"
+                    else
+                        "pending"
 
                 sb.AppendLine(
                     sprintf
@@ -2795,6 +3092,24 @@ module ConfigSchema =
                     "Optional pointer to this schema, so an editor validates the manifest as it is typed. Tolerated by the loader and never bound to a config key."
             ]
 
+        // Phase 700 — the second tolerated non-registry property.
+        // `additionalProperties: false` means an omitted property is an
+        // editor error, so the schema has to admit `$profile` or it would
+        // flag the very selection the reference doc tells operators to
+        // write. Deliberately NOT an `enum` of the built-in names: a
+        // consumer may declare its own profiles, and a schema that
+        // refused those would be wrong on the file it was generated for.
+        let profileProperty =
+            block "    " ManifestProfileProperty [
+                "\"type\": \"string\""
+                "\"description\": "
+                + str (
+                    sprintf
+                        "Name of the configuration profile this manifest imports — a named bundle resolved one rung below the manifest, so every key set here still wins over it. Ships with: %s. A consumer may declare further profiles, so any name is accepted here; an unrecognised one refuses startup and lists what is available."
+                        (builtInProfiles |> List.map _.Name |> String.concat ", ")
+                )
+            ]
+
         let keyProperties =
             bindable
             |> List.map (fun k ->
@@ -2805,11 +3120,12 @@ module ConfigSchema =
                      @ typeClauses k.Type
                      @ defaultClauses k))
 
-        let properties = (schemaProperty :: keyProperties) |> String.concat ",\n"
+        let properties =
+            (schemaProperty :: profileProperty :: keyProperties) |> String.concat ",\n"
 
         let description =
             sprintf
-                "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the %d keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md."
+                "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the %d keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md."
                 bindable.Length
 
         let sb = StringBuilder()

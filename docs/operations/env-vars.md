@@ -2,7 +2,7 @@
 
 Single-source reference for the environment variables `ServerConfig.fromEnv` (and adjacent seams) read. This page grows as the [Phase 71.A](../migrations/71a-runtime-config-lifts.md) runtime-config lifts land; today it covers the config-resolution variables. A deployment that sets none of these resolves byte-for-byte from `ServerConfig.defaults` + the supplied overrides record (GP 11).
 
-**Precedence (every lifted field):** consumer-authored literal (`{ ServerConfig.defaults with X = ... }`) > env var > **deployment configuration manifest** > library-default override-record value (`ServerConfigOverrides.referenceApp`) > `defaults.X`.
+**Precedence (every lifted field):** consumer-authored literal (`{ ServerConfig.defaults with X = ... }`) > env var > **deployment configuration manifest** > **configuration profile** > library-default override-record value (`ServerConfigOverrides.referenceApp`) > `defaults.X`.
 
 ## The deployment configuration manifest
 
@@ -37,7 +37,77 @@ Two things the schema is deliberately not. It does **not** re-state the environm
 
 **Wiring.** `ConsoleLogger.fromEnv ()` discovers and installs the manifest before it builds the logger, so a composition root that already calls it needs no change at all. The ordering is deliberate: `TOOLUP_LOG_LEVEL` is itself a bindable key, so a manifest read any later could not configure the logger it configures. A composition root that builds its **own** logger calls `ConfigResolver.installFromCurrentDirectory ()` itself, before `ServerConfig.fromEnv` — and is warned at compose time if a manifest is sitting on disk unread.
 
-**Inspecting it.** `--print-config` prints every key with the layer its value came from (`env` / `manifest` / `default`) plus the manifest path and hash; `--print-config --diff` prints only the keys some layer actually set, which is the review artefact rather than the dump. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above the resolution seam and reads as `default` there.
+**Inspecting it.** `--print-config` prints every key with the layer its value came from (`env` / `manifest` / `profile:<name>` / `default`) plus the manifest path and hash and the profile in force; `--print-config --diff` prints only the keys some layer actually set, which is the review artefact rather than the dump. A value written as a literal in composition-root code, or supplied by an overrides record, is applied above the resolution seam and reads as `default` there.
+
+## Configuration profiles
+
+The manifest collapses 30–50 scattered strings into one reviewable file. It does not collapse the
+**combinations**: a deployment behind a load balancer needs a cross-instance notification channel
+AND a cross-instance lock AND a shared rate-limit store, and until now the platform expressed that
+coupling only negatively — a preflight refusal once you had got it wrong, plus an `Accept*` hatch to
+say you meant it.
+
+A **profile** is the positive-space twin: a named bundle of registered keys, stated once and imported
+by name. It resolves **one rung below the manifest**, which is the whole of its safety story — a
+deployment's own explicit line always beats the bundle it imported, so the worst a wrong profile can
+do is supply a key nobody had thought about, and `--print-config` names the profile beside every such
+key.
+
+```json
+{
+  "$schema": "./toolup.config.schema.json",
+  "$profile": "production-multi-instance",
+  "TOOLUP_REPLICA_COUNT": 6
+}
+```
+
+That manifest imports the multi-instance posture and overrides its placeholder replica count. Every
+other key in the bundle applies; nothing in the file is taken away by it.
+
+**Selection.** `"$profile"` in the manifest wins; otherwise `TOOLUP_PROFILE` is consulted. Names match
+case-insensitively. An **unrecognised name refuses startup** and lists the available profiles —
+falling back would leave the deployment running the very defaults the profile was imported to
+replace, which is the "declared but not applied" failure this whole layer exists to prevent. Note
+`TOOLUP_PROFILE` itself is **refused inside a manifest**: a file names its profile with `"$profile"`,
+and admitting both spellings would be two ways to say one thing.
+
+**A profile is a claim, not a bypass.** Its values reach every reader through the same resolution seam
+an environment variable does, so the startup preflight validates the resolved combination *exactly as
+if each key had been typed by hand* — no validator is skipped, and no `Accept*` hatch is implied. A
+combination a profile contributed to that trips a refusal trips it with the profile named beside the
+refusal, so an operator is never reading a message about keys they never typed.
+
+**No profile carries a secret.** A bundle is shared across deployments by design, so a credential in
+one would be a credential in all of them — the manifest's secret refusal applies here with more
+force, and with no hatch. Where a posture depends on one, the profile *names* the variable under
+**Requires** and the operator supplies it through the environment lane:
+`production-multi-instance` selects the Redis-backed channel and lock but requires
+`TOOLUP_REDIS_CONNECTION`; `serverless` persists what must outlive an invocation but requires
+`TOOLUP_BLOB_STORAGE` to point somewhere durable.
+
+**The built-in set** — `dev-single-instance`, `production-multi-instance`, `serverless` — and each
+bundle's exact contents are rendered into the [configuration
+reference](../reference/config-reference.md#configuration-profiles) from the same registry data the
+key tables come from. Deliberately small: the value of the set is that a reader can hold all of it in
+their head.
+
+**Declaring your own.** A consumer registers additional profiles with `ConfigProfiles.declare` at the
+top of `main`, **before** `ConsoleLogger.fromEnv ()` — the profile has to be in force before the first
+reader resolves a key, and the first reader is the logger. Declaring later is refused, naming the
+ordering, rather than registering a bundle nothing will ever select. A declaration is checked against
+the registry on the way in and refused for every reason a manifest is (unknown key, secret key, a key
+whose reader does not resolve through the seam) plus the two a bundle adds — a duplicate name, and an
+empty value that would silently mean "unset".
+
+```fsharp
+ConfigProfiles.declare {
+    Name = "house-style"
+    Description = "Our standard production posture on top of the platform's."
+    Requires = []
+    Values = [ ConfigKeys.Names.logFormat, "json"; ConfigKeys.Names.securityHardening, "strict" ]
+}
+```
+
 
 ## Core deployment shape
 
@@ -129,6 +199,7 @@ Client (Vite defines) — **off-direction only**; enabling carries a structured 
 | `TOOLUP_SLOW_REQUEST_MS` | `SlowRequestThreshold` | `1000` |
 | `TOOLUP_REPLICA_COUNT` | `ReplicaCount` | `1` |
 | `TOOLUP_CONFIG_FILE` | _(none — names the manifest)_ | unset (probes `./toolup.config.json`); a named file that does not exist refuses startup |
+| `TOOLUP_PROFILE` | _(none — names the configuration profile)_ | unset (no profile imported); a manifest's `"$profile"` entry takes precedence; an unrecognised name refuses startup |
 
 ## `Accept*` escape-hatch flags
 

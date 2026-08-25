@@ -2,13 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
   "title": "ToolUp deployment configuration manifest",
-  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment. It lists the 105 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 105 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Optional pointer to this schema, so an editor validates the manifest as it is typed. Tolerated by the loader and never bound to a config key."
+    },
+    "$profile": {
+      "type": "string",
+      "description": "Name of the configuration profile this manifest imports — a named bundle resolved one rung below the manifest, so every key set here still wins over it. Ships with: dev-single-instance, production-multi-instance, serverless. A consumer may declare further profiles, so any name is accepted here; an unrecognised one refuses startup and lists what is available."
     },
     "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX": {
       "description": "Allows a RAG index that does not survive a restart. Lowers a startup preflight refusal to a warning.",
