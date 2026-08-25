@@ -197,6 +197,17 @@ let tests =
             // exercise the pipeline without a real model.
             let dim = 32
 
+            // FNV-1a over the UTF-8 bytes: String.GetHashCode is randomised
+            // per process, so bucketing on it reshuffles the projection (and
+            // occasionally the ranking) with each run's hash seed.
+            let fnv1a (w: string) : uint32 =
+                let mutable h = 2166136261u
+
+                for b in Text.Encoding.UTF8.GetBytes w do
+                    h <- (h ^^^ uint32 b) * 16777619u
+
+                h
+
             let bow (text: string) : float32[] =
                 let v = Array.zeroCreate<float32> dim
 
@@ -206,7 +217,7 @@ let tests =
                         .Split([| ' '; '\n'; '\t'; '.'; ','; '#' |], StringSplitOptions.RemoveEmptyEntries)
 
                 for w in words do
-                    let h = (abs (w.GetHashCode())) % dim
+                    let h = int (fnv1a w % uint32 dim)
                     v[h] <- v[h] + 1.0f
 
                 v
