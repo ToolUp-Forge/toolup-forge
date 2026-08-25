@@ -396,25 +396,42 @@ type FactFreshness =
 /// never drift from the truth the timestamps state.
 module Freshness =
 
-    /// Derive freshness for `fact` under `policy`, given whether the fact
-    /// is still the *current* head of its lineage (`isCurrent`) and the
-    /// evaluation instant `now`.
+    /// Derive freshness from a transaction time alone — the whole of what
+    /// the derivation reads off a fact (Phase 702).
     ///
-    ///  - `FreshFor window` — fresh while `now - AsOf <= window`.
+    ///  - `FreshFor window` — fresh while `now - asOf <= window`.
     ///  - `UntilSuperseded` — fresh exactly while it is current (a
     ///    superseded fact is stale from its successor's arrival).
     ///  - `UntilUpstreamChange` — treated as `UntilSuperseded` here; the
     ///    upstream-change trigger that additionally stales a still-current
     ///    fact is the reactive-recomputation phase (Stage 3), not Stage 0.
+    ///
+    /// Exposed separately from `derive` because a **projection** of a fact
+    /// — the population read model's current-heads surface — carries the
+    /// transaction time without carrying the fact. Sharing the derivation
+    /// rather than restating it is what makes the projected answer equal
+    /// the enumerated one by construction rather than by a second reading
+    /// of this comment.
+    let deriveAt
+        (policy: ToolUp.Platform.Grounding.StalenessPolicy)
+        (asOf: DateTime)
+        (isCurrent: bool)
+        (now: DateTime)
+        : FactFreshness =
+        match policy with
+        | ToolUp.Platform.Grounding.FreshFor window ->
+            let goesStaleAt = asOf + window
+            if now <= goesStaleAt then Fresh else Stale goesStaleAt
+        | ToolUp.Platform.Grounding.UntilSuperseded
+        | ToolUp.Platform.Grounding.UntilUpstreamChange -> if isCurrent then Fresh else Stale asOf
+
+    /// Derive freshness for `fact` under `policy`, given whether the fact
+    /// is still the *current* head of its lineage (`isCurrent`) and the
+    /// evaluation instant `now`.
     let derive
         (policy: ToolUp.Platform.Grounding.StalenessPolicy)
         (fact: Fact)
         (isCurrent: bool)
         (now: DateTime)
         : FactFreshness =
-        match policy with
-        | ToolUp.Platform.Grounding.FreshFor window ->
-            let goesStaleAt = fact.AsOf + window
-            if now <= goesStaleAt then Fresh else Stale goesStaleAt
-        | ToolUp.Platform.Grounding.UntilSuperseded
-        | ToolUp.Platform.Grounding.UntilUpstreamChange -> if isCurrent then Fresh else Stale fact.AsOf
+        deriveAt policy fact.AsOf isCurrent now

@@ -113,6 +113,16 @@ let allTests =
         // the population pipeline measured at the requirement's cardinality.
         FactStoreTests.populationRegistryTests
         FactStoreTests.populationScaleTests
+        // Phase 702 — the metric surface: the same IFactStore contract run a
+        // second time through the derived current-heads read model, the two
+        // paths' population results compared directly across a query matrix,
+        // the maintenance paths (supersession / competition / neighbouring
+        // metric / out-of-band write / flush-and-rebuild / AsOf bypass /
+        // fallback threshold), and the read measured at 100,000 heads.
+        FactStoreTests.surfaceTests
+        FactStoreTests.surfacePopulationRegistryTests
+        FactStoreTests.metricSurfaceTests
+        FactStoreTests.metricSurfaceScaleTests
         // Phase 566 — canonical-method selection for competing facts: selector
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.

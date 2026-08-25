@@ -170,6 +170,7 @@ ToolUp.Facts.FactValue+Tags.Scalar : System.Int32 (literal)
 ToolUp.Facts.FactValue+Tags.Series : System.Int32 (literal)
 ToolUp.Facts.Freshness (class)
 ToolUp.Facts.Freshness.derive(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
+ToolUp.Facts.Freshness.deriveAt(ToolUp.Platform.Grounding.StalenessPolicy, System.DateTime, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
 ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
@@ -251,6 +252,18 @@ ToolUp.Facts.PlannedTriple (class)
 ToolUp.Facts.PlannedTriple..ctor(ToolUp.Facts.TripleCandidate, ToolUp.Facts.PlanStep)
 ToolUp.Facts.PlannedTriple.Candidate : ToolUp.Facts.TripleCandidate { get }
 ToolUp.Facts.PlannedTriple.Step : ToolUp.Facts.PlanStep { get }
+ToolUp.Facts.PopulationMember (class)
+ToolUp.Facts.PopulationMember..ctor(System.String, ToolUp.Facts.SubjectRef, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.DateTime, System.DateTime, System.DateTime, System.String)
+ToolUp.Facts.PopulationMember.AsOf : System.DateTime { get }
+ToolUp.Facts.PopulationMember.FactId : System.String { get }
+ToolUp.Facts.PopulationMember.Magnitude : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.PopulationMember.MethodIdentity : System.String { get }
+ToolUp.Facts.PopulationMember.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.PopulationMember.PeriodTo : System.DateTime { get }
+ToolUp.Facts.PopulationMember.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.PopulationMemberModule (class)
+ToolUp.Facts.PopulationMemberModule.competitionKey(ToolUp.Facts.PopulationMember) : System.Tuple`3[ToolUp.Facts.SubjectRef, System.DateTime, System.DateTime]
+ToolUp.Facts.PopulationMemberModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.PopulationMember
 ToolUp.Facts.PopulationMethodSelection (class)
 ToolUp.Facts.PopulationMethodSelection.AllCompetingMethods : ToolUp.Facts.PopulationMethodSelection { get }
 ToolUp.Facts.PopulationMethodSelection.CanonicalMethodOnly : ToolUp.Facts.PopulationMethodSelection { get }
@@ -298,6 +311,8 @@ ToolUp.Facts.PopulationQueryModule.effectiveTopK(ToolUp.Facts.PopulationQuery) :
 ToolUp.Facts.PopulationQueryModule.matchesSubject(ToolUp.Facts.PopulationQuery, ToolUp.Facts.SubjectRef) : System.Boolean
 ToolUp.Facts.PopulationRanking (class)
 ToolUp.Facts.PopulationRanking.rank(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]
+ToolUp.Facts.PopulationRanking.rankBy`1(ToolUp.Facts.RankDirection, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
+ToolUp.Facts.PopulationRanking.rankMembers(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]
 ToolUp.Facts.PopulationResult (class)
 ToolUp.Facts.PopulationResult..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.RankDirection, System.Int32, System.Boolean, ToolUp.Facts.PopulationStats)
 ToolUp.Facts.PopulationResult.Direction : ToolUp.Facts.RankDirection { get }
@@ -305,6 +320,8 @@ ToolUp.Facts.PopulationResult.EffectiveTopK : System.Int32 { get }
 ToolUp.Facts.PopulationResult.Ranked : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
 ToolUp.Facts.PopulationResult.Stats : ToolUp.Facts.PopulationStats { get }
 ToolUp.Facts.PopulationResult.Truncated : System.Boolean { get }
+ToolUp.Facts.PopulationSelection (class)
+ToolUp.Facts.PopulationSelection.canonicalHeads`2(Microsoft.FSharp.Core.FSharpFunc`2[a, k], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
 ToolUp.Facts.PopulationStats (class)
 ToolUp.Facts.PopulationStats..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], ToolUp.Facts.FreshnessHistogram)
 ToolUp.Facts.PopulationStats.ComparableCount : System.Int32 { get }
@@ -319,6 +336,8 @@ ToolUp.Facts.PopulationStats.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[Sys
 ToolUp.Facts.PopulationStats.SubjectCount : System.Int32 { get }
 ToolUp.Facts.PopulationStatsModule (class)
 ToolUp.Facts.PopulationStatsModule.empty : ToolUp.Facts.PopulationStats { get }
+ToolUp.Facts.PopulationStatsModule.ofMembers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationStatsModule.ofMembersWithFreshness(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness]]) : ToolUp.Facts.PopulationStats
 ToolUp.Facts.PopulationStatsModule.ofPopulation(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Fact, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationStats
 ToolUp.Facts.PopulationValue (class)
 ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
@@ -372,3 +391,4 @@ ToolUp.Facts.ValueThreshold+Tags.AtMost : System.Int32 (literal)
 ToolUp.Facts.ValueThreshold+Tags.Between : System.Int32 (literal)
 ToolUp.Facts.ValueThresholdModule (class)
 ToolUp.Facts.ValueThresholdModule.satisfies(ToolUp.Facts.ValueThreshold, ToolUp.Facts.FactValue) : System.Boolean
+ToolUp.Facts.ValueThresholdModule.satisfiesMagnitude(ToolUp.Facts.ValueThreshold, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]) : System.Boolean

@@ -23,6 +23,13 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Server\IFactStore.fs" />
+        <!-- Phase 702 — the metric surface: the derived, columnar
+             current-heads read model the population query executes
+             against above a size threshold. Compiled ahead of the store
+             that maintains it; it depends only on the Core fact model and
+             `IBlobStorage`, never on `IFactStore`, so a store that
+             indexes differently is unaffected by its presence. -->
+        <Compile Include="Server\FactSurface.fs" />
         <Compile Include="Server\BlobFactStore.fs" />
         <Compile Include="Server\FactStoreEvidenceSource.fs" />
         <Compile Include="Server\DisclosureTaint.fs" />

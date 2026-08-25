@@ -209,6 +209,49 @@ type PopulationResult = {
     Stats: PopulationStats
 }
 
+/// The **decidable projection** of one current head (Phase 702): every
+/// field the population pipeline reads, and deliberately nothing else.
+///
+/// A population read decides five things — is this subject in the set,
+/// does its value clear the threshold, which of several competing methods
+/// counts, where does it rank, and what does the population look like —
+/// and *none* of them touch the fact's evidence, confidence, supersession
+/// edge, or the value's shape beyond its magnitude. Naming that projection
+/// is what lets an **indexed read model** hold a compact columnar snapshot
+/// of the current heads instead of the heads themselves, and still produce
+/// a byte-identical answer: both paths run the functions below over
+/// `PopulationMember` values, so equivalence is a property of the code
+/// rather than a claim a test has to keep re-establishing.
+///
+/// `Magnitude` is already `PopulationValue.comparable` of the head's value
+/// — the projection is lossy on purpose, and lossy exactly where the
+/// ranking is blind. A non-comparable shape projects to `None` and is
+/// counted, never ordered (GP 9), the same as it is on the fact.
+type PopulationMember = {
+    /// The head's content-addressed `FactId` — the ranking's deterministic
+    /// tiebreak, and the key an indexed implementation re-reads the full
+    /// fact by once the top-k is known.
+    FactId: string
+    /// The head's subject instance, for the subject-set predicate and the
+    /// distinct-subject count.
+    Subject: SubjectRef
+    /// `PopulationValue.comparable` of the head's value: `Some d` for a
+    /// rankable magnitude, `None` for a shape that asserts none.
+    Magnitude: decimal option
+    /// `Period.From` — the valid-time lower bound (the `Label` is cosmetic
+    /// and no decidable step reads it, so it is not projected).
+    PeriodFrom: DateTime
+    /// `Period.To` — the valid-time upper bound.
+    PeriodTo: DateTime
+    /// Transaction time — the whole of what freshness derivation reads
+    /// (`Freshness.deriveAt`).
+    AsOf: DateTime
+    /// `Fact.methodIdentity` of the head's method — the D19 competing-
+    /// method discriminator, and what a canonical-method selector matches
+    /// against.
+    MethodIdentity: string
+}
+
 /// Which `FactValue` shapes carry a single magnitude and can therefore be
 /// ranked, and which are counted but never ordered.
 module PopulationValue =
@@ -234,21 +277,50 @@ module PopulationValue =
         | Categorical _
         | Absent _ -> None
 
+/// Projection of a `Fact` into the decidable population shape.
+module PopulationMember =
+
+    /// Project a fact. Total and pure — the same fact always projects to
+    /// the same member, which is what makes a persisted projection
+    /// verifiable against the fact it came from.
+    let ofFact (f: Fact) : PopulationMember = {
+        FactId = f.FactId
+        Subject = f.Subject
+        Magnitude = PopulationValue.comparable f.Value
+        PeriodFrom = f.Period.From
+        PeriodTo = f.Period.To
+        AsOf = f.AsOf
+        MethodIdentity = Fact.methodIdentity f.Method
+    }
+
+    /// The **competition key** (plan D19): two current heads compete when
+    /// they share (subject, period) within one metric but were produced by
+    /// different methods. A member set is always one metric, so the metric
+    /// is constant and out of the key; the period `Label` is cosmetic and
+    /// excluded, mirroring the lineage key's canonical period.
+    let competitionKey (m: PopulationMember) = m.Subject, m.PeriodFrom, m.PeriodTo
+
 /// Inclusive-bound threshold evaluation.
 module ValueThreshold =
 
-    /// Whether a value satisfies a threshold. A value with no comparable
-    /// magnitude satisfies no threshold — it cannot be tested, so it is
-    /// not in the filtered population (and its absence is visible in the
-    /// difference between an unfiltered and a filtered `FactCount`).
-    let satisfies (threshold: ValueThreshold) (value: FactValue) : bool =
-        match PopulationValue.comparable value with
+    /// Whether a magnitude satisfies a threshold. `None` — a value shape
+    /// asserting no single magnitude — satisfies no threshold: it cannot
+    /// be tested, so it is not in the filtered population (and its absence
+    /// is visible in the difference between an unfiltered and a filtered
+    /// `FactCount`).
+    let satisfiesMagnitude (threshold: ValueThreshold) (magnitude: decimal option) : bool =
+        match magnitude with
         | None -> false
         | Some d ->
             match threshold with
             | AtLeast bound -> d >= bound
             | AtMost bound -> d <= bound
             | Between(low, high) -> d >= low && d <= high
+
+    /// Whether a value satisfies a threshold — `satisfiesMagnitude` over
+    /// the value's comparable magnitude.
+    let satisfies (threshold: ValueThreshold) (value: FactValue) : bool =
+        satisfiesMagnitude threshold (PopulationValue.comparable value)
 
 /// Resolution of a requested ordering into a concrete rank direction.
 module PopulationOrdering =
@@ -339,32 +411,116 @@ module PopulationQuery =
                 List.length subject.Path >= List.length prefix
                 && List.forall2 (=) prefix (subject.Path |> List.truncate (List.length prefix))))
 
+/// Canonical-method selection over competing current heads (plan D19).
+module PopulationSelection =
+
+    /// Resolve competing heads to a metric's registry-declared canonical
+    /// method, where one is declared. Per competing group: no declaration
+    /// → every head (the pre-566 behaviour, GP 11); a declaration with at
+    /// least one matching head → only the matching head(s); a declaration
+    /// no head matches → every head (an empty canonical lineage must
+    /// surface the competitors, never hide the metric entirely — GP 9).
+    ///
+    /// Generic over the element on purpose. The fact-enumerating store and
+    /// the indexed read model select over different shapes — `Fact` and
+    /// `PopulationMember` — and a second implementation of a three-branch
+    /// rule is exactly the kind of thing that agrees for a year and then
+    /// quietly does not.
+    let canonicalHeads
+        (keyOf: 'a -> 'k)
+        (methodOf: 'a -> string)
+        (selectorOf: 'a -> string option)
+        (heads: 'a list)
+        : 'a list =
+        // Competition needs two heads under DIFFERENT method identities
+        // sharing a key, so a population under a single method throughout
+        // cannot contain a contested group and the grouping is a no-op on
+        // it. Worth checking first because the grouping key contains a
+        // subject — a record carrying a string list — and structurally
+        // hashing one per member is a large fraction of a population read
+        // at scale, paid to discover that nothing competes. One method per
+        // metric is the ordinary case; competition is the interesting one.
+        match heads with
+        | []
+        | [ _ ] -> heads
+        | first :: rest when rest |> List.forall (fun x -> methodOf x = methodOf first) -> heads
+        | _ ->
+
+            heads
+            |> List.groupBy keyOf
+            |> List.collect (fun (_, group) ->
+                match group with
+                | []
+                | [ _ ] -> group
+                | contested ->
+                    match selectorOf (List.head contested) with
+                    | None -> contested
+                    | Some selector ->
+                        match
+                            contested
+                            |> List.filter (fun x -> CanonicalMethod.matches selector (methodOf x))
+                        with
+                        | [] -> contested
+                        | matching -> matching)
+
 /// Deterministic ranking over a matched population.
 module PopulationRanking =
 
-    /// Order the comparable members best-first under `direction`, ties
-    /// broken by `FactId` (ordinal). The tiebreak is load-bearing rather
-    /// than tidy: a population read must return the same ranking from an
-    /// enumerating store and from an indexed projection over the same
-    /// heads, and equal values are common at population scale.
-    let rank (direction: RankDirection) (facts: Fact list) : Fact list =
+    /// Order the comparable items best-first under `direction`, ties
+    /// broken by content-addressed id (ordinal). The tiebreak is
+    /// load-bearing rather than tidy: a population read must return the
+    /// same ranking from an enumerating store and from an indexed
+    /// projection over the same heads, and equal values are common at
+    /// population scale — so the two paths share this comparator rather
+    /// than each writing one.
+    let rankBy
+        (direction: RankDirection)
+        (magnitudeOf: 'a -> decimal option)
+        (idOf: 'a -> string)
+        (items: 'a list)
+        : 'a list =
         let keyed =
-            facts
-            |> List.choose (fun f -> PopulationValue.comparable f.Value |> Option.map (fun d -> d, f))
+            items |> List.choose (fun x -> magnitudeOf x |> Option.map (fun d -> d, x))
 
+        // Spelled out rather than `compare (dx, idOf x) (dy, idOf y)`.
+        // Lexicographic order on a pair IS "first key, then tiebreak", so
+        // the relation is identical — but the tuple form allocates two
+        // tuples per comparison and routes through F#'s generic structural
+        // comparer, and at population scale that is most of what a ranking
+        // costs. `compare` on `string` is ordinal, hence
+        // `String.CompareOrdinal`.
         let ordered =
             match direction with
             | LowestFirst ->
                 keyed
-                |> List.sortWith (fun (dx, fx) (dy, fy) -> compare (dx, fx.FactId) (dy, fy.FactId))
+                |> List.sortWith (fun (dx, x) (dy, y) ->
+                    let byValue = compare dx dy
+
+                    if byValue <> 0 then
+                        byValue
+                    else
+                        String.CompareOrdinal(idOf x, idOf y))
             | HighestFirst ->
                 keyed
-                |> List.sortWith (fun (dx, fx) (dy, fy) ->
-                    match compare dy dx with
-                    | 0 -> compare fx.FactId fy.FactId
-                    | c -> c)
+                |> List.sortWith (fun (dx, x) (dy, y) ->
+                    let byValue = compare dy dx
+
+                    if byValue <> 0 then
+                        byValue
+                    else
+                        String.CompareOrdinal(idOf x, idOf y))
 
         ordered |> List.map snd
+
+    /// Order the comparable facts best-first under `direction`.
+    let rank (direction: RankDirection) (facts: Fact list) : Fact list =
+        rankBy direction (fun f -> PopulationValue.comparable f.Value) (fun f -> f.FactId) facts
+
+    /// Order the comparable projected members best-first under
+    /// `direction` — the same comparator `rank` applies, over the
+    /// projection.
+    let rankMembers (direction: RankDirection) (members: PopulationMember list) : PopulationMember list =
+        rankBy direction _.Magnitude _.FactId members
 
 /// Derivation of the population summary.
 module PopulationStats =
@@ -383,50 +539,100 @@ module PopulationStats =
         Freshness = { FreshCount = 0; StaleCount = 0 }
     }
 
+    /// **The** population fold — over projected members already paired
+    /// with their derived freshness. Every other entry point in this
+    /// module reduces to this one, so an enumerating store and an indexed
+    /// read model cannot compute two different summaries of the same
+    /// population: there is one summary function and they both call it.
+    ///
+    /// Freshness arrives paired rather than as a callback because the two
+    /// callers derive it from different things — a fact, and a row in a
+    /// projection — and pairing keeps the fold blind to which.
+    let ofMembersWithFreshness (members: (PopulationMember * FactFreshness) list) : PopulationStats =
+        // One traversal rather than ten. Each accumulator below reproduces
+        // its list-combinator exactly, including the tie behaviour that is
+        // easy to lose: `List.min` / `List.max` keep the FIRST extreme
+        // they meet, and `List.sum` folds left to right — which matters for
+        // `decimal`, where 1.0 and 1.00 are equal but not identical, and
+        // where a caller comparing two implementations' summaries would
+        // see the difference.
+        match members with
+        | [] -> empty
+        | (firstMember, _) :: _ ->
+            let mutable factCount = 0
+            let mutable comparableCount = 0
+            let mutable freshCount = 0
+            let mutable periodFrom = firstMember.PeriodFrom
+            let mutable periodTo = firstMember.PeriodTo
+            let mutable minimum = 0m
+            let mutable maximum = 0m
+            let mutable total = 0m
+
+            for m, freshness in members do
+                factCount <- factCount + 1
+
+                if m.PeriodFrom < periodFrom then
+                    periodFrom <- m.PeriodFrom
+
+                if m.PeriodTo > periodTo then
+                    periodTo <- m.PeriodTo
+
+                match freshness with
+                | Fresh -> freshCount <- freshCount + 1
+                | Stale _ -> ()
+
+                match m.Magnitude with
+                | None -> ()
+                | Some d ->
+                    if comparableCount = 0 then
+                        minimum <- d
+                        maximum <- d
+                        total <- d
+                    else
+                        if d < minimum then
+                            minimum <- d
+
+                        if d > maximum then
+                            maximum <- d
+
+                        total <- total + d
+
+                    comparableCount <- comparableCount + 1
+
+            {
+                // The one derivation left as its own pass: `List.distinct`
+                // is already hash-backed and linear, and hand-rolling a set
+                // here would mean reaching for a BCL collection this
+                // Fable-safe module deliberately does without.
+                SubjectCount = members |> List.map (fun (m, _) -> m.Subject) |> List.distinct |> List.length
+                FactCount = factCount
+                ComparableCount = comparableCount
+                NonComparableCount = factCount - comparableCount
+                PeriodFrom = Some periodFrom
+                PeriodTo = Some periodTo
+                Minimum = if comparableCount = 0 then None else Some minimum
+                Maximum = if comparableCount = 0 then None else Some maximum
+                Mean =
+                    if comparableCount = 0 then
+                        None
+                    else
+                        Some(total / decimal comparableCount)
+                Freshness = {
+                    FreshCount = freshCount
+                    StaleCount = factCount - freshCount
+                }
+            }
+
+    /// Fold projected members into their summary, deriving freshness per
+    /// member.
+    let ofMembers (freshnessOf: PopulationMember -> FactFreshness) (members: PopulationMember list) : PopulationStats =
+        members |> List.map (fun m -> m, freshnessOf m) |> ofMembersWithFreshness
+
     /// Fold a matched population into its summary. `freshnessOf` is
     /// supplied by the caller rather than derived here because a metric's
     /// `StalenessPolicy` is a *registry* fact and this module sits below
     /// the registry — the same split `Freshness.derive` already makes.
     let ofPopulation (freshnessOf: Fact -> FactFreshness) (facts: Fact list) : PopulationStats =
-        match facts with
-        | [] -> empty
-        | _ ->
-            let comparableValues =
-                facts |> List.choose (fun f -> PopulationValue.comparable f.Value)
-
-            let comparableCount = List.length comparableValues
-
-            let freshCount =
-                facts
-                |> List.sumBy (fun f ->
-                    match freshnessOf f with
-                    | Fresh -> 1
-                    | Stale _ -> 0)
-
-            {
-                SubjectCount = facts |> List.map _.Subject |> List.distinct |> List.length
-                FactCount = List.length facts
-                ComparableCount = comparableCount
-                NonComparableCount = List.length facts - comparableCount
-                PeriodFrom = facts |> List.map _.Period.From |> List.min |> Some
-                PeriodTo = facts |> List.map _.Period.To |> List.max |> Some
-                Minimum =
-                    if comparableCount = 0 then
-                        None
-                    else
-                        Some(List.min comparableValues)
-                Maximum =
-                    if comparableCount = 0 then
-                        None
-                    else
-                        Some(List.max comparableValues)
-                Mean =
-                    if comparableCount = 0 then
-                        None
-                    else
-                        Some(List.sum comparableValues / decimal comparableCount)
-                Freshness = {
-                    FreshCount = freshCount
-                    StaleCount = List.length facts - freshCount
-                }
-            }
+        facts
+        |> List.map (fun f -> PopulationMember.ofFact f, freshnessOf f)
+        |> ofMembersWithFreshness

@@ -44,11 +44,13 @@ ToolUp.Facts.AttestedGroundingCertificate.Envelope : ToolUp.ArtefactSigning.Sign
 ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions)
 ToolUp.Facts.BlobFactStoreModule (class)
 ToolUp.Facts.BlobFactStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistry(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistryAndClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
+ToolUp.Facts.BlobFactStoreModule.createWithSurface(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions) : ToolUp.Facts.IFactStore
 ToolUp.Facts.CertificateEdge (class)
 ToolUp.Facts.CertificateEdge..ctor(System.String, System.String, System.String)
 ToolUp.Facts.CertificateEdge.From : System.String { get }
@@ -321,6 +323,19 @@ ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
 ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
 ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
 ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
+ToolUp.Facts.FactSurface (class)
+ToolUp.Facts.FactSurface.Prefix : System.String (literal)
+ToolUp.Facts.FactSurface.blobName(System.String) : System.String
+ToolUp.Facts.FactSurface.drop(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Facts.FactSurfaceOptions (class)
+ToolUp.Facts.FactSurfaceOptions..ctor(System.Boolean, System.Int32, System.Int32)
+ToolUp.Facts.FactSurfaceOptions.Enabled : System.Boolean { get }
+ToolUp.Facts.FactSurfaceOptions.MaxIncrementalFold : System.Int32 { get }
+ToolUp.Facts.FactSurfaceOptions.MinimumHeads : System.Int32 { get }
+ToolUp.Facts.FactSurfaceOptionsModule (class)
+ToolUp.Facts.FactSurfaceOptionsModule.always : ToolUp.Facts.FactSurfaceOptions { get }
+ToolUp.Facts.FactSurfaceOptionsModule.defaults : ToolUp.Facts.FactSurfaceOptions { get }
+ToolUp.Facts.FactSurfaceOptionsModule.disabled : ToolUp.Facts.FactSurfaceOptions { get }
 ToolUp.Facts.FactWithCompetition (class)
 ToolUp.Facts.FactWithCompetition..ctor(ToolUp.Facts.Fact, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.FactWithCompetition.CompetingMethods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
