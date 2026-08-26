@@ -475,6 +475,12 @@
              unattested deploy WITH its reason. Wire types live in
              Platform.Core; nothing below composes it. -->
         <Compile Include="Server\WorkProvenanceSource.fs" />
+        <!-- Phase 717 — the dependency SBOM as a PROJECTION of the recorded
+             closure rather than a scan: SPDX 2.3 + CycloneDX 1.6 emitted
+             from the build's own record, unattested entries present and
+             marked, byte-identical for identical inputs, plus the opt-in
+             platform-admin route a deployment mounts over its own source. -->
+        <Compile Include="Server\SbomProjection.fs" />
         <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
         <!-- Phase 487 — virtual (zero-copy) dataset bindings: read a dataset
