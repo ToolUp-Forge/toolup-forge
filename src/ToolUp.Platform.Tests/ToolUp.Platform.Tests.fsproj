@@ -313,6 +313,7 @@
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />
         <Compile Include="InProcess\AuthProviderTests.fs" />
+        <Compile Include="InProcess\OidcJwksTtlTests.fs" />
         <Compile Include="InProcess\AzureBlobStorageTests.fs" />
         <Compile Include="InProcess\AwsS3StorageTests.fs" />
         <Compile Include="InProcess\GoogleCloudStorageTests.fs" />
