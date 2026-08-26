@@ -1,5 +1,5 @@
 {
-  "ManifestVersion": "1.0.0",
+  "ManifestVersion": "1.1.0",
   "Rules": [
     {
       "Family": "composition-well-formedness",
@@ -91,6 +91,20 @@
       "Version": "1.0.0",
       "Severity": "warning",
       "RuleDescription": "A DSR coverage claim names an IDataExporter / IErasureHandler that this deployment does not compose. The claim is stale — the path was renamed or removed — so the coverage it asserts is not real."
+    },
+    {
+      "Family": "scale-readiness",
+      "Rule": "scale-readiness-intent-unsatisfiable",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A deployment declaring more than one instance (ServerConfig.ReplicaCount > 1) or a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost) must compose only components declaring Readiness = DistributedReady, with every declared distributed prerequisite composed."
+    },
+    {
+      "Family": "appliance-boot-posture",
+      "Rule": "appliance-offline-external-endpoint",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A deployment declaring ApplianceProfile.Posture = DeclaredOffline composed one or more components whose Phase 432 requirements include a URI-typed config knob. Each named endpoint must resolve from inside the appliance container; an endpoint reachable only from the supplying party's network will fail at first use rather than at preflight."
     }
   ]
 }

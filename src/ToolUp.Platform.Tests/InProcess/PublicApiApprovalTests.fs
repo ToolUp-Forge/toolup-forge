@@ -40,9 +40,16 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
         let rendered = renderSurface dll pool.Value
         let baselinePath = Path.Combine(baselineDir root, a.Name + ".approved.txt")
 
-        if approveModeOn () then
+        if approveModeFor a.Name then
             Directory.CreateDirectory(baselineDir root) |> ignore
             File.WriteAllText(baselinePath, rendered)
+        elif approveModeOn () then
+            // A scoped regeneration run that does not cover this
+            // assembly. Comparing here would fail the run for drift the
+            // operator has deliberately excluded, so the case is inert —
+            // the point of the scope is that untargeted baselines are
+            // neither rewritten nor consulted.
+            ()
         elif not (File.Exists baselinePath) then
             failtestf
                 "%s: no committed baseline at api-baselines/%s.approved.txt. This is a NEW public package — generate its baseline with `TOOLUP_APPROVE_API=1` and commit it in the same PR."
@@ -66,6 +73,29 @@ let private assemblyCases =
                 packable.Value.Length
                 0
                 "discoverPackable found no packable assemblies under src/ — the Pack-set glob is broken."
+        }
+
+        // A scoped regeneration that matches nothing rewrites nothing and
+        // reports success — the same vacuous-green shape a filter that
+        // selects zero tests produces. Loud, in the only place that can
+        // see both the scope and the discovered set.
+        test "a scoped regeneration names assemblies that exist" {
+            match approveScope () with
+            | None -> () // unscoped, or not regenerating at all
+            | Some names ->
+                let discovered = packable.Value |> List.map _.Name |> Set.ofList
+
+                let unknown =
+                    names
+                    |> Set.filter (fun n ->
+                        not (
+                            discovered
+                            |> Set.exists (fun d -> d.Equals(n, System.StringComparison.OrdinalIgnoreCase))
+                        ))
+
+                Expect.isEmpty
+                    (Set.toList unknown)
+                    "TOOLUP_APPROVE_API names assemblies that are not in the discovered packable set — nothing would have been regenerated for them. Check the spelling, or build the solution first."
         }
 
         yield! packable.Value |> List.map assemblyCase

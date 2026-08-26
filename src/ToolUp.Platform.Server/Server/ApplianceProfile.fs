@@ -970,11 +970,20 @@ type ApplianceBundleVocabulary = {
 module ApplianceSupportBundle =
 
     /// The Phase 9n credential-suffix allowlist, kept as the floor.
-    /// Deliberately a copy, for the reason 9n's own header gives for
-    /// duplicating it from `ConfigDriftDetector`: with a handful of
-    /// consumers, a shared module does not earn its keep and adding a
-    /// suffix is a small multi-edit rather than a refactor.
-    let SuffixFloor = [ "apikey"; "token"; "secret"; "password" ]
+    ///
+    /// Was a deliberate third COPY, on 9n's own "a shared module does not
+    /// earn its keep at two consumers" reasoning. It reads the shared
+    /// `RedactionAllowlist` now: three copies is where that reasoning
+    /// expired, and this was the copy the source-parsing parity guard did
+    /// not cover — so a suffix added to either of the other two would
+    /// have left the appliance floor behind, on the one surface where
+    /// redaction is the load-bearing guarantee rather than
+    /// defence-in-depth.
+    ///
+    /// Still only the FLOOR: `vocabularyOf` adds the deployment's
+    /// declared field classifications on top, because a four-suffix
+    /// credential list is not a statement about content.
+    let SuffixFloor = RedactionAllowlist.suffixes
 
     /// Whether a classification level marks a field as carrying content.
     ///

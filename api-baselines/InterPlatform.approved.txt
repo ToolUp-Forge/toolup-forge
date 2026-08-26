@@ -1878,14 +1878,17 @@ ToolUp.InterPlatform.PeerTypeRef+UnionRef.name : System.String { get }
 ToolUp.InterPlatform.PeerTypeRef+Unknown (class)
 ToolUp.InterPlatform.PeerTypeRef+Unknown.clrName : System.String { get }
 ToolUp.InterPlatform.PeerView (class)
+ToolUp.InterPlatform.PeerView.DatasetVintageProp : System.String (literal)
 ToolUp.InterPlatform.PeerView.KindProp : System.String (literal)
 ToolUp.InterPlatform.PeerView.PointsProp : System.String (literal)
 ToolUp.InterPlatform.PeerView.TitleProp : System.String (literal)
 ToolUp.InterPlatform.PeerView.chartProps(System.String, ToolUp.InterPlatform.PeerViewSeries) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.InterPlatform.PeerView.chartPropsAt(System.String, System.String, System.Int32, ToolUp.InterPlatform.PeerViewSeries) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
 ToolUp.InterPlatform.PeerView.describe(ToolUp.InterPlatform.PeerViewDeps, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerViewDeclaration, ToolUp.InterPlatform.PeerViewRefusal]]
 ToolUp.InterPlatform.PeerView.list(ToolUp.InterPlatform.PeerViewDeps, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerViewDeclaration]]
 ToolUp.InterPlatform.PeerView.render(ToolUp.InterPlatform.PeerViewDeps, System.String, System.String, ToolUp.InterPlatform.PeerViewRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerViewArtifact, ToolUp.InterPlatform.PeerViewRefusal]]
 ToolUp.InterPlatform.PeerView.validate(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.PeerViewDeclaration], ToolUp.InterPlatform.PeerViewRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerViewDeclaration, ToolUp.InterPlatform.PeerViewRefusal]
+ToolUp.InterPlatform.PeerView.vintageToken(System.String, System.Int32) : System.String
 ToolUp.InterPlatform.PeerView.windowDays(ToolUp.InterPlatform.PeerViewWindow) : System.Int32
 ToolUp.InterPlatform.PeerViewArtifact (class)
 ToolUp.InterPlatform.PeerViewArtifact..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.PeerViewWindow, System.String, System.Int32)

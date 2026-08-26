@@ -78,10 +78,21 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // **Generic over any exported rule id.** Nothing here knows what a rule
 // *does*. `seed` versions any `CompositionRuleDescriptor list`, and the
 // stamp / errata machinery keys on the rule code string alone — so the
-// three shipped families ([Phase 294] `CompositionValidator`,
+// five shipped families ([Phase 294] `CompositionValidator`,
 // [Phase 431] `EventTopologyPreflight`, [Phase 433]
-// `DataFootprintPreflight`) are wired here by seeding their exported
-// manifests, and a fourth family joins by adding one line.
+// `DataFootprintPreflight`, [Phase 434] `ScaleReadinessPreflight`,
+// [Phase 488] `ApplianceBootPosture`) are wired here by seeding their
+// exported manifests, and a sixth family joins by adding one line.
+//
+// **Adding a line is the whole obligation, and forgetting it used to be
+// silent.** 434's and 488's families were enforced at runtime from the
+// day they shipped and absent from this manifest until the 2026-08-26
+// tidy pass, because the file hardcoded three `seed` calls and the test
+// asserted the same hardcoded three — the two agreed with each other and
+// with nothing else. `RuleVersioningTests` now reflects over every
+// `ruleManifest : CompositionRuleDescriptor list` in this assembly and
+// fails naming any family `allRules` does not publish, so the next
+// omission is a red test rather than an absence nobody can see.
 //
 // **Additive throughout.** No shipped record grew a field: every type
 // here is a new sidecar, for the reason recorded on
@@ -493,10 +504,23 @@ module CompositionRuleVersions =
     /// old manifest may fail the new one, exactly the tightening
     /// reading), a major bump when one is removed or renamed.
     ///
-    /// 1.0.0 is the manifest as it stood when Phase 597 landed: the five
+    /// 1.0.0 was the manifest as it stood when Phase 597 landed: the five
     /// `CompositionValidator` rules, the two `EventTopologyPreflight`
     /// rules, and the two `DataFootprintPreflight` rules.
-    let ManifestVersion: RuleVersion = RuleVersion.initial
+    ///
+    /// **1.1.0** adds the two families that shipped alongside 597 and
+    /// were never wired in: [Phase 434]'s `ScaleReadinessPreflight` and
+    /// [Phase 488]'s `ApplianceBootPosture`. A minor bump, per the rule
+    /// above — a composition that passed the 1.0.0 manifest may fail the
+    /// 1.1.0 one, because two rules that were being *enforced at runtime*
+    /// were absent from the *published* manifest and so from every stamp
+    /// drawn under it. Nothing about either rule changed; what changed is
+    /// that a conclusion now records having been reached under them.
+    let ManifestVersion: RuleVersion = {
+        RuleMajor = 1
+        RuleMinor = 1
+        RulePatch = 0
+    }
 
     /// Per-rule version overrides, keyed by rule code. **Empty today by
     /// construction** — every rule that shipped before Phase 597 seeds
@@ -546,6 +570,14 @@ module CompositionRuleVersions =
     [<Literal>]
     let DataFootprintFamily = "data-footprint"
 
+    /// Family token for the [Phase 434] scale-readiness rule.
+    [<Literal>]
+    let ScaleReadinessFamily = "scale-readiness"
+
+    /// Family token for the [Phase 488] appliance boot-posture rule.
+    [<Literal>]
+    let ApplianceBootPostureFamily = "appliance-boot-posture"
+
     /// The versioned `CompositionValidator` rules, projected from the
     /// same `ruleManifest` the runtime check reads.
     let compositionRules: VersionedCompositionRule list =
@@ -559,10 +591,36 @@ module CompositionRuleVersions =
     let dataFootprintRules: VersionedCompositionRule list =
         seed overrides DataFootprintFamily DataFootprintPreflight.ruleManifest
 
+    /// The versioned `ScaleReadinessPreflight` rules ([Phase 434]).
+    let scaleReadinessRules: VersionedCompositionRule list =
+        seed overrides ScaleReadinessFamily ScaleReadinessPreflight.ruleManifest
+
+    /// The versioned `ApplianceBootPosture` rules ([Phase 488]).
+    let applianceBootPostureRules: VersionedCompositionRule list =
+        seed overrides ApplianceBootPostureFamily ApplianceBootPosture.ruleManifest
+
     /// Every versioned rule this build ships, in family order. The
     /// published manifest an external checker reads.
+    ///
+    /// **The list is explicit, and the guard against forgetting a family
+    /// is a TEST rather than reflection here.** Deriving the family set at
+    /// runtime would buy "a new family cannot be forgotten" at the cost of
+    /// the two properties this manifest exists to have — a deterministic
+    /// family ORDER (the wire document and its golden baseline are
+    /// ordered) and a stable family NAME (a module name is not one). So
+    /// the shipped projection stays declared, and
+    /// `RuleVersioningTests`' reflection sweep over every
+    /// `ruleManifest : CompositionRuleDescriptor list` in this assembly is
+    /// what makes an omission loud: that is precisely how 434's and 488's
+    /// families sat unpublished from the day they shipped until this pass,
+    /// with the hardcoded test asserting the hardcoded list and agreeing
+    /// with itself.
     let allRules: VersionedCompositionRule list =
-        compositionRules @ eventTopologyRules @ dataFootprintRules
+        compositionRules
+        @ eventTopologyRules
+        @ dataFootprintRules
+        @ scaleReadinessRules
+        @ applianceBootPostureRules
 
     /// The version of a rule by code, across every family. `None` for a
     /// code this build does not ship — the same honest "unknown" answer

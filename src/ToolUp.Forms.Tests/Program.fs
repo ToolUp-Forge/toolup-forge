@@ -16,6 +16,7 @@ let allTests =
         PublicSubmitSurfaceTests.tests
         ValidationBridgeTests.tests
         MatrixFieldTests.tests
+        FormApiInHandlerGateTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

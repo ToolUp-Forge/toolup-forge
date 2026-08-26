@@ -3,32 +3,38 @@ module ToolUp.Platform.Tests.InProcess.RedactionAllowlistParityTests
 open System.IO
 open System.Text.RegularExpressions
 open Expecto
+open ToolUp.Platform
 
 // ─── Phase 9n follow-up — redaction-allowlist parity guard ──────────
 //
-// `ConfigDriftDetector.fs` (Phase 9q) and `DiagnosticBundleHandler.fs`
-// (Phase 9n) each carry an inline copy of the redaction-suffix
-// allowlist (`apikey | token | secret | password`). The duplication
-// is deliberate — with only two consumers, extracting the list into a
-// shared module costs more (extra Compile entry, extra abstraction
-// for future readers to trace) than the maintenance saving — but
-// without a guard, a future contributor adding a new suffix to one
-// file could silently leak values of that shape through the other
-// surface (the un-touched site's redactor never sees the new suffix).
+// **What this used to be.** `ConfigDriftDetector.fs` (9q) and
+// `DiagnosticBundleHandler.fs` (9n) each carried an inline copy of the
+// redaction-suffix allowlist (`apikey | token | secret | password`), and
+// this test parsed both source files and asserted the two lists were
+// byte-equal. The duplication was deliberate; the guard was the price.
 //
-// This test is the guard: it parses both source files and asserts the
-// `redactionSuffixes` lists are byte-equal. Adds ~10ms to the test
-// suite; failure mode is loud, with both file paths and the diff
-// printed by Expecto.
+// **Why it changed.** A THIRD copy appeared —
+// `ApplianceSupportBundle.SuffixFloor` (488.D) — and it was outside the
+// guard, because the guard was written to compare exactly two named
+// files. So the property the guard existed to protect ("a suffix added
+// to one surface reaches the others") had quietly stopped holding on the
+// one surface where redaction is the load-bearing guarantee rather than
+// defence-in-depth. The list is now extracted to `RedactionAllowlist`
+// and all three consumers read it, which makes parity structural.
 //
-// **Why parse the source instead of reflecting through the binary?**
-// Both lists are `let private` at module level, which compiles to a
-// CLR-private binding the test assembly cannot read even with
-// `InternalsVisibleTo`. Flipping the visibility on production code
-// to enable a test is the wrong direction. Reading the .fs files
-// directly keeps the test self-contained and asserts the property we
-// actually care about — "the SOURCE lists match" — rather than a
-// reflection proxy for it.
+// **So what is left to test?** Two things a shared module does NOT make
+// structural:
+//
+//   1. That the shared list is the one the surfaces actually mask
+//      against — asserted directly against `RedactionAllowlist`, so a
+//      future edit that empties or narrows it is loud.
+//   2. That nobody re-introduces a private copy. The extraction is only
+//      worth what it costs if the next surface reads the module instead
+//      of pasting four strings, and that is a SOURCE property no type
+//      can enforce. The scan below is the successor to the old parity
+//      parse — same technique, applied to the whole Server tree rather
+//      than to two hardcoded paths, which is precisely the coverage gap
+//      that let the third copy in.
 
 // ─── Repo-root discovery ────────────────────────────────────────────
 
@@ -55,54 +61,56 @@ let private findRepoRoot () : string =
 
     walk start
 
-// ─── Source parsing ─────────────────────────────────────────────────
+// ─── Source scanning ────────────────────────────────────────────────
 
-let private allowlistRegex =
-    Regex(@"let\s+private\s+redactionSuffixes\s*=\s*\[(?<items>[^\]]+)\]", RegexOptions.Compiled)
+/// A literal list of the four credential suffixes, in any order, written
+/// inline. The shape a re-introduced private copy takes.
+let private inlineCopyRegex =
+    Regex(
+        "\\[\\s*\"(apikey|token|secret|password)\"(\\s*;\\s*\"(apikey|token|secret|password)\"){3}\\s*\\]",
+        RegexOptions.Compiled ||| RegexOptions.IgnoreCase
+    )
 
-let private stringLiteralRegex =
-    Regex("\"(?<value>[^\"]+)\"", RegexOptions.Compiled)
-
-let private parseAllowlist (path: string) : string list =
-    if not (File.Exists path) then
-        failwithf "RedactionAllowlistParityTests: expected source file does not exist: %s" path
-
-    let text = File.ReadAllText path
-    let m = allowlistRegex.Match text
-
-    if not m.Success then
-        failwithf "RedactionAllowlistParityTests: could not locate `let private redactionSuffixes = [ ... ]` in %s" path
-
-    let items = m.Groups["items"].Value
-
-    stringLiteralRegex.Matches items
-    |> Seq.map (fun m -> m.Groups["value"].Value)
-    |> List.ofSeq
-
-// ─── The test ───────────────────────────────────────────────────────
+/// The one file allowed to declare the list.
+let private declarationSite = "RedactionAllowlist.fs"
 
 let tests =
     testList "RedactionAllowlistParity" [
 
-        test "ConfigDriftDetector and DiagnosticBundleHandler share the same redaction-suffix allowlist" {
-            let root = findRepoRoot ()
-
-            let driftPath =
-                Path.Combine(root, "src", "ToolUp.Platform.Server", "Server", "ConfigDriftDetector.fs")
-
-            let bundlePath =
-                Path.Combine(root, "src", "ToolUp.Platform.Server", "Server", "DiagnosticBundleHandler.fs")
-
-            let driftSuffixes = parseAllowlist driftPath
-            let bundleSuffixes = parseAllowlist bundlePath
-
-            Expect.isNonEmpty driftSuffixes "ConfigDriftDetector.redactionSuffixes parsed empty"
-            Expect.isNonEmpty bundleSuffixes "DiagnosticBundleHandler.redactionSuffixes parsed empty"
-
+        test "the shared allowlist still holds the four credential suffixes" {
+            // The falsifier for the scan below: if the shared list were
+            // emptied, no surface would redact anything and the "nobody
+            // re-declares it" scan would still pass, cleanly.
             Expect.equal
-                bundleSuffixes
-                driftSuffixes
-                "Redaction-suffix allowlists diverged between ConfigDriftDetector and DiagnosticBundleHandler. Update both copies or accept that one surface will leak values of the new suffix shape."
+                RedactionAllowlist.suffixes
+                [ "apikey"; "token"; "secret"; "password" ]
+                "the shared credential-suffix floor changed — every redacting surface reads this list, so a narrowing here silently un-redacts all of them"
+
+            Expect.isTrue (RedactionAllowlist.shouldRedact "StripeApiKey") "a credential-shaped name is redacted"
+
+            Expect.isTrue (RedactionAllowlist.shouldRedact "sessiontoken") "matching is case-insensitive on the suffix"
+
+            Expect.isFalse (RedactionAllowlist.shouldRedact "PublicBaseUrl") "an ordinary config name is not"
+
+            Expect.isFalse (RedactionAllowlist.shouldRedact "") "an unnamed property is not a credential"
+        }
+
+        test "no source file re-declares the allowlist inline" {
+            let root = findRepoRoot ()
+            let serverDir = Path.Combine(root, "src", "ToolUp.Platform.Server")
+
+            Expect.isTrue (Directory.Exists serverDir) (sprintf "expected the Server sources at %s" serverDir)
+
+            let offenders =
+                Directory.EnumerateFiles(serverDir, "*.fs", SearchOption.AllDirectories)
+                |> Seq.filter (fun path -> Path.GetFileName path <> declarationSite)
+                |> Seq.filter (fun path -> inlineCopyRegex.IsMatch(File.ReadAllText path))
+                |> Seq.map (fun path -> Path.GetRelativePath(root, path))
+                |> List.ofSeq
+
+            Expect.isEmpty
+                offenders
+                "a source file declares its own copy of the credential-suffix allowlist. Read `RedactionAllowlist.suffixes` instead — three copies is how ApplianceSupportBundle.SuffixFloor ended up outside the old parity guard."
         }
 
     ]

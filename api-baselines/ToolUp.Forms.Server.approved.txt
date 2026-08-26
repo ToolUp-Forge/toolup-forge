@@ -92,6 +92,8 @@ ToolUp.Forms.FormsCompose+FormsServerAppModule.withShareTokenRateLimiter(ToolUp.
 ToolUp.Forms.FormsCompose+FormsServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Forms.FormsCompose+FormsServerApp) : ToolUp.Forms.FormsCompose+FormsServerApp
 ToolUp.Forms.FormsCompose+FormsServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.Forms.FormsCompose+FormsServerApp) : ToolUp.Forms.FormsCompose+FormsServerApp
 ToolUp.Forms.FormsCompose+FormsServerAppModule.withWorkflow(ToolUp.Forms.Workflow+WorkflowDefinition, ToolUp.Forms.FormsCompose+FormsServerApp) : ToolUp.Forms.FormsCompose+FormsServerApp
+ToolUp.Forms.FormsInHandlerGates (class)
+ToolUp.Forms.FormsInHandlerGates.formApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Forms.IFormStore (class)
 ToolUp.Forms.IFormStore+IFormStore (interface)
 ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]

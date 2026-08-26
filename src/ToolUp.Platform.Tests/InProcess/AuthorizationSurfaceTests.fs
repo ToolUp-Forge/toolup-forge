@@ -668,6 +668,122 @@ let private zeroFootprint =
         }
     ]
 
+// ── The shipped in-handler gate declarations (627.E residue) ──────────
+//
+// 627.E shipped the mechanism with no declarations, so the four records
+// that motivated it kept overstating `anonymousReachable` by their whole
+// method count — 32 across `IFormApi` (16), `JobApi` (8),
+// `ModelExecutionApi` (7) and `IModuleQueryBusApi` (1). The three
+// platform-tier records are checked here; `IFormApi`'s sixteen are
+// checked in `ToolUp.Forms.Tests`, beside its own declarations.
+//
+// **Each case asserts the count moves by the EXPECTED amount and that the
+// endpoints that moved are the endpoints named** — not merely that the
+// number went down. A sweep that silently covered the wrong methods would
+// move the number down too, and would be exactly the kind of untrue
+// reassurance the headline list exists to avoid.
+
+let private inHandlerGates =
+    let componentId = ComponentId.create "toolup.platform"
+
+    /// Assert: every method starts anonymous, every method is declared,
+    /// the headline empties, and the same methods land in
+    /// `gatedInHandler` carrying a non-empty rationale token.
+    let sweepCase
+        (name: string)
+        (surface: AuthorizationSurface)
+        (declarations: InHandlerGateDeclaration list)
+        (expected: int)
+        =
+        testCase name
+        <| fun () ->
+
+            let before = AuthorizationSurface.anonymousReachable surface
+
+            Expect.equal
+                (List.length before)
+                expected
+                "the fixture is only meaningful if every method starts in the headline set"
+
+            let resolved = AuthorizationSurface.resolveWithInHandlerGates declarations surface
+
+            Expect.isEmpty
+                (AuthorizationSurface.anonymousReachable resolved)
+                "the headline set empties — every method of this record is declared"
+
+            Expect.equal
+                (AuthorizationSurface.gatedInHandler resolved |> List.map _.Endpoint)
+                (before |> List.map _.Endpoint)
+                "and the entries that moved are exactly the entries that were there — same set, same order"
+
+            Expect.equal
+                (AuthorizationSurface.anonymousAtAttributeLayer resolved |> List.length)
+                expected
+                "the dispatcher-level question is unchanged: all of them are still anonymous at the ATTRIBUTE layer"
+
+            for entry in AuthorizationSurface.gatedInHandler resolved do
+                Expect.isTrue
+                    (entry.Requires
+                     |> List.exists (fun token -> token.StartsWith("gate:in-handler=", StringComparison.Ordinal)))
+                    (sprintf "%s carries the rationale a reviewer needs to check the claim" entry.Endpoint)
+
+    testList "shipped in-handler gate declarations (627.E)" [
+
+        sweepCase
+            "JobApi — all 8 methods declared"
+            (AuthorizationSurface.ofApiRecord<JobApi> componentId)
+            (PlatformInHandlerGates.jobApi componentId)
+            8
+
+        sweepCase
+            "ModelExecutionApi — all 7 methods declared"
+            (AuthorizationSurface.ofApiRecord<ModelExecutionApi> componentId)
+            (PlatformInHandlerGates.modelExecutionApi componentId)
+            7
+
+        sweepCase
+            "IModuleQueryBusApi — the 1 method declared"
+            (AuthorizationSurface.ofApiRecord<IModuleQueryBusApi> componentId)
+            (PlatformInHandlerGates.moduleQueryBusApi componentId)
+            1
+
+        test "a declaration naming a method the record does not carry is inert, not a lie" {
+            // The stale-declaration case the mechanism is documented to
+            // tolerate: these lists are authored beside handlers and the
+            // surface is derived from records, so a rename leaves a
+            // declaration pointing at nothing. It must not invent an
+            // entry, and it must not fail a composition.
+            let surface = AuthorizationSurface.ofApiRecord<JobApi> componentId
+
+            let stale = {
+                GatedComponent = componentId
+                GatedEndpoint = "JobApi.RenamedAwayLastWeek"
+                GatedRationale = "a check on a method that no longer exists"
+            }
+
+            let resolved = AuthorizationSurface.resolveWithInHandlerGates [ stale ] surface
+
+            Expect.equal resolved surface "a declaration matching nothing changes nothing"
+        }
+
+        test "the three platform records account for 16 of the 32 undeclared methods" {
+            // The arithmetic the tidy-up item states, asserted rather than
+            // recited — `IFormApi`'s other 16 are pinned in
+            // ToolUp.Forms.Tests, which is the pack that can see them.
+            let count (surface: AuthorizationSurface) =
+                AuthorizationSurface.anonymousReachable surface |> List.length
+
+            let total =
+                count (AuthorizationSurface.ofApiRecord<JobApi> componentId)
+                + count (AuthorizationSurface.ofApiRecord<ModelExecutionApi> componentId)
+                + count (AuthorizationSurface.ofApiRecord<IModuleQueryBusApi> componentId)
+
+            Expect.equal total 16 "8 + 7 + 1 — if a record grew a method, its declarations need the new one too"
+
+            Expect.equal (List.length (PlatformInHandlerGates.all componentId)) 16 "and every one of them is declared"
+        }
+    ]
+
 let tests =
     testList "AuthorizationSurface" [
         derivation
@@ -677,4 +793,5 @@ let tests =
         diffing
         wire
         zeroFootprint
+        inHandlerGates
     ]

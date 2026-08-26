@@ -208,6 +208,33 @@ type DefaultProvenanceGraph
                                 queue.Enqueue(FactRef ev.FactId, remaining - 1)
                         | None -> ()
 
+                    // A MESSAGE ROOT EXPANDS TO NOTHING BEYOND ITS OWN
+                    // SEED NODE, AND THAT IS THE CONTRACT — not an
+                    // unfinished arm.
+                    //
+                    // Every other seed kind names something a store can be
+                    // asked about: `ILineageStore` answers for a data
+                    // object or a result, `IFactEvidenceSource` for a fact,
+                    // `IArtifactProvenanceSource` for a model artifact.
+                    // Nothing composed here answers "which facts did this
+                    // message cite" — that is not a fact about the message
+                    // that any provenance store holds, it is an assertion
+                    // the ANSWER made, and it arrives as the `citedFactIds`
+                    // argument of `GetChainForMessage`. Routing this arm
+                    // would mean inventing a store the SDK does not have.
+                    //
+                    // So a message-rooted `GetChain` returns just the
+                    // bare seed node the loop above minted — no
+                    // disclosure, no label beyond its own id, no edges —
+                    // which scores 0 on `ProvenanceApiHandler.evidenceScore`,
+                    // so through the Phase 648 wire contract a `MessageRef`
+                    // lookup reads `Absent`. That is the same answer an
+                    // unknown id gets, and the distinction is invisible out
+                    // of process. It is written down on
+                    // `WireProvenanceRef.MessageRef` and on
+                    // `IProvenanceQueryApi.GetNode` so a caller reads
+                    // `Absent` on a message as "ask with the cited facts",
+                    // not as "no such message".
                     | MessageRef _, _ -> ()
 
             let rootId =
