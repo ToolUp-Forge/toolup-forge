@@ -160,11 +160,13 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # fake-gcs-server. Included so the GCS leg starts working the moment the
-  # companion gains an endpoint seam — today the leg reports a
-  # `NoCompanionSeam` skip because GoogleCloudStorageConfig has no way to
-  # be pointed here (see src/ToolUp.Cloud.Parity.Tests/EmulatorLegs.fs).
-  # `-scheme http` keeps it TLS-free for local use.
+  # fake-gcs-server. The GCS leg is ARMED as of 2026-08-26 —
+  # GoogleCloudStorageConfig gained an `EndpointUrl` seam, so pointing
+  # TOOLUP_PARITY_FAKEGCS at this service runs the IBlobStorage and
+  # IAuditSink parity packs against it (see
+  # src/ToolUp.Cloud.Parity.Tests/EmulatorLegs.fs). The companion does NOT
+  # create the bucket; `fake-gcs-init` below pre-creates it, mirroring
+  # `localstack-init`. `-scheme http` keeps it TLS-free for local use.
   fake-gcs:
     profiles: ["parity"]
     image: fsouza/fake-gcs-server:latest
@@ -172,6 +174,24 @@ services:
     ports:
       - "4443:4443"
     command: ["-scheme", "http", "-port", "4443", "-backend", "memory"]
+
+  # Pre-creates the parity bucket, mirroring `localstack-init` — the GCS
+  # companion does not create buckets. Single `$` on purpose, for the same
+  # reason as `localstack-init`: compose interpolates from the HOST
+  # environment at `up` time, so overriding TOOLUP_PARITY_FAKEGCS_BUCKET for
+  # the harness also moves the bucket this creates.
+  fake-gcs-init:
+    profiles: ["parity"]
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        curl -sf -X POST http://fake-gcs:4443/storage/v1/b?project=toolup-parity
+        -H 'Content-Type: application/json'
+        -d '{"name":"${TOOLUP_PARITY_FAKEGCS_BUCKET:-toolup-parity}"}'
+    depends_on:
+      - fake-gcs
+    restart: on-failure
 
 # volumes:
 #   redis-data:

@@ -273,6 +273,32 @@ let registerDatasetStore (services: IServiceCollection) (config: ServerConfig) :
             let dataObjects = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
             BlobDatasetStore.create dataObjects)
 
+/// Phase 528 — register the session registry when
+/// `ServerConfig.SessionRegistry` selects a backend.
+/// `BlobSessionRegistry` registers the blob-backed default over the
+/// composed `IBlobStorage` (BCL-only JSON, no vendor dependency — GP 1)
+/// via a lazy factory, so a deployment that never resolves
+/// `ISessionRegistry` pays nothing; `CustomSessionRegistry` registers
+/// nothing, leaving the consumer's own singleton (e.g. a Redis-backed
+/// one) in DI; `NoSessionRegistry` (the default) registers nothing —
+/// zero runtime cost when unused (GP 13). `TryAddSingleton` so a
+/// consumer that pre-registered its own registry under
+/// `BlobSessionRegistry` is never overridden.
+let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.SessionRegistry with
+    | NoSessionRegistry -> ()
+    | CustomSessionRegistry _ -> () // consumer / companion composed its own ISessionRegistry singleton
+    | BlobSessionRegistry opts ->
+        services.TryAddSingleton<ISessionRegistry>(fun (sp: System.IServiceProvider) ->
+            let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+
+            let logger =
+                match sp.GetService(typeof<ILogger>) with
+                | :? ILogger as l -> Some l
+                | _ -> None
+
+            SessionRegistry.BlobBackedSessionRegistry.create blobs logger opts.RetentionDays)
+
 /// Phase 527 — register the service-account store when
 /// `ServerConfig.ServiceAccounts` opts in. `EnabledServiceAccounts`
 /// registers the blob-backed `BlobServiceAccountStore` via a lazy

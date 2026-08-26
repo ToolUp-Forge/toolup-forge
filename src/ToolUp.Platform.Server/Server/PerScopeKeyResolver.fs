@@ -556,6 +556,34 @@ type PerScopeKeyResolver
     /// one identity, and each would discard the other's broadcast as its
     /// own echo — the fanout would test as working while doing nothing.
     member _.WireToChannel(notificationChannel: INotificationChannel, replicaIdentity: string) : Async<unit> = async {
+        // Re-wiring drops the previous subscription first (tidy-drain
+        // 2026-08-26; origin: Phase 22b ship report, which recorded
+        // `subscriptionId` as assigned and never read — dead state). It is
+        // no longer dead, and the reason it should not be is that the
+        // handler closes over `replicaId`: a second `WireToChannel` with a
+        // different identity used to leave the FIRST handler subscribed
+        // alongside the second, so one broadcast was handled twice and the
+        // stale handler's echo suppression compared against the old
+        // identity. Both duplicate acknowledgement events name the same
+        // scope, which is exactly the forensic record this fanout exists to
+        // make trustworthy. Idempotent by construction rather than by
+        // callers remembering to wire once.
+        match subscriptionId with
+        | Some previous ->
+            match channel with
+            | Some existing ->
+                try
+                    do! existing.Unsubscribe previous
+                with _ ->
+                    // A channel that cannot cancel a subscription is not a
+                    // reason to refuse the re-wire; the new subscription is
+                    // what the caller asked for.
+                    ()
+            | None -> ()
+
+            subscriptionId <- None
+        | None -> ()
+
         channel <- Some notificationChannel
         replicaId <- replicaIdentity
 

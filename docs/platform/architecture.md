@@ -248,6 +248,8 @@ Two shipped key resolvers:
 - `SingleKeyResolver` — one platform-wide key.
 - `PerScopeKeyResolver` — per-tenant; `IMemoryCache` with 5-min sliding TTL; `DestroyKey` for crypto-shred (tenant offboarding for GDPR / contract termination — complete on the serving replica when the call returns, minute-grain replica-fanout time across the fleet via an `INotificationChannel` broadcast).
 
+  **That fanout time is a promise about a WIRED deployment, and the wiring is not automatic.** The broadcast rides whatever `INotificationChannel` is composed; the default in-process channel does not leave the process, so on `ServerConfig.ReplicaCount > 1` with the default channel the destroy is complete on the serving replica and *nowhere else* — every other replica keeps serving the destroyed key from its cache until the 5-minute sliding TTL happens to expire it, which is silent and is precisely the outcome a crypto-shred exists to prevent. A multi-instance deployment therefore composes a distributed channel (the Redis companion is the shipped reference). `PerScopeKeyResolverDistributedValidator` fails preflight on that combination rather than letting it start.
+
 Custom resolvers (per-`(scopeId, userId)`, BYOK, KMS-backed) plug in against the same interface. Provider-specific preflight validators (`AwsS3EncryptionAtRestValidator`, `AzureBlobEncryptionAtRestValidator`, `GcsEncryptionAtRestValidator`) confirm encryption-at-rest is enabled at the bucket level.
 
 ## Health + observability

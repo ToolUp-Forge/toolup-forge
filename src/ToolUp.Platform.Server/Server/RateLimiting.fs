@@ -6,9 +6,6 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.RateLimiting
 open ToolUp.Platform
 
-[<Literal>]
-let private rateLimitPolicyName = "ToolUp.PerScope"
-
 /// Routes that bypass rate limiting entirely. `/health` and `/ready`
 /// are load-balancer probes and must not be 429'd.
 let private isBypassed (path: string) =

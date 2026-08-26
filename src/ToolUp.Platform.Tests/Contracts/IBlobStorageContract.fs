@@ -354,4 +354,49 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let! _ = Async.Parallel [ writer; reader ]
             return ()
         }
+
+        // Two WRITERS, which the case above does not cover. Phase 319's
+        // ship report recorded `LocalFileStorage` throwing "used by another
+        // process" on concurrent writes to the same blob and filed it as a
+        // store-robustness note, reachable only under a caller bug. The
+        // Phase 320 rework (temp file + atomic `File.Move` under a per-path
+        // lock) closed it — but nothing in the contract pack SAID so, so
+        // the fix and the note were independent facts and either could
+        // change without the other noticing.
+        //
+        // The last write wins is NOT asserted: cloud object stores make no
+        // ordering promise between overlapping PUTs of the same key, and a
+        // contract test that demanded one would be pinning a guarantee the
+        // interface does not offer. What every backend does promise is that
+        // an overlapping pair completes without error and leaves ONE
+        // coherent version behind — a value some writer actually wrote,
+        // never a mix.
+        testCaseAsync "Concurrent Uploads of the same blob: no errors, one coherent version survives"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let payloadFor (version: int) = Array.create 4096 (byte version)
+
+            let iterations = 50
+
+            let writerFor (version: int) = async {
+                for _ in 1..iterations do
+                    match! store.Upload(container, "contested.bin", payloadFor version) with
+                    | Error e -> failtestf "Upload racing another Upload of the same blob failed: %s" e
+                    | Ok _ -> ()
+            }
+
+            let! _ = Async.Parallel [ writerFor 1; writerFor 2 ]
+
+            match! store.Download(container, "contested.bin") with
+            | Error e -> failtestf "Download after concurrent Uploads failed: %s" e
+            | Ok bytes ->
+                Expect.equal bytes.Length 4096 "the surviving blob is whole, not a partial write"
+
+                Expect.all bytes (fun b -> b = bytes[0]) "the surviving blob is one writer's version, not a mix of two"
+
+                Expect.isTrue
+                    (bytes[0] = 1uy || bytes[0] = 2uy)
+                    "the surviving blob is a version some writer actually wrote"
+        }
     ]

@@ -25,11 +25,24 @@ open ToolUp.Storage.GoogleCloudStorage
 //   fail fast at boot.
 
 let private buildClient (config: GoogleCloudStorageConfig) : StorageClient =
-    match config.CredentialsJson with
-    | Some json ->
-        let credential = GoogleCredential.FromJson json
-        StorageClient.Create credential
-    | None -> StorageClient.Create()
+    // Mirrors `GoogleCloudStorage.buildClientFor` — the validator has to
+    // reach the same endpoint the store does, or it validates a bucket in a
+    // different place from the one the deployment reads and writes.
+    match config.EndpointUrl with
+    | None ->
+        match config.CredentialsJson with
+        | Some json ->
+            let credential = GoogleCredential.FromJson json
+            StorageClient.Create credential
+        | None -> StorageClient.Create()
+    | Some uri ->
+        let builder = StorageClientBuilder(BaseUri = uri)
+
+        match config.CredentialsJson with
+        | Some json -> builder.Credential <- GoogleCredential.FromJson json
+        | None -> builder.UnauthenticatedAccess <- true
+
+        builder.Build()
 
 type private Impl(config: GoogleCloudStorageConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
