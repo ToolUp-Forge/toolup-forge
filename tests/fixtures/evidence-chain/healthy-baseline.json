@@ -1,0 +1,57 @@
+{
+  "corpus": "evidence-chain-break-injection",
+  "part": "A — the healthy baseline",
+  "case": "healthy-baseline",
+  "description": "One synthetic deployment composing every substrate, all of them healthy. Every hop resolves, the chain is complete, and both canonical forms are pinned so drift in either fails loudly instead of quietly re-addressing the artefact.",
+  "walkDepth": 2,
+  "outcome": "chain-complete",
+  "bundleIntegrity": "intact",
+  "chainVerdictDigest": "271172a68afc8dce4334d386b560d83d186c6de7a98f96709dd46f0bd7d8c33b",
+  "bundleContentId": "8375e328f19d4d79a8bc6a358849134e90a906c3f9f115524cfa632484bbf5b1",
+  "bundleContentIdRegeneratedFor": "The exported bundle now states its walk's enumeration-completeness verdict as a typed qualifier, and the bundle's canonical form covers qualifiers — so the artefact re-addresses. Regenerated from the tree in which the form changed, after confirming the delta is a pure APPEND: everything before the qualifier block is byte-identical and the chain's own verdict digest above did not move, because the verdict rides beside that digest rather than inside it.",
+  "upstreamAncestorFindings": 2,
+  "hops": [
+    {
+      "ordinal": 1,
+      "id": "upstream-work-record",
+      "verdict": "linked",
+      "reference": "wc-head"
+    },
+    {
+      "ordinal": 2,
+      "id": "build-transcript",
+      "verdict": "linked",
+      "reference": "f850ecf931b2eeae06de0012e557bdf06ca4b744029b26aceb0554ac5f38528c"
+    },
+    {
+      "ordinal": 3,
+      "id": "dependency-closure",
+      "verdict": "linked",
+      "reference": "2fd170c6bc8d4b4cbdd277e4d9f07edb3c39aa607e4629797f505824fb449526"
+    },
+    {
+      "ordinal": 4,
+      "id": "deploy-record",
+      "verdict": "linked",
+      "reference": "deploy-corpus-1"
+    },
+    {
+      "ordinal": 5,
+      "id": "boot-verification",
+      "verdict": "linked",
+      "reference": "deploy-corpus-1"
+    },
+    {
+      "ordinal": 6,
+      "id": "evidence-pack",
+      "verdict": "linked",
+      "reference": "pack-manifest-corpus"
+    },
+    {
+      "ordinal": 7,
+      "id": "ledger-position",
+      "verdict": "linked",
+      "reference": "4218"
+    }
+  ]
+}

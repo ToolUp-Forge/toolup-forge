@@ -1268,6 +1268,23 @@ let allTests =
         EvidenceBundleExportTests.claimBoundaryTests
         EvidenceBundleExportTests.signedRoundTripTests
         EvidenceBundleExportTests.fixtureEmissionTests
+        // Phase 715 — the break-injection corpus, which is what makes the
+        // two packs above worth anything: one healthy synthetic chain
+        // with both canonical forms pinned, then one variant per break
+        // class asserting the specific verdict AND the specific position.
+        // Every case is demonstrated to fail against code lacking its
+        // check — a discriminating twin for the walked chain, a
+        // deliberately-weakened copy of the verifier for the bundle and
+        // the document — because a check that runs, passes and could not
+        // have failed is indistinguishable from one that works.
+        EvidenceChainBreakTests.corpusPlacementTests
+        EvidenceChainBreakTests.healthyBaselineTests
+        EvidenceChainBreakTests.chainBreakCorpusTests
+        EvidenceChainBreakTests.chainFalsificationTests
+        EvidenceChainBreakTests.bundleTamperCorpusTests
+        EvidenceChainBreakTests.bundleFalsificationTests
+        EvidenceChainBreakTests.documentTamperCorpusTests
+        EvidenceChainBreakTests.absentVsBrokenTests
         // Phase 716 — the walk proves it enumerated everything its own
         // linkage names, not merely everything it liked: the expected
         // positions derived rather than configured, a missing interior

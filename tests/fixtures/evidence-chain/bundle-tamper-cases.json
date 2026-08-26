@@ -1,0 +1,127 @@
+{
+  "corpus": "evidence-chain-break-injection",
+  "part": "B — one variant per tamper class, at the bundle and document level",
+  "description": "Every bundle-level case is tampered the way a competent forger would: each recomputes every digest downstream of the edit EXCEPT the one the case is about, so the tamper is caught by the property it violates rather than by an id its author would obviously have refreshed. Each pins the position the verifier must name, and each is falsified against a deliberately-weakened copy of that verifier omitting exactly its own check.",
+  "cases": [
+    {
+      "id": "schema-unreadable",
+      "level": "bundle",
+      "class": "unreadable-schema",
+      "verdict": "broken",
+      "position": "bundle/schemaVersion",
+      "omitCheck": "schema",
+      "falsification": "weakened-verifier",
+      "note": "A verifier that passed what it could not read would be worse than one that did not exist. Not checkable here is not the same as wrong, and the reason says so."
+    },
+    {
+      "id": "disposition-re-signed",
+      "level": "bundle",
+      "class": "unrecognised-nested-attestation-ruling",
+      "verdict": "broken",
+      "position": "bundle/nestedAttestationDisposition",
+      "omitCheck": "disposition",
+      "falsification": "weakened-verifier",
+      "note": "A document whose inner signatures were treated some other way makes a different claim, and is refused rather than read hopefully."
+    },
+    {
+      "id": "hop-dropped",
+      "level": "bundle",
+      "class": "short-hop-list",
+      "verdict": "broken",
+      "position": "bundle/chain/hops",
+      "omitCheck": "hop-count",
+      "falsification": "weakened-verifier",
+      "note": "A short hop list reads as a complete one. This is the tamper the whole hop model exists to prevent, and the forger here recomputed the chain digest and the content id over the six remaining hops."
+    },
+    {
+      "id": "hops-reordered",
+      "level": "bundle",
+      "class": "reordered-hop-list",
+      "verdict": "broken",
+      "position": "bundle/chain/hops[0]",
+      "omitCheck": "hop-order",
+      "falsification": "weakened-verifier",
+      "note": "A walk read in a different order is a different account of the same records. Renumbered and re-digested, so only the order check can catch it."
+    },
+    {
+      "id": "hop-renumbered",
+      "level": "bundle",
+      "class": "reordered-hop-list",
+      "verdict": "broken",
+      "position": "bundle/chain/hops[1]",
+      "omitCheck": "hop-order",
+      "falsification": "weakened-verifier",
+      "note": "The hops are in the right order and one carries the wrong ordinal — a renumbered walk cannot be read in the order it was taken."
+    },
+    {
+      "id": "hop-altered-after-the-walk",
+      "level": "bundle",
+      "class": "altered-hop-content",
+      "verdict": "broken",
+      "position": "bundle/chain/verdictDigest",
+      "omitCheck": "verdict-digest",
+      "falsification": "weakened-verifier",
+      "note": "A hop's join key was swapped and the bundle re-addressed; the chain's own verdict digest is what still disagrees."
+    },
+    {
+      "id": "outcome-flattered",
+      "level": "bundle",
+      "class": "flattered-outcome",
+      "verdict": "broken",
+      "position": "bundle/chain/outcome",
+      "omitCheck": "outcome",
+      "falsification": "weakened-verifier",
+      "note": "A chain carrying a broken hop and reporting itself complete. Everything downstream was recomputed, so the fold of its own hops is the only thing that contradicts it."
+    },
+    {
+      "id": "claim-boundary-stripped",
+      "level": "bundle",
+      "class": "stripped-claim-boundary",
+      "verdict": "broken",
+      "position": "bundle/notProved",
+      "omitCheck": "claim-boundary",
+      "falsification": "weakened-verifier",
+      "note": "Every bundle states what it does not prove, including one whose chain is complete, so an empty list is a stripped document rather than a clean one."
+    },
+    {
+      "id": "content-id-not-recomputed",
+      "level": "bundle",
+      "class": "restated-under-an-old-id",
+      "verdict": "broken",
+      "position": "bundle/contentId",
+      "omitCheck": "content-id",
+      "falsification": "weakened-verifier",
+      "note": "The document was restated and offered under the id of the document it used to be. The id is the last line of defence and it names itself."
+    },
+    {
+      "id": "resigned-over-altered-content",
+      "level": "document",
+      "class": "re-signed-over-altered-content",
+      "verdict": "broken",
+      "position": "document/subject",
+      "falsification": "weakened-verifier",
+      "falsificationNote": "The shipped structural verifier — which is code lacking the subject claim-check, since it never sees the statement — reports the inner bundle intact. Only the document reader, which compares the statement's published subject to the bundle inside it, refuses.",
+      "note": "The chain was altered and the whole statement re-signed under a valid key, but published under the subject digest of the document it replaced: a correctly-shaped, validly-signed statement about a different bundle."
+    },
+    {
+      "id": "resigned-and-readdressed",
+      "level": "document",
+      "class": "re-signed-over-altered-content",
+      "verdict": "intact-and-refused-by-the-holder",
+      "position": "",
+      "falsification": "weakened-verifier",
+      "falsificationNote": "A holder with no independently-held content id — the expectation that skips the subject check — accepts it, which is the honest answer to the question that holder asked.",
+      "note": "The forger altered the chain, re-addressed the bundle and re-signed the lot. The document IS well-formed and the signature IS valid, and no amount of structural checking can say otherwise; what refuses it is the holder's own claim-check against the id they already possessed. Recording this as a pass of the structural verifier is the point, not an omission."
+    },
+    {
+      "id": "inner-verifies-outer-does-not",
+      "level": "document",
+      "class": "inner-verifies-outer-does-not",
+      "verdict": "intact-and-signature-invalid",
+      "position": "",
+      "falsification": "weakened-verifier",
+      "falsificationNote": "The shipped structural verifier — code lacking any signature check at all — reports intact on the very document whose signature does not validate.",
+      "note": "A well-formed, self-consistent statement carried in an envelope whose signature was minted over other bytes. Structural integrity and authorship are different questions and only the second needs a key; a reader who ran only one of the two must not be able to mistake it for both."
+    }
+  ]
+}
