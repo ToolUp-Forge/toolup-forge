@@ -1,13 +1,19 @@
 module ToolUp.Platform.Tests.Program
 
+open System.Reflection
 open Expecto
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
 open ToolUp.Platform.Tests.Graph
+open ToolUp.Platform.Tests.Support
 
-let allTests =
+/// The explicitly-enumerated list this pack runs. `[<Tests>]` alone does
+/// NOT get a list into this run — `runTestsWithCLIArgs` executes exactly
+/// what is registered here — which is why `allTests` below appends the
+/// Phase 722 registration guard over it.
+let private registeredTests =
     testList "ToolUp.Platform.Tests" [
         LocalFileStorageTests.tests
         InMemoryEventStoreTests.tests
@@ -1121,6 +1127,13 @@ let allTests =
         // `importDefault`. One more separate `[<Tests>]` binding that would
         // otherwise lie dormant.
         SidebarVisibilityContractTests.placementTests
+        // Phase 612 — rail keyboard navigation (shape): where the handlers
+        // are attached and which DOM-level seams the model depends on; the
+        // behavioural half runs Fable-side in
+        // `ToolUp.AI.Client.Tests/SidebarKeyboardTests.fs`. Carried
+        // `[<Tests>]` and was never in this list — DORMANT since Phase 612,
+        // and found by the Phase 722 registration guard on its first run.
+        SidebarVisibilityContractTests.keyboardNavigationTests
         // Phase 569 — the same decision in its reasoned form: which gate
         // refused a deep-linked route, and the equation pinning the
         // sidebar and the router to one predicate.
@@ -1166,15 +1179,9 @@ let allTests =
         AdminLandingContractTests.clickThroughTests
         AdminLandingContractTests.emptyStateTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
-        // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
-        // but constructs the SDK's built-in *client-side* UI modules
-        // (`FileManagerUI.create`, `DataSubjectRequestAdminUI.create`,
-        // `HealthMonitorUI.create`, …), whose bodies touch `Icons` — Fable
-        // `importDefault` dummy-code that throws under .NET ("You've hit dummy
-        // code used for Fable bindings"). It is a Fable-tier pack, same class
-        // as the HomeOverviewTests client-tier landing test that lives in the
-        // ToolUp.AI.Client.Tests Fable harness. See the 2026-07-20
-        // orphaned-pack audit report.
+        // wired here; since Phase 722 that decision is DECLARED DATA rather
+        // than a comment, in `deliberatelyUnregistered` below, and the guard
+        // fails if the declaration ever goes stale.
         // Phase 171 — Home/Overview verification (separate `[<Tests>]`
         // bindings that `runTestsWithCLIArgs` would otherwise leave
         // dormant): the server-side CountObjects affordance + the
@@ -1948,6 +1955,34 @@ let allTests =
         // cannot pass as a fix.
         FailClosedDispatchTests.tests
     ]
+
+/// The `[<Tests>]` bindings this pack deliberately does not run, each
+/// with the reason. Phase 722: a deliberate omission is declared data the
+/// guard reads, not prose beside the list — a stale entry here fails the
+/// guard rather than quietly excusing something.
+let private deliberatelyUnregistered = [
+    {
+        TestRegistrationGuard.Binding = "ToolUp.Platform.Tests.InProcess.BuiltInModuleSurfaceTests.visibilityTests"
+        TestRegistrationGuard.Reason =
+            "constructs the SDK's built-in CLIENT-side UI modules (FileManagerUI.create, "
+            + "DataSubjectRequestAdminUI.create, HealthMonitorUI.create, …), whose bodies touch `Icons` — "
+            + "Fable `importDefault` dummy code that throws under .NET. It is a Fable-tier pack, same class "
+            + "as the HomeOverviewTests client-tier landing test in the ToolUp.AI.Client.Tests Fable "
+            + "harness. See the 2026-07-20 orphaned-pack audit report."
+    }
+]
+
+/// Phase 722 — the registered list plus the guard that makes an
+/// unregistered `[<Tests>]` binding fail loudly instead of vanishing.
+/// The floor is a LOWER BOUND (140 against ~170 attributed bindings), so
+/// adding a pack never needs an edit here; it only moves when bindings
+/// are deliberately removed.
+let allTests =
+    TestRegistrationGuard.withGuardExempting
+        (Assembly.GetExecutingAssembly())
+        140
+        deliberatelyUnregistered
+        registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).

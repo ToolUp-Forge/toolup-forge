@@ -5,9 +5,19 @@ module ToolUp.Platform.DataSubject.Tests.Program
 
 open Expecto
 open ToolUp.Platform.DataSubject.Tests.InProcess
+open System.Reflection
+open ToolUp.Platform.Tests.Support
 
-let allTests =
+let private registeredTests =
     testList "ToolUp.Platform.DataSubject.Tests" [ BackgroundExportStoreTests.tests; AsyncExportApiTests.tests ]
+
+/// Phase 722 — the registered list plus the guard that makes an
+/// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
+/// this pack runs an explicitly-enumerated list, not Expecto's
+/// `[<Tests>]` auto-discovery, so an attributed binding absent from the
+/// list above would silently never run.
+let allTests =
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 2 registeredTests
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

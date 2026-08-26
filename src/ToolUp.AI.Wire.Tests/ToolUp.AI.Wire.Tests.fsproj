@@ -44,6 +44,9 @@
         <Compile Include="..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
         <Compile Include="ClaudeWireFixtures.fs" />
         <Compile Include="ClaudeWireTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

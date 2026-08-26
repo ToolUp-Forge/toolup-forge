@@ -4,8 +4,19 @@
 module ToolUp.AICookbooks.Tests.Program
 
 open Expecto
+open System.Reflection
+open ToolUp.Platform.Tests.Support
 
-let allTests = testList "ToolUp.AICookbooks.Tests" [ LicensingBoundaryTests.tests ]
+let private registeredTests =
+    testList "ToolUp.AICookbooks.Tests" [ LicensingBoundaryTests.tests ]
+
+/// Phase 722 — the registered list plus the guard that makes an
+/// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
+/// this pack runs an explicitly-enumerated list, not Expecto's
+/// `[<Tests>]` auto-discovery, so an attributed binding absent from the
+/// list above would silently never run.
+let allTests =
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 0 registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).

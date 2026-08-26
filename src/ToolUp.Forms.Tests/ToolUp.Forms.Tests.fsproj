@@ -27,6 +27,9 @@
         <Compile Include="InProcess\ValidationBridgeTests.fs" />
         <Compile Include="InProcess\MatrixFieldTests.fs" />
         <Compile Include="InProcess\FormApiInHandlerGateTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

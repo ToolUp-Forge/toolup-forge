@@ -12,6 +12,9 @@
         <Compile Include="InProcess\CustomPartTests.fs" />
         <Compile Include="InProcess\RevisionTests.fs" />
         <Compile Include="InProcess\KnowledgeBaseTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

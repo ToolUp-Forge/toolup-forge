@@ -8,6 +8,8 @@ open ToolUp.Algorithms.Tests.Contracts
 open ToolUp.AlgorithmProviders
 open ToolUp.AlgorithmProviders.Tests
 open ToolUp.AlgorithmProviders.Tests.Support.MathNetProviderFixtures
+open System.Reflection
+open ToolUp.Platform.Tests.Support
 
 // ─── Phase 11.E.3 — the Math.NET provider test pack ─────────────────
 //
@@ -25,7 +27,7 @@ open ToolUp.AlgorithmProviders.Tests.Support.MathNetProviderFixtures
 //     own test surface, and for hand-written estimators it is the only
 //     backstop there is.
 
-let allTests =
+let private registeredTests =
     testList "ToolUp.AlgorithmProviders.Tests" [
         testList "Math.NET — IAlgorithmProvider contract" [
             IAlgorithmProviderContract.tests provider sampleInvocations
@@ -42,6 +44,14 @@ let allTests =
         MathNetSmoothingTests.tests
         MathNetProviderCompositionTests.tests
     ]
+
+/// Phase 722 — the registered list plus the guard that makes an
+/// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
+/// this pack runs an explicitly-enumerated list, not Expecto's
+/// `[<Tests>]` auto-discovery, so an attributed binding absent from the
+/// list above would silently never run.
+let allTests =
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 0 registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).

@@ -142,6 +142,26 @@ Two things that look like fixes and are not: **no CLI flag helps** — `--no-spi
 
 **If you add a pack**, copy the entry point above. **If you are tempted to make a pack parallel again**, the bar is that its subject writes nothing to the console — not that it currently happens to pass.
 
+## `[<Tests>]` alone does not run a test list — register it (Phase 722)
+
+These packs do **not** use Expecto's `[<Tests>]` auto-discovery. Each `Program.fs` calls `runTestsWithCLIArgs` over an explicitly-enumerated list, so the attribute is decoration: a new `[<Tests>]`-attributed binding that is not appended to that list **compiles, is attributed exactly like every other, and silently never runs** — and the pack reports its usual green with a total nobody reads as suspicious. Phase 634 hit this: its first full-pack run reported `7,045 passed / 0 failed` having executed none of its seven new cases, and it was caught only by probing `--list-tests`. **So: append every new list to the pack's own list in `Program.fs`, and confirm with `--list-tests` (or the run's case count) before trusting a green.** A filtered run is worse, not better — Expecto's `--filter` joins the test path with `.` and reports `Success!` when it matched nothing.
+
+Since Phase 722 the omission is loud rather than silent. Every pack with this shape appends `TestRegistrationGuard` (source-linked from `src/ToolUp.Platform.Tests/Support/TestRegistrationGuard.fs`) to its own list:
+
+```fsharp skip=fragment
+let private registeredTests =
+    testList "ToolUp.Example.Tests" [ FooTests.tests; BarTests.tests ]
+
+let allTests =
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 2 registeredTests
+```
+
+The guard adds three cases: the **subset check** (every `[<Tests>]`-attributed binding reflection finds in the assembly appears somewhere in the registered tree, failing by name), a **non-vacuity floor** on how many bindings the sweep found (so a sweep that has gone blind cannot satisfy the subset check over the empty set — the same reason `VerifyFable` asserts a TAP case floor rather than reading `node --test`'s exit code), and a **falsifier** that runs the comparison over a deliberately-omitted binding and asserts it goes red, paired with the control that it falls silent once that binding is registered. Comparison is by physical identity, not by label, so an unrelated nested test name cannot silence a real omission; wrapping a registered list (`testSequencedGroup`, `testList`) keeps its children's references and is fine.
+
+A binding that genuinely must not run in the .NET pack — the standing case is a client-tier list whose module body touches Fable `importDefault` dummy code — is declared as a `TestRegistrationGuard.Exemption` with its reason and passed to `withGuardExempting`. The declaration is data the guard reads, not prose beside the list: an exemption naming a binding the assembly no longer carries, or one the pack has since registered, **fails the guard** rather than quietly excusing something.
+
+Three packs (`ToolUp.Stripe.Tests`, `ToolUp.Voice.Tests`, `ToolUp.Cloud.Parity.Tests`) call `runTestsInAssemblyWithCLIArgs` instead — real auto-discovery, where `[<Tests>]` **is** sufficient and this whole class cannot arise. They carry no guard, deliberately. The client-tier Fable harness is a different runner again; its floor lives in `VerifyFable`.
+
 ## Testing client-tier MVU update functions
 
 Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:

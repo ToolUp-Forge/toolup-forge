@@ -14,6 +14,9 @@
          pure-BCL classification + sanitiser mirror pinned to the server
          substrate over one fixture tree (the stamp-round-trip mechanism). -->
     <Compile Include="MembershipsDoctorTests.fs" />
+    <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+         ToolUp.Platform.Tests so there is one implementation. -->
+    <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

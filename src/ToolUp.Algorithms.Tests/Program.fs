@@ -6,8 +6,10 @@ module ToolUp.Algorithms.Tests.Program
 open Expecto
 open ToolUp.Algorithms.Tests.Contracts
 open ToolUp.Algorithms.Tests.InProcess
+open System.Reflection
+open ToolUp.Platform.Tests.Support
 
-let allTests =
+let private registeredTests =
     testList "ToolUp.Algorithms.Tests" [
         // The provider-independent half of the GP 12 audit — run once
         // against the shipped interfaces.
@@ -33,6 +35,14 @@ let allTests =
         AIToolSurfaceTests.projectionTests
         AIToolSurfaceTests.contributorTests
     ]
+
+/// Phase 722 — the registered list plus the guard that makes an
+/// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
+/// this pack runs an explicitly-enumerated list, not Expecto's
+/// `[<Tests>]` auto-discovery, so an attributed binding absent from the
+/// list above would silently never run.
+let allTests =
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 0 registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).

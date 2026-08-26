@@ -2044,6 +2044,11 @@
              discriminator, both pinned closed alongside the correct-path
              behaviour they must not disturb (GP 11). -->
         <Compile Include="InProcess\FailClosedDispatchTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard. Source-linked
+             into every sibling pack that runs an explicitly-enumerated list
+             rather than Expecto auto-discovery; must compile immediately
+             before each pack's Program.fs. -->
+        <Compile Include="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
