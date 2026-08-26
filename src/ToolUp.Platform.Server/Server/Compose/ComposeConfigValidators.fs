@@ -109,6 +109,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (KeyDestroyAckCoverageValidator.KeyDestroyAckCoverageValidator(config, services)) // Phase 22b — warn per-scope key resolver + in-proc channel in a Team/MultiTeam shape (crypto-shred fanout reaches no sibling replica; the Error arm above only fires when the replica count is declared)
 
+    addConfigValidator (WebhookSecretRotationFanoutValidator.WebhookSecretRotationFanoutValidator(config, services)) // Phase 464 tail — refuse a webhook registry that is unwired, or wired to an in-process channel, under declared multi-instance (a rotated signing secret then never reaches siblings, which keep signing with the superseded value; the compose step only reported a THROWN subscribe). Same shape and same helpers as the 458 crypto-shred gate above.
+
     addConfigValidator (
         ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(config, secretStore)
     ) // warn share-token signing key would auto-generate (unmanaged) in a production/multi-instance share-token deployment (Wave 19; self-gates to Ok otherwise)

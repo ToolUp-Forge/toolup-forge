@@ -63,10 +63,19 @@ open ToolUp.Platform.ConfigValidation
 // connection string falls back to in-process. Inspecting the live
 // `IServiceCollection` (the shape `DeployPlaneDepsValidator` and
 // `KeyDestroyAckCoverageValidator` use) measures the composed reality.
-// When no channel instance is registered — a bespoke composition, a
-// factory registration — there is nothing to inspect, and the validator
+// When no channel registration can be classified — a bespoke composition,
+// a factory registration — there is nothing to inspect, and the validator
 // falls back to the `TOOLUP_NOTIFICATION_CHANNEL` reading it used
-// before, so no deployment loses a check it previously had.
+// before, so no deployment loses a check it previously had. Note that
+// fallback is CONSERVATIVE here (an unset variable reads as in-process,
+// i.e. Error), which is why the factory gap bit the Warning arm rather
+// than this one.
+//
+// 2026-08-26 — the probe now also classifies a TYPED registration
+// (`AddSingleton<INotificationChannel, InMemoryNotificationChannel>()`),
+// which declares its implementation type and previously read as "not
+// registered", and it distinguishes "registered but opaque" from "not
+// registered at all". See `RegistrationProbe` below.
 //
 // ── Relationship to `KeyDestroyAckCoverageValidator` (Phase 22b) ──
 //
@@ -119,22 +128,60 @@ let private isDistributedChannelEnv () =
     | None -> false
     | Some _ -> true
 
+/// What a composed registration for `'T` lets a preflight see WITHOUT
+/// building the container (building it would create different singletons
+/// from the ones the runtime uses).
+///
+/// The three non-instance cases are genuinely different questions, and
+/// collapsing them into one `None` was the defect this replaced (origin:
+/// Phase 458 ship report, tidy-drained 2026-08-26). "Nothing is
+/// registered" and "something is registered in a shape I cannot read"
+/// have OPPOSITE safe answers: the first means there is no fanout path to
+/// assess, the second means there may well be one and the check simply
+/// cannot see it — and a validator that reports both as "no finding" is
+/// silently strongest exactly where a consumer did something unusual.
+type internal RegistrationProbe =
+    /// No descriptor for the service type at all.
+    | NotRegistered
+    /// `AddSingleton<'T>(instance)` — the live object, fully inspectable.
+    | KnownInstance of obj
+    /// `AddSingleton<'T, TImpl>()` — no instance yet, but the concrete
+    /// implementation TYPE is declared, which is enough to classify by.
+    | KnownType of Type
+    /// `AddSingleton<'T>(fun sp -> …)` or an open generic — registered,
+    /// but nothing about the implementation is knowable ahead of build.
+    | Opaque
+
+/// Classify the registration for `'T`. Instance descriptors are preferred
+/// over typed ones and typed over opaque, so a deployment that registers
+/// an instance is classified exactly as it was before this probe existed.
+let internal probeRegistration<'T> (services: IServiceCollection) : RegistrationProbe =
+    let matching =
+        services
+        |> Seq.filter (fun d -> not (isNull d.ServiceType) && d.ServiceType = typeof<'T>)
+        |> Seq.toList
+
+    match matching with
+    | [] -> NotRegistered
+    | descriptors ->
+        match descriptors |> List.tryPick (fun d -> Option.ofObj d.ImplementationInstance) with
+        | Some instance -> KnownInstance instance
+        | None ->
+            match descriptors |> List.tryPick (fun d -> Option.ofObj d.ImplementationType) with
+            | Some implType -> KnownType implType
+            | None -> Opaque
+
 /// Registered implementation instance for `'T`, when compose registered
 /// one as a singleton instance. `None` covers both "not registered" and
 /// "registered as a factory / open generic", neither of which is
-/// inspectable without building the container (which would create
-/// different singletons than the runtime one).
+/// inspectable without building the container. Prefer `probeRegistration`
+/// where the difference between those two matters.
 let internal registeredInstance<'T> (services: IServiceCollection) : obj option =
-    services
-    |> Seq.tryPick (fun d ->
-        if
-            not (isNull d.ServiceType)
-            && d.ServiceType = typeof<'T>
-            && not (isNull d.ImplementationInstance)
-        then
-            Some d.ImplementationInstance
-        else
-            None)
+    match probeRegistration<'T> services with
+    | KnownInstance instance -> Some instance
+    | NotRegistered
+    | KnownType _
+    | Opaque -> None
 
 /// `true` when the composed `INotificationChannel` cannot cross a process
 /// boundary. Both shipped in-process implementations count: the in-memory
@@ -152,13 +199,37 @@ let internal registeredInstance<'T> (services: IServiceCollection) : obj option 
 /// the hard-Error arm and the Warning arm must classify a channel
 /// identically, or one preflight line contradicts the other.
 let internal composedChannelIsInProcess (services: IServiceCollection) : bool option =
-    match registeredInstance<INotificationChannel> services with
-    | Some instance ->
+    match probeRegistration<INotificationChannel> services with
+    | KnownInstance instance ->
         match instance with
         | :? NotificationChannel.InMemoryNotificationChannel
         | :? NotificationChannel.NoOpNotificationChannel -> Some true
         | _ -> Some false
-    | None -> None
+    // `AddSingleton<INotificationChannel, InMemoryNotificationChannel>()`
+    // declares its implementation type, which classifies exactly as well as
+    // an instance does — and used to read as "not registered".
+    | KnownType implType ->
+        if
+            implType = typeof<NotificationChannel.InMemoryNotificationChannel>
+            || implType = typeof<NotificationChannel.NoOpNotificationChannel>
+        then
+            Some true
+        else
+            Some false
+    | NotRegistered
+    | Opaque -> None
+
+/// `true` when an `INotificationChannel` IS registered but in a shape no
+/// preflight can classify — a factory registration, which is the ordinary
+/// way a consumer wires a channel that needs a connection string resolved
+/// from DI. Distinct from "no channel registered": there is a fanout path
+/// here, and its reachability is simply unknown.
+let internal composedChannelIsOpaque (services: IServiceCollection) : bool =
+    match probeRegistration<INotificationChannel> services with
+    | Opaque -> true
+    | NotRegistered
+    | KnownInstance _
+    | KnownType _ -> false
 
 /// The per-scope (crypto-shredding) resolver, when that is what was
 /// composed. A `SingleKeyResolver` has no `DestroyKey` path, and a custom

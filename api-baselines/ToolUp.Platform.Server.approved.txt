@@ -8440,6 +8440,9 @@ ToolUp.Platform.WebhookSecretMigration+MigrationSummary.AlreadyMigrated : System
 ToolUp.Platform.WebhookSecretMigration+MigrationSummary.Failed : System.Int32 { get }
 ToolUp.Platform.WebhookSecretMigration+MigrationSummary.Migrated : System.Int32 { get }
 ToolUp.Platform.WebhookSecretMigration+MigrationSummary.Scanned : System.Int32 { get }
+ToolUp.Platform.WebhookSecretRotationFanoutValidator (class)
+ToolUp.Platform.WebhookSecretRotationFanoutValidator+WebhookSecretRotationFanoutValidator (class)
+ToolUp.Platform.WebhookSecretRotationFanoutValidator+WebhookSecretRotationFanoutValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.WebhookSecretValidator (class)
 ToolUp.Platform.WebhookSecretValidator+WebhookSecretAtRestValidator (class)
 ToolUp.Platform.WebhookSecretValidator+WebhookSecretAtRestValidator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

@@ -784,6 +784,14 @@
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
         <Compile Include="Server\WebhookSecretMigration.fs" />
+        <!-- Phase 464 tail (tidy-drain 2026-08-26) — hard-Error gate on a
+             webhook secret rotation that cannot reach a sibling instance.
+             After WebhookRegistry.fs (reads BlobWebhookRegistry.IsWiredToChannel)
+             and after PerScopeKeyResolverDistributedValidator.fs (shares its
+             replica-count and channel-classification helpers, so the two gates
+             cannot disagree about the topology); before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="Server\WebhookSecretRotationFanoutValidator.fs" />
         <Compile Include="Server\WebhookSecretValidator.fs" />
         <Compile Include="Server\WebhookUrlValidator.fs" />
         <Compile Include="Server\WebhookDispatcher.fs" />

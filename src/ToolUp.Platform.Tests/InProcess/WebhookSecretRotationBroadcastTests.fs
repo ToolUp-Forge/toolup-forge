@@ -547,6 +547,127 @@ let private envelopeTests =
         }
     ]
 
+// ── The preflight gate over the two configurations above ──
+//
+// The 464 ship report recorded that compose reported a THROWN subscribe
+// (an `Error` log plus a degraded-capability entry) and said nothing
+// about the two configurations where the subscription succeeds and still
+// reaches no sibling — unwired, and wired to an in-process channel.
+// `WebhookSecretRotationFanoutValidator` (tidy-drain 2026-08-26) fails
+// those closed under a declared multi-replica topology, the shape the
+// Phase 458 crypto-shred gate already had.
+//
+// Every arm here is paired with the configuration that must NOT fire, so
+// a validator that returned `Error` unconditionally would fail this list
+// rather than pass it.
+
+let private preflightGateTests =
+    let services (channel: INotificationChannel option) (registry: IWebhookRegistry option) =
+        let sc = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+        match channel with
+        | Some c ->
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<
+                INotificationChannel
+             >(
+                sc,
+                c
+            )
+            |> ignore
+        | None -> ()
+
+        match registry with
+        | Some r ->
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IWebhookRegistry>(
+                sc,
+                r
+            )
+            |> ignore
+        | None -> ()
+
+        sc :> Microsoft.Extensions.DependencyInjection.IServiceCollection
+
+    let validate config sc = async {
+        let v =
+            WebhookSecretRotationFanoutValidator.WebhookSecretRotationFanoutValidator(config, sc)
+            :> ConfigValidation.IConfigValidator
+
+        return! v.Validate()
+    }
+
+    let multiReplica = {
+        ServerConfig.defaults with
+            ReplicaCount = 3
+    }
+
+    let wiredRegistry (channel: INotificationChannel) = async {
+        let blobs = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+        let registry = WebhookRegistry.BlobWebhookRegistry(blobs)
+        let secrets = storeOver (newTempDir ())
+        do! registry.WireToChannel(channel, secrets)
+        return registry
+    }
+
+    testList "preflight — rotation fanout gate" [
+
+        testCaseAsync "an UNWIRED registry under declared multi-instance is refused"
+        <| async {
+            let blobs = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let registry = WebhookRegistry.BlobWebhookRegistry(blobs)
+            Expect.isFalse registry.IsWiredToChannel "precondition: the registry is unwired"
+
+            let sc =
+                services
+                    (Some(InMemoryNotificationChannel(None) :> INotificationChannel))
+                    (Some(registry :> IWebhookRegistry))
+
+            match! validate multiReplica sc with
+            | ConfigValidation.Error msg ->
+                Expect.stringContains msg "WireToChannel" "the refusal names the missing wiring call"
+            | other -> failtestf "expected Error for an unwired registry under 3 replicas, got %A" other
+        }
+
+        testCaseAsync "a registry wired to an IN-PROCESS channel under declared multi-instance is refused"
+        <| async {
+            let channel = InMemoryNotificationChannel(None) :> INotificationChannel
+            let! registry = wiredRegistry channel
+            let sc = services (Some channel) (Some(registry :> IWebhookRegistry))
+
+            match! validate multiReplica sc with
+            | ConfigValidation.Error msg ->
+                Expect.stringContains msg "in-process" "the refusal names the channel as the cause"
+            | other -> failtestf "expected Error for an in-process channel under 3 replicas, got %A" other
+        }
+
+        // The two arms that must stay silent. Without them an
+        // unconditional `Error` would pass the two above.
+        testCaseAsync "the SAME in-process configuration on ONE replica is Ok — there is no sibling to reach"
+        <| async {
+            let channel = InMemoryNotificationChannel(None) :> INotificationChannel
+            let! registry = wiredRegistry channel
+            let sc = services (Some channel) (Some(registry :> IWebhookRegistry))
+
+            match! validate ServerConfig.defaults sc with
+            | ConfigValidation.Ok -> ()
+            | other -> failtestf "expected Ok on a single replica, got %A" other
+        }
+
+        testCaseAsync "no webhook registry composed is Ok whatever the replica count"
+        <| async {
+            let sc =
+                services (Some(InMemoryNotificationChannel(None) :> INotificationChannel)) None
+
+            match! validate multiReplica sc with
+            | ConfigValidation.Ok -> ()
+            | other -> failtestf "expected Ok with no webhook subsystem composed, got %A" other
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 464 — webhook signing-secret rotation broadcast" [ fanoutTests; unwiredTests; envelopeTests ]
+    testList "Phase 464 — webhook signing-secret rotation broadcast" [
+        fanoutTests
+        unwiredTests
+        envelopeTests
+        preflightGateTests
+    ]
