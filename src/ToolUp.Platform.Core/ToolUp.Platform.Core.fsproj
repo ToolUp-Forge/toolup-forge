@@ -413,6 +413,11 @@
         <Compile Include="Shared\WebhookApi.fs" />
         <Compile Include="Shared\DataObjectTypes.fs" />
         <Compile Include="Shared\DatasetTypes.fs" />
+        <!-- Phase 527 — service-account principals + scoped API token model.
+             After PermissionTypes.fs (the declared authority set is a
+             ModulePermission map); Fable-safe (records, DUs and pure
+             functions only — the hashing lives server-side). -->
+        <Compile Include="Shared\ServiceAccountTypes.fs" />
         <Compile Include="Shared\ResultTypes.fs" />
         <Compile Include="Shared\LineageTypes.fs" />
         <Compile Include="Shared\JobTypes.fs" />

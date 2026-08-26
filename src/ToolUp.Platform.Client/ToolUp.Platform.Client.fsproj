@@ -300,6 +300,10 @@
         <Compile Include="Client\InviteAccept.fs" />
         <Compile Include="Client\TeamConfigUI.fs" />
         <Compile Include="Client\WebhookAdminUI.fs" />
+        <!-- Phase 527 — service-account admin (machine principals + their
+             scoped API tokens). Owner/Admin nav role; opt-in via
+             ClientConfig.ServiceAccountAdmin. -->
+        <Compile Include="Client\ServiceAccountUI.fs" />
         <!-- Module-visibility profile editor — the admin surface over
              IModuleVisibilityApi. Opt-in via ClientConfig.ModuleVisibilityAdmin. -->
         <Compile Include="Client\ModuleVisibilityAdminUI.fs" />

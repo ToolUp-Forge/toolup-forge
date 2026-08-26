@@ -79,6 +79,7 @@
         <Compile Include="Contracts\IArtifactSignerContract.fs" />
         <Compile Include="Contracts\IArtifactVerifierContract.fs" />
         <Compile Include="Contracts\IShareTokenStoreContract.fs" />
+        <Compile Include="Contracts\IServiceAccountStoreContract.fs" />
         <!-- Phase 131 — cross-store id-sanitisation conformance bar
              (team / permission / share-token decorators over a real
              concrete store, bound twice: in-memory + local-file blob). -->
@@ -727,6 +728,7 @@
         <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
+        <Compile Include="InProcess\ServiceAccountStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
         <Compile Include="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />
@@ -1388,6 +1390,11 @@
              sweep-enforcement list in AuthorizationTests fails when any
              forge SDK API record method loses its attribute. -->
         <Compile Include="InProcess\AuthorizationTests.fs" />
+        <!-- Phase 335 — the classifier's recognition is by CLR type
+             identity over the two sanctioned families, so an attribute
+             whose simple name collides with a marker cannot classify a
+             method and is refused at startup by name. -->
+        <Compile Include="InProcess\AuthClassifierAttributeIdentityTests.fs" />
         <Compile Include="InProcess\AuditTests.fs" />
         <Compile Include="InProcess\RateLimitTests.fs" />
         <Compile Include="InProcess\ValidationTests.fs" />
@@ -1953,6 +1960,11 @@
              with the binding is not refused — so the refusal is about
              the disagreement and not about assertions existing. -->
         <Compile Include="InProcess\FederatedModelExecutionTests.fs" />
+        <!-- Phase 336 — fail-closed dispatch consistency: the surface gate's
+             missing-Subject seam and the PlatformAdmin backstop's premium
+             discriminator, both pinned closed alongside the correct-path
+             behaviour they must not disturb (GP 11). -->
+        <Compile Include="InProcess\FailClosedDispatchTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

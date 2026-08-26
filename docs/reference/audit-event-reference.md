@@ -5,7 +5,7 @@
      sources of truth are the `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs and
      the codec registry `auditEventCodecs` in src/ToolUp.Platform.Server/Server/AuditLog.fs. -->
 
-Every audit event the SDK emits (163 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
+Every audit event the SDK emits (168 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
 
 **Read the first column when you are writing a SIEM rule or querying an archive.** The wire `EventType` is what is persisted and replicated; the F# case identifier is what you pattern-match on in SDK code. They are equal for almost every event, and the exceptions are listed below — they are pinned deliberately, because a wire string that has already left for a third-party sink cannot be migrated.
 
@@ -65,6 +65,11 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ShareTokenIssued` | — | `ShareTokenIssuedPayload` |
 | `ShareTokenUsed` | — | `ShareTokenUsedPayload` |
 | `ShareTokenRevoked` | — | `ShareTokenRevokedPayload` |
+| `ServiceAccountCreated` | — | `ServiceAccountCreatedPayload` |
+| `ServiceAccountPermissionsChanged` | — | `ServiceAccountPermissionsChangedPayload` |
+| `ServiceAccountTokenMinted` | — | `ServiceAccountTokenMintedPayload` |
+| `ServiceAccountTokenRevoked` | — | `ServiceAccountTokenRevokedPayload` |
+| `ServiceAccountStatusChanged` | — | `ServiceAccountStatusChangedPayload` |
 | `ConversationExported` | — | `ConversationExportPayload` |
 | `BeaconRejected` | — | `BeaconRejectedPayload` |
 | `ConfigDrift` | — | `ConfigDriftPayload` |

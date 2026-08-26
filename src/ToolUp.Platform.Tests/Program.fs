@@ -221,6 +221,10 @@ let allTests =
         // Phase 69d.tail + 69h.tail — authorization classifier default-on
         // + audit annotation sweep contract packs.
         AuthorizationTests.tests
+        // Phase 335 — auth-attribute matching by CLR identity: a
+        // colliding third-party attribute cannot classify a method, and
+        // the collision refuses startup by name.
+        AuthClassifierAttributeIdentityTests.tests
         AuditTests.tests
         RateLimitTests.tests
         ValidationTests.tests
@@ -586,6 +590,14 @@ let allTests =
         ShareTokenStoreTests.readPathTests
         ShareTokenAuthMiddlewareTests.tests
         ShareTokenMiddlewareRateLimitTests.tests
+        // Phase 527 — service accounts. Three top-level lists, all
+        // registered here: `--filter` matches a TOP-LEVEL list-name
+        // prefix, so a list that is only referenced from another file is
+        // selected by nothing and a filtered run reports a vacuous
+        // green.
+        ServiceAccountStoreTests.tests
+        ServiceAccountStoreTests.pureTests
+        ServiceAccountStoreTests.persistenceTests
         AnonymousSessionMigrationTests.tests
         // Phase 337 — listed here, not merely attributed: `runTestsWithCLIArgs`
         // runs `allTests`, so a `[<Tests>]` binding absent from this list is
@@ -1821,6 +1833,17 @@ let allTests =
         // exactly the kind of code that passes by doing nothing. An
         // absent corpus is one loud failure, never a skip.
         Conformance.ModelExecutionSpecConformance.tests
+        // Phase 336 — fail-closed dispatch consistency. The two seams in the
+        // dispatch-authorization layer that failed OPEN where every other
+        // decision point fails closed: the surface gate's missing-Subject
+        // fall-through (reachable via a swallowed ScopeResolutionMiddleware
+        // resolver exception, not only an unsupported pipeline) and the
+        // PlatformAdmin backstop's case-sensitive `/premium` discriminator
+        // sitting beside a case-INsensitive prefix guard. Each arm carries
+        // its correct-path control — a public route still admitted without a
+        // Subject, `premium-status` still open — so "everything is refused"
+        // cannot pass as a fix.
+        FailClosedDispatchTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to

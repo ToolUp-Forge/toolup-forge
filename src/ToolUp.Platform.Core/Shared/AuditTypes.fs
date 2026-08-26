@@ -1330,6 +1330,73 @@ type ShareTokenRevokedPayload = {
     ResourceId: string
 }
 
+// ─── Service accounts (Phase 527) ────────────────────────────────────
+//
+// Machine principals and their scoped API tokens. Reserved
+// `SourceModule = "_platform.audit.service_accounts"`
+// (`ServiceAccountTypes.AuditSourceModule`).
+//
+// Every payload carries `AccountId` so the whole life of a machine
+// principal — created, granted, minted, revoked, disabled — reads as one
+// filterable trail. None of them ever carries a token SECRET; `TokenId`
+// is a public identifier by construction (it rides the token string in
+// the clear), and the secret exists only in the mint response.
+//
+// `UserId` is the human ACTOR who performed the management act, not the
+// machine principal — a service account never creates or disables
+// itself, so attribution here is always to a person.
+
+/// `IServiceAccountStore.Create` succeeded. `Modules` lists the module
+/// names in the declared permission set (names only — the grant levels
+/// live on the account record) so an operator can see the credential's
+/// reach without a second read.
+type ServiceAccountCreatedPayload = {
+    UserId: string
+    AccountId: string
+    DisplayName: string
+    Modules: string list
+}
+
+/// `IServiceAccountStore.SetPermissions` succeeded — the account's
+/// declared authority ceiling changed. Both sides are recorded because
+/// "what was it before" is the question an incident asks first, and the
+/// prior value is otherwise unrecoverable from the account record.
+type ServiceAccountPermissionsChangedPayload = {
+    UserId: string
+    AccountId: string
+    PreviousModules: string list
+    Modules: string list
+}
+
+/// `IServiceAccountStore.MintToken` succeeded. The credential itself is
+/// NOT in this payload and never can be — the store retains only a
+/// salted hash.
+type ServiceAccountTokenMintedPayload = {
+    UserId: string
+    AccountId: string
+    TokenId: string
+    DisplayName: string
+    ExpiresAt: System.DateTimeOffset
+}
+
+/// `IServiceAccountStore.RevokeToken` succeeded. Subsequent validations
+/// of this token return `RevokedToken`.
+type ServiceAccountTokenRevokedPayload = {
+    UserId: string
+    AccountId: string
+    TokenId: string
+}
+
+/// `IServiceAccountStore.SetStatus` succeeded. `Disabled = true` means
+/// every token belonging to the account is now refused wholesale; the
+/// tokens themselves are untouched, so the transition is reversible and
+/// this event is emitted for both directions.
+type ServiceAccountStatusChangedPayload = {
+    UserId: string
+    AccountId: string
+    Disabled: bool
+}
+
 /// Phase 6j.D — the AI fast-path beacon (or the equivalent
 /// `SubmitMessage`) was rejected by the ownership gate. Emitted when
 /// the first persisted message of a shared-container conversation
@@ -4080,6 +4147,20 @@ type AuditEvent =
     /// the actor; subsequent `Validate` calls reject the token with
     /// `RevokedToken`.
     | ShareTokenRevoked of ShareTokenRevokedPayload
+    /// Phase 527 — `IServiceAccountStore.Create` succeeded. Reserved
+    /// `SourceModule = "_platform.audit.service_accounts"`.
+    | ServiceAccountCreated of ServiceAccountCreatedPayload
+    /// Phase 527 — a machine principal's declared authority ceiling
+    /// changed. Records both the prior and the new module set.
+    | ServiceAccountPermissionsChanged of ServiceAccountPermissionsChangedPayload
+    /// Phase 527 — a scoped API token was minted. Carries the token's
+    /// public id and expiry; the secret is never recorded anywhere.
+    | ServiceAccountTokenMinted of ServiceAccountTokenMintedPayload
+    /// Phase 527 — a scoped API token was permanently revoked.
+    | ServiceAccountTokenRevoked of ServiceAccountTokenRevokedPayload
+    /// Phase 527 — a machine principal was disabled or re-enabled.
+    /// Disabling refuses every one of its tokens wholesale.
+    | ServiceAccountStatusChanged of ServiceAccountStatusChangedPayload
     /// An AI conversation was exported from the chat side
     /// panel. Metadata-only payload (no conversation content / tool
     /// payloads) so the audit trail can record export activity without
@@ -4641,6 +4722,11 @@ module AuditEvent =
         | ShareTokenIssued _ -> "ShareTokenIssued"
         | ShareTokenUsed _ -> "ShareTokenUsed"
         | ShareTokenRevoked _ -> "ShareTokenRevoked"
+        | ServiceAccountCreated _ -> "ServiceAccountCreated"
+        | ServiceAccountPermissionsChanged _ -> "ServiceAccountPermissionsChanged"
+        | ServiceAccountTokenMinted _ -> "ServiceAccountTokenMinted"
+        | ServiceAccountTokenRevoked _ -> "ServiceAccountTokenRevoked"
+        | ServiceAccountStatusChanged _ -> "ServiceAccountStatusChanged"
         | ConversationExported _ -> "ConversationExported"
         | BeaconRejected _ -> "BeaconRejected"
         | ConfigDrift _ -> "ConfigDrift"

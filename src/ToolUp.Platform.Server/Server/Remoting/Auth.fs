@@ -84,16 +84,60 @@ type internal MethodClassification =
 
 module internal AuthClassifier =
 
-    // Phase 69d.tail — attribute recognition is by simple type name, not
-    // CLR type identity. Two attribute families exist by design: the
+    // Phase 69d.tail — two attribute families exist by design: the
     // `ToolUp.Remoting.Server.*` set in this assembly (server-tier
     // consumers) and the `ToolUp.Platform.*` mirrors in the tier-shared
     // `ToolUp.Platform.Core` (carried by API records the Fable client
     // also compiles — those records cannot reference this server-tier
-    // assembly). The dispatcher honours both: simple-name matching plus
-    // reflective property reads cost microseconds once per API record at
-    // startup, and per-request evaluation runs over the normalised
-    // `AuthRequirement` data.
+    // assembly). The dispatcher honours both: reflective property reads
+    // cost microseconds once per API record at startup, and per-request
+    // evaluation runs over the normalised `AuthRequirement` data.
+    //
+    // Phase 335 — recognition is by CLR TYPE IDENTITY over an allow-list
+    // of exactly those two families, NOT by bare simple name as 69d.tail
+    // shipped it. Simple-name matching made the classification input
+    // forgeable: any attribute applicable to a record field whose type
+    // name happened to be `PublicEndpointAttribute` or
+    // `AllowAnonymousAttribute` — very common names a consumer or a
+    // third-party package may well define — silently classified the
+    // method `Public` / `Anonymous`, so `evaluate` returned `Allow` for
+    // every caller with NO startup signal (the field *was* classified, so
+    // the default-deny startup gate was satisfied). Identity matching is
+    // stronger than the namespace-qualified name the phase asked for: it
+    // also pins the declaring ASSEMBLY, so a consumer type declared into
+    // `namespace ToolUp.Remoting.Server` from its own assembly is foreign
+    // too. Both families are compile-time referenceable from here
+    // (Platform.Server already references Platform.Core), so the set is
+    // built from `typeof<>` rather than from strings.
+
+    let private sanctionedMarkers: Collections.Generic.HashSet<Type> =
+        Collections.Generic.HashSet<Type>(
+            [
+                // Server-tier family (this assembly).
+                typeof<RequiresRoleAttribute>
+                typeof<RequiresClaimAttribute>
+                typeof<TenantScopedAttribute>
+                typeof<AllowAnonymousAttribute>
+                typeof<PublicEndpointAttribute>
+                // Tier-shared mirror family (`ToolUp.Platform.Core`).
+                typeof<ToolUp.Platform.RequiresRoleAttribute>
+                typeof<ToolUp.Platform.RequiresClaimAttribute>
+                typeof<ToolUp.Platform.TenantScopedAttribute>
+                typeof<ToolUp.Platform.AllowAnonymousAttribute>
+                typeof<ToolUp.Platform.PublicEndpointAttribute>
+            ]
+        )
+
+    /// Phase 335 — the marker SIMPLE names, derived from the sanctioned
+    /// set so the two can never drift. Used only to detect a *collision*:
+    /// an attribute carrying one of these names that is not one of the
+    /// sanctioned types is reported at startup rather than ignored, so a
+    /// consumer whose own `PublicEndpointAttribute` silently stopped
+    /// opening a method learns why instead of discovering it as a 403.
+    let private markerSimpleNames: Collections.Generic.HashSet<string> =
+        Collections.Generic.HashSet<string>(sanctionedMarkers |> Seq.map _.Name)
+
+    let private isSanctioned (t: Type) = sanctionedMarkers.Contains t
 
     let private stringProperty (name: string) (a: Attribute) : string option =
         match a.GetType().GetProperty name with
@@ -104,19 +148,26 @@ module internal AuthClassifier =
             | _ -> None
 
     let private tryRequirement (a: Attribute) : AuthRequirement option =
-        match a.GetType().Name with
-        | "RequiresRoleAttribute" -> stringProperty "Role" a |> Option.map RoleRequired
-        | "RequiresClaimAttribute" ->
-            stringProperty "Claim" a
-            |> Option.map (fun claim -> ClaimRequired(claim, stringProperty "Value" a))
-        | "TenantScopedAttribute" -> Some TenantRequired
-        | _ -> None
+        let t = a.GetType()
+
+        if not (isSanctioned t) then
+            None
+        else
+            match t.Name with
+            | "RequiresRoleAttribute" -> stringProperty "Role" a |> Option.map RoleRequired
+            | "RequiresClaimAttribute" ->
+                stringProperty "Claim" a
+                |> Option.map (fun claim -> ClaimRequired(claim, stringProperty "Value" a))
+            | "TenantScopedAttribute" -> Some TenantRequired
+            | _ -> None
 
     let private isPublicEndpoint (a: Attribute) =
-        a.GetType().Name = "PublicEndpointAttribute"
+        let t = a.GetType()
+        isSanctioned t && t.Name = "PublicEndpointAttribute"
 
     let private isAllowAnonymous (a: Attribute) =
-        a.GetType().Name = "AllowAnonymousAttribute"
+        let t = a.GetType()
+        isSanctioned t && t.Name = "AllowAnonymousAttribute"
 
     // Reflection must see non-public record types too: consumer API
     // records can be `internal`/`private` (module-internal contracts,
@@ -171,6 +222,61 @@ module internal AuthClassifier =
             match cls with
             | Unclassified -> Some name
             | _ -> None)
+
+    /// Phase 335 — walk an API record's fields and return every attribute
+    /// whose SIMPLE NAME collides with one of the sanctioned markers but
+    /// whose CLR type is not sanctioned, as `(fieldName, attributeType)`
+    /// pairs (the type rendered assembly-qualified, so the diagnostic
+    /// names both the namespace and the assembly it came from).
+    ///
+    /// A collision is refused at startup rather than merely ignored. Two
+    /// reasons, and the second is why "ignore it" is not enough: a field
+    /// carrying ONLY the foreign marker now classifies `Unclassified`, so
+    /// the 69d gate would already refuse — but naming it "unclassified"
+    /// misdescribes the cause and sends the consumer to annotate a field
+    /// they believe they already annotated; and a field carrying a
+    /// foreign `PublicEndpointAttribute` ALONGSIDE a genuine
+    /// `[<RequiresRole>]` classifies `RequiresAuth` and would start
+    /// silently, with the consumer believing the method open. A name
+    /// collision must never silently decide a method's classification in
+    /// either direction.
+    let foreignMarkers (apiType: Type) : (string * string) list =
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
+            []
+        else
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
+            |> Array.collect (fun pi ->
+                pi.GetCustomAttributes(true)
+                |> Array.choose (fun a ->
+                    let t = a.GetType()
+
+                    if markerSimpleNames.Contains t.Name && not (isSanctioned t) then
+                        let rendered =
+                            if isNull t.AssemblyQualifiedName then
+                                t.FullName
+                            else
+                                t.AssemblyQualifiedName
+
+                        Some(pi.Name, rendered)
+                    else
+                        None))
+            |> Array.toList
+
+    /// Build a startup-time exception for attributes whose simple name
+    /// collides with a sanctioned marker (Phase 335).
+    let foreignMarkerException (apiTypeName: string) (collisions: (string * string) list) : exn =
+        let detail =
+            collisions
+            |> List.map (fun (field, attrType) -> sprintf "%s carries '%s'" field attrType)
+            |> String.concat "; "
+
+        invalidOp (
+            sprintf
+                "ToolUp.Remoting refused to start: API record '%s' has %d field(s) carrying an attribute whose name matches an authorisation marker but which is NOT one of the two sanctioned families: [%s]. Only ToolUp.Remoting.Server.* (server-tier) and ToolUp.Platform.* (tier-shared mirror) markers classify a method; an attribute of the same name from any other namespace or assembly is refused rather than honoured, because a name collision must never decide a method's authorisation. Replace it with the sanctioned attribute of the same name, or rename your own attribute. See docs/migrations/335-qualified-auth-attribute-matching.md."
+                apiTypeName
+                collisions.Length
+                detail
+        )
 
     /// Build a startup-time exception for unclassified methods.
     let unclassifiedException (apiTypeName: string) (methods: string list) : exn =

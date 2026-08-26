@@ -627,6 +627,10 @@
         <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
         <Compile Include="Server\IShareTokenStore.fs" />
         <Compile Include="Server\ShareTokenStore.fs" />
+        <!-- Phase 527 — service accounts. Interface then blob-backed default,
+             adjacent, mirroring the share-token pair above. -->
+        <Compile Include="Server\IServiceAccountStore.fs" />
+        <Compile Include="Server\ServiceAccountStore.fs" />
         <Compile Include="Server\IRateLimitStore.fs" />
         <Compile Include="Server\InMemoryRateLimitStore.fs" />
         <Compile Include="Server\Providers\BlobProviderProfile.fs" />
@@ -718,6 +722,11 @@
         <Compile Include="Server\PeerRouteRegistry.fs" />
         <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
         <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
+        <!-- Phase 527 — service-account bearer-token middleware. AFTER
+             ShareTokenAuthMiddleware.fs (it writes that module's
+             ShareTokenClaimItemsKey) and after IUsageLog.fs (Phase 9d
+             per-account attribution). -->
+        <Compile Include="Server\ServiceAccountTokenHandler.fs" />
         <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
         <Compile Include="Server\PeerBearerConfigValidator.fs" />
         <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
@@ -807,6 +816,11 @@
         <Compile Include="Server\WebhookDispatcher.fs" />
         <Compile Include="Server\HookedEventStore.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
+        <!-- Phase 527 — the Owner/Admin-gated service-account management
+             API behind ServiceAccountUI. Must follow Teams\TeamManagement.fs
+             (ITeamStore + TeamRoles are the role gate), which is why it sits
+             here rather than beside ServiceAccountTokenHandler.fs. -->
+        <Compile Include="Server\ServiceAccountApiHandler.fs" />
         <!-- Phase 7b — IUserSchemaApi Fable.Remoting handler (Owner/Admin
              gated writes). After WebhookApiHandler (same handler shape) +
              TeamManagement (the role gate); before BuildRouteHandlers mounts
