@@ -934,6 +934,11 @@
              INotificationSink; before Compose/ (ComposeRuntimeServices
              hosts it). -->
         <Compile Include="Server\AlertRuleEngine.fs" />
+        <!-- Phase 9n credential-suffix allowlist, extracted at the third
+             consumer (ConfigDriftDetector, DiagnosticBundleHandler,
+             ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
+             only — so it can sit ahead of every surface that redacts. -->
+        <Compile Include="Server\RedactionAllowlist.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <!-- Phase 120 — /dev/auth-denials rollup (reads AuthorizationDenied
@@ -1397,7 +1402,8 @@
              init/dispose order, and return a typed DryRunReport — zero
              external services, defects as findings rather than exceptions.
              Plus the Expecto-shaped (Expecto-free) DryRun.shouldCompose
-             affordance for consumer suites + cookbook verification. After
+             affordance for consumer suites + worked-example verification.
+             After
              CompositionDescriptorVersion.fs (the versioned build path it
              drives), ComposableSurface.fs (the slot universe it null-binds),
              ComponentLifecycle.fs and CompositionValidator.fs. Nothing

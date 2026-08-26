@@ -132,8 +132,8 @@ type ComposableSurface = {
 /// credentials (names + classes, never values) and config knobs declared
 /// against that slot's `ComponentId`. Answers "composing X requires
 /// secrets A, B" *before* anything is composed, which is the question a
-/// cookbook preflight Q-table and a scaffolding tool both need answered
-/// at authoring time rather than at first boot.
+/// scaffolding tool and an authoring-time preflight questionnaire both
+/// need answered at authoring time rather than at first boot.
 ///
 /// A separate record rather than a field on `ComposableSlot`, for the
 /// reason Phase 585 recorded for `ClassifiedCompositionRule`: adding a
