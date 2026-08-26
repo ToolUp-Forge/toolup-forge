@@ -193,7 +193,40 @@ let registerTeamPermissionStores
         if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
             inner
         else
-            GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, auditLog) :> IPermissionStore)
+            let guarded =
+                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, auditLog) :> IPermissionStore
+
+            // Phase 556 — the grant-event notice loop, OUTSIDE the write
+            // guard because it must observe what was actually written: a
+            // grant 551 refused, or 555 parked, is not a grant anybody
+            // should be told they hold. It observes only — it never
+            // refuses, never rewrites a result, and swallows every
+            // delivery failure, because a notification outage must not
+            // fail a permission write.
+            //
+            // Composed only when a channel is resolvable, on top of the
+            // non-empty-registry condition that already guards this whole
+            // branch: an `AdminDiscretion`-only deployment reaches neither
+            // decorator and pays for neither (GP 13).
+            match sp.GetService(typeof<INotificationChannel>) with
+            | :? INotificationChannel as channel when not (isNull (box channel)) ->
+                let settings =
+                    match sp.GetService(typeof<GrantNotification.GrantNotificationSettings>) with
+                    | :? GrantNotification.GrantNotificationSettings as s -> s
+                    | _ -> GrantNotification.GrantNotificationSettings.defaults
+
+                GrantNotification.GrantNotificationObserver(
+                    guarded,
+                    registry,
+                    channel,
+                    settings,
+                    resolvedLogger,
+                    resolveProposer sp,
+                    (fun () -> System.DateTimeOffset.UtcNow),
+                    Async.Start
+                )
+                :> IPermissionStore
+            | _ -> guarded)
     |> ignore
 
     teamStoreOpt

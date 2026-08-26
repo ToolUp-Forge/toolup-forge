@@ -321,6 +321,12 @@
              the persisted document, and the composed-chain property that a
              Phase 551 policy refusal pre-empts queueing. -->
         <Compile Include="InProcess\AdminMutationApprovalTests.fs" />
+        <!-- Phase 556 — grant-event notification to affected principals: the
+             pure write-delta classifier per transition, both audiences and
+             their recipient resolution, the per-audience message shapes, and
+             the delivery discipline (a channel outage never fails the grant;
+             an unpolicied module notifies nobody). -->
+        <Compile Include="InProcess\GrantNotificationTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

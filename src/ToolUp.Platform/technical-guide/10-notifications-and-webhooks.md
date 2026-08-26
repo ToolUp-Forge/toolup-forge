@@ -43,6 +43,13 @@ Most notification kinds are scope-private — a `JobProgress` envelope on scope 
 
 When adding a future reserved kind: document it here, declare the literal in the publishing companion's shared module, and accept that any consumer in a less-foundational position must duplicate the string rather than introduce a back-reference. The principle is the wire format is the contract — not the F# constant.
 
+### Scope-private published keys
+
+A `CustomNotification` key that stays inside one scope is not a reserved kind — it crosses no topic boundary, so nothing about scope isolation has to be argued for it. It is still a *published* key the moment a subscriber matches on the literal, and the SDK ships two of its own:
+
+- **`Narrative.Published`** / **`Narrative.ScopeReset`** — published by `NotifyingNarrativeStore` on every successful narrative write. Payload mirrors `NarrativeEntryInfo` so a list view can populate a row without a round-trip.
+- **`Platform.GrantNotice`** (Phase 556) — published by `GrantNotificationObserver` on the granting team's own topic when a grant lands on a module carrying a non-default Phase 551 `GrantPolicy`. Payload: `{ TeamId; ModuleName; SubjectId; GrantedBy; Permissions; DeclaredPolicy; GrantState; Transition; Party; OccurredAtUtc }` — **the grant fact and nothing from the module's own storage**, so the envelope is safe to log and safe to forward to an email vendor. `Transition` is `recorded` / `activated` / `widened`; one key carrying a discriminator rather than three keys, because "every grant event on a policied module" is the subscription an admin console actually wants. The same observer publishes a `TransactionalEmail` per affected principal — the grantee, and the party the declared policy names once the deployment supplies a `PartyRef` resolver — so a deployment with a composed email sink reaches the principals themselves and one without is silently unaffected. Declared as `[<Literal>] GrantNotification.GrantNoticeKey`.
+
 ### Per-connection subscription, not per-scope fan-out
 
 Each `EventSource` gets its own subscription + its own callback that writes only to its own response. For N tabs in the same scope, the in-memory channel calls N callbacks per publish — O(N) but trivially cheap at expected fanouts. A distributed implementation (Redis pub/sub, Kafka, etc.) is free to shard differently: the interface only promises "every subscriber sees the envelope", not "one callback per scope". This avoids the N×N duplicate-write bug a `Broadcast(scope)` API would invite.

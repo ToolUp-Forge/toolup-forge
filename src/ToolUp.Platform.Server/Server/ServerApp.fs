@@ -901,6 +901,20 @@ type ServerApp = {
     /// what makes the registry's keys a subset of the composed module set
     /// by construction rather than by convention.
     ModuleGrantPolicies: (string * GrantPolicy) list
+    /// Phase 556 — how grant-event notices to affected principals are
+    /// rendered and delivered. `None` means the shipped defaults, NOT
+    /// "no notices": the notice loop is the point of the phase, and a
+    /// deployment that declared a `GrantPolicy` and assumed the notice
+    /// came with it would otherwise get silence. What `None` costs is
+    /// still nothing in an `AdminDiscretion`-only deployment — the
+    /// observer is composed alongside the write guard, on the same
+    /// non-empty-registry condition (GP 13).
+    ///
+    /// Set it with `ServerApp.withGrantNotifications`, whose one
+    /// genuinely deployment-specific job is the `PartyRef` resolver: a
+    /// party reference is an opaque deployment string (GP 9), so absent
+    /// a resolver the declared-party leg reaches nobody.
+    GrantNotifications: GrantNotification.GrantNotificationSettings option
 }
 
 module ServerApp =
@@ -956,6 +970,25 @@ module ServerApp =
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
         ModuleGrantPolicies = []
+        GrantNotifications = None
+    }
+
+    /// Phase 556 — tune the grant-event notice fan-out: supply the
+    /// deployment's `PartyRef` → user-id resolution, override the
+    /// per-audience message shapes, or switch a delivery leg off.
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withGrantNotifications (
+    ///        GrantNotification.GrantNotificationSettings.defaults
+    ///        |> GrantNotification.GrantNotificationSettings.withPartyResolver (fun party ->
+    ///            match PartyRef.value party with
+    ///            | "dpo" -> [ "compliance@example.test" ]
+    ///            | _ -> []))
+    /// ```
+    let withGrantNotifications (settings: GrantNotification.GrantNotificationSettings) (app: ServerApp) = {
+        app with
+            GrantNotifications = Some settings
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -2660,6 +2693,19 @@ module ServerApp =
                         failwith
                             $"""Grant-policy registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared GrantPolicy must be keyed by a composed module's Name, or the policy silently stops being enforced."""
 
+            // Phase 556 — the grant-notice settings the observer reads.
+            // Registered only when a deployment supplied them AND a policy
+            // is declared: with no registration the observer falls back to
+            // `GrantNotificationSettings.defaults`, and with no registry it
+            // is never constructed at all, so an unpolicied deployment
+            // carries neither the singleton nor the observer (GP 13).
+            let withGrantNotificationSettings =
+                match app.GrantNotifications with
+                | Some settings when not (List.isEmpty app.ModuleGrantPolicies) ->
+                    appendRegistration withGrantPolicies (fun s ->
+                        s.AddSingleton<GrantNotification.GrantNotificationSettings>(settings))
+                | _ -> withGrantPolicies
+
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
@@ -2682,7 +2728,7 @@ module ServerApp =
             // module-graph rules check exactly what was registered rather
             // than the `ComponentId`-collapsed manifest projection.
             appendRegistration
-                withGrantPolicies
+                withGrantNotificationSettings
                 (CompositionValidator.serviceRegistration (compositionManifest app) (compositionReferences app))
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
