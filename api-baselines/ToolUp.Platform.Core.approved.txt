@@ -4610,7 +4610,8 @@ ToolUp.Platform.ExternalWorkSpecModule.withProfile(ToolUp.Platform.ExecutionProf
 ToolUp.Platform.ExternalWorkSpecModule.withSubmitterClass(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withTimeout(System.TimeSpan, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.FactImportPayload (class)
-ToolUp.Platform.FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FactImportPayload.AttestationLevel : System.String { get }
 ToolUp.Platform.FactImportPayload.CertificateRef : System.String { get }
 ToolUp.Platform.FactImportPayload.CertificateRoot : System.String { get }
 ToolUp.Platform.FactImportPayload.DeclaredDisclosure : System.String { get }
@@ -9055,10 +9056,11 @@ ToolUp.Platform.SubjectResolutionError+Tags.UnsupportedSubject : System.Int32 (l
 ToolUp.Platform.SubjectResolutionError+UnsupportedSubject (class)
 ToolUp.Platform.SubjectResolutionError+UnsupportedSubject.Item : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectResolutionRequest (class)
-ToolUp.Platform.SubjectResolutionRequest..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.SubjectResolutionRequest..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.SubjectResolutionRequest.Claim : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim] { get }
 ToolUp.Platform.SubjectResolutionRequest.Headers : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.SubjectResolutionRequest.SessionId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.SubjectResolutionRequest.SessionIdVerified : System.Boolean { get }
 ToolUp.Platform.SubjectResolutionRequest.User : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser] { get }
 ToolUp.Platform.SubmitterClass (class)
 ToolUp.Platform.SubmitterClass.AgentInitiated : ToolUp.Platform.SubmitterClass { get }

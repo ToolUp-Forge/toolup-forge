@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.InProcess.FactImportTests
 open System
 open System.Collections.Concurrent
 open System.Text
+open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
@@ -238,6 +239,59 @@ let private tamperStatement (find: string) (replace: string) (json: string) =
                     |> Encoding.UTF8.GetBytes
                     |> Convert.ToBase64String
         }
+
+// ── the attested projection at the door ─────────────────────────────────
+//
+// The peer running the levels-bound seal exports the SAME body through a
+// different projection. Every fixture below therefore builds the direct
+// certificate first and re-seals its body through the application signing
+// seam: byte-identical bodies is the property this leans on, not one it
+// re-establishes, and building the body twice would be testing the fixture.
+
+/// An `IApplicationSigner` over a deployment's own secrets at a chosen
+/// attestation level.
+///
+/// The in-process provider fixes the level at `Attribution`, which is the
+/// honest claim for a key the signing process can read. Overriding it is
+/// how a test reaches the other levels — the custody has not changed, so
+/// this is a fixture and never a pattern for a composition root.
+let private applicationSignerAt (d: Deployment) (level: AttestationLevel) : IApplicationSigner =
+    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+
+    {
+        ApplicationSigning.inProcess d.Secrets audit d.KeyId Ed25519 "system" with
+            Level = level
+    }
+    |> ApplicationSigning.create
+
+/// Re-seal `body` through the application signing seam at `level` and
+/// export it as the attested projection's signed statement.
+let private attestedJsonOf (d: Deployment) (level: AttestationLevel) (body: GroundingCertificateBody) = async {
+    let signer = applicationSignerAt d level
+    let canonical = GroundingCertificate.canonicalise body
+
+    match!
+        signer.SignPayload(GroundingCertificate.AttestationPurpose, GroundingCertificate.canonicalBytes canonical)
+    with
+    | Error e -> return failtestf "sealing the attested certificate must succeed: %s" (SigningError.describe e)
+    | Ok envelope ->
+        let certificate: AttestedGroundingCertificate = {
+            Body = canonical
+            Envelope = envelope
+        }
+
+        match! CertificateEnvelope.exportAttested d.EnvelopeSigner certificate with
+        | Error e -> return failtestf "exporting the attested envelope must succeed: %s" e
+        | Ok exported -> return certificate, DsseEnvelope.toJson exported
+}
+
+/// Issue a certificate over `factId` and hand back its ATTESTED projection
+/// — the document a peer running the levels-bound seal offers.
+let private attestedCertificateJsonFor (d: Deployment) scopeId (factId: string) (level: AttestationLevel) = async {
+    match! d.Issuer.Issue(scopeId, "exporter", FactCertificate factId, 5) with
+    | Error e -> return failtestf "certificate issue must succeed: %s" (CertificateError.describe e)
+    | Ok certificate -> return! attestedJsonOf d level certificate.Body
+}
 
 let private restrictedPolicy = "policy:partner-terms"
 
@@ -827,4 +881,426 @@ let tests =
                 Expect.stringContains payload.Reason "no key material" "and states why"
             | other -> failtestf "expected exactly one refusal row; got %A" other
         }
+
+        // ── the attested projection at the door ─────────────────────────
+        //
+        // A peer running the levels-bound seal offers a document of a
+        // different shape over the same body. The door reads both, routes
+        // on what the document declares about itself, and treats the level
+        // as an admission input — never as a disclosure modifier, and never
+        // as something to compare with `>=`.
+
+        testCaseAsync "an attested certificate imports end-to-end with its level visible in the trail"
+        <| async {
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = RecordingAuditLog()
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let! certificate, json = attestedCertificateJsonFor a scopeA original.FactId IsolatedSigner
+
+            let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
+
+            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            | Error refusal -> failtestf "an attested import must succeed: %s" (FactImportRefusal.describe refusal)
+            | Ok imported ->
+                Expect.equal imported.Value original.Value "the value crossed unchanged"
+
+                Expect.equal
+                    imported.Disclosure
+                    Surfaceable
+                    "the stance is still read out of the signed body, not out of the level"
+
+                // Both projections seal byte-identical bodies, so the ref a
+                // fact carries is the same digest either document yields.
+                // That is what keeps one join key rather than two.
+                let expectedRef = FactImport.attestedCertificateRef certificate
+
+                match imported.Method with
+                | Imported ref' -> Expect.equal ref' expectedRef "the import carries the verified certificate's own ref"
+                | other -> failtestf "an imported fact must carry Imported provenance; got %A" other
+
+                match audit.OfType "FactImportAccepted" with
+                | [ FactImportAccepted payload ] ->
+                    Expect.equal
+                        payload.AttestationLevel
+                        "isolated-signer"
+                        "the level the seal claims reaches the audit row, in its stable wire name"
+
+                    Expect.equal payload.CertificateRef expectedRef "beside the ref the fact records"
+
+                    Expect.equal
+                        payload.DeclaredDisclosure
+                        "Surfaceable"
+                        "and the stance, which the level did not touch"
+                | other -> failtestf "expected exactly one accepted row; got %A" other
+        }
+
+        testCaseAsync "a direct certificate records no level, rather than the weakest one"
+        <| async {
+            // The direct projection makes no claim about the signing key's
+            // custody at all. Recording `attribution` here would put an
+            // assertion in the trail that no signature covers — the same
+            // defaulting this door refuses everywhere else.
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = RecordingAuditLog()
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let! _, json = certificateJsonFor a scopeA original.FactId
+
+            // And the strictest level policy available does not touch it:
+            // a level nobody claimed cannot be measured against one.
+            let anchor =
+                PeerTrustAnchor.create "deployment-a" a.PublicKey
+                |> PeerTrustAnchor.withAdmissibleLevels [ IsolatedSigner ]
+
+            match!
+                (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+            with
+            | Error refusal ->
+                failtestf "the direct path must be unchanged by a level policy: %s" (FactImportRefusal.describe refusal)
+            | Ok _ ->
+                match audit.OfType "FactImportAccepted" with
+                | [ FactImportAccepted payload ] ->
+                    Expect.equal payload.AttestationLevel "" "a document claiming no level records none"
+                | other -> failtestf "expected exactly one accepted row; got %A" other
+        }
+
+        testCaseAsync "each known level is admitted by the policy that names it"
+        <| async {
+            let! a = deployment "deployment-a-v1"
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+
+            for level, policy in
+                [
+                    Attribution, [ Attribution ]
+                    IsolatedSigner, [ IsolatedSigner ]
+                    Attribution, [ Attribution; IsolatedSigner ]
+                    IsolatedSigner, [ Attribution; IsolatedSigner ]
+                ] do
+                // A fresh importer per arm, so "nothing landed" stays a
+                // statement about this arm alone.
+                let! b = deployment "deployment-b-v1"
+                let audit = RecordingAuditLog()
+                let! _, json = attestedCertificateJsonFor a scopeA original.FactId level
+
+                let anchor =
+                    PeerTrustAnchor.create "deployment-a" a.PublicKey
+                    |> PeerTrustAnchor.withAdmissibleLevels policy
+
+                match!
+                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                with
+                | Error refusal ->
+                    failtestf
+                        "level %s must be admitted by a policy naming it: %s"
+                        (AttestationLevel.name level)
+                        (FactImportRefusal.describe refusal)
+                | Ok _ -> ()
+        }
+
+        testCaseAsync "a level the anchor does not name is refused on its own terms, and nothing lands"
+        <| async {
+            let! a = deployment "deployment-a-v1"
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+
+            for level, policy in
+                [
+                    Attribution, [ IsolatedSigner ]
+                    IsolatedSigner, [ Attribution ]
+                    Attribution, []
+                    IsolatedSigner, []
+                ] do
+                let! b = deployment "deployment-b-v1"
+                let audit = RecordingAuditLog()
+                let! _, json = attestedCertificateJsonFor a scopeA original.FactId level
+
+                let anchor =
+                    PeerTrustAnchor.create "deployment-a" a.PublicKey
+                    |> PeerTrustAnchor.withAdmissibleLevels policy
+
+                match!
+                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                with
+                | Error(ImportLevelNotAdmitted(offered, admitted)) ->
+                    // Not `ImportUnverifiable`: the document verified, and
+                    // an operator sent hunting for tampering here would find
+                    // none. Both halves are named because neither is
+                    // knowable from the other.
+                    Expect.equal offered (AttestationLevel.name level) "the refusal names the level offered"
+
+                    Expect.equal
+                        admitted
+                        (policy |> List.map AttestationLevel.name)
+                        "and the ones this deployment admits"
+                | Error other -> failtestf "expected a level refusal; got %s" (FactImportRefusal.describe other)
+                | Ok _ -> failtestf "level %s must not be admitted here" (AttestationLevel.name level)
+
+                do! expectStoreEmpty b
+
+                match audit.OfType "FactImportRefused" with
+                | [ FactImportRefused payload ] ->
+                    Expect.equal
+                        payload.AttestationLevel
+                        (AttestationLevel.name level)
+                        "a refusal on level grounds audits the level that was offered"
+
+                    Expect.equal payload.ImportedFactId "" "and claims no local fact"
+                | other -> failtestf "expected exactly one refusal row; got %A" other
+        }
+
+        testCaseAsync "a reserved label is refused under every policy, including one that names it"
+        <| async {
+            // `AttestationLevel`'s own doc comment says a reserved label is
+            // NOT evidence. A threshold comparison would admit
+            // `reserved:anything` above `IsolatedSigner` on the strength of
+            // a string the peer chose; the set cannot express that, and the
+            // admission check refuses a reserved level before the set is
+            // even consulted — so naming one is inert rather than
+            // permissive.
+            let! a = deployment "deployment-a-v1"
+            let reserved = Reserved "hardware-quote"
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let! _, json = attestedCertificateJsonFor a scopeA original.FactId reserved
+
+            for policy in
+                [
+                    [ Attribution; IsolatedSigner ]
+                    [ reserved ]
+                    [ Attribution; IsolatedSigner; reserved ]
+                    []
+                ] do
+                let! b = deployment "deployment-b-v1"
+                let audit = RecordingAuditLog()
+
+                let anchor =
+                    PeerTrustAnchor.create "deployment-a" a.PublicKey
+                    |> PeerTrustAnchor.withAdmissibleLevels policy
+
+                match!
+                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                with
+                | Error(ImportLevelNotAdmitted(offered, _)) ->
+                    Expect.equal offered "reserved:hardware-quote" "the refusal quotes the label verbatim"
+                | Error other -> failtestf "expected a level refusal; got %s" (FactImportRefusal.describe other)
+                | Ok _ -> failtest "a reserved label must never be admitted, under any policy"
+
+                do! expectStoreEmpty b
+        }
+
+        testCaseAsync "a statement of some other shape is refused as an unknown projection"
+        <| async {
+            // Genuinely signed by the peer's own key, and about the right
+            // subject — and not a certificate at all. Refusing it as a
+            // predicate-type MISMATCH would have to name one of two
+            // expectations, telling a holder their statement is the wrong
+            // one of a pair it is not a member of.
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = RecordingAuditLog()
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let offer = ImportedFactOffer.ofFact original
+            let root = ImportedFactOffer.derivedFactId offer
+            let foreignType = "https://example.invalid/attestations/something-else/v1"
+
+            let! signed =
+                DsseEnvelope.sign
+                    a.EnvelopeSigner
+                    [ CertificateEnvelope.subjectFor root ]
+                    foreignType
+                    """{"hello":"world"}"""
+
+            let json =
+                match signed with
+                | Ok envelope -> DsseEnvelope.toJson envelope
+                | Error e -> failtestf "the fixture statement must sign: %s" e
+
+            let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
+
+            match! door.Import(scopeB, "deployment-a", offer, json) with
+            | Error(ImportUnknownProjection predicateType) ->
+                Expect.equal predicateType foreignType "the refusal quotes the type the document declared"
+            | Error other ->
+                failtestf "expected an unknown-projection refusal; got %s" (FactImportRefusal.describe other)
+            | Ok _ -> failtest "a statement of an unpublished shape must never import"
+
+            do! expectStoreEmpty b
+        }
+
+        testCaseAsync "a surfaced level contradicting the seal is refused before any level policy is consulted"
+        <| async {
+            // The document publishes `isolated-signer` beside a seal that
+            // claims `attribution`, and is signed perfectly by the peer's
+            // own envelope key. The anchor admits `Attribution` and not
+            // `IsolatedSigner`, so a door that read the SURFACED level
+            // would refuse on level grounds — a plausible-looking answer
+            // that would have accepted the same document under a laxer
+            // policy. The honest answer is that the document says two
+            // incompatible things and cannot be read at all.
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = RecordingAuditLog()
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let offer = ImportedFactOffer.ofFact original
+            let root = ImportedFactOffer.derivedFactId offer
+            let! certificate, _ = attestedCertificateJsonFor a scopeA original.FactId Attribution
+
+            let predicate =
+                JsonNode.Parse(CertificateEnvelope.attestedPredicateJson certificate)
+
+            predicate[CertificateEnvelope.AttestationLevelField] <- JsonValue.Create "isolated-signer"
+
+            let! forged =
+                DsseEnvelope.sign
+                    a.EnvelopeSigner
+                    [ CertificateEnvelope.subjectFor root ]
+                    CertificateEnvelope.AttestedPredicateType
+                    (predicate.ToJsonString())
+
+            let doctored =
+                match forged with
+                | Ok envelope ->
+                    // The envelope signature itself is sound — which is the
+                    // whole point of the case.
+                    Expect.equal
+                        (DsseEnvelopeSigning.verifySignature a.PublicKey envelope)
+                        EnvelopeValid
+                        "the doctored statement is genuinely signed"
+
+                    DsseEnvelope.toJson envelope
+                | Error e -> failtestf "could not sign the doctored statement: %s" e
+
+            let anchor =
+                PeerTrustAnchor.create "deployment-a" a.PublicKey
+                |> PeerTrustAnchor.withAdmissibleLevels [ Attribution ]
+
+            match! (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", offer, doctored) with
+            | Error(ImportUnverifiable(EnvelopeMalformed reason)) ->
+                Expect.stringContains
+                    reason
+                    CertificateEnvelope.AttestationLevelField
+                    "the refusal names the field that disagreed with the seal"
+            | Error other ->
+                failtestf "expected the reconcile guard to refuse first; got %s" (FactImportRefusal.describe other)
+            | Ok _ -> failtest "a document contradicting its own seal must never import"
+
+            do! expectStoreEmpty b
+
+            match audit.OfType "FactImportRefused" with
+            | [ FactImportRefused payload ] ->
+                Expect.equal
+                    payload.AttestationLevel
+                    ""
+                    "no level is recorded: none was established, and a surfaced one is not a claim"
+            | other -> failtestf "expected exactly one refusal row; got %A" other
+        }
+
+        testCaseAsync "the signature is established before the shape on both legs"
+        <| async {
+            // The same document, tampered the same way, on each projection.
+            // Both refusals must be the signature one. A subject or
+            // level answer here would tell a holder their document is
+            // authentic and merely misfiled, which is precisely what it is
+            // not — and on the attested leg it would also mean a policy had
+            // been applied to a level no signature covered.
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = RecordingAuditLog()
+
+            let! certified = seed a scopeA "revenue" 1250m Surfaceable
+            let! other = seed a scopeA "cost" 900m Surfaceable
+
+            let! _, directJson = certificateJsonFor a scopeA certified.FactId
+            let! _, attestedJson = attestedCertificateJsonFor a scopeA certified.FactId Attribution
+
+            // An anchor that admits nothing, so a level check running early
+            // would be visible as a different verdict.
+            let anchor =
+                PeerTrustAnchor.create "deployment-a" a.PublicKey
+                |> PeerTrustAnchor.withAdmissibleLevels []
+
+            let door = doorFor b [ anchor ] audit
+
+            for label, json in [ "the direct", directJson; "the attested", attestedJson ] do
+                // Re-point the statement at the other fact: the JSON stays
+                // well formed, so routing still classifies it, and the
+                // offered fact would satisfy the subject check if anything
+                // reached it.
+                let tampered = tamperStatement certified.FactId other.FactId json
+
+                match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact other, tampered) with
+                | Error(ImportUnverifiable EnvelopeSignatureInvalid) -> ()
+                | Error refusal ->
+                    failtestf
+                        "%s leg must answer with the signature verdict; got %s"
+                        label
+                        (FactImportRefusal.describe refusal)
+                | Ok _ -> failtestf "%s leg must never import a tampered document" label
+
+            do! expectStoreEmpty b
+        }
+
+        // ── the admissible-level policy, on its own ─────────────────────
+
+        testCase "the default policy admits both known levels and no reserved label"
+        <| fun () ->
+            let anchor =
+                PeerTrustAnchor.create "peer" {
+                    KeyId = "k"
+                    Algorithm = Ed25519
+                    Pem = ""
+                    Jwk = ""
+                }
+
+            Expect.isTrue (PeerTrustAnchor.admits Attribution anchor) "attribution is admitted by default"
+            Expect.isTrue (PeerTrustAnchor.admits IsolatedSigner anchor) "and so is an isolated signer"
+
+            Expect.isFalse
+                (PeerTrustAnchor.admits (Reserved "isolated-signer") anchor)
+                "and a reserved label spelled like a known level is still not one"
+
+            // The set is a value a composition root can be read off the
+            // page — including reading it back.
+            Expect.equal
+                (anchor.AdmissibleLevels |> Set.toList)
+                [ Attribution; IsolatedSigner ]
+                "the declared policy is inspectable, not a predicate"
+
+        testCase "no policy admits a reserved label, because a label is not evidence"
+        <| fun () ->
+            let anchor =
+                PeerTrustAnchor.create "peer" {
+                    KeyId = "k"
+                    Algorithm = Ed25519
+                    Pem = ""
+                    Jwk = ""
+                }
+
+            for policy in
+                [
+                    []
+                    [ Attribution ]
+                    [ Attribution; IsolatedSigner ]
+                    [ Reserved "hardware-quote" ]
+                ] do
+                let declared = anchor |> PeerTrustAnchor.withAdmissibleLevels policy
+
+                Expect.isFalse
+                    (PeerTrustAnchor.admits (Reserved "hardware-quote") declared)
+                    "a reserved level is refused before the declared set is consulted"
+
+            // And declaring one neither admits it nor empties the anchor of
+            // meaning: the other levels it names still hold.
+            let mixed =
+                anchor
+                |> PeerTrustAnchor.withAdmissibleLevels [ Attribution; Reserved "hardware-quote" ]
+
+            Expect.isTrue (PeerTrustAnchor.admits Attribution mixed) "a named known level is still admitted"
+            Expect.isFalse (PeerTrustAnchor.admits IsolatedSigner mixed) "one the policy omits is not"
     ]

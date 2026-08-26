@@ -235,6 +235,30 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > `docs/platform/security.md` (§"Public landing + team SaaS + share links",
 > cross-team switcher note)
 
+> **TI-1c — The anonymous session id is server-issued, so a caller cannot select
+> another anonymous session's scope by naming it.**
+> *Enablement:* Always on for any deployment declaring an anonymous surface.
+> An anonymous visitor's storage scope is keyed on a session id, which makes
+> that id an authorisation input. It is therefore minted by the server and
+> returned to the browser sealed in an HttpOnly cookie; the request headers
+> that also carry it (`X-User-Id`, the SSE `?userId=` query string) are
+> treated as echoes with no authority. A request presenting no valid seal is
+> issued a fresh session rather than granted the one it asked for, so there is
+> no first-use window in which a caller can bind itself to an id of its own
+> choosing. The requirement is carried on `SubjectResolutionRequest` as a
+> distinct verified flag rather than by convention, so a replacement
+> `ISubjectResolver` is held to it by the shipped contract pack.
+> **Evidence:**
+> `src/ToolUp.Platform.Server/Server/AnonymousSessionBinding.fs` ·
+> `src/ToolUp.Platform.Core/Shared/Interfaces/ISubjectResolver.fs`
+> (`SessionIdVerified`) ·
+> `src/ToolUp.Platform.Server/Server/Scope/DefaultSubjectResolver.fs` (step 3) ·
+> `src/ToolUp.Platform.Server/Server/Middleware.fs`
+> (`SubjectRequestExtractor`, `fallbackAnonymous`) ·
+> `src/ToolUp.Platform.Tests/InProcess/AnonymousSessionBindingTests.fs` ·
+> `src/ToolUp.Platform.Tests/Contracts/ISubjectResolverContract.fs` ·
+> `docs/migrations/337-signed-anonymous-session-binding.md` (Phase 337)
+
 > **TI-2 — Caller-supplied identifiers that become storage keys are validated at
 > the store seam, not at the caller.**
 > *Enablement:* Always on.
@@ -486,17 +510,26 @@ carelessly.
 > `src/ShareTokenStoreDecorators/RevokeOnIssuerRemoved/README.md` ·
 > `docs/platform/security.md` (§"Public landing + team SaaS + share links")
 
-> **AN-13 — Anonymous-session migration binds the session to its owner.**
-> *Enablement:* Opt-in (active only where a real session migrator is composed).
+> **AN-13 — Anonymous-session migration lifts only a session the caller is
+> proven to own.**
+> *Enablement:* The lift itself is opt-in (active only where a real session
+> migrator is composed); the ownership proof it rests on is always on wherever
+> an anonymous surface is declared — see [TI-1c](#1-tenant-isolation).
 > When an anonymous visitor signs in, their prior anonymous work can be lifted
-> into the authenticated account. Ownership binding closes the horizontal
-> data-theft path in that lift, and per-user locking prevents a
-> double-migration race. A deployment on the default no-op migrator is
-> unaffected and emits no binding cookie.
+> into the authenticated account. The middleware identifies the source session
+> from the sealed binding cookie rather than from any request header, so there
+> is no self-asserted value on the path into the migrator; per-user locking
+> prevents a double-migration race. A deployment on the default no-op migrator
+> performs no lift.
 > **Evidence:**
 > `src/ToolUp.Platform.Core/Shared/Interfaces/IAnonymousSessionMigrator.fs` ·
 > `src/ToolUp.Platform.Server/Server/AnonymousSessionMigrationMiddleware.fs` ·
-> `docs/migrations/135-anonymous-session-binding.md` (Phase 135)
+> `src/ToolUp.Platform.Server/Server/AnonymousSessionBinding.fs`
+> (`boundSessionId`) ·
+> `src/ToolUp.Platform.Tests/InProcess/AnonymousSessionBindingTests.fs`
+> (migration arm) ·
+> `docs/migrations/135-anonymous-session-binding.md` (Phase 135) ·
+> `docs/migrations/337-signed-anonymous-session-binding.md` (Phase 337)
 
 ---
 

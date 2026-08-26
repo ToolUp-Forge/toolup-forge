@@ -73,11 +73,31 @@ type SubjectResolutionRequest = {
     /// four-step algorithm treats both `None` and `Some anonymous`
     /// as the step-3 anonymous-session branch.
     User: AuthenticatedUser option
-    /// Session identifier for anonymous tracking, typically taken
-    /// from the `X-User-Id` header. `None` means the request did
-    /// not carry one; resolvers may generate a fresh value in that
+    /// Session identifier for anonymous tracking. `None` means the
+    /// request carried none; resolvers generate a fresh value in that
     /// case.
+    ///
+    /// **Phase 337 — read this ONLY together with `SessionIdVerified`.**
+    /// The field can still carry a self-asserted `X-User-Id` value, so
+    /// on its own it is an unauthenticated client claim.
     SessionId: string option
+    /// Phase 337 — `true` only when `SessionId` was cryptographically
+    /// established as issued by THIS server to THIS caller (the
+    /// server-tier extractor recovers it from the sealed
+    /// anonymous-session binding cookie).
+    ///
+    /// **A resolver MUST NOT let an unverified `SessionId` select a
+    /// storage scope.** The anonymous session id is not secret — it
+    /// rides `X-User-Id` and the SSE `?userId=` query string — so
+    /// honouring an unverified one lets any caller address any
+    /// anonymous session's scope by naming it, and (with a migrator
+    /// composed) have that session's data lifted into their account on
+    /// sign-in. The correct response to `false` is to mint a fresh
+    /// session, never to trust the claim (GP 4).
+    ///
+    /// `false` is the safe default for a request built by hand — a
+    /// caller that cannot verify must not assert that it did.
+    SessionIdVerified: bool
     /// Validated share-token claim, populated by
     /// `ShareTokenAuthMiddleware` (Phase 66 Stream A.4). When
     /// `Some`, the four-step algorithm returns `ClaimBearer claim`
