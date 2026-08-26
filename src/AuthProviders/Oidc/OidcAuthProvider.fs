@@ -7,6 +7,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Metrics
+open ToolUp.AuthProviders.OidcJwksCacheTypes
 open ToolUp.AuthProviders.OidcAuthProviderJwt
 open ToolUp.AuthProviders.OidcAuthProviderJwks
 
@@ -39,16 +40,108 @@ type OidcHardening = {
     /// availability-first stale-fallback. High-security deployments that
     /// prefer revocation-safety over availability opt in.
     FailClosedOnStaleJwks: bool
+    /// Phase 463 — JWKS cache lifetime, and therefore the ordinary
+    /// upper bound on this provider's key-revocation window. `None`
+    /// (default) keeps the shipped `defaultJwksTtl` of 10 minutes.
+    /// `Some ts` shortens (or lengthens) it; `Some TimeSpan.Zero`
+    /// disables the JWKS cache entirely — every validation re-fetches
+    /// and nothing is ever served from cache, including the stale
+    /// fallback. Negative values are refused at construction.
+    ///
+    /// Read the revocation-window note at the head of
+    /// `OidcAuthProvider.Jwks.fs` before tightening this: a zero TTL
+    /// puts one JWKS round-trip on every validated request, and it does
+    /// NOT bound per-token revocation (this provider does not do
+    /// introspection).
+    JwksCacheTtl: TimeSpan option
+    /// Phase 463 — OIDC discovery (`jwks_uri`) cache lifetime. `None`
+    /// (default) keeps the shipped `defaultDiscoveryTtl` of 24 hours,
+    /// which is safe because providers rarely rotate the endpoint;
+    /// `Some TimeSpan.Zero` re-runs metadata discovery per validation.
+    /// Rotation is already recovered from without this knob — a failing
+    /// fetch evicts the discovery entry — so tightening it is for
+    /// deployments that want the endpoint re-read on a schedule rather
+    /// than on failure.
+    DiscoveryCacheTtl: TimeSpan option
+    /// Phase 463 — publish a JWKS fetch failure to sibling instances so
+    /// they evict their own cached key set for the same URL, collapsing
+    /// the fleet-wide revocation window from "each silo's TTL,
+    /// independently" to one channel round-trip. `None` (default)
+    /// publishes nothing.
+    ///
+    /// Pair with `OidcAuthProviderJwks.subscribeToJwksEvictions` on the
+    /// same channel and the same `OriginReplicaId` — publishing without
+    /// a subscriber signals into the void, and the SDK cannot subscribe
+    /// on the provider's behalf because the provider is a
+    /// props-injected companion the composition root does not reference.
+    JwksEvictionSignal: JwksEvictionSignal option
 }
 
 module OidcHardening =
     /// Behaviour-preserving defaults: no max-age bound, availability-
-    /// first stale-JWKS fallback. Equivalent to the pre-Phase-341
-    /// provider (GP 11).
+    /// first stale-JWKS fallback, shipped cache TTLs, no cross-instance
+    /// signal. Equivalent to the pre-Phase-341 provider (GP 11).
     let defaults = {
         MaxTokenAgeSeconds = None
         FailClosedOnStaleJwks = false
+        JwksCacheTtl = None
+        DiscoveryCacheTtl = None
+        JwksEvictionSignal = None
     }
+
+    /// Phase 463 — project the cache-facing knobs into the policy the
+    /// JWKS module reads. `OidcHardening.defaults` maps to
+    /// `JwksCachePolicy.defaults` exactly.
+    let toCachePolicy (hardening: OidcHardening) : JwksCachePolicy = {
+        JwksTtl = hardening.JwksCacheTtl |> Option.defaultValue defaultJwksTtl
+        DiscoveryTtl = hardening.DiscoveryCacheTtl |> Option.defaultValue defaultDiscoveryTtl
+        FailClosedOnStale = hardening.FailClosedOnStaleJwks
+        EvictionSignal = hardening.JwksEvictionSignal
+    }
+
+/// Phase 463 — the receiving half of the cross-instance eviction
+/// signal, and the manual lever beside it. The cache itself lives in an
+/// `internal` implementation module, so these two thin wrappers are how
+/// a deployment reaches it.
+///
+/// Wiring, in full, for a multi-instance deployment:
+///
+/// 1. give each instance a stable identity — `sprintf "%s/%d"
+///    Environment.MachineName Environment.ProcessId` is what the SDK's
+///    own cross-replica broadcast uses, and needs no new env var;
+/// 2. build the provider with `OidcHardening.JwksEvictionSignal =
+///    Some { Channel = channel; OriginReplicaId = id }`;
+/// 3. call `OidcJwksCache.subscribeToEvictions channel id (Some logger)`
+///    once at compose time, on the SAME channel and id.
+///
+/// Steps 2 and 3 are separate because the provider is a props-injected
+/// companion the SDK composition root does not reference — nothing in
+/// the SDK can subscribe on its behalf. Publishing without subscribing
+/// signals into the void; subscribing without publishing is harmless.
+///
+/// **The channel must be a distributed `INotificationChannel` companion
+/// for this to cross instances at all.** The SDK's in-process default
+/// reaches only the publishing process, which makes the whole mechanism
+/// a well-formed no-op — correct for a single instance, and silently
+/// useless for a fleet.
+module OidcJwksCache =
+    /// Subscribe this instance to sibling instances' JWKS fetch-failure
+    /// signals, evicting its own cached key set for each named URL.
+    /// Returns the subscription id; retain it if the deployment ever
+    /// needs to `Unsubscribe`. Idempotent and self-echo-suppressing.
+    let subscribeToEvictions
+        (channel: INotificationChannel)
+        (originReplicaId: string)
+        (logger: ILogger option)
+        : Async<NotificationSubscriptionId> =
+        subscribeToJwksEvictions channel originReplicaId logger
+
+    /// Evict this instance's cached JWKS key set for exactly one URL.
+    /// `true` when an entry was present and removed. The supported
+    /// manual lever for an operator who has just revoked a signing key
+    /// and does not want to wait out the TTL. A URL that was never
+    /// cached is a `false`-returning no-op, never an error.
+    let evictUrl (jwksUrl: string) : bool = evictJwksUrl jwksUrl
 
 // ─── Shared default HttpClient ───────────────────────────────────────
 //
@@ -342,6 +435,7 @@ let private validate
     (logger: ILogger)
     (config: AuthConfig)
     (hardening: OidcHardening)
+    (cachePolicy: JwksCachePolicy)
     (ctx: HttpContext)
     : Async<Result<AuthenticatedUser, JwtValidationError>> =
     let incr (counter: string) : unit = metrics.Increment(counter, oidcTags)
@@ -381,13 +475,13 @@ let private validate
                         incr AuthMetrics.ValidateMalformed
                         return Error(MalformedToken "header has no kid")
                     | Some kid ->
-                        let! urlResult = resolveJwksUrl httpClient config.KeySource
+                        let! urlResult = resolveJwksUrlWithTtl cachePolicy.DiscoveryTtl httpClient config.KeySource
 
                         match urlResult with
                         | Error e -> return Error e
                         | Ok jwksUrl ->
                             // First look: current cache / fetch if cold.
-                            let! keysResult = getJwks httpClient logger jwksUrl false hardening.FailClosedOnStaleJwks
+                            let! keysResult = getJwksWithPolicy cachePolicy httpClient logger jwksUrl false
 
                             match keysResult with
                             | Error e -> return Error e
@@ -397,8 +491,7 @@ let private validate
                                     | Some k -> return Ok k
                                     | None ->
                                         // kid miss: refresh once in case the provider rotated keys.
-                                        let! refreshed =
-                                            getJwks httpClient logger jwksUrl true hardening.FailClosedOnStaleJwks
+                                        let! refreshed = getJwksWithPolicy cachePolicy httpClient logger jwksUrl true
 
                                         match refreshed with
                                         | Ok refreshedKeys ->
@@ -517,6 +610,35 @@ let private buildProvider
     | JwksDiscovery issuer -> requireHttps "issuer" issuer
     | JwksExplicit url -> requireHttps "JWKS URL" url
 
+    // Phase 463 — the cache knobs are validated at construction, the
+    // same place and in the same shape as the cleartext-URL guard above.
+    // A negative TTL has no coherent reading (`ttl <= 0` already means
+    // "no cache", so a negative would silently alias to it), and a blank
+    // replica id would have every instance in a fleet publish under the
+    // empty identity — at which point each discards every sibling's
+    // signal as its own echo, and the fanout tests as wired while doing
+    // nothing. Both surface at startup rather than as a subtly-wrong
+    // revocation window nobody can see from the outside.
+    let requireNonNegativeTtl (label: string) (ttl: TimeSpan option) =
+        match ttl with
+        | Some t when t < TimeSpan.Zero ->
+            invalidArg
+                (nameof hardening)
+                $"OidcAuthProvider {label} '{t}' is negative. Use TimeSpan.Zero to disable the cache (every validation re-fetches and nothing is served from cache), or a positive lifetime."
+        | _ -> ()
+
+    requireNonNegativeTtl (nameof hardening.JwksCacheTtl) hardening.JwksCacheTtl
+    requireNonNegativeTtl (nameof hardening.DiscoveryCacheTtl) hardening.DiscoveryCacheTtl
+
+    match hardening.JwksEvictionSignal with
+    | Some s when String.IsNullOrWhiteSpace s.OriginReplicaId ->
+        invalidArg
+            (nameof hardening)
+            "OidcAuthProvider JwksEvictionSignal.OriginReplicaId is blank. It identifies THIS instance so a receiver can discard its own echo; with every instance sharing the empty identity, each would discard the others' eviction signals and the cross-instance window would silently stay at the full per-silo TTL. Use a stable per-instance value (e.g. sprintf \"%s/%d\" Environment.MachineName Environment.ProcessId)."
+    | _ -> ()
+
+    let cachePolicy = OidcHardening.toCachePolicy hardening
+
     let log = logger |> Option.defaultValue noOpLogger
 
     let sink =
@@ -525,7 +647,7 @@ let private buildProvider
     { new IAuthProvider with
         member _.GetUser ctx = async {
             let httpCtx = RequestContext.value ctx :?> HttpContext
-            let! result = validate httpClient sink log config hardening httpCtx
+            let! result = validate httpClient sink log config hardening cachePolicy httpCtx
 
             match result with
             | Ok user ->
@@ -552,7 +674,7 @@ let private buildProvider
 
         member _.ValidateRequest ctx = async {
             let httpCtx = RequestContext.value ctx :?> HttpContext
-            let! result = validate httpClient sink log config hardening httpCtx
+            let! result = validate httpClient sink log config hardening cachePolicy httpCtx
 
             match result with
             | Ok user ->

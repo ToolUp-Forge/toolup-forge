@@ -12,14 +12,44 @@ ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithHardened(System.Net.Http.Htt
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithMetrics(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithMetricsHardened(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider+OidcHardening (class)
-ToolUp.AuthProviders.OidcAuthProvider+OidcHardening..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int64], System.Boolean)
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int64], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal])
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.DiscoveryCacheTtl : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.FailClosedOnStaleJwks : System.Boolean { get }
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.JwksCacheTtl : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.JwksEvictionSignal : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal] { get }
 ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.MaxTokenAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.AuthProviders.OidcAuthProvider+OidcHardeningModule (class)
 ToolUp.AuthProviders.OidcAuthProvider+OidcHardeningModule.defaults : ToolUp.AuthProviders.OidcAuthProvider+OidcHardening { get }
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardeningModule.toCachePolicy(ToolUp.AuthProviders.OidcAuthProvider+OidcHardening) : ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy
+ToolUp.AuthProviders.OidcAuthProvider+OidcJwksCache (class)
+ToolUp.AuthProviders.OidcAuthProvider+OidcJwksCache.evictUrl(System.String) : System.Boolean
+ToolUp.AuthProviders.OidcAuthProvider+OidcJwksCache.subscribeToEvictions(ToolUp.Platform.INotificationChannel, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Guid]
 ToolUp.AuthProviders.OidcAuthValidator (class)
 ToolUp.AuthProviders.OidcAuthValidator.create(System.String) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.AuthProviders.OidcAuthValidator.createWithAudience(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.AuthProviders.OidcAuthValidator.maxTimeoutMs : System.Int32 (literal)
 ToolUp.AuthProviders.OidcAuthValidator.timeoutEnvVar : System.String (literal)
 ToolUp.AuthProviders.OidcAuthValidator.tryFromEnv() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigValidation+IConfigValidator]
+ToolUp.AuthProviders.OidcJwksCacheTypes (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes.defaultDiscoveryTtl : System.TimeSpan { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes.defaultJwksTtl : System.TimeSpan { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy..ctor(System.TimeSpan, System.TimeSpan, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal])
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy.DiscoveryTtl : System.TimeSpan { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy.EvictionSignal : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal] { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy.FailClosedOnStale : System.Boolean { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy.JwksTtl : System.TimeSpan { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicyModule (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicyModule.defaults : ToolUp.AuthProviders.OidcJwksCacheTypes+JwksCachePolicy { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal..ctor(ToolUp.Platform.INotificationChannel, System.String)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal.Channel : ToolUp.Platform.INotificationChannel { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksEvictionSignal.OriginReplicaId : System.String { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope..ctor(System.String, System.String, System.DateTimeOffset, System.String)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.FailedAt : System.DateTimeOffset { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.JwksUrl : System.String { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.OriginReplicaId : System.String { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.Reason : System.String { get }
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedNotification (class)
+ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedNotification.NotificationKey : System.String (literal)

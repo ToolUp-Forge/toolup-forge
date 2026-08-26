@@ -204,6 +204,8 @@ let allTests =
         // Phase 12d — AG Grid value-provenance overlay.
         CellProvenanceTests.tests
         AuthProviderTests.tests
+        // Phase 463 — OIDC JWKS configurable TTL + surfaced revocation window.
+        OidcJwksTtlTests.tests
         AzureBlobStorageTests.tests
         AwsS3StorageTests.tests
         GoogleCloudStorageTests.tests
