@@ -675,6 +675,10 @@ let allTests =
         CitationNormaliserTests.tests
         InMemoryBM25IndexTests.tests
         IndexLifecycleTests.tests
+        // Phase 204 — the property twin of the pack above. Listed here and
+        // not merely attributed: `runTestsWithCLIArgs` runs `allTests`, so an
+        // `[<Tests>]` binding absent from this list is dormant, not run.
+        CrossIndexErasureConformanceTests.tests
         SyntheticClientToolAuthorizerTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
         ClientToolDispatchContractBindings.tests

@@ -835,6 +835,12 @@
         <!-- Phase 115 — IIndexLifecycle deletion / erasure fan-out across
              vector + sparse + cache, with restart-survival + at-rest checks. -->
         <Compile Include="InProcess\IndexLifecycleTests.fs" />
+        <!-- Phase 204 — the Phase 115 exit assertion turned into a property:
+             randomised ingest / delete / erase sequences over several scopes,
+             the invariant re-asserted after every command across the dense,
+             sparse and fused hybrid legs plus the embedding cache, and across
+             a mid-sequence restart that re-hydrates from blob storage. -->
+        <Compile Include="InProcess\CrossIndexErasureConformanceTests.fs" />
         <Compile Include="InProcess\SyntheticClientToolAuthorizerTests.fs" />
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
