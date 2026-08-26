@@ -3,7 +3,7 @@
 The normative text and its conformance corpus are no longer in this repository. They live in their
 own public home:
 
-**https://github.com/fuaran-ui/fuaran-federation-spec** — Apache-2.0.
+**https://github.com/Fuaran-Build/fuaran-federation-spec** — Apache-2.0.
 
 - `FEDERATION_WIRE.md` — the normative text (§1–§9 + Appendix A).
 - `wire-fixtures/` — the executable conformance corpus. `manifest.json` is the authoritative
@@ -36,7 +36,7 @@ in this order: the `TOOLUP_FEDERATION_SPEC_DIR` environment variable, a checkout
 repository (gitignored — this is what CI does), then a bounded search of this repository's ancestors.
 
 ```
-git clone https://github.com/fuaran-ui/fuaran-federation-spec.git
+git clone https://github.com/Fuaran-Build/fuaran-federation-spec.git
 ```
 
 When it is absent the conformance leg **fails** and prints the remedy. To run without it, set
