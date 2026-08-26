@@ -471,13 +471,19 @@ touches public surface:
   assembly that merely takes it as a parameter/return renders only the type NAME and needs no regen.
   After a surgical regen, re-run the FULL test pack — not just the approval filter — to catch a
   downstream baseline you missed.
-- **Regen is non-surgical: `TOOLUP_APPROVE_API=1` rewrites EVERY built baseline** (~95 files),
-  folding in unrelated additive drift and EOL-only churn. Build the whole solution first (the
-  renderer reads DLLs), regen, then `git restore` every baseline except your surgical targets and
-  stage those by name. Verify the real diff WITHOUT the env var — approve mode passes trivially, so
-  its green proves nothing. Never run the regen in a shared working tree (it rewrites files
-  concurrent sessions have in flight), and never apply baseline hunks with `git apply --3way` there
-  (it writes the shared index as a side effect).
+- **Scope the regen — `TOOLUP_APPROVE_API` takes assembly NAMES, not just `1`.**
+  `TOOLUP_APPROVE_API="ToolUp.Platform.Core,ToolUp.Platform.Server"` rewrites exactly those
+  baselines and leaves every other one untouched and unconsulted; a name the run does not discover
+  fails the gate rather than regenerating nothing. Prefer this to `=1` always — it is the surgical
+  filter, applied before anything reaches disk.
+  **`TOOLUP_APPROVE_API=1` still rewrites EVERY built baseline** (~95 files), folding in unrelated
+  additive drift and EOL-only churn, which is what the named form exists to avoid: three agents in
+  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, build the
+  whole solution first (the renderer reads DLLs), regen, then `git restore` every baseline except
+  your surgical targets and stage those by name. Either way, verify the real diff WITHOUT the env
+  var — approve mode passes trivially, so its green proves nothing. Never run an unscoped regen in a
+  shared working tree (it rewrites files concurrent sessions have in flight), and never apply
+  baseline hunks with `git apply --3way` there (it writes the shared index as a side effect).
 - **A worktree regen is only valid against the HEAD it is pinned to.** If surface lands between your
   pin and your apply, copying the regenerated file back silently deletes the landed lines — re-pin
   against the current HEAD copy, apply only your own hunks, and diff-verify zero foreign removals.

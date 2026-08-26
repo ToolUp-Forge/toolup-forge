@@ -82,6 +82,16 @@ module ToolUp.Platform.Tests.Contracts.PublicApiApproval
 //   dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
 //   $env:TOOLUP_APPROVE_API = $null
 //
+// **Scope it.** `=1` rewrites all ~95 baselines, which is how a session
+// regenerating one assembly ends up hand-reverting other sessions'
+// hunks. Name the assemblies instead — see `approveScope`:
+//
+//   $env:TOOLUP_APPROVE_API = "ToolUp.Platform.Core,ToolUp.Platform.Server"
+//
+// A scope naming an assembly the run does not discover FAILS rather than
+// regenerating nothing, because a filtered regen that silently matched
+// nothing is indistinguishable from one that worked.
+//
 // ── Why MetadataLoadContext ──
 // The packable set spans ~90 assemblies, most of which the Tests project
 // does NOT reference (Forms.* / Scheduling.* / Stripe.* / Hosts / Encryption
@@ -123,12 +133,64 @@ let activeConfig () =
 let baselineDir (root: string) = Path.Combine(root, "api-baselines")
 
 /// Regeneration path: `TOOLUP_APPROVE_API=1` rewrites baselines instead
-/// of comparing.
+/// of comparing. Whether ANY regeneration is armed — see
+/// `approveModeFor` for which assemblies it actually covers.
 let approveModeOn () =
     match Environment.GetEnvironmentVariable "TOOLUP_APPROVE_API" with
     | null
     | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+    | _ -> true
+
+/// The assemblies a regeneration run is scoped to, or `None` for "every
+/// discovered baseline" — the historical, and still the default,
+/// behaviour of `TOOLUP_APPROVE_API=1`.
+///
+/// **Why a scope exists at all.** `=1` rewrites every built baseline —
+/// ~95 files — so a session regenerating ONE assembly's surface also
+/// folds in whatever unrelated additive drift and EOL churn the tree
+/// happens to be carrying, including files a concurrent session has in
+/// flight. Three agents in one day had to hand-revert foreign hunks
+/// before committing (Phase 318 ship report). The recipe those sessions
+/// were following — regen everything, then `git restore` all but your
+/// targets — works, but it is a manual filter applied AFTER the damage
+/// is on disk, and it only protects the baselines the session thought to
+/// name.
+///
+/// So: `TOOLUP_APPROVE_API=ToolUp.Platform.Core` regenerates exactly that
+/// one, and a comma- or semicolon-separated list scopes to several:
+///
+///   $env:TOOLUP_APPROVE_API = "ToolUp.Platform.Core,ToolUp.Platform.Server"
+///
+/// `=1` / `=true` keep meaning "all of them", so nothing that worked
+/// before changes (GP 11). Matching is by assembly name — the baseline
+/// file stem — case-insensitively, with a trailing `.approved.txt`
+/// tolerated so a name pasted from a failure message works.
+let approveScope () : Set<string> option =
+    match Environment.GetEnvironmentVariable "TOOLUP_APPROVE_API" with
+    | null
+    | "" -> None
+    | v when v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase) -> None
+    | v ->
+        v.Split([| ','; ';' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map (fun name ->
+            let trimmed = name.Trim()
+
+            if trimmed.EndsWith(".approved.txt", StringComparison.OrdinalIgnoreCase) then
+                trimmed.Substring(0, trimmed.Length - ".approved.txt".Length)
+            else
+                trimmed)
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+        |> Set.ofArray
+        |> Some
+
+/// Whether THIS assembly's baseline is to be rewritten on this run.
+let approveModeFor (assemblyName: string) =
+    approveModeOn ()
+    && (match approveScope () with
+        | None -> true
+        | Some names ->
+            names
+            |> Set.exists (fun n -> n.Equals(assemblyName, StringComparison.OrdinalIgnoreCase)))
 
 // ─── Packable-set discovery (mirrors the Pack glob) ──────────────────
 

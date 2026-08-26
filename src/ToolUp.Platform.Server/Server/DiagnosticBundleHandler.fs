@@ -43,11 +43,12 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // **Secrets.** Every byte that goes into the tar passes through a
 // JSON-tree walk against the same property-name suffix allowlist
 // `ConfigDriftDetector`'s snapshot pass uses (`apikey`, `token`,
-// `secret`, `password`, case-insensitive). The allowlist intentionally
-// duplicates the drift detector's inline copy — extracting it into a
-// shared module when there are only two consumers does not earn its
-// keep, and a future "add a new suffix" touch is a two-edit operation,
-// not a refactor. `ServerConfig` itself does not currently carry
+// `secret`, `password`, case-insensitive). The allowlist USED to be an
+// inline copy of the drift detector's, on the reasoning that with two
+// consumers a shared module did not earn its keep. A third consumer
+// (`ApplianceSupportBundle.SuffixFloor`, 488.D) retired that reasoning,
+// so the list now lives once in `RedactionAllowlist` and all three read
+// it. `ServerConfig` itself does not currently carry
 // secrets (those live in `ISecretStore`); the redaction is defence-in-
 // depth against future fields and any caller-supplied string that
 // surfaces in `inspect.json` / `audit-tail.jsonl`.
@@ -76,16 +77,13 @@ let private platformScopeId = "_platform"
 
 let private anonymousSentinel = "_anonymous"
 
-// ─── Redaction walk (duplicate of `ConfigDriftDetector`'s allowlist;
-//      see file header for the "don't extract" rationale). ──────────
+// ─── Redaction walk (over the shared `RedactionAllowlist`, which is
+//      also what `ConfigDriftDetector` and
+//      `ApplianceSupportBundle.SuffixFloor` read). ──────────────────
 
-let private redactionSuffixes = [ "apikey"; "token"; "secret"; "password" ]
+let private shouldRedact = RedactionAllowlist.shouldRedact
 
-let private shouldRedact (propName: string) =
-    let lower = propName.ToLowerInvariant()
-    redactionSuffixes |> List.exists lower.EndsWith
-
-let private redactedString (length: int) = sprintf "<redacted:length=%d>" length
+let private redactedString = RedactionAllowlist.redactedString
 
 let rec private redact (node: JsonNode) : unit =
     if isNull node then

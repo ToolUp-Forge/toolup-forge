@@ -751,7 +751,7 @@ module CompositionDryRun =
 /// **Placement note.** The [Phase 285] contract packs live in
 /// `ToolUp.Platform.Tests`, which is `IsPackable=false` — a consumer
 /// cannot reference it, so a helper placed beside them would be
-/// unreachable by the consumer test suites and cookbook verification
+/// unreachable by the consumer test suites and scaffold-verification
 /// checklists this task exists to serve. It therefore ships here, in the
 /// package every such consumer already references, and is deliberately
 /// **Expecto-shaped but Expecto-free**: it raises a readable failure the
@@ -773,7 +773,7 @@ module DryRun =
         | Composes -> report
         | DoesNotCompose -> failwith (CompositionDryRun.renderReport report)
 
-    /// `shouldCompose` with a wall-clock bound — the cookbook-verification
+    /// `shouldCompose` with a wall-clock bound — the scaffold-verification
     /// shape, where "it composes" and "it composes *offline-fast*" are the
     /// same claim. A dry run that exceeds `budget` fails even when the
     /// composition is otherwise clean: overrunning an offline budget means

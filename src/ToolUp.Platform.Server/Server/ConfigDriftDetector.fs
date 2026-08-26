@@ -44,18 +44,13 @@ let private snapshotSchema = 1
 
 // Redaction allowlist — property-name suffixes (case-insensitive)
 // whose string values are replaced by `<redacted:length=N>` before
-// persistence and comparison. `ServerConfig` itself does not
-// currently carry secrets (those live in `ISecretStore`), but
-// defence-in-depth covers any future field named `*ApiKey` /
-// `*Token` / `*Secret` / `*Password` so a careless addition does
-// not leak through the snapshot blob.
-let private redactionSuffixes = [ "apikey"; "token"; "secret"; "password" ]
+// persistence and comparison. The list itself lives in
+// `RedactionAllowlist`, shared with `DiagnosticBundleHandler` (9n) and
+// `ApplianceSupportBundle.SuffixFloor` (488.D) — see that module's
+// header for why the deliberate duplication ended at the third copy.
+let private shouldRedact = RedactionAllowlist.shouldRedact
 
-let private shouldRedact (propName: string) =
-    let lower = propName.ToLowerInvariant()
-    redactionSuffixes |> List.exists lower.EndsWith
-
-let private redactedString (length: int) = sprintf "<redacted:length=%d>" length
+let private redactedString = RedactionAllowlist.redactedString
 
 // One-pass post-serialisation walk over the JSON tree: every string
 // property whose name ends in a sensitive suffix is replaced with the

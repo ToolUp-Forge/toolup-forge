@@ -87,11 +87,17 @@ type AIToolDefinition = {
     Location: ToolLocation
     Surface: AISurfaceFilter
     IsLiveInterface: bool
+    ResultBudget: AIToolResultBudget
 }
 
 and ToolLocation =
     | ServerResident  // executed on the server in-process
     | ClientResident  // dispatched to the client; the user's browser runs the tool
+
+and AIToolResultBudget =
+    | DefaultResultBudget       // the generous SDK-wide ceiling (every pre-existing tool)
+    | ResultBudgetChars of int  // this tool's own ceiling, in characters of the returned JSON
+    | NoResultBudget            // legitimately-large contract — never elide
 ```
 
 The record is metadata only — it lives in the core SDK so a module can declare tools without referencing the AI companion, and the executor is paired to it server-side by `ToolUp.AI.RegisteredTool`.

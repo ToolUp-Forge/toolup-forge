@@ -227,6 +227,14 @@ type IProvenanceGraph =
     /// Walk the provenance chain from `root` in `direction`, bounded to
     /// `depth` hops. Every node is one of the typed `ProvenanceNodeKind`s
     /// and every edge one of the typed `ProvenanceEdgeKind`s.
+    ///
+    /// **A `MessageRef` root returns only its own seed node, by
+    /// contract** — no edges, nothing annotated onto it. Every
+    /// other root names something a store answers for; nothing here holds
+    /// "which facts did this message cite" — that is an assertion the
+    /// answer made, and it is the `citedFactIds` argument of
+    /// `GetChainForMessage` below. Use that for a message root; this
+    /// method's empty answer is honest, not a gap.
     abstract GetChain:
         scopeId: string * root: ProvenanceRef * direction: ProvenanceDirection * depth: int -> Async<ProvenanceChain>
 

@@ -320,6 +320,7 @@ let myAnalysisTool: AIToolDefinition = {
     Location = ServerResident
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 ```
 
@@ -360,6 +361,7 @@ let setFieldTool: AIToolDefinition = {
     Location = ClientResident
     Surface = FullPageOnly
     IsLiveInterface = true
+    ResultBudget = DefaultResultBudget
 }
 ```
 
@@ -375,6 +377,7 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 - **Parameter schema is JSON-Schema-shaped.** The model sees `parameters: { type: "object", properties: { ... } }`. Required vs optional is currently implicit (all properties required); future schema versions may add explicit `required` lists.
 - **Executor must handle missing / malformed args gracefully.** Return `ToolResult.error` with a useful message — the agent will retry or surface the error to the user.
 - **Executor must NOT throw.** Catch exceptions and return `ToolResult.error`; an unhandled exception aborts the agent turn with `Failed` status.
+- **Result size**: every tool result passes a per-tool context budget at agent-loop dispatch (`ResultBudget` on the definition). `DefaultResultBudget` resolves to a generous SDK-wide ceiling no well-behaved result approaches; a tool whose result grows with data cardinality declares its own `ResultBudgetChars n` (characters of the returned JSON, must be positive), and an export-shaped tool whose whole point is the payload declares `NoResultBudget`. An over-budget result reaches the model as a typed JSON marker naming the tool and the elided size, with a steer to narrow the query — the call still counts as a success, not an error.
 - **Idempotency**: if a tool writes data, design it idempotent. The agent may retry on transient errors. Idempotency keys flow through the tool args.
 - **Permissions**: tools enforce their own permission checks against `AccessContext`. The SDK's `makePermissionGuardedApi` covers HTTP API permissions but does NOT auto-wrap tool executors.
 

@@ -1448,11 +1448,14 @@ ToolUp.Platform.CompositionRuleDescriptor.Code : System.String { get }
 ToolUp.Platform.CompositionRuleDescriptor.Description : System.String { get }
 ToolUp.Platform.CompositionRuleDescriptor.Severity : ToolUp.Platform.CompositionDefectSeverity { get }
 ToolUp.Platform.CompositionRuleVersions (class)
+ToolUp.Platform.CompositionRuleVersions.ApplianceBootPostureFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.CompositionFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.DataFootprintFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.EventTopologyFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.ManifestVersion : ToolUp.Platform.RuleVersion { get }
+ToolUp.Platform.CompositionRuleVersions.ScaleReadinessFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.allRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
+ToolUp.Platform.CompositionRuleVersions.applianceBootPostureRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.checkClassStamped(ToolUp.Platform.CompositionRuleClass, ToolUp.Platform.CompositionReferences, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.StampedCompositionResult
 ToolUp.Platform.CompositionRuleVersions.checkStamped(ToolUp.Platform.CompositionReferences, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.StampedCompositionResult
 ToolUp.Platform.CompositionRuleVersions.compositionRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
@@ -1462,6 +1465,7 @@ ToolUp.Platform.CompositionRuleVersions.dataFootprintRules : Microsoft.FSharp.Co
 ToolUp.Platform.CompositionRuleVersions.driftSince(ToolUp.Platform.RuleEvaluationStamp) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.StampedRuleVersion, ToolUp.Platform.RuleVersionBump]]
 ToolUp.Platform.CompositionRuleVersions.eventTopologyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.overrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]] { get }
+ToolUp.Platform.CompositionRuleVersions.scaleReadinessRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.seed(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule]
 ToolUp.Platform.CompositionRuleVersions.stampOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule]) : ToolUp.Platform.RuleEvaluationStamp
 ToolUp.Platform.CompositionRuleVersions.stampRun(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.StampedPreflightRun
@@ -6384,6 +6388,11 @@ ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.Server
 ToolUp.Platform.PlatformApiHandler.teamApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.TeamApi
 ToolUp.Platform.PlatformApiHandler.teamApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.PlatformApiHandler.withVisibilityProfile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution], ToolUp.Platform.AccessibleModulesResponse) : ToolUp.Platform.AccessibleModulesResponse
+ToolUp.Platform.PlatformInHandlerGates (class)
+ToolUp.Platform.PlatformInHandlerGates.all(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.jobApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.modelExecutionApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.moduleQueryBusApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformRuntimeConfigStore (class)
 ToolUp.Platform.PlatformRuntimeConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.PlatformKnowledgeBaseMode) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IPlatformRuntimeConfigStore]
 ToolUp.Platform.PlatformSchema (class)
@@ -6844,6 +6853,10 @@ ToolUp.Platform.RateLimiterInstanceValidator+RateLimiterInstanceValidator (class
 ToolUp.Platform.RateLimiterInstanceValidator+RateLimiterInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.RateLimiting (class)
 ToolUp.Platform.RateLimiting.configure(ToolUp.Platform.RateLimitConfig, Microsoft.AspNetCore.RateLimiting.RateLimiterOptions) : System.Void
+ToolUp.Platform.RedactionAllowlist (class)
+ToolUp.Platform.RedactionAllowlist.redactedString(System.Int32) : System.String
+ToolUp.Platform.RedactionAllowlist.shouldRedact(System.String) : System.Boolean
+ToolUp.Platform.RedactionAllowlist.suffixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ReevaluationSweepEnvelope (class)
 ToolUp.Platform.ReevaluationSweepEnvelope.serialiseRequest(ToolUp.Platform.ReevaluationSweepRequest) : System.String
 ToolUp.Platform.ReevaluationSweepEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReevaluationSweepRequest, System.String]
