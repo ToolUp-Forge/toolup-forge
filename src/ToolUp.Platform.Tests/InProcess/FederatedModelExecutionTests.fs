@@ -1935,6 +1935,67 @@ let private viewGrammarTests =
             | other -> failtestf "expected the grammar's chart component; got %A" other
         }
 
+        test "the bound bag is the grammar's bound bag, vintage prop included" {
+            // The case above pins the UNBOUND three keys. What `render`
+            // actually emits is the bound bag — Phase 649's
+            // `chart.datasetVintage` on top — and a binding prop that
+            // agreed with nothing would be worse than no binding at all,
+            // because a reader would recover a vintage the grammar does
+            // not recognise.
+            let series: PeerViewSeries = {
+                Name = "promo-spend"
+                Points = [ point "w1;a" 10.0; point "w2=b" 20.5 ]
+            }
+
+            let binding: NarrativeFromData.ChartBinding = {
+                ArtifactKey = None
+                DatasetVintage = Some(PeerView.vintageToken spendView.DatasetId renderRequest.DatasetVersion)
+            }
+
+            let projected =
+                NarrativeFromData.chartWith
+                    binding
+                    NarrativeFromData.Line
+                    (Some series.Name)
+                    (series.Points |> List.map (fun p -> p.Label, p.Value))
+
+            match projected with
+            | Component(_, props) ->
+                Expect.equal
+                    (PeerView.chartPropsAt "line" spendView.DatasetId renderRequest.DatasetVersion series)
+                    props
+                    "the bound federated bag is the grammar's bound bag"
+
+                Expect.equal
+                    PeerView.DatasetVintageProp
+                    NarrativeFromData.DatasetVintageProp
+                    "and it is the grammar's own key, not a second string that matches today"
+            | other -> failtestf "expected the grammar's chart component; got %A" other
+        }
+
+        test "the rendered artifact declares the vintage the request pinned" {
+            // The reason the binding is threaded at all: an artifact that
+            // does not say which vintage it draws is one a modeller
+            // cannot cite. Read back through the grammar's own reader, so
+            // this asserts recoverability rather than string presence.
+            let bag =
+                PeerView.chartPropsAt spendView.Kind spendView.DatasetId renderRequest.DatasetVersion {
+                    Name = "promo-spend"
+                    Points = [ point "w1" 10.0 ]
+                }
+
+            let recovered = NarrativeFromData.chartBinding bag
+
+            Expect.equal
+                recovered.DatasetVintage
+                (Some "weekly-panel@7")
+                "the vintage names the dataset AND the version — neither alone re-derives the picture"
+
+            Expect.isNone
+                recovered.ArtifactKey
+                "a view renders a dataset series, not a governed result — an empty artifact key would claim a binding that does not exist"
+        }
+
         testCaseAsync "the artifact's bytes ARE that renderer's output, and the hash is over them"
         <| async {
             let instance = dataHostRendering viewOnly None (Some(viewDeps ())) boundOnly

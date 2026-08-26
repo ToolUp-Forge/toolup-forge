@@ -1,5 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.RuleVersioningTests
 
+open System.Reflection
 open Expecto
 open ToolUp.Platform
 
@@ -66,6 +67,8 @@ let tests =
                 CompositionValidator.ruleManifest
                 @ EventTopologyPreflight.ruleManifest
                 @ DataFootprintPreflight.ruleManifest
+                @ ScaleReadinessPreflight.ruleManifest
+                @ ApplianceBootPosture.ruleManifest
                 |> List.map _.Code
 
             Expect.isNonEmpty exported "the fixture is meaningless if no rule ships"
@@ -79,6 +82,55 @@ let tests =
                 (CompositionRuleVersions.allRules |> List.map _.VersionedRule.Code)
                 exported
                 "the versioned manifest is exactly the exported rules, in family order — no extras, no omissions"
+        }
+
+        // ── 1b. A family that ships cannot go unpublished ──
+        //
+        // The case above still enumerates by hand, so it can only ever
+        // agree with whatever the hand-written list happens to say — which
+        // is exactly how [Phase 434]'s `ScaleReadinessPreflight` and
+        // [Phase 488]'s `ApplianceBootPosture` were enforced at runtime
+        // for months while absent from the published manifest, with a
+        // green test beside them. This one asks the ASSEMBLY instead.
+
+        test "no rule family this assembly ships is missing from the published manifest" {
+            // Every module-level `ruleManifest : CompositionRuleDescriptor
+            // list` in `ToolUp.Platform.Server` — the shape every family
+            // exports, and the only thing a family has to do to be one.
+            let declaringAssembly = typeof<CompositionRuleDescriptor>.Assembly
+
+            let familyManifests =
+                declaringAssembly.GetTypes()
+                |> Array.filter _.IsAbstract // F# modules are abstract sealed classes
+                |> Array.choose (fun t ->
+                    match t.GetProperty("ruleManifest", BindingFlags.Public ||| BindingFlags.Static) with
+                    | null -> None
+                    | prop when prop.PropertyType = typeof<CompositionRuleDescriptor list> ->
+                        Some(t.Name, prop.GetValue null :?> CompositionRuleDescriptor list)
+                    | _ -> None)
+                |> List.ofArray
+
+            // The falsifier for the sweep itself: if reflection stopped
+            // finding families, every assertion below would pass
+            // vacuously.
+            Expect.isGreaterThanOrEqual
+                (List.length familyManifests)
+                5
+                "the reflection sweep found fewer families than are known to ship — the probe is broken, not the manifest"
+
+            let published =
+                CompositionRuleVersions.allRules |> List.map _.VersionedRule.Code |> Set.ofList
+
+            let missing =
+                familyManifests
+                |> List.collect (fun (moduleName, rules) ->
+                    rules
+                    |> List.filter (fun r -> not (published.Contains r.Code))
+                    |> List.map (fun r -> sprintf "%s.%s" moduleName r.Code))
+
+            Expect.isEmpty
+                missing
+                "a rule family ships in this assembly but is absent from CompositionRuleVersions.allRules — add a `seed` call for it and bump ManifestVersion (minor: the rule set grew)"
         }
 
         test "rules that shipped before Phase 597 seed at 1.0.0" {
@@ -118,7 +170,7 @@ let tests =
             let document =
                 CompositionRuleVersions.toWireDocument CompositionRuleVersions.allRules
 
-            Expect.equal document.ManifestVersion "1.0.0" "the manifest version is published"
+            Expect.equal document.ManifestVersion "1.1.0" "the manifest version is published"
 
             Expect.all document.Rules (fun r -> r.Version = "1.0.0") "every published rule carries its version string"
 

@@ -36,6 +36,9 @@
         <Compile Include="Server\IFormSubmissionAnalyser.fs" />
         <Compile Include="Server\AnalyserCache.fs" />
         <Compile Include="Server\FormApiHandler.fs" />
+        <!-- Phase 627.E in-handler gate declarations for IFormApi. After
+             FormApiHandler.fs, whose gates they describe. -->
+        <Compile Include="Server\FormsInHandlerGates.fs" />
         <Compile Include="Server\InMemoryShareTokenRateLimiter.fs" />
         <Compile Include="Server\PublicFormApiHandler.fs" />
         <Compile Include="Server\PublishableFormConfigValidator.fs" />

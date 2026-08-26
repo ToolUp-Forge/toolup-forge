@@ -89,6 +89,7 @@ type AIToolDefinition = {
     Location: ToolLocation
     Surface: AISurfaceFilter
     IsLiveInterface: bool                       // reads or drives live browser-resident state
+    ResultBudget: AIToolResultBudget            // per-tool context budget on the JSON result
 }
 
 and ToolLocation =
@@ -99,6 +100,11 @@ and AISurfaceFilter =
     | Both
     | SidePanelOnly
     | FullPageOnly
+
+and AIToolResultBudget =
+    | DefaultResultBudget       // the generous SDK-wide ceiling (every pre-existing tool)
+    | ResultBudgetChars of int  // this tool's own ceiling, in characters of the returned JSON
+    | NoResultBudget            // legitimately-large contract — never elide
 ```
 
 Metadata only — the executor is server-side and lives in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime, so a module can declare tools without referencing the AI companion. Module-declared tools live in `Server.fs`; the composition root registers them via `ServerModule.withAITools [...]` or directly via `AIServerApp.withAITools`.

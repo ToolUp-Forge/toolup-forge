@@ -598,6 +598,13 @@
              because the chained ledger lives downstream of this assembly
              (GP 1). -->
         <Compile Include="Server\EvidenceChainWalker.fs" />
+        <!-- Phase 714 — the walked chain as a signed, offline-checkable
+             statement. After EvidenceChainWalker.fs (it packages that
+             walk) and after DsseEnvelope.fs (it signs through that
+             family). Carries no signing or verifying crypto of its own:
+             the signer arrives across IStatementEnvelopeSigner and the
+             signature check is a stock DSSE one. -->
+        <Compile Include="Server\EvidenceBundleExport.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
         <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +
@@ -946,6 +953,11 @@
              INotificationSink; before Compose/ (ComposeRuntimeServices
              hosts it). -->
         <Compile Include="Server\AlertRuleEngine.fs" />
+        <!-- Phase 9n credential-suffix allowlist, extracted at the third
+             consumer (ConfigDriftDetector, DiagnosticBundleHandler,
+             ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
+             only — so it can sit ahead of every surface that redacts. -->
+        <Compile Include="Server\RedactionAllowlist.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <!-- Phase 120 — /dev/auth-denials rollup (reads AuthorizationDenied
@@ -1344,6 +1356,12 @@
              enforced); beside EventTopology / DataFootprint, the sibling
              derived lenses. -->
         <Compile Include="Server\AuthorizationSurface.fs" />
+        <!-- Phase 627.E in-handler gate declarations for the platform-tier
+             API records (JobApi / ModelExecutionApi / IModuleQueryBusApi).
+             After AuthorizationSurface.fs, which declares the record they
+             are expressed in. IFormApi's live in ToolUp.Forms.Server,
+             beside its own handler. -->
+        <Compile Include="Server\PlatformInHandlerGates.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After
@@ -1403,7 +1421,8 @@
              init/dispose order, and return a typed DryRunReport — zero
              external services, defects as findings rather than exceptions.
              Plus the Expecto-shaped (Expecto-free) DryRun.shouldCompose
-             affordance for consumer suites + cookbook verification. After
+             affordance for consumer suites + worked-example verification.
+             After
              CompositionDescriptorVersion.fs (the versioned build path it
              drives), ComposableSurface.fs (the slot universe it null-binds),
              ComponentLifecycle.fs and CompositionValidator.fs. Nothing

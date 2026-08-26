@@ -129,6 +129,47 @@ let tests =
             Expect.isTrue (hasNode chain obj1) "chain reaches the originating data object"
         }
 
+        testCaseAsync "a MessageRef root walks to nothing — GetChainForMessage is the route (documented contract)"
+        <| async {
+            // Pins the documented behaviour rather than leaving it as an
+            // unexplained no-op arm. No store composed here — or anywhere
+            // in the SDK — answers "which facts did this message cite";
+            // that is an assertion the answer made, and it arrives as
+            // GetChainForMessage's `citedFactIds`. The Phase 648 wire
+            // contract therefore reports `Absent` for a MessageRef, which
+            // means "ask with the cited facts", not "no such message".
+            let graph, _ = seededGraph ()
+            let! chain = graph.GetChain(scopeA, MessageRef msg1, Upstream, 5)
+
+            // The seed node is minted for every root before the walk
+            // starts, so the answer is the bare message and nothing else:
+            // no disclosure, a label equal to its own id, no edges. That
+            // shape scores 0 on `ProvenanceApiHandler.evidenceScore`,
+            // which is why the wire contract reports `Absent` rather than
+            // `Found` — the walk learned nothing about the ref.
+            Expect.equal (chain.Nodes |> List.map _.Id) [ msg1 ] "the walk adds nothing to the seed node it was given"
+
+            let seeded = List.exactlyOne chain.Nodes
+
+            Expect.equal seeded.Kind ConversationMessage "and it is typed as the message it is"
+            Expect.isNone seeded.Disclosure "with nothing annotated onto it"
+            Expect.equal seeded.Label seeded.Id "and no label beyond its own id — evidenceScore 0"
+            Expect.isEmpty chain.Edges "no edges: nothing here knows what the message cited"
+            Expect.equal chain.Root msg1 "the root is still echoed, so the caller can tell what it asked about"
+
+            // The falsifier: the SAME message, asked the supported way,
+            // does answer — so the emptiness above is about the ROUTE, not
+            // about this fixture having no provenance to find.
+            let! viaCitedFacts = graph.GetChainForMessage(scopeA, msg1, [ fact2 ], 5)
+
+            Expect.isGreaterThan
+                (List.length viaCitedFacts.Nodes)
+                1
+                "the same message answers when its cited facts are supplied"
+
+            Expect.isNonEmpty viaCitedFacts.Edges "and the CitesFact edges the other route cannot produce are there"
+        }
+
         testCaseAsync "downstream from the data object reaches the result and the facts (the inverse)"
         <| async {
             let graph, _ = seededGraph ()

@@ -139,12 +139,11 @@ module RAGServerApp =
 Mirrored `AIServerApp` builders (all `withConfig`, `withAuth`, `withStorage`, ... `withAITools`, `withAIConfig`, `withModuleAIContexts`, etc.).
 
 RAG-specific builders:
-- `withVectorisationHandler: VectorisationHandler -> RAGServerApp -> RAGServerApp`
 - `withTopK: int -> RAGServerApp -> RAGServerApp` (default 5)
-- `withMinScore: float -> RAGServerApp -> RAGServerApp` (default 0.3)
+- `withMinScore: float option -> RAGServerApp -> RAGServerApp` (default 0.3)
 - `withMergeStrategy: MergeStrategy -> RAGServerApp -> RAGServerApp` (default `DenseOnly`)
 - `withSnippetCharLimit: int -> RAGServerApp -> RAGServerApp` (default 1500)
-- `withOriginFilter: ChunkOrigin list option -> RAGServerApp -> RAGServerApp` (default `None`)
+- `withOriginFilter: Set<ChunkOrigin> option -> RAGServerApp -> RAGServerApp` (default `None`)
 - `withGroundingMode: GroundingMode -> RAGServerApp -> RAGServerApp` (default `Permissive`)
 - `withFactClausePlanning: bool -> RAGServerApp -> RAGServerApp` (default `true`)
 - `withFactClausePlanOptions: FactClausePlanOptions -> RAGServerApp -> RAGServerApp` (default on, 3,000 ms budget)
@@ -157,18 +156,32 @@ RAG-specific builders:
 > overrun or fault; pass `withFactClausePlanning false` when the fact tier is composed for its tool
 > surface alone and a second model call per chat turn is not wanted.
 - `withIngestionConcurrency: int -> RAGServerApp -> RAGServerApp` (default 2)
-- `withIngestionQueueCapacity: int option -> RAGServerApp -> RAGServerApp` (default `None` = unbounded)
+- `withIngestionQueueCapacity: int -> RAGServerApp -> RAGServerApp` (default unbounded)
 - `withTelemetry: IRagTelemetry -> RAGServerApp -> RAGServerApp`
-- `withRetrievalTracer: IRetrievalTracer -> RAGServerApp -> RAGServerApp`
 - `withVectorStore: IVectorStore -> RAGServerApp -> RAGServerApp` (default `InMemoryVectorStore`)
 - `withEmbeddingCache: IEmbeddingCache -> RAGServerApp -> RAGServerApp`
-- `withTableExtractor: ITableExtractor -> RAGServerApp -> RAGServerApp`
 - `withReranker: IReranker -> RAGServerApp -> RAGServerApp`
 
-> `IOcrProvider` has no `with*` builder: `composeWithRAG` probes DI for an already-registered provider and falls back to the no-op only when it finds none, so an OCR companion is composed by `services.AddSingleton<IOcrProvider>(...)` before the RAG composition runs. See [`companions/ocr-providers.md`](../companions/ocr-providers.md).
-
-> `IQueryRewriter` (conversation-aware query rewrite) has no `with*` builder either, and for the same reason: `composeWithRAG` probes DI, so the registration *is* the opt-in and the compose surface grows no knob for it. Register before the RAG composition runs — `services.AddSingleton<IQueryRewriter>(ProviderQueryRewriter.create aiProvider)` for the shipped provider-backed rewriter, or any implementation of your own. No registration ⇒ the pipeline is byte-for-byte its pre-rewrite self (GP 11 / GP 13); the stage only ever fires for a request that carries `RetrievalRequest.History`. Bound it with `RetrievalPipelineOptions.QueryRewriteTimeoutMs` (default 2000ms) — on overrun or fault the pipeline searches the raw query and records `Failed` on the retrieval trace.
-- `withTextSummariser: ITextSummariser -> RAGServerApp -> RAGServerApp`
+> **Seams with no `with*` builder — register them in DI instead.** `composeWithRAG` probes DI for
+> `IOcrProvider`, `ITableExtractor` and `IRetrievalTracer`, falling back to its own default only when
+> it finds none. So `services.AddSingleton<IOcrProvider>(…)` (etc.) *before* the RAG composition runs
+> **is** the opt-in, and the compose surface grows no knob for it. See
+> [`companions/ocr-providers.md`](../companions/ocr-providers.md) for the OCR case.
+>
+> `IQueryRewriter` (conversation-aware query rewrite) is the same shape. Register before the RAG
+> composition runs — `services.AddSingleton<IQueryRewriter>(ProviderQueryRewriter.create aiProvider)`
+> for the shipped provider-backed rewriter, or any implementation of your own. No registration ⇒ the
+> pipeline is byte-for-byte its pre-rewrite self (GP 11 / GP 13); the stage only ever fires for a
+> request that carries `RetrievalRequest.History`. Bound it with
+> `RetrievalPipelineOptions.QueryRewriteTimeoutMs` (default 2000ms) — on overrun or fault the pipeline
+> searches the raw query and records `Failed` on the retrieval trace.
+>
+> `ITextSummariser` is **not composed at all**. `Chunking.withContextualHeader` takes one as an
+> `option` and no forge path calls it, so contextual-header summarisation is a helper a consumer wires
+> into its own ingestion, not a composition knob.
+>
+> `VectorisationHandler` is a per-module DECLARATION, not a builder: a module lists its handlers on
+> `ServerModule.VectorisationHandlers` and the composition reads them from the module registry.
 
 Terminal:
 - `run: RAGServerApp -> int`

@@ -64,9 +64,12 @@ open System.Security.Cryptography
 // ```
 //
 // What keeps that wiring from drifting into a parallel grammar is
-// `PeerView.chartProps`: it emits the SAME prop keys and the SAME point
-// encoding the chart component's own projector emits, and a conformance
-// test asserts the two agree rather than trusting prose. The layout of
+// `PeerView.chartProps` / `chartPropsAt`: they emit the SAME prop keys
+// and the SAME point encoding the chart component's own projector emits
+// — including [Phase 649]'s `chart.datasetVintage` binding, which a
+// bounded view always knows because the declaration binds the dataset
+// and the request pins the version — and a conformance test asserts each
+// against that projector rather than trusting prose. The layout of
 // several series into one artifact is the composition's business,
 // deliberately — how a deployment arranges its own charts is not a wire
 // concern.
@@ -424,6 +427,35 @@ module PeerView =
     [<Literal>]
     let PointsProp = "chart.points"
 
+    /// The grammar's [Phase 649] dataset-vintage binding prop — the same
+    /// key `ChartArtifact.DatasetVintageProp` and
+    /// `NarrativeFromData.DatasetVintageProp` emit, so a reader that
+    /// holds a rendered federated view recovers the binding exactly as it
+    /// would from any other chart the grammar drew.
+    ///
+    /// A bounded peer view already knows its vintage: the DECLARATION
+    /// binds the dataset and the REQUEST pins the version, and refusing
+    /// either is `validate`'s business well before anything renders. So
+    /// the artifact can say what it is a picture of, which is the whole
+    /// point of a pinned vintage — an answer that resolved differently on
+    /// re-run is not one a modeller can cite.
+    ///
+    /// The grammar's sibling binding prop, `chart.artifactKey`, is NOT
+    /// emitted: a view renders a dataset series, not a governed result,
+    /// so there is no artifact key to name and an empty one would say
+    /// "bound to nothing" rather than "not bound".
+    [<Literal>]
+    let DatasetVintageProp = "chart.datasetVintage"
+
+    /// The vintage token a rendered view carries: `"<datasetId>@<version>"`.
+    ///
+    /// Both halves, because neither alone re-derives the picture — a
+    /// version number means nothing without the dataset it versions, and
+    /// the dataset id alone is the thing a pinned vintage exists to
+    /// refuse. Ordinary text to the grammar, which treats the prop as an
+    /// opaque identifier.
+    let vintageToken (datasetId: string) (datasetVersion: int) : string = $"{datasetId}@{datasetVersion}"
+
     /// The grammar's point encoding: `"label=value;…"`, values in the
     /// invariant culture, separators sanitised out of labels.
     ///
@@ -438,15 +470,32 @@ module PeerView =
             $"{safe}={p.Value.ToString(inv)}")
         |> String.concat ";"
 
-    /// One series as the prop bag the chart component reads. The series
-    /// NAME is the caption, so an artifact carrying several series is
-    /// legible without a legend the wire would have to describe.
+    /// One series as the prop bag the chart component reads, UNBOUND. The
+    /// series NAME is the caption, so an artifact carrying several series
+    /// is legible without a legend the wire would have to describe.
+    ///
+    /// `render` uses `chartPropsAt`; this stays because it is the exact
+    /// bag `NarrativeFromData.chart` emits, which is what the conformance
+    /// test pins the encoding against.
     let chartProps (kind: string) (series: PeerViewSeries) : Map<string, string> =
         Map.ofList [
             KindProp, kind
             PointsProp, encodePoints series.Points
             TitleProp, series.Name
         ]
+
+    /// `chartProps` plus the [Phase 649] dataset-vintage binding — what a
+    /// rendered view actually carries, since a bounded view always knows
+    /// its vintage. Byte-identical to `chartProps` except for the one
+    /// added key (GP 11 for any consumer reading the other three).
+    let chartPropsAt
+        (kind: string)
+        (datasetId: string)
+        (datasetVersion: int)
+        (series: PeerViewSeries)
+        : Map<string, string> =
+        chartProps kind series
+        |> Map.add DatasetVintageProp (vintageToken datasetId datasetVersion)
 
     /// Whole days a window covers, rounded UP — a request covering any
     /// part of an extra day has covered it.
@@ -583,7 +632,9 @@ module PeerView =
                         })
 
                     let bytes =
-                        ordered |> List.map (chartProps declaration.Kind) |> deps.Renderer.Render
+                        ordered
+                        |> List.map (chartPropsAt declaration.Kind declaration.DatasetId request.DatasetVersion)
+                        |> deps.Renderer.Render
 
                     return
                         Ok {

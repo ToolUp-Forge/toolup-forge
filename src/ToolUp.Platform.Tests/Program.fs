@@ -167,6 +167,8 @@ let allTests =
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
+        // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
+        ShareTokenSigningKeyGovernanceTests.tests
         // Phase 329 — fail-loud DataProtection key-ring backend (validator + Warn).
         DataProtectionBackendTests.tests
         FileSecretStoreTests.tests
@@ -1262,6 +1264,18 @@ let allTests =
         EvidenceChainWalkerTests.auditedReadTests
         EvidenceChainWalkerTests.digestTests
         EvidenceChainWalkerTests.reportSectionTests
+        // Phase 714 — that walk exported as an artefact a counterparty
+        // can hold: content-addressed in both directions, wrapped as a
+        // standard signed statement, readable without a verifier, and
+        // carrying its claim boundary on a clean bundle as well as a
+        // broken one. The nested-attestation ruling is pinned here.
+        EvidenceBundleExportTests.bundleDeterminismTests
+        EvidenceBundleExportTests.statementWrappingTests
+        EvidenceBundleExportTests.nestedAttestationRulingTests
+        EvidenceBundleExportTests.pureVerifierTests
+        EvidenceBundleExportTests.claimBoundaryTests
+        EvidenceBundleExportTests.signedRoundTripTests
+        EvidenceBundleExportTests.fixtureEmissionTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate

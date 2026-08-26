@@ -284,6 +284,7 @@ let myTool: AIToolDefinition = {
     Location = ServerResident   // or ClientResident for UI-control tools
     Surface = Both
     IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
 }
 ```
 

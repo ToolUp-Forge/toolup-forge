@@ -1448,11 +1448,14 @@ ToolUp.Platform.CompositionRuleDescriptor.Code : System.String { get }
 ToolUp.Platform.CompositionRuleDescriptor.Description : System.String { get }
 ToolUp.Platform.CompositionRuleDescriptor.Severity : ToolUp.Platform.CompositionDefectSeverity { get }
 ToolUp.Platform.CompositionRuleVersions (class)
+ToolUp.Platform.CompositionRuleVersions.ApplianceBootPostureFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.CompositionFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.DataFootprintFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.EventTopologyFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.ManifestVersion : ToolUp.Platform.RuleVersion { get }
+ToolUp.Platform.CompositionRuleVersions.ScaleReadinessFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.allRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
+ToolUp.Platform.CompositionRuleVersions.applianceBootPostureRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.checkClassStamped(ToolUp.Platform.CompositionRuleClass, ToolUp.Platform.CompositionReferences, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.StampedCompositionResult
 ToolUp.Platform.CompositionRuleVersions.checkStamped(ToolUp.Platform.CompositionReferences, ToolUp.Platform.CompositionManifest) : ToolUp.Platform.StampedCompositionResult
 ToolUp.Platform.CompositionRuleVersions.compositionRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
@@ -1462,6 +1465,7 @@ ToolUp.Platform.CompositionRuleVersions.dataFootprintRules : Microsoft.FSharp.Co
 ToolUp.Platform.CompositionRuleVersions.driftSince(ToolUp.Platform.RuleEvaluationStamp) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.StampedRuleVersion, ToolUp.Platform.RuleVersionBump]]
 ToolUp.Platform.CompositionRuleVersions.eventTopologyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.overrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]] { get }
+ToolUp.Platform.CompositionRuleVersions.scaleReadinessRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.seed(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule]
 ToolUp.Platform.CompositionRuleVersions.stampOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule]) : ToolUp.Platform.RuleEvaluationStamp
 ToolUp.Platform.CompositionRuleVersions.stampRun(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.StampedPreflightRun
@@ -3223,6 +3227,28 @@ ToolUp.Platform.EventTopologyWireEntry..ctor(System.String, Microsoft.FSharp.Col
 ToolUp.Platform.EventTopologyWireEntry.Component : System.String { get }
 ToolUp.Platform.EventTopologyWireEntry.EmittedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.EventTopologyWireEntry.SubscribedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceBundleExport (class)
+ToolUp.Platform.EvidenceBundleExport.PredicateType : System.String (literal)
+ToolUp.Platform.EvidenceBundleExport.bundleFor(System.IServiceProvider, ToolUp.Platform.EvidenceChainWalkerMode, ToolUp.Platform.EvidenceChainRequest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceBundle, ToolUp.Platform.EvidenceChainError]]
+ToolUp.Platform.EvidenceBundleExport.bundleOf(System.String, System.DateTime, ToolUp.Platform.EvidenceChain) : ToolUp.Platform.EvidenceBundle
+ToolUp.Platform.EvidenceBundleExport.bundleWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BundleClaimQualifier], System.String, System.DateTime, ToolUp.Platform.EvidenceChain) : ToolUp.Platform.EvidenceBundle
+ToolUp.Platform.EvidenceBundleExport.canonicalBytes(ToolUp.Platform.EvidenceBundle) : System.Byte[]
+ToolUp.Platform.EvidenceBundleExport.digest(System.String) : System.String
+ToolUp.Platform.EvidenceBundleExport.expectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Platform.EvidenceBundleExport.export(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Platform.EvidenceBundle) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
+ToolUp.Platform.EvidenceBundleExport.notProvedFor(ToolUp.Platform.EvidenceChain) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
+ToolUp.Platform.EvidenceBundleExport.predicateJson(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleExport.readBundle(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceBundle, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Platform.EvidenceBundleExport.statementJson(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleExport.subjectFor(ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.InTotoSubject
+ToolUp.Platform.EvidenceBundleExport.verifyBundle(ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.BundleIntegrity
+ToolUp.Platform.EvidenceBundleExport.verifyCommand(System.String) : ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun
+ToolUp.Platform.EvidenceBundleExport.verifyDocument(System.String) : ToolUp.Platform.BundleIntegrity
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun (class)
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun..ctor(ToolUp.Platform.BundleIntegrity, System.String, System.Int32)
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.ExitCode : System.Int32 { get }
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.Integrity : ToolUp.Platform.BundleIntegrity { get }
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.Report : System.String { get }
 ToolUp.Platform.EvidenceChainSources (class)
 ToolUp.Platform.EvidenceChainSources..ctor(ToolUp.Platform.WorkProvenanceMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DependencyClosure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDeployRecordSealer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackReading, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerPositionReading, System.String]]]])
 ToolUp.Platform.EvidenceChainSources.Boot : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading] { get }
@@ -6398,6 +6424,11 @@ ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.Server
 ToolUp.Platform.PlatformApiHandler.teamApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.TeamApi
 ToolUp.Platform.PlatformApiHandler.teamApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.PlatformApiHandler.withVisibilityProfile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution], ToolUp.Platform.AccessibleModulesResponse) : ToolUp.Platform.AccessibleModulesResponse
+ToolUp.Platform.PlatformInHandlerGates (class)
+ToolUp.Platform.PlatformInHandlerGates.all(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.jobApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.modelExecutionApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.moduleQueryBusApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformRuntimeConfigStore (class)
 ToolUp.Platform.PlatformRuntimeConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.PlatformKnowledgeBaseMode) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IPlatformRuntimeConfigStore]
 ToolUp.Platform.PlatformSchema (class)
@@ -6858,6 +6889,10 @@ ToolUp.Platform.RateLimiterInstanceValidator+RateLimiterInstanceValidator (class
 ToolUp.Platform.RateLimiterInstanceValidator+RateLimiterInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.RateLimiting (class)
 ToolUp.Platform.RateLimiting.configure(ToolUp.Platform.RateLimitConfig, Microsoft.AspNetCore.RateLimiting.RateLimiterOptions) : System.Void
+ToolUp.Platform.RedactionAllowlist (class)
+ToolUp.Platform.RedactionAllowlist.redactedString(System.Int32) : System.String
+ToolUp.Platform.RedactionAllowlist.shouldRedact(System.String) : System.Boolean
+ToolUp.Platform.RedactionAllowlist.suffixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ReevaluationSweepEnvelope (class)
 ToolUp.Platform.ReevaluationSweepEnvelope.serialiseRequest(ToolUp.Platform.ReevaluationSweepRequest) : System.String
 ToolUp.Platform.ReevaluationSweepEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReevaluationSweepRequest, System.String]
@@ -7673,8 +7708,11 @@ ToolUp.Platform.ShareTokenSigningKeyProvenanceValidator (class)
 ToolUp.Platform.ShareTokenSigningKeyProvenanceValidator+ShareTokenSigningKeyProvenanceValidator (class)
 ToolUp.Platform.ShareTokenSigningKeyProvenanceValidator+ShareTokenSigningKeyProvenanceValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.ShareTokenStore (class)
+ToolUp.Platform.ShareTokenStore.autoGeneratedOriginMarker : System.String (literal)
 ToolUp.Platform.ShareTokenStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.IShareTokenStore
 ToolUp.Platform.ShareTokenStore.platformContainer : System.String (literal)
+ToolUp.Platform.ShareTokenStore.probeSigningKeyProvenance(ToolUp.Platform.Secrets+ISecretStore) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ShareTokenStore+SigningKeyProvenance]
+ToolUp.Platform.ShareTokenStore.signingKeyOriginSecretName : System.String (literal)
 ToolUp.Platform.ShareTokenStore.signingKeySecretName : System.String (literal)
 ToolUp.Platform.ShareTokenStore+BlobShareTokenStore (class)
 ToolUp.Platform.ShareTokenStore+BlobShareTokenStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
@@ -7684,6 +7722,18 @@ ToolUp.Platform.ShareTokenStore+SignedPayload.ResourceId : System.String { get }
 ToolUp.Platform.ShareTokenStore+SignedPayload.ResourceKind : System.String { get }
 ToolUp.Platform.ShareTokenStore+SignedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ShareTokenStore+SignedPayload.TokenId : System.String { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance (class)
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.AbsentWillAutoGenerate : ToolUp.Platform.ShareTokenStore+SigningKeyProvenance { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.AutoGenerated : ToolUp.Platform.ShareTokenStore+SigningKeyProvenance { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.IsAbsentWillAutoGenerate : System.Boolean { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.IsAutoGenerated : System.Boolean { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.IsOperatorProvisioned : System.Boolean { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.OperatorProvisioned : ToolUp.Platform.ShareTokenStore+SigningKeyProvenance { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance.Tag : System.Int32 { get }
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance+Tags (class)
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance+Tags.AbsentWillAutoGenerate : System.Int32 (literal)
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance+Tags.AutoGenerated : System.Int32 (literal)
+ToolUp.Platform.ShareTokenStore+SigningKeyProvenance+Tags.OperatorProvisioned : System.Int32 (literal)
 ToolUp.Platform.SignedExportDepsValidator (class)
 ToolUp.Platform.SignedExportDepsValidator+SignedExportDepsValidator (class)
 ToolUp.Platform.SignedExportDepsValidator+SignedExportDepsValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
