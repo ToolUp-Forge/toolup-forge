@@ -43,11 +43,31 @@ open ToolUp.Platform
 // request (including the synthetic-`AnonymousSession` fallback that
 // `ScopeResolutionMiddleware` stashes when `ISubjectResolver`
 // returns `Error _` — keeps the matrix uniform across resolver
-// failure modes). When the items entry is missing on an `/api/*`
-// path the middleware falls through to `next.Invoke` defensively;
-// this codepath is reachable only if a downstream consumer rewrote
-// the request to add `/api` prefix after `ScopeResolutionMiddleware`
-// ran, which is not a supported pipeline arrangement.
+// failure modes).
+//
+// **Missing-Subject is fail-CLOSED (Phase 336).** When the items
+// entry is absent on an `/api/*` path the middleware synthesises a
+// fresh `AnonymousSession` subject and runs the SAME matrix against
+// it, rather than calling `next.Invoke`. The pre-336 fall-through
+// turned the primary authentication gate into a pass-through under
+// any condition that left `Subject` unstashed — and one such
+// condition is live, not hypothetical: `ScopeResolutionMiddleware`
+// catches an infrastructure exception (DI hiccup, store throw, cache
+// miss-and-throw) and continues WITHOUT stashing a Subject. The
+// comment at that catch claims the fail-closed behaviour is
+// preserved; before this phase it was not, because the gate
+// downstream let the request through unauthenticated.
+//
+// Synthesising rather than hard-401'ing keeps correct-path behaviour
+// exact (GP 11): a `public_` route (`/api/csrf-token`, a peer-bearer
+// prefix, an Anonymous-only deployment's `/api/` catch-all) still
+// passes, because `AnonymousKind` is in its admit set. Everything the
+// strict `userOrTeam` default covers now denies with the ordinary
+// `401 authentication_required` the matrix already emits — same wire
+// contract, same audit rows, no new response shape. The synthetic
+// session id is a fresh GUID, never a caller-supplied value:
+// honouring an unverified claimed id on a path reached only because
+// something already went wrong is the Phase 337 hazard.
 
 [<Literal>]
 let SubjectItemsKey = "ToolUp.Subject"
@@ -466,6 +486,30 @@ let private writeRejection
         do! ctx.Response.WriteAsync body
     }
 
+/// Phase 336 — best-effort operator signal when an `/api/*` request
+/// reaches the gate with no stashed `Subject`. The request is still
+/// evaluated (fail-closed, see the module preamble); this only makes
+/// the condition visible, because the pre-336 fall-through was
+/// structurally silent — an unauthenticated pass-through looked
+/// exactly like a normal 200 in every log and dashboard.
+///
+/// Wrapped in `try/with` for the same reason every other
+/// observability call on this path is: a logger failure on the
+/// denial path MUST NOT stall the response.
+let private warnUnresolvedSubject (ctx: HttpContext) : unit =
+    try
+        match ctx.RequestServices.GetService(typeof<ILogger>) with
+        | :? ILogger as log ->
+            log.Warn(
+                sprintf
+                    "SurfaceEnforcementMiddleware: no resolved Subject on %s %s — evaluating as anonymous (fail-closed). ScopeResolutionMiddleware stashes one for every /api/* request, so this indicates a swallowed resolver exception or an unsupported pipeline arrangement."
+                    ctx.Request.Method
+                    (string ctx.Request.Path)
+            )
+        | _ -> ()
+    with _ ->
+        ()
+
 /// ASP.NET Core middleware enforcing per-route `SurfaceRequirement`
 /// against the resolved `Subject`. The canonical authentication /
 /// authorisation gate for `/api/*` paths post Phase 66 Stream A.6;
@@ -486,26 +530,31 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 // `AuthEnforcementMiddleware`'s `/api/*`-only scope.
                 do! next.Invoke(ctx)
             else
-                let subjectOpt =
+                // Defensive — ScopeResolutionMiddleware stashes a
+                // `Subject` (resolved, or its synthetic-anonymous
+                // fallback) for every `/api/*` request. Reaching the
+                // `None` arm means either a downstream rewrite added an
+                // `/api` prefix after scope resolution (not a supported
+                // pipeline arrangement), or the resolver threw and its
+                // catch continued without stashing.
+                //
+                // Phase 336 — the defensive ACTION is fail-closed: a
+                // fresh `AnonymousSession` is synthesised and the SAME
+                // matrix runs against it. `public_` routes still pass;
+                // everything the strict default covers now 401s instead
+                // of reaching the handler unauthenticated.
+                let subject =
                     match ctx.Items.TryGetValue SubjectItemsKey with
-                    | true, (:? Subject as s) -> Some s
-                    | _ -> None
+                    | true, (:? Subject as s) -> s
+                    | _ ->
+                        warnUnresolvedSubject ctx
+                        AnonymousSession(Guid.NewGuid().ToString())
 
-                match subjectOpt with
-                | None ->
-                    // Defensive — ScopeResolutionMiddleware stashes
-                    // a `Subject` (resolved or synthetic-anonymous
-                    // fallback) for every `/api/*` request. Reaching
-                    // this branch means a downstream rewrite added
-                    // an `/api` prefix after scope resolution, which
-                    // is not a supported pipeline arrangement.
-                    do! next.Invoke(ctx)
-                | Some subject ->
-                    let requirement =
-                        SurfaceRequirementRegistry.resolve registry ctx.Request.Method ctx.Request.Path.Value
+                let requirement =
+                    SurfaceRequirementRegistry.resolve registry ctx.Request.Method ctx.Request.Path.Value
 
-                    match SurfaceEnforcement.evaluate subject requirement with
-                    | Pass -> do! next.Invoke(ctx)
-                    | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx subject statusCode errorCode hint
+                match SurfaceEnforcement.evaluate subject requirement with
+                | Pass -> do! next.Invoke(ctx)
+                | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx subject statusCode errorCode hint
         }
         :> System.Threading.Tasks.Task
