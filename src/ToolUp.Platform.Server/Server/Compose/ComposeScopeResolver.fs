@@ -181,10 +181,40 @@ let registerScopeResolution
                     | true, (:? StorageScope as scope) when scope.Container.StartsWith "team-" -> Some scope.ScopeId
                     | _ -> None
 
+                // Phase 527 — a validated service-account token's effective
+                // permission map takes precedence over the team-derived one.
+                //
+                // Precedence rather than merge, and stated here rather than
+                // left to middleware ordering: the machine principal's
+                // declared set IS its authority, and merging it with whatever
+                // the owning team grants its human members would silently
+                // widen a credential that was deliberately scoped narrower.
+                // The overlay is written by `ServiceAccountTokenMiddleware`,
+                // which runs BEFORE `ScopeResolutionMiddleware` (the claim has
+                // to exist for the subject to resolve) and so would otherwise
+                // be overwritten by the team-derived map written after it.
+                //
+                // The overlay is never empty by construction — the store
+                // refuses an empty declared set, `ValidateToken` refuses an
+                // empty effective set, and the middleware refuses to write
+                // one — which matters because an empty map reads as
+                // UNRESTRICTED in `AccessContext.canAccessModule`. The
+                // `IsEmpty` guard below is the last of those three checks,
+                // placed where the value is actually consumed: falling
+                // through to the team map on an empty overlay is strictly
+                // safer than adopting it.
+                let serviceAccountPermissions =
+                    match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
+                    | true, (:? Map<string, ModulePermission list> as perms) when not perms.IsEmpty -> Some perms
+                    | _ -> None
+
                 let modulePermissions =
-                    match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-                    | true, (:? Map<string, ModulePermission list> as perms) -> perms
-                    | _ -> Map.empty
+                    match serviceAccountPermissions with
+                    | Some perms -> perms
+                    | None ->
+                        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
+                        | true, (:? Map<string, ModulePermission list> as perms) -> perms
+                        | _ -> Map.empty
 
                 let moduleExposure =
                     match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with

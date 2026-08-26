@@ -682,6 +682,20 @@ let buildRouteHandlers
             Api.make (PlatformTenantApiHandler.platformTenantApi, routeBuilder = PlatformTenantApi.routeBuilder)
           ]
 
+    // Phase 527 — the service-account management API. Mounted only when
+    // the substrate is opted in, so an unconfigured deployment gains no
+    // route (GP 13). Owner/Admin gating, the claim-bearer refusal and
+    // the server-side scope resolution are all enforced inside the
+    // handler. Route shape: `/api/IServiceAccountApi/*` via
+    // `ServiceAccountApi.routeBuilder`.
+    let serviceAccountApiHandler: HttpHandler list =
+        match config.ServiceAccounts with
+        | NoServiceAccounts -> []
+        | EnabledServiceAccounts
+        | CustomServiceAccountStore -> [
+            Api.make (ServiceAccountApiHandler.serviceAccountApi, routeBuilder = ServiceAccountApi.routeBuilder)
+          ]
+
     let router (devRoutes: HttpHandler list) =
         choose (
             [
@@ -730,6 +744,7 @@ let buildRouteHandlers
             @ premiumUserApiRoutes
             @ dataSubjectRequestApiHandler
             @ platformTenantApiHandler
+            @ serviceAccountApiHandler
             @ devRoutes
             @ extensions.Handlers
             @ handlers

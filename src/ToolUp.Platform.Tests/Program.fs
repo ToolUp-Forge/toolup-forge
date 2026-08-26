@@ -586,6 +586,14 @@ let allTests =
         ShareTokenStoreTests.readPathTests
         ShareTokenAuthMiddlewareTests.tests
         ShareTokenMiddlewareRateLimitTests.tests
+        // Phase 527 — service accounts. Three top-level lists, all
+        // registered here: `--filter` matches a TOP-LEVEL list-name
+        // prefix, so a list that is only referenced from another file is
+        // selected by nothing and a filtered run reports a vacuous
+        // green.
+        ServiceAccountStoreTests.tests
+        ServiceAccountStoreTests.pureTests
+        ServiceAccountStoreTests.persistenceTests
         AnonymousSessionMigrationTests.tests
         // Phase 337 — listed here, not merely attributed: `runTestsWithCLIArgs`
         // runs `allTests`, so a `[<Tests>]` binding absent from this list is
