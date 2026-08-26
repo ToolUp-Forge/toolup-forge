@@ -1081,6 +1081,12 @@
              the two things the marker must NOT be confusable with — a
              policy withhold and a tool invocation error. -->
         <Compile Include="InProcess\AIToolResultBudgetTests.fs" />
+        <!-- Phase 36.A — AI tool-dispatch RBAC: the per-turn tool list and
+             the client-visible listing filtered by the caller's per-module
+             Read, a forged tool name refused with a typed Denied before
+             Execute runs (executor failtests if reached), the symmetric
+             403 on /api/ai/tool-result, and the GP-11 unrestricted default. -->
+        <Compile Include="InProcess\AIToolDispatchRbacTests.fs" />
         <!-- Phase 565 — grounding certificates: sealed, selective provenance
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->

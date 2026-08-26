@@ -45,6 +45,215 @@ let isToolVisibleOnSurface (surface: AISurface) (def: AIToolDefinition) : bool =
     | SidePanelOnly, FullPage
     | FullPageOnly, SidePanel -> false
 
+// ─── Phase 36.A — per-module RBAC over AI tool dispatch ──────────────
+//
+// A module tool is an executable the model can reach on the caller's
+// behalf. Until this phase the agent loop's per-turn tool list was
+// filtered by SURFACE only, and the dispatch site looked a tool up by
+// name and ran it — so a user holding no `Read` on a module could still
+// have that module's tools invoked, simply by the model deciding to call
+// one. That is a permission hole with the module's own RBAC gate sitting
+// one layer below, unreached (GP 4: isolation is enforced structurally,
+// not by "the module will check").
+//
+// Three properties the design is built around:
+//
+//   * **Filtered at LIST time, re-checked at DISPATCH time.** The model
+//     never sees an inaccessible tool, so it never plans around one and
+//     never has to be told "no" — cleaner than dispatch-time refusal
+//     alone, which teaches the model that a tool exists. The dispatch
+//     re-check is defence in depth for the forged-name case (a model
+//     hallucinating a name it was never shown, or a replayed history).
+//
+//   * **Empty permission map stays unrestricted (GP 11).** RBAC is
+//     opt-in per deployment; `AccessContext.hasPermission` already
+//     returns `true` on an empty map, so a deployment that has never
+//     configured module permissions is byte-for-byte unchanged.
+//
+//   * **SDK-reserved tool sources are exempt, because they are not
+//     modules.** `_platform.ai.*` (Phase 36.B) enforces RBAC INTERNALLY
+//     per requested TARGET module — gating it on its own `SourceModule`
+//     would ask whether the caller may read a module called
+//     `"_platform.ai"`, which no permission map names, so the whole
+//     cross-module family would vanish the moment any deployment
+//     configured RBAC. See `isSdkReservedToolSource`.
+
+/// Phase 36.A — is this tool's `SourceModule` an SDK-reserved namespace
+/// rather than a consumer module?
+///
+/// Two reserved namespaces, both owned by the SDK and neither ever a key
+/// in a deployment's `ModulePermissions`:
+///
+///   * `_`-prefixed — the SDK's own tool-source convention:
+///     `_platform.ai` (36.B cross-module family), `_sdk.FeatureFlags`,
+///     `_sdk.ModuleVisibility`, `_algorithms`, `_facts`, `_scheduling`.
+///   * `ToolUp.`-prefixed — the SDK package namespace: `ToolUp.Platform`
+///     (the narrative tools), `ToolUp.KnowledgeBase`.
+///
+/// The phase specification named only `_platform.*` and `_sdk.*`; those
+/// two prefixes cover four of the SDK's built-in tool families and miss
+/// five, and a literal reading would have hidden the narrative, KB,
+/// algorithm, fact and scheduling tools from every RBAC-configured
+/// deployment. The generalisation is to the namespaces the SDK reserves,
+/// which is the property that actually justifies the exemption.
+///
+/// A consumer module named inside a reserved namespace would inherit the
+/// exemption. Module names are compose-time declarations by the
+/// deployment author (never user input), and such a name already
+/// collides with SDK identifiers — but the exemption is not absolute:
+/// `isToolPermittedFor` honours an explicit permission-map entry for a
+/// reserved source, so a deployment always retains the ability to gate
+/// one deliberately.
+let isSdkReservedToolSource (sourceModule: string) : bool =
+    not (System.String.IsNullOrWhiteSpace sourceModule)
+    && (sourceModule.StartsWith("_", System.StringComparison.Ordinal)
+        || sourceModule.StartsWith("ToolUp.", System.StringComparison.Ordinal))
+
+/// Phase 36.A — may this caller reach a tool sourced from this module?
+///
+/// The single predicate behind the list filter, the agent-loop dispatch
+/// re-check, the `/api/ai/tool-result` completion gate and the
+/// `GetAvailableTools` listing, so the four surfaces cannot drift apart.
+///
+/// Pure — `AccessContext` + `string` in, `bool` out; no framework type,
+/// no I/O, no ambient state (six-rule audit: identity by value, nothing
+/// to await, nothing retained between calls).
+let isToolSourcePermittedFor (access: AccessContext) (sourceModule: string) : bool =
+    if
+        isSdkReservedToolSource sourceModule
+        && not (access.ModulePermissions.ContainsKey sourceModule)
+    then
+        // A reserved source the deployment has not named: not a module,
+        // so there is nothing to check here. Its own internal per-target
+        // RBAC is the gate.
+        true
+    else
+        AccessContext.hasPermission sourceModule ModulePermission.Read access
+
+/// Phase 36.A — `isToolSourcePermittedFor` over a tool declaration.
+let isToolPermittedFor (access: AccessContext) (def: AIToolDefinition) : bool =
+    isToolSourcePermittedFor access def.SourceModule
+
+/// Phase 36.A — reconstruct the caller's `AccessContext` from the
+/// per-request items.
+///
+/// **Why items rather than DI, and why this is load-bearing.** Tool
+/// dispatch runs inside the agent loop's *background* `HttpContext`
+/// (`AIAssistantHandler.createBackgroundContext`), which carries its own
+/// DI scope. The DI `AccessContext` factory reads the live request via
+/// `IHttpContextAccessor`, which is null/unreliable on that background
+/// flow — resolving it there would silently yield an *unrestricted*
+/// anonymous context and this whole gate would pass everything. The
+/// background context copies `ToolUp.StorageScope` / `ToolUp.UserId` /
+/// `ToolUp.ModulePermissions` forward, so reading them back is the
+/// RBAC-correct path (GP 4), and it works unchanged on a real request
+/// context because the same middleware populates the same items.
+///
+/// Mirrors `PlatformAITools.reconstructAccess` deliberately — same
+/// items, same fallbacks. `ModulePermissions` is the only field this
+/// gate reads; the rest are populated for the audit trail's subject
+/// attribution.
+let reconstructAccessContext (ctx: HttpContext) : AccessContext =
+    let userId =
+        match ctx.Items.TryGetValue "ToolUp.UserId" with
+        | true, (:? string as id) -> id
+        | _ -> "anonymous"
+
+    let scopeOpt =
+        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+        | true, (:? StorageScope as s) -> Some s
+        | _ -> None
+
+    let teamId =
+        match scopeOpt with
+        | Some s when s.Container.StartsWith "team-" -> Some s.ScopeId
+        | _ -> None
+
+    let modulePermissions =
+        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
+        | true, (:? Map<string, ModulePermission list> as perms) -> perms
+        | _ -> Map.empty
+
+    let moduleExposure =
+        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
+        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
+        | _ -> Map.empty
+
+    let platformRole =
+        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
+        | true, (:? PlatformRole as role) -> Some role
+        | _ -> None
+
+    let subject =
+        match ctx.Items.TryGetValue "ToolUp.Subject" with
+        | true, (:? Subject as s) -> s
+        | _ ->
+            match teamId with
+            | Some tid -> TeamMember(userId, tid)
+            | None when userId <> "anonymous" -> AuthenticatedUser userId
+            | None -> AnonymousSession userId
+
+    {
+        UserId = userId
+        TeamId = teamId
+        Subject = subject
+        ModulePermissions = modulePermissions
+        ModuleExposure = moduleExposure
+        PlatformRole = platformRole
+    }
+
+/// Phase 36.A — the machine-readable verdict every unauthorized-tool
+/// denial carries on its `AuthorizationDenied` audit row. Stable: the
+/// `/dev/auth-denials` rollup and any operator query cut on it.
+[<Literal>]
+let UnauthorizedToolVerdict = "unauthorized_tool"
+
+/// Phase 36.A — record an unauthorized AI-tool invocation attempt.
+///
+/// The phase specification called for a new `_platform.ai.unauthorized_tool`
+/// audit stream. Phase 120 landed afterwards and generalised exactly this
+/// write side: `IAuthAuditHook` is the one seam every authorization denial
+/// on the HTTP surface calls, and `ModulePermissionDenialRequirement` is
+/// precisely this denial's class — so the row joins the existing uniform
+/// trail (and the `/dev/auth-denials` rollup, and its probing-burst dedup)
+/// instead of founding a ninth per-subsystem stream nobody queries. The
+/// tool name rides `Reason`; `Verdict` is `unauthorized_tool`.
+///
+/// **Best-effort, never blocking, never throwing** — same contract as
+/// `IAuditLog.Record`. A missing hook (a test bypassing `compose`) is a
+/// silent no-op; the refusal itself does not depend on the audit landing.
+///
+/// PII envelope: the subject id the hook already sanitises, the tool
+/// name, and the source module. No arguments, no bodies — a tool's
+/// arguments can carry anything the model chose to put in them.
+let recordUnauthorizedToolDenial
+    (ctx: HttpContext)
+    (access: AccessContext)
+    (route: string)
+    (toolName: string)
+    (sourceModule: string)
+    : unit =
+    try
+        match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
+        | :? IAuthAuditHook as hook ->
+            hook.RecordDenial {
+                Route = route
+                Subject = access.Subject
+                Requirement = ModulePermissionDenialRequirement
+                Verdict = UnauthorizedToolVerdict
+                Reason =
+                    $"AI tool '{toolName}' requires Read on module '{sourceModule}', which this caller does not hold."
+                ScopeId =
+                    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+                    | true, (:? StorageScope as s) -> Some s.ScopeId
+                    | _ -> None
+                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+            }
+            |> Async.Start
+        | _ -> ()
+    with _ ->
+        ()
+
 /// Generate an AIProviderToolDef (JSON Schema format) from an AIToolDefinition.
 /// Eliminates the need to hand-write both Definition and ProviderDef.
 /// Tool names are sanitized to meet provider naming constraints.
@@ -210,6 +419,20 @@ type AIToolRegistry() =
     member _.FindByName(name: string) =
         tools
         |> List.tryFind (fun t -> t.Definition.Name = name || t.ProviderDef.Name = name)
+
+    /// Phase 36.A — the tools this caller may reach, filtered by
+    /// per-module `Read` permission on each tool's `SourceModule`.
+    ///
+    /// This is the list-time half of the gate: the agent loop builds its
+    /// per-turn provider tool list from here, so an inaccessible tool is
+    /// never described to the model at all. `GetAll` is left untouched —
+    /// it remains the unfiltered registry view compose-time validators
+    /// and diagnostics need.
+    ///
+    /// An unrestricted context (empty `ModulePermissions`) returns the
+    /// same list `GetAll` does, in the same order (GP 11).
+    member _.ListAccessible(access: AccessContext) : RegisteredTool list =
+        tools |> List.filter (fun t -> isToolPermittedFor access t.Definition)
 
     /// Phase 709 — claim the one budget-elision Warn allowed for this
     /// tool. Returns `true` exactly once per tool name per registry;

@@ -413,6 +413,29 @@ let allTools: RegisteredTool list = [
 
 The registry is a mutable list populated via `RegisterAll(tools)` during compose. It's immutable after startup — no hot-swapping.
 
+### Tool dispatch RBAC (Phase 36.A)
+
+A module tool is an executable the model can reach **on the caller's behalf**, so the caller's module permissions gate it. Until Phase 36.A the per-turn tool list was filtered by *surface* only and the dispatch site looked a tool up by name and ran it — a user holding no `Read` on a module could still have that module's tools invoked, with the module's own RBAC gate sitting one layer below, unreached. The gate is now applied at four points, all through **one predicate** (`AIToolRegistry.isToolSourcePermittedFor`) so they cannot drift apart:
+
+| Point | Where | Effect |
+|---|---|---|
+| Per-turn tool list | `AIAgentEngine` via `AIToolRegistry.ListAccessible` | inaccessible tools are never described to the provider — the model does not know they exist |
+| Client-visible listing | `IAIAssistantApi.GetAvailableTools` | a user cannot enumerate the tool surface of a module they cannot read |
+| Dispatch site | `AIAgentEngine`, immediately before `tool.Execute` | typed `Denied` tool-result + audit; **the security boundary** |
+| `/api/ai/tool-result` | `ClientToolDispatch.clientToolResultHandler` | `403`; the pending call is left registered, not aborted |
+
+**The list filter is ergonomic; the dispatch re-check is the boundary.** Once the list filter holds, a well-behaved model cannot reach the dispatch check at all — what reaches it is a *forged* name: a hallucinated call, a replayed conversation history carrying a call from when the caller still held the permission, or a provider response fabricated upstream. The re-check refuses with `ToolInvocationError.Denied` (not `ToolThrew`) so the model is told the action is not permitted rather than that it failed, which would invite a retry.
+
+**Permission source — items, not DI, and this is load-bearing.** Tool dispatch runs inside the agent loop's *background* `HttpContext` (`createBackgroundContext`), whose DI `AccessContext` factory reads the now-disposed live request via `IHttpContextAccessor` and would yield an *unrestricted anonymous* context — the gate would then pass everything. `AIToolRegistry.reconstructAccessContext` reads the `ToolUp.StorageScope` / `ToolUp.UserId` / `ToolUp.ModulePermissions` items the background context copies forward (the same seam the `_platform.ai.*` family documents above), and works unchanged on a real request context. It is resolved once per turn: permissions do not change mid-turn, and re-resolving per call would let a mid-conversation revocation apply inconsistently across a parallel tool batch.
+
+**Unconfigured deployments are unchanged (GP 11).** `AccessContext.hasPermission` treats an empty `ModulePermissions` map as unrestricted, so a deployment that has never configured per-module permissions sees the identical tool list in the identical order. The `Read` / `Write` / `Admin` hierarchy is the platform's (`ModulePermission.implies`) — `Write` and `Admin` both satisfy the `Read` requirement.
+
+**SDK-reserved tool sources are exempt, because they are not modules.** A tool whose `SourceModule` begins `_` (`_platform.ai`, `_sdk.FeatureFlags`, `_sdk.ModuleVisibility`, `_algorithms`, `_facts`, `_scheduling`) or `ToolUp.` (`ToolUp.Platform` — the narrative tools; `ToolUp.KnowledgeBase`) passes the gate: no permission map names those keys, so gating them on their own `SourceModule` would make every built-in family vanish the moment a deployment configured RBAC. The `_platform.ai.*` family enforces RBAC internally per requested *target* module instead (see its table above). The exemption is **not absolute** — a deployment that names a reserved source explicitly in `ModulePermissions` has that declaration honoured, so gating one deliberately remains possible.
+
+**Audit.** A refusal writes two rows, deliberately: a `_platform.ai.unauthorized_tool` / `UnauthorizedTool` `ModuleEvent` in the caller's scope (distinct from the `_platform.ai.tool_allowlist_denial` stream — an allowlist deny is a policy the deployment authored; an unauthorized-tool deny means the model reached for something the *user* may not have), and an `AuthorizationDenied` row through the Phase 120 `IAuthAuditHook` under `ModulePermissionDenialRequirement` with verdict `unauthorized_tool`, so it joins the uniform `/dev/auth-denials` rollup. Both are best-effort and never block the turn. PII envelope: the tool name and source module — never the tool arguments, which can carry anything the model chose to put in them.
+
+**Six-rule portability audit.** `isToolSourcePermittedFor` / `isToolPermittedFor` are pure `AccessContext × string → bool`: identity by value (rule 1), nothing to await (rule 2), no retry semantics to express (rule 3), no state retained between calls (rule 4), no ordering promise (rule 5), no timing precision claim (rule 6). No framework type crosses the predicate, so a distributed dispatcher evaluates the same data and reaches the same verdict.
+
 ### Two tiers: chat-only vs client action (Phase 6c)
 
 Every AI tool runs server-side and returns a JSON string to the agent loop. That JSON is the **Level 1** result — it reaches the user as text inside the chat. For many tools that is the whole story: the user reads the numbers, decides what to do, and takes the action themselves.

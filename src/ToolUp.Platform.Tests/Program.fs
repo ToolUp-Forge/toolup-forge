@@ -909,6 +909,12 @@ let allTests =
         // the elided size — visible rather than silently truncated, and
         // deliberately unlike both a policy withhold and a tool error.
         AIToolResultBudgetTests.tests
+        // Phase 36.A — AI tool-dispatch RBAC. The per-turn tool list, the
+        // client-visible listing, the agent-loop dispatch site and the
+        // /api/ai/tool-result completion all gate on the caller's per-module
+        // Read; a forged tool name is refused with a typed Denied before the
+        // executor runs and lands a _platform.ai.unauthorized_tool audit row.
+        AIToolDispatchRbacTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure
