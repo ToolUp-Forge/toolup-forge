@@ -166,6 +166,8 @@ RAG-specific builders:
 - `withReranker: IReranker -> RAGServerApp -> RAGServerApp`
 
 > `IOcrProvider` has no `with*` builder: `composeWithRAG` probes DI for an already-registered provider and falls back to the no-op only when it finds none, so an OCR companion is composed by `services.AddSingleton<IOcrProvider>(...)` before the RAG composition runs. See [`companions/ocr-providers.md`](../companions/ocr-providers.md).
+
+> `IQueryRewriter` (conversation-aware query rewrite) has no `with*` builder either, and for the same reason: `composeWithRAG` probes DI, so the registration *is* the opt-in and the compose surface grows no knob for it. Register before the RAG composition runs — `services.AddSingleton<IQueryRewriter>(ProviderQueryRewriter.create aiProvider)` for the shipped provider-backed rewriter, or any implementation of your own. No registration ⇒ the pipeline is byte-for-byte its pre-rewrite self (GP 11 / GP 13); the stage only ever fires for a request that carries `RetrievalRequest.History`. Bound it with `RetrievalPipelineOptions.QueryRewriteTimeoutMs` (default 2000ms) — on overrun or fault the pipeline searches the raw query and records `Failed` on the retrieval trace.
 - `withTextSummariser: ITextSummariser -> RAGServerApp -> RAGServerApp`
 
 Terminal:

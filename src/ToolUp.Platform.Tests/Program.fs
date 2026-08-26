@@ -922,6 +922,8 @@ let allTests =
         MetadataFilterContract.tests
         // Phase 506 — conversation-aware query rewrite (IQueryRewriter stage).
         QueryRewriteContract.tests
+        // Phase 506 — the compose-side DI pickup for that stage.
+        QueryRewriteComposeTests.tests
         // Phase 505 — citation character-offset spans (chunk → citation).
         CitationSpanContract.tests
         // Phase 501 — the sparse-index analyzer seam + the Snowball / CJK

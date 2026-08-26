@@ -1033,6 +1033,8 @@
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
+        <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->
+        <Compile Include="InProcess\QueryRewriteComposeTests.fs" />
         <!-- Phase 559 — the query_facts AI tool (disclosure-gated fact reads). -->
         <Compile Include="InProcess\FactQueryToolTests.fs" />
         <!-- Phase 703 — the query_metric_population AI tool: the bounded
