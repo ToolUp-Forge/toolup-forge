@@ -325,6 +325,32 @@ type ISeamAuthorityEvidence =
     /// deployment neither declared grants nor ran the check.
     abstract SeamAuthority: SeamAuthorityIntegrity option
 
+/// Phase 713 — the ninth section's source.
+///
+/// A second standalone sibling rather than a member on either interface
+/// above, for the reason Phase 693 recorded when it cut the first: an
+/// abstract member added to a shipped F# interface is a source break,
+/// because F# cannot author a default implementation and every
+/// hand-written object expression stops compiling. The report resolves
+/// this one by type test too, so an evidence value that never heard of
+/// the evidence chain still compiles and its ninth section reads
+/// `NotComposed` — the honest verdict for a deployment that composed
+/// nothing to say (GP 11).
+///
+/// A THUNK rather than a value, unlike the seam-authority member beside
+/// it, and the difference is not arbitrary. The seam gate's result is in
+/// the composition root's hand at boot and re-running it would answer a
+/// weaker question. A chain walk is the opposite: it reads live
+/// substrate, so a chain captured at boot would be a snapshot of an
+/// evidence posture that has moved, and the report would quote it as
+/// current.
+type IEvidenceChainEvidence =
+    /// Walk the evidence chain. `None` when no walker is composed.
+    /// `Error` carries the walk's typed refusal — an over-cap request or
+    /// an over-cap closure — which is never to be read as "the chain is
+    /// empty".
+    abstract EvidenceChain: (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option
+
 [<RequireQualifiedAccess>]
 module DeploymentVerificationEvidence =
 
@@ -341,6 +367,22 @@ module DeploymentVerificationEvidence =
         | :? ISeamAuthorityEvidence as source -> source.SeamAuthority
         | _ -> None
 
+    /// Phase 713 — read the evidence-chain member off an evidence value
+    /// that carries one. `None` for any evidence that does not implement
+    /// the sibling interface, which is every value built before this
+    /// phase.
+    ///
+    /// The same single-read-path discipline `seamAuthorityOf`
+    /// established: the gatherer and every wither go through here, so
+    /// "does this evidence carry a chain walk" has one answer rather than
+    /// one per call site.
+    let evidenceChainOf
+        (evidence: IDeploymentVerificationEvidence)
+        : (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option =
+        match box evidence with
+        | :? IEvidenceChainEvidence as source -> source.EvidenceChain
+        | _ -> None
+
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
     /// where a value is required rather than an option.
@@ -354,6 +396,9 @@ module DeploymentVerificationEvidence =
 
           interface ISeamAuthorityEvidence with
               member _.SeamAuthority = None
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = None
         }
 
     /// Evidence naming whichever sources the composition root holds. Each
@@ -374,6 +419,9 @@ module DeploymentVerificationEvidence =
 
           interface ISeamAuthorityEvidence with
               member _.SeamAuthority = None
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = None
         }
 
     /// Replace the grounding-continuity member, preserving every other
@@ -389,8 +437,10 @@ module DeploymentVerificationEvidence =
         // name would silently delete the sixth section for every root
         // that supplies both — and `withDeploymentVerificationEvidence`
         // calls this one unconditionally, so the loss would be the
-        // default rather than an edge case.
+        // default rather than an edge case. Phase 713's chain member
+        // rides through for exactly the same reason.
         let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -401,6 +451,9 @@ module DeploymentVerificationEvidence =
 
           interface ISeamAuthorityEvidence with
               member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
         }
 
     /// Phase 693 — supply the seam-authority posture, preserving every
@@ -417,6 +470,8 @@ module DeploymentVerificationEvidence =
         (seamAuthority: SeamAuthorityIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
+        let evidenceChain = evidenceChainOf evidence
+
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
             member _.GroundingContinuity = evidence.GroundingContinuity
@@ -426,6 +481,37 @@ module DeploymentVerificationEvidence =
 
           interface ISeamAuthorityEvidence with
               member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+        }
+
+    /// Phase 713 — supply the evidence-chain walk, preserving every other
+    /// source.
+    ///
+    /// A wither rather than a sixth argument to `create`, for the reason
+    /// `withSeamAuthority` is one: widening that function's parameter
+    /// list retypes it, which the public-API approval gate reads as a
+    /// REMOVAL of the five-argument form and which breaks every existing
+    /// call.
+    let withEvidenceChain
+        (walk: (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = walk
         }
 
 /// Phase 686 — gather the sections, fold them into the report, and
@@ -951,6 +1037,143 @@ module DeploymentVerificationReport =
                             binding
                     ))
                     findings
+
+    // ─── Phase 713 — the ninth section: the join ─────────────────────────
+
+    /// How many hop lines the evidence-chain section carries.
+    ///
+    /// The chain's hop count is fixed and small by construction, so this
+    /// is not a truncation guard for the hops themselves — it bounds the
+    /// per-hop findings the section quotes beneath them. The verdict's
+    /// own counts are always over the whole walk.
+    [<Literal>]
+    let EvidenceChainFindingCap = 40
+
+    /// One line per hop, in walk order, whatever each hop said.
+    ///
+    /// **Every hop renders, including the absent ones.** A section that
+    /// listed only the resolved hops would read as a complete chain and
+    /// would not be — which is the single failure this whole surface
+    /// exists to prevent, reproduced at the last possible moment inside
+    /// the artefact meant to expose it.
+    let private hopFindings (chain: EvidenceChain) : string list =
+        let lines =
+            chain.Hops
+            |> List.map (fun hop ->
+                sprintf
+                    "%d. %s — %s: %s"
+                    hop.Ordinal
+                    hop.Title
+                    ((EvidenceLink.label hop.Link).ToUpperInvariant())
+                    (EvidenceLink.detail hop.Link))
+
+        let shown = lines |> List.truncate EvidenceChainFindingCap
+        let withheld = lines.Length - shown.Length
+
+        if withheld > 0 then
+            shown @ [ sprintf "(%d further hop line(s) not listed)" withheld ]
+        else
+            shown
+
+    /// Evidence chain (Phase 713).
+    ///
+    /// **Four verdicts for four chain outcomes, and the two
+    /// non-affirmative ones are not the same.** A chain in which nothing
+    /// resolved is `Observed` and never `NotComposed`: the walker IS
+    /// composed, it ran, and it found no join — which is a read with
+    /// nothing to affirm, not an absent substrate. A chain the walker
+    /// REFUSED is `Unreadable` and never `Observed`, for the reason the
+    /// ledger section refuses to read a failed integrity gate as an empty
+    /// log: a deployment that can end an inconvenient walk by exceeding
+    /// its own cap must not be rewarded with a quieter verdict.
+    ///
+    /// A withheld hop never reddens the section. A refusal is a working
+    /// access control, and a report that failed on one would teach a
+    /// reader to route around the control rather than ask its holder.
+    let gatherEvidenceChain (evidence: IDeploymentVerificationEvidence) : Async<ReportSection> = async {
+        let title = "Evidence chain"
+
+        match DeploymentVerificationEvidence.evidenceChainOf evidence with
+        | None ->
+            return
+                section
+                    EvidenceChainSection
+                    title
+                    (VerificationSectionVerdict.NotComposed
+                        "no evidence chain walker is composed, so tracing this deployment back to the work that authored it is an investigation rather than a query")
+                    []
+        | Some walk ->
+            let! outcome = walk () |> Async.Catch
+
+            match outcome with
+            | Choice2Of2 ex ->
+                return
+                    section
+                        EvidenceChainSection
+                        title
+                        (VerificationSectionVerdict.Unreadable(sprintf "the chain walk raised: %s" ex.Message))
+                        []
+            | Choice1Of2(Error error) ->
+                return
+                    section
+                        EvidenceChainSection
+                        title
+                        (VerificationSectionVerdict.Unreadable(
+                            sprintf "the chain walk was refused: %s" (EvidenceChainError.describe error)
+                        ))
+                        []
+            | Choice1Of2(Ok chain) ->
+                let hops = List.length chain.Hops
+
+                let linked =
+                    chain.Hops
+                    |> List.filter (fun hop -> EvidenceLink.isLinked hop.Link)
+                    |> List.length
+
+                let broken =
+                    chain.Hops
+                    |> List.filter (fun hop -> EvidenceLink.isBroken hop.Link)
+                    |> List.length
+
+                let verdict =
+                    match chain.Outcome with
+                    | EvidenceChainOutcome.ChainBroken ->
+                        VerificationSectionVerdict.Failed(
+                            sprintf
+                                "%d of %d hop(s) in the chain are broken, so the walk from the authoring work to the ledger position does not hold (chain digest %s)"
+                                broken
+                                hops
+                                chain.VerdictDigest
+                        )
+                    | EvidenceChainOutcome.ChainUnrecorded ->
+                        // Composed, walked, and not one join resolved.
+                        // `Observed` rather than `NotComposed` — the
+                        // walker answered, and what it answered is that
+                        // this deployment records no chain at all.
+                        VerificationSectionVerdict.Observed(
+                            sprintf
+                                "the chain was walked and not one of its %d hop(s) resolves, so this deployment records no traversable evidence at all (chain digest %s)"
+                                hops
+                                chain.VerdictDigest
+                        )
+                    | EvidenceChainOutcome.ChainPartial ->
+                        VerificationSectionVerdict.Observed(
+                            sprintf
+                                "%d of %d hop(s) resolve and none is broken, so the chain is unbroken where it exists and does not reach end to end (chain digest %s)"
+                                linked
+                                hops
+                                chain.VerdictDigest
+                        )
+                    | EvidenceChainOutcome.ChainComplete ->
+                        VerificationSectionVerdict.Verified(
+                            sprintf
+                                "all %d hop(s) resolve, so this deployment traverses from the upstream work record that authored its sources to its position in the audit ledger (chain digest %s)"
+                                hops
+                                chain.VerdictDigest
+                        )
+
+                return section EvidenceChainSection title verdict (hopFindings chain)
+    }
 
     // ─── Phase 699 — declared intent, and accepted risk ──────────────────
     //
@@ -1495,6 +1718,28 @@ module DeploymentVerificationReport =
                     else
                         None
             }
+            {
+                // Phase 713 appends, for the reason every statement since
+                // 693 has: the canonical form is order-sensitive, so
+                // inserting among the existing statements would move the
+                // lines of every statement after it.
+                //
+                // A chain invites one specific over-reading — that a
+                // complete traversal proves the endpoints are TRUE — and
+                // the artefact would be dishonest without saying
+                // otherwise. Each hop proves that two recorded facts
+                // reference each other as recorded. What produced either
+                // fact is outside every link in the walk.
+                Id = "chain-joins-records-not-reality"
+                Statement =
+                    "The evidence chain proves that recorded facts reference each other as recorded: that the deploy record names this transcript, that this closure is the one it binds, that a work record covers its sources. It does not establish that any of those records was true when it was written. A complete chain over fabricated inputs is complete, and the hop that would catch that does not exist — no traversal can."
+                Narrowing =
+                    if isComposed EvidenceChainSection then
+                        Some
+                            "every hop names the join key it resolved on, so a reader can re-derive each link from the records themselves rather than take the chain's word for it. The bound is unchanged: re-deriving a link confirms the reference, never the fact."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -1535,13 +1780,18 @@ module DeploymentVerificationReport =
             let configConformance = gatherConfigConformance ()
             let acknowledgements = gatherAcceptedAcknowledgements ()
 
+            // Phase 713. The one section whose subject is a join across
+            // the substrates the others read one at a time.
+            let! evidenceChain = gatherEvidenceChain evidence
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
             // the five would move the SECTION LINES of the ones after it
             // too, so a reader diffing two canonical forms across the
             // upgrade could not tell a re-ordering from a re-verdict.
-            // Phase 699 appends its two for the same reason.
+            // Phase 699 appends its two for the same reason, and Phase
+            // 713 its one.
             let sections = [
                 bootSeal
                 continuity
@@ -1551,6 +1801,7 @@ module DeploymentVerificationReport =
                 seamAuthority
                 configConformance
                 acknowledgements
+                evidenceChain
             ]
 
             let notProved = notProvedFor sections

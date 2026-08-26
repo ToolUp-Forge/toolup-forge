@@ -204,6 +204,8 @@ let allTests =
         // Phase 12d — AG Grid value-provenance overlay.
         CellProvenanceTests.tests
         AuthProviderTests.tests
+        // Phase 463 — OIDC JWKS configurable TTL + surfaced revocation window.
+        OidcJwksTtlTests.tests
         AzureBlobStorageTests.tests
         AwsS3StorageTests.tests
         GoogleCloudStorageTests.tests
@@ -1226,6 +1228,22 @@ let allTests =
         SbomProjectionTests.sbomHonestyTests
         SbomProjectionTests.sbomScopeStatementTests
         SbomProjectionTests.sbomEndpointTests
+        // Phase 713 — the join across those substrates, with every break
+        // reported as data. The load-bearing pack is the first: hop COUNT
+        // is invariant to what is composed, probed over a ladder of
+        // arrangements and paired with an arm proving the ladder actually
+        // varies, so a walk that shortened itself for one middle shape
+        // cannot pass. The rest reach every verdict on the hop that
+        // produces it, prove absent and broken read differently, refuse
+        // outside the declared caps without shortening, and count the
+        // audited read.
+        EvidenceChainWalkerTests.hopCountInvarianceTests
+        EvidenceChainWalkerTests.honestAbsenceTests
+        EvidenceChainWalkerTests.verdictReachabilityTests
+        EvidenceChainWalkerTests.capRefusalTests
+        EvidenceChainWalkerTests.auditedReadTests
+        EvidenceChainWalkerTests.digestTests
+        EvidenceChainWalkerTests.reportSectionTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate

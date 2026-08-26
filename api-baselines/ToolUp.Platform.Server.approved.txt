@@ -2194,6 +2194,9 @@ ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions (class)
 ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeploySummary, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployProvenance]], ToolUp.Platform.IDeployRecordSealer)
 ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions.Provenance : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeploySummary, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployProvenance]] { get }
 ToolUp.Platform.DefaultDeployPipeline+DeploySealingOptions.Sealer : ToolUp.Platform.IDeployRecordSealer { get }
+ToolUp.Platform.DefaultEvidenceChainWalker (class)
+ToolUp.Platform.DefaultEvidenceChainWalker..ctor(ToolUp.Platform.EvidenceChainSources, ToolUp.Platform.EvidenceChainCaps, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.DefaultEvidenceChainWalker.VerdictDigest(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]) : System.String
 ToolUp.Platform.DefaultEvidencePackGenerator (class)
 ToolUp.Platform.DefaultEvidencePackGenerator..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExportEnvelopeSigner], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.Platform.DefaultEvidencePackGeneratorModule (class)
@@ -2293,12 +2296,15 @@ ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConf
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi
 ToolUp.Platform.DeploymentVerificationEvidence (class)
 ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.evidenceChainOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]]
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
 ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
+ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
 ToolUp.Platform.DeploymentVerificationReport.ConfigConformanceKeyCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.EvidenceChainFindingCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityComponentCap : System.Int32 (literal)
@@ -2309,6 +2315,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherAnswerJoins(ToolUp.Platform.I
 ToolUp.Platform.DeploymentVerificationReport.gatherBootSeal(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherCertificates(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherConfigConformance() : ToolUp.Platform.DeploymentVerification+ReportSection
+ToolUp.Platform.DeploymentVerificationReport.gatherEvidenceChain(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
@@ -3215,6 +3222,36 @@ ToolUp.Platform.EventTopologyWireEntry..ctor(System.String, Microsoft.FSharp.Col
 ToolUp.Platform.EventTopologyWireEntry.Component : System.String { get }
 ToolUp.Platform.EventTopologyWireEntry.EmittedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.EventTopologyWireEntry.SubscribedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceChainSources (class)
+ToolUp.Platform.EvidenceChainSources..ctor(ToolUp.Platform.WorkProvenanceMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DependencyClosure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDeployRecordSealer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackReading, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerPositionReading, System.String]]]])
+ToolUp.Platform.EvidenceChainSources.Boot : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading] { get }
+ToolUp.Platform.EvidenceChainSources.Closure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DependencyClosure] { get }
+ToolUp.Platform.EvidenceChainSources.Deploy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord] { get }
+ToolUp.Platform.EvidenceChainSources.Ledger : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerPositionReading, System.String]]]] { get }
+ToolUp.Platform.EvidenceChainSources.Pack : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackReading, System.String]]]] { get }
+ToolUp.Platform.EvidenceChainSources.Sealer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDeployRecordSealer] { get }
+ToolUp.Platform.EvidenceChainSources.Transcript : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript] { get }
+ToolUp.Platform.EvidenceChainSources.Work : ToolUp.Platform.WorkProvenanceMode { get }
+ToolUp.Platform.EvidenceChainSourcesModule (class)
+ToolUp.Platform.EvidenceChainSourcesModule.none : ToolUp.Platform.EvidenceChainSources { get }
+ToolUp.Platform.EvidenceChainSourcesModule.packReadOf(ToolUp.Platform.IEvidencePackGenerator, ToolUp.Platform.EvidencePackRequest, Microsoft.FSharp.Core.Unit) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackReading, System.String]]
+ToolUp.Platform.EvidenceChainWalker (class)
+ToolUp.Platform.EvidenceChainWalker.PlatformScopeId : System.String (literal)
+ToolUp.Platform.EvidenceChainWalker.create(ToolUp.Platform.EvidenceChainSources) : ToolUp.Platform.IEvidenceChainWalker
+ToolUp.Platform.EvidenceChainWalker.createWith(ToolUp.Platform.EvidenceChainCaps, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.EvidenceChainSources) : ToolUp.Platform.IEvidenceChainWalker
+ToolUp.Platform.EvidenceChainWalker.ofMode(ToolUp.Platform.EvidenceChainWalkerMode) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEvidenceChainWalker]
+ToolUp.Platform.EvidenceChainWalker.recordWalk(System.IServiceProvider, ToolUp.Platform.EvidenceChain) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.EvidenceChainWalker.run(System.IServiceProvider, ToolUp.Platform.EvidenceChainWalkerMode, ToolUp.Platform.EvidenceChainRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]
+ToolUp.Platform.EvidenceChainWalkerMode (class)
+ToolUp.Platform.EvidenceChainWalkerMode.IsComposedEvidenceChainWalker : System.Boolean { get }
+ToolUp.Platform.EvidenceChainWalkerMode.IsNoEvidenceChainWalker : System.Boolean { get }
+ToolUp.Platform.EvidenceChainWalkerMode.NoEvidenceChainWalker : ToolUp.Platform.EvidenceChainWalkerMode { get }
+ToolUp.Platform.EvidenceChainWalkerMode.Tag : System.Int32 { get }
+ToolUp.Platform.EvidenceChainWalkerMode+ComposedEvidenceChainWalker (class)
+ToolUp.Platform.EvidenceChainWalkerMode+ComposedEvidenceChainWalker.Item : ToolUp.Platform.IEvidenceChainWalker { get }
+ToolUp.Platform.EvidenceChainWalkerMode+Tags (class)
+ToolUp.Platform.EvidenceChainWalkerMode+Tags.ComposedEvidenceChainWalker : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainWalkerMode+Tags.NoEvidenceChainWalker : System.Int32 (literal)
 ToolUp.Platform.EvidencePackGenerator (class)
 ToolUp.Platform.EvidencePackGenerator.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.IEvidencePackGenerator) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.EvidencePackHandler (class)
@@ -4162,6 +4199,11 @@ ToolUp.Platform.IEntityStore+IEntityStore.ListAll`1(System.String, System.String
 ToolUp.Platform.IEntityStore+IEntityStore.ListVersions`1(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityRef`1[T]]]
 ToolUp.Platform.IEntityStore+IEntityStore.Query`1(System.String, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[T], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.Save`1(System.String, T) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
+ToolUp.Platform.IEvidenceChainEvidence (interface)
+ToolUp.Platform.IEvidenceChainEvidence.EvidenceChain : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]] { get }
+ToolUp.Platform.IEvidenceChainWalker (interface)
+ToolUp.Platform.IEvidenceChainWalker.GetCaps() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.EvidenceChainCaps]
+ToolUp.Platform.IEvidenceChainWalker.Walk(ToolUp.Platform.EvidenceChainRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]
 ToolUp.Platform.IExportEnvelopeSigner (interface)
 ToolUp.Platform.IExportEnvelopeSigner.SignEnvelope(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportSignature, System.String]]
 ToolUp.Platform.IExternalCallbackCapableBackend (interface)

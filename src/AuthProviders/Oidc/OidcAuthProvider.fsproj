@@ -8,6 +8,7 @@
     <PackageTags>fsharp;sdk;auth;oidc;jwt;server;provider</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="OidcAuthProvider.Cache.fs" />
     <Compile Include="OidcAuthProvider.Jwt.fs" />
     <Compile Include="OidcAuthProvider.Jwks.fs" />
     <Compile Include="OidcAuthProvider.fs" />
