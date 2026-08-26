@@ -144,37 +144,35 @@ let blobStorageFactory (leg: CloudLeg) : Result<(unit -> IBlobStorage), LegSkip>
                 })
 
     | FakeGcs ->
-        // The finding this phase was written to surface, arriving exactly
-        // where it was predicted: the emulator is fine, the SEAM is
-        // missing. `GoogleCloudStorageConfig` carries BucketName +
-        // CredentialsJson + CredentialsJsonProvider and no endpoint
-        // override, and the companion builds its client via
-        // `StorageClient.Create`, which does NOT consult
-        // `STORAGE_EMULATOR_HOST` — verified locally: with that variable
-        // set, `Create` still walks the Application Default Credentials
-        // chain and throws "Your default credentials were not found."
-        // Emulator support in this SDK lives on `StorageClientBuilder`
-        // (`BaseUri` / `EmulatorDetection` / `UnauthenticatedAccess`),
-        // which the companion does not expose.
+        // ARMED 2026-08-26 (tidy-drain). Phase 193 left this cell a named
+        // skip because the emulator was fine and the SEAM was missing:
+        // `GoogleCloudStorageConfig` carried no endpoint override, and the
+        // companion built its client via `StorageClient.Create`, which does
+        // NOT consult `STORAGE_EMULATOR_HOST` — verified then: with that
+        // variable set, `Create` still walked the Application Default
+        // Credentials chain and threw "Your default credentials were not
+        // found." Emulator support in this SDK lives on
+        // `StorageClientBuilder` (`BaseUri` / `UnauthenticatedAccess`).
         //
-        // So GCS is not emulator-testable through the shipped surface, and
-        // the honest matrix cell is a named skip rather than a green tick.
-        // Adding an `EndpointUrl` field to `GoogleCloudStorageConfig` —
-        // mirroring `AwsS3StorageConfig`, which already has one — turns
-        // this leg on with NO change to this harness. That change is a
-        // companion runtime-surface edit (and an F# record field addition,
-        // so a version bump plus a public-API-baseline regen), which is
-        // why it is not folded into this CI-only phase.
+        // The companion now exposes `EndpointUrl`, mirroring
+        // `AwsS3StorageConfig`, and routes an override through the builder
+        // — so this leg arms exactly as 193 predicted it would. Like the
+        // LocalStack leg above, the companion does NOT create the bucket:
+        // the compose lane pre-creates it (fake-gcs-server takes a seeded
+        // `-data` directory or a `POST /storage/v1/b` call). See
+        // `docs/migrations/193-multi-cloud-parity-conformance-matrix.md`.
         match env (CloudLeg.envVar FakeGcs) with
         | None -> Error(NotConfigured(CloudLeg.envVar FakeGcs))
-        | Some _ ->
-            Error(
-                NoCompanionSeam(
-                    "ToolUp.Storage.GoogleCloudStorage",
-                    "GoogleCloudStorageConfig has no endpoint override, and StorageClient.Create ignores "
-                    + "STORAGE_EMULATOR_HOST — add an EndpointUrl field (as AwsS3StorageConfig has) to arm this leg"
-                )
-            )
+        | Some endpointUrl ->
+            let bucket = envOr "toolup-parity" "TOOLUP_PARITY_FAKEGCS_BUCKET"
+
+            Ok(fun () ->
+                ToolUp.Storage.GoogleCloudStorage.create {
+                    BucketName = bucket
+                    CredentialsJson = None
+                    CredentialsJsonProvider = None
+                    EndpointUrl = Some endpointUrl
+                })
 
 // ─── ISecretStore per leg ────────────────────────────────────────────
 
@@ -198,35 +196,48 @@ let secretStoreFactory (leg: CloudLeg) : Result<(unit -> ISecretStore), LegSkip>
         )
 
     | LocalStack ->
-        // LocalStack DOES emulate Secrets Manager. The companion's config
-        // is `{ Region }` with no endpoint override, so the endpoint has to
-        // come from the AWS SDK's own endpoint-URL resolution
-        // (`AWS_ENDPOINT_URL_SECRETS_MANAGER`, honoured by AWS SDK for .NET
-        // v4 — `ClientConfig.IgnoreConfiguredEndpointUrls` is the opt-out
-        // that proves the mechanism exists).
+        // LocalStack DOES emulate Secrets Manager. Until 2026-08-26 the
+        // companion's config was `{ Region }` with no endpoint override, so
+        // the endpoint had to come from the AWS SDK's own endpoint-URL
+        // resolution (`AWS_ENDPOINT_URL_SECRETS_MANAGER`) — and THAT is
+        // what made the guard below load-bearing rather than defensive
+        // boilerplate. Without the variable, `create { Region = ... }`
+        // resolved to the REAL AWS Secrets Manager endpoint for that
+        // region, and the contract pack writes and deletes secrets: against
+        // a live account, on whatever ambient credentials the machine has,
+        // with Secrets Manager's 7-30 day deletion-recovery window making
+        // the mess durable.
         //
-        // THE GUARD BELOW IS LOAD-BEARING, not defensive boilerplate.
-        // Without the endpoint variable, `AwsSecretsManager.create
-        // { Region = ... }` resolves to the REAL AWS Secrets Manager
-        // endpoint for that region, and the contract pack writes and
-        // deletes secrets — against a live account, on whatever ambient
-        // credentials the machine has, with Secrets Manager's 7-30 day
-        // deletion-recovery window making the mess durable. A parity leg
-        // must never be one missing variable away from that, so an armed
-        // leg with no endpoint refuses to run and says so.
+        // The companion now takes `EndpointUrl`, so the leg passes the
+        // endpoint explicitly and that footgun is gone by construction: an
+        // explicit `Some` cannot be absent by accident the way an
+        // environment variable can. The guard stays — it is now asking a
+        // different question (is this leg pointed somewhere?) and it still
+        // refuses to run an unpointed leg rather than defaulting to live
+        // AWS. `AWS_ENDPOINT_URL_SECRETS_MANAGER` is accepted as a fallback
+        // source for the URL so an existing compose lane keeps working.
         match env "TOOLUP_PARITY_LOCALSTACK_SECRETS" with
         | None -> Error(NotConfigured "TOOLUP_PARITY_LOCALSTACK_SECRETS")
         | Some region ->
-            match env "AWS_ENDPOINT_URL_SECRETS_MANAGER" with
+            match
+                env "TOOLUP_PARITY_LOCALSTACK_SECRETS_ENDPOINT"
+                |> Option.orElse (env "AWS_ENDPOINT_URL_SECRETS_MANAGER")
+            with
             | None ->
                 Error(
                     UnsafeConfiguration(
-                        "TOOLUP_PARITY_LOCALSTACK_SECRETS is set but AWS_ENDPOINT_URL_SECRETS_MANAGER is not, "
+                        "TOOLUP_PARITY_LOCALSTACK_SECRETS is set but neither "
+                        + "TOOLUP_PARITY_LOCALSTACK_SECRETS_ENDPOINT nor AWS_ENDPOINT_URL_SECRETS_MANAGER is, "
                         + "so the AWS SDK would resolve the real Secrets Manager endpoint and this pack would "
-                        + "write secrets to a live account — export the endpoint variable to arm this leg"
+                        + "write secrets to a live account — export an endpoint to arm this leg"
                     )
                 )
-            | Some _ -> Ok(fun () -> ToolUp.Secrets.AwsSecretsManager.create { Region = region })
+            | Some endpointUrl ->
+                Ok(fun () ->
+                    ToolUp.Secrets.AwsSecretsManager.create {
+                        Region = region
+                        EndpointUrl = Some endpointUrl
+                    })
 
     | FakeGcs ->
         // fake-gcs-server is a Cloud Storage emulator only. Google ships no

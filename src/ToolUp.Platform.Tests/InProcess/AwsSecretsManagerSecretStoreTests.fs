@@ -38,6 +38,12 @@ let tests =
         ]
     | region ->
         let factory () =
-            ToolUp.Secrets.AwsSecretsManager.create { Region = region }
+            ToolUp.Secrets.AwsSecretsManager.create {
+                Region = region
+                // Unchanged behaviour: this env-gated binding targets a real
+                // account and always did. The emulator route is the parity
+                // pack's LocalStack leg, which passes an explicit endpoint.
+                EndpointUrl = None
+            }
 
         ISecretStoreContract.tests "AwsSecretsManagerSecretStore" factory

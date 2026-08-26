@@ -52,6 +52,23 @@ type GoogleCloudStorageConfig = {
     /// — the metadata server / workload-identity chain refreshes tokens
     /// itself — so the provider is only needed for the inline-JSON path.
     CredentialsJsonProvider: (unit -> string) option
+    /// Optional GCS-compatible endpoint override — the mirror of
+    /// `AwsS3StorageConfig.EndpointUrl`, and the seam an emulator needs.
+    /// `None` (default) preserves today's behaviour exactly: the client is
+    /// built by `StorageClient.Create`, which resolves the real
+    /// `storage.googleapis.com` endpoint and honours the ADC chain.
+    ///
+    /// `Some uri` builds through `StorageClientBuilder` with `BaseUri` set,
+    /// which is the only surface in this SDK that can be pointed elsewhere
+    /// — `StorageClient.Create` does NOT consult `STORAGE_EMULATOR_HOST`
+    /// (verified: with that variable set it still walks the ADC chain and
+    /// throws "Your default credentials were not found"). When an override
+    /// is set and no credentials are supplied, the builder is put into
+    /// unauthenticated mode, because an emulator has no credentials to
+    /// present and the ADC chain would otherwise fail before the first
+    /// call. Supplying `CredentialsJson` alongside an override keeps the
+    /// credential, for an authenticating GCS-compatible endpoint.
+    EndpointUrl: string option
 }
 
 module GoogleCloudStorageConfig =
@@ -59,21 +76,38 @@ module GoogleCloudStorageConfig =
         BucketName = ""
         CredentialsJson = None
         CredentialsJsonProvider = None
+        EndpointUrl = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
-let private buildClientFromJson (credentialsJson: string option) : StorageClient =
-    match credentialsJson with
-    | Some json ->
-        let credential = GoogleCredential.FromJson json
-        StorageClient.Create credential
+let private buildClientFor (endpointUrl: string option) (credentialsJson: string option) : StorageClient =
+    match endpointUrl with
     | None ->
-        // Application Default Credentials — the SDK resolves env /
-        // metadata server / workload identity itself.
-        StorageClient.Create()
+        // Unchanged pre-existing path (GP 11) — no builder, no behaviour
+        // difference for any deployment that does not set an override.
+        match credentialsJson with
+        | Some json ->
+            let credential = GoogleCredential.FromJson json
+            StorageClient.Create credential
+        | None ->
+            // Application Default Credentials — the SDK resolves env /
+            // metadata server / workload identity itself.
+            StorageClient.Create()
+    | Some uri ->
+        let builder = StorageClientBuilder(BaseUri = uri)
+
+        match credentialsJson with
+        | Some json -> builder.Credential <- GoogleCredential.FromJson json
+        | None ->
+            // No credential to present, and an emulator wants none — say so
+            // explicitly rather than letting the ADC chain throw first.
+            builder.UnauthenticatedAccess <- true
+
+        builder.Build()
+
 
 // ─── IBlobStorage implementation ─────────────────────────────────────
 
@@ -99,7 +133,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             // Static / ADC path: build once, never rebuild.
             lock gate (fun () ->
                 if isNull cachedClient then
-                    cachedClient <- buildClientFromJson config.CredentialsJson
+                    cachedClient <- buildClientFor config.EndpointUrl config.CredentialsJson
 
                 cachedClient)
         | Some provider ->
@@ -108,7 +142,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             lock gate (fun () ->
                 if isNull cachedClient || resolved <> cachedJson then
                     cachedJson <- resolved
-                    cachedClient <- buildClientFromJson (Some resolved)
+                    cachedClient <- buildClientFor config.EndpointUrl (Some resolved)
 
                 cachedClient)
 
@@ -437,5 +471,11 @@ let fromEnv () : IBlobStorage option =
                 // `CredentialsJsonProvider = Some f` (Phase 2c) to survive
                 // rotation without a restart; ADC deployments need neither.
                 CredentialsJsonProvider = None
+                // No env key for the endpoint override, deliberately. It
+                // exists for emulator / GCS-compatible-endpoint use, which
+                // is a `create` concern; a deployment that could set an env
+                // var to redirect production storage is a footgun, not a
+                // feature.
+                EndpointUrl = None
             }
         )
