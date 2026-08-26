@@ -1129,6 +1129,31 @@ type ModuleVisibilityAdminMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalModuleVisibilityAdmin of ErasedModule
 
+/// Branding for the session-security page.
+type SessionSecurityConfig = { Name: string; Icon: ReactElement }
+
+/// Phase 528 — controls the built-in session-security page: the caller's
+/// active sessions, revoke-one, and sign-out-everywhere over `ISessionApi`.
+///
+/// Default `NoSessionSecurity`, and deliberately not inferred from
+/// anything the client already knows, for the same reason
+/// `ModuleVisibilityAdminMode` is not: the registry is selected
+/// server-side by `ServerConfig.SessionRegistry`, and on the default
+/// `NoSessionRegistry` the API's routes 404 — so a client that mounted the
+/// page speculatively would render a security surface whose every call
+/// fails, which is a worse outcome than not offering it. A page that
+/// cannot list your sessions cannot be distinguished, by the person
+/// reading it, from a page saying you have none. Pair the two (GP 13).
+type SessionSecurityMode =
+    /// No session-security page in the sidebar (default).
+    | NoSessionSecurity
+    /// SDK built-in session-security page.
+    | DefaultSessionSecurity
+    /// SDK built-in with custom name/icon.
+    | ConfiguredSessionSecurity of SessionSecurityConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalSessionSecurity of ErasedModule
+
 /// Phase 12c — payload delivered to `ClientConfig.OnError` when a module's
 /// view tree throws. `ComponentStack` carries the React component-stack
 /// captured by the boundary's `componentDidCatch` (empty string when React
@@ -1461,6 +1486,12 @@ type ClientConfig = {
     /// and set this to `DefaultModuleVisibilityAdmin` (or one of the
     /// branded variants) to surface the editor.
     ModuleVisibilityAdmin: ModuleVisibilityAdminMode
+    /// Phase 528 — controls the session-security page. Default:
+    /// `NoSessionSecurity` — pair with a server-side
+    /// `ServerConfig.SessionRegistry` other than `NoSessionRegistry` and
+    /// set this to `DefaultSessionSecurity` (or one of the branded
+    /// variants) to surface the active-sessions view.
+    SessionSecurity: SessionSecurityMode
     /// Controls the Platform Admin module (Phase 4b). Active in every
     /// non-Anonymous mode unless set to `NoPlatformAdmin`. The shell
     /// sidebar filter hides the module's "Platform Management" group
@@ -1881,6 +1912,10 @@ module ClientConfig =
         // Opt-in (GP 11/13) — the server-side substrate is itself opt-in,
         // and the editor's API 404s until it is enabled.
         ModuleVisibilityAdmin = NoModuleVisibilityAdmin
+        // Phase 528 — no session-security page; the server-side registry
+        // is opt-in too, and an unpaired page would 404 on every call
+        // (GP 11 / GP 13).
+        SessionSecurity = NoSessionSecurity
         PlatformAdmin = DefaultPlatformAdmin
         PermissionsAdmin = DefaultPermissionsAdmin
         HealthMonitor = DefaultHealthMonitor

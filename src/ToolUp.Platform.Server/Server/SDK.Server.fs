@@ -676,6 +676,14 @@ let compose
     // the consumer's own `IDatasetStore` singleton in place.
     registerDatasetStore services config
 
+    // Phase 528 — session registry. Conditional on
+    // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
+    // registration entirely, so neither the revocation middleware nor the
+    // ISessionApi route has a store to resolve; `BlobSessionRegistry`
+    // registers the blob-backed default lazily; `CustomSessionRegistry`
+    // leaves the consumer's own `ISessionRegistry` singleton in place.
+    registerSessionRegistry services config
+
     // Phase 68 — graph-data substrate. InMemoryGraphStore (default)
     // registers the zero-dependency in-memory IGraphStore lazily;
     // CustomGraphStore leaves an engine companion's singleton in place.

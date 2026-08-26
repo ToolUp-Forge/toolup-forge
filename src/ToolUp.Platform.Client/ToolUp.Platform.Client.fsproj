@@ -303,6 +303,7 @@
         <!-- Module-visibility profile editor — the admin surface over
              IModuleVisibilityApi. Opt-in via ClientConfig.ModuleVisibilityAdmin. -->
         <Compile Include="Client\ModuleVisibilityAdminUI.fs" />
+        <Compile Include="Client\SessionSecurityUI.fs" />
         <Compile Include="Client\HealthMonitorUI.fs" />
         <Compile Include="Client\ServiceStatusBoardUI.fs" />
         <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />

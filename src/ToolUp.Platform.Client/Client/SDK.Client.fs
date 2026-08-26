@@ -3405,6 +3405,22 @@ module Client =
             | _, ConfiguredModuleVisibilityAdmin cfg -> [ ModuleVisibilityAdminUI.create (Some cfg) ]
             | _, ExternalModuleVisibilityAdmin custom -> [ custom ]
 
+        // Phase 528 — session-security page. Same scope rule again, for a
+        // sharper reason than the two above: the page lists sessions
+        // recorded against the CALLER's identity, and an Anonymous-only
+        // deployment's identity is the session itself, so the page would
+        // show one row describing the browser reading it and offer to
+        // sign it out of nothing. The server-side registry is separately
+        // opt-in (`ServerConfig.SessionRegistry`); when it is off the API
+        // 404s and this config is expected to stay `NoSessionSecurity`.
+        let sessionSecurity =
+            match ClientConfig.requiresAnyAuth config, config.SessionSecurity with
+            | false, _
+            | _, NoSessionSecurity -> []
+            | _, DefaultSessionSecurity -> [ SessionSecurityUI.create None ]
+            | _, ConfiguredSessionSecurity cfg -> [ SessionSecurityUI.create (Some cfg) ]
+            | _, ExternalSessionSecurity custom -> [ custom ]
+
         // Phase 4b — Platform Admin module. Mode-agnostic: registered
         // unconditionally and gated by the shell's sidebar filter
         // (commit 4f.2) on `PlatformRole.PlatformAdmin`. Anonymous-mode
@@ -3568,6 +3584,7 @@ module Client =
             @ teamConfig
             @ webhookAdmin
             @ moduleVisibilityAdmin
+            @ sessionSecurity
             @ permissionsAdmin
             @ usageDashboard
             @ dataIngestionAdmin

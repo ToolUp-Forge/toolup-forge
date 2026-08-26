@@ -561,6 +561,22 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j)
     }
     {
+        EventType = "SessionRevoked"
+        TryEncode =
+            (function
+            | SessionRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SessionRevoked(fromAuditJson<SessionRevokedPayload> j)
+    }
+    {
+        EventType = "AllSessionsRevoked"
+        TryEncode =
+            (function
+            | AllSessionsRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AllSessionsRevoked(fromAuditJson<AllSessionsRevokedPayload> j)
+    }
+    {
         EventType = "ConversationExported"
         TryEncode =
             (function

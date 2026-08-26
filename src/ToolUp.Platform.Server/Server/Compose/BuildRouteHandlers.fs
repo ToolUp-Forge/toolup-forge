@@ -142,6 +142,18 @@ let buildRouteHandlers
         | SurfacingModuleVisibility
         | EnforcedModuleVisibility -> [ makeApi (ModuleVisibilityApiHandler.moduleVisibilityApi config.ModuleNames) ]
 
+    // Phase 528 — session-security API (active sessions, revoke one,
+    // sign-out-everywhere, team-admin force-revoke). Mounted only when
+    // `ServerConfig.SessionRegistry` selects a backend — which is the SAME
+    // flag that registers `ISessionRegistry` into DI, so the route can
+    // never resolve a null store, and the default `NoSessionRegistry`
+    // mounts nothing at all (the surface 404s; GP 13).
+    let sessionHandler: HttpHandler list =
+        match config.SessionRegistry with
+        | NoSessionRegistry -> []
+        | BlobSessionRegistry _
+        | CustomSessionRegistry _ -> [ makeApi SessionApiHandler.sessionApi ]
+
     // Webhook admin API. Mounted only when the deployment opted in via
     // `ServerConfig.Webhooks = EnabledWebhooks`; the lightweight
     // `NoWebhooks` default skips the route entirely so the proxy
@@ -697,6 +709,7 @@ let buildRouteHandlers
             @ configHandler
             @ featureFlagHandler
             @ moduleVisibilityHandler
+            @ sessionHandler
             @ webhookHandler
             @ userSchemaHandler
             @ presenceHandler

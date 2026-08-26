@@ -147,6 +147,9 @@
         <!-- Phase 159 — durable per-subject consent state store contract
              (round-trip + per-subject / per-scope isolation + withdraw). -->
         <Compile Include="Contracts\IConsentStateStoreContract.fs" />
+        <!-- Phase 528 — session registry conformance (record / list /
+             revoke / per-scope isolation / staleness bound). -->
+        <Compile Include="Contracts\ISessionRegistryContract.fs" />
         <Compile Include="Contracts\ITimeSeriesStoreContract.fs" />
         <Compile Include="Contracts\IDatasetStoreContract.fs" />
         <!-- Phase 449 — model-fit envelope conformance (bound to the reference provider). -->
@@ -1228,6 +1231,11 @@
         <!-- Phase 159 — IConsentStateStore bindings (in-memory + entity-
              backed over BlobEntityStore) + restart-durability proof. -->
         <Compile Include="InProcess\ConsentStateStoreTests.fs" />
+        <!-- Phase 528 — ISessionRegistry binding over the blob-backed
+             default, plus the SessionIdentity derivation tests and the
+             retention / traversal specifics the portable pack cannot
+             express. -->
+        <Compile Include="InProcess\SessionRegistryTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
         <Compile Include="InProcess\UserClaimsTests.fs" />
