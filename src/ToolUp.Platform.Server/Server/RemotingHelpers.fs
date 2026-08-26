@@ -82,10 +82,63 @@ let makeApi<'impl> (api: HttpContext -> 'impl) =
 /// — matches the keys used by `AccessContext.ModulePermissions` and
 /// `IPermissionStore`.
 let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
+    // Phase 551 — the module's declared `GrantPolicy`, re-verified ON USE.
+    //
+    // The registry is resolved per request rather than closed over,
+    // because `permissionGuardedApiCore` runs at `ServerModule.withGuardedApi`
+    // time — before `compose` has built the container the registry lives
+    // in. The lookup misses entirely on a deployment that declares no
+    // policy (nothing is registered — GP 13), and `resolve` then answers
+    // `AdminDiscretion`, for which `isGrantLive` is unconditionally true.
+    // Such a deployment therefore executes one failed `GetService` and is
+    // otherwise byte-for-byte its pre-551 self.
+    let resolveRegistry (ctx: HttpContext) =
+        match ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
+        | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as r -> r
+        | _ -> GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+
+    /// Refuse + audit a permission entry that is present but inert. This
+    /// is the control that survives a grant row written straight into the
+    /// store: the write guard can be bypassed, this cannot (Phase 311).
+    /// The decision and the audit row both come from
+    /// `GrantPolicyGuard.guardDispatch`, so the pack exercises the same
+    /// path a request takes rather than a re-implementation of it.
+    let assertGrantLive (ctx: HttpContext) (accessCtx: AccessContext) =
+        let auditLog =
+            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as log -> Some log
+            | _ -> None
+
+        let scopeId =
+            accessCtx.TeamId
+            |> Option.map (fun t -> $"team-{t}")
+            |> Option.defaultValue accessCtx.UserId
+
+        match
+            GrantPolicyGuard.guardDispatch
+                (resolveRegistry ctx)
+                (GrantPolicyGuard.grantsFromItems ctx.Items)
+                auditLog
+                Async.Start
+                scopeId
+                accessCtx.UserId
+                moduleName
+        with
+        | Ok() -> ()
+        | Error payload ->
+            raise (
+                UnauthorizedAccessException(
+                    $"Access denied to module '{moduleName}': the grant is not live under the module's declared grant policy '{payload.DeclaredPolicy}' ({payload.InertReason})."
+                )
+            )
+
     let guardedBuilder (ctx: HttpContext) : 'T =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as accessCtx when not (AccessContext.canAccessModule moduleName accessCtx) ->
             raise (UnauthorizedAccessException($"Access denied to module '{moduleName}'"))
+        | :? AccessContext as accessCtx ->
+            assertGrantLive ctx accessCtx
+            apiBuilder ctx
         | _ -> apiBuilder ctx
 
     let errorHandler (ex: exn) (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpContext>) =

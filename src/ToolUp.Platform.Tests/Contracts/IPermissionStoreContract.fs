@@ -122,6 +122,10 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 Defaults = Map.ofList [ "X", [ Admin ] ]
                 Members = Map.ofList [ "bob", Map.ofList [ "X", [ Write ] ] ]
                 Exposure = Map.empty
+                // Phase 551 — no module declares a grant policy in this
+                // contract's fixture, so the grant map is empty and the
+                // document round-trips exactly as it did pre-551.
+                Grants = Map.empty
             }
 
             let! _ = store.SetTeamPermissions(team, replacement)
@@ -151,6 +155,33 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 Defaults = Map.ofList [ "M1", [ Read ]; "M2", [ Read; Write ]; "M3", [ Admin ] ]
                 Members = Map.ofList [ "alice", Map.ofList [ "M1", [ Admin ] ]; "bob", Map.ofList [ "M2", [] ] ]
                 Exposure = Map.ofList [ "M2", ModuleExposure.Hidden; "M3", ModuleExposure.Unavailable ]
+                // Phase 551 — grant records round-trip alongside the rest
+                // of the document, so a store implementation that drops
+                // them fails this contract rather than silently rendering
+                // every policy-bearing grant inert at dispatch.
+                Grants =
+                    Map.ofList [
+                        "alice",
+                        Map.ofList [
+                            "M1",
+                            {
+                                State = GrantState.Active
+                                SatisfiedPolicy = GrantPolicy.RequiresAcknowledgement
+                                Justification = "onboarding"
+                                ConsentedBy = None
+                            }
+                        ]
+                        "bob",
+                        Map.ofList [
+                            "M2",
+                            {
+                                State = GrantState.PendingConsent
+                                SatisfiedPolicy = GrantPolicy.RequiresSubjectConsent
+                                Justification = "pilot"
+                                ConsentedBy = Some "bob"
+                            }
+                        ]
+                    ]
             }
 
             let! _ = store.SetTeamPermissions(team, original)

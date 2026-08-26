@@ -153,6 +153,12 @@ let private highEvents =
         "DatasetPolicyDenied"
         "EgressBlocked"
         "EncryptionKeyRotated"
+        // Phase 551 — grant-policy refusals. High for the same reason
+        // `SchemaOnlyAccessAttempted` is: a refusal rate is a leading
+        // indicator for credential leak / misconfiguration, and
+        // `UnconsentedGrantRefused` with reason `no-grant-record` is the
+        // signature of a permission row written outside the guard.
+        "GrantPolicyRefused"
         "KnowledgeOriginalRetrievalDenied"
         "ModelArtifactTransitionDenied"
         "ModelFitGateFailed"
@@ -169,6 +175,7 @@ let private highEvents =
         "SurfaceDenied"
         "TeamCreationDenied"
         "TenantOffboardConfirmationRefused"
+        "UnconsentedGrantRefused"
     ]
 
 let private mediumEvents =

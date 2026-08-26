@@ -84,9 +84,35 @@ let registerTeamPermissionStores
     // (opt-in RBAC).
     // Phase 131 — wrap the permission store in the id-sanitising
     // decorator (same write-seam rejection as the team store above).
-    services.AddSingleton<IPermissionStore>(
-        StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
-    )
+    // Phase 551 — and, outside that, the grant-policy write guard, which
+    // refuses a grant that does not satisfy the target module's declared
+    // `GrantPolicy`.
+    //
+    // Registered through a FACTORY rather than an eager instance for one
+    // reason: the `ModuleGrantPolicyRegistry` is built from the composed
+    // module set in `ServerApp.run`, which lands its registration through
+    // the same `ServiceConfig` hook but not necessarily before this line
+    // runs. A factory resolves at first request, by which point both are
+    // present.
+    //
+    // When no module declares a policy the registry is never registered,
+    // the lookup misses, and the UNDECORATED store is returned — so the
+    // decorator does not exist at all in a deployment that does not use
+    // it (GP 13), rather than existing and always answering yes.
+    services.AddSingleton<IPermissionStore>(fun (sp: System.IServiceProvider) ->
+        let inner =
+            StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
+            :> IPermissionStore
+
+        let registry =
+            match sp.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
+            | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as r -> r
+            | _ -> GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+
+        if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
+            inner
+        else
+            GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, auditLog) :> IPermissionStore)
     |> ignore
 
     teamStoreOpt

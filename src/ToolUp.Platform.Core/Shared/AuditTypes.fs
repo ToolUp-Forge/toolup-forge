@@ -2311,6 +2311,55 @@ type SchemaOnlyAccessAttemptedPayload = {
     AttemptedResource: string
 }
 
+/// Phase 551 — a grant WRITE was refused because it did not satisfy the
+/// target module's declared `GrantPolicy`. Emitted by the grant-policy
+/// write guard before anything is persisted, so the refusal is visible
+/// even though no state changed (GP 6). Its dispatch-time twin is
+/// `UnconsentedGrantRefused` — the two are deliberately separate events
+/// because they answer different questions: this one says an admin tried
+/// to create authority the module does not admit, that one says
+/// authority already recorded is not being honoured.
+type GrantPolicyRefusedPayload = {
+    /// The administrator attempting the grant.
+    ActorId: string
+    /// The subject the grant was being written for. Empty when the write
+    /// was a whole-document replacement with no single subject.
+    SubjectId: string
+    /// Module the grant targeted. Mirrors the `IPermissionStore` /
+    /// `AccessContext.ModulePermissions` key shape — the SAME key the
+    /// module declared its policy under, so no second naming axis exists
+    /// to drift.
+    ModuleName: string
+    /// The module's declared policy, as its stable wire token.
+    DeclaredPolicy: string
+    /// Stable refusal discriminator (`GrantRefusal.code`) — the field an
+    /// operator dashboard groups by.
+    RefusalCode: string
+}
+
+/// Phase 551 — a request was refused at DISPATCH because the caller's
+/// permission entry on a policy-bearing module carried no live grant
+/// record. This is the control that survives a grant row written
+/// straight into the store: the write guard can be bypassed, the
+/// dispatch check cannot (Phase 311 lesson). Distinct from
+/// `SurfaceDenied` (route surface) and from `SchemaOnlyAccessAttempted`
+/// (substrate read) — this fires at the module-access gate.
+type UnconsentedGrantRefusedPayload = {
+    /// Acting `AccessContext.UserId`.
+    UserId: string
+    /// Module whose routes were refused.
+    ModuleName: string
+    /// The module's currently declared policy, as its stable wire token.
+    DeclaredPolicy: string
+    /// Why the grant was inert — `"no-grant-record"`,
+    /// `"awaiting-subject-consent"`, `"evidence-below-declared-policy"`,
+    /// or `"counterparty-approval-unavailable"`
+    /// (`GrantPolicy.inertReason`). A dashboard separating the first from
+    /// the second separates suspected injection from ordinary pending
+    /// consent.
+    InertReason: string
+}
+
 /// Phase 18 — a typed inter-platform peer contract call resolved on the
 /// receiver (the host dispatched it to a terminal outcome). Emitted once
 /// per inbound call by the peer host's contract handler. Reserved
@@ -4434,6 +4483,14 @@ type AuditEvent =
     /// data was read. Distinct from `SurfaceDenied` — fires at the
     /// substrate / handler layer, not at the route surface.
     | SchemaOnlyAccessAttempted of SchemaOnlyAccessAttemptedPayload
+    /// Phase 551 — a grant write was refused because it did not satisfy
+    /// the target module's declared `GrantPolicy`. Write-time twin of
+    /// `UnconsentedGrantRefused`.
+    | GrantPolicyRefused of GrantPolicyRefusedPayload
+    /// Phase 551 — a module's routes were refused at dispatch because the
+    /// caller's permission entry carried no live grant record under the
+    /// module's declared `GrantPolicy`.
+    | UnconsentedGrantRefused of UnconsentedGrantRefusedPayload
     /// Phase 18 — a typed inter-platform peer contract call resolved on
     /// the receiver. Emitted once per inbound call by the peer host's
     /// contract handler after dispatch reaches a terminal outcome.
@@ -4830,6 +4887,8 @@ module AuditEvent =
         | ModuleArtefactRejected _ -> "ArtifactRejected"
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
+        | GrantPolicyRefused _ -> "GrantPolicyRefused"
+        | UnconsentedGrantRefused _ -> "UnconsentedGrantRefused"
         | PeerCallCompleted _ -> "PeerCallCompleted"
         | PeerJobCompleted _ -> "PeerJobCompleted"
         | PeerCleanRoomDecision _ -> "PeerCleanRoomDecision"

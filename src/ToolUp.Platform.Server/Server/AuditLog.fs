@@ -1034,6 +1034,27 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> j)
     }
+    // Phase 551 — the grant-policy refusal pair. Write-time and
+    // dispatch-time are separate event types on purpose: an operator
+    // alerting on "someone is trying to create authority the module does
+    // not admit" and one alerting on "recorded authority is not being
+    // honoured" are different alerts with different responses.
+    {
+        EventType = "GrantPolicyRefused"
+        TryEncode =
+            (function
+            | GrantPolicyRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantPolicyRefused(fromAuditJson<GrantPolicyRefusedPayload> j)
+    }
+    {
+        EventType = "UnconsentedGrantRefused"
+        TryEncode =
+            (function
+            | UnconsentedGrantRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> UnconsentedGrantRefused(fromAuditJson<UnconsentedGrantRefusedPayload> j)
+    }
     {
         EventType = "PeerCallCompleted"
         TryEncode =

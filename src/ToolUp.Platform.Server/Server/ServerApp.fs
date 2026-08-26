@@ -155,6 +155,18 @@ type ServerModule = {
     /// hierarchy, geography, org chart). Same fan-in + duplicate-id
     /// rejection as `Metrics`. Empty by default (GP 13).
     Subjects: Grounding.SubjectDefinition list
+    /// Phase 551 — the module's own declared precondition on being
+    /// granted to anyone. `AdminDiscretion` (the default) is byte-for-byte
+    /// today: no registry is composed, no grant records are loaded, and
+    /// the dispatch gate short-circuits (GP 11 / GP 13). Set it with
+    /// `ServerModule.withGrantPolicy`, which admits only a NARROWING —
+    /// composition may tighten a module's policy, never loosen it (D15).
+    ///
+    /// The declaration is keyed by this record's `Name`, which is also
+    /// the RBAC key `withGuardedApi` hands the dispatch gate and the key
+    /// `AccessContext.ModulePermissions` uses — one axis, not two, so a
+    /// policy cannot drift away from the module it governs.
+    GrantPolicy: GrantPolicy
 }
 
 module ServerModule =
@@ -176,7 +188,34 @@ module ServerModule =
         ComponentId = None
         Metrics = []
         Subjects = []
+        GrantPolicy = GrantPolicy.AdminDiscretion
     }
+
+    /// Phase 551 — declare the module's grant policy: the precondition
+    /// that must hold before the module may be granted to anyone.
+    ///
+    /// **Narrowing-only (D15).** Calling this twice is legal and composes
+    /// by tightening; a call that would LOOSEN an already-declared policy
+    /// fails at compose time, naming the module and both policies. Two
+    /// `RequiresCounterpartyApproval` declarations naming different
+    /// parties are incomparable — neither narrows the other — and are
+    /// likewise refused rather than silently resolved in favour of
+    /// whichever call ran last.
+    ///
+    /// Failing here rather than at first request is deliberate: a policy
+    /// silently weakened at composition is exactly the accidental
+    /// exposure the phase exists to prevent, and a composition root is
+    /// the last place it can be caught for free.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "PartnerBenchmarks"
+    /// |> ServerModule.withGrantPolicy GrantPolicy.RequiresSubjectConsent
+    /// |> ServerModule.withGuardedApi partnerBenchmarksApi
+    /// ```
+    let withGrantPolicy (policy: GrantPolicy) (m: ServerModule) : ServerModule =
+        match GrantPolicy.tighten m.Name m.GrantPolicy policy with
+        | Ok tightened -> { m with GrantPolicy = tightened }
+        | Error refusal -> failwith (GrantRefusal.describe refusal)
 
     /// Attach a permission-guarded Fable.Remoting api factory. Uses the
     /// module's `Name` as the RBAC key, so callers never duplicate it.
@@ -850,6 +889,18 @@ type ServerApp = {
     /// compose-time failure, not a runtime surprise. Empty until the
     /// first `addModule`.
     ModuleComponentIds: (string * ComponentId) list
+    /// Phase 551 — accumulated `(moduleName, declaredGrantPolicy)` pairs,
+    /// one per registered `ServerModule`. Projected at `run` time into a
+    /// `ModuleGrantPolicyRegistry`, which is registered in DI **only when
+    /// at least one module declares something other than
+    /// `AdminDiscretion`** — so a deployment that declares no policy
+    /// composes no registry, wraps no store, loads no grant records, and
+    /// is byte-for-byte its pre-551 self (GP 11 / GP 13).
+    ///
+    /// Accumulated in the same fold that appends `ModuleNames`, which is
+    /// what makes the registry's keys a subset of the composed module set
+    /// by construction rather than by convention.
+    ModuleGrantPolicies: (string * GrantPolicy) list
 }
 
 module ServerApp =
@@ -904,6 +955,7 @@ module ServerApp =
         SecretResilience = NoResilience
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
+        ModuleGrantPolicies = []
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -2162,6 +2214,12 @@ module ServerApp =
                         // Phase 279 — accumulate the resolved stable id for
                         // the compose-time uniqueness check in `run`.
                         ModuleComponentIds = app.ModuleComponentIds @ [ m.Name, resolvedComponentId ]
+                        // Phase 551 — the module's declared grant policy,
+                        // keyed by the SAME `m.Name` this fold appends to
+                        // `ModuleNames` and that `withGuardedApi` handed
+                        // the dispatch gate. One naming axis, so a policy
+                        // cannot drift away from its module.
+                        ModuleGrantPolicies = app.ModuleGrantPolicies @ [ m.Name, m.GrantPolicy ]
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
@@ -2567,6 +2625,41 @@ module ServerApp =
                     (fun acc pack -> appendRegistration acc (fun s -> s.AddSingleton<ISeedPack>(pack)))
                     withMetricRegistry
 
+            // Phase 551 — project the accumulated module grant-policy
+            // declarations into the `ModuleGrantPolicyRegistry` DI reads.
+            //
+            // Registered ONLY when a module declares something stricter
+            // than `AdminDiscretion`. That is the whole of the GP 13
+            // story: with no registration the `IPermissionStore` factory
+            // returns the undecorated store, `ScopeResolutionMiddleware`
+            // performs no extra read, and the dispatch gate resolves
+            // `AdminDiscretion` for every module — so a deployment that
+            // declares nothing pays nothing and behaves identically.
+            //
+            // The orphan check is belt-and-braces: the registry is folded
+            // from the same `ServerModule` records that produce
+            // `ModuleNames`, so a key outside that set is impossible
+            // today. It is asserted anyway because the failure it guards
+            // against is SILENT — Phase 36.A shipped a `SourceModule`
+            // matched against permission-map keys and a naming drift
+            // there stopped enforcement without any symptom. A structural
+            // guarantee nobody checks is one refactor from being a
+            // convention.
+            let withGrantPolicies =
+                let registry =
+                    GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations app.ModuleGrantPolicies
+
+                if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
+                    withSeedPacks
+                else
+                    match GrantPolicyGuard.ModuleGrantPolicyRegistry.orphans registry app.ModuleNames with
+                    | [] ->
+                        appendRegistration withSeedPacks (fun s ->
+                            s.AddSingleton<GrantPolicyGuard.ModuleGrantPolicyRegistry>(registry))
+                    | orphans ->
+                        failwith
+                            $"""Grant-policy registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared GrantPolicy must be keyed by a composed module's Name, or the policy silently stops being enforced."""
+
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
@@ -2589,7 +2682,7 @@ module ServerApp =
             // module-graph rules check exactly what was registered rather
             // than the `ComponentId`-collapsed manifest projection.
             appendRegistration
-                withSeedPacks
+                withGrantPolicies
                 (CompositionValidator.serviceRegistration (compositionManifest app) (compositionReferences app))
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default

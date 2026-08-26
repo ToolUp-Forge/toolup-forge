@@ -564,6 +564,36 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
 
                                     ctx.Items["ToolUp.ModuleExposure"] <- box exposure
+
+                                    // Phase 551 — the subject's grant
+                                    // records, so the module-access gate
+                                    // can re-verify a declared
+                                    // `GrantPolicy` ON USE rather than
+                                    // trusting that the write path
+                                    // enforced it.
+                                    //
+                                    // Loaded ONLY when at least one module
+                                    // declares a policy stricter than
+                                    // `AdminDiscretion`. A deployment that
+                                    // declares none registers no registry,
+                                    // so this is one failed `GetService`
+                                    // and no extra store read (GP 13) —
+                                    // and the dispatch gate answers
+                                    // `AdminDiscretion` for every module,
+                                    // which is unconditionally live.
+                                    match
+                                        ctx.RequestServices.GetService(
+                                            typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>
+                                        )
+                                    with
+                                    | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
+                                        not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
+                                        ->
+                                        let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
+
+                                        ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
+                                            box (TeamPermissions.grantsFor user.UserId doc)
+                                    | _ -> ()
                                 | _ -> ()
 
                             // Phase 4b — resolve PlatformRole per request.

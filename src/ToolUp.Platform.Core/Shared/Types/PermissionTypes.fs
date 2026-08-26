@@ -63,6 +63,324 @@ module ModulePermission =
         | ModulePermission.SchemaOnly, ModulePermission.SchemaOnly -> true
         | _ -> false
 
+/// Phase 551 — an opaque reference to a party whose approval a module's
+/// declared `GrantPolicy` requires. A stable string the deployment
+/// resolves (a tenant id, a DPO mailbox, a regulator handle); the SDK
+/// never interprets it, mirroring the `PolicyRef` shape. GP 9 — the SDK
+/// never names a module or a party; both are supplied at registration.
+type PartyRef = PartyRef of string
+
+module PartyRef =
+    /// The underlying string. Never `null` for a ref built through
+    /// `create`; a hand-constructed `PartyRef null` reads as `""`.
+    let value (PartyRef raw) = if isNull (box raw) then "" else raw
+
+    /// Build a ref from a raw string, trimming surrounding whitespace so
+    /// `" acme "` and `"acme"` are the same party. Deliberately does NOT
+    /// case-fold — a party reference is an opaque deployment identifier
+    /// and the SDK is not entitled to decide its equality relation
+    /// beyond stripping the whitespace a form field adds.
+    let create (raw: string) =
+        PartyRef(if isNull (box raw) then "" else raw.Trim())
+
+    /// True when the ref names nobody. An unnameable counterparty is a
+    /// fail-closed state, never a fall-through to admin discretion.
+    let isEmpty (p: PartyRef) = value p = ""
+
+/// Phase 551 — a module's **declared** precondition on being granted to
+/// anyone. The admin-authored `ModulePermissions` map remains the
+/// authority on *who* is granted; this is the module's own voice on
+/// *what must be true first*, enforced fail-closed at dispatch as well
+/// as at the grant write (the Phase 311 lesson: a gate the write path
+/// must remember to call is a defect class, not a control).
+///
+/// **Narrowing-only.** Composition may tighten a module's declared
+/// policy and never loosen it (D15) — `GrantPolicy.tighten` is the only
+/// combinator, and `ServerModule.withGrantPolicy` refuses a loosening at
+/// compose time rather than at first request.
+///
+/// **`AdminDiscretion` is byte-identical to today** (GP 11 / GP 13): a
+/// module that declares nothing carries it, no registry is composed, no
+/// grant records are loaded, and every path behaves exactly as it did
+/// before this type existed.
+///
+/// Ordered by strictness — `AdminDiscretion` < `RequiresAcknowledgement`
+/// < `RequiresSubjectConsent` < `RequiresCounterpartyApproval` — see
+/// `GrantPolicy.strictness` for why that order is the one the estate
+/// means, and note that two `RequiresCounterpartyApproval` arms naming
+/// DIFFERENT parties are incomparable rather than equal.
+[<RequireQualifiedAccess>]
+type GrantPolicy =
+    /// The pre-551 default. An administrator's grant stands on its own;
+    /// no additional artifact is demanded at write or at dispatch.
+    | AdminDiscretion
+    /// The granting administrator must confirm the grant explicitly and
+    /// record a justification. Ceremony on the admin side only — no
+    /// third party is consulted, so the grant is live immediately.
+    | RequiresAcknowledgement
+    /// The grantee must accept before the grant carries authority. The
+    /// write records the grant as `PendingConsent`; it is INERT at
+    /// dispatch until the subject accepts.
+    | RequiresSubjectConsent
+    /// A named counterparty must approve. Until the consent store ships
+    /// (Phase 552) this arm refuses every grant at write AND treats every
+    /// grant row as inert at dispatch — conservatively correct rather
+    /// than optimistically permissive.
+    | RequiresCounterpartyApproval of PartyRef
+
+/// Phase 551 — the lifecycle state of a recorded grant. A grant under
+/// `AdminDiscretion` needs no record at all; the states below exist for
+/// grants written under a stricter declared policy.
+[<RequireQualifiedAccess>]
+type GrantState =
+    /// The declared precondition was satisfied; the grant carries
+    /// authority.
+    | Active
+    /// Recorded, awaiting the grantee's acceptance
+    /// (`RequiresSubjectConsent`). Present in the document and visible to
+    /// an admin, but inert at dispatch.
+    | PendingConsent
+
+module GrantState =
+    /// Stable wire token for persistence + audit.
+    let toToken =
+        function
+        | GrantState.Active -> "active"
+        | GrantState.PendingConsent -> "pending-consent"
+
+    /// Parse a persisted token. An unrecognised token reads as
+    /// `PendingConsent` — the inert state — never `Active`: a state this
+    /// node cannot interpret must not be the one that confers authority.
+    let ofToken (token: string) =
+        match
+            (if isNull (box token) then
+                 ""
+             else
+                 token.Trim().ToLowerInvariant())
+        with
+        | "active" -> GrantState.Active
+        | _ -> GrantState.PendingConsent
+
+/// Phase 551 — the evidence that a module's declared `GrantPolicy` was
+/// satisfied for one (subject, module) grant. Persisted alongside the
+/// permission entry it qualifies, and re-read at dispatch: a permission
+/// entry without an adequate record is inert.
+///
+/// `SatisfiedPolicy` records the policy that was actually met, not the
+/// one in force now. That distinction is load-bearing: a module may
+/// TIGHTEN its declared policy after grants exist, and a record whose
+/// evidence was gathered under the looser policy must stop satisfying
+/// the stricter one rather than being grandfathered.
+type ModuleGrantRecord = {
+    State: GrantState
+    /// The policy this record's evidence satisfied at write time.
+    SatisfiedPolicy: GrantPolicy
+    /// The granting administrator's recorded reason. Non-empty whenever
+    /// `SatisfiedPolicy` is at least `RequiresAcknowledgement`.
+    Justification: string
+    /// The subject who accepted, once they have
+    /// (`RequiresSubjectConsent`). `None` while `PendingConsent`.
+    ConsentedBy: string option
+}
+
+/// Phase 551 — a typed refusal from the grant-policy guard. Every arm
+/// names the module and the policy that refused, so a caller can render
+/// an actionable message without parsing prose, and an audit row carries
+/// the same discriminator an operator dashboards on.
+[<RequireQualifiedAccess>]
+type GrantRefusal =
+    /// The module declares `RequiresAcknowledgement` (or stricter) and
+    /// the write carried no explicit confirmation.
+    | AcknowledgementRequired of moduleName: string * policy: GrantPolicy
+    /// Confirmation was given but no justification text accompanied it.
+    | JustificationRequired of moduleName: string * policy: GrantPolicy
+    /// The module declares `RequiresCounterpartyApproval` and no consent
+    /// store is composed to satisfy it (Phase 552).
+    | CounterpartyApprovalUnavailable of moduleName: string * party: PartyRef
+    /// A permission entry exists for a policy-bearing module with no
+    /// adequate grant record — the shape a row injected directly into the
+    /// store takes.
+    | UnbackedGrant of moduleName: string * policy: GrantPolicy
+    /// Composition attempted to replace a declared policy with a weaker
+    /// one.
+    | PolicyLoosening of moduleName: string * declared: GrantPolicy * attempted: GrantPolicy
+    /// Two `RequiresCounterpartyApproval` declarations naming different
+    /// parties. Incomparable — neither narrows the other, so the estate
+    /// refuses rather than silently picking one.
+    | ConflictingCounterparty of moduleName: string * declared: PartyRef * attempted: PartyRef
+
+/// Phase 551 — what a policy-satisfying grant write actually did.
+[<RequireQualifiedAccess>]
+type GrantWriteOutcome =
+    /// The grant is live.
+    | Granted
+    /// Recorded and awaiting the named subject's acceptance. The
+    /// permission entry exists but confers nothing until then.
+    | RecordedPendingConsent of subjectId: string
+
+module GrantPolicy =
+    /// Rank by strictness. Used for the narrowing-only rule and for the
+    /// "was the evidence at least as strong as what is demanded now"
+    /// comparison at dispatch.
+    ///
+    /// The order is `AdminDiscretion` < `RequiresAcknowledgement` <
+    /// `RequiresSubjectConsent` < `RequiresCounterpartyApproval` because
+    /// each step adds a party who must act: nobody, then the admin
+    /// themselves, then the grantee, then an outsider. It is NOT a claim
+    /// that a counterparty's approval implies the subject's — the ranks
+    /// order *how hard the precondition is to satisfy*, which is what the
+    /// narrowing rule is about.
+    let strictness =
+        function
+        | GrantPolicy.AdminDiscretion -> 0
+        | GrantPolicy.RequiresAcknowledgement -> 1
+        | GrantPolicy.RequiresSubjectConsent -> 2
+        | GrantPolicy.RequiresCounterpartyApproval _ -> 3
+
+    /// Stable wire token for persistence + audit. The counterparty arm
+    /// carries its party after a `:` so one token round-trips the whole
+    /// value.
+    let toToken =
+        function
+        | GrantPolicy.AdminDiscretion -> "admin-discretion"
+        | GrantPolicy.RequiresAcknowledgement -> "requires-acknowledgement"
+        | GrantPolicy.RequiresSubjectConsent -> "requires-subject-consent"
+        | GrantPolicy.RequiresCounterpartyApproval party -> "requires-counterparty-approval:" + PartyRef.value party
+
+    /// The strictest arm this node can CONSTRUCT from a token that
+    /// carries no party reference — the fail-closed landing point for an
+    /// unrecognised policy token (see `ofToken`).
+    let strictestConstructible = GrantPolicy.RequiresSubjectConsent
+
+    /// Parse a persisted policy token, **fail-closed**: an unrecognised
+    /// token never reads as `AdminDiscretion`.
+    ///
+    /// Two unrecognised shapes are distinguished deliberately, because
+    /// they mean different things:
+    ///
+    /// * A **wholly unknown** token — plausibly an arm a newer deployment
+    ///   writes — lands on `strictestConstructible`
+    ///   (`RequiresSubjectConsent`). Landing on the counterparty arm
+    ///   instead would refuse every grant on the module permanently,
+    ///   because the token carried no party to name and a fabricated one
+    ///   is a worse answer than a strict one: it would put a counterparty
+    ///   who does not exist into an audit record. Subject consent is the
+    ///   strictest precondition an operator on THIS node can actually
+    ///   satisfy.
+    /// * A **known counterparty arm with a missing party** keeps the
+    ///   counterparty arm with an empty ref, which nothing can satisfy.
+    ///   Here the arm IS recognised, so downgrading it would be a
+    ///   loosening on the strength of corruption — the same posture
+    ///   `PermissionStore` takes on an unparseable document.
+    let ofToken (token: string) =
+        let normalised =
+            if isNull (box token) then
+                ""
+            else
+                token.Trim().ToLowerInvariant()
+
+        if normalised.StartsWith "requires-counterparty-approval:" then
+            GrantPolicy.RequiresCounterpartyApproval(
+                PartyRef.create (normalised.Substring "requires-counterparty-approval:".Length)
+            )
+        else
+            match normalised with
+            | "admin-discretion" -> GrantPolicy.AdminDiscretion
+            | "requires-acknowledgement" -> GrantPolicy.RequiresAcknowledgement
+            | "requires-subject-consent" -> GrantPolicy.RequiresSubjectConsent
+            | "requires-counterparty-approval" ->
+                // The arm is recognised; the party is not there. Keep the
+                // arm — an unnameable counterparty refuses everything.
+                GrantPolicy.RequiresCounterpartyApproval(PartyRef.create "")
+            | _ -> strictestConstructible
+
+    /// Does `candidate` narrow (or equal) `declared`? Narrowing-only
+    /// composition admits exactly the candidates for which this is true.
+    /// Two counterparty arms naming different parties are incomparable
+    /// and therefore NOT a narrowing — `tighten` reports them.
+    let isNarrowing (declared: GrantPolicy) (candidate: GrantPolicy) =
+        match declared, candidate with
+        | GrantPolicy.RequiresCounterpartyApproval a, GrantPolicy.RequiresCounterpartyApproval b -> a = b
+        | _ -> strictness candidate >= strictness declared
+
+    /// Combine a declared policy with a composition-supplied one,
+    /// admitting only a narrowing. Returns the stricter of the two, or a
+    /// typed refusal naming the module.
+    let tighten (moduleName: string) (declared: GrantPolicy) (candidate: GrantPolicy) =
+        match declared, candidate with
+        | GrantPolicy.RequiresCounterpartyApproval a, GrantPolicy.RequiresCounterpartyApproval b when a <> b ->
+            Error(GrantRefusal.ConflictingCounterparty(moduleName, a, b))
+        | _ when isNarrowing declared candidate -> Ok candidate
+        | _ -> Error(GrantRefusal.PolicyLoosening(moduleName, declared, candidate))
+
+    /// **The dispatch predicate.** Does a permission entry on a module
+    /// declaring `policy` actually carry authority, given the grant
+    /// record persisted for it (if any)?
+    ///
+    /// * `AdminDiscretion` — always true, record or no record. This is
+    ///   the byte-for-byte-as-today arm and it is checked FIRST so a
+    ///   deployment that declares nothing never reaches the rest.
+    /// * `RequiresCounterpartyApproval` — always false until Phase 552
+    ///   composes `IGrantConsentStore`. An `Active` record claiming to
+    ///   satisfy it is not trusted: no path can legitimately have written
+    ///   one, so its presence is evidence of injection, not of consent.
+    /// * otherwise — the record must exist, be `Active`, and its
+    ///   `SatisfiedPolicy` must be at least as strict as what is declared
+    ///   now, so a module that tightened its policy invalidates the
+    ///   grants written under the looser one instead of grandfathering
+    ///   them.
+    let isGrantLive (policy: GrantPolicy) (record: ModuleGrantRecord option) =
+        match policy with
+        | GrantPolicy.AdminDiscretion -> true
+        | GrantPolicy.RequiresCounterpartyApproval _ -> false
+        | _ ->
+            match record with
+            | None -> false
+            | Some r -> r.State = GrantState.Active && strictness r.SatisfiedPolicy >= strictness policy
+
+    /// Short stable label for the reason a grant is not live. Emitted on
+    /// the dispatch-refusal audit row so an operator can separate "no
+    /// record at all" (an injected row) from "waiting on the subject"
+    /// (an ordinary pending grant) without joining to the document.
+    let inertReason (policy: GrantPolicy) (record: ModuleGrantRecord option) =
+        match policy, record with
+        | GrantPolicy.AdminDiscretion, _ -> "live"
+        | GrantPolicy.RequiresCounterpartyApproval _, _ -> "counterparty-approval-unavailable"
+        | _, None -> "no-grant-record"
+        | _, Some r when r.State <> GrantState.Active -> "awaiting-subject-consent"
+        | _, Some _ -> "evidence-below-declared-policy"
+
+module GrantRefusal =
+    /// Human-readable rendering, prefixed with a stable machine-greppable
+    /// code. Interface members that return `Result<unit, string>` carry
+    /// this; callers that want the typed value use the guard's own entry
+    /// points, which never stringify.
+    let describe =
+        function
+        | GrantRefusal.AcknowledgementRequired(m, p) ->
+            $"GRANT-POLICY-ACK-REQUIRED: module '{m}' declares '{GrantPolicy.toToken p}'; the grant must carry an explicit acknowledgement."
+        | GrantRefusal.JustificationRequired(m, p) ->
+            $"GRANT-POLICY-JUSTIFICATION-REQUIRED: module '{m}' declares '{GrantPolicy.toToken p}'; the grant must carry a justification."
+        | GrantRefusal.CounterpartyApprovalUnavailable(m, party) ->
+            $"GRANT-POLICY-COUNTERPARTY-UNAVAILABLE: module '{m}' requires approval from party '{PartyRef.value party}' and no consent store is composed."
+        | GrantRefusal.UnbackedGrant(m, p) ->
+            $"GRANT-POLICY-UNBACKED-GRANT: module '{m}' declares '{GrantPolicy.toToken p}' but the written permission entry carries no adequate grant record."
+        | GrantRefusal.PolicyLoosening(m, declared, attempted) ->
+            $"GRANT-POLICY-LOOSENING: module '{m}' declares '{GrantPolicy.toToken declared}'; '{GrantPolicy.toToken attempted}' would loosen it (narrowing-only)."
+        | GrantRefusal.ConflictingCounterparty(m, declared, attempted) ->
+            $"GRANT-POLICY-CONFLICTING-COUNTERPARTY: module '{m}' already requires approval from '{PartyRef.value declared}'; '{PartyRef.value attempted}' neither narrows nor equals it."
+
+    /// The stable discriminator an audit row and an operator dashboard
+    /// group by.
+    let code =
+        function
+        | GrantRefusal.AcknowledgementRequired _ -> "acknowledgement-required"
+        | GrantRefusal.JustificationRequired _ -> "justification-required"
+        | GrantRefusal.CounterpartyApprovalUnavailable _ -> "counterparty-approval-unavailable"
+        | GrantRefusal.UnbackedGrant _ -> "unbacked-grant"
+        | GrantRefusal.PolicyLoosening _ -> "policy-loosening"
+        | GrantRefusal.ConflictingCounterparty _ -> "conflicting-counterparty"
+
 /// Per-team, per-module **exposure** state — the tri-state behind the
 /// team-management "module exposure" control. Orthogonal to the RBAC
 /// permission maps: exposure governs *whether the module is offered to
@@ -158,6 +476,18 @@ type TeamPermissions = {
     /// `Unavailable` states. See the `ModuleExposure` doc for the
     /// exposure-vs-permission distinction.
     Exposure: Map<string, ModuleExposure>
+    /// Phase 551 — grant-policy evidence, keyed `userId → moduleName →
+    /// record`, mirroring `Members`. Populated ONLY for grants written
+    /// against a module whose declared `GrantPolicy` is stricter than
+    /// `AdminDiscretion`; an empty map is the whole of every pre-551
+    /// document and is byte-identical to today (GP 11).
+    ///
+    /// A `Members` entry with no corresponding record here is exactly the
+    /// shape a row injected straight into the store takes, which is why
+    /// dispatch re-derives liveness from this map rather than trusting
+    /// `Members` alone (Phase 311 lesson — write-path-only enforcement is
+    /// insufficient).
+    Grants: Map<string, Map<string, ModuleGrantRecord>>
 }
 
 module TeamPermissions =
@@ -165,4 +495,10 @@ module TeamPermissions =
         Defaults = Map.empty
         Members = Map.empty
         Exposure = Map.empty
+        Grants = Map.empty
     }
+
+    /// The grant records recorded for one subject, module-keyed. Empty
+    /// when the subject has none — the pre-551 shape.
+    let grantsFor (userId: string) (perms: TeamPermissions) : Map<string, ModuleGrantRecord> =
+        perms.Grants |> Map.tryFind userId |> Option.defaultValue Map.empty

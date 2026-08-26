@@ -791,6 +791,7 @@ ToolUp.Platform.AuditEvent.IsFileReprocessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmissionUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmitted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGrantPolicyRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsGroundingEnvelopeMutated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsGroundingMutationRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsHealthStateChanged : System.Boolean { get }
@@ -892,6 +893,7 @@ ToolUp.Platform.AuditEvent.IsTenantOffboardConfirmationApproved : System.Boolean
 ToolUp.Platform.AuditEvent.IsTenantOffboardConfirmationRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantOffboardConfirmationRequested : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantProvisioned : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsUnconsentedGrantRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsUserLoggedIn : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowActionExecuted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsWorkflowTransitioned : System.Boolean { get }
@@ -1034,6 +1036,8 @@ ToolUp.Platform.AuditEvent+FormSubmissionUpdated (class)
 ToolUp.Platform.AuditEvent+FormSubmissionUpdated.Item : ToolUp.Platform.FormSubmissionUpdatedPayload { get }
 ToolUp.Platform.AuditEvent+FormSubmitted (class)
 ToolUp.Platform.AuditEvent+FormSubmitted.Item : ToolUp.Platform.FormSubmittedPayload { get }
+ToolUp.Platform.AuditEvent+GrantPolicyRefused (class)
+ToolUp.Platform.AuditEvent+GrantPolicyRefused.Item : ToolUp.Platform.GrantPolicyRefusedPayload { get }
 ToolUp.Platform.AuditEvent+GroundingEnvelopeMutated (class)
 ToolUp.Platform.AuditEvent+GroundingEnvelopeMutated.Item : ToolUp.Platform.GroundingEnvelopeMutatedPayload { get }
 ToolUp.Platform.AuditEvent+GroundingMutationRefused (class)
@@ -1265,6 +1269,7 @@ ToolUp.Platform.AuditEvent+Tags.FileReprocessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmissionUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmitted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GrantPolicyRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.GroundingEnvelopeMutated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.GroundingMutationRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.HealthStateChanged : System.Int32 (literal)
@@ -1366,6 +1371,7 @@ ToolUp.Platform.AuditEvent+Tags.TenantOffboardConfirmationApproved : System.Int3
 ToolUp.Platform.AuditEvent+Tags.TenantOffboardConfirmationRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantOffboardConfirmationRequested : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantProvisioned : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.UnconsentedGrantRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.UserLoggedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowActionExecuted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowTransitioned : System.Int32 (literal)
@@ -1413,6 +1419,8 @@ ToolUp.Platform.AuditEvent+TenantOffboardConfirmationRequested (class)
 ToolUp.Platform.AuditEvent+TenantOffboardConfirmationRequested.Item : ToolUp.Platform.TenantOffboardConfirmationRequestedPayload { get }
 ToolUp.Platform.AuditEvent+TenantProvisioned (class)
 ToolUp.Platform.AuditEvent+TenantProvisioned.Item : ToolUp.Platform.TenantProvisionedPayload { get }
+ToolUp.Platform.AuditEvent+UnconsentedGrantRefused (class)
+ToolUp.Platform.AuditEvent+UnconsentedGrantRefused.Item : ToolUp.Platform.UnconsentedGrantRefusedPayload { get }
 ToolUp.Platform.AuditEvent+UserLoggedIn (class)
 ToolUp.Platform.AuditEvent+UserLoggedIn.Item : ToolUp.Platform.UserLoggedInPayload { get }
 ToolUp.Platform.AuditEvent+WorkflowActionExecuted (class)
@@ -5026,6 +5034,98 @@ ToolUp.Platform.FormSubmittedPayload.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.UserId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.WorkflowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GrantPolicy (class)
+ToolUp.Platform.GrantPolicy.AdminDiscretion : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantPolicy.IsAdminDiscretion : System.Boolean { get }
+ToolUp.Platform.GrantPolicy.IsRequiresAcknowledgement : System.Boolean { get }
+ToolUp.Platform.GrantPolicy.IsRequiresCounterpartyApproval : System.Boolean { get }
+ToolUp.Platform.GrantPolicy.IsRequiresSubjectConsent : System.Boolean { get }
+ToolUp.Platform.GrantPolicy.RequiresAcknowledgement : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantPolicy.RequiresSubjectConsent : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantPolicy.Tag : System.Int32 { get }
+ToolUp.Platform.GrantPolicy+RequiresCounterpartyApproval (class)
+ToolUp.Platform.GrantPolicy+RequiresCounterpartyApproval.Item : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantPolicy+Tags (class)
+ToolUp.Platform.GrantPolicy+Tags.AdminDiscretion : System.Int32 (literal)
+ToolUp.Platform.GrantPolicy+Tags.RequiresAcknowledgement : System.Int32 (literal)
+ToolUp.Platform.GrantPolicy+Tags.RequiresCounterpartyApproval : System.Int32 (literal)
+ToolUp.Platform.GrantPolicy+Tags.RequiresSubjectConsent : System.Int32 (literal)
+ToolUp.Platform.GrantPolicyModule (class)
+ToolUp.Platform.GrantPolicyModule.inertReason(ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleGrantRecord]) : System.String
+ToolUp.Platform.GrantPolicyModule.isGrantLive(ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleGrantRecord]) : System.Boolean
+ToolUp.Platform.GrantPolicyModule.isNarrowing(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantPolicy) : System.Boolean
+ToolUp.Platform.GrantPolicyModule.ofToken(System.String) : ToolUp.Platform.GrantPolicy
+ToolUp.Platform.GrantPolicyModule.strictestConstructible : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantPolicyModule.strictness(ToolUp.Platform.GrantPolicy) : System.Int32
+ToolUp.Platform.GrantPolicyModule.tighten(System.String, ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantPolicy) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantRefusal]
+ToolUp.Platform.GrantPolicyModule.toToken(ToolUp.Platform.GrantPolicy) : System.String
+ToolUp.Platform.GrantPolicyRefusedPayload (class)
+ToolUp.Platform.GrantPolicyRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.GrantPolicyRefusedPayload.ActorId : System.String { get }
+ToolUp.Platform.GrantPolicyRefusedPayload.DeclaredPolicy : System.String { get }
+ToolUp.Platform.GrantPolicyRefusedPayload.ModuleName : System.String { get }
+ToolUp.Platform.GrantPolicyRefusedPayload.RefusalCode : System.String { get }
+ToolUp.Platform.GrantPolicyRefusedPayload.SubjectId : System.String { get }
+ToolUp.Platform.GrantRefusal (class)
+ToolUp.Platform.GrantRefusal.IsAcknowledgementRequired : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.IsConflictingCounterparty : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.IsCounterpartyApprovalUnavailable : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.IsJustificationRequired : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.IsPolicyLoosening : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.IsUnbackedGrant : System.Boolean { get }
+ToolUp.Platform.GrantRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.GrantRefusal+AcknowledgementRequired (class)
+ToolUp.Platform.GrantRefusal+AcknowledgementRequired.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+AcknowledgementRequired.policy : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantRefusal+ConflictingCounterparty (class)
+ToolUp.Platform.GrantRefusal+ConflictingCounterparty.attempted : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantRefusal+ConflictingCounterparty.declared : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantRefusal+ConflictingCounterparty.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+CounterpartyApprovalUnavailable (class)
+ToolUp.Platform.GrantRefusal+CounterpartyApprovalUnavailable.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+CounterpartyApprovalUnavailable.party : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantRefusal+JustificationRequired (class)
+ToolUp.Platform.GrantRefusal+JustificationRequired.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+JustificationRequired.policy : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantRefusal+PolicyLoosening (class)
+ToolUp.Platform.GrantRefusal+PolicyLoosening.attempted : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantRefusal+PolicyLoosening.declared : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantRefusal+PolicyLoosening.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+Tags (class)
+ToolUp.Platform.GrantRefusal+Tags.AcknowledgementRequired : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+Tags.ConflictingCounterparty : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+Tags.CounterpartyApprovalUnavailable : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+Tags.JustificationRequired : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+Tags.PolicyLoosening : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+Tags.UnbackedGrant : System.Int32 (literal)
+ToolUp.Platform.GrantRefusal+UnbackedGrant (class)
+ToolUp.Platform.GrantRefusal+UnbackedGrant.moduleName : System.String { get }
+ToolUp.Platform.GrantRefusal+UnbackedGrant.policy : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantRefusalModule (class)
+ToolUp.Platform.GrantRefusalModule.code(ToolUp.Platform.GrantRefusal) : System.String
+ToolUp.Platform.GrantRefusalModule.describe(ToolUp.Platform.GrantRefusal) : System.String
+ToolUp.Platform.GrantState (class)
+ToolUp.Platform.GrantState.Active : ToolUp.Platform.GrantState { get }
+ToolUp.Platform.GrantState.IsActive : System.Boolean { get }
+ToolUp.Platform.GrantState.IsPendingConsent : System.Boolean { get }
+ToolUp.Platform.GrantState.PendingConsent : ToolUp.Platform.GrantState { get }
+ToolUp.Platform.GrantState.Tag : System.Int32 { get }
+ToolUp.Platform.GrantState+Tags (class)
+ToolUp.Platform.GrantState+Tags.Active : System.Int32 (literal)
+ToolUp.Platform.GrantState+Tags.PendingConsent : System.Int32 (literal)
+ToolUp.Platform.GrantStateModule (class)
+ToolUp.Platform.GrantStateModule.ofToken(System.String) : ToolUp.Platform.GrantState
+ToolUp.Platform.GrantStateModule.toToken(ToolUp.Platform.GrantState) : System.String
+ToolUp.Platform.GrantWriteOutcome (class)
+ToolUp.Platform.GrantWriteOutcome.Granted : ToolUp.Platform.GrantWriteOutcome { get }
+ToolUp.Platform.GrantWriteOutcome.IsGranted : System.Boolean { get }
+ToolUp.Platform.GrantWriteOutcome.IsRecordedPendingConsent : System.Boolean { get }
+ToolUp.Platform.GrantWriteOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.GrantWriteOutcome+RecordedPendingConsent (class)
+ToolUp.Platform.GrantWriteOutcome+RecordedPendingConsent.subjectId : System.String { get }
+ToolUp.Platform.GrantWriteOutcome+Tags (class)
+ToolUp.Platform.GrantWriteOutcome+Tags.Granted : System.Int32 (literal)
+ToolUp.Platform.GrantWriteOutcome+Tags.RecordedPendingConsent : System.Int32 (literal)
 ToolUp.Platform.GraphStoreMode (class)
 ToolUp.Platform.GraphStoreMode.CustomGraphStore : ToolUp.Platform.GraphStoreMode { get }
 ToolUp.Platform.GraphStoreMode.InMemoryGraphStore : ToolUp.Platform.GraphStoreMode { get }
@@ -6827,6 +6927,12 @@ ToolUp.Platform.ModuleExposureModule.toToken(ToolUp.Platform.ModuleExposure) : S
 ToolUp.Platform.ModuleFilter (class)
 ToolUp.Platform.ModuleFilter.apply`1(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
 ToolUp.Platform.ModuleFilter.matches(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : System.Boolean
+ToolUp.Platform.ModuleGrantRecord (class)
+ToolUp.Platform.ModuleGrantRecord..ctor(ToolUp.Platform.GrantState, ToolUp.Platform.GrantPolicy, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ModuleGrantRecord.ConsentedBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModuleGrantRecord.Justification : System.String { get }
+ToolUp.Platform.ModuleGrantRecord.SatisfiedPolicy : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.ModuleGrantRecord.State : ToolUp.Platform.GrantState { get }
 ToolUp.Platform.ModuleIdOrigin (class)
 ToolUp.Platform.ModuleIdOrigin.DerivedFromName : ToolUp.Platform.ModuleIdOrigin { get }
 ToolUp.Platform.ModuleIdOrigin.ExplicitlyDeclared : ToolUp.Platform.ModuleIdOrigin { get }
@@ -7761,6 +7867,13 @@ ToolUp.Platform.OverallStatus+Tags.DegradedBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+Tags.UnhealthyBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+UnhealthyBy (class)
 ToolUp.Platform.OverallStatus+UnhealthyBy.sections : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PartyRef (class)
+ToolUp.Platform.PartyRef.Item : System.String { get }
+ToolUp.Platform.PartyRef.Tag : System.Int32 { get }
+ToolUp.Platform.PartyRefModule (class)
+ToolUp.Platform.PartyRefModule.create(System.String) : ToolUp.Platform.PartyRef
+ToolUp.Platform.PartyRefModule.isEmpty(ToolUp.Platform.PartyRef) : System.Boolean
+ToolUp.Platform.PartyRefModule.value(ToolUp.Platform.PartyRef) : System.String
 ToolUp.Platform.PasskeyCredentialRegisteredPayload (class)
 ToolUp.Platform.PasskeyCredentialRegisteredPayload..ctor(System.String, System.String, System.String)
 ToolUp.Platform.PasskeyCredentialRegisteredPayload.CredentialIdPrefix : System.String { get }
@@ -9811,12 +9924,14 @@ ToolUp.Platform.TeamOwnershipTransferredPayload.FromUserId : System.String { get
 ToolUp.Platform.TeamOwnershipTransferredPayload.TeamId : System.String { get }
 ToolUp.Platform.TeamOwnershipTransferredPayload.ToUserId : System.String { get }
 ToolUp.Platform.TeamPermissions (class)
-ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure])
+ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]])
 ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.TeamPermissions.Exposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
+ToolUp.Platform.TeamPermissions.Grants : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]] { get }
 ToolUp.Platform.TeamPermissions.Members : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
 ToolUp.Platform.TeamPermissionsModule (class)
 ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { get }
+ToolUp.Platform.TeamPermissionsModule.grantsFor(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]
 ToolUp.Platform.TeamRestoredPayload (class)
 ToolUp.Platform.TeamRestoredPayload..ctor(System.String, System.String, System.String)
 ToolUp.Platform.TeamRestoredPayload.TeamId : System.String { get }
@@ -10203,6 +10318,12 @@ ToolUp.Platform.UnattestedReason+Tags.ProviderAbsent : System.Int32 (literal)
 ToolUp.Platform.UnattestedReason+Tags.ResolutionFailed : System.Int32 (literal)
 ToolUp.Platform.UnattestedReasonModule (class)
 ToolUp.Platform.UnattestedReasonModule.describe(ToolUp.Platform.UnattestedReason) : System.String
+ToolUp.Platform.UnconsentedGrantRefusedPayload (class)
+ToolUp.Platform.UnconsentedGrantRefusedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.UnconsentedGrantRefusedPayload.DeclaredPolicy : System.String { get }
+ToolUp.Platform.UnconsentedGrantRefusedPayload.InertReason : System.String { get }
+ToolUp.Platform.UnconsentedGrantRefusedPayload.ModuleName : System.String { get }
+ToolUp.Platform.UnconsentedGrantRefusedPayload.UserId : System.String { get }
 ToolUp.Platform.UpstreamReleaseCoverage (class)
 ToolUp.Platform.UpstreamReleaseCoverage.IsCovered : System.Boolean { get }
 ToolUp.Platform.UpstreamReleaseCoverage.IsNotCovered : System.Boolean { get }

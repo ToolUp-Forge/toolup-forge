@@ -915,6 +915,14 @@ let allTests =
         // Read; a forged tool name is refused with a typed Denied before the
         // executor runs and lands a _platform.ai.unauthorized_tool audit row.
         AIToolDispatchRbacTests.tests
+        // Phase 551 — module-declared grant policy. Fail-closed policy /
+        // grant-state parse (no mangled token reads as AdminDiscretion),
+        // narrowing-only composition, the write guard per arm, dispatch
+        // refusal of a grant row injected straight into the store (the
+        // Phase 311 property — write-path-only enforcement is
+        // insufficient), and the GP 11 / GP 13 floor: an all-default
+        // deployment composes an empty registry and short-circuits.
+        GrantPolicyTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

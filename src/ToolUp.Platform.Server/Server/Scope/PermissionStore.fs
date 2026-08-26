@@ -134,6 +134,72 @@ module private Json =
 
         dict
 
+    /// Phase 551 — grant records as `userId → moduleName → record`.
+    /// Absent entirely on a pre-551 document, and omitted on write when
+    /// no module declares a policy stricter than `AdminDiscretion`, so
+    /// the serialised bytes of an unchanged deployment are unchanged.
+    let private grantsToObject (grants: Map<string, Map<string, ModuleGrantRecord>>) =
+        let outer =
+            System.Collections.Generic.Dictionary<
+                string,
+                System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>>
+             >()
+
+        for KeyValue(userId, byModule) in grants do
+            let inner =
+                System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>>()
+
+            for KeyValue(moduleName, record) in byModule do
+                let fields = System.Collections.Generic.Dictionary<string, string>()
+                fields["state"] <- GrantState.toToken record.State
+                fields["policy"] <- GrantPolicy.toToken record.SatisfiedPolicy
+                fields["justification"] <- record.Justification
+
+                match record.ConsentedBy with
+                | Some who -> fields["consentedBy"] <- who
+                | None -> ()
+
+                inner[moduleName] <- fields
+
+            if inner.Count > 0 then
+                outer[userId] <- inner
+
+        outer
+
+    let private grantsFromObject (obj: JsonElement) : Map<string, Map<string, ModuleGrantRecord>> =
+        if obj.ValueKind <> JsonValueKind.Object then
+            Map.empty
+        else
+            [
+                for userProp in obj.EnumerateObject() do
+                    if userProp.Value.ValueKind = JsonValueKind.Object then
+                        let byModule = [
+                            for moduleProp in userProp.Value.EnumerateObject() do
+                                if moduleProp.Value.ValueKind = JsonValueKind.Object then
+                                    let field name =
+                                        match moduleProp.Value.TryGetProperty(name: string) with
+                                        | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+                                        | _ -> None
+
+                                    moduleProp.Name,
+                                    {
+                                        // Both parses are fail-closed: an
+                                        // unreadable state is inert and an
+                                        // unreadable policy token never
+                                        // reads as AdminDiscretion.
+                                        State = field "state" |> Option.defaultValue "" |> GrantState.ofToken
+                                        SatisfiedPolicy =
+                                            field "policy" |> Option.defaultValue "" |> GrantPolicy.ofToken
+                                        Justification = field "justification" |> Option.defaultValue ""
+                                        ConsentedBy = field "consentedBy"
+                                    }
+                        ]
+
+                        if not (List.isEmpty byModule) then
+                            userProp.Name, Map.ofList byModule
+            ]
+            |> Map.ofList
+
     let serialize (perms: TeamPermissions) : byte[] =
         let membersDict =
             System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string[]>>()
@@ -154,6 +220,10 @@ module private Json =
                 perms.Exposure
                 |> Map.toArray
                 |> Array.choose (fun (k, v) -> if ModuleExposure.isExposed v then None else Some k)
+            // Phase 551 — grant-policy evidence. Empty on every pre-551
+            // document and on every deployment where no module declares a
+            // policy, in which case the property serialises as `{}`.
+            grants = grantsToObject perms.Grants
         |}
 
         JsonSerializer.Serialize(dto, options) |> Encoding.UTF8.GetBytes
@@ -213,10 +283,19 @@ module private Json =
                         |> Map.ofList
                     | _ -> Map.empty
 
+            // Phase 551 — grant records. Absent on every pre-551 document
+            // ⇒ empty ⇒ every module behaves as `AdminDiscretion` unless
+            // one declares otherwise (GP 11).
+            let grants =
+                match root.TryGetProperty "grants" with
+                | true, g -> grantsFromObject g
+                | _ -> Map.empty
+
             Some {
                 Defaults = defaults
                 Members = members
                 Exposure = exposure
+                Grants = grants
             }
         with _ ->
             None

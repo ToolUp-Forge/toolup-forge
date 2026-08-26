@@ -794,6 +794,13 @@
         <Compile Include="Server\OAuth1aFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
+        <!-- Phase 551 — module-declared grant policy: the compose-time
+             registry, the IPermissionStore write-guard decorator, and the
+             dispatch predicate. After PermissionStore.fs (it decorates
+             IPermissionStore) and before Middleware.fs (which stamps the
+             per-request grant records), RemotingHelpers.fs (the dispatch
+             gate), and ServerApp.fs (which builds the registry). -->
+        <Compile Include="Server\GrantPolicyGuard.fs" />
         <Compile Include="Server\Scope\StoreIdSanitising.fs" />
         <!-- Phase 113 — IPermissionStore/tier-backed default for the
              host-neutral IActionAuthorizer seam (default-deny; policy as
