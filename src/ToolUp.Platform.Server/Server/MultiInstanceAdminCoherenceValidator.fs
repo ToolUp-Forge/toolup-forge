@@ -17,11 +17,15 @@ open ToolUp.Platform.ConfigValidation
 //   * the DSR erasure-preview cache — in-process, so a confirm routed to a
 //     different replica than the preview returns "no preview found".
 //
-// The underlying fix is the distributed-primitives work (Phase 9i
-// `IDistributedLock` + Phase 9c durable queue / ETag CAS). Until that
-// lands the degradation is invisible — unlike the team-cache case, which
-// `NotificationChannelInstanceValidator` already warns about. This
-// validator surfaces the whole class at preflight, enumerating only the
+// The underlying fix is two-part, and only the first part exists.
+// `IDistributedLock` — the cross-instance lease primitive — has shipped,
+// but none of the subsystems above has been migrated onto it, and what
+// the lease alone cannot supply is still missing: single-writer election
+// on the in-process tick / queue paths, and fenced (or ETag-CAS) writes
+// on the stores, so a lapsed lease cannot interleave a stale write.
+// Until those land the degradation is invisible — unlike the team-cache
+// case, which `NotificationChannelInstanceValidator` already warns about.
+// This validator surfaces the whole class at preflight, enumerating only the
 // subsystems actually composed. Warning (not Error), mirroring the other
 // topology validators' soft-touch posture — some deployments legitimately
 // run a single instance for these subsystems or accept the degradation.
@@ -68,7 +72,7 @@ type MultiInstanceAdminCoherenceValidator(config: ServerConfig, ?timeout: TimeSp
                     return
                         Warning(
                             sprintf
-                                "ServerConfig.ReplicaCount = %d with in-process single-writer admin subsystems composed:\n%s\nThese hold per-process state that does not cross instance boundaries — concurrent operations race (lost updates / dropped webhooks / lost previews), and a concurrent last-admin revoke can brick the platform. The distributed remedy is Phase 9i (IDistributedLock) + Phase 9c (durable queue / ETag CAS); until those land, run a single instance, or accept the documented degradation."
+                                "ServerConfig.ReplicaCount = %d with in-process single-writer admin subsystems composed:\n%s\nThese hold per-process state that does not cross instance boundaries — concurrent operations race (lost updates / dropped webhooks / lost previews), and a concurrent last-admin revoke can brick the platform. The cross-instance lease primitive (IDistributedLock) is composable today, but none of these subsystems takes a lease: what is still missing is single-writer election on the in-process tick and queue paths, and fenced (or ETag-CAS) writes on the stores. Until those land, run a single instance, or accept the documented degradation."
                                 config.ReplicaCount
                                 listing
                         )
