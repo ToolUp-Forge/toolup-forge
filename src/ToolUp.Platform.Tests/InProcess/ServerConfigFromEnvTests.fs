@@ -537,5 +537,24 @@ let tests =
                         (warnings |> Seq.exists (fun w -> w.Contains "MODULE_BINDING_ANCHORS"))
                         "must warn on the malformed entry")
             }
+
+            // ── Phase 460 — the share-token ephemeral-key acknowledgement ──
+            //
+            // Kept out of `sixAcceptFlags` above: that list is a fixed
+            // historical set (the flags 71.A.2 found unread), and growing it
+            // would rename what it records. Same GP 11 shape, pinned in both
+            // directions because a flag that reads as `true` when unset would
+            // silently disarm the refusal this phase exists to add.
+            test "AcceptEphemeralShareTokenKey: TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1 lifts to true" {
+                withEnv [ "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", Some "1" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isTrue cfg.AcceptEphemeralShareTokenKey "the env var must be read")
+            }
+
+            test "AcceptEphemeralShareTokenKey: unset → false (the refusal stays armed)" {
+                withEnv [ "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isFalse cfg.AcceptEphemeralShareTokenKey "unset must not acknowledge anything")
+            }
         ]
     )

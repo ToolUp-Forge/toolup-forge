@@ -166,13 +166,20 @@ ToolUp.AI.AISurfaceDerivationMode+Tags.DeriveFromCookie : System.Int32 (literal)
 ToolUp.AI.AISurfaceDerivationMode+Tags.TrustClient : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry (class)
 ToolUp.AI.AIToolRegistry.DefaultToolResultBudgetChars : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry.UnauthorizedToolVerdict : System.String (literal)
 ToolUp.AI.AIToolRegistry.createTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
+ToolUp.AI.AIToolRegistry.isSdkReservedToolSource(System.String) : System.Boolean
+ToolUp.AI.AIToolRegistry.isToolPermittedFor(ToolUp.Platform.AccessContext, ToolUp.Platform.AIToolDefinition) : System.Boolean
+ToolUp.AI.AIToolRegistry.isToolSourcePermittedFor(ToolUp.Platform.AccessContext, System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolVisibleOnSurface(ToolUp.AI.AISurface, ToolUp.Platform.AIToolDefinition) : System.Boolean
+ToolUp.AI.AIToolRegistry.reconstructAccessContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AccessContext
+ToolUp.AI.AIToolRegistry.recordUnauthorizedToolDenial(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AccessContext, System.String, System.String, System.String) : System.Void
 ToolUp.AI.AIToolRegistry.toProviderDef(ToolUp.Platform.AIToolDefinition) : ToolUp.Platform.AI.AIProviderToolDef
 ToolUp.AI.AIToolRegistry+AIToolRegistry (class)
 ToolUp.AI.AIToolRegistry+AIToolRegistry..ctor()
 ToolUp.AI.AIToolRegistry+AIToolRegistry.FindByName(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.GetAll() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
+ToolUp.AI.AIToolRegistry+AIToolRegistry.ListAccessible(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.RegisterAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]) : System.Void
 ToolUp.AI.AIToolRegistry+AIToolRegistry.TryClaimBudgetWarning(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry+RegisteredTool (class)
@@ -307,6 +314,8 @@ ToolUp.AI.ClientToolDispatch.clientToolResultHandler(Microsoft.FSharp.Core.FShar
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry (class)
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry..ctor()
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.RegisterPending(System.Guid) : System.Threading.Tasks.Task`1[System.String]
+ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.RegisterPending(System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Threading.Tasks.Task`1[System.String]
+ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.SourceModuleOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.TryAbort(System.Guid, System.String) : System.Boolean
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.TryComplete(System.Guid, System.String) : System.Boolean
 ToolUp.AI.ConversationExportAuditHandler (class)

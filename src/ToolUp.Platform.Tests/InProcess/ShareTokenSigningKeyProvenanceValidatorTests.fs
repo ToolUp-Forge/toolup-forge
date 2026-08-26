@@ -7,11 +7,20 @@ open ToolUp.Platform.ConfigValidation
 
 // ─── Wave 19 — share-token signing-key provenance preflight ──────────
 //
-// Warns (never refuses) when the HMAC signing key would be auto-
-// generated (absent from ISecretStore) in a production / multi-instance
-// share-token deployment, so the security-critical key is not invisible
-// to backup / rotation governance. Single-instance / non-public, or a
-// key already provisioned, is silent.
+// Fires when the HMAC signing key would be auto-generated (absent from
+// ISecretStore) in a production / multi-instance share-token deployment,
+// so the security-critical key is not invisible to backup / rotation
+// governance. Single-instance / non-public, or a key already
+// provisioned, is silent.
+//
+// **Phase 460 raised the unacknowledged production-shaped arm from
+// `Warning` to `Error`** — a public or multi-replica deployment no
+// longer boots onto a key nobody provisioned. The two cases below that
+// read `Warning` before now read `Error`; the acknowledgement path, the
+// auto-generated-key-in-force path and the provenance probe are pinned
+// in `ShareTokenSigningKeyGovernanceTests`, which owns the full ladder.
+// This pack keeps its original scope: the SHAPE gate (which deployments
+// the validator speaks to at all), which Phase 460 did not touch.
 
 /// Minimal in-memory ISecretStore keyed by (scopeId, key). Seed via the
 /// constructor to model "key already provisioned".
@@ -98,24 +107,24 @@ let tests =
             Expect.equal (validate config (emptyStore ())) Ok "single-instance non-public → silent"
         }
 
-        test "Surface live + ReplicaCount > 1 + key absent → Warning" {
+        test "Surface live + ReplicaCount > 1 + key absent → Error (Phase 460: was Warning)" {
             let config = cfg Surfaces.individual EnabledShareTokenStore 3 None
             let result = validate config (emptyStore ())
 
             match result with
-            | Warning msg ->
+            | Error msg ->
                 Expect.stringContains msg ShareTokenStore.signingKeySecretName "names the unmanaged signing-key secret"
-                Expect.stringContains msg "auto-generate" "explains the auto-generation gap"
-            | other -> failtestf "expected Warning, got %A" other
+                Expect.stringContains msg "pre-provision" "names the fix"
+            | other -> failtestf "expected Error, got %A" other
         }
 
-        test "Surface live + PublicBaseUrl set (inferred scale-out) + key absent → Warning" {
+        test "Surface live + PublicBaseUrl set (inferred scale-out) + key absent → Error (Phase 460: was Warning)" {
             let config =
                 cfg Surfaces.individual EnabledShareTokenStore 1 (Some "https://app.example.com")
 
             match validate config (emptyStore ()) with
-            | Warning _ -> ()
-            | other -> failtestf "expected Warning, got %A" other
+            | Error _ -> ()
+            | other -> failtestf "expected Error, got %A" other
         }
 
         test "Surface live + production shape + key already provisioned → Ok" {

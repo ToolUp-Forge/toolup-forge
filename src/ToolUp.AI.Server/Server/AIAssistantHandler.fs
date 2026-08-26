@@ -1309,7 +1309,28 @@ let aiAssistantApi
                 return conversations |> Array.toList
             }
 
-        GetAvailableTools = fun () -> async { return registry.GetAll() |> List.map _.Definition }
+        // Phase 36.A: the client-visible tool listing is filtered by the
+        // caller's per-module `Read` permission, the same predicate the
+        // agent loop's per-turn list and its dispatch re-check use — a
+        // user must not be able to enumerate the tool surface of a module
+        // they cannot read. Unrestricted deployments (empty
+        // `ModulePermissions`) see the full registry as before (GP 11).
+        //
+        // Resolved through the items-backed reconstruction rather than the
+        // `accessContext` above, whose fall-through is
+        // `AccessContext.unrestricted` — a silent unrestricted fallback is
+        // the one thing a permission filter must not have. Both read the
+        // same middleware-populated request; the reconstruction keeps
+        // `ModulePermissions` when the DI factory did not run.
+        GetAvailableTools =
+            fun () -> async {
+                let toolAccess =
+                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                    | :? AccessContext as ac -> ac
+                    | _ -> AIToolRegistry.reconstructAccessContext ctx
+
+                return registry.ListAccessible toolAccess |> List.map _.Definition
+            }
 
         GetTaskStatus =
             fun _taskId -> async {

@@ -55,18 +55,12 @@ let private readHeader (ctx: HttpContext) (name: string) : string option =
         if String.IsNullOrEmpty v then None else Some v
     | _ -> None
 
-/// Constant-time string comparison. Prevents timing side channels
-/// against the smoke token.
-let private constantTimeEquals (a: string) (b: string) : bool =
-    if a.Length <> b.Length then
-        false
-    else
-        let mutable result = 0
-
-        for i in 0 .. a.Length - 1 do
-            result <- result ||| (int a[i] ^^^ int b[i])
-
-        result = 0
+// Phase 467 — the smoke-token compare is `JwtCrypto.fixedTimeEqualsUtf8`,
+// the single sanctioned string-token comparison in the SDK. It replaces
+// a verbatim copy of the char-XOR loop the encryption admin handler
+// carried (`int a[i] ^^^ int b[i]` over UTF-16 code units, length-checked
+// on chars) — the same defect, in a second file, which is exactly why
+// there is now one implementation rather than a pattern to re-copy.
 
 let private resolveGate (ctx: HttpContext) : Result<unit, int * string> =
     match readEnvToken () with
@@ -82,7 +76,7 @@ let private resolveGate (ctx: HttpContext) : Result<unit, int * string> =
         match readHeader ctx SmokeTokenHeader with
         | None -> Error(401, sprintf "smoke: missing %s header" SmokeTokenHeader)
         | Some headerToken ->
-            if constantTimeEquals envToken headerToken then
+            if JwtCrypto.fixedTimeEqualsUtf8 envToken headerToken then
                 Ok()
             else
                 Error(401, "smoke: invalid token")

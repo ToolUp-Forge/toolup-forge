@@ -167,6 +167,8 @@ let allTests =
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
+        // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
+        ShareTokenSigningKeyGovernanceTests.tests
         // Phase 329 — fail-loud DataProtection key-ring backend (validator + Warn).
         DataProtectionBackendTests.tests
         FileSecretStoreTests.tests
@@ -909,6 +911,12 @@ let allTests =
         // the elided size — visible rather than silently truncated, and
         // deliberately unlike both a policy withhold and a tool error.
         AIToolResultBudgetTests.tests
+        // Phase 36.A — AI tool-dispatch RBAC. The per-turn tool list, the
+        // client-visible listing, the agent-loop dispatch site and the
+        // /api/ai/tool-result completion all gate on the caller's per-module
+        // Read; a forged tool name is refused with a typed Denied before the
+        // executor runs and lands a _platform.ai.unauthorized_tool audit row.
+        AIToolDispatchRbacTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure
@@ -1634,6 +1642,12 @@ let allTests =
         // closed (the inverse of the Phase 69d/69h happy-path coverage), plus
         // audit-omission observability + the PII-redaction default.
         AdversarialFailClosedTests.tests
+        // Phase 467 — constant-time token compare unified on
+        // JwtCrypto.fixedTimeEqualsUtf8 (byte-normalised behaviour + a
+        // source pin per call site, since the gates are private), and the
+        // per-IP failure window, whose expiry test and reset stamp now
+        // observe one caller-supplied instant rather than two clock reads.
+        ConstantTimeCompareTests.tests
         // Phase 169 — module-load startup observability (the addModule
         // outcome accumulator emitted through the startup logger).
         ModuleLoadOutcomeTests.tests

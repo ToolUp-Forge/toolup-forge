@@ -2968,6 +2968,33 @@ type ServerConfig = {
     /// the warning.
     AcceptInviteByEmailWithoutDirectory: bool
 
+    /// Phase 460 — explicit operator acknowledgement that the
+    /// share-token HMAC signing key may be **ephemeral**: absent from
+    /// `ISecretStore` at boot and therefore CSPRNG-generated and
+    /// persisted by `BlobShareTokenStore` on first use.
+    ///
+    /// An auto-generated key is a security-critical secret nobody knows
+    /// to back up or rotate: if the secret store is wiped or
+    /// re-provisioned the key is silently re-minted and **every
+    /// outstanding public share link stops verifying**. With several
+    /// replicas booting against an empty store the authoritative key is
+    /// whichever replica won the first write, not a value the operator
+    /// chose.
+    ///
+    /// Default `false`. `ShareTokenSigningKeyProvenanceValidator`
+    /// **refuses startup** when the share-token surface is live, the
+    /// deployment is production-shaped (`PublicBaseUrl` set or
+    /// `ReplicaCount > 1`) and the key is absent. Set `true` (or
+    /// `TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1`) for a dev / CI /
+    /// single-instance deployment that knowingly accepts a throwaway
+    /// key; the refusal downgrades to a `Warning` naming the flag, so
+    /// the posture stays visible on the preflight snapshot rather than
+    /// becoming silent.
+    ///
+    /// A non-production-shaped deployment is unaffected either way —
+    /// the validator is silent there, as it always was (GP 11).
+    AcceptEphemeralShareTokenKey: bool
+
     /// Eviction TTL for ephemeral session stores
     /// (Anonymous + AuthenticatedEphemeral modes). Default 60 minutes.
     /// `AuthenticatedEphemeral` deployments supporting trial-account
@@ -3655,6 +3682,7 @@ module ServerConfig =
         AcceptInMemoryShareTokenRateLimiterInMultiInstance = false
         AcceptPendingInviteStoreInMultiInstance = false
         AcceptInviteByEmailWithoutDirectory = false
+        AcceptEphemeralShareTokenKey = false
         EphemeralStoreEvictionMinutes = 60.0
         MaxSseConnectionsPerScope = Some 10
         DataSubjectRequests = DataSubjectRequestMode.Disabled
@@ -4353,6 +4381,11 @@ module ServerConfig =
                 AcceptInMemoryOAuthStateInMultiInstance = envFlag ConfigKeys.Names.acceptInMemoryOAuthStateMultiInstance
                 AcceptPendingInviteStoreInMultiInstance = envFlag ConfigKeys.Names.acceptPendingInviteStoreMultiInstance
                 AcceptInviteByEmailWithoutDirectory = envFlag ConfigKeys.Names.acceptInviteByEmailWithoutDirectory
+                // Phase 460 — the share-token ephemeral-key acknowledgement.
+                // Same GP 11 shape as the rest of the family: unset ⇒ `false`,
+                // and the provenance validator still refuses a production-shaped
+                // deployment whose signing key is unprovisioned.
+                AcceptEphemeralShareTokenKey = envFlag ConfigKeys.Names.acceptEphemeralShareTokenKey
                 // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
                 // inside the `fromEnv` seam (were compose-only / unread).
                 Port = parseServerPort ()

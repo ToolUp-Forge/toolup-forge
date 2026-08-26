@@ -86,18 +86,14 @@ let private resolveActor (ctx: HttpContext) =
         | Ok v -> $"token:deployment-admin (claimed: {v})"
         | Error _ -> "token:deployment-admin (claimed: <rejected by sanitiser>)"
 
-/// Constant-time string comparison. Prevents timing side channels
-/// against the admin token.
-let private constantTimeEquals (a: string) (b: string) : bool =
-    if a.Length <> b.Length then
-        false
-    else
-        let mutable result = 0
-
-        for i in 0 .. a.Length - 1 do
-            result <- result ||| (int a[i] ^^^ int b[i])
-
-        result = 0
+// Phase 467 — the admin-token compare is `JwtCrypto.fixedTimeEqualsUtf8`,
+// the single sanctioned string-token comparison in the SDK (BCL
+// `CryptographicOperations.FixedTimeEquals` over UTF-8 bytes). It
+// replaces a local char-XOR loop that folded `int a[i] ^^^ int b[i]`
+// over UTF-16 code units: byte-correct only for an ASCII token, and
+// length-checked on CHARS rather than bytes. Do not reintroduce a local
+// copy here — a token compare that is nearly constant-time is the one
+// kind that reads as fine in review.
 
 // Phase 232 — why the gate failed. The handler maps EVERY failure to a
 // uniform 403 (so the response never discloses whether a token is
@@ -114,41 +110,24 @@ type private GateFailure =
 
 /// Phase 232 — per-source-IP throttle on token attempts. In-process
 /// (single-instance) brute-force friction layered over the high-entropy
-/// token; not the primary control. `recordTokenFailure` counts a failed
-/// token attempt within a sliding window; `isThrottled` blocks once the
-/// cap is reached. Successful auth does not reset the window (the cap is
-/// on failures only).
-[<Literal>]
-let private maxTokenFailures = 5
-
-[<Literal>]
-let private windowMinutes = 5.0
-
+/// token; not the primary control. Successful auth does not reset the
+/// window (the cap is on failures only).
+///
+/// Phase 467 — the counter itself moved to `TokenAttemptThrottle`, which
+/// takes the instant as a parameter. The handler snapshots
+/// `DateTime.UtcNow` ONCE per request and threads that value through
+/// both the throttle check and the failure record, so the window test
+/// and any window reset observe the same instant. Previously each read
+/// its own `DateTime.UtcNow`, so under concurrent failures on one IP the
+/// window could be judged expired against one read and re-stamped from a
+/// later one.
 let private tokenFailures =
-    System.Collections.Concurrent.ConcurrentDictionary<string, int * DateTime>()
+    TokenAttemptThrottle(maxFailures = 5, window = TimeSpan.FromMinutes 5.0)
 
 let private clientIp (ctx: HttpContext) : string =
     match ctx.Connection.RemoteIpAddress with
     | null -> "unknown"
     | ip -> string ip
-
-let private isThrottled (ip: string) : bool =
-    match tokenFailures.TryGetValue ip with
-    | true, (count, windowStart) when (DateTime.UtcNow - windowStart).TotalMinutes < windowMinutes ->
-        count >= maxTokenFailures
-    | _ -> false
-
-let private recordTokenFailure (ip: string) : unit =
-    tokenFailures.AddOrUpdate(
-        ip,
-        (fun _ -> (1, DateTime.UtcNow)),
-        (fun _ (count, windowStart) ->
-            if (DateTime.UtcNow - windowStart).TotalMinutes < windowMinutes then
-                (count + 1, windowStart)
-            else
-                (1, DateTime.UtcNow))
-    )
-    |> ignore
 
 let private resolveLogger (ctx: HttpContext) : ILogger option =
     match ctx.RequestServices.GetService(typeof<ILogger>) with
@@ -183,7 +162,7 @@ let private resolveGate (ctx: HttpContext) : Result<string, GateFailure> =
             match readHeader ctx AdminTokenHeader with
             | None -> Error TokenMissing
             | Some headerToken ->
-                if constantTimeEquals envToken headerToken then
+                if JwtCrypto.fixedTimeEqualsUtf8 envToken headerToken then
                     Ok(resolveActor ctx)
                 else
                     Error TokenInvalid
@@ -193,8 +172,12 @@ let private destroyScopeKey (scopeId: string) : HttpHandler =
         let ip = clientIp ctx
         let logger = resolveLogger ctx
 
+        // Phase 467 — ONE clock read per request, threaded through the
+        // throttle check and the failure record below.
+        let now = DateTime.UtcNow
+
         // Phase 232 — per-IP throttle on token brute-force.
-        if isThrottled ip then
+        if tokenFailures.IsThrottled(ip, now) then
             logger
             |> Option.iter (fun l ->
                 l.Warn(sprintf "[encryption-admin] throttled: too many failed token attempts from %s" ip))
@@ -211,7 +194,7 @@ let private destroyScopeKey (scopeId: string) : HttpHandler =
                 match failure with
                 | TokenMissing
                 | TokenInvalid ->
-                    recordTokenFailure ip
+                    tokenFailures.RecordFailure(ip, now) |> ignore
 
                     logger
                     |> Option.iter (fun l ->
