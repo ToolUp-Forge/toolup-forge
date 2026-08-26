@@ -725,6 +725,10 @@
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
         <Compile Include="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />
+        <!-- Phase 337 — signed anonymous-session binding: the scope-selection
+             leg Phase 135 left open. After AnonymousSessionMigrationTests
+             (same substrate); no ordering dependency of its own. -->
+        <Compile Include="InProcess\AnonymousSessionBindingTests.fs" />
         <Compile Include="InProcess\StoreIdSanitisingTests.fs" />
         <Compile Include="InProcess\SecureByDefaultValidatorTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />

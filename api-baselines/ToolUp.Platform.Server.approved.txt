@@ -130,7 +130,10 @@ ToolUp.Platform.AlertRuleEngine+RuleState.BreachingSince : Microsoft.FSharp.Core
 ToolUp.Platform.AlertRuleEngine+RuleState.Fired : System.Boolean { get }
 ToolUp.Platform.AnonymousSessionBinding (class)
 ToolUp.Platform.AnonymousSessionBinding.CookieName : System.String (literal)
+ToolUp.Platform.AnonymousSessionBinding.boundSessionId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.AnonymousSessionBinding.ensureBound(Microsoft.AspNetCore.Http.HttpContext, System.String) : System.Void
 ToolUp.Platform.AnonymousSessionBinding.isBoundTo(Microsoft.AspNetCore.Http.HttpContext, System.String) : System.Boolean
+ToolUp.Platform.AnonymousSessionBinding.issue(Microsoft.AspNetCore.Http.HttpContext) : System.String
 ToolUp.Platform.AnonymousSessionBinding.mint(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.AnonymousSessionBinding.readCookie(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.AnonymousSessionBinding.setCookie(Microsoft.AspNetCore.Http.HttpContext, System.String) : System.Void
