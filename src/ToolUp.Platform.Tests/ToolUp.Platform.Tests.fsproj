@@ -316,6 +316,7 @@
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />
         <Compile Include="InProcess\AuthProviderTests.fs" />
+        <Compile Include="InProcess\OidcJwksTtlTests.fs" />
         <Compile Include="InProcess\AzureBlobStorageTests.fs" />
         <Compile Include="InProcess\AwsS3StorageTests.fs" />
         <Compile Include="InProcess\GoogleCloudStorageTests.fs" />
@@ -1467,6 +1468,18 @@
              opt-in platform-admin route's refusals. After
              BuildTranscriptTests, whose closure vocabulary it projects. -->
         <Compile Include="InProcess\SbomProjectionTests.fs" />
+        <!-- Phase 713 — the evidence chain walker: hop-count invariance
+             probed over a LADDER of arrangements rather than the two
+             extremes, every link verdict reached on the hop that can
+             produce it (with absent and broken asserted to read
+             differently), the declared caps refusing rather than
+             shortening (and the same walk under a roomier cap returning
+             everything, so the refusal is a refusal), the audited read
+             counted, and the ninth report section degrading like every
+             other. After BuildTranscriptTests, whose StubSealer it reuses,
+             and after WorkProvenanceSourceTests' subject, which answers
+             its first hop. -->
+        <Compile Include="InProcess\EvidenceChainWalkerTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding
              and a drifted composition each do not — probed separately), the

@@ -778,6 +778,7 @@ ToolUp.Platform.AuditEvent.IsEncryptionKeyRotated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityUpdated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsEvidenceChainWalked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsExternalCallbackRejected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsExternalCallbackResolved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFactImportAccepted : System.Boolean { get }
@@ -1007,6 +1008,8 @@ ToolUp.Platform.AuditEvent+EntityDeleted (class)
 ToolUp.Platform.AuditEvent+EntityDeleted.Item : ToolUp.Platform.EntityLifecycleEventPayload { get }
 ToolUp.Platform.AuditEvent+EntityUpdated (class)
 ToolUp.Platform.AuditEvent+EntityUpdated.Item : ToolUp.Platform.EntityLifecycleEventPayload { get }
+ToolUp.Platform.AuditEvent+EvidenceChainWalked (class)
+ToolUp.Platform.AuditEvent+EvidenceChainWalked.Item : ToolUp.Platform.EvidenceChainWalkedPayload { get }
 ToolUp.Platform.AuditEvent+ExternalCallbackRejected (class)
 ToolUp.Platform.AuditEvent+ExternalCallbackRejected.Item : ToolUp.Platform.ExternalCallbackRejectedPayload { get }
 ToolUp.Platform.AuditEvent+ExternalCallbackResolved (class)
@@ -1249,6 +1252,7 @@ ToolUp.Platform.AuditEvent+Tags.EncryptionKeyRotated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityUpdated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.EvidenceChainWalked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ExternalCallbackRejected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ExternalCallbackResolved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FactImportAccepted : System.Int32 (literal)
@@ -1784,6 +1788,22 @@ ToolUp.Platform.BlobStorage+SignedUrlRefusal+SigningFailed.message : System.Stri
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags (class)
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.NotConfigured : System.Int32 (literal)
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.SigningFailed : System.Int32 (literal)
+ToolUp.Platform.BootVerificationReading (class)
+ToolUp.Platform.BootVerificationReading.IsBootRejected : System.Boolean { get }
+ToolUp.Platform.BootVerificationReading.IsBootUnsealed : System.Boolean { get }
+ToolUp.Platform.BootVerificationReading.IsBootVerified : System.Boolean { get }
+ToolUp.Platform.BootVerificationReading.Tag : System.Int32 { get }
+ToolUp.Platform.BootVerificationReading+BootRejected (class)
+ToolUp.Platform.BootVerificationReading+BootRejected.detail : System.String { get }
+ToolUp.Platform.BootVerificationReading+BootRejected.position : System.String { get }
+ToolUp.Platform.BootVerificationReading+BootUnsealed (class)
+ToolUp.Platform.BootVerificationReading+BootUnsealed.reason : System.String { get }
+ToolUp.Platform.BootVerificationReading+BootVerified (class)
+ToolUp.Platform.BootVerificationReading+BootVerified.detail : System.String { get }
+ToolUp.Platform.BootVerificationReading+Tags (class)
+ToolUp.Platform.BootVerificationReading+Tags.BootRejected : System.Int32 (literal)
+ToolUp.Platform.BootVerificationReading+Tags.BootUnsealed : System.Int32 (literal)
+ToolUp.Platform.BootVerificationReading+Tags.BootVerified : System.Int32 (literal)
 ToolUp.Platform.Branding (class)
 ToolUp.Platform.Branding..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Branding.AppName : System.String { get }
@@ -3854,6 +3874,7 @@ ToolUp.Platform.DeploymentVerification.AuditLedgerSection : System.String (liter
 ToolUp.Platform.DeploymentVerification.BootSealSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.CertificateIssuanceSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.ConfigConformanceSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.EvidenceChainSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
 ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)
@@ -4456,6 +4477,137 @@ ToolUp.Platform.EventStoreMode+Tags.InMemoryOnly : System.Int32 (literal)
 ToolUp.Platform.EventStoreMode+Tags.PersistentBlobBacked : System.Int32 (literal)
 ToolUp.Platform.Events (class)
 ToolUp.Platform.Events.create(System.String, System.String, System.String, System.String) : ToolUp.Platform.ModuleEvent
+ToolUp.Platform.EvidenceChain (class)
+ToolUp.Platform.EvidenceChain..ctor(System.Int32, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop], ToolUp.Platform.EvidenceChainOutcome, System.String)
+ToolUp.Platform.EvidenceChain.Actor : System.String { get }
+ToolUp.Platform.EvidenceChain.Hops : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop] { get }
+ToolUp.Platform.EvidenceChain.Outcome : ToolUp.Platform.EvidenceChainOutcome { get }
+ToolUp.Platform.EvidenceChain.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.EvidenceChain.VerdictDigest : System.String { get }
+ToolUp.Platform.EvidenceChain.WalkedAt : System.DateTime { get }
+ToolUp.Platform.EvidenceChainCaps (class)
+ToolUp.Platform.EvidenceChainCaps..ctor(System.Int32, System.Int32)
+ToolUp.Platform.EvidenceChainCaps.MaxClosureEntries : System.Int32 { get }
+ToolUp.Platform.EvidenceChainCaps.MaxWorkDepth : System.Int32 { get }
+ToolUp.Platform.EvidenceChainCapsModule (class)
+ToolUp.Platform.EvidenceChainCapsModule.defaults : ToolUp.Platform.EvidenceChainCaps { get }
+ToolUp.Platform.EvidenceChainCapsModule.none : ToolUp.Platform.EvidenceChainCaps { get }
+ToolUp.Platform.EvidenceChainError (class)
+ToolUp.Platform.EvidenceChainError.IsChainClosureExceedsCap : System.Boolean { get }
+ToolUp.Platform.EvidenceChainError.IsChainWorkDepthExceedsCap : System.Boolean { get }
+ToolUp.Platform.EvidenceChainError.IsChainWorkDepthInvalid : System.Boolean { get }
+ToolUp.Platform.EvidenceChainError.Tag : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+ChainClosureExceedsCap (class)
+ToolUp.Platform.EvidenceChainError+ChainClosureExceedsCap.cap : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+ChainClosureExceedsCap.entries : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+ChainWorkDepthExceedsCap (class)
+ToolUp.Platform.EvidenceChainError+ChainWorkDepthExceedsCap.cap : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+ChainWorkDepthExceedsCap.requested : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+ChainWorkDepthInvalid (class)
+ToolUp.Platform.EvidenceChainError+ChainWorkDepthInvalid.requested : System.Int32 { get }
+ToolUp.Platform.EvidenceChainError+Tags (class)
+ToolUp.Platform.EvidenceChainError+Tags.ChainClosureExceedsCap : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainError+Tags.ChainWorkDepthExceedsCap : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainError+Tags.ChainWorkDepthInvalid : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainErrorModule (class)
+ToolUp.Platform.EvidenceChainErrorModule.describe(ToolUp.Platform.EvidenceChainError) : System.String
+ToolUp.Platform.EvidenceChainLinks (class)
+ToolUp.Platform.EvidenceChainLinks..ctor(ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome, ToolUp.Platform.EvidenceHopOutcome)
+ToolUp.Platform.EvidenceChainLinks.BootVerification : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.BuildTranscript : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.DependencyClosure : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.DeployRecord : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.EvidencePack : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.LedgerPosition : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainLinks.UpstreamWorkRecord : ToolUp.Platform.EvidenceHopOutcome { get }
+ToolUp.Platform.EvidenceChainModule (class)
+ToolUp.Platform.EvidenceChainModule.BootVerificationHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.BuildTranscriptHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.DependencyClosureHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.DeployRecordHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.EvidencePackHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.FramingVersion : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.LedgerPositionHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainModule.UpstreamWorkRecordHop : System.String (literal)
+ToolUp.Platform.EvidenceChainModule.allAbsent(System.String) : ToolUp.Platform.EvidenceChainLinks
+ToolUp.Platform.EvidenceChainModule.canonicalForm(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]) : System.String
+ToolUp.Platform.EvidenceChainModule.hops(ToolUp.Platform.EvidenceChainLinks) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]
+ToolUp.Platform.EvidenceChainModule.order : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceChainModule.outcomeOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]) : ToolUp.Platform.EvidenceChainOutcome
+ToolUp.Platform.EvidenceChainModule.render(ToolUp.Platform.EvidenceChain) : System.String
+ToolUp.Platform.EvidenceChainModule.titleOf(System.String) : System.String
+ToolUp.Platform.EvidenceChainOutcome (class)
+ToolUp.Platform.EvidenceChainOutcome.ChainBroken : ToolUp.Platform.EvidenceChainOutcome { get }
+ToolUp.Platform.EvidenceChainOutcome.ChainComplete : ToolUp.Platform.EvidenceChainOutcome { get }
+ToolUp.Platform.EvidenceChainOutcome.ChainPartial : ToolUp.Platform.EvidenceChainOutcome { get }
+ToolUp.Platform.EvidenceChainOutcome.ChainUnrecorded : ToolUp.Platform.EvidenceChainOutcome { get }
+ToolUp.Platform.EvidenceChainOutcome.IsChainBroken : System.Boolean { get }
+ToolUp.Platform.EvidenceChainOutcome.IsChainComplete : System.Boolean { get }
+ToolUp.Platform.EvidenceChainOutcome.IsChainPartial : System.Boolean { get }
+ToolUp.Platform.EvidenceChainOutcome.IsChainUnrecorded : System.Boolean { get }
+ToolUp.Platform.EvidenceChainOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.EvidenceChainOutcome+Tags (class)
+ToolUp.Platform.EvidenceChainOutcome+Tags.ChainBroken : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainOutcome+Tags.ChainComplete : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainOutcome+Tags.ChainPartial : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainOutcome+Tags.ChainUnrecorded : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainOutcomeModule (class)
+ToolUp.Platform.EvidenceChainOutcomeModule.label(ToolUp.Platform.EvidenceChainOutcome) : System.String
+ToolUp.Platform.EvidenceChainRequest (class)
+ToolUp.Platform.EvidenceChainRequest..ctor(System.String, System.Int32)
+ToolUp.Platform.EvidenceChainRequest.Actor : System.String { get }
+ToolUp.Platform.EvidenceChainRequest.WorkDepth : System.Int32 { get }
+ToolUp.Platform.EvidenceChainRequestModule (class)
+ToolUp.Platform.EvidenceChainRequestModule.DefaultWorkDepth : System.Int32 (literal)
+ToolUp.Platform.EvidenceChainRequestModule.forActor(System.String) : ToolUp.Platform.EvidenceChainRequest
+ToolUp.Platform.EvidenceChainWalkedPayload (class)
+ToolUp.Platform.EvidenceChainWalkedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.EvidenceChainWalkedPayload.Actor : System.String { get }
+ToolUp.Platform.EvidenceChainWalkedPayload.Hops : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceChainWalkedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.EvidenceChainWalkedPayload.Outcome : System.String { get }
+ToolUp.Platform.EvidenceChainWalkedPayload.VerdictDigest : System.String { get }
+ToolUp.Platform.EvidenceHop (class)
+ToolUp.Platform.EvidenceHop..ctor(System.String, System.String, System.Int32, ToolUp.Platform.EvidenceLink, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.EvidenceHop.Findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceHop.Id : System.String { get }
+ToolUp.Platform.EvidenceHop.Link : ToolUp.Platform.EvidenceLink { get }
+ToolUp.Platform.EvidenceHop.Ordinal : System.Int32 { get }
+ToolUp.Platform.EvidenceHop.Title : System.String { get }
+ToolUp.Platform.EvidenceHopOutcome (class)
+ToolUp.Platform.EvidenceHopOutcome..ctor(ToolUp.Platform.EvidenceLink, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.EvidenceHopOutcome.Findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceHopOutcome.Link : ToolUp.Platform.EvidenceLink { get }
+ToolUp.Platform.EvidenceHopOutcomeModule (class)
+ToolUp.Platform.EvidenceHopOutcomeModule.bare(ToolUp.Platform.EvidenceLink) : ToolUp.Platform.EvidenceHopOutcome
+ToolUp.Platform.EvidenceLink (class)
+ToolUp.Platform.EvidenceLink.IsLinkAbsent : System.Boolean { get }
+ToolUp.Platform.EvidenceLink.IsLinkBroken : System.Boolean { get }
+ToolUp.Platform.EvidenceLink.IsLinkWithheld : System.Boolean { get }
+ToolUp.Platform.EvidenceLink.IsLinked : System.Boolean { get }
+ToolUp.Platform.EvidenceLink.Tag : System.Int32 { get }
+ToolUp.Platform.EvidenceLink+LinkAbsent (class)
+ToolUp.Platform.EvidenceLink+LinkAbsent.reason : System.String { get }
+ToolUp.Platform.EvidenceLink+LinkBroken (class)
+ToolUp.Platform.EvidenceLink+LinkBroken.position : System.String { get }
+ToolUp.Platform.EvidenceLink+LinkBroken.reason : System.String { get }
+ToolUp.Platform.EvidenceLink+LinkWithheld (class)
+ToolUp.Platform.EvidenceLink+LinkWithheld.policy : System.String { get }
+ToolUp.Platform.EvidenceLink+Linked (class)
+ToolUp.Platform.EvidenceLink+Linked.detail : System.String { get }
+ToolUp.Platform.EvidenceLink+Linked.reference : System.String { get }
+ToolUp.Platform.EvidenceLink+Tags (class)
+ToolUp.Platform.EvidenceLink+Tags.LinkAbsent : System.Int32 (literal)
+ToolUp.Platform.EvidenceLink+Tags.LinkBroken : System.Int32 (literal)
+ToolUp.Platform.EvidenceLink+Tags.LinkWithheld : System.Int32 (literal)
+ToolUp.Platform.EvidenceLink+Tags.Linked : System.Int32 (literal)
+ToolUp.Platform.EvidenceLinkModule (class)
+ToolUp.Platform.EvidenceLinkModule.detail(ToolUp.Platform.EvidenceLink) : System.String
+ToolUp.Platform.EvidenceLinkModule.isBroken(ToolUp.Platform.EvidenceLink) : System.Boolean
+ToolUp.Platform.EvidenceLinkModule.isLinked(ToolUp.Platform.EvidenceLink) : System.Boolean
+ToolUp.Platform.EvidenceLinkModule.label(ToolUp.Platform.EvidenceLink) : System.String
+ToolUp.Platform.EvidenceLinkModule.reference(ToolUp.Platform.EvidenceLink) : System.String
 ToolUp.Platform.EvidencePackClassification (class)
 ToolUp.Platform.EvidencePackClassification..ctor(System.String, System.String, System.String)
 ToolUp.Platform.EvidencePackClassification.EntityName : System.String { get }
@@ -4491,6 +4643,23 @@ ToolUp.Platform.EvidencePackManifest.GeneratedAt : System.DateTimeOffset { get }
 ToolUp.Platform.EvidencePackManifest.Reason : System.String { get }
 ToolUp.Platform.EvidencePackManifest.RequestedBy : System.String { get }
 ToolUp.Platform.EvidencePackManifest.ScopeId : System.String { get }
+ToolUp.Platform.EvidencePackReading (class)
+ToolUp.Platform.EvidencePackReading.IsPackSigned : System.Boolean { get }
+ToolUp.Platform.EvidencePackReading.IsPackUnsigned : System.Boolean { get }
+ToolUp.Platform.EvidencePackReading.IsPackWithheld : System.Boolean { get }
+ToolUp.Platform.EvidencePackReading.Tag : System.Int32 { get }
+ToolUp.Platform.EvidencePackReading+PackSigned (class)
+ToolUp.Platform.EvidencePackReading+PackSigned.entries : System.Int32 { get }
+ToolUp.Platform.EvidencePackReading+PackSigned.manifestDigest : System.String { get }
+ToolUp.Platform.EvidencePackReading+PackUnsigned (class)
+ToolUp.Platform.EvidencePackReading+PackUnsigned.entries : System.Int32 { get }
+ToolUp.Platform.EvidencePackReading+PackUnsigned.manifestDigest : System.String { get }
+ToolUp.Platform.EvidencePackReading+PackWithheld (class)
+ToolUp.Platform.EvidencePackReading+PackWithheld.policy : System.String { get }
+ToolUp.Platform.EvidencePackReading+Tags (class)
+ToolUp.Platform.EvidencePackReading+Tags.PackSigned : System.Int32 (literal)
+ToolUp.Platform.EvidencePackReading+Tags.PackUnsigned : System.Int32 (literal)
+ToolUp.Platform.EvidencePackReading+Tags.PackWithheld : System.Int32 (literal)
 ToolUp.Platform.EvidencePackRequest (class)
 ToolUp.Platform.EvidencePackRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
 ToolUp.Platform.EvidencePackRequest.AuditSourceModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -5807,6 +5976,23 @@ ToolUp.Platform.KnowledgeScopeErasedPayload.ScopeId : System.String { get }
 ToolUp.Platform.KnowledgeScopeErasedPayload.UserId : System.String { get }
 ToolUp.Platform.KnowledgeSourceModule (class)
 ToolUp.Platform.KnowledgeSourceModule.value : System.String (literal)
+ToolUp.Platform.LedgerPositionReading (class)
+ToolUp.Platform.LedgerPositionReading.IsLedgerBroken : System.Boolean { get }
+ToolUp.Platform.LedgerPositionReading.IsLedgerRecorded : System.Boolean { get }
+ToolUp.Platform.LedgerPositionReading.IsLedgerUnrecorded : System.Boolean { get }
+ToolUp.Platform.LedgerPositionReading.Tag : System.Int32 { get }
+ToolUp.Platform.LedgerPositionReading+LedgerBroken (class)
+ToolUp.Platform.LedgerPositionReading+LedgerBroken.detail : System.String { get }
+ToolUp.Platform.LedgerPositionReading+LedgerBroken.position : System.Int64 { get }
+ToolUp.Platform.LedgerPositionReading+LedgerRecorded (class)
+ToolUp.Platform.LedgerPositionReading+LedgerRecorded.headDigest : System.String { get }
+ToolUp.Platform.LedgerPositionReading+LedgerRecorded.position : System.Int64 { get }
+ToolUp.Platform.LedgerPositionReading+LedgerUnrecorded (class)
+ToolUp.Platform.LedgerPositionReading+LedgerUnrecorded.reason : System.String { get }
+ToolUp.Platform.LedgerPositionReading+Tags (class)
+ToolUp.Platform.LedgerPositionReading+Tags.LedgerBroken : System.Int32 (literal)
+ToolUp.Platform.LedgerPositionReading+Tags.LedgerRecorded : System.Int32 (literal)
+ToolUp.Platform.LedgerPositionReading+Tags.LedgerUnrecorded : System.Int32 (literal)
 ToolUp.Platform.LifecycleExportArchive (class)
 ToolUp.Platform.LifecycleExportArchive..ctor(System.String, System.String, System.String, System.Int32)
 ToolUp.Platform.LifecycleExportArchive.BlobPath : System.String { get }

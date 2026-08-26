@@ -1523,8 +1523,14 @@ let private fromEnvTests =
 // Drives the internal `OidcAuthProviderJwks.getJwksCore` directly (via
 // InternalsVisibleTo) so the time-gated stale window is deterministic:
 // seed the process cache with a successful fetch, then force a re-fetch
-// (ttl 0) against a failing client. Default mode serves the stale cache;
-// strict mode (fail-closed) surfaces the fetch error instead.
+// (an already-elapsed ttl) against a failing client. Default mode serves
+// the stale cache; strict mode (fail-closed) surfaces the fetch error.
+//
+// Phase 463 note: the forcing device here used to be `TimeSpan.Zero`, and
+// is now a one-tick ttl. Zero no longer means "already expired" — it means
+// the JWKS cache is DISABLED, which by design serves nothing at all,
+// stale fallback included (see `OidcJwksTtlTests`). A one-tick ttl is
+// what this case always meant: expired, but still a cache.
 
 let private oidcStaleJwksTests =
     testList "OidcAuthProvider — strict JWKS fail-closed (Phase 341)" [
@@ -1540,18 +1546,21 @@ let private oidcStaleJwksTests =
 
             let tenMin = TimeSpan.FromMinutes 10.0
             let oneMin = TimeSpan.FromMinutes 1.0
+            // Expired for any entry seeded a moment ago, but still an
+            // ENABLED cache — see the Phase 463 note above.
+            let elapsed = TimeSpan.FromTicks 1L
 
             // 1. Seed the process cache with a successful fetch.
             let! seeded = OidcAuthProviderJwks.getJwksCore okClient silentLogger key.JwksUrl false false tenMin oneMin
 
-            // 2. Default (failClosed=false): ttl 0 forces a re-fetch that
-            //    fails → the stale fallback serves the seeded key set.
+            // 2. Default (failClosed=false): an elapsed ttl forces a re-fetch
+            //    that fails → the stale fallback serves the seeded key set.
             let! staleDefault =
-                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false false TimeSpan.Zero oneMin
+                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false false elapsed oneMin
 
             // 3. Strict (failClosed=true): same stale window → Error, no serve.
             let! staleStrict =
-                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false true TimeSpan.Zero oneMin
+                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false true elapsed oneMin
 
             match seeded with
             | Ok keys -> Expect.equal keys.Count 1 "seed fetch returns the one JWKS key"

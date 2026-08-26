@@ -5,20 +5,30 @@
 # still be folded into this file in the same PR.
 ToolUp.Stripe.TierToken.Cookie (class)
 ToolUp.Stripe.TierToken.Cookie.clear(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext) : System.Void
+ToolUp.Stripe.TierToken.Cookie.insecureDowngradeApplies(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext) : System.Boolean
+ToolUp.Stripe.TierToken.Cookie.isNonProductionHost(System.String) : System.Boolean
 ToolUp.Stripe.TierToken.Cookie.issue(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Stripe.TierToken.Tier, System.Int32, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Stripe.TierToken.MintError]
+ToolUp.Stripe.TierToken.Cookie.issueFor(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Stripe.TierToken.Tier, System.String, System.Int64, System.Int32, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Stripe.TierToken.MintError]
 ToolUp.Stripe.TierToken.Cookie.resolveFromRequest(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext, System.DateTimeOffset, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Stripe.TierToken.Tier]
+ToolUp.Stripe.TierToken.Cookie.resolveFromRequestWithEpoch(ToolUp.Stripe.TierToken.CookieConfig, Microsoft.AspNetCore.Http.HttpContext, System.DateTimeOffset, System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Int64]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Stripe.TierToken.Tier]]
 ToolUp.Stripe.TierToken.CookieConfig (class)
 ToolUp.Stripe.TierToken.CookieConfig..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Stripe.TierToken.CookieConfig.CookieName : System.String { get }
 ToolUp.Stripe.TierToken.CookieConfig.InsecureCookiesEnvVar : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Stripe.TierToken.MintError (class)
+ToolUp.Stripe.TierToken.MintError.InvalidEpoch : ToolUp.Stripe.TierToken.MintError { get }
 ToolUp.Stripe.TierToken.MintError.InvalidLifetime : ToolUp.Stripe.TierToken.MintError { get }
+ToolUp.Stripe.TierToken.MintError.InvalidSubject : ToolUp.Stripe.TierToken.MintError { get }
+ToolUp.Stripe.TierToken.MintError.IsInvalidEpoch : System.Boolean { get }
 ToolUp.Stripe.TierToken.MintError.IsInvalidLifetime : System.Boolean { get }
+ToolUp.Stripe.TierToken.MintError.IsInvalidSubject : System.Boolean { get }
 ToolUp.Stripe.TierToken.MintError.IsSecretMissing : System.Boolean { get }
 ToolUp.Stripe.TierToken.MintError.SecretMissing : ToolUp.Stripe.TierToken.MintError { get }
 ToolUp.Stripe.TierToken.MintError.Tag : System.Int32 { get }
 ToolUp.Stripe.TierToken.MintError+Tags (class)
+ToolUp.Stripe.TierToken.MintError+Tags.InvalidEpoch : System.Int32 (literal)
 ToolUp.Stripe.TierToken.MintError+Tags.InvalidLifetime : System.Int32 (literal)
+ToolUp.Stripe.TierToken.MintError+Tags.InvalidSubject : System.Int32 (literal)
 ToolUp.Stripe.TierToken.MintError+Tags.SecretMissing : System.Int32 (literal)
 ToolUp.Stripe.TierToken.Tier (class)
 ToolUp.Stripe.TierToken.Tier.Anonymous : ToolUp.Stripe.TierToken.Tier { get }
@@ -48,23 +58,42 @@ ToolUp.Stripe.TierToken.TierModule.rank(ToolUp.Stripe.TierToken.Tier) : System.I
 ToolUp.Stripe.TierToken.TierModule.toClaim(ToolUp.Stripe.TierToken.Tier) : System.String
 ToolUp.Stripe.TierToken.TierModule.tryParse(System.String) : ToolUp.Stripe.TierToken.Tier
 ToolUp.Stripe.TierToken.Token (class)
+ToolUp.Stripe.TierToken.Token.RecommendedMaxLifetimeSeconds : System.Int32 (literal)
+ToolUp.Stripe.TierToken.Token.inspect(System.DateTimeOffset, System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Stripe.TierToken.TokenClaims, ToolUp.Stripe.TierToken.ValidateError]
 ToolUp.Stripe.TierToken.Token.mint(ToolUp.Stripe.TierToken.Tier, System.Int32, System.DateTimeOffset, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Stripe.TierToken.MintError]
+ToolUp.Stripe.TierToken.Token.mintFor(ToolUp.Stripe.TierToken.Tier, System.String, System.Int64, System.Int32, System.DateTimeOffset, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Stripe.TierToken.MintError]
 ToolUp.Stripe.TierToken.Token.validate(System.DateTimeOffset, System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Stripe.TierToken.Tier, ToolUp.Stripe.TierToken.ValidateError]
+ToolUp.Stripe.TierToken.Token.validateWithEpoch(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Int64]]], System.DateTimeOffset, System.String, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Stripe.TierToken.Tier, ToolUp.Stripe.TierToken.ValidateError]]
+ToolUp.Stripe.TierToken.TokenClaims (class)
+ToolUp.Stripe.TierToken.TokenClaims..ctor(ToolUp.Stripe.TierToken.Tier, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], System.DateTimeOffset)
+ToolUp.Stripe.TierToken.TokenClaims.Epoch : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Stripe.TierToken.TokenClaims.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Stripe.TierToken.TokenClaims.Subject : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Stripe.TierToken.TokenClaims.Tier : ToolUp.Stripe.TierToken.Tier { get }
 ToolUp.Stripe.TierToken.ValidateError (class)
 ToolUp.Stripe.TierToken.ValidateError.Expired : ToolUp.Stripe.TierToken.ValidateError { get }
 ToolUp.Stripe.TierToken.ValidateError.IsExpired : System.Boolean { get }
 ToolUp.Stripe.TierToken.ValidateError.IsMalformedToken : System.Boolean { get }
+ToolUp.Stripe.TierToken.ValidateError.IsRevocationCheckRequired : System.Boolean { get }
+ToolUp.Stripe.TierToken.ValidateError.IsRevoked : System.Boolean { get }
 ToolUp.Stripe.TierToken.ValidateError.IsSecretMissing : System.Boolean { get }
 ToolUp.Stripe.TierToken.ValidateError.IsSignatureMismatch : System.Boolean { get }
+ToolUp.Stripe.TierToken.ValidateError.IsSubjectUnknown : System.Boolean { get }
 ToolUp.Stripe.TierToken.ValidateError.IsUnknownTier : System.Boolean { get }
 ToolUp.Stripe.TierToken.ValidateError.MalformedToken : ToolUp.Stripe.TierToken.ValidateError { get }
+ToolUp.Stripe.TierToken.ValidateError.RevocationCheckRequired : ToolUp.Stripe.TierToken.ValidateError { get }
+ToolUp.Stripe.TierToken.ValidateError.Revoked : ToolUp.Stripe.TierToken.ValidateError { get }
 ToolUp.Stripe.TierToken.ValidateError.SecretMissing : ToolUp.Stripe.TierToken.ValidateError { get }
 ToolUp.Stripe.TierToken.ValidateError.SignatureMismatch : ToolUp.Stripe.TierToken.ValidateError { get }
+ToolUp.Stripe.TierToken.ValidateError.SubjectUnknown : ToolUp.Stripe.TierToken.ValidateError { get }
 ToolUp.Stripe.TierToken.ValidateError.Tag : System.Int32 { get }
 ToolUp.Stripe.TierToken.ValidateError.UnknownTier : ToolUp.Stripe.TierToken.ValidateError { get }
 ToolUp.Stripe.TierToken.ValidateError+Tags (class)
 ToolUp.Stripe.TierToken.ValidateError+Tags.Expired : System.Int32 (literal)
 ToolUp.Stripe.TierToken.ValidateError+Tags.MalformedToken : System.Int32 (literal)
+ToolUp.Stripe.TierToken.ValidateError+Tags.RevocationCheckRequired : System.Int32 (literal)
+ToolUp.Stripe.TierToken.ValidateError+Tags.Revoked : System.Int32 (literal)
 ToolUp.Stripe.TierToken.ValidateError+Tags.SecretMissing : System.Int32 (literal)
 ToolUp.Stripe.TierToken.ValidateError+Tags.SignatureMismatch : System.Int32 (literal)
+ToolUp.Stripe.TierToken.ValidateError+Tags.SubjectUnknown : System.Int32 (literal)
 ToolUp.Stripe.TierToken.ValidateError+Tags.UnknownTier : System.Int32 (literal)

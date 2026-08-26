@@ -3989,6 +3989,46 @@ type DeploymentVerifiedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 713 — one walk of the evidence chain.
+///
+/// **Producing evidence itself leaves evidence.** The walk reads seven
+/// joins and writes nothing back (GP 6); this row is the only artefact
+/// it produces. Recording it turns "who has traced this deployment back
+/// to the work that authored it, and what did the chain say when they
+/// did" into a question the trail answers — and under a chained ledger
+/// the answer is tamper-evident, so a walk whose breaks someone would
+/// rather nobody saw cannot be quietly removed.
+///
+/// **The digest and the link labels, never the chain.** The row carries
+/// the verdict digest and one label per hop, never the hop detail. The
+/// detail names record ids, closure digests and ledger positions — a
+/// deployment-wide evidence summary — and the audit trail has its own
+/// readership and its own export paths. The digest is sufficient to
+/// prove two walks said the same thing, and insufficient to be a second
+/// copy of the chain.
+///
+/// **Recorded on every outcome, including the complete one.** A row
+/// written only when a hop broke cannot distinguish a deployment nobody
+/// traced from one that was traced and was whole — and those are the two
+/// states a reader most needs to tell apart.
+type EvidenceChainWalkedPayload = {
+    /// Who walked.
+    Actor: string
+    /// Top-line outcome label: `"chain-unrecorded"`, `"chain-complete"`,
+    /// `"chain-partial"` or `"chain-broken"`.
+    Outcome: string
+    /// SHA-256 over the chain's canonical form — the LINK SET, with the
+    /// clock and the actor excluded, so two walks against an unchanged
+    /// deployment produce the same digest and drift is visible as a
+    /// change rather than inferred from prose.
+    VerdictDigest: string
+    /// One `"<hop-id>=<link-label>"` entry per hop, in walk order. The
+    /// shape a SIEM rule cuts on without parsing the chain. Always the
+    /// same length, whatever the deployment composes.
+    Hops: string list
+    OccurredAt: DateTimeOffset
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -4669,6 +4709,10 @@ type AuditEvent =
     /// READ: nothing moved, and the row records who asked, what the
     /// verdict set was, and the digest that commits to it.
     | DeploymentVerified of DeploymentVerifiedPayload
+    /// Phase 713 — the evidence chain was walked. An audited READ:
+    /// nothing moved, and the row records who asked, what the link set
+    /// was, and the digest that commits to it.
+    | EvidenceChainWalked of EvidenceChainWalkedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -4857,6 +4901,7 @@ module AuditEvent =
         | GroundingMutationRefused _ -> "GroundingMutationRefused"
         | CertificateIssued _ -> "CertificateIssued"
         | DeploymentVerified _ -> "DeploymentVerified"
+        | EvidenceChainWalked _ -> "EvidenceChainWalked"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
