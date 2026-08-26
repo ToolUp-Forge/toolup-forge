@@ -103,7 +103,32 @@ type AccessClassification =
     /// fail-closed default-deny floor applies. Not a defect — the
     /// correct posture for most surfaces, said out loud.
     | InheritedDefaultDeny
-    /// An unauthenticated caller reaches it. The headline set.
+    /// **Phase 627.E** — anonymous at the ATTRIBUTE layer, but the
+    /// component declares that its handler gates the call itself.
+    ///
+    /// The fourth value exists because the other three forced a lie. A
+    /// record that is blanket-`[<AllowAnonymous>]` while its handler
+    /// performs a real check had nowhere to land but `AnonymousReachable`
+    /// — and forge ships several: `IFormApi` (16 methods), `JobApi` (8),
+    /// `ModelExecutionApi` (7), `IModuleQueryBusApi` (1). Thirty-two
+    /// entries in the headline set that a reviewer, having checked them
+    /// once, learns to scroll past. Phase 627 found a genuinely
+    /// unauthenticated write to the public page overlay sitting in that
+    /// same list, and the most plausible account of how it hid for so long
+    /// is that the list it hid in was mostly noise. A headline set is only
+    /// worth having if every entry in it is a finding.
+    ///
+    /// **It is a DECLARATION, and it is deliberately not as strong as
+    /// `ExplicitRequirement`.** Nothing here can verify a closure inside a
+    /// handler — `resolveWithInHandlerGates` records what a component
+    /// SAYS, and the classification says exactly that much and no more.
+    /// A reviewer reading it knows two things: the dispatcher will not
+    /// stop an anonymous caller, and someone claimed the handler will.
+    /// Both are worth knowing; conflating either with a real attribute
+    /// gate is what this case exists to avoid.
+    | GatedInHandler
+    /// An unauthenticated caller reaches it, with nothing declared in
+    /// front of it. The headline set — and since Phase 627.E, only this.
     | AnonymousReachable
 
 /// One externally reachable thing a component contributes, with its
@@ -183,6 +208,38 @@ type AuthorizationSurfaceWireEntry = {
     Classification: string
 }
 
+/// **Phase 627.E** — a component's declaration that one of its
+/// attribute-anonymous endpoints is gated inside the handler.
+///
+/// Everything else in this file is DERIVED from live registrations, and
+/// this is the one thing that cannot be: an in-handler check is a closure,
+/// invisible to reflection over an API record. The precedent for admitting
+/// a declaration here is already in the file — seams 1 and 2 read
+/// `RoutePrefixes` / `RouteSurfaceRequirements`, which are declarations
+/// too. What keeps a declaration honest is that it is recorded as a weaker
+/// classification than a real gate (see `AccessClassification.strength`),
+/// so declaring one can never make a surface look better-defended than an
+/// attribute gate.
+///
+/// `Rationale` is mandatory in practice — `resolveWithInHandlerGates`
+/// ignores a declaration whose rationale is blank. A gate nobody can name
+/// is indistinguishable from a gate nobody wrote, and the whole point of
+/// moving these entries out of the headline set is that the reviewer who
+/// stops seeing them can find out why in one line.
+///
+/// Field names are `Gated*`-prefixed for the Phase 431 field-inference
+/// reason recorded on `AuthorizationSurface.Exposed`.
+type InHandlerGateDeclaration = {
+    /// The component whose handler performs the check.
+    GatedComponent: ComponentId
+    /// The endpoint identity, matching `ExposedSurface.Endpoint` —
+    /// `<RecordName>.<Field>` for a remoting endpoint.
+    GatedEndpoint: string
+    /// What the handler actually checks, in one line. Blank ⇒ the
+    /// declaration is ignored.
+    GatedRationale: string
+}
+
 /// The `ExposedSurfaceKind` vocabulary as stable strings — what the
 /// wire projection and the readable delta print. Round-trips exactly.
 module ExposedSurfaceKind =
@@ -225,6 +282,7 @@ module AccessClassification =
         match access with
         | ExplicitRequirement -> "explicit-requirement"
         | InheritedDefaultDeny -> "inherited-default-deny"
+        | GatedInHandler -> "gated-in-handler"
         | AnonymousReachable -> "anonymous-reachable"
 
     /// Read a persisted label back. An unrecognised label reads as
@@ -235,16 +293,27 @@ module AccessClassification =
     let ofLabel (raw: string) : AccessClassification =
         match (if isNull raw then "" else raw.Trim()) with
         | "explicit-requirement" -> ExplicitRequirement
+        | "gated-in-handler" -> GatedInHandler
         | "anonymous-reachable" -> AnonymousReachable
         | _ -> InheritedDefaultDeny
 
     /// How closed a classification is. Higher is stronger; a drop is a
     /// weakening.
+    ///
+    /// Phase 627.E placed `GatedInHandler` BELOW `InheritedDefaultDeny`
+    /// and above `AnonymousReachable`, which is the ordering the two
+    /// facts about it force. It is weaker than the default-deny floor
+    /// because the dispatcher genuinely does let the caller through —
+    /// only handler code stands in the way, and this file cannot see
+    /// handler code. It is stronger than bare anonymity because something
+    /// was declared. Any other placement would let a real regression diff
+    /// as an improvement.
     let strength (access: AccessClassification) : int =
         match access with
         | AnonymousReachable -> 0
-        | InheritedDefaultDeny -> 1
-        | ExplicitRequirement -> 2
+        | GatedInHandler -> 1
+        | InheritedDefaultDeny -> 2
+        | ExplicitRequirement -> 3
 
 /// Derivation, queries, policy resolution, and diff over a
 /// composition's authorization surface. Every function here is pure
@@ -556,13 +625,87 @@ module AuthorizationSurface =
                   })
         |> assemble
 
+    // ── in-handler gate declarations (627.E) ──────────────────────────
+
+    /// **Phase 627.E** — record that named attribute-anonymous endpoints
+    /// are gated inside their handlers, moving them out of the
+    /// `anonymousReachable` headline and into `gatedInHandler`.
+    ///
+    /// **Only `AnonymousReachable` entries are refined**, the same rule
+    /// `resolveWithPolicy` follows one section above, and for the same
+    /// reason: an entry that already declares an attribute gate keeps it,
+    /// and nothing here may quietly WEAKEN a surface. A declaration
+    /// naming an endpoint that is already gated, or that does not exist in
+    /// the surface at all, is silently inert rather than an error — the
+    /// declarations are authored beside handlers and the surface is
+    /// derived from records, so a stale one is an ordinary consequence of
+    /// a rename, not a reason to fail a composition.
+    ///
+    /// A blank `GatedRationale` is ignored; see `InHandlerGateDeclaration`.
+    ///
+    /// The rationale rides the entry as a `gate:in-handler=<rationale>`
+    /// requirement token, so the readable delta and the persisted wire
+    /// form both carry the claim rather than merely its existence.
+    let resolveWithInHandlerGates
+        (declarations: InHandlerGateDeclaration list)
+        (surface: AuthorizationSurface)
+        : AuthorizationSurface =
+        let declared =
+            declarations
+            |> List.filter (fun d -> not (String.IsNullOrWhiteSpace d.GatedRationale))
+            |> List.map (fun d -> (d.GatedComponent.Value, d.GatedEndpoint.Trim()), d.GatedRationale.Trim())
+            |> Map.ofList
+
+        if Map.isEmpty declared then
+            surface
+        else
+            surface.Exposed
+            |> List.map (fun entry ->
+                if entry.Access <> AnonymousReachable then
+                    entry
+                else
+                    match declared |> Map.tryFind (entry.Component.Value, entry.Endpoint) with
+                    | None -> entry
+                    | Some rationale -> {
+                        entry with
+                            Requires = entry.Requires @ [ "gate:in-handler=" + rationale ]
+                            Access = GatedInHandler
+                      })
+            |> assemble
+
     // ── queries (438.B) ───────────────────────────────────────────────
 
-    /// **The headline.** Every entry an unauthenticated caller reaches,
-    /// in id order. Additions to this list are the highest-signal diff
-    /// class the composition gate produces.
+    /// **The headline.** Every entry an unauthenticated caller reaches
+    /// with nothing declared in front of it, in id order. Additions to
+    /// this list are the highest-signal diff class the composition gate
+    /// produces.
+    ///
+    /// Phase 627.E: an entry whose component declared an in-handler gate
+    /// is NOT here — it is in `gatedInHandler`. That split is the point.
+    /// Before it, this list mixed genuinely open doors in with thirty-odd
+    /// entries that were fine, and a list mostly composed of non-findings
+    /// is one people stop reading. A real one hid there.
     let anonymousReachable (surface: AuthorizationSurface) : ExposedSurface list =
         surface.Exposed |> List.filter (fun e -> e.Access = AnonymousReachable)
+
+    /// **Phase 627.E** — every entry that is anonymous at the attribute
+    /// layer but whose component declared an in-handler gate.
+    ///
+    /// The second list a security review reads, and the one where the
+    /// reviewer's own judgement is still required: nothing in this file
+    /// verified any of these claims. The `gate:in-handler=…` token on each
+    /// entry names what was claimed.
+    let gatedInHandler (surface: AuthorizationSurface) : ExposedSurface list =
+        surface.Exposed |> List.filter (fun e -> e.Access = GatedInHandler)
+
+    /// Everything reachable by an unauthenticated caller at the ATTRIBUTE
+    /// layer, declared gate or not — the pre-627.E reading of
+    /// `anonymousReachable`, kept because it is the right question for a
+    /// dispatcher-level audit ("what does the classifier let through?")
+    /// even though it is the wrong one for a review headline.
+    let anonymousAtAttributeLayer (surface: AuthorizationSurface) : ExposedSurface list =
+        surface.Exposed
+        |> List.filter (fun e -> e.Access = AnonymousReachable || e.Access = GatedInHandler)
 
     /// Every entry gated only by the composition's default-deny floor.
     let defaultDenied (surface: AuthorizationSurface) : ExposedSurface list =
@@ -726,6 +869,19 @@ module AuthorizationSurface =
 
     /// How loud a delta is. A new anonymous-reachable entry or ANY
     /// weakening is critical; everything else that moved is reviewable.
+    ///
+    /// **Phase 627.E — a new `GatedInHandler` entry is REVIEWABLE, not
+    /// critical, and the choice is worth stating because it is the one
+    /// place the new case trades strictness away.** Escalating it would
+    /// have fired `CRITICAL` on all thirty-odd existing declarations the
+    /// first time they were recorded, which is how a gate becomes a thing
+    /// people click past. The direction that matters is still caught with
+    /// full force: `GatedInHandler` sits ABOVE `AnonymousReachable` in
+    /// `strength`, so a surface losing its declared gate diffs as
+    /// `RequirementsWeakened` — critical. What is accepted is that a NEW
+    /// attribute-anonymous endpoint arriving with a declaration attached
+    /// reads as reviewable; `renderDelta` marks those lines explicitly so
+    /// the claim is read rather than assumed.
     let severity (d: AuthorizationSurfaceDelta) : AuthorizationDriftSeverity =
         let anonymousAdded =
             d.SurfacesAdded |> List.exists (fun e -> e.Access = AnonymousReachable)
@@ -763,10 +919,15 @@ module AuthorizationSurface =
                 d.SurfacesAdded
                 |> List.map (fun e ->
                     let marker =
-                        if e.Access = AnonymousReachable then
-                            "  + [CRITICAL anonymous-reachable] "
-                        else
-                            "  + "
+                        match e.Access with
+                        | AnonymousReachable -> "  + [CRITICAL anonymous-reachable] "
+                        // Phase 627.E — reviewable rather than critical
+                        // (see `severity`), but never silent: the line
+                        // says the dispatcher will not stop this caller
+                        // and that the gate is a CLAIM nothing here
+                        // verified. `describe` prints the claim itself.
+                        | GatedInHandler -> "  + [REVIEW attribute-anonymous, gate declared not verified] "
+                        | _ -> "  + "
 
                     marker + ComponentId.value e.Component + " " + describe e)
 

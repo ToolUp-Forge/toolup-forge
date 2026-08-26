@@ -130,11 +130,23 @@ Four aspects of a composition are emitted as machine-readable JSON and diffed
 against a committed baseline in the test suite. The one that matters most to a
 security reviewer is the **authorization-surface manifest**: it enumerates every
 externally reachable entry point with its normalised authorization requirement,
-classified as `ExplicitRequirement`, `InheritedDefaultDeny`, or
+classified as `ExplicitRequirement`, `InheritedDefaultDeny`, `GatedInHandler`, or
 `AnonymousReachable`. **A change that makes a new endpoint anonymously reachable
 fails the build**, so an accidental exposure cannot ship quietly.
 
+`GatedInHandler` (Phase 627) is the declared middle ground: anonymous at the
+attribute layer, but the component states that its handler performs the check.
+It exists because the headline `AnonymousReachable` set was **overstating**
+exposure — several shipped records are blanket-anonymous by attribute while
+genuinely gated inside the handler, and thirty-odd such entries in the headline
+list are how a real open door stops standing out. It is deliberately ranked
+*below* `InheritedDefaultDeny`: the dispatcher does let the caller through, and
+nothing in the manifest can verify handler code, so losing a declared gate still
+diffs as a critical weakening. A reviewer reads the `gate:in-handler=…` token to
+see what was claimed, and verifies it themselves.
+
 **Evidence:** `src/ToolUp.Platform.Server/Server/AuthorizationSurface.fs` ·
+`src/ToolUp.Platform.Tests/InProcess/ContentAdminAuthorizationTests.fs` (§G) ·
 `composition-baselines/authorization-surface-baseline.json` ·
 `composition-baselines/composition-baseline.json` ·
 `composition-baselines/data-footprint-baseline.json` ·
