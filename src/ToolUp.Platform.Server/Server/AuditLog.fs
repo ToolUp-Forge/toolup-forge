@@ -1055,6 +1055,52 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> UnconsentedGrantRefused(fromAuditJson<UnconsentedGrantRefusedPayload> j)
     }
+    // Phase 555 — the dual-control ceremony. Five event types rather than
+    // one row with an outcome field: "what is queued", "who approved
+    // what", "what was turned down", "what was attempted and refused"
+    // and "what lapsed unreviewed" are five different alerts. The fourth
+    // is the security signal — a proposer attempting to approve their own
+    // proposal — and it must not be a filter over the others.
+    {
+        EventType = "AdminMutationProposed"
+        TryEncode =
+            (function
+            | AdminMutationProposed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdminMutationProposed(fromAuditJson<AdminMutationProposedPayload> j)
+    }
+    {
+        EventType = "AdminMutationApproved"
+        TryEncode =
+            (function
+            | AdminMutationApproved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdminMutationApproved(fromAuditJson<AdminMutationApprovedPayload> j)
+    }
+    {
+        EventType = "AdminMutationRejected"
+        TryEncode =
+            (function
+            | AdminMutationRejected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdminMutationRejected(fromAuditJson<AdminMutationRejectedPayload> j)
+    }
+    {
+        EventType = "AdminMutationApprovalRefused"
+        TryEncode =
+            (function
+            | AdminMutationApprovalRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdminMutationApprovalRefused(fromAuditJson<AdminMutationApprovalRefusedPayload> j)
+    }
+    {
+        EventType = "AdminMutationExpired"
+        TryEncode =
+            (function
+            | AdminMutationExpired p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdminMutationExpired(fromAuditJson<AdminMutationExpiredPayload> j)
+    }
     {
         EventType = "PeerCallCompleted"
         TryEncode =

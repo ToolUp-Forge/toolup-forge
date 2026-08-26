@@ -99,15 +99,96 @@ let registerTeamPermissionStores
     // the lookup misses, and the UNDECORATED store is returned — so the
     // decorator does not exist at all in a deployment that does not use
     // it (GP 13), rather than existing and always answering yes.
+    //
+    // Phase 555 — dual control (the two-person rule) sits BETWEEN the
+    // sanitising store and the Phase 551 grant-policy guard, and that
+    // position is the whole of 555.D's "module policy refusal pre-empts
+    // queueing": a write reaches the module's declared `GrantPolicy`
+    // FIRST, so one the module would never admit is refused outright
+    // rather than parked awaiting an approval that could not have applied
+    // it. Reversing the two would queue writes guaranteed to fail at the
+    // end of a ceremony two administrators performed.
+    //
+    // Registered only under `DualControl` (GP 13): a `SingleAdmin`
+    // deployment builds no approval store, wraps no decorator and reads
+    // no `admin-mutations/` blob — the chain below is the exact one that
+    // shipped before this phase.
+    let resolveGrantRegistry (sp: System.IServiceProvider) =
+        match sp.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
+        | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as r -> r
+        | _ -> GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+
+    let sanitisedPermissionStore () =
+        StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
+        :> IPermissionStore
+
+    /// The acting administrator for the live request. `None` when no
+    /// identity can be resolved — the decorator then REFUSES the gated
+    /// write rather than parking it, because a two-person rule whose
+    /// first person is unknown cannot prove distinctness.
+    let resolveProposer (sp: System.IServiceProvider) () =
+        match sp.GetService(typeof<Microsoft.AspNetCore.Http.IHttpContextAccessor>) with
+        | :? Microsoft.AspNetCore.Http.IHttpContextAccessor as accessor when not (isNull (box accessor.HttpContext)) ->
+            match accessor.HttpContext.Items.TryGetValue "ToolUp.AccessContext" with
+            | true, (:? AccessContext as ac) when not (System.String.IsNullOrWhiteSpace ac.UserId) -> Some ac.UserId
+            | _ ->
+                match accessor.HttpContext.Items.TryGetValue "ToolUp.UserId" with
+                | true, (:? string as id) when not (System.String.IsNullOrWhiteSpace id) -> Some id
+                | _ -> None
+        | _ -> None
+
+    match config.AdminMutationPolicy with
+    | AdminMutationPolicy.SingleAdmin -> ()
+    | AdminMutationPolicy.DualControl settings ->
+        let approvals =
+            AdminMutationApproval.BlobAdminMutationApprovalStore(resolvedBlobStorage, resolvedLogger)
+            :> AdminMutationApproval.IAdminMutationApprovalStore
+
+        services.AddSingleton<AdminMutationApproval.IAdminMutationApprovalStore>(approvals)
+        |> ignore
+
+        // Registered as the CONCRETE type as well as inside the
+        // `IPermissionStore` chain, and resolved from there rather than
+        // constructed twice, so an admin approval surface drives the same
+        // instance the write path parked into.
+        services.AddSingleton<AdminMutationApproval.DualControlPermissionStore>(fun (sp: System.IServiceProvider) ->
+            let registry = resolveGrantRegistry sp
+
+            let isPolicyBearing moduleName =
+                GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName
+                <> GrantPolicy.AdminDiscretion
+
+            AdminMutationApproval.DualControlPermissionStore(
+                sanitisedPermissionStore (),
+                settings,
+                approvals,
+                isPolicyBearing,
+                resolveProposer sp,
+                (fun () -> System.DateTimeOffset.UtcNow),
+                auditLog
+            ))
+        |> ignore
+
     services.AddSingleton<IPermissionStore>(fun (sp: System.IServiceProvider) ->
         let inner =
-            StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
-            :> IPermissionStore
+            match config.AdminMutationPolicy with
+            | AdminMutationPolicy.SingleAdmin -> sanitisedPermissionStore ()
+            | AdminMutationPolicy.DualControl _ ->
+                match sp.GetService(typeof<AdminMutationApproval.DualControlPermissionStore>) with
+                | :? AdminMutationApproval.DualControlPermissionStore as d -> d :> IPermissionStore
+                // Unreachable — the registration above runs whenever the
+                // mode is `DualControl`. Falling back to the undecorated
+                // store would silently disable the control, so the miss is
+                // logged rather than passed over in silence.
+                | _ ->
+                    resolvedLogger.Error(
+                        "ComposeTeamRuntime: AdminMutationPolicy is DualControl but no DualControlPermissionStore is registered; permission writes are NOT under dual control.",
+                        None
+                    )
 
-        let registry =
-            match sp.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
-            | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as r -> r
-            | _ -> GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+                    sanitisedPermissionStore ()
+
+        let registry = resolveGrantRegistry sp
 
         if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
             inner

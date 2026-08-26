@@ -315,6 +315,12 @@
              the write guard per arm, dispatch refusal of an injected
              grant row, and the AdminDiscretion byte-parity floor. -->
         <Compile Include="InProcess\GrantPolicyTests.fs" />
+        <!-- Phase 555 — dual control (two-person rule) for sensitive admin
+             mutations: the propose / approve / reject / expire ceremony,
+             structural self-approval refusal, the GP 11 byte-parity floor on
+             the persisted document, and the composed-chain property that a
+             Phase 551 policy refusal pre-empts queueing. -->
+        <Compile Include="InProcess\AdminMutationApprovalTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

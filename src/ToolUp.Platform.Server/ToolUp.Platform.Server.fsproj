@@ -808,6 +808,17 @@
              per-request grant records), RemotingHelpers.fs (the dispatch
              gate), and ServerApp.fs (which builds the registry). -->
         <Compile Include="Server\GrantPolicyGuard.fs" />
+        <!-- Phase 555 — dual control (two-person rule) for sensitive admin
+             mutations: the pending-approval store, the propose / approve /
+             reject / expire ceremony, and the IPermissionStore decorator that
+             parks a gated write instead of applying it. After
+             PermissionStore.fs (it decorates IPermissionStore) and after
+             GrantPolicyGuard.fs, which is the decorator it composes INSIDE —
+             module grant policy is evaluated first so a write the module
+             would never admit is refused rather than queued. Takes no type
+             dependency on GrantPolicyGuard: the policy-bearing question
+             arrives as a predicate from the composition root. -->
+        <Compile Include="Server\Scope\AdminMutationApproval.fs" />
         <Compile Include="Server\Scope\StoreIdSanitising.fs" />
         <!-- Phase 113 — IPermissionStore/tier-backed default for the
              host-neutral IActionAuthorizer seam (default-deny; policy as

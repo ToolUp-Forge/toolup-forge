@@ -2360,6 +2360,117 @@ type UnconsentedGrantRefusedPayload = {
     InertReason: string
 }
 
+// ─── Phase 555 — dual control for sensitive admin mutations ──────────
+//
+// Five events, one per act in the ceremony, because an operator asking
+// "what is queued", "who approved what", "what was turned down", "what
+// was attempted and structurally refused" and "what lapsed unreviewed"
+// is asking five different questions with five different responses. A
+// single `AdminMutationDecided` row carrying an outcome field would make
+// the fourth question — the one that is a security signal rather than an
+// operations signal — a filter over the others.
+//
+// Every row carries `RequestId` and (except the refusal, where the
+// payload may not be readable) `Fingerprint`, so the propose→decide pair
+// joins on an identity that binds to the exact bytes proposed rather
+// than to a mutable id.
+
+/// Phase 555 — a gated admin mutation was captured as a pending record
+/// and did NOT apply. The first half of the two-person ceremony: this
+/// row means authority was proposed, not created.
+type AdminMutationProposedPayload = {
+    /// The pending record's opaque identifier — the string an approver
+    /// names, and the join key to the decision row.
+    RequestId: string
+    /// The team whose permission document the mutation targets.
+    TeamId: string
+    /// The administrator who proposed it. Never empty: an unattributable
+    /// write is refused rather than parked, so no proposal row can be
+    /// anonymous.
+    ProposerId: string
+    /// `AdminMutationKind.toToken` — what class of write is queued.
+    MutationKind: string
+    /// SHA-256 over the captured mutation. Binds this row to the exact
+    /// payload, so a decision row naming the same fingerprint provably
+    /// decided the same change.
+    Fingerprint: string
+    /// The operator-facing one-liner the approver will be shown.
+    Summary: string
+    /// When the proposal lapses if nobody decides it.
+    ExpiresAtUtc: DateTimeOffset
+}
+
+/// Phase 555 — a second, distinct administrator approved a pending
+/// mutation. `Applied` distinguishes "approved and the underlying write
+/// succeeded" from "approved and the underlying store then refused it" —
+/// a distinction an approver cannot see and an auditor must.
+type AdminMutationApprovedPayload = {
+    RequestId: string
+    TeamId: string
+    /// The administrator who proposed it.
+    ProposerId: string
+    /// The administrator who approved it. Structurally never equal to
+    /// `ProposerId` — that is the control.
+    ApproverId: string
+    MutationKind: string
+    Fingerprint: string
+    /// Did the approved mutation actually land? `false` means the
+    /// approval was valid and the underlying store refused the write
+    /// (storage failure, or a Phase 551 grant-policy refusal evaluated
+    /// against a document that moved since the proposal).
+    Applied: bool
+}
+
+/// Phase 555 — a second administrator deliberately turned a pending
+/// mutation down. Distinct from `AdminMutationApprovalRefused`: this is a
+/// decision, that is a refused attempt.
+type AdminMutationRejectedPayload = {
+    RequestId: string
+    TeamId: string
+    ProposerId: string
+    /// The administrator who rejected it.
+    ApproverId: string
+    MutationKind: string
+    Fingerprint: string
+    /// The reason the rejecting administrator gave. May be empty.
+    Reason: string
+}
+
+/// Phase 555 — an approval ATTEMPT was structurally refused. The
+/// security-signal row of the family: a proposer trying to approve their
+/// own proposal, an attempt on a lapsed record, or an attempt on a
+/// request that does not exist all land here rather than being invisible
+/// because nothing changed.
+type AdminMutationApprovalRefusedPayload = {
+    RequestId: string
+    TeamId: string
+    /// The proposer, where the record was readable. Empty when the
+    /// request was not found.
+    ProposerId: string
+    /// Who attempted the approval.
+    AttemptedApproverId: string
+    /// `AdminMutationKind.toToken`, or empty when the record was not
+    /// readable.
+    MutationKind: string
+    /// Stable refusal discriminator (`AdminMutationRefusal.code`) — the
+    /// field an operator dashboard groups by. `self-approval-refused` is
+    /// the one worth alerting on.
+    RefusalCode: string
+}
+
+/// Phase 555 — a pending mutation lapsed without a decision and was
+/// swept. Emitted at the moment the record is discarded, so the trail
+/// shows a proposal ending rather than merely stopping.
+type AdminMutationExpiredPayload = {
+    RequestId: string
+    TeamId: string
+    ProposerId: string
+    MutationKind: string
+    Fingerprint: string
+    /// When it lapsed.
+    ExpiredAtUtc: DateTimeOffset
+}
+
 /// Phase 18 — a typed inter-platform peer contract call resolved on the
 /// receiver (the host dispatched it to a terminal outcome). Emitted once
 /// per inbound call by the peer host's contract handler. Reserved
@@ -4491,6 +4602,21 @@ type AuditEvent =
     /// caller's permission entry carried no live grant record under the
     /// module's declared `GrantPolicy`.
     | UnconsentedGrantRefused of UnconsentedGrantRefusedPayload
+    /// Phase 555 — a sensitive admin mutation was captured as a pending
+    /// record under dual control and did NOT apply.
+    | AdminMutationProposed of AdminMutationProposedPayload
+    /// Phase 555 — a second, distinct administrator approved a pending
+    /// mutation.
+    | AdminMutationApproved of AdminMutationApprovedPayload
+    /// Phase 555 — a second administrator rejected a pending mutation;
+    /// nothing was applied.
+    | AdminMutationRejected of AdminMutationRejectedPayload
+    /// Phase 555 — an approval attempt was structurally refused (self
+    /// approval, an expired record, an unknown request).
+    | AdminMutationApprovalRefused of AdminMutationApprovalRefusedPayload
+    /// Phase 555 — a pending mutation lapsed without a decision and was
+    /// swept.
+    | AdminMutationExpired of AdminMutationExpiredPayload
     /// Phase 18 — a typed inter-platform peer contract call resolved on
     /// the receiver. Emitted once per inbound call by the peer host's
     /// contract handler after dispatch reaches a terminal outcome.
@@ -4889,6 +5015,11 @@ module AuditEvent =
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | GrantPolicyRefused _ -> "GrantPolicyRefused"
         | UnconsentedGrantRefused _ -> "UnconsentedGrantRefused"
+        | AdminMutationProposed _ -> "AdminMutationProposed"
+        | AdminMutationApproved _ -> "AdminMutationApproved"
+        | AdminMutationRejected _ -> "AdminMutationRejected"
+        | AdminMutationApprovalRefused _ -> "AdminMutationApprovalRefused"
+        | AdminMutationExpired _ -> "AdminMutationExpired"
         | PeerCallCompleted _ -> "PeerCallCompleted"
         | PeerJobCompleted _ -> "PeerJobCompleted"
         | PeerCleanRoomDecision _ -> "PeerCleanRoomDecision"

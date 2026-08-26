@@ -3307,6 +3307,25 @@ type ServerConfig = {
     /// declared route prefixes. See the `ModuleVisibilityMode` cases for
     /// what each buys and what route hardening can and cannot reach.
     ModuleVisibility: ModuleVisibilityMode
+    /// Phase 555 — dual control (the two-person rule) over sensitive admin
+    /// mutations. Default `SingleAdmin` — no pending-approval store is
+    /// registered, no decorator wraps `IPermissionStore`, no approval blob
+    /// is written or read, and every admin write applies exactly as it did
+    /// before this field existed (GP 11 + GP 13).
+    ///
+    /// `DualControl settings` captures a gated write as a pending record
+    /// naming its proposer and its exact payload; a SECOND, DISTINCT
+    /// administrator approves or rejects, and only approval applies it.
+    /// `settings.Scope` chooses between every widening permission write
+    /// and only those touching a module that declares a Phase 551
+    /// `GrantPolicy`; `settings.PendingTtlMinutes` bounds how long a
+    /// proposal stays approvable.
+    ///
+    /// Composes WITH Phase 551 rather than instead of it, and in a fixed
+    /// order: the module's declared grant policy is evaluated first, so a
+    /// write the module would never admit is refused outright rather than
+    /// parked awaiting an approval that could not have applied it.
+    AdminMutationPolicy: AdminMutationPolicy
     /// Phase 594 — the data-vocabulary packs this deployment pins. Default
     /// `[]` — no pack pinned, so the composition validator's
     /// `vocabulary-typename-unknown` / `vocabulary-schema-mismatch` rules
@@ -3717,6 +3736,7 @@ module ServerConfig =
         I18nCoverageMode = NoCoverageCheck
         Presence = NoPresence
         ModuleVisibility = NoModuleVisibility
+        AdminMutationPolicy = AdminMutationPolicy.SingleAdmin
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
         ExpectedModules = None

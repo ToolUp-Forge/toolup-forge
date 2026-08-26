@@ -933,6 +933,17 @@ let allTests =
         // insufficient), and the GP 11 / GP 13 floor: an all-default
         // deployment composes an empty registry and short-circuits.
         GrantPolicyTests.tests
+        // Phase 555 — dual control (two-person rule) over sensitive admin
+        // mutations. The full ceremony (a gated grant is inert until a
+        // second, DISTINCT administrator approves), structural refusal of
+        // self-approval including on a capitalisation variant, lapse-and-
+        // sweep, the fingerprint binding an approval to the exact bytes
+        // proposed, fail-closed behaviour when the queue cannot be read,
+        // and two composition properties: GP 11 byte-parity on the
+        // persisted document for every write the gate does not touch, and
+        // the shipped chain order in which a Phase 551 policy refusal
+        // pre-empts queueing.
+        AdminMutationApprovalTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

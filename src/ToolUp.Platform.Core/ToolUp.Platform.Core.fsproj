@@ -213,6 +213,15 @@
         <Compile Include="Shared\Types\ModuleVisibilityTypes.fs" />
         <Compile Include="Shared\Types\RoleTypes.fs" />
         <Compile Include="Shared\Types\PermissionTypes.fs" />
+        <!-- Phase 555 — dual control (two-person rule) for sensitive admin
+             mutations: the AdminMutationPolicy / DualControlSettings opt-in,
+             the captured-mutation value and its pending record, and the typed
+             refusals. After PermissionTypes.fs (the captured mutation embeds
+             TeamPermissions / ModulePermission / ModuleExposure) and before
+             SDK.Shared.fs, which carries the ServerConfig field. Fable-safe
+             (values + BCL only) so an approval queue can render server-side
+             and client-side from one type. -->
+        <Compile Include="Shared\Types\AdminMutationTypes.fs" />
         <!-- Phase 66 Stream A.1 — Subject / SurfaceProfile / SurfaceRequirement
              types compiled before AccessContext (which now carries a Subject
              field). ShareTokenTypes hoisted alongside because Subject.ClaimBearer
