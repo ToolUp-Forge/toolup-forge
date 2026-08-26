@@ -60,6 +60,31 @@ let private UsersPrefix = "/api/_platform/users"
 ///     here would break that emergency access;
 ///   * `/api/_platform/ads/*`, `/api/_platform/consent` — public analytics
 ///     / consent sinks.
+///
+/// **Phase 336 — the premium discriminator is case- and trailing-slash-
+/// insensitive, matching the prefix guards above.** `StartsWithSegments`
+/// is `OrdinalIgnoreCase` by default, so before this phase the two halves
+/// of the `UsersPrefix` arm disagreed: `/api/_platform/users/{id}/PREMIUM`
+/// (or a trailing `/premium/`) satisfied the prefix and then failed the
+/// case-sensitive `EndsWith "/premium"`, skipping the backstop entirely.
+/// The method test had the same shape — `httpMethod = "POST"` is ordinal,
+/// while Giraffe's `POST` combinator routes via
+/// `HttpMethods.IsPost` (`OrdinalIgnoreCase`), so a lower-case `post`
+/// reached the grant handler with the backstop silent.
+///
+/// Neither was a live end-to-end bypass: today's grant/revoke routes use
+/// Giraffe `routef`, whose regex match IS case-sensitive, so `/PREMIUM`
+/// 404s and the in-handler `canModifyPlatformConfig` check still holds
+/// the method variant. That is exactly the point — this middleware exists
+/// to hold when the *second* gate does not, so a backstop a casing trick
+/// disables is a defect whether or not something else happens to catch it
+/// today. A future handler mounted with `routeCif` or ASP.NET Core
+/// endpoint routing (case-insensitive by default) closes the gap between
+/// latent and live with no edit here.
+///
+/// Normalising is strictly more closed, never less: `/premium-status`
+/// still does not end with `/premium` after the trailing-slash trim, so
+/// the intentionally-open GET read stays open on both guards.
 let internal requiresPlatformAdmin (httpMethod: string) (path: PathString) : bool =
     if path.StartsWithSegments(PathString AdminPrefix) then
         true
@@ -68,9 +93,20 @@ let internal requiresPlatformAdmin (httpMethod: string) (path: PathString) : boo
     elif path.StartsWithSegments(PathString UsersPrefix) then
         // Grant/revoke are the only mutating premium routes; the read
         // (`/premium-status`, GET) is intentionally open.
-        let isMutating = httpMethod = "POST" || httpMethod = "DELETE"
+        let isMutating =
+            System.String.Equals(httpMethod, "POST", System.StringComparison.OrdinalIgnoreCase)
+            || System.String.Equals(httpMethod, "DELETE", System.StringComparison.OrdinalIgnoreCase)
+
         let pathValue = if path.HasValue then path.Value else ""
-        isMutating && pathValue.EndsWith "/premium"
+
+        // Trim EVERY trailing slash, not just one — `/premium//` is the
+        // same request to a router that collapses them, and a guard that
+        // handles exactly one variant of a repeatable character is the
+        // same defect one character along.
+        let trimmed = pathValue.TrimEnd '/'
+
+        isMutating
+        && trimmed.EndsWith("/premium", System.StringComparison.OrdinalIgnoreCase)
     else
         false
 

@@ -27,7 +27,9 @@ open ToolUp.Platform.SurfaceEnforcement
 // Plus the two evaluate branches the table folds into row 3 / row 5
 // (`user_subject_not_admitted`, `team_member_not_admitted`), the
 // `/api/*` path-scoping passthrough, the missing-Subject defensive
-// fall-through, and the strict fail-closed global default. Complements
+// evaluation (fail-closed since Phase 336 — see
+// `FailClosedDispatchTests` for that seam in full), and the strict
+// fail-closed global default. Complements
 // `SurfaceCoherenceValidatorTests` (compose-time refusals) and
 // `CsrfCarveOutDerivationTests` (the CSRF predicate over the same
 // registry) by pinning the runtime gate's wire behaviour end to end —
@@ -212,11 +214,20 @@ let tests =
             Expect.equal r.Body "" "no rejection body for an unenforced path"
         }
 
-        // ── Defensive: missing Subject on /api/* falls through ────────
-        test "Missing Subject on /api path → defensive fall-through to next" {
+        // ── Defensive: missing Subject on /api/* is fail-CLOSED (336) ─
+        test "Missing Subject on /api path → evaluated as anonymous, not passed through" {
+            // Pre-Phase-336 this asserted the opposite (`next` invoked).
+            // That fall-through turned the primary authentication gate
+            // into a pass-through under any condition that left `Subject`
+            // unstashed — including a swallowed `ScopeResolutionMiddleware`
+            // resolver exception, which is a live path. The full
+            // fail-closed matrix (public routes still admitted, forged
+            // identity headers ignored) is pinned by
+            // `FailClosedDispatchTests`.
             let r = run (registryFor SurfaceRequirement.userOrTeam) None "POST" "/api/x"
-            Expect.isTrue r.NextInvoked "no stashed Subject → defensive next.Invoke (unsupported pipeline arrangement)"
-            Expect.equal r.Body "" "no rejection written without a Subject to evaluate"
+            Expect.equal r.StatusCode 401 "no stashed Subject → synthesised anonymous → 401 on an auth-required route"
+            Expect.isFalse r.NextInvoked "the handler is never reached without a resolved Subject"
+            Expect.stringContains r.Body "authentication_required" "the matrix's own error code"
         }
 
         // ── Strict fail-closed default: empty registry ────────────────
