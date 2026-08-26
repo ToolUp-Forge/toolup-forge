@@ -1131,6 +1131,7 @@ ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.Dependenc
 ToolUp.Platform.ComposeStores.registerExternalCompute(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
+ToolUp.Platform.ComposeStores.registerServiceAccountStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerSessionRegistry(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerTimeSeriesStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -4559,6 +4560,16 @@ ToolUp.Platform.IServerHost.App : Microsoft.FSharp.Core.FSharpOption`1[Microsoft
 ToolUp.Platform.IServerHost.Host : Microsoft.Extensions.Hosting.IHost { get }
 ToolUp.Platform.IServerHost.Invoke(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.IServerHost.RunBlocking() : System.Int32
+ToolUp.Platform.IServiceAccountStore (interface)
+ToolUp.Platform.IServiceAccountStore.Create(ToolUp.Platform.ServiceAccountCreateRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount]]
+ToolUp.Platform.IServiceAccountStore.ListTokens(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountToken]]
+ToolUp.Platform.IServiceAccountStore.MintToken(ToolUp.Platform.ServiceAccountTokenMintRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountToken, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.RevokeToken(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.SetPermissions(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.SetStatus(System.String, System.String, ToolUp.Platform.ServiceAccountStatus, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.IServiceAccountStore.ValidateToken(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccountPrincipal, ToolUp.Platform.ServiceAccountError]]
 ToolUp.Platform.ISessionRegistry (interface)
 ToolUp.Platform.ISessionRegistry.IsRevoked(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.ISessionRegistry.ListForUser(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], ToolUp.Platform.SessionError]]
@@ -7530,6 +7541,21 @@ ToolUp.Platform.ServerModuleModule.withRouteSurfaceRequirement(System.String, Sy
 ToolUp.Platform.ServerModuleModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withSlowRequestThreshold(System.String, System.TimeSpan, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withVectorisation(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
+ToolUp.Platform.ServiceAccountApiHandler (class)
+ToolUp.Platform.ServiceAccountApiHandler.serviceAccountApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IServiceAccountApi
+ToolUp.Platform.ServiceAccountStore (class)
+ToolUp.Platform.ServiceAccountStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.IServiceAccountStore
+ToolUp.Platform.ServiceAccountStore.platformContainer : System.String (literal)
+ToolUp.Platform.ServiceAccountStore+BlobServiceAccountStore (class)
+ToolUp.Platform.ServiceAccountStore+BlobServiceAccountStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.ServiceAccountTokenHandler (class)
+ToolUp.Platform.ServiceAccountTokenHandler.AuthorizationHeader : System.String (literal)
+ToolUp.Platform.ServiceAccountTokenHandler.BearerScheme : System.String (literal)
+ToolUp.Platform.ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey : System.String (literal)
+ToolUp.Platform.ServiceAccountTokenHandler.ServiceAccountPrincipalItemsKey : System.String (literal)
+ToolUp.Platform.ServiceAccountTokenHandler+ServiceAccountTokenMiddleware (class)
+ToolUp.Platform.ServiceAccountTokenHandler+ServiceAccountTokenMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate)
+ToolUp.Platform.ServiceAccountTokenHandler+ServiceAccountTokenMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.ServiceStatusBoardApiHandler (class)
 ToolUp.Platform.ServiceStatusBoardApiHandler.serviceStatusBoardApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IServiceStatusBoardApi
 ToolUp.Platform.ServiceStatusBoardDepsValidator (class)

@@ -266,6 +266,33 @@ type ShareTokenStoreMode =
     /// runtime cost.
     | EnabledShareTokenStore
 
+/// Phase 527 — selects whether `compose` registers the service-account
+/// substrate: named machine principals owned by a scope, each minting
+/// scoped, expiring, revocable API tokens.
+///
+/// Default `NoServiceAccounts` — no `IServiceAccountStore` in DI, no
+/// `ServiceAccountTokenMiddleware` in the pipeline, no
+/// `_platform/service-accounts/` blob layout, no admin routes. A
+/// deployment that does not opt in is byte-for-byte the deployment it
+/// was before this substrate existed (GP 11 / GP 13), including its
+/// handling of an `Authorization: Bearer` header, which nothing here
+/// touches when the middleware is absent.
+type ServiceAccountStoreMode =
+    /// No service-account substrate registered. Default.
+    | NoServiceAccounts
+    /// Register `BlobServiceAccountStore` against the resolved
+    /// `IBlobStorage`, mount the admin API, and insert the bearer-token
+    /// middleware ahead of scope resolution. Audit emission flows
+    /// through the configured `IAuditLog` — under `NoAuditLog` the impl
+    /// skips it at no runtime cost.
+    | EnabledServiceAccounts
+    /// The consumer composed its own `IServiceAccountStore` singleton
+    /// (a directory-backed principal store, a hosted-secrets-backed
+    /// token store). The middleware and admin routes are wired exactly
+    /// as for `EnabledServiceAccounts`; only the default blob-backed
+    /// registration is skipped, so the consumer's singleton stands.
+    | CustomServiceAccountStore
+
 /// Selects which `IJobScheduler` implementation `compose` registers.
 /// Default: `NoJobScheduler` — background jobs are opt-in. Apps that
 /// don't enable a mode get nothing — no `IJobScheduler` in DI, no
@@ -2215,6 +2242,15 @@ type ServerConfig = {
     /// blob-backed and HMAC-signed against an auto-generated key in
     /// `ISecretStore`.
     ShareTokenStore: ShareTokenStoreMode
+    /// Phase 527 — service-account substrate selection. Default:
+    /// `NoServiceAccounts` — no `IServiceAccountStore` is registered, no
+    /// bearer-token middleware is inserted, no admin routes are mounted,
+    /// and no `_platform/service-accounts/` blob layout is touched.
+    /// Enable with `EnabledServiceAccounts` when the deployment needs
+    /// machine principals (CI integrations, partner API access, agent
+    /// hosts) that authenticate as themselves rather than borrowing a
+    /// human identity or a raw admin token.
+    ServiceAccounts: ServiceAccountStoreMode
     /// Peer-bearer-auth route registry. Path prefixes
     /// listed here are owned by `PeerBearerAuthMiddleware`: the
     /// middleware validates the request's `Authorization: Bearer
@@ -3544,6 +3580,7 @@ module ServerConfig =
         BackfillMissedTicks = false
         EventTriggerCatchUp = false
         ShareTokenStore = NoShareTokenStore
+        ServiceAccounts = NoServiceAccounts
         PeerRoutePrefixes = []
         MaxRequestBodyBytes = None
         WebhookUrlAllowedHosts = []

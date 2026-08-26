@@ -79,6 +79,7 @@
         <Compile Include="Contracts\IArtifactSignerContract.fs" />
         <Compile Include="Contracts\IArtifactVerifierContract.fs" />
         <Compile Include="Contracts\IShareTokenStoreContract.fs" />
+        <Compile Include="Contracts\IServiceAccountStoreContract.fs" />
         <!-- Phase 131 — cross-store id-sanitisation conformance bar
              (team / permission / share-token decorators over a real
              concrete store, bound twice: in-memory + local-file blob). -->
@@ -730,6 +731,7 @@
         <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
+        <Compile Include="InProcess\ServiceAccountStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
         <Compile Include="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />

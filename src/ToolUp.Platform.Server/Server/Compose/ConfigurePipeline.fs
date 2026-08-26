@@ -237,6 +237,26 @@ let configurePipeline
     // `ISubjectResolver` runs.
     app.UseMiddleware<ShareTokenAuthMiddleware>() |> ignore
 
+    // Phase 527 — service-account bearer tokens. Registered ONLY when the
+    // deployment opted in, so an unconfigured deployment's pipeline is
+    // byte-for-byte what it was (GP 11 / GP 13) and nothing new inspects
+    // its `Authorization` header.
+    //
+    // Placed immediately after `ShareTokenAuthMiddleware` and before
+    // `ScopeResolutionMiddleware` because it writes that middleware's
+    // `ShareTokenClaimItemsKey` — a validated service-account token
+    // resolves to `ClaimBearer`, so the claim must be in `Items` before
+    // `ISubjectResolver` runs. The two never contend: a share token
+    // arrives on `?token=` / `X-Share-Token`, a service-account token on
+    // `Authorization: Bearer tusa_…`, and each middleware passes through
+    // untouched when its own credential is absent.
+    match config.ServiceAccounts with
+    | NoServiceAccounts -> ()
+    | EnabledServiceAccounts
+    | CustomServiceAccountStore ->
+        app.UseMiddleware<ServiceAccountTokenHandler.ServiceAccountTokenMiddleware>()
+        |> ignore
+
     app.UseMiddleware<ScopeResolutionMiddleware>(config) |> ignore
 
     // Phase 132 — admin structural backstop. Sits immediately after

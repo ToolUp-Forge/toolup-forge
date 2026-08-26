@@ -683,6 +683,12 @@ let compose
     // registers the blob-backed default lazily; `CustomSessionRegistry`
     // leaves the consumer's own `ISessionRegistry` singleton in place.
     registerSessionRegistry services config
+    // Phase 527 — service-account substrate. Conditional on
+    // `ServerConfig.ServiceAccounts`; `NoServiceAccounts` (default) skips
+    // registration entirely; `EnabledServiceAccounts` registers the
+    // blob-backed default lazily; `CustomServiceAccountStore` leaves the
+    // consumer's own `IServiceAccountStore` singleton in place.
+    registerServiceAccountStore services config
 
     // Phase 68 — graph-data substrate. InMemoryGraphStore (default)
     // registers the zero-dependency in-memory IGraphStore lazily;

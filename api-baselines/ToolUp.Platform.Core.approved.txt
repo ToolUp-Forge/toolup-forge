@@ -857,6 +857,11 @@ ToolUp.Platform.AuditEvent.IsSchemaApproved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSchemaChanged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSchemaOnlyAccessAttempted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSchemaProposed : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsServiceAccountCreated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsServiceAccountPermissionsChanged : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsServiceAccountStatusChanged : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsServiceAccountTokenMinted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsServiceAccountTokenRevoked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSessionRevoked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsShareTokenIssued : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsShareTokenRevoked : System.Boolean { get }
@@ -1166,6 +1171,16 @@ ToolUp.Platform.AuditEvent+SchemaOnlyAccessAttempted (class)
 ToolUp.Platform.AuditEvent+SchemaOnlyAccessAttempted.Item : ToolUp.Platform.SchemaOnlyAccessAttemptedPayload { get }
 ToolUp.Platform.AuditEvent+SchemaProposed (class)
 ToolUp.Platform.AuditEvent+SchemaProposed.Item : ToolUp.Platform.SchemaProposedPayload { get }
+ToolUp.Platform.AuditEvent+ServiceAccountCreated (class)
+ToolUp.Platform.AuditEvent+ServiceAccountCreated.Item : ToolUp.Platform.ServiceAccountCreatedPayload { get }
+ToolUp.Platform.AuditEvent+ServiceAccountPermissionsChanged (class)
+ToolUp.Platform.AuditEvent+ServiceAccountPermissionsChanged.Item : ToolUp.Platform.ServiceAccountPermissionsChangedPayload { get }
+ToolUp.Platform.AuditEvent+ServiceAccountStatusChanged (class)
+ToolUp.Platform.AuditEvent+ServiceAccountStatusChanged.Item : ToolUp.Platform.ServiceAccountStatusChangedPayload { get }
+ToolUp.Platform.AuditEvent+ServiceAccountTokenMinted (class)
+ToolUp.Platform.AuditEvent+ServiceAccountTokenMinted.Item : ToolUp.Platform.ServiceAccountTokenMintedPayload { get }
+ToolUp.Platform.AuditEvent+ServiceAccountTokenRevoked (class)
+ToolUp.Platform.AuditEvent+ServiceAccountTokenRevoked.Item : ToolUp.Platform.ServiceAccountTokenRevokedPayload { get }
 ToolUp.Platform.AuditEvent+SessionRevoked (class)
 ToolUp.Platform.AuditEvent+SessionRevoked.Item : ToolUp.Platform.SessionRevokedPayload { get }
 ToolUp.Platform.AuditEvent+ShareTokenIssued (class)
@@ -1313,6 +1328,11 @@ ToolUp.Platform.AuditEvent+Tags.SchemaApproved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SchemaChanged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SchemaOnlyAccessAttempted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SchemaProposed : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ServiceAccountCreated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ServiceAccountPermissionsChanged : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ServiceAccountStatusChanged : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ServiceAccountTokenMinted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ServiceAccountTokenRevoked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SessionRevoked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ShareTokenIssued : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ShareTokenRevoked : System.Int32 (literal)
@@ -2953,6 +2973,10 @@ ToolUp.Platform.CorsConfig.Origins : Microsoft.FSharp.Collections.FSharpList`1[S
 ToolUp.Platform.CorsConfigModule (class)
 ToolUp.Platform.CorsConfigModule.forOrigins(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.CorsConfig
 ToolUp.Platform.CorsConfigModule.permissive : ToolUp.Platform.CorsConfig { get }
+ToolUp.Platform.CreateServiceAccountRequest (class)
+ToolUp.Platform.CreateServiceAccountRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]])
+ToolUp.Platform.CreateServiceAccountRequest.DisplayName : System.String { get }
+ToolUp.Platform.CreateServiceAccountRequest.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.CreateTeamRequest (class)
 ToolUp.Platform.CreateTeamRequest..ctor(System.String, System.String)
 ToolUp.Platform.CreateTeamRequest.InitialOwnerUserId : System.String { get }
@@ -5316,6 +5340,15 @@ ToolUp.Platform.IProvenanceQueryApi.GetEdges : Microsoft.FSharp.Core.FSharpFunc`
 ToolUp.Platform.IProvenanceQueryApi.GetNode : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceNodeAnswer]] { get }
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
+ToolUp.Platform.IServiceAccountApi (class)
+ToolUp.Platform.IServiceAccountApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateServiceAccountRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.ServiceAccountStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MintServiceAccountTokenRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountTokenView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.IServiceAccountApi.CreateAccount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateServiceAccountRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.ListAccounts : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.ListTokens : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.MintToken : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MintServiceAccountTokenRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountTokenView, System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.RevokeToken : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.SetAccountPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]] { get }
+ToolUp.Platform.IServiceAccountApi.SetAccountStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.ServiceAccountStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]] { get }
 ToolUp.Platform.IServiceStatusBoardApi (class)
 ToolUp.Platform.IServiceStatusBoardApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceStatusSnapshot, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SectionSummary, System.String]]])
 ToolUp.Platform.IServiceStatusBoardApi.GetSnapshot : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceStatusSnapshot, System.String]]] { get }
@@ -6141,6 +6174,19 @@ ToolUp.Platform.MinLengthAttribute.MinLength : System.Int32 { get }
 ToolUp.Platform.MinValueAttribute (class)
 ToolUp.Platform.MinValueAttribute..ctor(System.Double)
 ToolUp.Platform.MinValueAttribute.MinValue : System.Double { get }
+ToolUp.Platform.MintServiceAccountTokenRequest (class)
+ToolUp.Platform.MintServiceAccountTokenRequest..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.MintServiceAccountTokenRequest.AccountId : System.String { get }
+ToolUp.Platform.MintServiceAccountTokenRequest.DisplayName : System.String { get }
+ToolUp.Platform.MintServiceAccountTokenRequest.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.MintedServiceAccountToken (class)
+ToolUp.Platform.MintedServiceAccountToken..ctor(System.String, ToolUp.Platform.ServiceAccountToken)
+ToolUp.Platform.MintedServiceAccountToken.Record : ToolUp.Platform.ServiceAccountToken { get }
+ToolUp.Platform.MintedServiceAccountToken.Secret : System.String { get }
+ToolUp.Platform.MintedServiceAccountTokenView (class)
+ToolUp.Platform.MintedServiceAccountTokenView..ctor(System.String, ToolUp.Platform.ServiceAccountTokenView)
+ToolUp.Platform.MintedServiceAccountTokenView.Secret : System.String { get }
+ToolUp.Platform.MintedServiceAccountTokenView.Token : ToolUp.Platform.ServiceAccountTokenView { get }
 ToolUp.Platform.ModelArtifactPromotionPayload (class)
 ToolUp.Platform.ModelArtifactPromotionPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Boolean, System.Boolean, System.String, System.String)
 ToolUp.Platform.ModelArtifactPromotionPayload.Accepted : System.Boolean { get }
@@ -8619,7 +8665,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
@@ -8724,6 +8770,7 @@ ToolUp.Platform.ServerConfig.SecurityHardening : ToolUp.Platform.SecurityHardeni
 ToolUp.Platform.ServerConfig.SecurityHeaders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ServerConfig.SeedData : ToolUp.Platform.SeedDataMode { get }
 ToolUp.Platform.ServerConfig.ServerlessHost : ToolUp.Platform.ServerlessHostMode { get }
+ToolUp.Platform.ServerConfig.ServiceAccounts : ToolUp.Platform.ServiceAccountStoreMode { get }
 ToolUp.Platform.ServerConfig.SessionRegistry : ToolUp.Platform.SessionRegistryMode { get }
 ToolUp.Platform.ServerConfig.ShareTokenStore : ToolUp.Platform.ShareTokenStoreMode { get }
 ToolUp.Platform.ServerConfig.SkipPreflight : System.Boolean { get }
@@ -8774,6 +8821,158 @@ ToolUp.Platform.ServerlessHostMode.Tag : System.Int32 { get }
 ToolUp.Platform.ServerlessHostMode+Tags (class)
 ToolUp.Platform.ServerlessHostMode+Tags.KestrelHost : System.Int32 (literal)
 ToolUp.Platform.ServerlessHostMode+Tags.ServerlessHost : System.Int32 (literal)
+ToolUp.Platform.ServiceAccount (class)
+ToolUp.Platform.ServiceAccount..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.String, System.DateTimeOffset, ToolUp.Platform.ServiceAccountStatus)
+ToolUp.Platform.ServiceAccount.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccount.CreatedAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccount.CreatedBy : System.String { get }
+ToolUp.Platform.ServiceAccount.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccount.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+ToolUp.Platform.ServiceAccount.ScopeId : System.String { get }
+ToolUp.Platform.ServiceAccount.Status : ToolUp.Platform.ServiceAccountStatus { get }
+ToolUp.Platform.ServiceAccountApi (class)
+ToolUp.Platform.ServiceAccountApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.ServiceAccountCreateRequest (class)
+ToolUp.Platform.ServiceAccountCreateRequest..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.String)
+ToolUp.Platform.ServiceAccountCreateRequest.CreatedBy : System.String { get }
+ToolUp.Platform.ServiceAccountCreateRequest.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountCreateRequest.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+ToolUp.Platform.ServiceAccountCreateRequest.ScopeId : System.String { get }
+ToolUp.Platform.ServiceAccountCreatedPayload (class)
+ToolUp.Platform.ServiceAccountCreatedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ServiceAccountCreatedPayload.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountCreatedPayload.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountCreatedPayload.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ServiceAccountCreatedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountError (class)
+ToolUp.Platform.ServiceAccountError.AccountDisabled : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.AccountNotFound : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.Expired : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.InvalidSecret : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.IsAccountDisabled : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsAccountNotFound : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsExpired : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsInvalidSecret : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsMalformed : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsNoPermissionsDeclared : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsNotFound : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsRevokedToken : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsScopeMismatch : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.IsStorageFailed : System.Boolean { get }
+ToolUp.Platform.ServiceAccountError.Malformed : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.NoPermissionsDeclared : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.NotFound : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.RevokedToken : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.ScopeMismatch : ToolUp.Platform.ServiceAccountError { get }
+ToolUp.Platform.ServiceAccountError.Tag : System.Int32 { get }
+ToolUp.Platform.ServiceAccountError+StorageFailed (class)
+ToolUp.Platform.ServiceAccountError+StorageFailed.Item : System.String { get }
+ToolUp.Platform.ServiceAccountError+Tags (class)
+ToolUp.Platform.ServiceAccountError+Tags.AccountDisabled : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.AccountNotFound : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.Expired : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.InvalidSecret : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.Malformed : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.NoPermissionsDeclared : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.NotFound : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.RevokedToken : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.ScopeMismatch : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountError+Tags.StorageFailed : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload (class)
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload.PreviousModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountPrincipal (class)
+ToolUp.Platform.ServiceAccountPrincipal..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.DateTimeOffset)
+ToolUp.Platform.ServiceAccountPrincipal.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountPrincipal.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountPrincipal.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountPrincipal.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+ToolUp.Platform.ServiceAccountPrincipal.ScopeId : System.String { get }
+ToolUp.Platform.ServiceAccountPrincipal.TokenId : System.String { get }
+ToolUp.Platform.ServiceAccountStatus (class)
+ToolUp.Platform.ServiceAccountStatus.Active : ToolUp.Platform.ServiceAccountStatus { get }
+ToolUp.Platform.ServiceAccountStatus.Disabled : ToolUp.Platform.ServiceAccountStatus { get }
+ToolUp.Platform.ServiceAccountStatus.IsActive : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStatus.IsDisabled : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStatus.Tag : System.Int32 { get }
+ToolUp.Platform.ServiceAccountStatus+Tags (class)
+ToolUp.Platform.ServiceAccountStatus+Tags.Active : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountStatus+Tags.Disabled : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountStatusChangedPayload (class)
+ToolUp.Platform.ServiceAccountStatusChangedPayload..ctor(System.String, System.String, System.Boolean)
+ToolUp.Platform.ServiceAccountStatusChangedPayload.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountStatusChangedPayload.Disabled : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStatusChangedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountStoreMode (class)
+ToolUp.Platform.ServiceAccountStoreMode.CustomServiceAccountStore : ToolUp.Platform.ServiceAccountStoreMode { get }
+ToolUp.Platform.ServiceAccountStoreMode.EnabledServiceAccounts : ToolUp.Platform.ServiceAccountStoreMode { get }
+ToolUp.Platform.ServiceAccountStoreMode.IsCustomServiceAccountStore : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStoreMode.IsEnabledServiceAccounts : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStoreMode.IsNoServiceAccounts : System.Boolean { get }
+ToolUp.Platform.ServiceAccountStoreMode.NoServiceAccounts : ToolUp.Platform.ServiceAccountStoreMode { get }
+ToolUp.Platform.ServiceAccountStoreMode.Tag : System.Int32 { get }
+ToolUp.Platform.ServiceAccountStoreMode+Tags (class)
+ToolUp.Platform.ServiceAccountStoreMode+Tags.CustomServiceAccountStore : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountStoreMode+Tags.EnabledServiceAccounts : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountStoreMode+Tags.NoServiceAccounts : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountToken (class)
+ToolUp.Platform.ServiceAccountToken..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, System.Boolean, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]])
+ToolUp.Platform.ServiceAccountToken.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountToken.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountToken.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountToken.IssuedAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountToken.IssuedBy : System.String { get }
+ToolUp.Platform.ServiceAccountToken.Revoked : System.Boolean { get }
+ToolUp.Platform.ServiceAccountToken.Salt : System.String { get }
+ToolUp.Platform.ServiceAccountToken.ScopeId : System.String { get }
+ToolUp.Platform.ServiceAccountToken.ScopeSnapshot : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+ToolUp.Platform.ServiceAccountToken.SecretHash : System.String { get }
+ToolUp.Platform.ServiceAccountToken.TokenId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintRequest (class)
+ToolUp.Platform.ServiceAccountTokenMintRequest..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.ServiceAccountTokenMintRequest.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintRequest.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintRequest.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.ServiceAccountTokenMintRequest.IssuedBy : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintRequest.ScopeId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload (class)
+ToolUp.Platform.ServiceAccountTokenMintedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.ServiceAccountTokenMintedPayload.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload.TokenId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenRevokedPayload (class)
+ToolUp.Platform.ServiceAccountTokenRevokedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ServiceAccountTokenRevokedPayload.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenRevokedPayload.TokenId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenRevokedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenView (class)
+ToolUp.Platform.ServiceAccountTokenView..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, System.Boolean)
+ToolUp.Platform.ServiceAccountTokenView.AccountId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenView.DisplayName : System.String { get }
+ToolUp.Platform.ServiceAccountTokenView.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountTokenView.IssuedAt : System.DateTimeOffset { get }
+ToolUp.Platform.ServiceAccountTokenView.IssuedBy : System.String { get }
+ToolUp.Platform.ServiceAccountTokenView.Revoked : System.Boolean { get }
+ToolUp.Platform.ServiceAccountTokenView.TokenId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenViewModule (class)
+ToolUp.Platform.ServiceAccountTokenViewModule.ofRecord(ToolUp.Platform.ServiceAccountToken) : ToolUp.Platform.ServiceAccountTokenView
+ToolUp.Platform.ServiceAccountTypes (class)
+ToolUp.Platform.ServiceAccountTypes.AuditSourceModule : System.String (literal)
+ToolUp.Platform.ServiceAccountTypes.ClaimResourceKind : System.String (literal)
+ToolUp.Platform.ServiceAccountTypes.DefaultTokenLifetime : System.TimeSpan { get }
+ToolUp.Platform.ServiceAccountTypes.ExpiryPrecision : System.TimeSpan { get }
+ToolUp.Platform.ServiceAccountTypes.SecretBytes : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountTypes.TokenPrefix : System.String (literal)
+ToolUp.Platform.ServiceAccountTypes.classifyToken(System.DateTimeOffset, ToolUp.Platform.ServiceAccountToken) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ServiceAccountError]
+ToolUp.Platform.ServiceAccountTypes.effectivePermissions(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]
+ToolUp.Platform.ServiceAccountTypes.formatToken(System.String, System.String) : System.String
+ToolUp.Platform.ServiceAccountTypes.tryParseToken(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.ServiceAccountError]
+ToolUp.Platform.ServiceAccountTypes.validatePermissions(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ServiceAccountError]
 ToolUp.Platform.ServiceStatusSnapshot (class)
 ToolUp.Platform.ServiceStatusSnapshot..ctor(System.DateTime, ToolUp.Platform.OverallStatus, ToolUp.Platform.SectionSummary, ToolUp.Platform.SectionSummary, ToolUp.Platform.SectionSummary, ToolUp.Platform.SectionSummary, ToolUp.Platform.SectionSummary, ToolUp.Platform.SectionSummary)
 ToolUp.Platform.ServiceStatusSnapshot.Drift : ToolUp.Platform.SectionSummary { get }

@@ -1190,6 +1190,83 @@ ProcessedDataContext (class)
 ProcessedDataContext.Context : Feliz.ReactTypes+ReactContext`1[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]] { get }
 ProcessedDataContext+ProcessedData (class)
 ProcessedDataContext+ProcessedData.forType(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]
+ServiceAccountUI (class)
+ServiceAccountUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceAccountAdminConfig]) : ToolUp.Platform.ErasedModule
+ServiceAccountUI.init() : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceAccountUI.update(ServiceAccountUI+Msg, ServiceAccountUI+Model) : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceAccountUI+Model (class)
+ServiceAccountUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], Microsoft.FSharp.Core.FSharpOption`1[ServiceAccountUI+PendingSecret], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ServiceAccountUI+Model.Accounts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount] { get }
+ServiceAccountUI+Model.Busy : System.Boolean { get }
+ServiceAccountUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ServiceAccountUI+Model.Loaded : System.Boolean { get }
+ServiceAccountUI+Model.PendingSecret : Microsoft.FSharp.Core.FSharpOption`1[ServiceAccountUI+PendingSecret] { get }
+ServiceAccountUI+Model.SelectedAccountId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ServiceAccountUI+Model.Tokens : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView] { get }
+ServiceAccountUI+Msg (class)
+ServiceAccountUI+Msg.AcknowledgeSecret : ServiceAccountUI+Msg { get }
+ServiceAccountUI+Msg.BackToList : ServiceAccountUI+Msg { get }
+ServiceAccountUI+Msg.DismissError : ServiceAccountUI+Msg { get }
+ServiceAccountUI+Msg.IsAccountCreated : System.Boolean { get }
+ServiceAccountUI+Msg.IsAccountsLoaded : System.Boolean { get }
+ServiceAccountUI+Msg.IsAcknowledgeSecret : System.Boolean { get }
+ServiceAccountUI+Msg.IsBackToList : System.Boolean { get }
+ServiceAccountUI+Msg.IsCreateAccount : System.Boolean { get }
+ServiceAccountUI+Msg.IsDismissError : System.Boolean { get }
+ServiceAccountUI+Msg.IsLoadAccounts : System.Boolean { get }
+ServiceAccountUI+Msg.IsMintToken : System.Boolean { get }
+ServiceAccountUI+Msg.IsRevokeToken : System.Boolean { get }
+ServiceAccountUI+Msg.IsSelectAccount : System.Boolean { get }
+ServiceAccountUI+Msg.IsSetStatus : System.Boolean { get }
+ServiceAccountUI+Msg.IsStatusSet : System.Boolean { get }
+ServiceAccountUI+Msg.IsTokenMinted : System.Boolean { get }
+ServiceAccountUI+Msg.IsTokenRevoked : System.Boolean { get }
+ServiceAccountUI+Msg.IsTokensLoaded : System.Boolean { get }
+ServiceAccountUI+Msg.LoadAccounts : ServiceAccountUI+Msg { get }
+ServiceAccountUI+Msg.Tag : System.Int32 { get }
+ServiceAccountUI+Msg+AccountCreated (class)
+ServiceAccountUI+Msg+AccountCreated.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String] { get }
+ServiceAccountUI+Msg+AccountsLoaded (class)
+ServiceAccountUI+Msg+AccountsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], System.String] { get }
+ServiceAccountUI+Msg+CreateAccount (class)
+ServiceAccountUI+Msg+CreateAccount.Item : ToolUp.Platform.CreateServiceAccountRequest { get }
+ServiceAccountUI+Msg+MintToken (class)
+ServiceAccountUI+Msg+MintToken.Item : ToolUp.Platform.MintServiceAccountTokenRequest { get }
+ServiceAccountUI+Msg+RevokeToken (class)
+ServiceAccountUI+Msg+RevokeToken.Item : System.String { get }
+ServiceAccountUI+Msg+SelectAccount (class)
+ServiceAccountUI+Msg+SelectAccount.Item : System.String { get }
+ServiceAccountUI+Msg+SetStatus (class)
+ServiceAccountUI+Msg+SetStatus.Item1 : System.String { get }
+ServiceAccountUI+Msg+SetStatus.Item2 : ToolUp.Platform.ServiceAccountStatus { get }
+ServiceAccountUI+Msg+StatusSet (class)
+ServiceAccountUI+Msg+StatusSet.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String] { get }
+ServiceAccountUI+Msg+Tags (class)
+ServiceAccountUI+Msg+Tags.AccountCreated : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.AccountsLoaded : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.AcknowledgeSecret : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.BackToList : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.CreateAccount : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.DismissError : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.LoadAccounts : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.MintToken : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.RevokeToken : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.SelectAccount : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.SetStatus : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.StatusSet : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.TokenMinted : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.TokenRevoked : System.Int32 (literal)
+ServiceAccountUI+Msg+Tags.TokensLoaded : System.Int32 (literal)
+ServiceAccountUI+Msg+TokenMinted (class)
+ServiceAccountUI+Msg+TokenMinted.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountTokenView, System.String] { get }
+ServiceAccountUI+Msg+TokenRevoked (class)
+ServiceAccountUI+Msg+TokenRevoked.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+ServiceAccountUI+Msg+TokensLoaded (class)
+ServiceAccountUI+Msg+TokensLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], System.String] { get }
+ServiceAccountUI+PendingSecret (class)
+ServiceAccountUI+PendingSecret..ctor(System.String, ToolUp.Platform.ServiceAccountTokenView)
+ServiceAccountUI+PendingSecret.Secret : System.String { get }
+ServiceAccountUI+PendingSecret.Token : ToolUp.Platform.ServiceAccountTokenView { get }
 ServiceStatusBoardUI (class)
 ServiceStatusBoardUI.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceStatusBoardConfig]) : ToolUp.Platform.AdminTile
 ServiceStatusBoardUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceStatusBoardConfig]) : ToolUp.Platform.ErasedModule
@@ -3383,7 +3460,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3424,6 +3501,7 @@ ToolUp.Platform.ClientConfig.PrerenderRoutes : Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.ClientConfig.Presence : ToolUp.Platform.PresenceMode { get }
 ToolUp.Platform.ClientConfig.PublicEntryDispatchers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]] { get }
 ToolUp.Platform.ClientConfig.RequestSeam : ToolUp.Platform.ClientRequestSeam { get }
+ToolUp.Platform.ClientConfig.ServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
 ToolUp.Platform.ClientConfig.ServiceStatusBoard : ToolUp.Platform.ServiceStatusBoardMode { get }
 ToolUp.Platform.ClientConfig.SessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
 ToolUp.Platform.ClientConfig.ShowDebugOnlyModules : System.Boolean { get }
@@ -4414,6 +4492,27 @@ ToolUp.Platform.ScopeDenialModule.SelectTeamHint : System.String (literal)
 ToolUp.Platform.ScopeDenialModule.TeamRequiredCode : System.String (literal)
 ToolUp.Platform.ScopeDenialModule.ofException(System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
 ToolUp.Platform.ScopeDenialModule.ofResponseBody(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
+ToolUp.Platform.ServiceAccountAdminConfig (class)
+ToolUp.Platform.ServiceAccountAdminConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.ServiceAccountAdminConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.ServiceAccountAdminConfig.Name : System.String { get }
+ToolUp.Platform.ServiceAccountAdminMode (class)
+ToolUp.Platform.ServiceAccountAdminMode.DefaultServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
+ToolUp.Platform.ServiceAccountAdminMode.IsConfiguredServiceAccountAdmin : System.Boolean { get }
+ToolUp.Platform.ServiceAccountAdminMode.IsDefaultServiceAccountAdmin : System.Boolean { get }
+ToolUp.Platform.ServiceAccountAdminMode.IsExternalServiceAccountAdmin : System.Boolean { get }
+ToolUp.Platform.ServiceAccountAdminMode.IsNoServiceAccountAdmin : System.Boolean { get }
+ToolUp.Platform.ServiceAccountAdminMode.NoServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
+ToolUp.Platform.ServiceAccountAdminMode.Tag : System.Int32 { get }
+ToolUp.Platform.ServiceAccountAdminMode+ConfiguredServiceAccountAdmin (class)
+ToolUp.Platform.ServiceAccountAdminMode+ConfiguredServiceAccountAdmin.Item : ToolUp.Platform.ServiceAccountAdminConfig { get }
+ToolUp.Platform.ServiceAccountAdminMode+ExternalServiceAccountAdmin (class)
+ToolUp.Platform.ServiceAccountAdminMode+ExternalServiceAccountAdmin.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.ServiceAccountAdminMode+Tags (class)
+ToolUp.Platform.ServiceAccountAdminMode+Tags.ConfiguredServiceAccountAdmin : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountAdminMode+Tags.DefaultServiceAccountAdmin : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountAdminMode+Tags.ExternalServiceAccountAdmin : System.Int32 (literal)
+ToolUp.Platform.ServiceAccountAdminMode+Tags.NoServiceAccountAdmin : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardConfig (class)
 ToolUp.Platform.ServiceStatusBoardConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.ServiceStatusBoardConfig.Icon : Fable.React.ReactElement { get }

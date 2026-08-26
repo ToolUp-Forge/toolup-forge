@@ -560,6 +560,47 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j)
     }
+    // ─── Service accounts (Phase 527) ────────────────────────────────
+    {
+        EventType = "ServiceAccountCreated"
+        TryEncode =
+            (function
+            | ServiceAccountCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ServiceAccountCreated(fromAuditJson<ServiceAccountCreatedPayload> j)
+    }
+    {
+        EventType = "ServiceAccountPermissionsChanged"
+        TryEncode =
+            (function
+            | ServiceAccountPermissionsChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ServiceAccountPermissionsChanged(fromAuditJson<ServiceAccountPermissionsChangedPayload> j)
+    }
+    {
+        EventType = "ServiceAccountTokenMinted"
+        TryEncode =
+            (function
+            | ServiceAccountTokenMinted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ServiceAccountTokenMinted(fromAuditJson<ServiceAccountTokenMintedPayload> j)
+    }
+    {
+        EventType = "ServiceAccountTokenRevoked"
+        TryEncode =
+            (function
+            | ServiceAccountTokenRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ServiceAccountTokenRevoked(fromAuditJson<ServiceAccountTokenRevokedPayload> j)
+    }
+    {
+        EventType = "ServiceAccountStatusChanged"
+        TryEncode =
+            (function
+            | ServiceAccountStatusChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ServiceAccountStatusChanged(fromAuditJson<ServiceAccountStatusChangedPayload> j)
+    }
     {
         EventType = "SessionRevoked"
         TryEncode =

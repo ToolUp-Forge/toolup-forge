@@ -3391,6 +3391,19 @@ module Client =
             | _, ConfiguredWebhookAdmin cfg -> [ WebhookAdminUI.create (Some cfg) ]
             | _, ExternalWebhookAdmin custom -> [ custom ]
 
+        // Phase 527 — service-account admin. Same scope rule as the
+        // webhook admin above and for the same reason: an account and its
+        // tokens are owned by a persistent scope, and an Anonymous-only
+        // deployment has none, so every call would fail. Omitted whatever
+        // the setting says in that case.
+        let serviceAccountAdmin =
+            match ClientConfig.requiresAnyAuth config, config.ServiceAccountAdmin with
+            | false, _
+            | _, NoServiceAccountAdmin -> []
+            | _, DefaultServiceAccountAdmin -> [ ServiceAccountUI.create None ]
+            | _, ConfiguredServiceAccountAdmin cfg -> [ ServiceAccountUI.create (Some cfg) ]
+            | _, ExternalServiceAccountAdmin custom -> [ custom ]
+
         // Module-visibility profile editor: same scope rule again — a
         // profile is stored per admin scope, and an Anonymous-only
         // deployment has none, so every read / write would fail. The
@@ -3583,6 +3596,7 @@ module Client =
             @ teamManager
             @ teamConfig
             @ webhookAdmin
+            @ serviceAccountAdmin
             @ moduleVisibilityAdmin
             @ sessionSecurity
             @ permissionsAdmin

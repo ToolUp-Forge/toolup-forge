@@ -1106,6 +1106,31 @@ type WebhookAdminMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalWebhookAdmin of ErasedModule
 
+/// Phase 527 — branding for the service-account admin module.
+type ServiceAccountAdminConfig = { Name: string; Icon: ReactElement }
+
+/// Phase 527 — controls the built-in service-account admin (list /
+/// create / disable machine principals, mint / revoke their scoped API
+/// tokens). Default `NoServiceAccountAdmin`: the module is not injected,
+/// so a deployment that has not opted in gains no sidebar entry and no
+/// client-side proxy (GP 11 / GP 13).
+///
+/// Pairs with the SERVER-side `ServerConfig.ServiceAccounts`. Setting
+/// only this one does not enable the substrate — the API it calls is not
+/// mounted unless the server side is opted in too, and the module then
+/// renders its error banner rather than a working screen. Both halves
+/// are deliberate acts, matching the `Webhooks` / `WebhookAdmin` pairing
+/// directly above.
+type ServiceAccountAdminMode =
+    /// No service-account admin module in the sidebar (default).
+    | NoServiceAccountAdmin
+    /// SDK built-in service-account admin.
+    | DefaultServiceAccountAdmin
+    /// SDK built-in with custom name/icon.
+    | ConfiguredServiceAccountAdmin of ServiceAccountAdminConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalServiceAccountAdmin of ErasedModule
+
 /// Branding for the module-visibility profile editor.
 type ModuleVisibilityAdminConfig = { Name: string; Icon: ReactElement }
 
@@ -1480,6 +1505,12 @@ type ClientConfig = {
     /// this to `DefaultWebhookAdmin` (or one of the branded variants)
     /// to surface the admin UI.
     WebhookAdmin: WebhookAdminMode
+    /// Phase 527 — controls the service-account admin. Default:
+    /// `NoServiceAccountAdmin` — pair with
+    /// `ServerConfig.ServiceAccounts = EnabledServiceAccounts` and set
+    /// this to `DefaultServiceAccountAdmin` (or one of the branded
+    /// variants) to surface the admin UI.
+    ServiceAccountAdmin: ServiceAccountAdminMode
     /// Controls the module-visibility profile editor. Default:
     /// `NoModuleVisibilityAdmin` — pair with a server-side
     /// `ServerConfig.ModuleVisibility` other than `NoModuleVisibility`
@@ -1909,6 +1940,7 @@ module ClientConfig =
         TeamManager = DefaultTeamManager
         TeamConfig = DefaultTeamConfig
         WebhookAdmin = NoWebhookAdmin
+        ServiceAccountAdmin = NoServiceAccountAdmin
         // Opt-in (GP 11/13) — the server-side substrate is itself opt-in,
         // and the editor's API 404s until it is enabled.
         ModuleVisibilityAdmin = NoModuleVisibilityAdmin

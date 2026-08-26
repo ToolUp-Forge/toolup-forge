@@ -299,6 +299,39 @@ let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig
 
             SessionRegistry.BlobBackedSessionRegistry.create blobs logger opts.RetentionDays)
 
+/// Phase 527 — register the service-account store when
+/// `ServerConfig.ServiceAccounts` opts in. `EnabledServiceAccounts`
+/// registers the blob-backed `BlobServiceAccountStore` via a lazy
+/// factory, so a deployment that opts in but never receives a
+/// service-account request pays only the registration (GP 13);
+/// `CustomServiceAccountStore` registers nothing, leaving the consumer's
+/// own `IServiceAccountStore` singleton in DI; `NoServiceAccounts` (the
+/// default) registers nothing at all.
+///
+/// `IAuditLog` is resolved OPTIONALLY inside the factory rather than
+/// required: a deployment running `AuditLog = NoAuditLog` composes no
+/// `IAuditLog`, and the store's audit emission is a no-op under `None`.
+/// Requiring it here would make the audit mode a hard dependency of the
+/// substrate, which is the coupling GP 13 exists to prevent.
+///
+/// `TryAddSingleton` so a consumer that pre-registered its own store
+/// under `EnabledServiceAccounts` is never overridden.
+let registerServiceAccountStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.ServiceAccounts with
+    | NoServiceAccounts -> ()
+    | CustomServiceAccountStore -> () // consumer composed its own IServiceAccountStore singleton
+    | EnabledServiceAccounts ->
+        services.TryAddSingleton<IServiceAccountStore>(fun (sp: System.IServiceProvider) ->
+            let storage = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+
+            let audit =
+                match sp.GetService(typeof<IAuditLog>) with
+                | :? IAuditLog as a -> Some a
+                | _ -> None
+
+            let logger = sp.GetService(typeof<ILogger>) :?> ILogger
+            ServiceAccountStore.create storage audit logger)
+
 /// Phase 68 — register the graph-data store. `InMemoryGraphStore` (the
 /// default) registers the zero-dependency in-memory `IGraphStore` via a
 /// *lazy* factory, so a deployment that never resolves `IGraphStore` pays
