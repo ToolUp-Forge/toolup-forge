@@ -850,49 +850,10 @@ let private narrowedAdmission =
             modelExecutionPeerId
     )
 
-/// The admission a given reject vector is read against.
-///
-/// **Per-vector rather than one shared value, because an authority
-/// refusal is a statement about a GRANT and a grant is per-peer.** A
-/// corpus that read every model-execution vector against one admission
-/// could pin the row-read and scope-widening classes (which no grant
-/// changes) and could not pin these three at all: the same document is
-/// answered at one level and refused at another, which is the whole
-/// property the family exists to hold. The mapping lives here so the
-/// harness reads it rather than reconstructing it.
-let admissionFor (vectorId: string) : ModelExecutionAdmission =
-    match vectorId with
-    | "model-execution/reject-view-at-aggregates" -> admissionAt PeerDataVisibilityLevel.AggregatesOnly
-    | "model-execution/reject-full-at-view" -> admissionAt PeerDataVisibilityLevel.ViewOnly
-    | "model-execution/reject-narrowed" -> narrowedAdmission
-    // Phase 643 — the bound vectors are read at `ViewOnly` and with the
-    // view operations DECLARED, because both are preconditions of
-    // reaching a bounds check at all. Read at the reference admission
-    // they would be refused one check earlier, for a reason that has
-    // nothing to do with what they are vectors for.
-    | "model-execution/reject-view-over-bound-window"
-    | "model-execution/reject-view-undeclared-series" ->
-        admissionAt PeerDataVisibilityLevel.ViewOnly
-        |> ModelExecutionAdmission.withViews
-    // Phase 644 — the transition vectors are read with the operation
-    // DECLARED and at the reference level, which is `AggregatesOnly`. The
-    // second half of that is the claim: a transition carries no data, so
-    // it needs no level above the floor, and a vector read at a raised
-    // level would let an implementation that fused the two authority axes
-    // pass.
-    | "model-execution/reject-transition-unknown-artifact"
-    | "model-execution/reject-transition-invalid"
-    | "model-execution/reject-transition-unauthorized" -> referenceAdmission |> ModelExecutionAdmission.withTransitions
-    // Phase 646 — the transfer vectors are read with the transfer
-    // DECLARED and at the reference level, which is `AggregatesOnly`,
-    // for the reason the transition vectors are: a transfer carries data
-    // INBOUND and answers a receipt, so there is nothing for a
-    // data-visibility level to govern and a vector read at a raised level
-    // would let an implementation that fused the two authority axes pass.
-    | "model-execution/reject-promotion-hash-mismatch"
-    | "model-execution/reject-promotion-cap-exceeded"
-    | "model-execution/reject-promotion-conflict" -> referenceAdmission |> ModelExecutionAdmission.withPromotions
-    | _ -> referenceAdmission
+// The state each model-execution reject vector is judged against is one
+// keyed record, `modelExecutionStateFor`, declared once every reference
+// value it names is in scope — see the model-execution vector state
+// below.
 
 let private referenceVintage: ModelExecutionPeerVintage = {
     DatasetId = "weekly-panel"
@@ -1189,22 +1150,6 @@ let private unauthorizedTransitionInvocation: PeerTransitionInvocation = {
         Target = "Retired"
 }
 
-/// The artifact status and grant each transition reject vector is judged
-/// against — the transition family's `admissionFor`.
-///
-/// The state has to be supplied because `ModelTransition.judge` is pure:
-/// there is no store for the harness to read a status out of, which is
-/// exactly the property that lets it certify against the shipped
-/// function. A vector's state is part of the vector.
-let transitionStateFor (vectorId: string) : ModelArtifactStatus option * ModelTransitionAuthority =
-    match vectorId with
-    | "model-execution/reject-transition-unknown-artifact" -> None, referenceTransitionGrant
-    // A FULL grant, so the refusal cannot be mistaken for an authority
-    // one: this vector's whole content is that no grant makes a
-    // terminal state leavable.
-    | "model-execution/reject-transition-invalid" -> Some ModelArtifactStatus.Retired, ModelTransitionAuthority.full
-    | _ -> Some ModelArtifactStatus.Fitted, referenceTransitionGrant
-
 // ─── Reference values — Phase 646 promotion transfers ────────────────
 
 /// The exploration record a modelling tool kept beside the fit — the
@@ -1361,55 +1306,170 @@ let private hashMismatchTransfer = {
                     a)
 }
 
-/// The registry cap each promotion reject vector is judged against, the
-/// artifact the scope already holds, and the peer's grant — the promotion
-/// family's `admissionFor`.
+// ─── Model-execution vector state ────────────────────────────────────
+
+/// Everything a model-execution reject vector is judged against, keyed
+/// by vector id.
 ///
-/// The state has to be supplied for the reason `transitionStateFor`'s
-/// does: `ModelPromotion.judge` is pure, so there is no store for the
-/// harness to read a cap or an incumbent out of, which is exactly the
-/// property that lets it certify against the shipped function.
-let promotionStateFor
-    (vectorId: string)
-    : ModelArtifact option * ProvenanceAttachmentLimits * ModelTransitionAuthority =
+/// **One record rather than a lookup per reader.** Each reader the family
+/// grew — the envelope, the transition judge, the transfer judge — arrived
+/// needing a different slice of the same per-vector state, and each was
+/// first served by its own parallel lookup over the same ids. Three such
+/// lookups agreeing on which vector is which is a coincidence maintained
+/// by hand: a vector added to one and forgotten in another reads with the
+/// wrong state and still passes, because the default arm answers. A single
+/// keyed record makes a vector's state one thing to state and one thing to
+/// get wrong, and a fourth reader adds a FIELD rather than a fourth
+/// lookup.
+///
+/// **The state is supplied rather than read out of a store because the
+/// judges are pure** — `ModelTransition.judge` and `ModelPromotion.judge`
+/// take the status, cap and incumbent as arguments, which is exactly the
+/// property that lets the harness certify against the shipped functions
+/// rather than a test-local reimplementation of them. A vector's state is
+/// part of the vector.
+type ModelExecutionVectorState = {
+    /// The grant the request envelope is read against. Per-vector because
+    /// an authority refusal is a statement about a GRANT and a grant is
+    /// per-peer: three vectors share one document and differ only in this,
+    /// which is the whole property the levels have to hold — the same
+    /// request answered at one level, refused at another, and refused for a
+    /// different reason under a narrowing.
+    Admission: ModelExecutionAdmission
+    /// The lifecycle status the scope holds for the artifact a transition
+    /// names, or `None` where it holds nothing.
+    ArtifactStatus: ModelArtifactStatus option
+    /// The peer's lifecycle grant, read by the transition and transfer
+    /// judges alike.
+    TransitionGrant: ModelTransitionAuthority
+    /// The artifact the scope already holds under the transferred key, for
+    /// the conflict case.
+    Incumbent: ModelArtifact option
+    /// The RECEIVER's declared attachment bounds.
+    AttachmentLimits: ProvenanceAttachmentLimits
+}
+
+/// The state every vector reads at unless it names otherwise. Each arm
+/// below overrides only the fields its own refusal is about, so a vector's
+/// entry says what is special about it and nothing else.
+let private referenceVectorState: ModelExecutionVectorState = {
+    Admission = referenceAdmission
+    ArtifactStatus = Some ModelArtifactStatus.Fitted
+    TransitionGrant = referenceTransitionGrant
+    Incumbent = None
+    AttachmentLimits = ProvenanceAttachmentLimits.default'
+}
+
+/// The state a given model-execution reject vector is judged against.
+///
+/// Every pre-642 vector maps to the reference state and reads as it always
+/// did. The mapping lives here so the harness reads it rather than
+/// reconstructing it.
+let modelExecutionStateFor (vectorId: string) : ModelExecutionVectorState =
     match vectorId with
+    // Phase 642 — the authority family. The document is identical across
+    // these three; the grant is the vector.
+    | "model-execution/reject-view-at-aggregates" -> {
+        referenceVectorState with
+            Admission = admissionAt PeerDataVisibilityLevel.AggregatesOnly
+      }
+    | "model-execution/reject-full-at-view" -> {
+        referenceVectorState with
+            Admission = admissionAt PeerDataVisibilityLevel.ViewOnly
+      }
+    | "model-execution/reject-narrowed" -> {
+        referenceVectorState with
+            Admission = narrowedAdmission
+      }
+    // Phase 643 — the bound vectors are read at `ViewOnly` and with the
+    // view operations DECLARED, because both are preconditions of
+    // reaching a bounds check at all. Read at the reference admission
+    // they would be refused one check earlier, for a reason that has
+    // nothing to do with what they are vectors for.
+    | "model-execution/reject-view-over-bound-window"
+    | "model-execution/reject-view-undeclared-series" -> {
+        referenceVectorState with
+            Admission =
+                admissionAt PeerDataVisibilityLevel.ViewOnly
+                |> ModelExecutionAdmission.withViews
+      }
+    // Phase 644 — the transition vectors are read with the operation
+    // DECLARED and at the reference level, which is `AggregatesOnly`. The
+    // second half of that is the claim: a transition carries no data, so
+    // it needs no level above the floor, and a vector read at a raised
+    // level would let an implementation that fused the two authority axes
+    // pass.
+    //
+    // The scope holds nothing under the key this one names, which is the
+    // whole of the unknown-artifact case.
+    | "model-execution/reject-transition-unknown-artifact" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withTransitions
+            ArtifactStatus = None
+      }
+    // A FULL grant, so the refusal cannot be mistaken for an authority
+    // one: this vector's whole content is that no grant makes a
+    // terminal state leavable.
+    | "model-execution/reject-transition-invalid" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withTransitions
+            ArtifactStatus = Some ModelArtifactStatus.Retired
+            TransitionGrant = ModelTransitionAuthority.full
+      }
+    | "model-execution/reject-transition-unauthorized" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withTransitions
+      }
+    // Phase 646 — the transfer vectors are read with the transfer
+    // DECLARED and at the reference level, which is `AggregatesOnly`,
+    // for the reason the transition vectors are: a transfer carries data
+    // INBOUND and answers a receipt, so there is nothing for a
+    // data-visibility level to govern and a vector read at a raised level
+    // would let an implementation that fused the two authority axes pass.
+    | "model-execution/reject-promotion-hash-mismatch" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withPromotions
+      }
     // A cap of ONE against a transfer carrying three (two records plus the
     // spec payload). The vector's whole content is that the bound is the
     // RECEIVER's declared one — nothing in the document is wrong, and a
     // deployment at the default cap answers the identical bytes.
-    | "model-execution/reject-promotion-cap-exceeded" ->
-        None,
-        {
-            ProvenanceAttachmentLimits.default' with
-                MaxAttachments = 1
-        },
-        referenceTransitionGrant
+    | "model-execution/reject-promotion-cap-exceeded" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withPromotions
+            AttachmentLimits = {
+                ProvenanceAttachmentLimits.default' with
+                    MaxAttachments = 1
+            }
+      }
     // The scope already holds this composite key, fit from different
     // parameters. A key names one artifact; two under one key would leave
     // every downstream citation ambiguous about which it meant.
-    | "model-execution/reject-promotion-conflict" ->
-        Some {
-            CompositeKey = referencePromotedKey
-            ScopeId = modelExecutionBoundScope
-            ArtifactRef = {
-                ArtifactId = "artifact-8821"
-                ContentHash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-                ByteLength = 4096L
-            }
-            Diagnostics = Map.empty
-            GateVerdicts = []
-            Status = ModelArtifactStatus.Fitted
-            Annotations = Map.empty
-            Notes = ""
-            Attachments = []
-            Signature = None
-            RegisteredBy = "local-fitter"
-            RegisteredAt = DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero)
-            Version = 1
-        },
-        ProvenanceAttachmentLimits.default',
-        referenceTransitionGrant
-    | _ -> None, ProvenanceAttachmentLimits.default', referenceTransitionGrant
+    | "model-execution/reject-promotion-conflict" -> {
+        referenceVectorState with
+            Admission = referenceAdmission |> ModelExecutionAdmission.withPromotions
+            Incumbent =
+                Some {
+                    CompositeKey = referencePromotedKey
+                    ScopeId = modelExecutionBoundScope
+                    ArtifactRef = {
+                        ArtifactId = "artifact-8821"
+                        ContentHash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                        ByteLength = 4096L
+                    }
+                    Diagnostics = Map.empty
+                    GateVerdicts = []
+                    Status = ModelArtifactStatus.Fitted
+                    Annotations = Map.empty
+                    Notes = ""
+                    Attachments = []
+                    Signature = None
+                    RegisteredBy = "local-fitter"
+                    RegisteredAt = DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero)
+                    Version = 1
+                }
+      }
+    | _ -> referenceVectorState
 
 /// One refusal per class the profile defines — so a modeller's mapping
 /// is pinned by the corpus rather than inferred from the two classes it

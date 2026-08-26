@@ -237,9 +237,10 @@ let private verifyInvocationRejection (entry: ManifestEntry) (document: string) 
 /// document and differ only in the grant they are read against, which is
 /// exactly the property the levels have to hold: the same request is
 /// answered at one level, refused at another, and refused for a
-/// different reason under a narrowing. `admissionFor` maps a vector id
-/// to its grant; every pre-642 vector maps to the reference admission
-/// and reads as it always did.
+/// different reason under a narrowing. `modelExecutionStateFor` maps a
+/// vector id to everything it is judged against — the grant, and the
+/// state each of the readers below needs; every pre-642 vector maps to
+/// the reference state and reads as it always did.
 ///
 /// Phase 643 — a bounded-view vector is refused by a SECOND reader, and
 /// the harness has to run both in order. `read` admits the envelope (it
@@ -249,8 +250,10 @@ let private verifyInvocationRejection (entry: ManifestEntry) (document: string) 
 /// stopped at the envelope would report these two as ACCEPTED, which is
 /// the failure the two-stage branch below exists to make impossible.
 let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
+    let state = modelExecutionStateFor entry.Id
+
     let outcome =
-        ModelExecutionPeerContract.read (admissionFor entry.Id) modelExecutionBoundScope document
+        ModelExecutionPeerContract.read state.Admission modelExecutionBoundScope document
 
     match outcome with
     | Ok request when reason.StartsWith "model-execution-view-" ->
@@ -271,14 +274,13 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
     // action and a policy verdict also go through — is what refuses.
     | Ok request when reason.StartsWith "model-execution-transition-" ->
         let invocation = JsonRpc.deserialize<PeerTransitionInvocation> request.Body
-        let current, grant = transitionStateFor entry.Id
 
         match PeerTransition.target invocation with
         | None -> failtestf "'%s' must name a lifecycle status the profile defines" entry.Id
         | Some target ->
             let seamRequest = PeerTransition.toRequest "consortium-north" target invocation
 
-            match ModelTransition.judge current grant seamRequest with
+            match ModelTransition.judge state.ArtifactStatus state.TransitionGrant seamRequest with
             | Ok _ -> failtestf "'%s' must be refused by the transition seam, and it was admitted" entry.Id
             | Error refusal ->
                 Expect.equal
@@ -294,7 +296,6 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
     // bare transition, a local action and a policy verdict alike.
     | Ok request when reason.StartsWith "model-execution-promotion-" ->
         let transfer = JsonRpc.deserialize<PeerPromotionTransfer> request.Body
-        let existing, limits, grant = promotionStateFor entry.Id
 
         match PeerPromotion.target transfer with
         | None -> failtestf "'%s' must name a lifecycle status the profile defines" entry.Id
@@ -302,7 +303,7 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
             match PeerPromotion.toPromoted "consortium-north" target transfer with
             | Error reason -> failtestf "'%s' must be readable as a transfer; it was not: %s" entry.Id reason
             | Ok promoted ->
-                match ModelPromotion.judge existing limits grant promoted with
+                match ModelPromotion.judge state.Incumbent state.AttachmentLimits state.TransitionGrant promoted with
                 | Ok _ -> failtestf "'%s' must be refused by the transfer seam, and it was admitted" entry.Id
                 | Error refusal ->
                     Expect.equal
