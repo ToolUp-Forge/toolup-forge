@@ -148,7 +148,29 @@ server surface a "Content" / "Pages" admin module drives —
 `ListPages` / `GetPage` / `SavePage` / `SetStatus` / `ListRevisions` /
 `RestoreRevision` over the page overlay, reusing the lifecycle +
 versioning substrate above. Mount it with
-`ContentAdminCompose.withContentAdmin`. The Fable sidebar **client**
+`ContentAdminCompose.withContentAdmin`.
+
+**Authorization (Phase 627).** Every method requires a **platform admin**
+(`[<RequiresRole "PlatformAdmin">]`), enforced by the Phase 69d classifier —
+`withContentAdmin` mounts through `Api.make`, which arms it. The gate is
+platform-level rather than scope-level because the surface writes the
+deployment-wide `_public` overlay at a **fixed** `PublicPageEntity.PublicScope`:
+there is no per-caller scope for the `StorageScope` resolver to isolate, so the
+attribute gate carries the whole weight. `SetStatus` additionally emits a
+`PolicyChanged` audit row against the registered `IAuditLog`.
+
+Two consequences worth knowing before composing it. If your deployment
+registers no `IPlatformAdminStore`, **no caller clears the gate** and the
+authoring UI is unreachable (fail-closed, by design). And now that the
+classifier is armed, any method added to this contract without an authorization
+attribute **refuses startup**, naming the record and field. Migration:
+[`627-content-admin-api-authorization.md`](../migrations/627-content-admin-api-authorization.md).
+
+Anonymous visitors are unaffected — they read published pages through the
+`ToolUp.PublicRendering` overlay renderer, which serves only `published` pages.
+This is the authoring door, not the reading one.
+
+The Fable sidebar **client**
 module (a rich block editor emitting Phase 87 `NarrativeElement` trees +
 Phase 88 media pickers) binds this contract and is the one remaining
 iterative piece — the backend, render path, lifecycle, versioning, and

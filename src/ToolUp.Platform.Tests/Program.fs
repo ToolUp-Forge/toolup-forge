@@ -587,6 +587,10 @@ let allTests =
         ShareTokenAuthMiddlewareTests.tests
         ShareTokenMiddlewareRateLimitTests.tests
         AnonymousSessionMigrationTests.tests
+        // Phase 337 — listed here, not merely attributed: `runTestsWithCLIArgs`
+        // runs `allTests`, so a `[<Tests>]` binding absent from this list is
+        // dormant and a filtered run reports zero tests AND success.
+        AnonymousSessionBindingTests.tests
         StoreIdSanitisingTests.tests
         SecureByDefaultValidatorTests.tests
         InMemoryPendingInviteStoreTests.tests
@@ -967,6 +971,7 @@ let allTests =
         AssetStoreTests.tests
         MediaLibraryTests.tests
         ContentAuthoringTests.tests
+        ContentAdminAuthorizationTests.tests
         InMemoryRateLimitStoreTests.tests
         // Phase 56 — full contract pack bound to InMemoryRateLimitStore.
         // External-store companions (AzureTableStorage / Redis) bind to

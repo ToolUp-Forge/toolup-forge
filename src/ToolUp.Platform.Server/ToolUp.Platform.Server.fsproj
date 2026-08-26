@@ -823,6 +823,14 @@
         <Compile Include="Server\ModuleVisibilityResolver.fs" />
         <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
         <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
+        <!-- Phase 135 — anonymous-session ownership binding (the sealed
+             HttpOnly cookie). Phase 337 MOVED it ahead of the scope
+             resolvers and Middleware.fs: the binding is no longer only
+             the migration gate, it is the source of the anonymous session
+             id itself, so SubjectRequestExtractor / ScopeResolutionMiddleware
+             both consume it. Depends on DataProtection + HttpContext only,
+             so it sits safely this early. -->
+        <Compile Include="Server\AnonymousSessionBinding.fs" />
         <Compile Include="Server\Scope\StorageScopeResolver.fs" />
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
@@ -895,8 +903,9 @@
         <!-- Phase 66 Stream C.1 (continuation) — anonymous→authenticated
              session-migration trigger middleware. Registered in the
              pipeline after SurfaceEnforcementMiddleware; depends on
-             NoOpAnonymousSessionMigrator (compiled earlier). -->
-        <Compile Include="Server\AnonymousSessionBinding.fs" />
+             NoOpAnonymousSessionMigrator (compiled earlier) and on
+             AnonymousSessionBinding (moved ahead of Middleware.fs by
+             Phase 337). -->
         <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
         <!-- Phase 56 — inbound HTTP rate-limit middleware. Composes
              against `IRateLimitStore` (registered earlier in the build
