@@ -508,6 +508,11 @@ let allTests =
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         LdapAuthProviderTests.tests
+        // Phase 530 — SCIM 2.0 provisioning: recorded Entra ID + Okta
+        // sequences (create → assign group → change role → deactivate)
+        // replayed against the real TeamStore, plus the bearer gate,
+        // scope isolation, and the RFC 7643/7644 wire model.
+        ScimProvisioningTests.tests
         // Phase 443 — WebAuthn / passkey companion: ceremony round-trip
         // (stub IFido2), counter-regression clone detection, invite
         // gating, challenge expiry, session-token round-trip, preflight.
