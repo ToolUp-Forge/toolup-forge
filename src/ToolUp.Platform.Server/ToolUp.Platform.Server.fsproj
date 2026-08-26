@@ -1332,6 +1332,12 @@
              enforced); beside EventTopology / DataFootprint, the sibling
              derived lenses. -->
         <Compile Include="Server\AuthorizationSurface.fs" />
+        <!-- Phase 627.E in-handler gate declarations for the platform-tier
+             API records (JobApi / ModelExecutionApi / IModuleQueryBusApi).
+             After AuthorizationSurface.fs, which declares the record they
+             are expressed in. IFormApi's live in ToolUp.Forms.Server,
+             beside its own handler. -->
+        <Compile Include="Server\PlatformInHandlerGates.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After

@@ -6362,6 +6362,11 @@ ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.Server
 ToolUp.Platform.PlatformApiHandler.teamApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.TeamApi
 ToolUp.Platform.PlatformApiHandler.teamApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.PlatformApiHandler.withVisibilityProfile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution], ToolUp.Platform.AccessibleModulesResponse) : ToolUp.Platform.AccessibleModulesResponse
+ToolUp.Platform.PlatformInHandlerGates (class)
+ToolUp.Platform.PlatformInHandlerGates.all(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.jobApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.modelExecutionApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Platform.PlatformInHandlerGates.moduleQueryBusApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformRuntimeConfigStore (class)
 ToolUp.Platform.PlatformRuntimeConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.PlatformKnowledgeBaseMode) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IPlatformRuntimeConfigStore]
 ToolUp.Platform.PlatformSchema (class)

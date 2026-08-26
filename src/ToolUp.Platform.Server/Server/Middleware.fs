@@ -593,13 +593,30 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         // had no signal to distinguish "no credentials"
                         // from "resolver crashed."
                         //
-                        // The fail-closed behaviour is preserved (we
-                        // don't re-raise — bringing the request path down
-                        // for a DI hiccup would be worse). What changes
-                        // is observability: structured log + best-effort
-                        // audit event so a spike in
-                        // `ScopeResolutionFailed` is visible on dashboards
-                        // and per-incident triage has a query path.
+                        // This catch does NOT re-raise — bringing the
+                        // request path down for a DI hiccup would be
+                        // worse — and what changes here is observability:
+                        // structured log + best-effort audit event so a
+                        // spike in `ScopeResolutionFailed` is visible on
+                        // dashboards and per-incident triage has a query
+                        // path.
+                        //
+                        // **Swallowing is not by itself fail-closed, and
+                        // this comment used to say it was.** All the
+                        // catch does is leave the `HttpContext.Items`
+                        // entries unset; what makes that SAFE is
+                        // downstream, in [Phase 336] (`db622f5f`):
+                        // `SurfaceEnforcementMiddleware` treats a missing
+                        // Subject on an `/api/*` path as fail-closed,
+                        // synthesising a fresh `AnonymousSession` and
+                        // running the SAME surface gate over it, so a
+                        // crashed resolver yields an anonymous-privilege
+                        // request rather than an unjudged one. Before
+                        // 336 the fall-through was to whatever each
+                        // handler did with absent Items, which is not a
+                        // property this middleware could promise on its
+                        // own. Read the guarantee there; do not conclude
+                        // from this catch alone that it holds.
                         //
                         // Every observability call is itself wrapped in a
                         // local try/with — a logger / audit failure
