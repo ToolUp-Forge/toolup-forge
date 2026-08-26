@@ -63,8 +63,6 @@ let private flushPolicy: BatchFlushPolicy = {
     ProducerWaitTimeout = TimeSpan.FromSeconds 1.0
 }
 
-let private blobFlushDelay = TimeSpan.FromMilliseconds 500.0
-
 /// Wraps an `IUsageLog` so every `Record` call triggers the
 /// underlying flusher to drain immediately. Eliminates the timing
 /// race the BackgroundService introduces under test load.

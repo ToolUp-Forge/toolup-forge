@@ -33,9 +33,6 @@ let private FastPathSourceModule = "_platform.ai.fastpath"
 let private FastPathResolvedEventType = "FastPathResolved"
 
 [<Literal>]
-let private SequencedClauseEventType = "SequencedFastPathClause"
-
-[<Literal>]
 let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
 
 // ─── Phase 6j.B — Tier-3 triage rollup ───────────────────────────
