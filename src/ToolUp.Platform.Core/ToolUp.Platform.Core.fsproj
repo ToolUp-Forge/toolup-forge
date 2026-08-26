@@ -449,6 +449,13 @@
              server-only because IContainerScheduler.StreamLogs returns
              IAsyncEnumerable. -->
         <Compile Include="Shared\Types\DeployPlaneTypes.fs" />
+        <!-- Phase 712 — the upstream work record as wire data: refs,
+             records, the withheld marker, declared caps, typed cap
+             refusals, and the coverage / unattested vocabulary the deploy
+             companion is written in. Before DeployRecordTypes.fs, whose
+             structured work companion references WorkRecordRef. Fable-safe
+             (records + unions + string handling only). -->
+        <Compile Include="Shared\Types\WorkProvenanceWireTypes.fs" />
         <!-- Phase 656 — the deploy record (manifest as deployed +
              provenance) and the byte-level sealing seam. After
              DeployPlaneTypes.fs because it uses the DeployId / TenantId /

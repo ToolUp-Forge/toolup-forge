@@ -508,6 +508,11 @@ let allTests =
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         LdapAuthProviderTests.tests
+        // Phase 530 — SCIM 2.0 provisioning: recorded Entra ID + Okta
+        // sequences (create → assign group → change role → deactivate)
+        // replayed against the real TeamStore, plus the bearer gate,
+        // scope isolation, and the RFC 7643/7644 wire model.
+        ScimProvisioningTests.tests
         // Phase 443 — WebAuthn / passkey companion: ceremony round-trip
         // (stub IFido2), counter-regression clone detection, invite
         // gating, challenge expiry, session-token round-trip, preflight.
@@ -930,6 +935,8 @@ let allTests =
         MetadataFilterContract.tests
         // Phase 506 — conversation-aware query rewrite (IQueryRewriter stage).
         QueryRewriteContract.tests
+        // Phase 506 — the compose-side DI pickup for that stage.
+        QueryRewriteComposeTests.tests
         // Phase 505 — citation character-offset spans (chunk → citation).
         CitationSpanContract.tests
         // Phase 501 — the sparse-index analyzer seam + the Snowball / CJK
@@ -1191,6 +1198,14 @@ let allTests =
         BuildTranscriptTests.closureAttestationTests
         BuildTranscriptTests.closureCaptureTests
         BuildTranscriptTests.closureBindingTests
+        // Phase 712 — the upstream work record as a read-only wire
+        // contract: the work/build tier of the shape the fact tier
+        // already ships. Bounded both ways (an over-cap request, an
+        // over-cap answer, and a source that answers above its own
+        // declared cap), withheld distinguishable from absent, a foreign
+        // kind crossing intact, every unattested reason recorded rather
+        // than dropped, and an uncomposed deployment unchanged.
+        WorkProvenanceSourceTests.tests
         // Phase 717 — the SBOM projected from that closure. Each pack is
         // probed in both directions: the schema check is proven able to
         // REFUSE, the completeness check runs against a wholly-unattested
