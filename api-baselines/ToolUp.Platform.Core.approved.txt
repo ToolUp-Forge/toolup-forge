@@ -5906,6 +5906,7 @@ ToolUp.Platform.JwtCrypto.checkHs256Alg(System.String) : Microsoft.FSharp.Core.F
 ToolUp.Platform.JwtCrypto.clockSkewSeconds : System.Int64 { get }
 ToolUp.Platform.JwtCrypto.computeHmac(System.Byte[], System.Byte[]) : System.Byte[]
 ToolUp.Platform.JwtCrypto.fixedTimeEquals(System.Byte[], System.Byte[]) : System.Boolean
+ToolUp.Platform.JwtCrypto.fixedTimeEqualsUtf8(System.String, System.String) : System.Boolean
 ToolUp.Platform.JwtCrypto.result : ToolUp.Platform.JwtCrypto+ResultBuilder { get }
 ToolUp.Platform.JwtCrypto+ResultBuilder (class)
 ToolUp.Platform.JwtCrypto+ResultBuilder..ctor()

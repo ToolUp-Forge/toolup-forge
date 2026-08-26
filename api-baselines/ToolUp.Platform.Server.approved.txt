@@ -8194,6 +8194,14 @@ ToolUp.Platform.TimeSeriesSourceBinding.UnitColumn : System.String { get }
 ToolUp.Platform.TimeSeriesSourceBinding.UnitLabel : System.String { get }
 ToolUp.Platform.TimeSeriesSourceBinding.Until : System.DateTimeOffset { get }
 ToolUp.Platform.TimeSeriesSourceBinding.ValueColumn : System.String { get }
+ToolUp.Platform.TokenAttemptThrottle (class)
+ToolUp.Platform.TokenAttemptThrottle..ctor(System.Int32, System.TimeSpan)
+ToolUp.Platform.TokenAttemptThrottle.FailureCount(System.String, System.DateTime) : System.Int32
+ToolUp.Platform.TokenAttemptThrottle.Forget(System.String) : System.Void
+ToolUp.Platform.TokenAttemptThrottle.IsThrottled(System.String, System.DateTime) : System.Boolean
+ToolUp.Platform.TokenAttemptThrottle.MaxFailures : System.Int32 { get }
+ToolUp.Platform.TokenAttemptThrottle.RecordFailure(System.String, System.DateTime) : System.Int32
+ToolUp.Platform.TokenAttemptThrottle.Window : System.TimeSpan { get }
 ToolUp.Platform.Tracing.ActivityContextHelpers (class)
 ToolUp.Platform.Tracing.ActivityContextHelpers.currentTraceparent() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Tracing.ActivityContextHelpers.tryParseTraceparent(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Diagnostics.ActivityContext]

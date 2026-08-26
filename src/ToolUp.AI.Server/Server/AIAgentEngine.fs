@@ -267,12 +267,26 @@ let private runFullAgentLoop
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
-        // Phase 6g.A: filter the per-turn tool list by the request's
-        // surface. Tools declared as `SidePanelOnly` / `FullPageOnly`
-        // are excluded when the chat is from the other surface; `Both`
-        // (the default for existing tools) always passes through.
+        // Phase 36.A: the caller's access context, reconstructed from the
+        // items the background context carries forward. Resolved ONCE at
+        // the top of the loop — permissions do not change mid-turn, and
+        // re-resolving per tool call would let a mid-conversation
+        // permission revocation apply inconsistently across a parallel
+        // tool batch. See `reconstructAccessContext` for why this is read
+        // from items rather than DI (a DI read here silently yields an
+        // unrestricted anonymous context and the gate passes everything).
+        let access = reconstructAccessContext ctx
+
+        // Phase 36.A: filter the per-turn tool list by the caller's
+        // per-module `Read` permission, then (Phase 6g.A) by the
+        // request's surface. Tools sourced from a module the caller
+        // cannot read never reach the provider, so the model neither
+        // sees them nor plans around them; tools declared as
+        // `SidePanelOnly` / `FullPageOnly` are excluded when the chat is
+        // from the other surface; `Both` (the default for existing
+        // tools) always passes through.
         let tools =
-            registry.GetAll()
+            registry.ListAccessible access
             |> List.filter (fun t -> isToolVisibleOnSurface surface t.Definition)
             |> List.map _.ProviderDef
 
@@ -465,7 +479,14 @@ let private runFullAgentLoop
         // `_platform.ui.decode_error` audit. Never crashes / blocks the
         // loop — a wedged backend logs at Warn and the denial still
         // returns to the model.
-        let writeDenialAudit (toolName: string) (reason: string) = async {
+        //
+        // Phase 36.A parameterises the stream so the RBAC denial gets its
+        // own `_platform.ai.unauthorized_tool` source rather than being
+        // conflated with the allowlist stream: they are different
+        // refusals with different operator responses (an allowlist deny
+        // is a policy the deployment authored; an unauthorized-tool deny
+        // means the model reached for something the USER may not have).
+        let writeToolDenialAudit (auditSource: string) (eventType: string) (toolName: string) (reason: string) = async {
             match eventStoreOpt with
             | None -> return ()
             | Some store ->
@@ -482,8 +503,8 @@ let private runFullAgentLoop
                     Id = Guid.NewGuid()
                     OccurredAt = DateTime.UtcNow
                     ScopeId = latencyScope.ScopeId
-                    SourceModule = "_platform.ai.tool_allowlist_denial"
-                    EventType = "ToolAllowlistDenied"
+                    SourceModule = auditSource
+                    EventType = eventType
                     Payload = JsonSerializer.Serialize(payload, latencyJsonOptions)
                 }
 
@@ -497,11 +518,21 @@ let private runFullAgentLoop
                         do! writeTask |> Async.AwaitTask
                     else
                         logger.Warn
-                            $"AI tool-allowlist denial audit write timed out after {LatencyWriteTimeoutMs / 1000}s; dropping record (taskId={taskId})"
+                            $"AI tool denial audit write ({auditSource}) timed out after {LatencyWriteTimeoutMs / 1000}s; dropping record (taskId={taskId})"
                 with ex ->
                     logger.Warn
-                        $"AI tool-allowlist denial audit write failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
+                        $"AI tool denial audit write ({auditSource}) failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
         }
+
+        /// G12 allowlist denial stream — unchanged shape and source.
+        let writeDenialAudit (toolName: string) (reason: string) =
+            writeToolDenialAudit "_platform.ai.tool_allowlist_denial" "ToolAllowlistDenied" toolName reason
+
+        /// Phase 36.A — RBAC denial stream. A tool the model named whose
+        /// `SourceModule` the caller holds no `Read` on. Distinct source
+        /// from the allowlist stream (see `writeToolDenialAudit`).
+        let writeUnauthorizedToolAudit (toolName: string) (reason: string) =
+            writeToolDenialAudit "_platform.ai.unauthorized_tool" "UnauthorizedTool" toolName reason
 
         // Counts turns where every tool call errored. Reset to 0 on any
         // turn that contained at least one successful tool call or
@@ -793,6 +824,52 @@ let private runFullAgentLoop
                             let! result = async {
                                 try
                                     match toolOpt with
+                                    | Some tool when not (isToolPermittedFor access tool.Definition) ->
+                                        // ─── Phase 36.A — dispatch-site re-check ───
+                                        //
+                                        // Defence in depth. The per-turn tool
+                                        // list above already excluded this tool,
+                                        // so a well-behaved model cannot reach
+                                        // here: what does is a FORGED name — a
+                                        // hallucinated call, a replayed
+                                        // conversation history carrying a call
+                                        // from when the caller still held the
+                                        // permission, or a provider response
+                                        // fabricated upstream. The list filter is
+                                        // an ergonomic gate; this one is the
+                                        // security boundary, and it is the last
+                                        // point before `tool.Execute` runs with
+                                        // the caller's scope in hand (GP 4).
+                                        //
+                                        // A typed `Denied`, not `ToolThrew`: the
+                                        // model must be told the action is not
+                                        // permitted rather than that it failed,
+                                        // or it retries. (`Denied` postdates this
+                                        // phase's specification, which named
+                                        // `ToolThrew` before the typed-refusal
+                                        // case existed.) `isErrorToolResult`
+                                        // already recognises the rendering, so
+                                        // the loop's early-stop budget counts it.
+                                        let reason =
+                                            $"requires Read on module '{tool.Definition.SourceModule}', which you do not have access to"
+
+                                        logger.Warn(
+                                            sprintf
+                                                "AI tool '%s' (source module '%s') refused at dispatch: caller holds no Read on that module. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
+                                                tool.Definition.Name
+                                                tool.Definition.SourceModule
+                                        )
+
+                                        recordUnauthorizedToolDenial
+                                            ctx
+                                            access
+                                            "agent-loop:tool-dispatch"
+                                            tool.Definition.Name
+                                            tool.Definition.SourceModule
+
+                                        do! writeUnauthorizedToolAudit tool.Definition.Name reason
+
+                                        return Error(Denied(tc.Name, reason))
                                     | Some tool ->
                                         // Phase 6g.A: route by `Location`. ServerResident
                                         // — existing path (HttpContext + argsJson →
@@ -840,7 +917,17 @@ let private runFullAgentLoop
                                                 do! writeDenialAudit tool.Definition.Name reason
                                                 return Error(Denied(tc.Name, reason))
                                             | Allow ->
-                                                let pendingTask = dispatchRegistry.RegisterPending(tcId)
+                                                // Phase 36.A: record the tool's
+                                                // source module with the pending
+                                                // call so `/api/ai/tool-result`
+                                                // can re-check the POSTing
+                                                // caller's permission before
+                                                // completing it.
+                                                let pendingTask =
+                                                    dispatchRegistry.RegisterPending(
+                                                        tcId,
+                                                        Some tool.Definition.SourceModule
+                                                    )
 
                                                 // Phase 6g.A: SSE event carries the tool's
                                                 // canonical name (`Definition.Name`, e.g.
