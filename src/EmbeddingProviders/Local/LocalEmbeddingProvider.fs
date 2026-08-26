@@ -10,13 +10,16 @@ open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── TF-IDF embedding provider ────────────────────────────────────
 //
-// A vocabulary-building TF-IDF provider for offline / dev use.
+// A hashed TF-IDF provider for offline / dev use.
 //
-// Vocabulary is built incrementally across all embedded texts:
-// - Each document's terms are added to the global vocabulary.
-// - Embeddings are 512-dimensional sparse vectors over that vocabulary.
-// - IDF is updated on each new document (documents already embedded
-//   are NOT re-embedded; this is approximate but sufficient for dev).
+// - A term's DIMENSION is a pure function of the term itself: a
+//   deterministic, culture-invariant hash into the fixed 512 slots
+//   (`featureSlot` below). Nothing about the corpus, its arrival order,
+//   or how much has been embedded can move it.
+// - A term's WEIGHT is TF-IDF, and IDF still adapts as documents arrive
+//   (documents already embedded are NOT re-embedded; this is approximate
+//   but sufficient for dev). Adaptive weighting only rescales
+//   coordinates — it can no longer permute them.
 //
 // Quality is lower than neural embeddings (no semantic understanding),
 // but works offline with no dependencies and no API key. Suitable for:
@@ -24,16 +27,57 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // - Demos where retrieval quality is not critical
 // - Offline environments
 //
-// Dimensions: 512 (vocabulary capped at 512 terms by frequency rank)
+// Dimensions: 512 (fixed hashed feature slots; terms that collide share
+// a slot, which the signed hashing below leaves unbiased in expectation)
+//
+// ─── Why hashing, and what it replaced ───────────────────────────
+//
+// This provider used to carry a `vocab` array — the terms ranked by
+// document frequency, truncated to 512 — and dimension `i` denoted
+// `vocab[i]`. The array was rebuilt on EVERY embed, and previously
+// indexed chunks were never re-embedded, so a chunk indexed early kept
+// coordinates in a vocabulary the provider had since re-sorted. On a
+// small corpus each new embed (a *query* embeds too, and so updates the
+// IDF state) permuted enough of the head that dimension 0 denoted a
+// different term than it had at index time, and cosine similarity
+// between a query and a chunk became meaningless.
+//
+// The failure was silent and total rather than degrading: retrieval
+// returned confidently ranked nonsense, which reads as "the dev embedder
+// is low quality" (true, and the documented expectation) rather than
+// "your stored vectors are in a space the query no longer shares". It
+// was observed writing Phase 14z's cross-scope acceptance case — an
+// on-topic document lost to an unrelated one from the same scope, with
+// no scope-keying involved at all — and worked around there with a
+// fixed-assignment test double.
+//
+// Fixing it by hashing rather than by "freeze the vocabulary once built"
+// or "re-embed the corpus when the assignment moves" is the choice that
+// keeps IDF adaptivity at no cost and needs no staleness machinery: with
+// the assignment fixed by construction there is no assignment change to
+// detect, announce, or recover from.
+//
+// **Vectors written by the pre-hashing scheme are not readable by this
+// one — a dev-tier reset, stated plainly.** Their coordinates denote
+// whatever the vocabulary happened to be at their index time; nothing
+// can recover that. The recovery is automatic rather than manual: both
+// `ModelId` literals are bumped below (`local-tfidf-v3` / `-v4`), so
+// `ReembeddingService` sees an `EmbeddingVersion` mismatch on every
+// stored chunk and re-embeds the corpus ONCE, exactly as it does for any
+// other algorithm change. That is also why this file does not emit a
+// startup notice about a moved assignment: the assignment no longer
+// moves, and the one historical move is handled by the mechanism the SDK
+// already has for it. A persisted IDF state blob stays readable and is
+// still hydrated — only the vectors are invalidated.
 //
 // NOTE on Guiding Principle 12 / Rule 4 (stateless handlers between
 // invocations): this provider deliberately retains mutable IDF state
-// (`df`, `docCount`, `vocab`) across `GenerateEmbedding` calls so TF-IDF
-// scores can adapt as documents arrive. That is acceptable for an
-// in-process dev provider but would violate Rule 4 in a distributed
-// setting. Production providers (OpenAI, Anthropic, etc.) must be
-// stateless between invocations — model state lives server-side at the
-// API boundary, not in the `IEmbeddingProvider` instance.
+// (`df`, `docCount`) across `GenerateEmbedding` calls so TF-IDF scores
+// can adapt as documents arrive. That is acceptable for an in-process
+// dev provider but would violate Rule 4 in a distributed setting.
+// Production providers (OpenAI, Anthropic, etc.) must be stateless
+// between invocations — model state lives server-side at the API
+// boundary, not in the `IEmbeddingProvider` instance.
 //
 // NOTE on cross-restart behaviour: the IDF state can persist to disk
 // via `LocalEmbeddingProvider.createPersistent`. When persistence is
@@ -76,33 +120,44 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // so Platform Admin uploads do not shape team query embeddings.
 //
 // **Each scope-keyed provider reports `ModelId =
-// "local-tfidf-v2#{scopeKey}"`** because the embedding function
-// genuinely differs per scope: vector geometry is a function of the
-// vocabulary, and a per-scope vocabulary is a different vocabulary. The
-// `local-tfidf-v2` half separates the family from the unscoped `v1`, so
+// "{ScopedModelId}#{scopeKey}"`** because the embedding function
+// genuinely differs per scope: the IDF weights a scope applies are a
+// function of the documents that scope has seen. The family half
+// separates the scope-keyed providers from the unscoped ones, so
 // `ReembeddingService` re-embeds once on the swap rather than silently
-// mixing two sparse spaces; the `#{scopeKey}` half keeps two scopes out
+// mixing two weightings; the `#{scopeKey}` half keeps two scopes out
 // of one another's `IEmbeddingCache` entries and lets the reembed
 // staleness check measure a chunk against its OWN scope's embedder (see
 // `scopedModelIdFor`).
 //
 // **GP 11 — the unscoped factories are untouched.** `create ()` and
 // `createPersistent blob` keep their signatures, their single global
-// state, their legacy blob path, and `ModelId = "local-tfidf-v1"`, so an
-// existing deployment that does not opt in is byte-for-byte unchanged
-// and pays no reembed.
+// state, and their legacy blob path, so an existing deployment that does
+// not opt in composes exactly as before. (Their `ModelId` literal DOES
+// move with the hashing change — that is the one-off corpus reembed the
+// header describes, and it applies to every shape of this provider
+// alike.)
 //
-// **Cross-scope retrieval — resolved (Option 1).** A TF-IDF vector's
-// geometry is a function of its vocabulary, so under per-scope
-// vocabularies dimension `i` denotes a different term in each scope and
-// one query vector cannot be compared across scopes. `RetrievalPipeline`
-// therefore embeds the query ONCE PER AUTHORISED SCOPE and merges, gated
-// on the `IScopedEmbeddingProviderFactory` capability probe — so the N
-// embeds land only on this in-process dev provider, and every stateless
+// **Cross-scope retrieval — resolved (Option 1).** `RetrievalPipeline`
+// embeds the query ONCE PER AUTHORISED SCOPE and merges, gated on the
+// `IScopedEmbeddingProviderFactory` capability probe — so the N embeds
+// land only on this in-process dev provider, and every stateless
 // production embedder keeps exactly one query vector on a byte-identical
 // path. The family below implements that capability (and
 // `IEmbeddingProvider`, so it composes directly into
 // `RAGServerApp.create`).
+//
+// The ORIGINAL motivation for that design was sharper than it is now:
+// under ranked vocabularies dimension `i` denoted a different term in
+// each scope, so one query vector could not be compared across scopes at
+// all. Under feature hashing the coordinate MEANING is shared — a term
+// occupies the same slot everywhere — and what still differs per scope is
+// the IDF weighting. So the pipeline's per-scope embed has gone from
+// repairing incomparable geometry to applying each scope's own
+// weighting: less dramatic, still correct, and still what the pipeline
+// does. Nothing here is removed on the strength of that: the capability
+// is also what keeps a metered production embedder off the N-embed path,
+// which was never about geometry.
 
 /// Tokenise a string into lower-cased words, stripping punctuation.
 let private tokenise (text: string) =
@@ -245,6 +300,54 @@ let private stopWords =
 
 let private dimensions = 512
 
+// ─── Feature hashing — the fixed term → dimension assignment ─────
+//
+// The hash MUST be deterministic across processes and machines and
+// independent of culture, because a chunk indexed by one process is
+// queried by another and the two must agree on what dimension `i`
+// denotes. `String.GetHashCode` satisfies neither: .NET randomises it
+// per process by default, so it would reproduce the exact bug this
+// replaces — worse, invisibly, since a single-process test would pass.
+//
+// FNV-1a (64-bit) over the term's UTF-8 bytes, finished with
+// MurmurHash3's `fmix64` avalanche step. The finaliser is load-bearing:
+// FNV-1a's LOW bits are its weak ones (each `hash * prime` step
+// propagates low → high only), and `dimensions` is a power of two, so
+// taking the remainder reads exactly those weak bits. `fmix64` mixes
+// every bit into every other, after which the low bits used for the slot
+// and the top bit used for the sign are effectively independent.
+
+let private termHash (term: string) : uint64 =
+    let bytes = Encoding.UTF8.GetBytes term
+    let mutable h = 14695981039346656037UL // FNV-1a 64-bit offset basis
+
+    for b in bytes do
+        h <- (h ^^^ uint64 b) * 1099511628211UL // FNV prime
+
+    // MurmurHash3 fmix64
+    h <- h ^^^ (h >>> 33)
+    h <- h * 0xFF51AFD7ED558CCDUL
+    h <- h ^^^ (h >>> 33)
+    h <- h * 0xC4CEB9FE1A85EC53UL
+    h <- h ^^^ (h >>> 33)
+    h
+
+/// The slot a term occupies, and the sign its weight carries there.
+///
+/// Signed hashing (Weinberger et al.) is the standard mitigation for the
+/// one cost hashing has over a ranked vocabulary: two distinct terms can
+/// share a slot. With every weight positive, collisions would only ever
+/// ADD, inflating every pairwise similarity in one direction; with the
+/// sign drawn from an independent bit of the same avalanched hash, a
+/// collision's contribution cancels in expectation instead. It is
+/// deterministic and symmetric, so the index and query sides still agree
+/// exactly — which is the whole property this function exists to hold.
+let private featureSlot (term: string) : int * float =
+    let h = termHash term
+    let slot = int (h % uint64 dimensions)
+    let sign = if h &&& 0x8000000000000000UL = 0UL then 1.0 else -1.0
+    slot, sign
+
 // ─── Persistence shape ───────────────────────────────────────────
 
 [<Literal>]
@@ -253,9 +356,19 @@ let private platformContainer = "_platform"
 [<Literal>]
 let private stateBlobName = "embeddings/_local-tfidf-state.json"
 
-/// Model id reported by the unscoped (global-vocabulary) providers.
+/// Model id reported by the unscoped (single shared vocabulary)
+/// providers.
+///
+/// **The version digit names the embedding FUNCTION, and both halves of
+/// it move.** `v1` was the unscoped ranked-vocabulary embedder and `v2`
+/// the scope-keyed one; feature hashing (see the header) is a genuinely
+/// different function on both, so they advance together to `v3` / `v4`
+/// rather than one of them reusing a retired literal. A chunk carrying
+/// `v1` or `v2` in its `_embedModel` metadata is therefore re-embedded
+/// once by `ReembeddingService` — the automatic recovery for vectors
+/// written in a vocabulary that no longer exists.
 [<Literal>]
-let GlobalModelId = "local-tfidf-v1"
+let GlobalModelId = "local-tfidf-v3"
 
 /// Model-id FAMILY prefix for the scope-keyed providers. Distinct from
 /// `GlobalModelId` because a per-scope vocabulary is a different
@@ -264,7 +377,7 @@ let GlobalModelId = "local-tfidf-v1"
 /// reports this bare value: each reports `scopedModelIdFor` its own
 /// scope (see below).
 [<Literal>]
-let ScopedModelId = "local-tfidf-v2"
+let ScopedModelId = "local-tfidf-v4"
 
 /// Canonical, blob-path-safe key for a `VectorScope`.
 module ScopeKey =
@@ -351,8 +464,10 @@ let private serializeState (docCount: int) (df: ConcurrentDictionary<string, int
     // Ordered so re-serialising an unchanged state is byte-identical —
     // a blob that churns on every flush is indistinguishable from one
     // recording a real change when a reader diffs storage. `ToArray()`
-    // is the atomic-snapshot read (see the vocab-rebuild note below for
-    // why iterating the dictionary directly is not).
+    // is the atomic-snapshot read: iterating a ConcurrentDictionary
+    // directly routes through `ICollection.CopyTo`, which sizes the
+    // destination from `df.Count` at one moment and then copies, so a
+    // concurrent `AddOrUpdate` between the two overflows it and throws.
     for kv in df.ToArray() |> Array.sortBy _.Key do
         writer.WriteNumber(kv.Key, kv.Value)
 
@@ -410,13 +525,15 @@ type private LocalEmbeddingProviderImpl
     // as a volatile int elsewhere — stale reads at most underestimate IDF
     // by one document which is tolerable for an approximate dev provider.
     let mutable docCount = 0
-    // stable vocabulary snapshot. Replaced wholesale under `stateLock`; read
-    // lock-free — consumers capture the reference once per embedding call.
-    let mutable vocab: string array = [||]
     let stateLock = obj ()
 
     // Hydrate from persisted state if any. Runs once at construction;
     // safe because no other thread can see the instance yet.
+    //
+    // There is nothing to recompute afterwards: dimension assignment is a
+    // function of the term, so a hydrated provider and a freshly fed one
+    // holding the same `df` produce the same geometry with no derived
+    // snapshot to rebuild.
     do
         match initial with
         | None -> ()
@@ -425,21 +542,6 @@ type private LocalEmbeddingProviderImpl
 
             for kv in loadedDf do
                 df[kv.Key] <- kv.Value
-
-            // Recompute vocab from the loaded df so the first embed call
-            // doesn't trip an empty vocab. The `kv.Key` secondary sort key
-            // is load-bearing: `df.ToArray()` enumerates a
-            // ConcurrentDictionary in unspecified order and most terms tie
-            // at df=1, so a score-only sort would assign vocab dimensions
-            // (and pick the 512-cap survivors) non-deterministically —
-            // every embedding's geometry would then drift run-to-run.
-            let snapshot = df.ToArray()
-
-            vocab <-
-                snapshot
-                |> Array.sortBy (fun (kv: System.Collections.Generic.KeyValuePair<string, int>) -> -kv.Value, kv.Key)
-                |> Array.map _.Key
-                |> Array.truncate dimensions
 
     /// Persist current state synchronously inside the caller's lock.
     /// Local-disk writes through LocalFileStorage are sub-millisecond;
@@ -458,21 +560,17 @@ type private LocalEmbeddingProviderImpl
             with _ ->
                 ()
 
-    // Serialises the read-modify-write on `docCount` and the vocab rebuild.
+    // Serialises the read-modify-write on `docCount` and the persist.
     // `df` itself is a ConcurrentDictionary and already atomic per key, but
-    // the increment of `docCount` and the vocab recomputation must appear
-    // consistent to concurrent embedders.
+    // the increment of `docCount` and the snapshot handed to the persister
+    // must appear consistent to concurrent embedders.
     //
-    // Concurrency-safety note on the vocab rebuild: `df.ToArray()` returns
-    // an atomic snapshot of the dictionary (internal locking inside
-    // ConcurrentDictionary). Iterating `df` directly via `Seq.toArray` /
-    // `Seq.sortByDescending` would route through `ICollection.CopyTo`,
-    // which sizes the destination from `df.Count` at one moment and then
-    // copies — a concurrent `AddOrUpdate` from another embedder between
-    // sizing and copying overflows the destination and throws
-    // `ArgumentException`. Surfaced under the parallel reembed pressure
-    // from `ReembeddingService.scanScope`'s `Async.Start(processOne ...)`
-    // fan-out (one Async per chunk in a scope).
+    // (Before feature hashing this lock also guarded a vocabulary rebuild
+    // that sorted a `df.ToArray()` snapshot on every call. That rebuild is
+    // gone with the vocabulary — the assignment it produced is what this
+    // change replaced — and with it the `ICollection.CopyTo` hazard the
+    // snapshot form existed to dodge under `ReembeddingService.scanScope`'s
+    // per-chunk `Async.Start` fan-out.)
     let updateDF (terms: string array) =
         let distinct = terms |> Array.distinct
 
@@ -481,18 +579,6 @@ type private LocalEmbeddingProviderImpl
 
         lock stateLock (fun () ->
             docCount <- docCount + 1
-
-            let dfSnapshot = df.ToArray()
-
-            // `kv.Key` secondary key makes the vocab a deterministic
-            // function of the df snapshot regardless of ToArray() order —
-            // see the hydrate site for why the df=1 tie block matters.
-            vocab <-
-                dfSnapshot
-                |> Array.sortBy (fun (kv: System.Collections.Generic.KeyValuePair<string, int>) -> -kv.Value, kv.Key)
-                |> Array.map _.Key
-                |> Array.truncate dimensions
-
             persistLocked ())
 
     let embed (text: string) =
@@ -508,19 +594,22 @@ type private LocalEmbeddingProviderImpl
         // Update IDF state with the new document
         updateDF (tf.Keys |> Seq.toArray)
 
-        let currentVocab = vocab
-        let vec = Array.zeroCreate<float32> (min dimensions currentVocab.Length)
+        // Always the full declared dimensionality. The pre-hashing form
+        // sized this by the vocabulary, so an early call returned a vector
+        // SHORTER than `Dimensions` advertised — a second way the same
+        // corpus could yield incomparable vectors.
+        let vec = Array.zeroCreate<float32> dimensions
         let total = float terms.Length |> max 1.0
+        let docs = docCount
 
-        for i in 0 .. vec.Length - 1 do
-            let term = currentVocab[i]
-
-            match tf.TryGetValue term with
-            | true, count ->
-                let tfScore = float count / total
-                let idf = Math.Log(float (docCount + 1) / float (df.GetOrAdd(term, 1) + 1) + 1.0)
-                vec[i] <- float32 (tfScore * idf)
-            | _ -> ()
+        for kv in tf do
+            let term = kv.Key
+            let tfScore = float kv.Value / total
+            let idf = Math.Log(float (docs + 1) / float (df.GetOrAdd(term, 1) + 1) + 1.0)
+            let slot, sign = featureSlot term
+            // `+`, not `=`: two terms may hash to one slot, and a collision
+            // must accumulate rather than let the last term written win.
+            vec[slot] <- vec[slot] + float32 (sign * tfScore * idf)
 
         // Normalise
         let mag = vec |> Array.sumBy (fun x -> x * x) |> sqrt
@@ -540,13 +629,15 @@ type private LocalEmbeddingProviderImpl
         // sparse space). `ReembeddingService` keys re-indexing on
         // `EmbeddingVersion` mismatch — a stable ModelId means restarts
         // do not trigger reembed passes, eliminating the 20–60s cold-start
-        // tax. Bump the version literal here on a real algorithm change
-        // (different normalisation, different vocab cap, different
-        // tokeniser) so existing chunks get re-indexed once.
+        // tax. Bump the version literal (in `GlobalModelId` /
+        // `ScopedModelId`) on a real algorithm change — different
+        // normalisation, different dimension assignment, different
+        // tokeniser — so existing chunks get re-indexed once. Feature
+        // hashing was exactly such a change, and both literals moved.
         //
         // Phase 14z: supplied by the factory rather than hard-coded —
         // `GlobalModelId` for the unscoped providers, `ScopedModelId`
-        // for a scope-keyed one, because a per-scope vocabulary IS a
+        // for a scope-keyed one, because a per-scope IDF state IS a
         // different embedding function. Constant for the instance's
         // lifetime either way, as the interface requires.
         member _.ModelId = modelId

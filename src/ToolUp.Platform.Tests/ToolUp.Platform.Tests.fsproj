@@ -1835,6 +1835,16 @@
              reset / persistence paths and the GP 11 pin that the
              unscoped factories still carry one global vocabulary. -->
         <Compile Include="InProcess\LocalEmbeddingScopeTests.fs" />
+        <!-- Feature-hashed dimension assignment in LocalEmbeddingProvider.
+             The ranked vocabulary it replaced was rebuilt on every embed
+             while indexed chunks were never re-embedded, so a chunk went
+             stale in its own coordinate space and retrieval returned
+             confidently ranked nonsense. Asserted on the SUPPORT (which
+             dimensions carry weight) rather than the vector, because IDF
+             weighting is still adaptive by design — with a control case
+             pinning that the weights do move, so the assignment case
+             cannot pass by the embedder having been frozen. -->
+        <Compile Include="InProcess\LocalEmbeddingHashingTests.fs" />
         <!-- Phase 500 — the Tesseract IOcrProvider companion AND the
              "OCR unavailable" signal in the KnowledgeBase extractor.
              Structural arm always on (composition detection, the

@@ -309,6 +309,14 @@ let allTests =
         LocalEmbeddingScopeTests.capabilityProbeTests
         LocalEmbeddingScopeTests.cacheKeyingTests
         LocalEmbeddingScopeTests.crossScopeRetrievalTests
+        // Feature-hashed dimension assignment: a term's slot is a
+        // function of the term, so a growing corpus can no longer move a
+        // previously-indexed chunk into a coordinate space its query
+        // does not share. The "weights DO still move" case is the
+        // control that stops the assignment case passing on a frozen
+        // embedder.
+        LocalEmbeddingHashingTests.dimensionAssignmentTests
+        LocalEmbeddingHashingTests.spaceAlignmentTests
         // Phase 500 — the Tesseract IOcrProvider companion and the
         // "OCR unavailable" ingestion signal. Structural arm always on;
         // native arm Pending unless TOOLUP_TESSDATA is set.
