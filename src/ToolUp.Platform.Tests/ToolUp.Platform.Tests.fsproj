@@ -661,6 +661,11 @@
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <Compile Include="InProcess\LdapAuthProviderTests.fs" />
+        <!-- Phase 530 — SCIM 2.0 provisioning conformance pack: recorded
+             Entra ID + Okta lifecycle sequences replayed against the real
+             TeamStore, plus the bearer gate, scope isolation, and the
+             wire model. No live IdP. -->
+        <Compile Include="InProcess\ScimProvisioningTests.fs" />
         <Compile Include="InProcess\PasskeyAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
@@ -725,6 +730,10 @@
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
         <Compile Include="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />
+        <!-- Phase 337 — signed anonymous-session binding: the scope-selection
+             leg Phase 135 left open. After AnonymousSessionMigrationTests
+             (same substrate); no ordering dependency of its own. -->
+        <Compile Include="InProcess\AnonymousSessionBindingTests.fs" />
         <Compile Include="InProcess\StoreIdSanitisingTests.fs" />
         <Compile Include="InProcess\SecureByDefaultValidatorTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
@@ -1039,6 +1048,8 @@
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
+        <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->
+        <Compile Include="InProcess\QueryRewriteComposeTests.fs" />
         <!-- Phase 559 — the query_facts AI tool (disclosure-gated fact reads). -->
         <Compile Include="InProcess\FactQueryToolTests.fs" />
         <!-- Phase 703 — the query_metric_population AI tool: the bounded
@@ -1428,6 +1439,16 @@
              the attest seam (provider-absent + stub ledger), and the
              closure digest bound into the sealed record. -->
         <Compile Include="InProcess\BuildTranscriptTests.fs" />
+        <!-- Phase 712 — the upstream work provenance seam: the read-only
+             shape pin, the bounded walk (an over-cap request, an over-cap
+             answer and a source that answers above its own declared cap all
+             refused typed — and the same walk under a roomier cap returning
+             everything, so the refusal is a refusal), withheld vs absent, an
+             unknown kind crossing intact, every unattested reason recorded,
+             and an uncomposed deployment's canonical bytes untouched. After
+             BuildTranscriptTests, whose StubSealer it reuses rather than
+             duplicating. -->
+        <Compile Include="InProcess\WorkProvenanceSourceTests.fs" />
         <!-- Phase 717 — the dependency SBOM projected from the recorded
              closure: both documents validated against the format's own
              published schema (vendored under fixtures/sbom-schemas, so
@@ -1999,6 +2020,10 @@
              validator, all exercised via an in-memory fake directory (no
              live LDAP server needed). -->
         <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" />
+        <!-- Phase 530 — SCIM 2.0 inbound-provisioning companion. The
+             conformance pack replays recorded Entra ID / Okta request
+             sequences against the shipped TeamStore. -->
+        <ProjectReference Include="..\AuthProviders\Scim\Scim.fsproj" />
         <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
         <!-- Phase 564 — Reporting Server (the disclosure export door in ReportApiHandler). -->

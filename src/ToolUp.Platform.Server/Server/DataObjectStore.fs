@@ -453,10 +453,15 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             |> List.filter (fun o -> releasedHashes.Contains o.ContentHash || o.LastModified <= cutoff)
             |> List.map _.BlobName
 
+        // Capped at the same `metadataReadParallelism` every other
+        // fan-out in this file uses, and for the same reason: an `Erase`
+        // over a populous scope is the case that reaches this path, and
+        // an uncapped fan-out there saturates the thread pool and stalls
+        // unrelated requests. This delete leg was the one exception.
         let! _ =
             toDelete
             |> List.map (fun name -> blobStorage.Delete(container, name))
-            |> Async.Parallel
+            |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
 
         return toDelete.Length
     }

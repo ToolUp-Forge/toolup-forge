@@ -80,14 +80,30 @@ Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingPro
 
 ## Caching layer
 
-The SDK auto-wraps any registered `IEmbeddingProvider` with `CachingEmbeddingProvider` — LRU cache, keys are `(ProviderId, ModelId, Dimensions, SHA256(text))`:
+The SDK auto-wraps any registered `IEmbeddingProvider` with `CachingEmbeddingProvider` — LRU cache, keyed by an `EmbeddingCacheKey`: the `(ProviderId, ModelId, Dimensions)` `EmbeddingVersion` plus `SHA256(text)`.
 
 ```fsharp
+open ToolUp.Platform.IEmbeddingProvider
+
+type EmbeddingCacheKey = {
+    Version: EmbeddingVersion
+    /// Hex-encoded hash of the source text — never the raw text.
+    TextHash: string
+}
+
 type IEmbeddingCache =
-    abstract TryGet: providerId: string -> modelId: string -> dimensions: int -> textHash: string -> float32[] option
-    abstract Set: providerId: string -> modelId: string -> dimensions: int -> textHash: string -> float32[] -> unit
-    abstract HitRate: float
+    abstract TryGet: key: EmbeddingCacheKey -> Async<float32 array option>
+    abstract Set: key: EmbeddingCacheKey -> embedding: float32 array -> Async<unit>
+    /// Approximate lifetime hit rate of this instance, in `[0, 1]`.
+    abstract HitRate: unit -> Async<float>
+    /// DSR flush. The key is a content hash, so per-subject invalidation
+    /// is impossible by construction; a full flush is the privacy-correct
+    /// response and is always safe — the cache is a pure recomputation
+    /// optimisation.
+    abstract Clear: unit -> Async<unit>
 ```
+
+Every member is `Async` (portability rule 2), so a companion may be backed by a network store without a blocking boundary. `Clear` is not optional: the DSR erasure flow calls it after erasing the source chunks so a stale embedding of erased content cannot be served from cache.
 
 Default `InMemoryEmbeddingCache` has capacity 10000. Cache keys are SHA256-hashed — raw text never lands in keys.
 

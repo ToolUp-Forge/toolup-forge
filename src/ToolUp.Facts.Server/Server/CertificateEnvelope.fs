@@ -385,3 +385,83 @@ let verifyAndReadAttestedJson
 /// inherits rather than re-establishes it.
 let attestedSealedBytes (certificate: AttestedGroundingCertificate) : byte[] =
     GroundingCertificate.canonicalBytes certificate.Body
+
+// ─── Routing between the two projections (Phase 710) ────────────────────
+//
+// Two projections now publish over one subject, and a reader that holds
+// both readers has to decide which to run. The decision is made HERE, on
+// the `predicateType` the document declares, and the shape of that decision
+// is as load-bearing as the readers themselves:
+//
+//   * **The document nominates nothing.** A caller does not say which
+//     projection to expect, so a peer cannot steer a reader by asserting a
+//     shape beside its document. What the caller supplies is a key; what
+//     the document supplies is a claim about its own shape, and every route
+//     re-establishes that claim INSIDE the signed bytes before anything is
+//     believed.
+//   * **There is no try-one-then-the-other.** A fallback reader produces a
+//     verdict naming whichever attempt happened to run second, which is a
+//     lie about what was checked: a holder told "predicate type mismatch,
+//     expected the attested type" would conclude their document was the
+//     wrong shape when in fact it was the right shape with a bad signature.
+//     One document, one route, one verdict.
+//   * **A third shape is refused as a third shape**, not as a mismatch
+//     against whichever of the two was tried. `UnknownProjection` carries
+//     the type it read, so an operator holding a statement from some other
+//     tool is told what they are holding rather than what they are not.
+//
+// **Reading a field out of the UNVERIFIED payload is safe here, and only
+// because of what follows it.** The surrounding discipline is that a
+// document never nominates how it is checked, and this reads a document's
+// own claim before any signature has been established — so it is worth
+// saying exactly why that is not a hole. Routing chooses which
+// `EnvelopeExpectation` is applied; every route then verifies the signature
+// over the PAE FIRST and re-checks the predicate type against that
+// expectation inside the signed statement. A document that lies about its
+// own predicate type is therefore routed to a reader that refuses it. The
+// worst a liar achieves is being refused with one verdict rather than
+// another, and every route is fail-closed.
+
+/// Which of the two published projections a document declares itself to
+/// be — read from its own statement, and believed only to the extent of
+/// choosing which fail-closed reader runs.
+type DeclaredProjection =
+    /// The direct projection (`PredicateType`) — a certificate sealed with
+    /// a detached JWS, carrying no attestation level.
+    | DirectProjection
+    /// The attested projection (`AttestedPredicateType`) — the same body
+    /// sealed through the application signing seam, with the attestation
+    /// level bound into the signed bytes.
+    | AttestedProjection
+    /// Neither: a statement of some other shape entirely. Names the type it
+    /// declared, because "this is not a certificate I publish a reader for"
+    /// and "this is the wrong one of my two" are different facts.
+    | UnknownProjection of predicateType: string
+
+/// The projection a DSSE document declares. `EnvelopeMalformed` when the
+/// document cannot be read far enough to have declared anything at all —
+/// never a pass, and never a guess at which projection was meant.
+let declaredProjection (json: string) : Result<DeclaredProjection, EnvelopeVerdict> =
+    match DsseEnvelope.parse json with
+    | Error e -> Error(EnvelopeMalformed e)
+    | Ok envelope ->
+        match DsseEnvelope.readStatement envelope with
+        | Error verdict -> Error verdict
+        | Ok statement ->
+            if statement.PredicateType = PredicateType then
+                Ok DirectProjection
+            elif statement.PredicateType = AttestedPredicateType then
+                Ok AttestedProjection
+            else
+                Ok(UnknownProjection statement.PredicateType)
+
+/// The holder's expectation for a declared projection — the second,
+/// crypto-free self-consistency check a reader applies once the signature
+/// is established. Kept beside the routing so the two cannot drift: a leg
+/// added here without its expectation would check the wrong predicate type
+/// against the signed statement.
+let expectationFor (projection: DeclaredProjection) (expectedRoot: string option) : EnvelopeExpectation option =
+    match projection with
+    | DirectProjection -> Some(expectation expectedRoot)
+    | AttestedProjection -> Some(attestedExpectation expectedRoot)
+    | UnknownProjection _ -> None

@@ -28,11 +28,12 @@ open ToolUp.Platform
 // `StorageScope` on `HttpContext.Items`.
 //
 // **Trigger semantics (design §3.7, six steps).**
-//   1. Read the inbound `X-User-Id` header. For a browser that
-//      previously held an anonymous session this still carries the
-//      anonymous session id alongside the authenticated `Authorization:
-//      Bearer` credential (the client keeps the pre-sign-in session id
-//      in the fallback header until migration completes).
+//   1. Recover the anonymous session id from the sealed binding cookie
+//      (Phase 337 — was the `X-User-Id` header through Phase 135). A
+//      browser that previously held an anonymous session still presents
+//      that cookie alongside its new `Authorization: Bearer` credential,
+//      so the pre-sign-in session is identified by a value this server
+//      issued rather than one the client asserts.
 //   2. Resolve the authenticated target user id from the stashed
 //      `Subject` (`AuthenticatedUser uid` / `TeamMember(uid, _)` only —
 //      `AnonymousSession` and `ClaimBearer` are not migration targets).
@@ -128,10 +129,15 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
             let path = ctx.Request.Path
             let isApi = path.StartsWithSegments(PathString "/api")
 
-            let inboundSessionId =
-                match ctx.Request.Headers.TryGetValue "X-User-Id" with
-                | true, values when values.Count > 0 -> Some(string values[0])
-                | _ -> None
+            // Phase 337 — the anonymous session id comes from the sealed
+            // binding cookie, never from the self-asserted `X-User-Id`
+            // header. Phase 135 read the header and then re-checked the
+            // binding, which was equivalent in effect but left a raw
+            // request field on the path into the migrator; reading the
+            // seal directly means there is no unverified value to check.
+            // `Unprotect` authenticates before the payload is read, so a
+            // `Some` here is server-issued by construction.
+            let inboundSessionId = AnonymousSessionBinding.boundSessionId ctx
 
             let subjectOpt =
                 match ctx.Items.TryGetValue SubjectItemsKey with
@@ -140,40 +146,28 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
 
             let targetIdOpt = subjectOpt |> Option.bind migrationTargetId
 
-            // Phase 135 — a real (non-NoOp) migrator wired? The browser
-            // binding + migration only matter then; default NoOp
-            // deployments stay byte-for-byte unchanged (no binding cookie,
-            // no migration). GP 11 / GP 13.
-            let realMigrator =
-                match ctx.RequestServices.GetService(typeof<IAnonymousSessionMigrator>) with
-                | :? NoOpAnonymousSessionMigrator -> false
-                | :? IAnonymousSessionMigrator -> true
-                | _ -> false
+            // Phase 135 minted the binding here, for whatever session id
+            // an anonymous request asserted, and only when a real migrator
+            // was composed. Phase 337 removed both halves: the id is now
+            // SERVER-ISSUED rather than merely bound (trust-on-first-use
+            // binds an attacker to the victim's id, which is why the
+            // scope-selection leg stayed open), and
+            // `ScopeResolutionMiddleware` — which runs earlier and knows
+            // the resolved subject — owns the mint for every anonymous
+            // subject, not only the migrating ones.
 
-            // Phase 135 — on an anonymous `/api/*` request, establish the
-            // server-issued, HttpOnly, DataProtection-sealed binding for
-            // this session id. A later authenticated request MUST present
-            // this binding (a browser-bound proof of ownership) to migrate
-            // — the self-asserted, non-secret `X-User-Id` is never trusted
-            // on its own.
-            match isApi, inboundSessionId, subjectOpt with
-            | true, Some sid, Some(AnonymousSession _) when realMigrator ->
-                if not (AnonymousSessionBinding.isBoundTo ctx sid) then
-                    match AnonymousSessionBinding.mint ctx sid with
-                    | Some token -> AnonymousSessionBinding.setCookie ctx token
-                    | None -> ()
-            | _ -> ()
-
-            // Trigger preconditions: an `/api/*` request, an inbound
-            // anonymous session id, an authenticated migration target, the
-            // session id must differ from the user id (otherwise the
-            // `X-User-Id` *is* the auth identity — no separate anonymous
-            // session exists, as under `HeaderAuthProvider`), AND
-            // (Phase 135) the HttpOnly binding cookie must cryptographically
-            // prove this browser owned the anonymous session — defeating an
-            // attacker who replays a victim's (non-secret) session id.
+            // Trigger preconditions: an `/api/*` request, a server-issued
+            // anonymous session id recovered from the seal, an
+            // authenticated migration target, and a session id differing
+            // from the user id (otherwise `X-User-Id` *is* the auth
+            // identity — no separate anonymous session exists, as under
+            // `HeaderAuthProvider`). The ownership proof that Phase 135
+            // added as a separate `isBoundTo` check is now structural:
+            // `inboundSessionId` cannot hold a value this server did not
+            // seal, so an attacker replaying a victim's (non-secret)
+            // session id has nothing to replay it into.
             match isApi, inboundSessionId, targetIdOpt with
-            | true, Some sid, Some uid when sid <> uid && AnonymousSessionBinding.isBoundTo ctx sid ->
+            | true, Some sid, Some uid when sid <> uid ->
                 match ctx.RequestServices.GetService(typeof<IMemoryCache>) with
                 | :? IMemoryCache as cache ->
                     let lastSeenKey = LastSeenKeyPrefix + uid

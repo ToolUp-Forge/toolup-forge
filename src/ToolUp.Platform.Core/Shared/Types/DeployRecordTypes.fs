@@ -292,3 +292,98 @@ module DeployRecord =
         record with
             Provenance = DeployProvenance.coerce record.Provenance
     }
+
+// ─── The upstream work half, as an optional structured companion ─────
+//
+// `DeployProvenance.UpstreamProvenanceDigest` is an opaque digest: a
+// deployment may fill it, the platform stores it, seals it and reports
+// it verbatim, and never interprets it. That slot is authoritative and
+// is not changed here — nothing below rewrites it, widens it, or adds a
+// second one.
+//
+// What it cannot do is answer WHICH upstream work stands behind the
+// sources, because a digest can be compared and cannot be traversed. The
+// companion below is the structured half of that answer: a reference to
+// the head upstream work record (walkable through the work provenance
+// seam), or the honest reason there is none.
+//
+// **A companion, not a widening — for the reason this file already
+// records.** Three more fields on `DeployRecord` would retype its
+// constructor and break every consumer that builds one literally, for
+// the benefit of consumers that fill them — and on the day this shipped,
+// that was none of them. As a separate record that EMBEDS the deploy
+// record, the sealed type is untouched, an existing consumer keeps
+// compiling, and an existing deployment keeps producing byte-for-byte
+// identical canonical bytes and therefore byte-for-byte identical seals
+// (GP 11 / GP 13).
+//
+// **The companion is NOT inside the seal, and says so.** It is derived
+// after the fact by asking a source system a question, so it is a
+// reading of the record rather than part of it. `UpstreamReference`
+// echoes the slot the reading was taken against precisely so a reader
+// can confirm the companion describes THIS record — a cross-check
+// against the authoritative digest, never a substitute for it.
+
+/// The structured upstream-work companion to a deploy record.
+///
+/// Purely additive: a deployment that never asks produces
+/// `DeployWorkAttestation.none`, which records the honest reason
+/// (`SourceAbsent`) rather than a blank that could be mistaken for
+/// "asked, and clean".
+type DeployWorkAttestation = {
+    /// Schema version of the companion shape.
+    SchemaVersion: int
+    /// Echo of the deploy record's opaque upstream-provenance slot as it
+    /// stood when this reading was taken. The slot stays authoritative;
+    /// this is how a reader confirms the companion belongs to the record
+    /// in front of it, and nothing here parses the value.
+    UpstreamReference: string option
+    /// The head upstream work record, or the reason there is none.
+    /// Never silent.
+    Head: WorkAttestation
+    /// The source system consulted, as it named itself. `""` when none
+    /// was consulted.
+    SourceSystem: string
+}
+
+/// A deploy record together with its upstream-work reading. What a
+/// reader is handed when it wants both halves; the sealed record inside
+/// is unchanged and verifies exactly as it did before.
+type WorkAttestedDeployRecord = {
+    Record: DeployRecord
+    Work: DeployWorkAttestation
+}
+
+[<RequireQualifiedAccess>]
+module DeployWorkAttestation =
+
+    /// Schema version this build of the substrate emits.
+    [<Literal>]
+    let SchemaVersion = 1
+
+    /// The identity value: nothing asked, and it says so. What a
+    /// deployment that composes no work provenance source contributes,
+    /// so "no reading" is not a special case anyone has to handle
+    /// (GP 11).
+    let none: DeployWorkAttestation = {
+        SchemaVersion = SchemaVersion
+        UpstreamReference = None
+        Head = WorkAttestation.Unattested WorkUnattestedReason.SourceAbsent
+        SourceSystem = ""
+    }
+
+    /// Whether this reading references a work record at all.
+    let isAttested (attestation: DeployWorkAttestation) : bool =
+        match attestation.Head with
+        | WorkAttestation.AttestedBy _ -> true
+        | WorkAttestation.Unattested _ -> false
+
+    /// Render the reading for an operator-facing surface, naming the
+    /// source system when one was consulted.
+    let describe (attestation: DeployWorkAttestation) : string =
+        let head = WorkAttestation.describe attestation.Head
+
+        if attestation.SourceSystem = "" then
+            head
+        else
+            $"{head} [source system: {attestation.SourceSystem}]"

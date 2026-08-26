@@ -200,8 +200,17 @@ type AuditReplicator
     // the channel and semaphores are in-process state, but the cursor
     // (which is the source of truth) lives in `IBlobStorage`. A
     // distributed companion replaces the channel with a partition-keyed
-    // durable queue and the semaphores with `IDistributedLock` (Phase 9i)
-    // without changing the interface.
+    // durable queue and the semaphores with `IDistributedLock` without
+    // changing the interface.
+    //
+    // `IDistributedLock` has since shipped, and this is deliberately
+    // still not one of its consumers. A cross-instance lease here would
+    // exclude this replicator's two writers (the live hook and the
+    // catch-up sweep) against their peers on other replicas — but the
+    // ingress channel stays in-process, so each replica replicates only
+    // the events it observed regardless. The lease is worth taking as
+    // part of the durable-queue migration that fixes the ingress, not
+    // ahead of it.
 
     let channels =
         sinks
