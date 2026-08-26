@@ -3227,6 +3227,28 @@ ToolUp.Platform.EventTopologyWireEntry..ctor(System.String, Microsoft.FSharp.Col
 ToolUp.Platform.EventTopologyWireEntry.Component : System.String { get }
 ToolUp.Platform.EventTopologyWireEntry.EmittedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.EventTopologyWireEntry.SubscribedKinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EvidenceBundleExport (class)
+ToolUp.Platform.EvidenceBundleExport.PredicateType : System.String (literal)
+ToolUp.Platform.EvidenceBundleExport.bundleFor(System.IServiceProvider, ToolUp.Platform.EvidenceChainWalkerMode, ToolUp.Platform.EvidenceChainRequest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceBundle, ToolUp.Platform.EvidenceChainError]]
+ToolUp.Platform.EvidenceBundleExport.bundleOf(System.String, System.DateTime, ToolUp.Platform.EvidenceChain) : ToolUp.Platform.EvidenceBundle
+ToolUp.Platform.EvidenceBundleExport.bundleWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BundleClaimQualifier], System.String, System.DateTime, ToolUp.Platform.EvidenceChain) : ToolUp.Platform.EvidenceBundle
+ToolUp.Platform.EvidenceBundleExport.canonicalBytes(ToolUp.Platform.EvidenceBundle) : System.Byte[]
+ToolUp.Platform.EvidenceBundleExport.digest(System.String) : System.String
+ToolUp.Platform.EvidenceBundleExport.expectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Platform.EvidenceBundleExport.export(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Platform.EvidenceBundle) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
+ToolUp.Platform.EvidenceBundleExport.notProvedFor(ToolUp.Platform.EvidenceChain) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
+ToolUp.Platform.EvidenceBundleExport.predicateJson(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleExport.readBundle(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceBundle, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Platform.EvidenceBundleExport.statementJson(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleExport.subjectFor(ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.InTotoSubject
+ToolUp.Platform.EvidenceBundleExport.verifyBundle(ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.BundleIntegrity
+ToolUp.Platform.EvidenceBundleExport.verifyCommand(System.String) : ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun
+ToolUp.Platform.EvidenceBundleExport.verifyDocument(System.String) : ToolUp.Platform.BundleIntegrity
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun (class)
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun..ctor(ToolUp.Platform.BundleIntegrity, System.String, System.Int32)
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.ExitCode : System.Int32 { get }
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.Integrity : ToolUp.Platform.BundleIntegrity { get }
+ToolUp.Platform.EvidenceBundleExport+BundleVerificationRun.Report : System.String { get }
 ToolUp.Platform.EvidenceChainSources (class)
 ToolUp.Platform.EvidenceChainSources..ctor(ToolUp.Platform.WorkProvenanceMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DependencyClosure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDeployRecordSealer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackReading, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerPositionReading, System.String]]]])
 ToolUp.Platform.EvidenceChainSources.Boot : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootVerificationReading] { get }

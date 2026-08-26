@@ -1490,6 +1490,11 @@
              and after WorkProvenanceSourceTests' subject, which answers
              its first hop. -->
         <Compile Include="InProcess\EvidenceChainWalkerTests.fs" />
+        <!-- Phase 714 — the walked chain exported as a signed, offline
+             checkable bundle. After EvidenceChainWalkerTests, whose hop
+             shapes and verdict digest it builds its fixture chains
+             from. -->
+        <Compile Include="InProcess\EvidenceBundleExportTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding
              and a drifted composition each do not — probed separately), the
