@@ -17,6 +17,8 @@
     <Compile Include="StripeBillingProviderTests.fs" />
     <!-- Phase 332 — empty/weak HMAC secret fail-closed gates (billing + peer). -->
     <Compile Include="SecretStrengthGateTests.fs" />
+    <!-- Phase 340 — per-subject epoch revocation + tier-cookie edge hardening. -->
+    <Compile Include="TierTokenRevocationTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

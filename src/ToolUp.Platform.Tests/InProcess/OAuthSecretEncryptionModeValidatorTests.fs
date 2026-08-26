@@ -14,6 +14,16 @@ open ToolUp.Platform.ConfigValidation
 // is the gap the env-var-only EncryptedSecretStoreModeValidator misses:
 // a raw store + a master key env var set passes that validator while
 // writing plaintext.
+//
+// ─── Phase 340 — the scope is no longer auth-gated ──────────────────
+//
+// Two paths that used to return a silent `Ok` now return a `Warning`:
+// a non-auth-requiring (Anonymous-surface) deployment persisting OAuth
+// credentials to a non-encrypting store, and any deployment whose
+// `AcceptPlaintextSecretsWhenAuthRequired` escape hatch is suppressing
+// the finding. The refusal path (auth-requiring, no escape hatch) and the
+// clean path (an encrypting store) are unchanged, which is the GP 11
+// promise: an already-encrypting deployment sees nothing new.
 
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
@@ -39,8 +49,26 @@ let private passthroughStore () : Secrets.ISecretStore =
 [<Tests>]
 let tests =
     testList "Phase 138 — OAuth secret-encryption mode validator" [
-        test "Anonymous mode + non-encrypting store → Ok (no auth, no refusal)" {
-            Expect.equal (validate (cfg Surfaces.anonymous false) (rawStore ())) Ok "anon path passes"
+        test "Phase 340 — Anonymous mode + non-encrypting store → Warning (caught, not refused)" {
+            // The pre-340 assertion here was `Ok`: an anonymous-surface
+            // deployment running OAuth connectors persisted plaintext
+            // refresh tokens and preflight said nothing at all. It is
+            // surfaced now, and deliberately as a Warning — the
+            // aggregator treats Warning as non-blocking, so an existing
+            // deployment upgrades, reads the finding, and still boots.
+            match validate (cfg Surfaces.anonymous false) (rawStore ()) with
+            | Warning msg ->
+                Expect.stringContains msg "Anonymous" "names the offending mode"
+                Expect.stringContains msg "plaintext" "explains the consequence"
+                Expect.stringContains msg "EncryptedSecretStore" "carries the same remediation menu as the refusal"
+            | other -> failtestf "expected Warning, got %A" other
+        }
+
+        test "Phase 340 — Anonymous mode + encrypting store → Ok (GP 11: no new noise)" {
+            Expect.equal
+                (validate (cfg Surfaces.anonymous false) (encryptingStore ()))
+                Ok
+                "an encrypting deployment is byte-for-byte unchanged, whatever its surface"
         }
 
         test "Individual mode + raw (non-encrypting) store + no escape hatch → Error" {
@@ -62,8 +90,36 @@ let tests =
             | other -> failtestf "passthrough wrapper must be caught by store inspection; got %A" other
         }
 
-        test "Team mode + raw store + escape hatch → Ok" {
-            Expect.equal (validate (cfg Surfaces.team true) (rawStore ())) Ok "escape hatch passes"
+        test "Phase 340 — Team mode + raw store + escape hatch → Warning naming the flag" {
+            // Still not refused (the informed opt-out is honoured), but no
+            // longer silent: before 340 this returned `Ok`, so a
+            // deployment holding the flag and one with a correctly
+            // encrypting store produced identical preflight output.
+            match validate (cfg Surfaces.team true) (rawStore ()) with
+            | Warning msg ->
+                Expect.stringContains
+                    msg
+                    "AcceptPlaintextSecretsWhenAuthRequired"
+                    "names the flag that suppressed the refusal"
+
+                Expect.stringContains msg "startup refusal" "says what was suppressed"
+            | other -> failtestf "expected Warning, got %A" other
+        }
+
+        test "Phase 340 — Anonymous mode + raw store + escape hatch → Warning (not a refusal either way)" {
+            match validate (cfg Surfaces.anonymous true) (rawStore ()) with
+            | Warning msg -> Expect.stringContains msg "AcceptPlaintextSecretsWhenAuthRequired" "names the flag"
+            | other -> failtestf "expected Warning, got %A" other
+        }
+
+        test "Phase 340 — escape hatch does NOT manufacture a finding on an encrypting store" {
+            // The flag is a suppression, not an assertion of risk: a
+            // deployment that sets it AND encrypts properly must stay
+            // silent, or the Warning becomes noise people learn to skip.
+            Expect.equal
+                (validate (cfg Surfaces.team true) (encryptingStore ()))
+                Ok
+                "encrypting store wins over the flag"
         }
 
         test "Validator metadata is well-formed" {
