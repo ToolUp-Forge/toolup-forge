@@ -707,6 +707,31 @@ module GiraffeUtil =
                     // (JWKS fetch, OIDC introspection, tenant lookup). Same
                     // promotion applied below to the idempotency lookup + the
                     // rate-limit evaluation.
+                    // WATCH-LIST (perf, no action) — Map lookups per request.
+                    // This is the first of the pre-flight chain's per-request
+                    // `Map.tryFind` lookups (classification here, then
+                    // validation-input type, rate limits, audit metadata) plus a
+                    // `Set` membership test. TRIGGER for revisiting — swapping
+                    // these `Map`s for `Dictionary<string, _>` — is any SDK or
+                    // consumer API record reaching roughly 30 methods. Nothing
+                    // below that is worth trading an immutable lookup for a
+                    // mutable one and its allocation.
+                    //
+                    // Re-measured 2026-07-30: the trigger is NOT met. Counting
+                    // every `type *Api = {` record across the SDK and the
+                    // consuming repos — 53 records — the true maximum is
+                    // `IFormApi` at 16 methods, then `ISchedulingApi` 15,
+                    // `TeamApi` 15, `KnowledgeApi` 13, `IPlatformTenantApi` 13.
+                    // `Map` at n = 16 is a balanced tree of depth ~4. Still about
+                    // half the trigger.
+                    //
+                    // RE-MEASURE WITH THE SAME WHOLE-ESTATE COUNT; never re-derive
+                    // the ceiling by eye. The figure this note replaced cited a
+                    // 7-field record as the largest, having sampled one repo's
+                    // module directory — less than half the real maximum, and it
+                    // went stale precisely because it was never re-checked
+                    // against the full set.
+
                     // A classification-map MISS means this method does not belong
                     // to THIS handler's API. In a multi-API `choose` the dispatch
                     // handlers are tried in order and a non-matching request must
