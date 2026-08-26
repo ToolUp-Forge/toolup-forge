@@ -181,10 +181,25 @@ module EvidenceBundleExport =
                 ContentId = digest (EvidenceBundle.canonicalForm unaddressed)
         }
 
-    /// Package a walked chain as a bundle carrying no additional
-    /// qualifiers — the shape a deployment exports today.
+    /// Package a walked chain as a bundle stating its own
+    /// enumeration-completeness verdict — the shape a deployment exports.
+    ///
+    /// **The verdict is stated on every bundle, including a `complete`
+    /// one.** A qualifier that appeared only where the walk enumerated
+    /// less than its linkage named would be a caveat nobody reads, and
+    /// its absence would be ambiguous between "this walk was complete"
+    /// and "this producer does not measure completeness" — which is the
+    /// silence the claim exists to break.
+    ///
+    /// It rides as a qualifier rather than in the chain's own canonical
+    /// form because the chain's verdict digest names the LINK SET, and
+    /// this is a statement about the enumeration behind the links. The
+    /// bundle's content id covers qualifiers, so the verdict is bound
+    /// here; and the structural verifier refuses a document whose
+    /// qualifier and chain disagree, so it cannot be swapped for a
+    /// friendlier one without re-addressing the bundle.
     let bundleOf (observer: string) (observedAt: DateTime) (chain: EvidenceChain) : EvidenceBundle =
-        bundleWith [] observer observedAt chain
+        bundleWith [ EvidenceBundle.enumerationQualifier chain.Enumeration ] observer observedAt chain
 
     /// The canonical bytes the content id addresses.
     ///

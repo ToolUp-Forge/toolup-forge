@@ -1268,6 +1268,16 @@ let allTests =
         EvidenceBundleExportTests.claimBoundaryTests
         EvidenceBundleExportTests.signedRoundTripTests
         EvidenceBundleExportTests.fixtureEmissionTests
+        // Phase 716 — the walk proves it enumerated everything its own
+        // linkage names, not merely everything it liked: the expected
+        // positions derived rather than configured, a missing interior
+        // position named, a declared bound kept distinct from an
+        // omission, and a shorter render unable to satisfy the claim.
+        EvidenceEnumerationCompletenessTests.derivationTests
+        EvidenceEnumerationCompletenessTests.missingPositionTests
+        EvidenceEnumerationCompletenessTests.boundedTests
+        EvidenceEnumerationCompletenessTests.shorterRenderTests
+        EvidenceEnumerationCompletenessTests.bundleStatementTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate

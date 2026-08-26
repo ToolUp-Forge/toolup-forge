@@ -1495,6 +1495,12 @@
              shapes and verdict digest it builds its fixture chains
              from. -->
         <Compile Include="InProcess\EvidenceBundleExportTests.fs" />
+        <!-- Phase 716 — the walk's enumeration-completeness claim: the
+             expected positions derived from the chain's own linkage, the
+             three verdicts kept three, and a shorter render unable to
+             pass. After EvidenceBundleExportTests, whose exported bundle
+             it asserts states the verdict. -->
+        <Compile Include="InProcess\EvidenceEnumerationCompletenessTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding
              and a drifted composition each do not — probed separately), the

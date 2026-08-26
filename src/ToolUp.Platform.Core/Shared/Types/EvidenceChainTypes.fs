@@ -237,6 +237,168 @@ module EvidenceChainOutcome =
         | EvidenceChainOutcome.ChainPartial -> "chain-partial"
         | EvidenceChainOutcome.ChainBroken -> "chain-broken"
 
+// ─── Phase 716 — the walk says what it enumerated, not only what it
+//                 liked ───────────────────────────────────────────────
+//
+// The hop list above proves the walk visited every STAGE. It does not
+// prove that, within a stage, the walk enumerated everything the stage's
+// own linkage named. A walk that quietly stops at the first unresolvable
+// parent ref, or whose enumeration is truncated on the way to the
+// reader, renders as a clean short list — and selective omission is then
+// indistinguishable from a genuinely short history. That is the same
+// argument the hop list makes one level down, and it needs its own
+// answer.
+//
+// ── The expected set is DERIVED, and that is the whole guarantee ──────
+//
+// The positions below are computed from the chain's own linkage — the
+// parent refs a work record carries, the entries a dependency closure
+// records, the index a ledger read reached — never from a configured
+// list and never from what the walk rendered. A configured expectation
+// could be tuned until it matched whatever was produced, at which point
+// the claim measures nothing; an expectation read back out of the render
+// is the same failure wearing a different hat. So the two halves are
+// deliberately separate functions over separate inputs: one derives what
+// must appear, the other reads what did.
+//
+// ── Three states, and the third is not a softer failure ──────────────
+//
+// A walk that stopped at a DECLARED bound is `Bounded`, never
+// `Incomplete`. The caller was told the limit before it asked — the
+// walker publishes its caps, and the enumeration cap states its own
+// truncation in the render — and a told limit is not an omission.
+// Collapsing the two would teach a reader to treat every capped walk as
+// a finding, which ends with the finding ignored. `Incomplete` is
+// reserved for the case that has no such excuse: the linkage named a
+// position, no declared bound accounts for it, and the render is silent.
+//
+// **The claim is over ENUMERATION, not over scope.** A party seeing less
+// because policy withheld it is a different subject with a different
+// answer, and it is not narrowed here; a withheld hop enumerates nothing
+// and claims nothing.
+
+/// One position the chain's own linkage says an enumeration must
+/// account for.
+///
+/// `Bound` is what makes the three-state verdict possible: a position
+/// carrying `Some limit` is one a DECLARED bound legitimately holds
+/// back, so its absence from the render reads as `Bounded`; a position
+/// carrying `None` must appear, and its absence is an omission.
+/// Attributing the bound to the position rather than tracking a separate
+/// excuse list is deliberate — an excuse that could not name which
+/// positions it covered would excuse everything.
+type EnumerationPosition = {
+    /// The hop whose enumeration this position belongs to — one of the
+    /// `*Hop` literals in `EvidenceChain`.
+    Hop: string
+    /// Stable lowercase label for what kind of position this is. Never
+    /// localised; this is what a dashboard cuts on.
+    Kind: string
+    /// The key the render must name for this position to be accounted
+    /// for: a work record id, a closure entry's id and version, a ledger
+    /// index. Derived from the linkage that named it.
+    Key: string
+    /// The declared limit that legitimately holds this position back, or
+    /// `None` where the linkage says it must be enumerated.
+    Bound: string option
+}
+
+/// One declared limit that held positions back, and how many.
+///
+/// A count rather than the positions themselves: this rides on every
+/// walk and into every exported bundle, and a cap that held back two
+/// thousand closure entries would otherwise carry two thousand lines of
+/// what it deliberately did not enumerate.
+type EnumerationBound = {
+    /// The hop whose enumeration the limit applied to.
+    Hop: string
+    /// Stable lowercase name of the declared limit.
+    Bound: string
+    /// How many positions the limit held back. Zero where the limit
+    /// refused a walk outright, since no enumeration began.
+    Unenumerated: int
+}
+
+/// Whether the walk enumerated everything its own linkage named.
+///
+/// Three cases, and the middle one exists so the third keeps its
+/// meaning — see the section header.
+[<RequireQualifiedAccess>]
+type EnumerationCompleteness =
+    /// Every position the linkage named appears in what was rendered.
+    /// Vacuously true where the linkage names nothing, which is the
+    /// honest answer for a deployment that composed nothing: an empty
+    /// enumeration is complete, and the chain's own outcome is what says
+    /// it is empty.
+    | Complete
+    /// Every position that is missing is missing because a declared
+    /// limit held it back. Not a failure and emphatically not a pass on
+    /// the missing positions — the reader is told which limit applied
+    /// and how much it covered, which is what makes the bound a bound
+    /// rather than a silence.
+    | Bounded of bounds: EnumerationBound list
+    /// The linkage named positions that no declared limit accounts for
+    /// and the render does not carry. The finding this phase exists to
+    /// make sayable.
+    | Incomplete of missing: EnumerationPosition list * reason: string
+
+[<RequireQualifiedAccess>]
+module EnumerationCompleteness =
+
+    /// Stable lowercase wire label. Never localised — this is what a
+    /// dashboard cuts on and what an exported bundle's qualifier carries.
+    let label =
+        function
+        | EnumerationCompleteness.Complete -> "complete"
+        | EnumerationCompleteness.Bounded _ -> "bounded"
+        | EnumerationCompleteness.Incomplete _ -> "incomplete"
+
+    /// `true` only for `Complete`. Provided so a caller cannot write
+    /// `<> Incomplete …` and accidentally read `Bounded` as a pass on
+    /// positions nobody enumerated.
+    let isComplete =
+        function
+        | EnumerationCompleteness.Complete -> true
+        | _ -> false
+
+    /// How many positions of a rendered `Incomplete` are named before
+    /// the description says how many more there are. The list itself is
+    /// never truncated — only this one-line rendering is, and it says so.
+    [<Literal>]
+    let DescribedMissingCap = 10
+
+    /// One-line description, so a diagnostic, a test, an exported
+    /// bundle's qualifier and an operator surface all read the same
+    /// wording.
+    let describe (completeness: EnumerationCompleteness) : string =
+        match completeness with
+        | EnumerationCompleteness.Complete ->
+            "every position this chain's own linkage names appears in the enumeration the walk rendered"
+        | EnumerationCompleteness.Bounded bounds ->
+            let described =
+                bounds
+                |> List.map (fun bound ->
+                    $"{bound.Hop} held {bound.Unenumerated} position(s) back at its declared '{bound.Bound}' limit")
+                |> String.concat "; "
+
+            $"the enumeration is bounded rather than short — {described}; a declared limit the caller was told about is not an omission"
+        | EnumerationCompleteness.Incomplete(missing, reason) ->
+            let shown =
+                missing
+                |> List.truncate DescribedMissingCap
+                |> List.map (fun position -> $"{position.Hop}/{position.Kind} {position.Key}")
+                |> String.concat ", "
+
+            let withheld = List.length missing - min (List.length missing) DescribedMissingCap
+
+            let tail =
+                if withheld > 0 then
+                    $" (and {withheld} further position(s) carried on the verdict but not listed here)"
+                else
+                    ""
+
+            $"{reason}: {shown}{tail}"
+
 /// One walked chain.
 ///
 /// `VerdictDigest` is a SHA-256 over the canonical form below, computed
@@ -254,6 +416,17 @@ type EvidenceChain = {
     Hops: EvidenceHop list
     Outcome: EvidenceChainOutcome
     VerdictDigest: string
+    /// Whether the walk enumerated everything its own linkage named.
+    ///
+    /// **Deliberately outside `VerdictDigest`.** That digest names the
+    /// LINK SET, and this is a statement ABOUT the enumeration behind
+    /// the links rather than a link — folding it in would move every
+    /// chain digest an existing reader holds, to commit to something the
+    /// hop lines do not carry. It is bound instead at the layer that has
+    /// a claim boundary to bind it to: an exported bundle states it as a
+    /// typed qualifier, which the bundle's content id covers and its
+    /// verifier cross-checks against this field.
+    Enumeration: EnumerationCompleteness
 }
 
 /// The bounds a walker declares, so a caller can size its request
@@ -588,6 +761,18 @@ module EvidenceChain =
         |> ignore
 
         sb.AppendLine(sprintf "  verdict digest: %s" chain.VerdictDigest) |> ignore
+
+        // Rendered on every chain, complete ones included, for the reason
+        // the claim boundary is: a line that appeared only on failures is
+        // a line a reader learns to expect the absence of.
+        sb.AppendLine(
+            sprintf
+                "  enumeration: %s — %s"
+                (EnumerationCompleteness.label chain.Enumeration)
+                (EnumerationCompleteness.describe chain.Enumeration)
+        )
+        |> ignore
+
         sb.AppendLine "" |> ignore
 
         for hop in chain.Hops do
@@ -605,6 +790,193 @@ module EvidenceChain =
                 sb.AppendLine(sprintf "        · %s" finding) |> ignore
 
         sb.ToString()
+
+/// Deriving what an enumeration must account for, and reading what it
+/// did.
+///
+/// **Two halves over two inputs, deliberately.** `assess` reads only the
+/// rendered hops; every producer of expected positions reads only the
+/// linkage. Nothing here can consult the render to decide what should
+/// have been rendered, which is the one way an expectation stops
+/// measuring anything.
+[<RequireQualifiedAccess>]
+module EvidenceEnumeration =
+
+    // ── Position kinds ───────────────────────────────────────────────
+    //
+    // Literals rather than a closed union, for the reason the hop ids
+    // are literals: a later phase deriving a new kind of position must
+    // not stop every consumer that matched on these from compiling.
+
+    /// A stage of the walk that the model's declared order names.
+    [<Literal>]
+    let HopKind = "hop"
+
+    /// One upstream work record a parent ref names.
+    [<Literal>]
+    let WorkAncestorKind = "work-ancestor"
+
+    /// One dependency-closure entry the closure records.
+    [<Literal>]
+    let ClosureEntryKind = "closure-entry"
+
+    /// One position in the hash-chained audit ledger.
+    [<Literal>]
+    let LedgerIndexKind = "ledger-index"
+
+    // ── Declared bounds ──────────────────────────────────────────────
+
+    /// The walk's own per-hop enumeration cap — the one that states its
+    /// truncation in the render rather than truncating silently.
+    [<Literal>]
+    let EnumerationCapBound = "declared-enumeration-cap"
+
+    /// The requested work depth: the level naming this record was
+    /// walked, the level that would resolve it was not.
+    [<Literal>]
+    let WorkDepthBound = "declared-work-depth"
+
+    /// The upstream source's own declared ancestor bound, which refused
+    /// the ancestor walk rather than trimming it.
+    [<Literal>]
+    let WorkAncestorBound = "declared-work-ancestor-bound"
+
+    /// The walker's declared closure cap, which refuses a walk rather
+    /// than reporting a trimmed closure.
+    [<Literal>]
+    let ClosureCapBound = "declared-closure-cap"
+
+    /// A position the linkage says must be enumerated.
+    let required (hop: string) (kind: string) (key: string) : EnumerationPosition = {
+        Hop = hop
+        Kind = kind
+        Key = key
+        Bound = None
+    }
+
+    /// A position a declared limit legitimately holds back.
+    let bounded (hop: string) (kind: string) (key: string) (bound: string) : EnumerationPosition = {
+        Hop = hop
+        Kind = kind
+        Key = key
+        Bound = Some bound
+    }
+
+    /// Everything one hop actually rendered: its join key, its own
+    /// account of itself, and the enumeration behind it.
+    ///
+    /// The join key is part of the surface because several hops enumerate
+    /// through it — a ledger read names its position there and nowhere
+    /// else — and a check that ignored it would report a rendered
+    /// position as missing.
+    let renderedSurface (hop: EvidenceHop) : string =
+        let parts = [
+            EvidenceLink.reference hop.Link
+            EvidenceLink.detail hop.Link
+            yield! hop.Findings
+        ]
+
+        parts |> String.concat "\n"
+
+    /// Whether a hop's render names a position's key.
+    ///
+    /// Containment rather than equality, because a rendered enumeration
+    /// line is prose about the position and not the key alone. Keys are
+    /// derived to be discriminating within their hop for exactly this
+    /// reason — a closure entry's key carries its version, so two
+    /// packages sharing a name prefix cannot account for one another.
+    let accountsFor (hop: EvidenceHop) (key: string) : bool =
+        key <> "" && (renderedSurface hop).Contains key
+
+    /// Fold the derived expectation and the rendered hops into the
+    /// verdict. Total, pure, and the only place the precedence lives:
+    ///   * any position missing with no declared bound ⇒ `Incomplete`;
+    ///   * else any position a bound held back          ⇒ `Bounded`;
+    ///   * else                                         ⇒ `Complete`.
+    ///
+    /// **`Incomplete` outranks `Bounded` and never the reverse.** A cap
+    /// that applied somewhere else in the walk is not an excuse for a
+    /// position nothing accounts for, and a fold that let one cap silence
+    /// one omission would let a deployment buy silence by declaring a
+    /// bound it never needed.
+    ///
+    /// The stage tier is checked from `EvidenceChain.order` rather than
+    /// from anything a caller supplies, so **a render carrying fewer
+    /// hops fails here whatever expectation it is handed** — including
+    /// an empty one.
+    let assess (expected: EnumerationPosition list) (hops: EvidenceHop list) : EnumerationCompleteness =
+        let byId = hops |> List.map (fun hop -> hop.Id, hop) |> Map.ofList
+
+        let missingHops =
+            EvidenceChain.order
+            |> List.filter (fun hopId -> not (byId |> Map.containsKey hopId))
+            |> List.map (fun hopId -> required hopId HopKind hopId)
+
+        let unaccounted =
+            expected
+            |> List.filter (fun position ->
+                match byId |> Map.tryFind position.Hop with
+                | None -> true
+                | Some hop -> not (accountsFor hop position.Key))
+
+        let missing =
+            missingHops
+            @ (unaccounted |> List.filter (fun position -> Option.isNone position.Bound))
+
+        if not (List.isEmpty missing) then
+            EnumerationCompleteness.Incomplete(
+                missing,
+                $"{List.length missing} position(s) this chain's own linkage names are absent from the enumeration the walk rendered, and no declared bound accounts for them"
+            )
+        else
+            let bounds =
+                unaccounted
+                |> List.choose (fun position -> position.Bound |> Option.map (fun bound -> position.Hop, bound))
+                |> List.countBy id
+                |> List.map (fun ((hop, bound), count) -> {
+                    Hop = hop
+                    Bound = bound
+                    Unenumerated = count
+                })
+                |> List.sortBy (fun bound -> bound.Hop, bound.Bound)
+
+            if List.isEmpty bounds then
+                EnumerationCompleteness.Complete
+            else
+                EnumerationCompleteness.Bounded bounds
+
+    /// The verdict for a walk that was REFUSED at a declared cap.
+    ///
+    /// **Always `Bounded`, never `Incomplete`, and that is the phase's
+    /// third state doing its work.** A refused walk enumerated nothing
+    /// and hid nothing: the caller named a request outside a bound the
+    /// walker had already published, and got a typed refusal saying so.
+    /// Reading that as an incomplete enumeration would put the one state
+    /// reserved for silent omission on the loudest possible answer.
+    ///
+    /// `Unenumerated` is the closure's own entry count where the closure
+    /// cap refused, and zero where the depth axis refused before any
+    /// enumeration began — nothing was held back from an enumeration
+    /// that never started.
+    let ofRefusal (error: EvidenceChainError) : EnumerationCompleteness =
+        match error with
+        | ChainWorkDepthInvalid _
+        | ChainWorkDepthExceedsCap _ ->
+            EnumerationCompleteness.Bounded [
+                {
+                    Hop = EvidenceChain.UpstreamWorkRecordHop
+                    Bound = WorkDepthBound
+                    Unenumerated = 0
+                }
+            ]
+        | ChainClosureExceedsCap(entries, _) ->
+            EnumerationCompleteness.Bounded [
+                {
+                    Hop = EvidenceChain.DependencyClosureHop
+                    Bound = ClosureCapBound
+                    Unenumerated = entries
+                }
+            ]
 
 // ─── Phase 714 — the walked chain as a portable, checkable bundle ─────
 //
@@ -789,6 +1161,26 @@ module EvidenceBundle =
     [<Literal>]
     let SubjectName = "evidence-chain-bundle"
 
+    /// The qualifier id under which a bundle states its chain's
+    /// enumeration-completeness verdict.
+    ///
+    /// A stable id rather than prose in the claim boundary, so a consumer
+    /// finds the verdict without string-matching a sentence — and so the
+    /// verifier below can cross-check it against the chain it qualifies.
+    [<Literal>]
+    let EnumerationQualifierId = "enumeration-completeness"
+
+    /// The qualifier a bundle carries its chain's enumeration verdict as.
+    ///
+    /// Rendered last in the canonical form, per the qualifier slot's own
+    /// contract, so a bundle stating it appends lines and moves nothing
+    /// before them.
+    let enumerationQualifier (completeness: EnumerationCompleteness) : BundleClaimQualifier = {
+        Id = EnumerationQualifierId
+        Verdict = EnumerationCompleteness.label completeness
+        Detail = EnumerationCompleteness.describe completeness
+    }
+
     /// The canonical form the content id is taken over.
     ///
     /// Five blocks in a fixed order: the framing, the nested-attestation
@@ -904,15 +1296,33 @@ module EvidenceBundle =
                 "the bundle carries no claim boundary — every bundle states what it does not prove, including one whose chain is complete, so an empty list is a stripped document rather than a clean one"
             )
         else
-            let recomputedContentId = digest (canonicalForm bundle)
+            // The enumeration verdict rides in two places — on the chain,
+            // where the walk recorded it, and on the qualifier, where the
+            // bundle states it — and only the second reaches the content
+            // id. A document whose two halves disagree is refused rather
+            // than read from whichever half a reader happened to look at.
+            let disagreeing =
+                bundle.Qualifiers
+                |> List.tryFind (fun qualifier ->
+                    qualifier.Id = EnumerationQualifierId
+                    && qualifier.Verdict <> EnumerationCompleteness.label bundle.Chain.Enumeration)
 
-            if bundle.ContentId <> recomputedContentId then
+            match disagreeing with
+            | Some qualifier ->
                 Some(
-                    "bundle/contentId",
-                    $"the bundle is addressed as '{bundle.ContentId}' and its own canonical form digests to '{recomputedContentId}'"
+                    $"bundle/qualifiers/{EnumerationQualifierId}",
+                    $"the bundle states enumeration verdict '{qualifier.Verdict}' and the chain it qualifies carries '{EnumerationCompleteness.label bundle.Chain.Enumeration}' — a document that says two things about what its walk enumerated says neither"
                 )
-            else
-                None
+            | None ->
+                let recomputedContentId = digest (canonicalForm bundle)
+
+                if bundle.ContentId <> recomputedContentId then
+                    Some(
+                        "bundle/contentId",
+                        $"the bundle is addressed as '{bundle.ContentId}' and its own canonical form digests to '{recomputedContentId}'"
+                    )
+                else
+                    None
 
     /// Verify a bundle **structurally**, using a caller-supplied digest
     /// function over the canonical form.

@@ -4363,6 +4363,37 @@ ToolUp.Platform.EntityTypes+RelationshipDirection.Tag : System.Int32 { get }
 ToolUp.Platform.EntityTypes+RelationshipDirection+Tags (class)
 ToolUp.Platform.EntityTypes+RelationshipDirection+Tags.Incoming : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+RelationshipDirection+Tags.Outgoing : System.Int32 (literal)
+ToolUp.Platform.EnumerationBound (class)
+ToolUp.Platform.EnumerationBound..ctor(System.String, System.String, System.Int32)
+ToolUp.Platform.EnumerationBound.Bound : System.String { get }
+ToolUp.Platform.EnumerationBound.Hop : System.String { get }
+ToolUp.Platform.EnumerationBound.Unenumerated : System.Int32 { get }
+ToolUp.Platform.EnumerationCompleteness (class)
+ToolUp.Platform.EnumerationCompleteness.Complete : ToolUp.Platform.EnumerationCompleteness { get }
+ToolUp.Platform.EnumerationCompleteness.IsBounded : System.Boolean { get }
+ToolUp.Platform.EnumerationCompleteness.IsComplete : System.Boolean { get }
+ToolUp.Platform.EnumerationCompleteness.IsIncomplete : System.Boolean { get }
+ToolUp.Platform.EnumerationCompleteness.Tag : System.Int32 { get }
+ToolUp.Platform.EnumerationCompleteness+Bounded (class)
+ToolUp.Platform.EnumerationCompleteness+Bounded.bounds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EnumerationBound] { get }
+ToolUp.Platform.EnumerationCompleteness+Incomplete (class)
+ToolUp.Platform.EnumerationCompleteness+Incomplete.missing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EnumerationPosition] { get }
+ToolUp.Platform.EnumerationCompleteness+Incomplete.reason : System.String { get }
+ToolUp.Platform.EnumerationCompleteness+Tags (class)
+ToolUp.Platform.EnumerationCompleteness+Tags.Bounded : System.Int32 (literal)
+ToolUp.Platform.EnumerationCompleteness+Tags.Complete : System.Int32 (literal)
+ToolUp.Platform.EnumerationCompleteness+Tags.Incomplete : System.Int32 (literal)
+ToolUp.Platform.EnumerationCompletenessModule (class)
+ToolUp.Platform.EnumerationCompletenessModule.DescribedMissingCap : System.Int32 (literal)
+ToolUp.Platform.EnumerationCompletenessModule.describe(ToolUp.Platform.EnumerationCompleteness) : System.String
+ToolUp.Platform.EnumerationCompletenessModule.isComplete(ToolUp.Platform.EnumerationCompleteness) : System.Boolean
+ToolUp.Platform.EnumerationCompletenessModule.label(ToolUp.Platform.EnumerationCompleteness) : System.String
+ToolUp.Platform.EnumerationPosition (class)
+ToolUp.Platform.EnumerationPosition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.EnumerationPosition.Bound : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EnumerationPosition.Hop : System.String { get }
+ToolUp.Platform.EnumerationPosition.Key : System.String { get }
+ToolUp.Platform.EnumerationPosition.Kind : System.String { get }
 ToolUp.Platform.EnvelopeAdmission (class)
 ToolUp.Platform.EnvelopeAdmission.EnvelopeAdmitted : ToolUp.Platform.EnvelopeAdmission { get }
 ToolUp.Platform.EnvelopeAdmission.IsEnvelopeAdmitted : System.Boolean { get }
@@ -4510,17 +4541,20 @@ ToolUp.Platform.EvidenceBundle.Qualifiers : Microsoft.FSharp.Collections.FSharpL
 ToolUp.Platform.EvidenceBundle.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.EvidenceBundleModule (class)
 ToolUp.Platform.EvidenceBundleModule.CarriedVerbatim : System.String (literal)
+ToolUp.Platform.EvidenceBundleModule.EnumerationQualifierId : System.String (literal)
 ToolUp.Platform.EvidenceBundleModule.FramingVersion : System.String (literal)
 ToolUp.Platform.EvidenceBundleModule.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.EvidenceBundleModule.StructuralPassDisclaimer : System.String (literal)
 ToolUp.Platform.EvidenceBundleModule.SubjectName : System.String (literal)
 ToolUp.Platform.EvidenceBundleModule.canonicalForm(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleModule.enumerationQualifier(ToolUp.Platform.EnumerationCompleteness) : ToolUp.Platform.BundleClaimQualifier
 ToolUp.Platform.EvidenceBundleModule.render(ToolUp.Platform.EvidenceBundle) : System.String
 ToolUp.Platform.EvidenceBundleModule.verificationReport(ToolUp.Platform.BundleIntegrity, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvidenceBundle]) : System.String
 ToolUp.Platform.EvidenceBundleModule.verifyWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.BundleIntegrity
 ToolUp.Platform.EvidenceChain (class)
-ToolUp.Platform.EvidenceChain..ctor(System.Int32, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop], ToolUp.Platform.EvidenceChainOutcome, System.String)
+ToolUp.Platform.EvidenceChain..ctor(System.Int32, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop], ToolUp.Platform.EvidenceChainOutcome, System.String, ToolUp.Platform.EnumerationCompleteness)
 ToolUp.Platform.EvidenceChain.Actor : System.String { get }
+ToolUp.Platform.EvidenceChain.Enumeration : ToolUp.Platform.EnumerationCompleteness { get }
 ToolUp.Platform.EvidenceChain.Hops : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop] { get }
 ToolUp.Platform.EvidenceChain.Outcome : ToolUp.Platform.EvidenceChainOutcome { get }
 ToolUp.Platform.EvidenceChain.SchemaVersion : System.Int32 { get }
@@ -4609,6 +4643,21 @@ ToolUp.Platform.EvidenceChainWalkedPayload.Hops : Microsoft.FSharp.Collections.F
 ToolUp.Platform.EvidenceChainWalkedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.EvidenceChainWalkedPayload.Outcome : System.String { get }
 ToolUp.Platform.EvidenceChainWalkedPayload.VerdictDigest : System.String { get }
+ToolUp.Platform.EvidenceEnumeration (class)
+ToolUp.Platform.EvidenceEnumeration.ClosureCapBound : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.ClosureEntryKind : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.EnumerationCapBound : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.HopKind : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.LedgerIndexKind : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.WorkAncestorBound : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.WorkAncestorKind : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.WorkDepthBound : System.String (literal)
+ToolUp.Platform.EvidenceEnumeration.accountsFor(ToolUp.Platform.EvidenceHop, System.String) : System.Boolean
+ToolUp.Platform.EvidenceEnumeration.assess(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EnumerationPosition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]) : ToolUp.Platform.EnumerationCompleteness
+ToolUp.Platform.EvidenceEnumeration.bounded(System.String, System.String, System.String, System.String) : ToolUp.Platform.EnumerationPosition
+ToolUp.Platform.EvidenceEnumeration.ofRefusal(ToolUp.Platform.EvidenceChainError) : ToolUp.Platform.EnumerationCompleteness
+ToolUp.Platform.EvidenceEnumeration.renderedSurface(ToolUp.Platform.EvidenceHop) : System.String
+ToolUp.Platform.EvidenceEnumeration.required(System.String, System.String, System.String) : ToolUp.Platform.EnumerationPosition
 ToolUp.Platform.EvidenceHop (class)
 ToolUp.Platform.EvidenceHop..ctor(System.String, System.String, System.Int32, ToolUp.Platform.EvidenceLink, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.EvidenceHop.Findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
