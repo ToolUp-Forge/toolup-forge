@@ -631,6 +631,11 @@
         <Compile Include="Server\UsageLog.fs" />
         <Compile Include="Server\ITeamQuotaPolicy.fs" />
         <Compile Include="Server\PerScopeKeyResolver.fs" />
+        <!-- Phase 467 — the per-source-IP failed-token throttle, lifted out
+             of EncryptionAdminHandler so the window transition is one
+             atomic step against a single clock snapshot (and testable
+             without a wall clock). Must precede its consumers. -->
+        <Compile Include="Server\TokenAttemptThrottle.fs" />
         <Compile Include="Server\EncryptionAdminHandler.fs" />
         <!-- Phase 320 — the external-compute completion-callback ingress.
              After JobScheduler.fs (which implements the

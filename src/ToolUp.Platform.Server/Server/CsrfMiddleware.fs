@@ -81,11 +81,13 @@ module Csrf =
 
         Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
 
-    let private fixedTimeEquals (a: string) (b: string) =
-        CryptographicOperations.FixedTimeEquals(
-            ReadOnlySpan(Encoding.UTF8.GetBytes a),
-            ReadOnlySpan(Encoding.UTF8.GetBytes b)
-        )
+    // Phase 467 — was a private verbatim copy of the same BCL call. It
+    // is byte-correct either way; what the copy cost was a second place
+    // the pattern could be edited (or re-derived char-wise) independently
+    // of the sanctioned one. Unified onto `JwtCrypto.fixedTimeEqualsUtf8`
+    // — no decoupling rationale applies here, since `Platform.Server`
+    // already depends on `Platform.Core` where the helper lives.
+    let private fixedTimeEquals (a: string) (b: string) = JwtCrypto.fixedTimeEqualsUtf8 a b
 
     /// Time-limited protector from the app's DataProtection key ring
     /// (persisted to `IBlobStorage` in `SDK.Server`, so the seal

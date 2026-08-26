@@ -1696,6 +1696,10 @@
              69l/69m perf packs). Test-only; no production source changed. -->
         <Compile Include="Contracts\FailClosedContract.fs" />
         <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
+        <!-- Phase 467 — byte-correct constant-time token compare (behaviour
+             + call-site source pins) and the TokenAttemptThrottle window,
+             whose transition now observes a single caller-supplied instant. -->
+        <Compile Include="InProcess\ConstantTimeCompareTests.fs" />
         <Compile Include="InProcess\ModuleLoadOutcomeTests.fs" />
         <!-- Phase 203 — hydration-parity conformance harness pack. -->
         <Compile Include="InProcess\HydrationParityTests.fs" />

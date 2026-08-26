@@ -1612,6 +1612,12 @@ let allTests =
         // closed (the inverse of the Phase 69d/69h happy-path coverage), plus
         // audit-omission observability + the PII-redaction default.
         AdversarialFailClosedTests.tests
+        // Phase 467 — constant-time token compare unified on
+        // JwtCrypto.fixedTimeEqualsUtf8 (byte-normalised behaviour + a
+        // source pin per call site, since the gates are private), and the
+        // per-IP failure window, whose expiry test and reset stamp now
+        // observe one caller-supplied instant rather than two clock reads.
+        ConstantTimeCompareTests.tests
         // Phase 169 — module-load startup observability (the addModule
         // outcome accumulator emitted through the startup logger).
         ModuleLoadOutcomeTests.tests
