@@ -966,6 +966,7 @@ let allTests =
         AssetStoreTests.tests
         MediaLibraryTests.tests
         ContentAuthoringTests.tests
+        ContentAdminAuthorizationTests.tests
         InMemoryRateLimitStoreTests.tests
         // Phase 56 — full contract pack bound to InMemoryRateLimitStore.
         // External-store companions (AzureTableStorage / Redis) bind to

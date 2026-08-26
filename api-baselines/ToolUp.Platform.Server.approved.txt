@@ -79,14 +79,17 @@ ToolUp.Platform.AIPublishAuthoriser.Tag : System.Int32 { get }
 ToolUp.Platform.AccessClassification (class)
 ToolUp.Platform.AccessClassification.AnonymousReachable : ToolUp.Platform.AccessClassification { get }
 ToolUp.Platform.AccessClassification.ExplicitRequirement : ToolUp.Platform.AccessClassification { get }
+ToolUp.Platform.AccessClassification.GatedInHandler : ToolUp.Platform.AccessClassification { get }
 ToolUp.Platform.AccessClassification.InheritedDefaultDeny : ToolUp.Platform.AccessClassification { get }
 ToolUp.Platform.AccessClassification.IsAnonymousReachable : System.Boolean { get }
 ToolUp.Platform.AccessClassification.IsExplicitRequirement : System.Boolean { get }
+ToolUp.Platform.AccessClassification.IsGatedInHandler : System.Boolean { get }
 ToolUp.Platform.AccessClassification.IsInheritedDefaultDeny : System.Boolean { get }
 ToolUp.Platform.AccessClassification.Tag : System.Int32 { get }
 ToolUp.Platform.AccessClassification+Tags (class)
 ToolUp.Platform.AccessClassification+Tags.AnonymousReachable : System.Int32 (literal)
 ToolUp.Platform.AccessClassification+Tags.ExplicitRequirement : System.Int32 (literal)
+ToolUp.Platform.AccessClassification+Tags.GatedInHandler : System.Int32 (literal)
 ToolUp.Platform.AccessClassification+Tags.InheritedDefaultDeny : System.Int32 (literal)
 ToolUp.Platform.AccessClassificationModule (class)
 ToolUp.Platform.AccessClassificationModule.label(ToolUp.Platform.AccessClassification) : System.String
@@ -477,6 +480,7 @@ ToolUp.Platform.AuthorizationSurfaceDelta.SurfacesAdded : Microsoft.FSharp.Colle
 ToolUp.Platform.AuthorizationSurfaceDelta.SurfacesRemoved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExposedSurface] { get }
 ToolUp.Platform.AuthorizationSurfaceModule (class)
 ToolUp.Platform.AuthorizationSurfaceModule.admitsAnonymous(ToolUp.Platform.SurfaceRequirement) : System.Boolean
+ToolUp.Platform.AuthorizationSurfaceModule.anonymousAtAttributeLayer(ToolUp.Platform.AuthorizationSurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExposedSurface]
 ToolUp.Platform.AuthorizationSurfaceModule.anonymousReachable(ToolUp.Platform.AuthorizationSurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExposedSurface]
 ToolUp.Platform.AuthorizationSurfaceModule.classifyAdmitSet(System.Boolean, ToolUp.Platform.SurfaceRequirement) : ToolUp.Platform.AccessClassification
 ToolUp.Platform.AuthorizationSurfaceModule.componentIdOf(ToolUp.Platform.ServerModule) : ToolUp.Platform.ComponentId
@@ -487,6 +491,7 @@ ToolUp.Platform.AuthorizationSurfaceModule.diff(ToolUp.Platform.AuthorizationSur
 ToolUp.Platform.AuthorizationSurfaceModule.empty : ToolUp.Platform.AuthorizationSurface { get }
 ToolUp.Platform.AuthorizationSurfaceModule.emptyDelta : ToolUp.Platform.AuthorizationSurfaceDelta { get }
 ToolUp.Platform.AuthorizationSurfaceModule.explicitlyRequired(ToolUp.Platform.AuthorizationSurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExposedSurface]
+ToolUp.Platform.AuthorizationSurfaceModule.gatedInHandler(ToolUp.Platform.AuthorizationSurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExposedSurface]
 ToolUp.Platform.AuthorizationSurfaceModule.isEmptyDelta(ToolUp.Platform.AuthorizationSurfaceDelta) : System.Boolean
 ToolUp.Platform.AuthorizationSurfaceModule.merge(ToolUp.Platform.AuthorizationSurface, ToolUp.Platform.AuthorizationSurface) : ToolUp.Platform.AuthorizationSurface
 ToolUp.Platform.AuthorizationSurfaceModule.mergeAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuthorizationSurface]) : ToolUp.Platform.AuthorizationSurface
@@ -499,6 +504,7 @@ ToolUp.Platform.AuthorizationSurfaceModule.ofModulesWith(Microsoft.FSharp.Core.F
 ToolUp.Platform.AuthorizationSurfaceModule.ofWire(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuthorizationSurfaceWireEntry]) : ToolUp.Platform.AuthorizationSurface
 ToolUp.Platform.AuthorizationSurfaceModule.renderDelta(ToolUp.Platform.AuthorizationSurfaceDelta) : System.String
 ToolUp.Platform.AuthorizationSurfaceModule.requirementsOf(System.String, ToolUp.Platform.AuthorizationSurface) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.AuthorizationSurfaceModule.resolveWithInHandlerGates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration], ToolUp.Platform.AuthorizationSurface) : ToolUp.Platform.AuthorizationSurface
 ToolUp.Platform.AuthorizationSurfaceModule.resolveWithPolicy(ToolUp.Platform.ActionPolicy, ToolUp.Platform.AuthorizationSurface) : ToolUp.Platform.AuthorizationSurface
 ToolUp.Platform.AuthorizationSurfaceModule.severity(ToolUp.Platform.AuthorizationSurfaceDelta) : ToolUp.Platform.AuthorizationDriftSeverity
 ToolUp.Platform.AuthorizationSurfaceModule.severityLabel(ToolUp.Platform.AuthorizationDriftSeverity) : System.String
@@ -4655,6 +4661,11 @@ ToolUp.Platform.IWorkerKeyRegistry.Revoke(System.String, System.String, System.S
 ToolUp.Platform.IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.InHandlerGateDeclaration (class)
+ToolUp.Platform.InHandlerGateDeclaration..ctor(ToolUp.Platform.ComponentId, System.String, System.String)
+ToolUp.Platform.InHandlerGateDeclaration.GatedComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.InHandlerGateDeclaration.GatedEndpoint : System.String { get }
+ToolUp.Platform.InHandlerGateDeclaration.GatedRationale : System.String { get }
 ToolUp.Platform.InMemoryAuditSink (class)
 ToolUp.Platform.InMemoryAuditSink..ctor(System.String)
 ToolUp.Platform.InMemoryAuditSink.FailAlways(System.String) : System.Void
