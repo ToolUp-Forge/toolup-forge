@@ -726,6 +726,8 @@ ToolUp.Platform.BootstrapTeam.initialTeamNameEnvVar : System.String (literal)
 ToolUp.Platform.BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BoundedWorkProvenanceSource (class)
+ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
 ToolUp.Platform.BudgetedComputeDispatcher (class)
 ToolUp.Platform.BudgetedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ComputeBudgetGuard, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.BuildRouteHandlers (class)
@@ -4637,6 +4639,12 @@ ToolUp.Platform.IWebhookRegistry.ListSubscriptions(System.String) : Microsoft.FS
 ToolUp.Platform.IWebhookRegistry.RotateSecret(System.String, System.Guid, System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]
 ToolUp.Platform.IWebhookRegistry.SetConsecutiveFailures(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IWebhookRegistry.UpdateStatus(System.String, System.Guid, ToolUp.Platform.WebhookStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IWorkProvenanceSource (interface)
+ToolUp.Platform.IWorkProvenanceSource.Covering(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkCoverage, System.String]]
+ToolUp.Platform.IWorkProvenanceSource.GetAncestors(ToolUp.Platform.WorkAncestorRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkAncestorPage, ToolUp.Platform.WorkProvenanceError]]
+ToolUp.Platform.IWorkProvenanceSource.GetCaps() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WorkProvenanceCaps]
+ToolUp.Platform.IWorkProvenanceSource.GetRecord(ToolUp.Platform.WorkRecordRef) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WorkRecordAnswer]
+ToolUp.Platform.IWorkProvenanceSource.SourceSystem() : System.String
 ToolUp.Platform.IWorkerKeyRegistry (interface)
 ToolUp.Platform.IWorkerKeyRegistry.Approve(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
 ToolUp.Platform.IWorkerKeyRegistry.EnrolOnFirstContact(System.String, System.String, ToolUp.Platform.WorkerKeyAlgorithm, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkerSigningKey, ToolUp.Platform.WorkerKeyError]]
@@ -8349,6 +8357,23 @@ ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy..ctor(Microsoft.FSharp.Coll
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule (class)
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule.empty : ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.WorkProvenance (class)
+ToolUp.Platform.WorkProvenance.attest(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployWorkAttestation]
+ToolUp.Platform.WorkProvenance.attestRecord(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WorkAttestedDeployRecord]
+ToolUp.Platform.WorkProvenanceMode (class)
+ToolUp.Platform.WorkProvenanceMode.IsComposedWorkProvenanceSource : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceMode.IsNoWorkProvenanceSource : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceMode.NoWorkProvenanceSource : ToolUp.Platform.WorkProvenanceMode { get }
+ToolUp.Platform.WorkProvenanceMode.Tag : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceMode+ComposedWorkProvenanceSource (class)
+ToolUp.Platform.WorkProvenanceMode+ComposedWorkProvenanceSource.Item : ToolUp.Platform.IWorkProvenanceSource { get }
+ToolUp.Platform.WorkProvenanceMode+Tags (class)
+ToolUp.Platform.WorkProvenanceMode+Tags.ComposedWorkProvenanceSource : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceMode+Tags.NoWorkProvenanceSource : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceSource (class)
+ToolUp.Platform.WorkProvenanceSource.bounded(ToolUp.Platform.IWorkProvenanceSource) : ToolUp.Platform.IWorkProvenanceSource
+ToolUp.Platform.WorkProvenanceSource.ofMode(ToolUp.Platform.WorkProvenanceMode) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWorkProvenanceSource]
+ToolUp.Platform.WorkProvenanceSource.walkOverLookups(ToolUp.Platform.IWorkProvenanceSource, ToolUp.Platform.WorkAncestorRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkAncestorPage, ToolUp.Platform.WorkProvenanceError]]
 ToolUp.Platform.WorkerKeyError (class)
 ToolUp.Platform.WorkerKeyError.IsInvalidIdentifier : System.Boolean { get }
 ToolUp.Platform.WorkerKeyError.IsInvalidPublicKey : System.Boolean { get }

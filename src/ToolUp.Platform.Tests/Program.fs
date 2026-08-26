@@ -1178,6 +1178,14 @@ let allTests =
         BuildTranscriptTests.closureAttestationTests
         BuildTranscriptTests.closureCaptureTests
         BuildTranscriptTests.closureBindingTests
+        // Phase 712 — the upstream work record as a read-only wire
+        // contract: the work/build tier of the shape the fact tier
+        // already ships. Bounded both ways (an over-cap request, an
+        // over-cap answer, and a source that answers above its own
+        // declared cap), withheld distinguishable from absent, a foreign
+        // kind crossing intact, every unattested reason recorded rather
+        // than dropped, and an uncomposed deployment unchanged.
+        WorkProvenanceSourceTests.tests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate

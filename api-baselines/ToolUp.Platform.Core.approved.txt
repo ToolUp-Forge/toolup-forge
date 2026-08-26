@@ -3733,6 +3733,17 @@ ToolUp.Platform.DeploySummary.State : ToolUp.Platform.DeployState { get }
 ToolUp.Platform.DeploySummary.StateChangedAt : System.DateTime { get }
 ToolUp.Platform.DeploySummary.SubmittedBy : System.String { get }
 ToolUp.Platform.DeploySummary.TenantId : System.String { get }
+ToolUp.Platform.DeployWorkAttestation (class)
+ToolUp.Platform.DeployWorkAttestation..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.WorkAttestation, System.String)
+ToolUp.Platform.DeployWorkAttestation.Head : ToolUp.Platform.WorkAttestation { get }
+ToolUp.Platform.DeployWorkAttestation.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.DeployWorkAttestation.SourceSystem : System.String { get }
+ToolUp.Platform.DeployWorkAttestation.UpstreamReference : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeployWorkAttestationModule (class)
+ToolUp.Platform.DeployWorkAttestationModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeployWorkAttestationModule.describe(ToolUp.Platform.DeployWorkAttestation) : System.String
+ToolUp.Platform.DeployWorkAttestationModule.isAttested(ToolUp.Platform.DeployWorkAttestation) : System.Boolean
+ToolUp.Platform.DeployWorkAttestationModule.none : ToolUp.Platform.DeployWorkAttestation { get }
 ToolUp.Platform.DeploymentConfig (class)
 ToolUp.Platform.DeploymentConfig.hasAnonymous(ToolUp.Platform.ServerConfig) : System.Boolean
 ToolUp.Platform.DeploymentConfig.hasAuthenticatedUserScope(ToolUp.Platform.ServerConfig) : System.Boolean
@@ -10508,6 +10519,156 @@ ToolUp.Platform.WireWithheldNode..ctor(System.String, ToolUp.Platform.WireProven
 ToolUp.Platform.WireWithheldNode.Id : System.String { get }
 ToolUp.Platform.WireWithheldNode.Kind : ToolUp.Platform.WireProvenanceNodeKind { get }
 ToolUp.Platform.WireWithheldNode.PolicyRef : System.String { get }
+ToolUp.Platform.WithheldWorkRecord (class)
+ToolUp.Platform.WithheldWorkRecord..ctor(ToolUp.Platform.WorkRecordRef, ToolUp.Platform.WorkRecordKind, System.String)
+ToolUp.Platform.WithheldWorkRecord.Kind : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WithheldWorkRecord.PolicyRef : System.String { get }
+ToolUp.Platform.WithheldWorkRecord.Ref : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkAncestorPage (class)
+ToolUp.Platform.WorkAncestorPage..ctor(ToolUp.Platform.WorkRecordRef, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WithheldWorkRecord], System.Int32)
+ToolUp.Platform.WorkAncestorPage.Depth : System.Int32 { get }
+ToolUp.Platform.WorkAncestorPage.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecord] { get }
+ToolUp.Platform.WorkAncestorPage.Root : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkAncestorPage.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WithheldWorkRecord] { get }
+ToolUp.Platform.WorkAncestorPageModule (class)
+ToolUp.Platform.WorkAncestorPageModule.size(ToolUp.Platform.WorkAncestorPage) : System.Int32
+ToolUp.Platform.WorkAncestorRequest (class)
+ToolUp.Platform.WorkAncestorRequest..ctor(ToolUp.Platform.WorkRecordRef, System.Int32)
+ToolUp.Platform.WorkAncestorRequest.Depth : System.Int32 { get }
+ToolUp.Platform.WorkAncestorRequest.Root : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkAttestation (class)
+ToolUp.Platform.WorkAttestation.IsAttestedBy : System.Boolean { get }
+ToolUp.Platform.WorkAttestation.IsUnattested : System.Boolean { get }
+ToolUp.Platform.WorkAttestation.Tag : System.Int32 { get }
+ToolUp.Platform.WorkAttestation+AttestedBy (class)
+ToolUp.Platform.WorkAttestation+AttestedBy.Item : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkAttestation+Tags (class)
+ToolUp.Platform.WorkAttestation+Tags.AttestedBy : System.Int32 (literal)
+ToolUp.Platform.WorkAttestation+Tags.Unattested : System.Int32 (literal)
+ToolUp.Platform.WorkAttestation+Unattested (class)
+ToolUp.Platform.WorkAttestation+Unattested.Item : ToolUp.Platform.WorkUnattestedReason { get }
+ToolUp.Platform.WorkAttestationModule (class)
+ToolUp.Platform.WorkAttestationModule.describe(ToolUp.Platform.WorkAttestation) : System.String
+ToolUp.Platform.WorkAttestationModule.head(ToolUp.Platform.WorkAttestation) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WorkRecordRef]
+ToolUp.Platform.WorkAttestedDeployRecord (class)
+ToolUp.Platform.WorkAttestedDeployRecord..ctor(ToolUp.Platform.DeployRecord, ToolUp.Platform.DeployWorkAttestation)
+ToolUp.Platform.WorkAttestedDeployRecord.Record : ToolUp.Platform.DeployRecord { get }
+ToolUp.Platform.WorkAttestedDeployRecord.Work : ToolUp.Platform.DeployWorkAttestation { get }
+ToolUp.Platform.WorkCoverage (class)
+ToolUp.Platform.WorkCoverage.IsCovered : System.Boolean { get }
+ToolUp.Platform.WorkCoverage.IsNoCoveringRecord : System.Boolean { get }
+ToolUp.Platform.WorkCoverage.IsNotTracked : System.Boolean { get }
+ToolUp.Platform.WorkCoverage.NoCoveringRecord : ToolUp.Platform.WorkCoverage { get }
+ToolUp.Platform.WorkCoverage.NotTracked : ToolUp.Platform.WorkCoverage { get }
+ToolUp.Platform.WorkCoverage.Tag : System.Int32 { get }
+ToolUp.Platform.WorkCoverage+Covered (class)
+ToolUp.Platform.WorkCoverage+Covered.Item : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkCoverage+Tags (class)
+ToolUp.Platform.WorkCoverage+Tags.Covered : System.Int32 (literal)
+ToolUp.Platform.WorkCoverage+Tags.NoCoveringRecord : System.Int32 (literal)
+ToolUp.Platform.WorkCoverage+Tags.NotTracked : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceCaps (class)
+ToolUp.Platform.WorkProvenanceCaps..ctor(System.Int32, System.Int32)
+ToolUp.Platform.WorkProvenanceCaps.MaxDepth : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceCaps.MaxRecords : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceCapsModule (class)
+ToolUp.Platform.WorkProvenanceCapsModule.defaults : ToolUp.Platform.WorkProvenanceCaps { get }
+ToolUp.Platform.WorkProvenanceCapsModule.none : ToolUp.Platform.WorkProvenanceCaps { get }
+ToolUp.Platform.WorkProvenanceError (class)
+ToolUp.Platform.WorkProvenanceError.IsWorkAncestorsExceedRecordCap : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceError.IsWorkAncestorsOverDeclaredCap : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceError.IsWorkDepthExceedsCap : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceError.IsWorkDepthInvalid : System.Boolean { get }
+ToolUp.Platform.WorkProvenanceError.Tag : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+Tags (class)
+ToolUp.Platform.WorkProvenanceError+Tags.WorkAncestorsExceedRecordCap : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceError+Tags.WorkAncestorsOverDeclaredCap : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceError+Tags.WorkDepthExceedsCap : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceError+Tags.WorkDepthInvalid : System.Int32 (literal)
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsExceedRecordCap (class)
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsExceedRecordCap.cap : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsExceedRecordCap.records : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsOverDeclaredCap (class)
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsOverDeclaredCap.cap : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkAncestorsOverDeclaredCap.records : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkDepthExceedsCap (class)
+ToolUp.Platform.WorkProvenanceError+WorkDepthExceedsCap.cap : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkDepthExceedsCap.requested : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceError+WorkDepthInvalid (class)
+ToolUp.Platform.WorkProvenanceError+WorkDepthInvalid.requested : System.Int32 { get }
+ToolUp.Platform.WorkProvenanceErrorModule (class)
+ToolUp.Platform.WorkProvenanceErrorModule.describe(ToolUp.Platform.WorkProvenanceError) : System.String
+ToolUp.Platform.WorkRecord (class)
+ToolUp.Platform.WorkRecord..ctor(ToolUp.Platform.WorkRecordRef, ToolUp.Platform.WorkRecordKind, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecordRef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.WorkRecord.ContentDigest : System.String { get }
+ToolUp.Platform.WorkRecord.Kind : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WorkRecord.Label : System.String { get }
+ToolUp.Platform.WorkRecord.Parents : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecordRef] { get }
+ToolUp.Platform.WorkRecord.Ref : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkRecord.Verdict : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WorkRecordAnswer (class)
+ToolUp.Platform.WorkRecordAnswer.Absent : ToolUp.Platform.WorkRecordAnswer { get }
+ToolUp.Platform.WorkRecordAnswer.IsAbsent : System.Boolean { get }
+ToolUp.Platform.WorkRecordAnswer.IsFound : System.Boolean { get }
+ToolUp.Platform.WorkRecordAnswer.IsWithheld : System.Boolean { get }
+ToolUp.Platform.WorkRecordAnswer.Tag : System.Int32 { get }
+ToolUp.Platform.WorkRecordAnswer+Found (class)
+ToolUp.Platform.WorkRecordAnswer+Found.Item : ToolUp.Platform.WorkRecord { get }
+ToolUp.Platform.WorkRecordAnswer+Tags (class)
+ToolUp.Platform.WorkRecordAnswer+Tags.Absent : System.Int32 (literal)
+ToolUp.Platform.WorkRecordAnswer+Tags.Found : System.Int32 (literal)
+ToolUp.Platform.WorkRecordAnswer+Tags.Withheld : System.Int32 (literal)
+ToolUp.Platform.WorkRecordAnswer+Withheld (class)
+ToolUp.Platform.WorkRecordAnswer+Withheld.Item : ToolUp.Platform.WithheldWorkRecord { get }
+ToolUp.Platform.WorkRecordKind (class)
+ToolUp.Platform.WorkRecordKind.Authored : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WorkRecordKind.IsAuthored : System.Boolean { get }
+ToolUp.Platform.WorkRecordKind.IsOther : System.Boolean { get }
+ToolUp.Platform.WorkRecordKind.IsReleased : System.Boolean { get }
+ToolUp.Platform.WorkRecordKind.IsReviewed : System.Boolean { get }
+ToolUp.Platform.WorkRecordKind.IsVerified : System.Boolean { get }
+ToolUp.Platform.WorkRecordKind.Released : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WorkRecordKind.Reviewed : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WorkRecordKind.Tag : System.Int32 { get }
+ToolUp.Platform.WorkRecordKind.Verified : ToolUp.Platform.WorkRecordKind { get }
+ToolUp.Platform.WorkRecordKind+Other (class)
+ToolUp.Platform.WorkRecordKind+Other.label : System.String { get }
+ToolUp.Platform.WorkRecordKind+Tags (class)
+ToolUp.Platform.WorkRecordKind+Tags.Authored : System.Int32 (literal)
+ToolUp.Platform.WorkRecordKind+Tags.Other : System.Int32 (literal)
+ToolUp.Platform.WorkRecordKind+Tags.Released : System.Int32 (literal)
+ToolUp.Platform.WorkRecordKind+Tags.Reviewed : System.Int32 (literal)
+ToolUp.Platform.WorkRecordKind+Tags.Verified : System.Int32 (literal)
+ToolUp.Platform.WorkRecordKindModule (class)
+ToolUp.Platform.WorkRecordKindModule.label(ToolUp.Platform.WorkRecordKind) : System.String
+ToolUp.Platform.WorkRecordRef (class)
+ToolUp.Platform.WorkRecordRef..ctor(System.String, System.String)
+ToolUp.Platform.WorkRecordRef.RecordId : System.String { get }
+ToolUp.Platform.WorkRecordRef.SourceSystem : System.String { get }
+ToolUp.Platform.WorkRecordRefModule (class)
+ToolUp.Platform.WorkRecordRefModule.create(System.String, System.String) : ToolUp.Platform.WorkRecordRef
+ToolUp.Platform.WorkRecordRefModule.describe(ToolUp.Platform.WorkRecordRef) : System.String
+ToolUp.Platform.WorkUnattestedReason (class)
+ToolUp.Platform.WorkUnattestedReason.IsLookupFailed : System.Boolean { get }
+ToolUp.Platform.WorkUnattestedReason.IsNoCoveringRecord : System.Boolean { get }
+ToolUp.Platform.WorkUnattestedReason.IsNotTracked : System.Boolean { get }
+ToolUp.Platform.WorkUnattestedReason.IsSourceAbsent : System.Boolean { get }
+ToolUp.Platform.WorkUnattestedReason.IsUpstreamReferenceUnrecorded : System.Boolean { get }
+ToolUp.Platform.WorkUnattestedReason.NoCoveringRecord : ToolUp.Platform.WorkUnattestedReason { get }
+ToolUp.Platform.WorkUnattestedReason.NotTracked : ToolUp.Platform.WorkUnattestedReason { get }
+ToolUp.Platform.WorkUnattestedReason.SourceAbsent : ToolUp.Platform.WorkUnattestedReason { get }
+ToolUp.Platform.WorkUnattestedReason.Tag : System.Int32 { get }
+ToolUp.Platform.WorkUnattestedReason.UpstreamReferenceUnrecorded : ToolUp.Platform.WorkUnattestedReason { get }
+ToolUp.Platform.WorkUnattestedReason+LookupFailed (class)
+ToolUp.Platform.WorkUnattestedReason+LookupFailed.reason : System.String { get }
+ToolUp.Platform.WorkUnattestedReason+Tags (class)
+ToolUp.Platform.WorkUnattestedReason+Tags.LookupFailed : System.Int32 (literal)
+ToolUp.Platform.WorkUnattestedReason+Tags.NoCoveringRecord : System.Int32 (literal)
+ToolUp.Platform.WorkUnattestedReason+Tags.NotTracked : System.Int32 (literal)
+ToolUp.Platform.WorkUnattestedReason+Tags.SourceAbsent : System.Int32 (literal)
+ToolUp.Platform.WorkUnattestedReason+Tags.UpstreamReferenceUnrecorded : System.Int32 (literal)
+ToolUp.Platform.WorkUnattestedReasonModule (class)
+ToolUp.Platform.WorkUnattestedReasonModule.describe(ToolUp.Platform.WorkUnattestedReason) : System.String
 ToolUp.Platform.WorkerKeyAlgorithm (class)
 ToolUp.Platform.WorkerKeyAlgorithm.Ed25519 : ToolUp.Platform.WorkerKeyAlgorithm { get }
 ToolUp.Platform.WorkerKeyAlgorithm.Es256 : ToolUp.Platform.WorkerKeyAlgorithm { get }
