@@ -158,6 +158,16 @@
     <PackageVersion Include="Google.Cloud.Kms.V1" Version="3.24.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14" />
     <PackageVersion Include="HNSW" Version="26.4.177" />
+    <!-- Phase 717 — JSON Schema evaluator, TEST TIER ONLY. The SBOM
+         projection's SPDX 2.3 and CycloneDX 1.6 output is validated
+         against each format's own published schema (vendored offline as
+         test fixtures) rather than eyeballed, so a document the format
+         would reject fails the suite instead of shipping. Referenced
+         only by `ToolUp.Platform.Tests`; it never reaches a packable
+         assembly, so GP 1 is untouched. Pinned at 8.0.5 — the last
+         version published under plain MIT, which keeps the licence set
+         of this Apache-2.0 repo unchanged. -->
+    <PackageVersion Include="JsonSchema.Net" Version="8.0.5" />
     <PackageVersion Include="MailKit" Version="4.16" />
     <!-- Phase 38 — markdown + YAML-frontmatter parser for the public-
          rendering companion (`src/ToolUp.PublicRendering/`). MIT;
