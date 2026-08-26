@@ -178,6 +178,27 @@ these errs toward **under**-reporting (a missed finding), except where marked.
     "Self-reference only" means a recursive binding nothing else calls — almost
     certainly dead, but reported separately so the claim stays exactly as strong
     as its evidence.
+12. **A binding whose VALUE is meant to be unreferenced — the effect is its
+    construction, and the reference is what keeps it alive.** This is the one
+    limitation on the list that can cause real harm if acted on, so it is worth
+    more than a line. The worked example is
+    `src/ToolUp.Platform.Server/Server/Files/FileManagement.fs` `evictionTimer`:
+    a module-level binding whose *initialisation* starts a
+    `System.Threading.Timer` running `evictExpiredStores` every ten minutes.
+    Nothing calls it, and nothing ever will — but `System.Threading.Timer` is
+    finalizable, so dropping the last reference to it makes the timer eligible
+    for collection and it silently stops firing. Deleting the binding therefore
+    stops ephemeral-store eviction, with no compile error, no test failure, and
+    no log line: the deployment simply accumulates stores forever.
+
+    Every other entry above is a reason this tool UNDER-reports. This one is a
+    reason a true positive can still be the wrong thing to delete: "unreferenced"
+    is an accurate statement about the call graph and says nothing about whether
+    the binding does work. The shapes to watch for are a `let` whose right-hand
+    side constructs something with a lifetime (`Timer`, `FileSystemWatcher`, a
+    subscription handle, a `CancellationTokenRegistration`), or whose
+    initialisation registers into a static registry. Read the right-hand side
+    before deleting, not just the report line.
 
 ## Implementation notes
 

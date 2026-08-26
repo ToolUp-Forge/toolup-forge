@@ -246,12 +246,6 @@ let private collectRules
                 )
     ]
 
-let private severity =
-    function
-    | RuleOk -> 0
-    | RuleWarning _ -> 1
-    | RuleError _ -> 2
-
 let private joinMessages (messages: string list) : string =
     messages |> String.concat "\n  - " |> sprintf "\n  - %s"
 

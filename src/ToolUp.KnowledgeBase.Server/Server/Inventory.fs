@@ -15,6 +15,13 @@ open KnowledgeBase.ServerAIContext
 /// Split an index into uploaded-or-narrative documents vs notes.
 /// Both `publishInventoryUpdate` and `formatInventory` need this split,
 /// so it lives here as a single helper rather than being repeated.
+///
+/// Both of them had gone back to repeating it inline anyway — four copies
+/// of the same predicate across two functions — and neither called this.
+/// Phase 626's unreferenced-code report is what surfaced that, which is
+/// the useful shape of that tool's output: a helper with no callers whose
+/// doc comment says it has two is not dead code, it is a helper that lost
+/// its call sites. Rewired 2026-08-26 (tidy-drain).
 let private partitionInventory (docs: KnowledgeDocument list) =
     docs
     |> List.partition (fun d ->
@@ -37,34 +44,14 @@ let publishInventoryUpdate
             let! docs = loadIndex storage container
             let! aiContext = loadAIContext storage container
 
-            let documentCount =
-                docs
-                |> List.filter (fun d ->
-                    match d.Source with
-                    | Note _ -> false
-                    | _ -> true)
-                |> List.length
-
-            let noteCount =
-                docs
-                |> List.filter (fun d ->
-                    match d.Source with
-                    | Note _ -> true
-                    | _ -> false)
-                |> List.length
-
             // Heuristic-only suggested questions (WS4.4) — sample doc
             // names + notes to seed the AI panel's zero-state. Server-
             // side AI-generated suggestions are a follow-up. Carrying
             // them in the inventory payload keeps the AI client free
             // of any KB compile-time dependency.
-            let documents, notes =
-                docs
-                |> List.partition (fun d ->
-                    match d.Source with
-                    | Note _ -> false
-                    | UploadedFile
-                    | FromNarrative _ -> true)
+            let documents, notes = partitionInventory docs
+            let documentCount = documents.Length
+            let noteCount = notes.Length
 
             let topDocs = documents |> List.sortByDescending _.UploadedAt |> List.truncate 3
 
@@ -116,13 +103,7 @@ let invalidateInventoryCache (container: string) : unit =
     inventoryCache.TryRemove(container) |> ignore
 
 let private formatInventory (docs: KnowledgeDocument list) : string =
-    let documents, notes =
-        docs
-        |> List.partition (fun d ->
-            match d.Source with
-            | Note _ -> false
-            | UploadedFile
-            | FromNarrative _ -> true)
+    let documents, notes = partitionInventory docs
 
     let docCount = documents.Length
     let noteCount = notes.Length

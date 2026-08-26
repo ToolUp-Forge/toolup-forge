@@ -48,11 +48,6 @@ let private mkSpec image : ContainerSpec = {
     Labels = Map.empty
 }
 
-let private okOrFail label =
-    function
-    | Ok v -> v
-    | Error e -> failtestf "%s: expected Ok, got %A" label e
-
 let tests (name: string) (binding: ContainerSchedulerBinding) =
 
     let factory = binding.Factory

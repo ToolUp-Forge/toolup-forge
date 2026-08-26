@@ -314,6 +314,25 @@ let configurePipeline
         app.UseMiddleware<ModuleVisibilityRoutes.ModuleVisibilityRouteMiddleware>()
         |> ignore
 
+    // Phase 528 — revoked-session refusal. Registered ONLY when
+    // `ServerConfig.SessionRegistry` selects a backend, so the default
+    // deployment pays not even a delegate hop (GP 13) and stays
+    // byte-for-byte as before (GP 11).
+    //
+    // Sits after `SurfaceEnforcementMiddleware` for the reason the two
+    // stages above do: only a request that already cleared authentication
+    // reaches a revocation decision, which keeps the response codes
+    // honest — an unauthenticated caller is told they are not
+    // authenticated, not that a session they do not have was revoked. It
+    // must be after `ScopeResolutionMiddleware` besides, since the
+    // `Subject` and `StorageScope` it reads are that middleware's stamps.
+    match config.SessionRegistry with
+    | NoSessionRegistry -> ()
+    | BlobSessionRegistry _
+    | CustomSessionRegistry _ ->
+        app.UseMiddleware<SessionRevocation.SessionRevocationMiddleware>(config)
+        |> ignore
+
     // Phase 66 Stream C.1 (continuation) — anonymous→authenticated
     // session-migration trigger. Sits AFTER SurfaceEnforcementMiddleware
     // so only requests that pass the per-route surface gate can fire a

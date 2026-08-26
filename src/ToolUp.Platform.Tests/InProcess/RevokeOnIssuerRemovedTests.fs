@@ -79,7 +79,20 @@ let private pollUntil (timeout: TimeSpan) (predicate: unit -> Async<bool>) = asy
     return satisfied
 }
 
-let private deliveryTimeout = TimeSpan.FromSeconds 2.0
+/// Deliberately generous, and raised from 2s on 2026-08-26 (tidy-drain;
+/// origin: Phase 319 ship report, which recorded this pack's
+/// `MembershipChanged.Removed` case failing once in a full Platform run and
+/// passing in isolation and on two later full runs).
+///
+/// The subscriber is fire-and-forget on the thread pool, so what the 2s
+/// bound was really measuring under a full run was pool scheduling latency,
+/// not delivery. `pollUntil` returns on the first satisfied poll, so a
+/// larger bound costs a healthy run nothing at all — it is a ceiling, not a
+/// sleep — while a genuinely undelivered notification still fails, just
+/// later. That asymmetry is the whole argument: a timeout that can expire
+/// under load is a wall-clock time bomb, and an intermittently-red case in
+/// the canonical gate trains readers to re-run rather than read.
+let private deliveryTimeout = TimeSpan.FromSeconds 15.0
 
 /// Fresh `(decorator, inner, channel, audit, teamId)` per test so
 /// concurrent runs over the same temp-dir root cannot interfere

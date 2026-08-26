@@ -148,6 +148,9 @@
         <!-- Phase 159 — durable per-subject consent state store contract
              (round-trip + per-subject / per-scope isolation + withdraw). -->
         <Compile Include="Contracts\IConsentStateStoreContract.fs" />
+        <!-- Phase 528 — session registry conformance (record / list /
+             revoke / per-scope isolation / staleness bound). -->
+        <Compile Include="Contracts\ISessionRegistryContract.fs" />
         <Compile Include="Contracts\ITimeSeriesStoreContract.fs" />
         <Compile Include="Contracts\IDatasetStoreContract.fs" />
         <!-- Phase 449 — model-fit envelope conformance (bound to the reference provider). -->
@@ -313,6 +316,7 @@
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />
         <Compile Include="InProcess\AuthProviderTests.fs" />
+        <Compile Include="InProcess\OidcJwksTtlTests.fs" />
         <Compile Include="InProcess\AzureBlobStorageTests.fs" />
         <Compile Include="InProcess\AwsS3StorageTests.fs" />
         <Compile Include="InProcess\GoogleCloudStorageTests.fs" />
@@ -1080,6 +1084,12 @@
              the two things the marker must NOT be confusable with — a
              policy withhold and a tool invocation error. -->
         <Compile Include="InProcess\AIToolResultBudgetTests.fs" />
+        <!-- Phase 36.A — AI tool-dispatch RBAC: the per-turn tool list and
+             the client-visible listing filtered by the caller's per-module
+             Read, a forged tool name refused with a typed Denied before
+             Execute runs (executor failtests if reached), the symmetric
+             403 on /api/ai/tool-result, and the GP-11 unrestricted default. -->
+        <Compile Include="InProcess\AIToolDispatchRbacTests.fs" />
         <!-- Phase 565 — grounding certificates: sealed, selective provenance
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->
@@ -1237,6 +1247,11 @@
         <!-- Phase 159 — IConsentStateStore bindings (in-memory + entity-
              backed over BlobEntityStore) + restart-durability proof. -->
         <Compile Include="InProcess\ConsentStateStoreTests.fs" />
+        <!-- Phase 528 — ISessionRegistry binding over the blob-backed
+             default, plus the SessionIdentity derivation tests and the
+             retention / traversal specifics the portable pack cannot
+             express. -->
+        <Compile Include="InProcess\SessionRegistryTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
         <Compile Include="InProcess\UserClaimsTests.fs" />
@@ -1713,6 +1728,10 @@
              69l/69m perf packs). Test-only; no production source changed. -->
         <Compile Include="Contracts\FailClosedContract.fs" />
         <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
+        <!-- Phase 467 — byte-correct constant-time token compare (behaviour
+             + call-site source pins) and the TokenAttemptThrottle window,
+             whose transition now observes a single caller-supplied instant. -->
+        <Compile Include="InProcess\ConstantTimeCompareTests.fs" />
         <Compile Include="InProcess\ModuleLoadOutcomeTests.fs" />
         <!-- Phase 203 — hydration-parity conformance harness pack. -->
         <Compile Include="InProcess\HydrationParityTests.fs" />

@@ -264,10 +264,12 @@ module private Json =
 //      at least one persisted job.
 //   2. For each scope, calls `IJobStore.DueJobs(scope, now)` to fetch
 //      `Active` jobs whose `NextRunAt <= now`.
-//   3. Dispatches each due job concurrently via `Async.Start` —
-//      independent jobs must not head-of-line-block each other (the
-//      retry loop's `Async.Sleep delay` would otherwise stall the
-//      scheduler thread).
+//   3. Dispatches each due job concurrently via `startDispatch` (an
+//      `Async.Start` behind a logging exception boundary) — independent
+//      jobs must not head-of-line-block each other (the retry loop's
+//      `Async.Sleep delay` would otherwise stall the scheduler thread),
+//      and a throw with no caller left to observe it must not become an
+//      unhandled thread-pool exception that takes the host down.
 //
 // **Single-instance limitation.** Two silos running this scheduler
 // against the same `IBlobStorage`-backed `IJobStore` would each fire
@@ -966,6 +968,29 @@ type InProcessJobScheduler
     let dispatchOne (job: JobDefinition) (source: TriggerSource) (scheduledAt: DateTime) =
         dispatchFrom 1 job source scheduledAt
 
+    /// The exception boundary every fire-and-forget dispatch goes through.
+    ///
+    /// `Async.Start` leaves no caller to observe a throw, so anything that
+    /// escapes `dispatchFrom` — a throwing `IJobStore.RecordRun` is the
+    /// observed instance — surfaces as an unhandled thread-pool exception
+    /// and takes the host down with it rather than failing one job. That
+    /// killed the test host during Phase 319's mutation testing. Logging
+    /// and swallowing is right here: the run's own outcome is already
+    /// recorded (or unrecordable, which is what threw), and the scheduler
+    /// must survive one job's store failure to serve the rest of the tick.
+    let startDispatch (job: JobDefinition) (source: TriggerSource) (work: Async<unit>) =
+        Async.Start(
+            async {
+                try
+                    do! work
+                with ex ->
+                    logger.Error(
+                        $"[JobScheduler] event=dispatch_unhandled jobId=%O{job.JobId} handler=%s{job.Handler} source=%A{source}",
+                        Some ex
+                    )
+            }
+        )
+
     // ─── Status transitions ──────────────────────────────────────
 
     let setStatus (scopeId: string) (jobId: JobId) (status: JobStatus) = async {
@@ -1317,9 +1342,9 @@ type InProcessJobScheduler
                             // — `acquireBlocking` waits rather than failing,
                             // so the queueing is correct rather than merely
                             // tolerated.
-                            Async.Start(
-                                dispatchFrom (run.Attempt + 1) job (ScheduledByEvent("_external-retry", run.RunId)) now
-                            )
+                            let retrySource = ScheduledByEvent("_external-retry", run.RunId)
+
+                            startDispatch job retrySource (dispatchFrom (run.Attempt + 1) job retrySource now)
 
                             return ExternalResolution.Resolved "failed"
                         else
@@ -1635,7 +1660,7 @@ type InProcessJobScheduler
                 let! due = store.DueJobs(scope, now)
 
                 for job in due do
-                    Async.Start(dispatchOne job ScheduledByCron now)
+                    startDispatch job ScheduledByCron (dispatchOne job ScheduledByCron now)
         with ex ->
             logger.Error($"[JobScheduler] event=tick_error tickAt={now:o} lastScope={currentScope}", Some ex)
 
@@ -1749,7 +1774,7 @@ type InProcessJobScheduler
 
                 for job in allBackfill do
                     let source = ScheduledByEvent("_backfill", Guid.Empty)
-                    Async.Start(dispatchOne job source observedTick)
+                    startDispatch job source (dispatchOne job source observedTick)
         with ex ->
             logger.Error($"[JobScheduler] event=drift_handler_error driftMs={int64 drift.TotalMilliseconds}", Some ex)
     }
@@ -1862,9 +1887,9 @@ type InProcessJobScheduler
                                     for job in matched do
                                         triggersDispatched <- triggersDispatched + 1
 
-                                        Async.Start(
-                                            dispatchOne job (ScheduledByEvent(evt.EventType, evt.Id)) evt.OccurredAt
-                                        )
+                                        let catchUpSource = ScheduledByEvent(evt.EventType, evt.Id)
+
+                                        startDispatch job catchUpSource (dispatchOne job catchUpSource evt.OccurredAt)
                                 | None -> ()
 
                                 // Advance whether or not anything matched —
@@ -2068,7 +2093,8 @@ type InProcessJobScheduler
             | None -> return Error $"Job %A{jobId} not found in scope %s{scopeId}"
             | Some job when job.Status = Cancelled -> return Error "Cannot trigger a cancelled job"
             | Some job ->
-                Async.Start(dispatchOne job (ScheduledManually byUserId) (DateTime.UtcNow))
+                let source = ScheduledManually byUserId
+                startDispatch job source (dispatchOne job source (DateTime.UtcNow))
 
                 return Ok()
         }
@@ -2086,7 +2112,8 @@ type InProcessJobScheduler
 
             for job in matches do
                 let evtId = _eventId
-                Async.Start(dispatchOne job (ScheduledByEvent(eventType, evtId)) (DateTime.UtcNow))
+                let source = ScheduledByEvent(eventType, evtId)
+                startDispatch job source (dispatchOne job source (DateTime.UtcNow))
         }
 
     // ─── Phase 9b.A — IJobSchedulerTelemetry ─────────────────────

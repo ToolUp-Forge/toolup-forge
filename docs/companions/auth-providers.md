@@ -167,6 +167,69 @@ Rejected by design:
 
 An inbound token whose `alg` is not in the configured `AcceptedAlgorithms` is rejected with `UnsupportedAlgorithm "<name>"` even if its signature would verify against the JWKS — the trust set is operator-owned, not auto-widened by the SDK. See [`docs/migrations/3-A-oidc-algorithm-whitelist.md`](../migrations/3-A-oidc-algorithm-whitelist.md) for the security rationale + the per-IdP opt-in matrix.
 
+#### Key revocation: what the window actually is
+
+**By default, a signing key the issuer has revoked keeps validating tokens on a
+given instance for up to 10 minutes while the issuer is reachable — and for as
+long as JWKS fetches keep failing.** The second half is the one that surprises
+people: once a refresh is failing, the provider prefers serving the
+last-known-good key set over failing every sign-in, so the window is bounded by
+provider *availability*, not by the TTL.
+
+That is a deliberate availability-over-revocation default, and it matches how
+mainstream OIDC libraries behave: an issuer blip should not take your
+application down. It is the wrong default if your threat model includes signing-
+key compromise. Three levers change it, all on `OidcHardening` and all off by
+default (GP 11) — a deployment that keeps `OidcHardening.defaults` is
+byte-for-byte the pre-Phase-463 provider:
+
+| Lever | What it bounds | Cost |
+|---|---|---|
+| `JwksCacheTtl = Some ts` | The ordinary window, while the issuer is healthy. `Some TimeSpan.Zero` disables the JWKS cache outright — every validation re-fetches, and nothing is served from cache, stale fallback included. | One JWKS round-trip per validated request at zero; proportionally fewer as the TTL rises. |
+| `FailClosedOnStaleJwks = true` | The **outage** window. A failing refresh surfaces the error instead of serving keys that may have been revoked since the last success. | Sign-in fails while your IdP is unreachable. This is the trade, stated plainly. |
+| `JwksEvictionSignal = Some …` | The window **across instances**. A fetch failure on one instance publishes a `CustomNotification`; subscribed siblings evict their own entry for that URL. | One notification per failed fetch. Needs a distributed `INotificationChannel` companion — the in-process default reaches only the publishing process. |
+
+Without the third lever the fleet-wide window is not "the TTL" — it is the TTL
+measured independently per instance, with no instance able to observe another's
+trouble. Wiring it is two steps, because the OIDC provider is a props-injected
+companion the SDK composition root does not reference, so nothing in the SDK can
+subscribe on its behalf:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders
+open ToolUp.AuthProviders.OidcJwksCacheTypes
+
+// A stable identity for THIS instance. Machine name is the container / pod
+// name under every orchestrator the SDK targets; the pid disambiguates
+// several instances colocated on one host.
+let instanceId =
+    sprintf "%s/%d" System.Environment.MachineName System.Environment.ProcessId
+
+let provider =
+    OidcAuthProvider.fromConfigHardened
+        (Some logger)
+        { OidcAuthProvider.OidcHardening.defaults with
+            JwksCacheTtl = Some(System.TimeSpan.FromMinutes 2.0)
+            FailClosedOnStaleJwks = true
+            JwksEvictionSignal = Some { Channel = channel; OriginReplicaId = instanceId } }
+        authConfig
+
+// The receiving half — same channel, same id, once at compose time.
+OidcJwksCache.subscribeToEvictions channel instanceId (Some logger)
+|> Async.RunSynchronously
+|> ignore
+```
+
+`OidcJwksCache.evictUrl jwksUrl` is the manual lever for an operator who has
+just revoked a key and does not want to wait out the TTL on the instance they
+are looking at.
+
+**What none of this bounds: per-token revocation.** This provider does not
+perform token introspection (RFC 7662) — revocation is observed only through the
+key set. A token whose individual grant was revoked, while its signing key
+remains published, keeps validating until its `exp`, regardless of every setting
+above. Keep access-token lifetimes short; that is the control that applies here.
+
 ### `ToolUp.AuthProviders.Oidc.Client` (browser sign-in)
 
 Browser-side counterpart to the OIDC server provider. Implements OAuth 2.0 Authorization Code + PKCE.

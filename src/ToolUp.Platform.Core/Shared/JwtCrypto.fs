@@ -50,6 +50,26 @@ let computeHmac (secret: byte[]) (message: byte[]) : byte[] =
 let fixedTimeEquals (a: byte[]) (b: byte[]) : bool =
     CryptographicOperations.FixedTimeEquals(ReadOnlySpan a, ReadOnlySpan b)
 
+/// Phase 467 — constant-time equality of two SECRETS held as `string`,
+/// compared as their UTF-8 **bytes**.
+///
+/// This is the sanctioned entry point for every string-shaped token
+/// compare (admin tokens, smoke tokens, CSRF double-submit values, JWT
+/// audience / contract-id pins). It exists because the obvious
+/// hand-rolled form — XOR-folding `int a[i] ^^^ int b[i]` over the
+/// strings' CHARS — compares UTF-16 code units, and is therefore not
+/// byte-correct for a non-ASCII token: two tokens that differ in their
+/// UTF-8 encoding can share a char length, and a surrogate pair counts
+/// as two units rather than four bytes. Normalising to UTF-8 first makes
+/// the comparison operate on exactly the bytes the token IS.
+///
+/// `CryptographicOperations.FixedTimeEquals` under it returns `false` on
+/// a length mismatch without inspecting content, so no separate length
+/// pre-check is needed (and adding one would leak nothing extra —
+/// a token's LENGTH is not secret; its content is).
+let fixedTimeEqualsUtf8 (a: string) (b: string) : bool =
+    fixedTimeEquals (Encoding.UTF8.GetBytes a) (Encoding.UTF8.GetBytes b)
+
 /// Refuse anything but `alg: HS256` before the signature is touched —
 /// defence in depth against algorithm-confusion (`alg: none`, `alg:
 /// RS256` against an HS256 secret, `alg: HS512`, …). `header` is the

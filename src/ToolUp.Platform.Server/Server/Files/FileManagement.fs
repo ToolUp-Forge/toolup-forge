@@ -1065,7 +1065,18 @@ let private evictExpiredStores () =
         if not kvp.Value.Persist && kvp.Value.LastAccessed.Value < cutoff then
             stores.TryRemove(kvp.Key) |> ignore
 
-/// Background timer for periodic eviction (runs every 10 minutes)
+/// Background timer for periodic eviction (runs every 10 minutes).
+///
+/// **DO NOT DELETE — it is unreferenced on purpose.** The effect is this
+/// binding's CONSTRUCTION, and the binding itself is what holds the last
+/// reference to a finalizable `System.Threading.Timer`: drop it and the
+/// timer becomes collectable and silently stops firing, so ephemeral
+/// stores accumulate forever with no compile error, no failing test and no
+/// log line. `tools/ToolUp.DeadCode` reports it as a true positive every
+/// run, correctly — "unreferenced" is a statement about the call graph and
+/// says nothing about whether the binding does work. That limitation is
+/// written up as #12 in `tools/ToolUp.DeadCode/README.md`, with this
+/// binding as its worked example.
 let private evictionTimer =
     new System.Threading.Timer(
         (fun _ -> evictExpiredStores ()),

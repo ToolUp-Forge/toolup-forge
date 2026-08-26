@@ -402,8 +402,6 @@ module private Rest =
     let addVersionUrl (projectId: string) (secretId: string) =
         $"{secretResource projectId secretId}:addVersion"
 
-    let private jsonOptions = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
-
     /// GCP error responses have shape `{"error":{"code":..,"message":..,"status":".."}}`.
     /// Extract the `status` field; returns `None` when the body is
     /// missing or not in the expected shape (treat as a non-canonical
