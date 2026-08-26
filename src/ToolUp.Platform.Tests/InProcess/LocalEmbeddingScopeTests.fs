@@ -72,6 +72,24 @@ let private platformCorpus = [
 
 let private query = "northern division revenue"
 
+/// A corpus that SKEWS the query's terms rather than raising them
+/// together: every document mentions "revenue", none mentions "northern"
+/// or "division".
+///
+/// The distinction became load-bearing when the provider moved to feature
+/// hashing. A term's dimension is now fixed, so corpus history reaches a
+/// vector only through IDF weighting — and a corpus that lifts every
+/// query term by the SAME amount leaves the normalised vector exactly
+/// where it was. `teamACorpus` is such a corpus (it mentions all three
+/// query terms), so the two control cases that need "history moved this
+/// vector" to be observable draw on this one instead. Without it they
+/// would still be green and would be proving nothing.
+let private skewCorpus = [
+    "revenue recognition policy for multi-year contracts"
+    "revenue forecast methodology and stated assumptions"
+    "revenue reporting cadence agreed with the finance team"
+]
+
 /// A stand-in for every production embedder: a pure function of the
 /// text, with no state to key per scope and no way to answer the Phase
 /// 14z capability probe. Deterministic bag-of-words so retrieval over it
@@ -216,8 +234,19 @@ let isolationTests =
             // these vectors could not fail, the isolation assertions
             // would be vacuous. Feeding one scope a different corpus
             // must move its vector.
+            //
+            // The corpus is named here rather than reusing `teamACorpus`,
+            // and that is load-bearing since the provider moved to
+            // feature hashing. A term's DIMENSION is now fixed, so
+            // history reaches a vector only through IDF weighting — and
+            // `teamACorpus` happens to raise all three of the query's
+            // terms by the same amount, which leaves the NORMALISED
+            // vector untouched and would have turned this control silently
+            // vacuous. `skewCorpus` mentions "revenue" in every document
+            // and "northern" in none, so the query's terms end up with
+            // different IDF and the direction genuinely moves.
             let family = LocalEmbeddingProvider.createScoped ()
-            let withCorpus = feedThenQuery family (VectorScope.Team "a") teamACorpus query
+            let withCorpus = feedThenQuery family (VectorScope.Team "a") skewCorpus query
 
             let withoutCorpus =
                 feedThenQuery (LocalEmbeddingProvider.createScoped ()) (VectorScope.Team "a") [] query
@@ -387,10 +416,18 @@ let persistenceTests =
 
 let backwardCompatibilityTests =
     testList "Phase 14z — GP 11 backward compatibility" [
-        test "the unscoped providers still report local-tfidf-v1" {
+        test "the unscoped providers report the unscoped model id" {
             let p = LocalEmbeddingProvider.create ()
-            Expect.equal p.ModelId LocalEmbeddingProvider.GlobalModelId "unscoped model id is unchanged"
-            Expect.equal p.ModelId "local-tfidf-v1" "and its literal value is pinned"
+            Expect.equal p.ModelId LocalEmbeddingProvider.GlobalModelId "unscoped model id"
+
+            // Pinned as a literal so a change to the embedding function
+            // is a deliberate act: this value is what `ReembeddingService`
+            // compares a stored chunk's `_embedModel` against, so moving
+            // it re-embeds every corpus once and leaving it still while
+            // the function changes strands every stored vector. It last
+            // moved from `local-tfidf-v1` when the ranked vocabulary was
+            // replaced by feature hashing.
+            Expect.equal p.ModelId "local-tfidf-v3" "and its literal value is pinned"
         }
 
         test "scope-keyed providers report a distinct model id so ReembeddingService re-indexes on the swap" {
@@ -399,9 +436,9 @@ let backwardCompatibilityTests =
 
             Expect.equal p.ModelId (LocalEmbeddingProvider.scopedModelIdFor (VectorScope.Team "a")) "scoped model id"
 
-            Expect.equal p.ModelId "local-tfidf-v2#team-a" "and its literal value is pinned"
+            Expect.equal p.ModelId "local-tfidf-v4#team-a" "and its literal value is pinned"
 
-            Expect.stringStarts p.ModelId LocalEmbeddingProvider.ScopedModelId "the family prefix is the v2 literal"
+            Expect.stringStarts p.ModelId LocalEmbeddingProvider.ScopedModelId "the family prefix is the scoped literal"
 
             Expect.notEqual
                 p.ModelId
@@ -421,9 +458,15 @@ let backwardCompatibilityTests =
             // surface; it is the opt-out. Pinning it here means a future
             // change that quietly scope-keys `create ()` fails loudly
             // rather than forcing an unannounced corpus reembed.
+            //
+            // `skewCorpus`, not `teamACorpus`, for the reason its doc
+            // comment gives: under feature hashing a corpus that raises
+            // every query term equally leaves the normalised vector
+            // unmoved, so this case would go green whether the vocabulary
+            // were shared or not.
             let shared = LocalEmbeddingProvider.create ()
 
-            for text in teamACorpus do
+            for text in skewCorpus do
                 embed shared text |> ignore
 
             let contaminated = embed shared query
@@ -586,7 +629,7 @@ let cacheKeyingTests =
 
             Expect.equal
                 modelIds
-                [ "local-tfidf-v2#team-a"; "local-tfidf-v2#team-b" ]
+                [ "local-tfidf-v4#team-a"; "local-tfidf-v4#team-b" ]
                 "the scope reaches the cache key through the model id"
         }
 
@@ -777,19 +820,30 @@ let private leaveRows = [
 // which is what makes the falsification bite.
 //
 // The real `ScopedLocalEmbeddingProviders` is deliberately NOT used
-// here, and the reason is a pre-existing property of the TF-IDF
-// provider rather than anything this phase introduced: its vocabulary is
-// re-sorted by document frequency on EVERY embed, and previously-indexed
-// chunks are not re-embedded (the file header calls this "approximate
-// but sufficient for dev"). On a corpus of four documents each new embed
-// therefore permutes the dimension→term assignment, so a chunk indexed
-// early is already in a stale space by query time — with or without
-// scope-keying, and on a single scope just as much as across two. It is
-// filed to TIDY-UP rather than fixed here. That provider's own scope
-// behaviour is covered by the isolation / persistence / reset lists
-// above, and by the two cases below that use it for what it can pin:
-// which scopes get searched at all, and what provenance survives the
-// merge.
+// here — but the reason has changed, and the change is worth recording
+// because the original reason was a defect.
+//
+// Originally: the TF-IDF provider re-sorted its vocabulary by document
+// frequency on EVERY embed while never re-embedding indexed chunks, so
+// on a four-document corpus each new embed permuted the dimension→term
+// assignment and a chunk indexed early was already in a stale space by
+// query time — with or without scope-keying, and on a single scope just
+// as much as across two. This phase filed it to TIDY-UP rather than fix
+// it inside its own lease, and worked around it with the
+// fixed-assignment double below.
+//
+// That defect is FIXED: the provider hashes terms to fixed dimensions,
+// and `LocalEmbeddingHashingTests` pins the alignment property the
+// double was standing in for — including on the scope-keyed family.
+//
+// The double stays anyway, for what is now a positive reason. What THIS
+// list must falsify is a pipeline claim — that two scopes with
+// incomparable spaces still rank together — and `ScopedBowEmbedder`
+// states exactly that geometry and nothing else. The real provider can
+// no longer state it at all: under hashing a term occupies the same slot
+// in every scope, so a fixture built on it would have nothing to
+// falsify. A test double chosen to make the failure mode expressible is
+// not a workaround.
 
 let private bowDim = 64
 

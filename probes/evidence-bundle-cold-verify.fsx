@@ -88,6 +88,11 @@ let private readOutcome (node: JsonNode) : EvidenceChainOutcome =
     | "ChainBroken" -> EvidenceChainOutcome.ChainBroken
     | other -> failwithf "unknown chain outcome on the wire: %s" other
 
+let private readBound (node: JsonNode) : EnumerationBound =
+    { Hop = str node["Hop"]
+      Bound = str node["Bound"]
+      Unenumerated = node["Unenumerated"].GetValue<int>() }
+
 let private readList (node: JsonNode) : JsonNode list =
     match node with
     | null -> []
@@ -103,6 +108,44 @@ let private readOptional (node: JsonNode) =
     match node with
     | null -> None
     | value -> Some(str value)
+
+let private readPosition (node: JsonNode) : EnumerationPosition =
+    { Hop = str node["Hop"]
+      Kind = str node["Kind"]
+      Key = str node["Key"]
+      Bound = readOptional node["Bound"] }
+
+/// The enumeration-completeness verdict, read out of the wire rather
+/// than defaulted. It reaches the operator-facing report through the
+/// chain's render, so a probe that guessed at it would produce text the
+/// warm run does not — which is exactly the drift this probe exists to
+/// rule out.
+let private readEnumeration (node: JsonNode) : EnumerationCompleteness =
+    match node with
+    | :? JsonObject as object' ->
+        let name = object' |> Seq.head
+
+        match name.Key with
+        // A SINGLE-field case carries its field's value directly, so the
+        // list of bounds is the case payload rather than the first
+        // element of one. A MULTI-field case carries its fields as an
+        // array. Reading both the same way silently produced an empty
+        // bound list, and an empty one still labels `bounded` — so the
+        // defect would have surfaced as a report whose text was subtly
+        // short rather than as a failure.
+        | "Bounded" -> EnumerationCompleteness.Bounded(readList name.Value |> List.map readBound)
+        | "Incomplete" ->
+            let fields = readList name.Value
+
+            let at index =
+                if List.length fields > index then fields[index] else null
+
+            EnumerationCompleteness.Incomplete(readList (at 0) |> List.map readPosition, str (at 1))
+        | other -> failwithf "unknown enumeration completeness case on the wire: %s" other
+    | value ->
+        match str value with
+        | "Complete" -> EnumerationCompleteness.Complete
+        | other -> failwithf "unknown enumeration completeness case on the wire: %s" other
 
 let private readBundle (predicate: JsonNode) : EvidenceBundle =
     let chain = predicate["Chain"]
@@ -126,7 +169,8 @@ let private readBundle (predicate: JsonNode) : EvidenceBundle =
           WalkedAt = readTime chain["WalkedAt"]
           Hops = hops
           Outcome = readOutcome chain["Outcome"]
-          VerdictDigest = str chain["VerdictDigest"] }
+          VerdictDigest = str chain["VerdictDigest"]
+          Enumeration = readEnumeration chain["Enumeration"] }
       NotProved =
         readList predicate["NotProved"]
         |> List.map (fun statement ->

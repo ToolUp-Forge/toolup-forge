@@ -207,6 +207,102 @@ module private EvidenceChainHops =
         else
             shown
 
+    // ── Phase 716 — what each hop's linkage says must be enumerated ──
+    //
+    // Every derivation below reads LINKAGE — the parent refs a work
+    // record carries, the attestation state of each closure entry, the
+    // index a ledger read reached — and never the findings the hop
+    // rendered. That separation is the completeness claim's whole value:
+    // an expectation read back out of the render is satisfied by
+    // definition, so it measures nothing.
+
+    /// The positions an ancestor page's own parent refs name, each
+    /// carrying the declared bound that legitimately holds it back, if
+    /// any.
+    ///
+    /// **Two bounds, and everything else is required.** A parent named
+    /// by a record sitting at the requested depth's frontier was never
+    /// fetched — the level naming it was walked and the level resolving
+    /// it was not — so the depth the caller asked for accounts for it. A
+    /// record whose rendered line falls past the enumeration cap is
+    /// accounted for by that cap, which states its own truncation. A
+    /// parent ref that is neither is one the linkage names and the walk
+    /// did not carry: the source answered `Absent` and the ancestor walk
+    /// moved on, which is exactly the silent stop this claim exists to
+    /// surface.
+    let ancestorPositions (page: WorkAncestorPage) : EnumerationPosition list =
+        let hop = EvidenceChain.UpstreamWorkRecordHop
+
+        let recordsById =
+            page.Records
+            |> List.map (fun record -> record.Ref.RecordId, record)
+            |> Map.ofList
+
+        // Distance from the root over the edges the page itself carries.
+        // The `seen` guard is load-bearing rather than defensive: a
+        // source system whose records cite each other cyclically would
+        // otherwise walk forever inside a pure function.
+        let rec distances (frontier: string list) (level: int) (seen: Map<string, int>) : Map<string, int> =
+            match frontier with
+            | [] -> seen
+            | _ ->
+                let seen = frontier |> List.fold (fun acc id -> Map.add id level acc) seen
+
+                let next =
+                    frontier
+                    |> List.collect (fun id ->
+                        match recordsById |> Map.tryFind id with
+                        | Some record -> record.Parents |> List.map _.RecordId
+                        | None -> [])
+                    |> List.filter (fun id -> not (seen |> Map.containsKey id))
+                    |> List.distinct
+
+                distances next (level + 1) seen
+
+        let distance = distances [ page.Root.RecordId ] 0 Map.empty
+
+        // The order `ancestorFindings` renders in — readable records,
+        // then withheld markers — so a position's rendered index is
+        // computed rather than guessed at from what came back.
+        let renderIndex =
+            (page.Records |> List.map (fun record -> record.Ref.RecordId))
+            @ (page.Withheld |> List.map (fun marker -> marker.Ref.RecordId))
+            |> List.mapi (fun index id -> id, index)
+            |> Map.ofList
+
+        /// The shallowest record naming this id as a parent, which is the
+        /// level at which the walk would have resolved it.
+        let namedAt (id: string) =
+            page.Records
+            |> List.filter (fun record -> record.Parents |> List.exists (fun parent -> parent.RecordId = id))
+            |> List.choose (fun record -> distance |> Map.tryFind record.Ref.RecordId)
+            |> function
+                | [] -> None
+                | levels -> Some(List.min levels)
+
+        page.Root.RecordId
+        :: (page.Records
+            |> List.collect (fun record -> record.Parents |> List.map _.RecordId))
+        |> List.distinct
+        |> List.map (fun id ->
+            match renderIndex |> Map.tryFind id with
+            | Some index when index >= FindingCap ->
+                EvidenceEnumeration.bounded
+                    hop
+                    EvidenceEnumeration.WorkAncestorKind
+                    id
+                    EvidenceEnumeration.EnumerationCapBound
+            | Some _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id
+            | None ->
+                match namedAt id with
+                | Some level when level + 1 >= page.Depth ->
+                    EvidenceEnumeration.bounded
+                        hop
+                        EvidenceEnumeration.WorkAncestorKind
+                        id
+                        EvidenceEnumeration.WorkDepthBound
+                | _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id)
+
     /// The deploy this walk is about, for a break that needs to name a
     /// position and has only the deployment to name.
     let deployPosition (sources: EvidenceChainSources) : string =
@@ -247,85 +343,124 @@ module private EvidenceChainHops =
     /// because the substrate is composed and would not answer, which is
     /// precisely the state a deployment reaches by breaking its own
     /// evidence.
-    let walkWorkRecord (sources: EvidenceChainSources) (depth: int) : Async<EvidenceHopOutcome> = async {
-        match sources.Deploy with
-        | None ->
-            return
-                EvidenceHopOutcome.bare (
-                    EvidenceLink.LinkAbsent
-                        "no sealed deploy record is composed, so there is no upstream reference to look the authoring work up by"
-                )
-        | Some signedRecord ->
-            let! attestation = WorkProvenance.attest sources.Work signedRecord.Record
-
-            match attestation.Head with
-            | WorkAttestation.Unattested(WorkUnattestedReason.LookupFailed reason) ->
+    /// Answers with the hop's outcome AND the positions its own linkage
+    /// says the enumeration must account for. Every branch that resolves
+    /// no ancestor page names no positions — there is no enumeration to
+    /// be complete about — and the branch that resolves one derives them
+    /// from the page's parent refs.
+    let walkWorkRecord
+        (sources: EvidenceChainSources)
+        (depth: int)
+        : Async<EvidenceHopOutcome * EnumerationPosition list> =
+        async {
+            match sources.Deploy with
+            | None ->
                 return
                     EvidenceHopOutcome.bare (
-                        EvidenceLink.LinkBroken(
-                            defaultArg attestation.UpstreamReference (deployPosition sources),
-                            sprintf "the composed work provenance source was asked and would not answer: %s" reason
-                        )
-                    )
-            | WorkAttestation.Unattested reason ->
-                return EvidenceHopOutcome.bare (EvidenceLink.LinkAbsent(WorkUnattestedReason.describe reason))
-            | WorkAttestation.AttestedBy head ->
-                match WorkProvenanceSource.ofMode sources.Work with
-                | None ->
-                    // Unreachable while `attest` only attests through
-                    // a composed source, and stated rather than
-                    // assumed: a future mode that attested without
-                    // one would otherwise silently render as linked
-                    // with no ancestors.
+                        EvidenceLink.LinkAbsent
+                            "no sealed deploy record is composed, so there is no upstream reference to look the authoring work up by"
+                    ),
+                    []
+            | Some signedRecord ->
+                let! attestation = WorkProvenance.attest sources.Work signedRecord.Record
+
+                match attestation.Head with
+                | WorkAttestation.Unattested(WorkUnattestedReason.LookupFailed reason) ->
                     return
                         EvidenceHopOutcome.bare (
-                            EvidenceLink.LinkAbsent
-                                "an upstream work record is named and no source is composed to read it from"
-                        )
-                | Some source ->
-                    match! source.GetRecord head with
-                    | WorkRecordAnswer.Withheld marker ->
-                        return EvidenceHopOutcome.bare (EvidenceLink.LinkWithheld marker.PolicyRef)
-                    | WorkRecordAnswer.Absent ->
+                            EvidenceLink.LinkBroken(
+                                defaultArg attestation.UpstreamReference (deployPosition sources),
+                                sprintf "the composed work provenance source was asked and would not answer: %s" reason
+                            )
+                        ),
+                        []
+                | WorkAttestation.Unattested reason ->
+                    return EvidenceHopOutcome.bare (EvidenceLink.LinkAbsent(WorkUnattestedReason.describe reason)), []
+                | WorkAttestation.AttestedBy head ->
+                    match WorkProvenanceSource.ofMode sources.Work with
+                    | None ->
+                        // Unreachable while `attest` only attests through
+                        // a composed source, and stated rather than
+                        // assumed: a future mode that attested without
+                        // one would otherwise silently render as linked
+                        // with no ancestors.
                         return
                             EvidenceHopOutcome.bare (
-                                EvidenceLink.LinkBroken(
-                                    WorkRecordRef.describe head,
-                                    "the source system named this record as covering the deploy's sources and then holds no record under that ref"
-                                )
-                            )
-                    | WorkRecordAnswer.Found record ->
-                        let! ancestors = source.GetAncestors { Root = head; Depth = depth }
+                                EvidenceLink.LinkAbsent
+                                    "an upstream work record is named and no source is composed to read it from"
+                            ),
+                            []
+                    | Some source ->
+                        match! source.GetRecord head with
+                        | WorkRecordAnswer.Withheld marker ->
+                            return EvidenceHopOutcome.bare (EvidenceLink.LinkWithheld marker.PolicyRef), []
+                        | WorkRecordAnswer.Absent ->
+                            return
+                                EvidenceHopOutcome.bare (
+                                    EvidenceLink.LinkBroken(
+                                        WorkRecordRef.describe head,
+                                        "the source system named this record as covering the deploy's sources and then holds no record under that ref"
+                                    )
+                                ),
+                                []
+                        | WorkRecordAnswer.Found record ->
+                            let! ancestors = source.GetAncestors { Root = head; Depth = depth }
 
-                        let detail =
-                            sprintf
-                                "the deploy's sources are covered by %s work record %s in %s"
-                                (WorkRecordKind.label record.Kind)
-                                (WorkRecordRef.describe head)
-                                (if attestation.SourceSystem = "" then
-                                     "an unnamed source system"
-                                 else
-                                     attestation.SourceSystem)
+                            let detail =
+                                sprintf
+                                    "the deploy's sources are covered by %s work record %s in %s"
+                                    (WorkRecordKind.label record.Kind)
+                                    (WorkRecordRef.describe head)
+                                    (if attestation.SourceSystem = "" then
+                                         "an unnamed source system"
+                                     else
+                                         attestation.SourceSystem)
 
-                        match ancestors with
-                        | Ok page ->
-                            return {
-                                Link = EvidenceLink.Linked(head.RecordId, detail)
-                                Findings = capFindings (ancestorFindings page)
-                            }
-                        | Error error ->
-                            // The head resolved; the ancestor walk did
-                            // not. The join to the deploy still holds,
-                            // so the hop is linked and the refusal is
-                            // reported as the finding it is rather than
-                            // demoting a link that is genuinely there.
-                            return {
-                                Link = EvidenceLink.Linked(head.RecordId, detail)
-                                Findings = [
-                                    sprintf "the ancestor walk was refused: %s" (WorkProvenanceError.describe error)
-                                ]
-                            }
-    }
+                            match ancestors with
+                            | Ok page ->
+                                return
+                                    {
+                                        Link = EvidenceLink.Linked(head.RecordId, detail)
+                                        Findings = capFindings (ancestorFindings page)
+                                    },
+                                    ancestorPositions page
+                            | Error error ->
+                                // The head resolved; the ancestor walk did
+                                // not. The join to the deploy still holds,
+                                // so the hop is linked and the refusal is
+                                // reported as the finding it is rather than
+                                // demoting a link that is genuinely there.
+                                //
+                                // The enumeration nevertheless did not
+                                // happen, and every refusal this seam
+                                // raises is a DECLARED bound. One bounded
+                                // position says so, rather than letting a
+                                // refused ancestor walk read as a complete
+                                // enumeration of nothing.
+                                return
+                                    {
+                                        Link = EvidenceLink.Linked(head.RecordId, detail)
+                                        Findings = [
+                                            sprintf
+                                                "the ancestor walk was refused: %s"
+                                                (WorkProvenanceError.describe error)
+                                        ]
+                                    },
+                                    [
+                                        // Keyed on the enumeration that
+                                        // did not happen rather than on
+                                        // the head, whose id the link
+                                        // reference already names — a
+                                        // position the render accounts
+                                        // for is not a position anything
+                                        // held back.
+                                        EvidenceEnumeration.bounded
+                                            EvidenceChain.UpstreamWorkRecordHop
+                                            EvidenceEnumeration.WorkAncestorKind
+                                            $"ancestors-of {head.RecordId}"
+                                            EvidenceEnumeration.WorkAncestorBound
+                                    ]
+        }
 
     // ── Hop 2 — the build transcript ─────────────────────────────────
 
@@ -416,27 +551,68 @@ module private EvidenceChainHops =
     /// release, carrying the reason. Reported rather than counted: an
     /// unattested entry is the half of a closure a reader most needs to
     /// see, and a bare count is not actionable.
-    let private unattestedFindings (closure: DependencyClosure) : string list =
+    ///
+    /// Split into the entry's key and its reason so the enumeration's
+    /// POSITIONS and its rendered LINES are produced from one traversal
+    /// in one order. Two traversals that drifted apart would compute a
+    /// position's rendered index against lines it does not correspond to.
+    let private unattestedEntries (closure: DependencyClosure) : (string * string) list =
         closure.Entries
         |> List.choose (fun entry ->
             match entry.Attestation with
             | AttestedBy _ -> None
-            | Unattested reason -> Some(sprintf "%s %s — %s" entry.Id entry.Version (UnattestedReason.describe reason)))
+            | Unattested reason -> Some(sprintf "%s %s" entry.Id entry.Version, UnattestedReason.describe reason))
+
+    let private unattestedFindings (closure: DependencyClosure) : string list =
+        unattestedEntries closure
+        |> List.map (fun (key, reason) -> sprintf "%s — %s" key reason)
+
+    /// The positions a linked closure's own attestation states name: one
+    /// per entry standing on no attested upstream release, because those
+    /// are the entries the enumeration exists to carry. An entry past the
+    /// declared enumeration cap is held back by that cap, which states
+    /// its own truncation in the render.
+    ///
+    /// The key carries the version as well as the id, so two packages
+    /// sharing a name prefix cannot account for one another.
+    let private closurePositions (closure: DependencyClosure) : EnumerationPosition list =
+        unattestedEntries closure
+        |> List.mapi (fun index (key, _) ->
+            if index >= FindingCap then
+                EvidenceEnumeration.bounded
+                    EvidenceChain.DependencyClosureHop
+                    EvidenceEnumeration.ClosureEntryKind
+                    key
+                    EvidenceEnumeration.EnumerationCapBound
+            else
+                EvidenceEnumeration.required
+                    EvidenceChain.DependencyClosureHop
+                    EvidenceEnumeration.ClosureEntryKind
+                    key)
 
     /// The join from the deploy record to the closure its build
     /// resolved, answered by the deploy substrate's own slot comparison.
-    let walkClosure (sources: EvidenceChainSources) : EvidenceHopOutcome =
+    ///
+    /// Answers with the hop's outcome AND the positions the closure's own
+    /// attestation states name. **Only the branch where the join HOLDS
+    /// names any.** A closure nothing binds to this deployment is not an
+    /// enumeration the walk owes a reader — the hop says so in one line,
+    /// and claiming its entries were missing would report the absent join
+    /// twice under two different names.
+    let walkClosure (sources: EvidenceChainSources) : EvidenceHopOutcome * EnumerationPosition list =
         match sources.Closure, sources.Deploy with
         | None, _ ->
             EvidenceHopOutcome.bare (
                 EvidenceLink.LinkAbsent
                     "no dependency closure is composed, so which resolved packages this deployment stands on is unrecorded"
-            )
+            ),
+            []
         | Some _, None ->
             EvidenceHopOutcome.bare (
                 EvidenceLink.LinkAbsent
                     "a dependency closure is recorded and no deploy record binds its digest, so nothing joins it to this deployment"
-            )
+            ),
+            []
         | Some closure, Some signedRecord ->
             let computed = DeployRecords.closureDigest closure
             let entries = List.length closure.Entries
@@ -450,18 +626,20 @@ module private EvidenceChainHops =
                 |> List.length
 
             match DeployRecords.verifyClosure closure signedRecord.Record.Provenance with
-            | Ok() -> {
-                Link =
-                    EvidenceLink.Linked(
-                        computed,
-                        sprintf
-                            "the deploy record binds closure %s, which is the closure in hand — %d resolved entries, %d standing on an attested upstream release"
-                            computed
-                            entries
-                            attested
-                    )
-                Findings = capFindings (unattestedFindings closure)
-              }
+            | Ok() ->
+                {
+                    Link =
+                        EvidenceLink.Linked(
+                            computed,
+                            sprintf
+                                "the deploy record binds closure %s, which is the closure in hand — %d resolved entries, %d standing on an attested upstream release"
+                                computed
+                                entries
+                                attested
+                        )
+                    Findings = capFindings (unattestedFindings closure)
+                },
+                closurePositions closure
             | Error failures ->
                 let describe =
                     failures |> List.map DeployRecords.DeployRecordVerificationFailure.describe
@@ -480,14 +658,16 @@ module private EvidenceChainHops =
                                 "the deploy record's upstream-provenance slot does not carry the digest of the closure in hand — either the slot was filled with something else, which is legitimate, or this is not the closure the record was sealed over"
                             )
                         Findings = describe
-                    }
+                    },
+                    []
                 else
                     {
                         Link =
                             EvidenceLink.LinkAbsent
                                 "the deploy record's upstream-provenance slot is empty, so nothing binds the closure in hand to it"
                         Findings = describe
-                    }
+                    },
+                    []
 
     // ── Hop 4 — the sealed deploy record ─────────────────────────────
 
@@ -643,14 +823,28 @@ module private EvidenceChainHops =
 
     /// The join from this deployment's evidence to a position in the
     /// hash-chained audit ledger — where the walk ends.
-    let walkLedgerPosition (sources: EvidenceChainSources) : Async<EvidenceHopOutcome> = async {
+    ///
+    /// Answers with the hop's outcome AND the position the ledger read
+    /// reached, where it reached one. A ledger index is the one position
+    /// a hop enumerates through its join key rather than through a
+    /// finding line, which is why the completeness check reads a hop's
+    /// whole rendered surface and not only its findings.
+    let walkLedgerPosition (sources: EvidenceChainSources) : Async<EvidenceHopOutcome * EnumerationPosition list> = async {
+        let indexPosition (position: int64) = [
+            EvidenceEnumeration.required
+                EvidenceChain.LedgerPositionHop
+                EvidenceEnumeration.LedgerIndexKind
+                (string position)
+        ]
+
         match sources.Ledger with
         | None ->
             return
                 EvidenceHopOutcome.bare (
                     EvidenceLink.LinkAbsent
                         "no hash-chained audit ledger is composed, so this deployment's evidence is anchored nowhere and carries no tamper evidence"
-                )
+                ),
+                []
         | Some read ->
             let! outcome = read () |> Async.Catch
 
@@ -659,7 +853,8 @@ module private EvidenceChainHops =
                 return
                     EvidenceHopOutcome.bare (
                         EvidenceLink.LinkBroken(deployPosition sources, sprintf "the ledger read raised: %s" ex.Message)
-                    )
+                    ),
+                    []
             | Choice1Of2(Error reason) ->
                 // Composed and would not answer. Reading this as absence
                 // would make breaking your own ledger the cheapest way to
@@ -670,27 +865,32 @@ module private EvidenceChainHops =
                             deployPosition sources,
                             sprintf "the ledger is composed and could not be read: %s" reason
                         )
-                    )
+                    ),
+                    []
             | Choice1Of2(Ok(LedgerPositionReading.LedgerUnrecorded reason)) ->
-                return EvidenceHopOutcome.bare (EvidenceLink.LinkAbsent reason)
+                return EvidenceHopOutcome.bare (EvidenceLink.LinkAbsent reason), []
             | Choice1Of2(Ok(LedgerPositionReading.LedgerBroken(position, detail))) ->
-                return {
-                    Link = EvidenceLink.LinkBroken(string position, detail)
-                    Findings = [
-                        sprintf
-                            "records 0..%d chain cleanly; everything after the break is unevidenced"
-                            (max 0L (position - 1L))
-                    ]
-                }
+                return
+                    {
+                        Link = EvidenceLink.LinkBroken(string position, detail)
+                        Findings = [
+                            sprintf
+                                "records 0..%d chain cleanly; everything after the break is unevidenced"
+                                (max 0L (position - 1L))
+                        ]
+                    },
+                    indexPosition position
             | Choice1Of2(Ok(LedgerPositionReading.LedgerRecorded(position, headDigest))) ->
-                return {
-                    Link =
-                        EvidenceLink.Linked(
-                            string position,
-                            sprintf "this deployment's evidence chains to ledger position %d" position
-                        )
-                    Findings = [ sprintf "chain head '%s'" headDigest ]
-                }
+                return
+                    {
+                        Link =
+                            EvidenceLink.Linked(
+                                string position,
+                                sprintf "this deployment's evidence chains to ledger position %d" position
+                            )
+                        Findings = [ sprintf "chain head '%s'" headDigest ]
+                    },
+                    indexPosition position
     }
 
 /// The shipped walker over the substrates a deployment already records.
@@ -728,16 +928,17 @@ type DefaultEvidenceChainWalker(sources: EvidenceChainSources, caps: EvidenceCha
                 if closureSize > caps.MaxClosureEntries then
                     return Result.Error(ChainClosureExceedsCap(closureSize, caps.MaxClosureEntries))
                 else
-                    let! work = walkWorkRecord sources request.WorkDepth
+                    let! work, workPositions = walkWorkRecord sources request.WorkDepth
                     let! deploy = walkDeployRecord sources
                     let! pack = walkEvidencePack sources
-                    let! ledger = walkLedgerPosition sources
+                    let! ledger, ledgerPositions = walkLedgerPosition sources
+                    let closure, closureExpected = walkClosure sources
 
                     let hops =
                         EvidenceChain.hops {
                             UpstreamWorkRecord = work
                             BuildTranscript = walkTranscript sources
-                            DependencyClosure = walkClosure sources
+                            DependencyClosure = closure
                             DeployRecord = deploy
                             BootVerification = walkBootVerification sources
                             EvidencePack = pack
@@ -752,6 +953,14 @@ type DefaultEvidenceChainWalker(sources: EvidenceChainSources, caps: EvidenceCha
                             Hops = hops
                             Outcome = EvidenceChain.outcomeOf hops
                             VerdictDigest = DefaultEvidenceChainWalker.VerdictDigest hops
+                            // Derived from the linkage each hop resolved,
+                            // then measured against what those hops
+                            // rendered. The two are separate arguments
+                            // because they must come from separate
+                            // places: an expectation read back out of the
+                            // render is satisfied by construction.
+                            Enumeration =
+                                EvidenceEnumeration.assess (workPositions @ closureExpected @ ledgerPositions) hops
                         }
         }
 
@@ -845,6 +1054,12 @@ module EvidenceChainWalker =
                         Hops = hops
                         Outcome = EvidenceChain.outcomeOf hops
                         VerdictDigest = DefaultEvidenceChainWalker.VerdictDigest hops
+                        // No walker, so no linkage names anything and the
+                        // enumeration is complete over an empty set. That
+                        // is not a claim the deployment recorded much —
+                        // the chain's own outcome says `ChainUnrecorded`,
+                        // and the two answer different questions.
+                        Enumeration = EvidenceEnumeration.assess [] hops
                     }
             | Some walker ->
                 match! walker.Walk request with

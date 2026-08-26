@@ -7,7 +7,8 @@
   "outcome": "chain-complete",
   "bundleIntegrity": "intact",
   "chainVerdictDigest": "271172a68afc8dce4334d386b560d83d186c6de7a98f96709dd46f0bd7d8c33b",
-  "bundleContentId": "845f35d7f42909dd273e2da2353b7592f4818ef72e171044f0beea26249f12f4",
+  "bundleContentId": "8375e328f19d4d79a8bc6a358849134e90a906c3f9f115524cfa632484bbf5b1",
+  "bundleContentIdRegeneratedFor": "The exported bundle now states its walk's enumeration-completeness verdict as a typed qualifier, and the bundle's canonical form covers qualifiers — so the artefact re-addresses. Regenerated from the tree in which the form changed, after confirming the delta is a pure APPEND: everything before the qualifier block is byte-identical and the chain's own verdict digest above did not move, because the verdict rides beside that digest rather than inside it.",
   "upstreamAncestorFindings": 2,
   "hops": [
     {

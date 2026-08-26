@@ -137,6 +137,10 @@ let private chainOf (links: EvidenceChainLinks) : EvidenceChain =
         Hops = hops
         Outcome = EvidenceChain.outcomeOf hops
         VerdictDigest = DefaultEvidenceChainWalker.VerdictDigest hops
+        // These fixtures are hand-built link sets rather than walks, so
+        // there is no linkage behind them to be incomplete about. The
+        // enumeration verdict's own arms live in the walker pack.
+        Enumeration = EnumerationCompleteness.Complete
     }
 
 let private cleanChain = chainOf cleanLinks
@@ -307,19 +311,22 @@ let bundleDeterminismTests =
         }
 
         test "a qualifier appends to the canonical form rather than shifting it" {
-            // The extensibility property a later phase's typed verdict
-            // depends on: everything before the qualifier block must be
+            // The extensibility property the enumeration verdict depends
+            // on: everything before the qualifier block must be
             // byte-identical, so a reader diffing two canonical forms
             // across the upgrade can tell a growth from a re-statement.
+            // Appended to the qualifiers the bundle already carries,
+            // which is the shape a further phase's addition takes.
             let qualified =
                 EvidenceBundleExport.bundleWith
-                    [
-                        {
-                            Id = "enumeration-completeness"
-                            Verdict = "complete"
-                            Detail = "every hop's enumeration was taken whole"
-                        }
-                    ]
+                    (cleanBundle.Qualifiers
+                     @ [
+                         {
+                             Id = "some-later-measurement"
+                             Verdict = "measured"
+                             Detail = "a verdict a later phase attaches"
+                         }
+                     ])
                     observer
                     observedAt
                     cleanChain

@@ -309,6 +309,14 @@ let allTests =
         LocalEmbeddingScopeTests.capabilityProbeTests
         LocalEmbeddingScopeTests.cacheKeyingTests
         LocalEmbeddingScopeTests.crossScopeRetrievalTests
+        // Feature-hashed dimension assignment: a term's slot is a
+        // function of the term, so a growing corpus can no longer move a
+        // previously-indexed chunk into a coordinate space its query
+        // does not share. The "weights DO still move" case is the
+        // control that stops the assignment case passing on a frozen
+        // embedder.
+        LocalEmbeddingHashingTests.dimensionAssignmentTests
+        LocalEmbeddingHashingTests.spaceAlignmentTests
         // Phase 500 — the Tesseract IOcrProvider companion and the
         // "OCR unavailable" ingestion signal. Structural arm always on;
         // native arm Pending unless TOOLUP_TESSDATA is set.
@@ -1293,6 +1301,16 @@ let allTests =
         EvidenceChainBreakTests.bundleFalsificationTests
         EvidenceChainBreakTests.documentTamperCorpusTests
         EvidenceChainBreakTests.absentVsBrokenTests
+        // Phase 716 — the walk proves it enumerated everything its own
+        // linkage names, not merely everything it liked: the expected
+        // positions derived rather than configured, a missing interior
+        // position named, a declared bound kept distinct from an
+        // omission, and a shorter render unable to satisfy the claim.
+        EvidenceEnumerationCompletenessTests.derivationTests
+        EvidenceEnumerationCompletenessTests.missingPositionTests
+        EvidenceEnumerationCompletenessTests.boundedTests
+        EvidenceEnumerationCompletenessTests.shorterRenderTests
+        EvidenceEnumerationCompletenessTests.bundleStatementTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate
