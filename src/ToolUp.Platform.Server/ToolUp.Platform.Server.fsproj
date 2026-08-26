@@ -598,6 +598,13 @@
              because the chained ledger lives downstream of this assembly
              (GP 1). -->
         <Compile Include="Server\EvidenceChainWalker.fs" />
+        <!-- Phase 714 — the walked chain as a signed, offline-checkable
+             statement. After EvidenceChainWalker.fs (it packages that
+             walk) and after DsseEnvelope.fs (it signs through that
+             family). Carries no signing or verifying crypto of its own:
+             the signer arrives across IStatementEnvelopeSigner and the
+             signature check is a stock DSSE one. -->
+        <Compile Include="Server\EvidenceBundleExport.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
         <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +

@@ -605,3 +605,440 @@ module EvidenceChain =
                 sb.AppendLine(sprintf "        · %s" finding) |> ignore
 
         sb.ToString()
+
+// ─── Phase 714 — the walked chain as a portable, checkable bundle ─────
+//
+// A chain answers a question for whoever is holding the deployment. It
+// is not yet an artefact a counterparty can hold: nothing names the
+// bundle's own identity, nothing states what the bundle does and does
+// not claim, and the only thing that could check it is the deployment
+// that produced it. This section is the **bundle**: the chain, plus the
+// claim boundary, plus a content id over a canonical framing — and a
+// verifier that needs none of the above to be running.
+//
+// ── What a bundle claims, exactly ────────────────────────────────────
+//
+// **These records, with these digests, linked this way, were observed
+// by this deployment at this time.** Nothing more. It does not claim
+// that the upstream records are true, that the work they describe was
+// done well, that code never composed behaved as declared, or that
+// anything the deployment did not record happened or did not happen.
+// The boundary is not a footnote about the artefact; it IS half the
+// artefact, and it is carried as data on every bundle — clean ones
+// included — because a caveat that appears only on failures is a
+// caveat nobody reads.
+//
+// ── Two rulings this shape makes, both written INTO the document ─────
+//
+// *Nested signatures are CARRIED VERBATIM, never re-signed.* Several of
+// the chain's hops name an artefact that already carries somebody's
+// signature: a deploy record's seal, a signed evidence-pack manifest, a
+// signed ledger head. A bundle can either transcode those — carry each
+// inner attestation exactly as recorded and add ONE outer signature over
+// the whole — or re-sign: extract the content, drop the inner signature,
+// and assert it afresh under the bundle key. This shape transcodes, and
+// the disposition rides in the document as
+// `NestedAttestationDisposition` so a verifier reads the ruling out of
+// the bundle rather than having to know it about the producer.
+// Re-signing would convert an observation into an origin claim in the
+// one act that is supposed to preserve the difference: the surviving
+// signature would say "this deployment asserts these upstream facts"
+// where the record said "this deployment observed that somebody else
+// asserted them", and no later reader could recover which. It would
+// also make a compromised bundle key sufficient to manufacture upstream
+// attestations that were never made.
+//
+// *The content id names the RECORD SET, not the observation.* The
+// canonical form below deliberately excludes the observer and the
+// observation time, exactly as the chain's own verdict digest excludes
+// its actor and clock. Two bundles taken a minute apart from an
+// unchanged deployment therefore carry the SAME content id, and a reader
+// sees at a glance that nothing moved. The observer and the time are
+// still covered by the outer signature — they sit inside the signed
+// payload — so the "observed by this deployment at this time" half of
+// the claim is attested; it simply is not what the artefact is
+// ADDRESSED BY.
+
+/// One additional typed verdict qualifying what a bundle claims.
+///
+/// **Deliberately open-ended, and appended rather than inserted.** A
+/// later phase that measures something new about the walk — whether the
+/// enumeration behind a hop was complete, say — attaches it here instead
+/// of widening the chain or the not-proved list. The canonical form
+/// renders qualifiers last and in carried order, so adding one appends
+/// lines and moves nothing before them: a reader diffing two canonical
+/// forms across the upgrade can tell a growth from a re-statement.
+///
+/// `Verdict` is a stable lowercase wire label, never localised — the
+/// thing a dashboard cuts on. `Detail` is the qualifier's own account of
+/// itself.
+type BundleClaimQualifier = {
+    /// Stable id, so a consumer can find one qualifier without
+    /// string-matching prose.
+    Id: string
+    /// Stable lowercase wire label for this qualifier's verdict.
+    Verdict: string
+    /// What the verdict means for this bundle, quoting the evidence
+    /// rather than the conclusion.
+    Detail: string
+}
+
+/// A walked chain packaged as a portable artefact.
+///
+/// The chain rides VERBATIM — its hops, its outcome and its own verdict
+/// digest are the ones the walk produced, not a re-derivation. That is
+/// the transcode ruling applied to the bundle's own innermost artefact,
+/// and it is what lets a holder check the chain's digest independently
+/// of anything this shape does.
+type EvidenceBundle = {
+    SchemaVersion: int
+    /// How this bundle treats an inner artefact that already carries a
+    /// signature. One recognised value —
+    /// `EvidenceBundle.CarriedVerbatim` — and a verifier refuses a
+    /// document declaring anything else rather than guessing, because
+    /// the whole point of writing the ruling down is that a reader need
+    /// not know which producer wrote the bundle.
+    NestedAttestationDisposition: string
+    /// The deployment that observed these records. An opaque,
+    /// deployment-chosen id; never interpreted here, and never a claim
+    /// about who the observer IS.
+    Observer: string
+    ObservedAt: DateTime
+    /// The walk, exactly as it was produced.
+    Chain: EvidenceChain
+    /// What this bundle does NOT prove. Present on every bundle,
+    /// including one whose chain is complete.
+    NotProved: DeploymentVerification.NotProvedStatement list
+    /// Additional typed verdicts qualifying the claim. Empty is normal.
+    Qualifiers: BundleClaimQualifier list
+    /// Lowercase-hex SHA-256 over `EvidenceBundle.canonicalForm`,
+    /// computed by the producer. This is the bundle's identity and the
+    /// in-toto subject digest an envelope publishes it under.
+    ContentId: string
+}
+
+/// Whether a bundle hangs together.
+///
+/// **Two cases, and the negative one names a POSITION.** A reader told
+/// only "this bundle does not verify" has to re-derive the whole
+/// document to find out what moved; `BrokenAt` carries a stable
+/// structural coordinate (`bundle/chain/hops[3]`, `bundle/contentId`, …)
+/// plus the reason, so the finding is actionable from the one line.
+///
+/// **`BrokenAt` also covers "I cannot check this".** A bundle written
+/// under a schema this verifier does not know is reported broken with a
+/// reason saying exactly that — never `Intact`. A verifier that passed
+/// what it could not read would be worse than one that did not exist.
+[<RequireQualifiedAccess>]
+type BundleIntegrity =
+    /// Every structural property this verifier can establish holds.
+    /// Emphatically NOT a statement that the bundle's signature is
+    /// valid, nor that the records it carries are true — see
+    /// `EvidenceBundle.verifyWith`.
+    | Intact
+    /// A named property does not hold at a named position.
+    | BrokenAt of position: string * reason: string
+
+[<RequireQualifiedAccess>]
+module BundleIntegrity =
+
+    /// Stable lowercase wire label.
+    let label =
+        function
+        | BundleIntegrity.Intact -> "intact"
+        | BundleIntegrity.BrokenAt _ -> "broken"
+
+    /// `true` only for `Intact`. Provided so a caller cannot write
+    /// `<> BrokenAt …` and accidentally read a future case as a pass.
+    let isIntact =
+        function
+        | BundleIntegrity.Intact -> true
+        | BundleIntegrity.BrokenAt _ -> false
+
+    /// One-line description, so a diagnostic, a test and a command's
+    /// stdout all read the same wording.
+    let describe =
+        function
+        | BundleIntegrity.Intact -> "bundle intact"
+        | BundleIntegrity.BrokenAt(position, reason) -> $"broken at {position}: {reason}"
+
+module EvidenceBundle =
+
+    /// Schema version of `EvidenceBundle`.
+    [<Literal>]
+    let SchemaVersion = 1
+
+    /// Framing version for the bundle's canonical form. Part of the
+    /// framed string the content id is taken over, so a bundle
+    /// canonicalised under a future scheme can never collide with one
+    /// canonicalised under this.
+    [<Literal>]
+    let FramingVersion = "toolup.evidencebundle.v1"
+
+    /// The one recognised nested-attestation disposition: an inner
+    /// artefact's own signature is carried exactly as recorded, and the
+    /// bundle adds its own signature over the whole. The rejected
+    /// alternative — re-signing the extracted content under the bundle
+    /// key — is priced in this substrate's migration note.
+    [<Literal>]
+    let CarriedVerbatim = "carried-verbatim"
+
+    /// The in-toto subject name a bundle publishes under. The digest is
+    /// what a holder claim-checks; the name is how a reader recognises
+    /// the shape at a glance.
+    [<Literal>]
+    let SubjectName = "evidence-chain-bundle"
+
+    /// The canonical form the content id is taken over.
+    ///
+    /// Five blocks in a fixed order: the framing, the nested-attestation
+    /// ruling, the chain (its own canonical hop lines plus its outcome
+    /// and verdict digest), the not-proved statements, and the
+    /// qualifiers. Qualifiers render LAST so a later phase's addition
+    /// appends rather than shifting.
+    ///
+    /// **Excludes `Observer` and `ObservedAt`** — see the section header:
+    /// the id names the record set, so an unchanged deployment bundles to
+    /// the same id every time.
+    let canonicalForm (bundle: EvidenceBundle) : string =
+        let sb = StringBuilder()
+        sb.Append(FramingVersion).Append('\n') |> ignore
+        sb.Append(SchemaVersion).Append('\n') |> ignore
+
+        // Length-prefixed fields, so the canonical form is injective
+        // over free-text detail without needing a separator byte the
+        // detail could contain. A delimiter-only scheme would let two
+        // different bundles frame to identical bytes.
+        let field (value: string) =
+            let value = if isNull value then "" else value
+            sb.Append(value.Length).Append(':').Append(value).Append(';') |> ignore
+
+        // An explicit LF, never `AppendLine`, which emits
+        // `Environment.NewLine` — the same bundle would then frame to
+        // different bytes on Windows and Linux and the id would stop
+        // being a property of the bundle.
+        let endLine () = sb.Append('\n') |> ignore
+
+        field "disposition"
+        field bundle.NestedAttestationDisposition
+        endLine ()
+
+        // The chain's own canonical form, spliced verbatim. Sharing it
+        // rather than restating the hop framing is what keeps the
+        // bundle's id and the chain's verdict digest derived from ONE
+        // definition of what a hop is.
+        sb.Append(EvidenceChain.canonicalForm bundle.Chain.Hops) |> ignore
+
+        field "chain"
+        field (string bundle.Chain.SchemaVersion)
+        field (EvidenceChainOutcome.label bundle.Chain.Outcome)
+        field bundle.Chain.VerdictDigest
+        endLine ()
+
+        for statement in bundle.NotProved do
+            field "not-proved"
+            field statement.Id
+            field statement.Statement
+            field (defaultArg statement.Narrowing "")
+            endLine ()
+
+        for qualifier in bundle.Qualifiers do
+            field "qualifier"
+            field qualifier.Id
+            field qualifier.Verdict
+            field qualifier.Detail
+            endLine ()
+
+        sb.ToString()
+
+    /// The hop-set fault a bundle's chain carries, if any: a short or
+    /// long hop list, a hop out of walk order, or a hop whose ordinal
+    /// does not match its position.
+    let private hopFault (bundle: EvidenceBundle) : (string * string) option =
+        let hops = bundle.Chain.Hops
+        let expected = EvidenceChain.order
+
+        if List.length hops <> List.length expected then
+            Some(
+                "bundle/chain/hops",
+                $"the walk carries {List.length hops} hop(s) where a complete chain is {List.length expected} — a short hop list reads as a complete one, which is exactly what the chain shape exists to prevent"
+            )
+        else
+            List.zip hops expected
+            |> List.indexed
+            |> List.tryPick (fun (index, (hop, expectedId)) ->
+                if hop.Id <> expectedId then
+                    Some(
+                        $"bundle/chain/hops[{index}]",
+                        $"hop {index} is '{hop.Id}' where the walk order names '{expectedId}'"
+                    )
+                elif hop.Ordinal <> index + 1 then
+                    Some(
+                        $"bundle/chain/hops[{index}]",
+                        $"hop '{hop.Id}' carries ordinal {hop.Ordinal} at position {index + 1} — a renumbered walk cannot be read in the order it was taken"
+                    )
+                else
+                    None)
+
+    /// The digest-dependent fault a bundle carries, if any: a chain
+    /// outcome that is not the fold of its own hops, a verdict digest
+    /// that is not the digest of its own hops, a stripped claim
+    /// boundary, or a content id that is not the digest of the whole.
+    let private contentFault (digest: string -> string) (bundle: EvidenceBundle) : (string * string) option =
+        let recomputedOutcome = EvidenceChain.outcomeOf bundle.Chain.Hops
+        let recomputedVerdict = digest (EvidenceChain.canonicalForm bundle.Chain.Hops)
+
+        if bundle.Chain.Outcome <> recomputedOutcome then
+            Some(
+                "bundle/chain/outcome",
+                $"the chain reports outcome '{EvidenceChainOutcome.label bundle.Chain.Outcome}' and folding its own hops gives '{EvidenceChainOutcome.label recomputedOutcome}'"
+            )
+        elif bundle.Chain.VerdictDigest <> recomputedVerdict then
+            Some(
+                "bundle/chain/verdictDigest",
+                $"the chain carries verdict digest '{bundle.Chain.VerdictDigest}' and its own hops canonicalise to '{recomputedVerdict}' — a hop was altered after the walk"
+            )
+        elif List.isEmpty bundle.NotProved then
+            Some(
+                "bundle/notProved",
+                "the bundle carries no claim boundary — every bundle states what it does not prove, including one whose chain is complete, so an empty list is a stripped document rather than a clean one"
+            )
+        else
+            let recomputedContentId = digest (canonicalForm bundle)
+
+            if bundle.ContentId <> recomputedContentId then
+                Some(
+                    "bundle/contentId",
+                    $"the bundle is addressed as '{bundle.ContentId}' and its own canonical form digests to '{recomputedContentId}'"
+                )
+            else
+                None
+
+    /// Verify a bundle **structurally**, using a caller-supplied digest
+    /// function over the canonical form.
+    ///
+    /// **Pure, and crypto-free by construction.** The digest arrives as
+    /// an argument rather than being computed here, because this file is
+    /// packed for hosts where `System.Security.Cryptography` does not
+    /// exist; a party checking a bundle supplies the SHA-256 their own
+    /// platform provides and gets the same answer. Bundle verification
+    /// therefore needs no deployment, no store, no network, and no
+    /// package beyond a hash.
+    ///
+    /// **What it establishes:** the schema is one this verifier knows;
+    /// the nested-attestation ruling is the recognised one; the chain
+    /// carries the full hop set, in order, correctly ordinalled; the
+    /// chain's outcome is the fold of its own hops; the chain's verdict
+    /// digest is the digest of its own canonical form; the claim
+    /// boundary is present; and the content id is the digest of the
+    /// whole canonical form.
+    ///
+    /// **What it does NOT establish, and this is the important half:**
+    /// nothing about the outer signature — a holder checks that against
+    /// a public key, with stock DSSE tooling if they prefer — and
+    /// nothing about whether the records the chain carries are TRUE.
+    /// `Intact` means the document has not been altered since it was
+    /// framed and says what it says consistently. It is not a pass on
+    /// the deployment.
+    let verifyWith (digest: string -> string) (bundle: EvidenceBundle) : BundleIntegrity =
+        if bundle.SchemaVersion <> SchemaVersion then
+            BundleIntegrity.BrokenAt(
+                "bundle/schemaVersion",
+                $"this bundle declares schema version {bundle.SchemaVersion} and this verifier reads version {SchemaVersion} — it is not checkable here, which is not the same as being wrong"
+            )
+        elif bundle.NestedAttestationDisposition <> CarriedVerbatim then
+            BundleIntegrity.BrokenAt(
+                "bundle/nestedAttestationDisposition",
+                $"this bundle declares nested-attestation disposition '{bundle.NestedAttestationDisposition}' and the only disposition this verifier can check is '{CarriedVerbatim}' — a document whose inner signatures were treated some other way makes a different claim, and is refused rather than read hopefully"
+            )
+        else
+            match hopFault bundle with
+            | Some(position, reason) -> BundleIntegrity.BrokenAt(position, reason)
+            | None ->
+                match contentFault digest bundle with
+                | Some(position, reason) -> BundleIntegrity.BrokenAt(position, reason)
+                | None -> BundleIntegrity.Intact
+
+    /// Render a bundle as operator-facing text — the shape the verify
+    /// command prints and a support bundle quotes. Pure, so a test
+    /// asserts on it directly.
+    ///
+    /// The claim boundary renders on EVERY bundle, for the reason it is
+    /// carried as data at all.
+    let render (bundle: EvidenceBundle) : string =
+        let sb = StringBuilder()
+        sb.AppendLine "── Evidence bundle ──" |> ignore
+        sb.AppendLine(sprintf "  content id: %s" bundle.ContentId) |> ignore
+
+        sb.AppendLine(sprintf "  observed %s by %s" (bundle.ObservedAt.ToString "o") bundle.Observer)
+        |> ignore
+
+        sb.AppendLine(sprintf "  nested attestations: %s" bundle.NestedAttestationDisposition)
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+        sb.Append(EvidenceChain.render bundle.Chain) |> ignore
+
+        if not (List.isEmpty bundle.Qualifiers) then
+            sb.AppendLine "" |> ignore
+            sb.AppendLine "  Qualifiers:" |> ignore
+
+            for qualifier in bundle.Qualifiers do
+                sb.AppendLine(sprintf "    - [%s] %s — %s" qualifier.Verdict qualifier.Id qualifier.Detail)
+                |> ignore
+
+        sb.AppendLine "" |> ignore
+        sb.AppendLine "  What this bundle does NOT prove:" |> ignore
+
+        for statement in bundle.NotProved do
+            sb.AppendLine(sprintf "    - %s" statement.Statement) |> ignore
+
+            match statement.Narrowing with
+            | Some narrowing -> sb.AppendLine(sprintf "      (narrowed: %s)" narrowing) |> ignore
+            | None -> ()
+
+        sb.ToString()
+
+    /// The disclaimer a verification run prints on EVERY outcome,
+    /// including a pass.
+    ///
+    /// It is a literal rather than prose assembled at the call site
+    /// because it is the sentence most likely to be read as
+    /// boilerplate and skipped, and a sentence that varies between
+    /// runs invites exactly that. One wording, one place.
+    [<Literal>]
+    let StructuralPassDisclaimer =
+        "  A structural pass says this document is self-consistent and unaltered since it was framed. It says nothing about who signed it — check the signature against a public key with any DSSE verifier — and nothing about whether the records it carries are true."
+
+    /// The operator-facing text one verification run prints: the
+    /// verdict, the disclaimer, and — where the document was readable
+    /// at all — the bundle itself, claim boundary included.
+    ///
+    /// **In `Core`, and that placement is the point.** A party checking
+    /// a bundle offline should reach the SAME output as the deployment
+    /// that produced it, byte for byte, and a report assembled in the
+    /// server tier could only be approximated by anybody else. Every
+    /// input here is a value; nothing reads a clock, a store or a key,
+    /// so a cold run over the same document produces the same bytes.
+    let verificationReport (integrity: BundleIntegrity) (bundle: EvidenceBundle option) : string =
+        let sb = StringBuilder()
+        sb.AppendLine "── Evidence bundle verification ──" |> ignore
+
+        sb.AppendLine(
+            sprintf
+                "  verdict: %s — %s"
+                ((BundleIntegrity.label integrity).ToUpperInvariant())
+                (BundleIntegrity.describe integrity)
+        )
+        |> ignore
+
+        sb.AppendLine "" |> ignore
+        sb.AppendLine StructuralPassDisclaimer |> ignore
+
+        match bundle with
+        | Some bundle ->
+            sb.AppendLine "" |> ignore
+            sb.Append(render bundle) |> ignore
+        | None -> ()
+
+        sb.ToString()

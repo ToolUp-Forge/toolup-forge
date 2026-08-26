@@ -1919,6 +1919,26 @@ ToolUp.Platform.BuildTranscriptModule.canonicalDependencies(ToolUp.Platform.Buil
 ToolUp.Platform.BuildTranscriptModule.canonicalForm(ToolUp.Platform.BuildTranscript) : System.String
 ToolUp.Platform.BuildTranscriptModule.create(ToolUp.Platform.BuildToolchain, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildDependency], ToolUp.Platform.BuildEntryPoint) : ToolUp.Platform.BuildTranscript
 ToolUp.Platform.BuildTranscriptModule.empty : ToolUp.Platform.BuildTranscript { get }
+ToolUp.Platform.BundleClaimQualifier (class)
+ToolUp.Platform.BundleClaimQualifier..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BundleClaimQualifier.Detail : System.String { get }
+ToolUp.Platform.BundleClaimQualifier.Id : System.String { get }
+ToolUp.Platform.BundleClaimQualifier.Verdict : System.String { get }
+ToolUp.Platform.BundleIntegrity (class)
+ToolUp.Platform.BundleIntegrity.Intact : ToolUp.Platform.BundleIntegrity { get }
+ToolUp.Platform.BundleIntegrity.IsBrokenAt : System.Boolean { get }
+ToolUp.Platform.BundleIntegrity.IsIntact : System.Boolean { get }
+ToolUp.Platform.BundleIntegrity.Tag : System.Int32 { get }
+ToolUp.Platform.BundleIntegrity+BrokenAt (class)
+ToolUp.Platform.BundleIntegrity+BrokenAt.position : System.String { get }
+ToolUp.Platform.BundleIntegrity+BrokenAt.reason : System.String { get }
+ToolUp.Platform.BundleIntegrity+Tags (class)
+ToolUp.Platform.BundleIntegrity+Tags.BrokenAt : System.Int32 (literal)
+ToolUp.Platform.BundleIntegrity+Tags.Intact : System.Int32 (literal)
+ToolUp.Platform.BundleIntegrityModule (class)
+ToolUp.Platform.BundleIntegrityModule.describe(ToolUp.Platform.BundleIntegrity) : System.String
+ToolUp.Platform.BundleIntegrityModule.isIntact(ToolUp.Platform.BundleIntegrity) : System.Boolean
+ToolUp.Platform.BundleIntegrityModule.label(ToolUp.Platform.BundleIntegrity) : System.String
 ToolUp.Platform.CapabilityId (class)
 ToolUp.Platform.CapabilityId.Item : System.String { get }
 ToolUp.Platform.CapabilityId.Tag : System.Int32 { get }
@@ -4463,6 +4483,26 @@ ToolUp.Platform.EventStoreMode+Tags.InMemoryOnly : System.Int32 (literal)
 ToolUp.Platform.EventStoreMode+Tags.PersistentBlobBacked : System.Int32 (literal)
 ToolUp.Platform.Events (class)
 ToolUp.Platform.Events.create(System.String, System.String, System.String, System.String) : ToolUp.Platform.ModuleEvent
+ToolUp.Platform.EvidenceBundle (class)
+ToolUp.Platform.EvidenceBundle..ctor(System.Int32, System.String, System.String, System.DateTime, ToolUp.Platform.EvidenceChain, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BundleClaimQualifier], System.String)
+ToolUp.Platform.EvidenceBundle.Chain : ToolUp.Platform.EvidenceChain { get }
+ToolUp.Platform.EvidenceBundle.ContentId : System.String { get }
+ToolUp.Platform.EvidenceBundle.NestedAttestationDisposition : System.String { get }
+ToolUp.Platform.EvidenceBundle.NotProved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement] { get }
+ToolUp.Platform.EvidenceBundle.ObservedAt : System.DateTime { get }
+ToolUp.Platform.EvidenceBundle.Observer : System.String { get }
+ToolUp.Platform.EvidenceBundle.Qualifiers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BundleClaimQualifier] { get }
+ToolUp.Platform.EvidenceBundle.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.EvidenceBundleModule (class)
+ToolUp.Platform.EvidenceBundleModule.CarriedVerbatim : System.String (literal)
+ToolUp.Platform.EvidenceBundleModule.FramingVersion : System.String (literal)
+ToolUp.Platform.EvidenceBundleModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.EvidenceBundleModule.StructuralPassDisclaimer : System.String (literal)
+ToolUp.Platform.EvidenceBundleModule.SubjectName : System.String (literal)
+ToolUp.Platform.EvidenceBundleModule.canonicalForm(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleModule.render(ToolUp.Platform.EvidenceBundle) : System.String
+ToolUp.Platform.EvidenceBundleModule.verificationReport(ToolUp.Platform.BundleIntegrity, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EvidenceBundle]) : System.String
+ToolUp.Platform.EvidenceBundleModule.verifyWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], ToolUp.Platform.EvidenceBundle) : ToolUp.Platform.BundleIntegrity
 ToolUp.Platform.EvidenceChain (class)
 ToolUp.Platform.EvidenceChain..ctor(System.Int32, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop], ToolUp.Platform.EvidenceChainOutcome, System.String)
 ToolUp.Platform.EvidenceChain.Actor : System.String { get }
