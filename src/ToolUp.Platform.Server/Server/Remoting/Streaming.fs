@@ -148,6 +148,100 @@ module internal Streaming =
                 | None -> None)
             |> Map.ofArray
 
+    // ── Phase 727 — align this diagnostic with the dispatch classifiers.
+    //
+    // Phase 69d.tail matched every marker here by bare simple type name,
+    // which was consistent with the classifiers of the day. Phase 335
+    // moved the auth classifier to CLR type identity and left this one
+    // behind, so two matchers have disagreed since about what counts as
+    // `[<RequiresRole>]` — exactly the drift 335 was written to end.
+    //
+    // The diagnostic is fail-SAFE (a missed match produces a diagnostic,
+    // not an authorisation), so this is a correctness-of-message item
+    // rather than a hole — with ONE exception that is a real defect: the
+    // pre-727 matcher recognised `RateLimitAttribute` only via a
+    // server-tier type test, and its name arm had no `RateLimitAttribute`
+    // case, so a tier-shared `ToolUp.Platform.RateLimitAttribute` on a
+    // streaming method was recognised by NEITHER path. The adapter
+    // started, and the declared budget was silently dropped by the SSE
+    // short-circuit — which is the precise outcome this refusal exists to
+    // prevent, on the family (Fable-compiled Core API records) that
+    // carries the mirror in the first place. Identity matching over both
+    // families fixes that by construction.
+    //
+    // A foreign attribute of a colliding name is still REPORTED, rendered
+    // as a collision rather than as a declared guard: the refusal is
+    // preserved (never weakened), and the message stops asserting that
+    // the consumer declared a `[<RequiresRole>]` this SDK would honour.
+    // That is what makes the two matchers agree on the forged case — both
+    // now say "this is not one of our markers", where before one silently
+    // ignored it and the other named it as a guard.
+    let private preflightMarkers =
+        MarkerFamily [
+            // Server-tier family (this assembly).
+            typeof<RequiresRoleAttribute>
+            typeof<RequiresClaimAttribute>
+            typeof<TenantScopedAttribute>
+            typeof<RateLimitAttribute>
+            typeof<AuditAttribute>
+            typeof<IdempotentAttribute>
+            // Tier-shared mirror family (`ToolUp.Platform.Core`).
+            typeof<ToolUp.Platform.RequiresRoleAttribute>
+            typeof<ToolUp.Platform.RequiresClaimAttribute>
+            typeof<ToolUp.Platform.TenantScopedAttribute>
+            typeof<ToolUp.Platform.RateLimitAttribute>
+            typeof<ToolUp.Platform.AuditAttribute>
+            typeof<ToolUp.Platform.IdempotentAttribute>
+        ]
+
+    let private stringProp (name: string) (a: obj) : string option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? string as s -> Some s
+            | _ -> None
+
+    let private intProp (name: string) (a: obj) : int option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? int as i -> Some i
+            | _ -> None
+
+    /// Describe one attribute on a streaming method: `Some` when it is a
+    /// sanctioned pre-flight marker the SSE path cannot enforce, or a
+    /// foreign attribute colliding with one of their names; `None` when
+    /// it is neither. The name dispatch runs INSIDE the identity gate, so
+    /// it decodes a type already established as ours rather than guessing
+    /// from a name (the same shape as `AuthClassifier.tryRequirement`).
+    let private describeUnenforceable (a: obj) : string option =
+        let t = a.GetType()
+
+        if preflightMarkers.IsForeign t then
+            Some(
+                sprintf
+                    "foreign '%s' — name collides with a pre-flight marker; not honoured"
+                    (preflightMarkers.Render t)
+            )
+        elif not (preflightMarkers.IsSanctioned t) then
+            None
+        else
+            match t.Name with
+            | "RequiresRoleAttribute" ->
+                Some(sprintf "RequiresRole(\"%s\")" (stringProp "Role" a |> Option.defaultValue "?"))
+            | "RequiresClaimAttribute" ->
+                Some(sprintf "RequiresClaim(\"%s\")" (stringProp "Claim" a |> Option.defaultValue "?"))
+            | "TenantScopedAttribute" -> Some "TenantScoped"
+            | "RateLimitAttribute" ->
+                let count = intProp "Count" a |> Option.defaultValue 0
+                let window = intProp "WindowSeconds" a |> Option.defaultValue 0
+                Some(sprintf "RateLimit(%d, %ds)" count window)
+            | "AuditAttribute" -> Some(sprintf "Audit(\"%s\")" (stringProp "KindName" a |> Option.defaultValue "?"))
+            | "IdempotentAttribute" -> Some "Idempotent"
+            | _ -> None
+
     /// Return the names of streaming methods that carry pre-flight
     /// attributes the streaming dispatch path doesn't honour today.
     /// `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` /
@@ -169,45 +263,9 @@ module internal Streaming =
                 match streamingShape apiField with
                 | None -> None
                 | Some _ ->
-                    let attrs = apiField.GetCustomAttributes(true)
-
-                    // Simple-name matching so the tier-shared
-                    // `ToolUp.Platform.*` attribute mirrors are caught
-                    // alongside this assembly's own family (Phase
-                    // 69d.tail — same rationale as `AuthClassifier`).
-                    let stringProp (name: string) (a: obj) : string option =
-                        match a.GetType().GetProperty name with
-                        | null -> None
-                        | p ->
-                            match p.GetValue a with
-                            | :? string as s -> Some s
-                            | _ -> None
-
                     let unenforceable =
-                        attrs
-                        |> Array.choose (fun a ->
-                            match a with
-                            | :? RateLimitAttribute as rl ->
-                                Some(sprintf "RateLimit(%d, %ds)" rl.Count rl.WindowSeconds)
-                            | _ ->
-                                match a.GetType().Name with
-                                | "RequiresRoleAttribute" ->
-                                    Some(
-                                        sprintf
-                                            "RequiresRole(\"%s\")"
-                                            (stringProp "Role" a |> Option.defaultValue "?")
-                                    )
-                                | "RequiresClaimAttribute" ->
-                                    Some(
-                                        sprintf
-                                            "RequiresClaim(\"%s\")"
-                                            (stringProp "Claim" a |> Option.defaultValue "?")
-                                    )
-                                | "TenantScopedAttribute" -> Some "TenantScoped"
-                                | "AuditAttribute" ->
-                                    Some(sprintf "Audit(\"%s\")" (stringProp "KindName" a |> Option.defaultValue "?"))
-                                | "IdempotentAttribute" -> Some "Idempotent"
-                                | _ -> None)
+                        apiField.GetCustomAttributes(true)
+                        |> Array.choose describeUnenforceable
                         |> Array.toList
 
                     if List.isEmpty unenforceable then

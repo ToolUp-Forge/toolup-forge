@@ -270,6 +270,36 @@ module GiraffeUtil =
         // evaluation skips quickly when the lookup misses.
         let idempotentMethods = Idempotency.classify typeof<'impl>
 
+        // Phase 727 — the collision refusal Phase 335 gave the auth
+        // markers, extended to the three OTHER families whose recognition
+        // this dispatch path drives: audit emission, PII-safe payload
+        // inclusion, rate limiting and idempotency. Each family now
+        // matches by CLR type identity (see the per-family severity
+        // assessments at the head of Audit.fs / RateLimit.fs /
+        // Idempotency.fs), and for all three the refusal is the
+        // load-bearing half rather than a nicety: identity matching alone
+        // would silently DISARM a guard a consumer believed declared, and
+        // a guard that stops applying with nothing saying so is the
+        // failure each of these families exists to prevent.
+        //
+        // Deliberately NOT gated on `AuthContextResolver.IsSome` — unlike
+        // the auth classifier above, these three are armed independently
+        // of whether an auth-context resolver is composed.
+        //
+        // The validation family is deliberately absent: it keeps
+        // simple-name matching, with the reasoning recorded in
+        // Validation.fs. Its marker names collide with
+        // `System.ComponentModel.DataAnnotations`, which legitimately sits
+        // on the same consumer DTOs, so a refusal here would break a
+        // correct deployment for no defect (GP 11).
+        let preflightMarkerCollisions =
+            Audit.foreignMarkers typeof<'impl>
+            @ RateLimit.foreignMarkers typeof<'impl>
+            @ Idempotency.foreignMarkers typeof<'impl>
+
+        if not (List.isEmpty preflightMarkerCollisions) then
+            raise (MarkerCollision.refusal typeof<'impl>.Name preflightMarkerCollisions)
+
         // Phase 69e — cache per-method input types when their record
         // shape carries at least one ValidationAttribute. Empty map
         // means no methods need pre-flight validation; per-call lookup

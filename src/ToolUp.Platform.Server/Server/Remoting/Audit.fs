@@ -78,24 +78,70 @@ module internal Audit =
             | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
             | other -> AuditKind.Custom other
 
-    // Phase 69d.tail / 69h.tail — like the auth classifier, audit
-    // attribute recognition is by simple type name so BOTH families are
-    // honoured: this assembly's `ToolUp.Remoting.Server.AuditAttribute`
-    // and the tier-shared `ToolUp.Platform.AuditAttribute` mirror that
-    // Fable-compiled API records carry (they cannot reference this
-    // server-tier assembly). Name matching + a reflective property read
-    // happen once per API record at startup.
+    // ── Phase 727 severity assessment — the audit family ───────────────
+    //
+    // Phase 69h.tail recognised both attributes by bare simple type name,
+    // to bridge this assembly's `ToolUp.Remoting.Server.*` family and the
+    // tier-shared `ToolUp.Platform.*` mirror a Fable-compiled API record
+    // carries. Phase 335 fixed the same defect in the auth classifier;
+    // this is the assessment for the two markers here, and they are NOT
+    // the same severity as each other.
+    //
+    // `[<PiiSafe>]` — SHARPEST OF THE FOUR FAMILIES, and the only one
+    // whose forgery is a DATA-EXPOSURE defect rather than an availability
+    // or correctness one. `isPiiSafe` returning true is what STOPS a
+    // field being redacted: the value is stringified into the emitted
+    // audit row's payload verbatim. So a foreign attribute named
+    // `PiiSafeAttribute` on a consumer's input-record field silently
+    // un-redacts it, and an audit row is not a local artefact — it is
+    // replicated by every composed `IAuditSink` (S3 / GCS / Azure Blob /
+    // Splunk / Datadog), i.e. straight out of the deployment's trust
+    // boundary. The attribute's whole documented contract is "fail-safe:
+    // forgetting the attribute keeps PII out of audit rows", and
+    // simple-name matching meant a name a consumer never intended as ours
+    // could satisfy it. GP 6: a row that claims PII-safety must have been
+    // classified by something a forgery cannot satisfy. VERDICT: fix —
+    // CLR identity, plus the startup collision refusal below.
+    //
+    // `[<Audit(kind)>]` — MEDIUM. A forgery does not expose anything: it
+    // adds an audit row (noise, with a `KindName` decoded from a foreign
+    // string property). The sharp direction is the OTHER one, and it is
+    // the reason the fix needs the collision refusal rather than a
+    // silent tightening: a consumer whose own `AuditAttribute` was being
+    // honoured by accident would, under a bare identity fix, silently
+    // stop emitting audit rows for a method they believe audited — a
+    // compliance surface going quiet with nothing anywhere saying so.
+    // Refusing at startup and naming the attribute is what makes the
+    // tightening safe. VERDICT: fix — CLR identity + collision refusal.
+    //
+    // Both families are compile-time referenceable here (Platform.Server
+    // references Platform.Core), so the sets are built from `typeof<>`.
+    let private auditMarkers =
+        MarkerFamily [ typeof<AuditAttribute>; typeof<ToolUp.Platform.AuditAttribute> ]
+
+    let private piiMarkers =
+        MarkerFamily [ typeof<PiiSafeAttribute>; typeof<ToolUp.Platform.PiiSafeAttribute> ]
+
     let private tryAuditKind (a: obj) : AuditKind option =
-        match a with
-        | :? AuditAttribute as au -> Some au.Kind
-        | _ when a.GetType().Name = "AuditAttribute" ->
-            match a.GetType().GetProperty "KindName" with
-            | null -> None
-            | p ->
-                match p.GetValue a with
-                | :? string as kindName when not (isNull kindName) -> Some(decodeKind kindName)
-                | _ -> None
-        | _ -> None
+        let t = a.GetType()
+
+        if not (auditMarkers.IsSanctioned t) then
+            None
+        else
+            match a with
+            | :? AuditAttribute as au -> Some au.Kind
+            | _ ->
+                // The sanctioned tier-shared mirror: same shape, read
+                // reflectively because it cannot inherit the server-tier
+                // type. The identity gate above has already established
+                // that this IS the mirror, so the property read is a
+                // decode of a known type rather than a name-based guess.
+                match t.GetProperty "KindName" with
+                | null -> None
+                | p ->
+                    match p.GetValue a with
+                    | :? string as kindName when not (isNull kindName) -> Some(decodeKind kindName)
+                    | _ -> None
 
     // Same non-public reflection rule as `AuthClassifier.reflectionFlags`:
     // internal/private API records (and private input records) must
@@ -148,6 +194,41 @@ module internal Audit =
                     None)
             |> Map.ofArray
 
+    /// Phase 727 — marker-name collisions across the audit surface, as
+    /// `(surface, subject, renderedAttributeType)` triples for the
+    /// dispatcher's startup refusal (`MarkerCollision.refusal`).
+    ///
+    /// Two scans, because the two markers sit on different records: an
+    /// `[<Audit>]` collision is on the API record's own fields, while a
+    /// `[<PiiSafe>]` collision is on the fields of an AUDITED method's
+    /// input record — which is why this runs after `inputTypes`.
+    ///
+    /// The PII scan is deliberately one level deep, matching
+    /// `payloadFromInputRecord`'s reach exactly: that function stringifies
+    /// or redacts the input record's own fields and does not recurse, so
+    /// scanning deeper would report collisions on fields the redaction
+    /// switch never consults. If the payload walk ever gains real nesting,
+    /// this scan follows it in the same commit.
+    ///
+    /// A method whose `[<Audit>]` is itself foreign is not audited, so its
+    /// input record never reaches the payload builder — the audit
+    /// collision is reported and the PII scan simply has nothing to say
+    /// about it.
+    let foreignMarkers (apiType: Type) : (string * string * string) list =
+        let onApiRecord =
+            auditMarkers.Collisions(apiType, reflectionFlags)
+            |> List.map (fun (field, rendered) -> "audit emission", field, rendered)
+
+        let onInputRecords =
+            inputTypes apiType
+            |> Map.toList
+            |> List.collect (fun (methodName, inputType) ->
+                piiMarkers.Collisions(inputType, reflectionFlags)
+                |> List.map (fun (field, rendered) ->
+                    "PII-safe audit payload", sprintf "%s input field %s" methodName field, rendered))
+
+        onApiRecord @ onInputRecords
+
     /// Build the PII-redacted payload map from an input record value.
     /// Fields without `[<PiiSafe>]` are redacted to `<redacted:TypeName>`;
     /// fields with `[<PiiSafe>]` are stringified. Nested records are
@@ -162,10 +243,13 @@ module internal Audit =
         else string value
 
     let private isPiiSafe (pi: System.Reflection.PropertyInfo) : bool =
-        // Simple-name match so the tier-shared `ToolUp.Platform.PiiSafeAttribute`
-        // mirror is honoured alongside this assembly's own attribute.
+        // Phase 727 — CLR identity, not simple name. This predicate is
+        // the redaction switch: returning true puts the field's value
+        // into the audit payload un-redacted. See the severity note at
+        // the head of this module for why a forgeable switch here is a
+        // data-exposure defect rather than a tidiness one.
         pi.GetCustomAttributes(true)
-        |> Array.exists (fun (a: obj) -> a.GetType().Name = "PiiSafeAttribute")
+        |> Array.exists (fun (a: obj) -> piiMarkers.IsSanctioned(a.GetType()))
 
     let payloadFromInputRecord (inputType: System.Type) (inputValue: obj) : Map<string, string> =
         if isNull inputValue || not (FSharpType.IsRecord(inputType, reflectionFlags)) then

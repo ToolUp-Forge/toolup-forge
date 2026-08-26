@@ -979,10 +979,19 @@ section eliminates structurally.
 > input. Fields are whitelisted individually; anything not whitelisted renders as
 > a redaction marker. **Forgetting the attribute keeps personal data out of the
 > audit row** — the failure mode is a less useful row, never a leaked one.
-> Idempotent replays do not double-audit.
+> Idempotent replays do not double-audit. The whitelist marker is recognised by
+> **CLR type identity** over the two sanctioned attribute families, so an
+> attribute that merely shares the marker's simple name cannot defeat redaction;
+> a name collision refuses composition rather than being honoured or silently
+> ignored.
 > **Evidence:** `src/ToolUp.Platform.Core/Shared/AuthAttributes.fs` ·
-> `src/ToolUp.Platform.Server/Server/Api.fs` ·
-> `docs/migrations/69h-audit-annotation-sweep.md` (Phase 69h)
+> `src/ToolUp.Platform.Server/Server/Remoting/Audit.fs` (the redaction switch and
+> its marker family) ·
+> `src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs` (the
+> collision refusal site) · `src/ToolUp.Platform.Server/Server/Api.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/AttributeRecognitionSweepTests.fs` ·
+> `docs/migrations/69h-audit-annotation-sweep.md` (Phase 69h) ·
+> `docs/migrations/727-attribute-recognition-sweep.md` (Phase 727)
 
 > **AU-4 — The behaviour when an audit write fails is a declared policy, not an
 > implementation accident.**

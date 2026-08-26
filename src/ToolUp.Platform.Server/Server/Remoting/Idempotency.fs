@@ -351,18 +351,49 @@ module internal Idempotency =
     // Reflect over public AND non-public records, and recognise BOTH the
     // server-tier `IdempotentAttribute` and the tier-shared
     // `ToolUp.Platform.IdempotentAttribute` mirror (which Fable-compiled
-    // Core API records carry) by simple type name — same family-agnostic
-    // + fail-open fix as the 69d/69h/69g/69e classifiers. Without it a
-    // Core API record's `[<Idempotent>]` is invisible (idempotency never
-    // engages), and a non-public record silently skips classification.
+    // Core API records carry) — same family-agnostic + fail-open fix as
+    // the 69d/69h/69g/69e classifiers. Without it a Core API record's
+    // `[<Idempotent>]` is invisible (idempotency never engages), and a
+    // non-public record silently skips classification.
     let private reflectionFlags =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 
-    let private isIdempotentAttr (a: obj) : bool =
-        match a with
-        | :? IdempotentAttribute -> true
-        | _ -> a.GetType().Name = "IdempotentAttribute"
+    // ── Phase 727 severity assessment — the idempotency family ────────
+    //
+    // What a forgery buys:
+    //
+    //   * HONOURED, a foreign `IdempotentAttribute` arms response
+    //     memoisation on a method the consumer never marked: a second
+    //     call carrying the same `X-Idempotency-Key` is answered from the
+    //     store instead of executing the handler. That is a CORRECTNESS
+    //     defect (a stale answer where a fresh execution was intended),
+    //     and it is bounded in the direction that matters most: the store
+    //     scope is `subjectKey|methodName` (`deriveScope`), so a memoised
+    //     response can only ever be replayed to the SAME subject — a
+    //     forged marker cannot leak one caller's response to another. It
+    //     is also doubly opt-in: dormant unless an `IIdempotencyStore` is
+    //     composed (GP 13) AND the caller sends the header.
+    //   * NOT honoured — the direction a bare identity fix introduces —
+    //     is the sharper one: a consumer whose own `IdempotentAttribute`
+    //     was picked up by accident loses replay protection silently, and
+    //     the calls that carry an idempotency key are the ones where
+    //     duplicate execution is expensive (payments, provisioning).
+    //
+    // Same shape as rate limiting, one notch lower in blast radius
+    // because of the per-subject scope and the double opt-in. VERDICT:
+    // fix — CLR identity + collision refusal. Severity MEDIUM
+    // (correctness; no cross-subject exposure).
+    let private markers =
+        MarkerFamily [ typeof<IdempotentAttribute>; typeof<ToolUp.Platform.IdempotentAttribute> ]
+
+    let private isIdempotentAttr (a: obj) : bool = markers.IsSanctioned(a.GetType())
+
+    /// Phase 727 — marker-name collisions on the API record, for the
+    /// dispatcher's startup refusal.
+    let foreignMarkers (apiType: Type) : (string * string * string) list =
+        markers.Collisions(apiType, reflectionFlags)
+        |> List.map (fun (field, rendered) -> "idempotency", field, rendered)
 
     /// Cache the `[<Idempotent>]` classification per method at startup.
     let classify (apiType: Type) : Set<string> =

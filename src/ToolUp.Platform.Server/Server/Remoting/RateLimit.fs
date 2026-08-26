@@ -166,27 +166,62 @@ module internal RateLimit =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 
-    /// Normalise either attribute family — the server-tier
+    // ── Phase 727 severity assessment — the rate-limit family ─────────
+    //
+    // What a forgery buys, in each direction:
+    //
+    //   * A foreign `RateLimitAttribute` HONOURED (the pre-727 behaviour)
+    //     imposes a budget the consumer never declared, with semantics
+    //     read off a foreign type's `Count` / `WindowSeconds` properties —
+    //     which need not mean what this evaluator reads them as. It cannot
+    //     RELAX anything: budgets compose with AND semantics (`evaluate`
+    //     denies on the first exhausted budget), so an extra loose budget
+    //     never widens a tight one. The damage is availability — 429s on a
+    //     method the consumer believes ungated — not access.
+    //   * A foreign attribute silently NOT honoured is the sharper
+    //     direction, and it is what a bare identity fix would have
+    //     introduced: a consumer whose own `RateLimitAttribute` was being
+    //     picked up by accident loses the limiter with nothing anywhere
+    //     saying so, and an abuse budget that quietly stops applying is
+    //     exactly the failure a rate limiter exists to prevent.
+    //
+    // So the identity fix alone is NOT sufficient here — the startup
+    // collision refusal is the load-bearing half, and the assessment is
+    // what says so. VERDICT: fix — CLR identity + collision refusal.
+    // Severity MEDIUM (availability / abuse-budget, both directions), one
+    // rung below the audit family's PII exposure and above validation.
+    let private markers =
+        MarkerFamily [ typeof<RateLimitAttribute>; typeof<ToolUp.Platform.RateLimitAttribute> ]
+
+    /// Normalise either sanctioned attribute family — the server-tier
     /// `ToolUp.Remoting.Server.RateLimitAttribute` or the tier-shared
     /// `ToolUp.Platform.RateLimitAttribute` mirror (which Fable-compiled
     /// Core API records carry) — into the server-tier budget shape the
-    /// evaluator consumes. Family is recognised by simple type name +
-    /// reflective `Count` / `WindowSeconds` read, mirroring how the auth
-    /// and audit classifiers bridge their Core mirrors.
+    /// evaluator consumes. Family membership is CLR TYPE IDENTITY (Phase
+    /// 727); the reflective `Count` / `WindowSeconds` read decodes the
+    /// mirror only after identity has established that it IS the mirror.
     let private tryBudget (a: obj) : RateLimitAttribute option =
-        match a with
-        | :? RateLimitAttribute as rl -> Some rl
-        | _ when a.GetType().Name = "RateLimitAttribute" ->
-            let t = a.GetType()
+        let t = a.GetType()
 
-            match t.GetProperty "Count", t.GetProperty "WindowSeconds" with
-            | null, _
-            | _, null -> None
-            | countProp, windowProp ->
-                match countProp.GetValue a, windowProp.GetValue a with
-                | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
-                | _ -> None
-        | _ -> None
+        if not (markers.IsSanctioned t) then
+            None
+        else
+            match a with
+            | :? RateLimitAttribute as rl -> Some rl
+            | _ ->
+                match t.GetProperty "Count", t.GetProperty "WindowSeconds" with
+                | null, _
+                | _, null -> None
+                | countProp, windowProp ->
+                    match countProp.GetValue a, windowProp.GetValue a with
+                    | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
+                    | _ -> None
+
+    /// Phase 727 — marker-name collisions on the API record, for the
+    /// dispatcher's startup refusal.
+    let foreignMarkers (apiType: Type) : (string * string * string) list =
+        markers.Collisions(apiType, reflectionFlags)
+        |> List.map (fun (field, rendered) -> "rate limiting", field, rendered)
 
     /// Cache `[<RateLimit>]` attributes per API record field at startup.
     let classify (apiType: Type) : Map<string, RateLimitAttribute list> =

@@ -240,6 +240,14 @@ let allTests =
         IdempotencyStoreEvictionTests.tests
         AuditBodyDisposalTests.tests
         StreamingTests.tests
+        // Phase 727 — the same question 335 answered for the auth
+        // classifier, asked of the four families riding alongside it:
+        // audit / PII-safety, rate limiting and idempotency move to CLR
+        // identity + a startup collision refusal; validation deliberately
+        // keeps simple-name matching (pinned, with the reason recorded in
+        // Validation.fs); the Streaming diagnostic agrees with the
+        // classifier on a forged marker.
+        AttributeRecognitionSweepTests.tests
         StreamingDispatchTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests

@@ -52,6 +52,95 @@ type PublicEndpointAttribute() =
 
 // -----------------------------------------------------------------------------
 
+/// Phase 727 — the recognition mechanism Phase 335 introduced for the
+/// auth markers, factored out so the other attribute families riding the
+/// same dispatch path share ONE implementation instead of five copies
+/// that drift. Two matchers disagreeing about what counts as a marker is
+/// precisely the drift 335 was written to end, and five hand-rolled
+/// copies of "is this one of ours" would have re-created it a family at
+/// a time.
+///
+/// A family is an allow-list of CLR TYPES (`typeof<>`, so both the
+/// namespace and the declaring ASSEMBLY are pinned — a consumer type
+/// declared straight into `namespace ToolUp.Remoting.Server` from its own
+/// assembly is foreign for the same reason a `Contoso.*` one is), plus
+/// the SIMPLE names derived from that set so a *collision* — an attribute
+/// carrying a marker's name that is not one of the sanctioned types — can
+/// be reported rather than silently ignored.
+///
+/// Every family in this dispatch path spans two tiers by design: the
+/// server-tier attributes declared in this assembly, and the tier-shared
+/// `ToolUp.Platform.*` mirrors in `ToolUp.Platform.Core` that Fable-
+/// compiled API records carry (they cannot reference a server-tier
+/// assembly). `Platform.Server` references `Platform.Core`, so both are
+/// compile-time referenceable here and the set is built from `typeof<>`
+/// rather than from strings.
+type internal MarkerFamily(sanctioned: Type seq) =
+    let types = Collections.Generic.HashSet<Type>(sanctioned)
+    let names = Collections.Generic.HashSet<string>(types |> Seq.map _.Name)
+
+    /// True when the attribute's CLR type is one of the sanctioned ones.
+    member _.IsSanctioned(t: Type) = types.Contains t
+
+    /// True when the attribute's SIMPLE name collides with a sanctioned
+    /// marker but its CLR type is not sanctioned — the forgeable shape.
+    member _.IsForeign(t: Type) =
+        names.Contains t.Name && not (types.Contains t)
+
+    /// Render a type for a diagnostic: assembly-qualified where possible,
+    /// so the message names both the namespace and the assembly it came
+    /// from (which is what tells a consumer *which* of their packages
+    /// declared it).
+    member _.Render(t: Type) : string =
+        if isNull t.AssemblyQualifiedName then
+            t.FullName
+        else
+            t.AssemblyQualifiedName
+
+    /// Walk a record type's fields and return `(fieldName, renderedType)`
+    /// for every attribute whose simple name collides with a sanctioned
+    /// marker without being one. Empty for a non-record type.
+    member this.Collisions(recordType: Type, flags: System.Reflection.BindingFlags) : (string * string) list =
+        if not (FSharpType.IsRecord(recordType, flags)) then
+            []
+        else
+            FSharpType.GetRecordFields(recordType, flags)
+            |> Array.collect (fun pi ->
+                pi.GetCustomAttributes(true)
+                |> Array.choose (fun a ->
+                    let t = a.GetType()
+
+                    if this.IsForeign t then
+                        Some(pi.Name, this.Render t)
+                    else
+                        None))
+            |> Array.toList
+
+/// Phase 727 — the shared startup refusal for a marker-name collision on
+/// one of the non-auth pre-flight families. Same posture as Phase 335's
+/// `AuthClassifier.foreignMarkerException`, generalised over the surface
+/// name so each family's diagnostic says which guard the consumer
+/// believes they declared.
+module internal MarkerCollision =
+
+    /// `collisions` is `(surface, subject, renderedAttributeType)` —
+    /// `subject` is the record field, or a `method input field X` path
+    /// where the marker sits on an input record rather than the API
+    /// record itself.
+    let refusal (apiTypeName: string) (collisions: (string * string * string) list) : exn =
+        let detail =
+            collisions
+            |> List.map (fun (surface, subject, attrType) -> sprintf "%s [%s] carries '%s'" subject surface attrType)
+            |> String.concat "; "
+
+        invalidOp (
+            sprintf
+                "ToolUp.Remoting refused to start: API record '%s' has %d attribute(s) whose name matches a dispatch pre-flight marker but which are NOT one of the two sanctioned families: [%s]. Only ToolUp.Remoting.Server.* (server-tier) and ToolUp.Platform.* (tier-shared mirror) attributes arm rate limiting, idempotency, audit emission or PII-safe payload inclusion; an attribute of the same name from any other namespace or assembly is refused rather than honoured, because a name collision must never silently decide whether a guard is armed — in either direction. Replace it with the sanctioned attribute of the same name, or rename your own attribute. See docs/migrations/727-attribute-recognition-sweep.md."
+                apiTypeName
+                collisions.Length
+                detail
+        )
+
 /// Result of evaluating a method's classification against an `IAuthContext`.
 type AuthDecision =
     /// Method is allowed for this caller. Dispatch proceeds.
@@ -110,34 +199,29 @@ module internal AuthClassifier =
     // (Platform.Server already references Platform.Core), so the set is
     // built from `typeof<>` rather than from strings.
 
-    let private sanctionedMarkers: Collections.Generic.HashSet<Type> =
-        Collections.Generic.HashSet<Type>(
-            [
-                // Server-tier family (this assembly).
-                typeof<RequiresRoleAttribute>
-                typeof<RequiresClaimAttribute>
-                typeof<TenantScopedAttribute>
-                typeof<AllowAnonymousAttribute>
-                typeof<PublicEndpointAttribute>
-                // Tier-shared mirror family (`ToolUp.Platform.Core`).
-                typeof<ToolUp.Platform.RequiresRoleAttribute>
-                typeof<ToolUp.Platform.RequiresClaimAttribute>
-                typeof<ToolUp.Platform.TenantScopedAttribute>
-                typeof<ToolUp.Platform.AllowAnonymousAttribute>
-                typeof<ToolUp.Platform.PublicEndpointAttribute>
-            ]
-        )
+    // Phase 727 — the set and the simple-name collision detection now
+    // ride the shared `MarkerFamily` (above), which is the same code the
+    // audit / rate-limit / idempotency families use. The membership is
+    // unchanged; only the mechanism is shared, so the five recognisers
+    // can no longer drift apart the way this one drifted from
+    // `Streaming.fs`'s diagnostic between 69d.tail and 335.
+    let private markers =
+        MarkerFamily [
+            // Server-tier family (this assembly).
+            typeof<RequiresRoleAttribute>
+            typeof<RequiresClaimAttribute>
+            typeof<TenantScopedAttribute>
+            typeof<AllowAnonymousAttribute>
+            typeof<PublicEndpointAttribute>
+            // Tier-shared mirror family (`ToolUp.Platform.Core`).
+            typeof<ToolUp.Platform.RequiresRoleAttribute>
+            typeof<ToolUp.Platform.RequiresClaimAttribute>
+            typeof<ToolUp.Platform.TenantScopedAttribute>
+            typeof<ToolUp.Platform.AllowAnonymousAttribute>
+            typeof<ToolUp.Platform.PublicEndpointAttribute>
+        ]
 
-    /// Phase 335 — the marker SIMPLE names, derived from the sanctioned
-    /// set so the two can never drift. Used only to detect a *collision*:
-    /// an attribute carrying one of these names that is not one of the
-    /// sanctioned types is reported at startup rather than ignored, so a
-    /// consumer whose own `PublicEndpointAttribute` silently stopped
-    /// opening a method learns why instead of discovering it as a 403.
-    let private markerSimpleNames: Collections.Generic.HashSet<string> =
-        Collections.Generic.HashSet<string>(sanctionedMarkers |> Seq.map _.Name)
-
-    let private isSanctioned (t: Type) = sanctionedMarkers.Contains t
+    let private isSanctioned (t: Type) = markers.IsSanctioned t
 
     let private stringProperty (name: string) (a: Attribute) : string option =
         match a.GetType().GetProperty name with
@@ -241,26 +325,7 @@ module internal AuthClassifier =
     /// collision must never silently decide a method's classification in
     /// either direction.
     let foreignMarkers (apiType: Type) : (string * string) list =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            []
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.collect (fun pi ->
-                pi.GetCustomAttributes(true)
-                |> Array.choose (fun a ->
-                    let t = a.GetType()
-
-                    if markerSimpleNames.Contains t.Name && not (isSanctioned t) then
-                        let rendered =
-                            if isNull t.AssemblyQualifiedName then
-                                t.FullName
-                            else
-                                t.AssemblyQualifiedName
-
-                        Some(pi.Name, rendered)
-                    else
-                        None))
-            |> Array.toList
+        markers.Collisions(apiType, reflectionFlags)
 
     /// Build a startup-time exception for attributes whose simple name
     /// collides with a sanctioned marker (Phase 335).

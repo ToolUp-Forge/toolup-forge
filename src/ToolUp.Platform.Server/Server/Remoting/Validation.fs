@@ -288,6 +288,63 @@ module internal Validation =
     // 69d.tail auth classifier closed). `tryNormalise` maps either family
     // to the server-tier attribute whose `Validate` carries the logic,
     // reading the mirror's properties reflectively by simple type name.
+    //
+    // ── Phase 727 severity assessment — the validation family ─────────
+    //
+    // VERDICT: KEEP simple-name matching. This is the one family of the
+    // four that Phase 335's CLR-identity mechanism should NOT be extended
+    // to, and the reasoning is recorded here so the next sweep does not
+    // re-derive it and reach the opposite conclusion from consistency
+    // alone. Three arguments, in order of weight.
+    //
+    // 1. A forgery cannot relax anything. The family has no "skip
+    //    validation" marker — every attribute in it ADDS a constraint,
+    //    and `validate` accumulates violations rather than subtracting
+    //    them. So an unsanctioned attribute that is honoured produces
+    //    extra 400s on a well-formed request: an availability / UX defect,
+    //    visible, self-limiting, and diagnosable from the categorised
+    //    envelope, which names the violating field and code. It cannot
+    //    grant access, expose a value, or suppress a sibling validator.
+    //    That is the opposite failure direction from `[<PiiSafe>]` (which
+    //    STOPS redaction) and from the auth markers 335 fixed (which
+    //    OPENED a method) — and failure direction, not name-forgeability,
+    //    is what set those two apart.
+    //
+    // 2. Tightening here would be a silent fail-OPEN, and — unlike rate
+    //    limiting and idempotency — the refusal that buys the safety back
+    //    is not available. A consumer whose own mirror attribute is
+    //    picked up today would, under identity matching, silently stop
+    //    validating: input reaches the handler unchecked with nothing
+    //    saying so. The other three families answer that with a startup
+    //    collision refusal; this one cannot, because (3) its marker names
+    //    collide with a BCL family that appears on the same records for
+    //    entirely legitimate unrelated reasons. Identity matching without
+    //    a refusal is strictly worse than the status quo.
+    //
+    // 3. The collision surface is the widest of the four and its
+    //    collisions are mostly BENIGN BY INTENT.
+    //    `System.ComponentModel.DataAnnotations` ships `MinLength` /
+    //    `MaxLength` / `Range` / `Regex`-shaped attributes whose simple
+    //    names collide exactly, and those sit on consumer DTOs for EF
+    //    Core column mapping and MVC model binding — nothing to do with
+    //    this engine. Refusing to start on one would break a correct
+    //    deployment on an SDK upgrade: a GP 11 violation with no defect
+    //    behind it.
+    //
+    // What keeps (3) safe today is the TYPED reflective property read
+    // below, not the name: `DataAnnotations.MinLengthAttribute` exposes
+    // `Length`, not `MinLength`, so `intProp a "MinLength"` misses and the
+    // attribute is ignored. That is currently true by luck rather than by
+    // design, so it is pinned by a test (`ValidationAttributeRecognition`
+    // in `ToolUp.Platform.Tests`) — a future arm added here that reads a
+    // property name the BCL family also exposes would start honouring
+    // BCL attributes, and the pin is what would say so.
+    //
+    // The server-tier arm needs no change either way: `:? ValidationAttribute`
+    // is already identity-based, because satisfying it means DERIVING from
+    // a type in this assembly — which requires referencing it, and that
+    // reference IS the sanction (`CustomAttribute` + `IFieldValidator` are
+    // the documented consumer extension point).
     let private intProp (a: obj) (name: string) : int option =
         match a.GetType().GetProperty name with
         | null -> None

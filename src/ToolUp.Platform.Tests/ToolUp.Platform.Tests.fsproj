@@ -1435,6 +1435,13 @@
         <Compile Include="InProcess\IdempotencyStoreEvictionTests.fs" />
         <Compile Include="InProcess\AuditBodyDisposalTests.fs" />
         <Compile Include="InProcess\StreamingTests.fs" />
+        <!-- Phase 727 — attribute recognition beyond the auth classifier:
+             the audit / PII-safety, rate-limit and idempotency families
+             match by CLR identity and refuse a name collision at startup;
+             validation deliberately keeps simple-name matching; the
+             Streaming diagnostic agrees with the classifier on a forged
+             marker and now sees the tier-shared RateLimit mirror. -->
+        <Compile Include="InProcess\AttributeRecognitionSweepTests.fs" />
         <Compile Include="InProcess\StreamingDispatchTests.fs" />
         <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
              Textual checks pin (a) InvocationPropsInt.Arguments holding
