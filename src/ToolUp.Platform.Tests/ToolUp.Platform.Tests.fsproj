@@ -1390,6 +1390,11 @@
              sweep-enforcement list in AuthorizationTests fails when any
              forge SDK API record method loses its attribute. -->
         <Compile Include="InProcess\AuthorizationTests.fs" />
+        <!-- Phase 335 — the classifier's recognition is by CLR type
+             identity over the two sanctioned families, so an attribute
+             whose simple name collides with a marker cannot classify a
+             method and is refused at startup by name. -->
+        <Compile Include="InProcess\AuthClassifierAttributeIdentityTests.fs" />
         <Compile Include="InProcess\AuditTests.fs" />
         <Compile Include="InProcess\RateLimitTests.fs" />
         <Compile Include="InProcess\ValidationTests.fs" />

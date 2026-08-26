@@ -221,6 +221,10 @@ let allTests =
         // Phase 69d.tail + 69h.tail — authorization classifier default-on
         // + audit annotation sweep contract packs.
         AuthorizationTests.tests
+        // Phase 335 — auth-attribute matching by CLR identity: a
+        // colliding third-party attribute cannot classify a method, and
+        // the collision refuses startup by name.
+        AuthClassifierAttributeIdentityTests.tests
         AuditTests.tests
         RateLimitTests.tests
         ValidationTests.tests
