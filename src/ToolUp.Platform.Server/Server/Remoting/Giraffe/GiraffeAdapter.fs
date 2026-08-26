@@ -181,6 +181,22 @@ module GiraffeUtil =
         let classifications = AuthClassifier.classify typeof<'impl>
 
         if options.AuthContextResolver.IsSome then
+            // Phase 335 — name-collision refusal, BEFORE the unclassified
+            // check so the specific diagnostic wins. A foreign attribute
+            // whose simple name matches a marker no longer classifies
+            // anything (identity matching in `AuthClassifier`); refusing
+            // here names the field AND the offending attribute's
+            // assembly-qualified type, rather than leaving the consumer
+            // to read "unclassified method" about a field they believe
+            // they annotated. It also catches the case the unclassified
+            // gate structurally cannot see: a foreign open marker sitting
+            // beside a genuine requirement, where the record starts fine
+            // and the consumer believes the method is open.
+            let foreign = AuthClassifier.foreignMarkers typeof<'impl>
+
+            if not (List.isEmpty foreign) then
+                raise (AuthClassifier.foreignMarkerException typeof<'impl>.Name foreign)
+
             let unclassified = AuthClassifier.unclassified classifications
 
             if not (List.isEmpty unclassified) then

@@ -468,6 +468,13 @@
              honestly unattested; DependencyClosure.attest (Core) resolves
              the upstream references through IUpstreamReleaseProvider. -->
         <Compile Include="Server\RestoreClosures.fs" />
+        <!-- Phase 712 — the upstream work provenance seam: the read-only
+             IWorkProvenanceSource, the NoWorkProvenanceSource default that
+             composes nothing, the decorator that makes a source's declared
+             caps binding, and the deploy-record reading that records an
+             unattested deploy WITH its reason. Wire types live in
+             Platform.Core; nothing below composes it. -->
+        <Compile Include="Server\WorkProvenanceSource.fs" />
         <!-- Phase 717 — the dependency SBOM as a PROJECTION of the recorded
              closure rather than a scan: SPDX 2.3 + CycloneDX 1.6 emitted
              from the build's own record, unattested entries present and

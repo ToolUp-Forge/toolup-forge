@@ -221,6 +221,10 @@ let allTests =
         // Phase 69d.tail + 69h.tail — authorization classifier default-on
         // + audit annotation sweep contract packs.
         AuthorizationTests.tests
+        // Phase 335 — auth-attribute matching by CLR identity: a
+        // colliding third-party attribute cannot classify a method, and
+        // the collision refuses startup by name.
+        AuthClassifierAttributeIdentityTests.tests
         AuditTests.tests
         RateLimitTests.tests
         ValidationTests.tests
@@ -1194,6 +1198,14 @@ let allTests =
         BuildTranscriptTests.closureAttestationTests
         BuildTranscriptTests.closureCaptureTests
         BuildTranscriptTests.closureBindingTests
+        // Phase 712 — the upstream work record as a read-only wire
+        // contract: the work/build tier of the shape the fact tier
+        // already ships. Bounded both ways (an over-cap request, an
+        // over-cap answer, and a source that answers above its own
+        // declared cap), withheld distinguishable from absent, a foreign
+        // kind crossing intact, every unattested reason recorded rather
+        // than dropped, and an uncomposed deployment unchanged.
+        WorkProvenanceSourceTests.tests
         // Phase 717 — the SBOM projected from that closure. Each pack is
         // probed in both directions: the schema check is proven able to
         // REFUSE, the completeness check runs against a wholly-unattested
@@ -1797,6 +1809,17 @@ let allTests =
         // exactly the kind of code that passes by doing nothing. An
         // absent corpus is one loud failure, never a skip.
         Conformance.ModelExecutionSpecConformance.tests
+        // Phase 336 — fail-closed dispatch consistency. The two seams in the
+        // dispatch-authorization layer that failed OPEN where every other
+        // decision point fails closed: the surface gate's missing-Subject
+        // fall-through (reachable via a swallowed ScopeResolutionMiddleware
+        // resolver exception, not only an unsupported pipeline) and the
+        // PlatformAdmin backstop's case-sensitive `/premium` discriminator
+        // sitting beside a case-INsensitive prefix guard. Each arm carries
+        // its correct-path control — a public route still admitted without a
+        // Subject, `premium-status` still open — so "everything is refused"
+        // cannot pass as a fix.
+        FailClosedDispatchTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
