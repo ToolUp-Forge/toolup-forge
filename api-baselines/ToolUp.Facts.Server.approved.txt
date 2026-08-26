@@ -113,7 +113,9 @@ ToolUp.Facts.CertificateEnvelope.attestedExpectation(Microsoft.FSharp.Core.FShar
 ToolUp.Facts.CertificateEnvelope.attestedPredicateJson(ToolUp.Facts.AttestedGroundingCertificate) : System.String
 ToolUp.Facts.CertificateEnvelope.attestedSealedBytes(ToolUp.Facts.AttestedGroundingCertificate) : System.Byte[]
 ToolUp.Facts.CertificateEnvelope.attestedStatementJson(ToolUp.Facts.AttestedGroundingCertificate) : System.String
+ToolUp.Facts.CertificateEnvelope.declaredProjection(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CertificateEnvelope+DeclaredProjection, ToolUp.Platform.EnvelopeVerdict]
 ToolUp.Facts.CertificateEnvelope.expectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Facts.CertificateEnvelope.expectationFor(ToolUp.Facts.CertificateEnvelope+DeclaredProjection, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EnvelopeExpectation]
 ToolUp.Facts.CertificateEnvelope.export(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Facts.GroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
 ToolUp.Facts.CertificateEnvelope.exportAttested(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
 ToolUp.Facts.CertificateEnvelope.predicateJson(ToolUp.Facts.GroundingCertificate) : System.String
@@ -124,6 +126,19 @@ ToolUp.Facts.CertificateEnvelope.verifyAndRead(ToolUp.ArtefactSigning.PublicKeyM
 ToolUp.Facts.CertificateEnvelope.verifyAndReadAttested(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
 ToolUp.Facts.CertificateEnvelope.verifyAndReadAttestedJson(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
 ToolUp.Facts.CertificateEnvelope.verifyAndReadJson(ToolUp.ArtefactSigning.PublicKeyMetadata, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection (class)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.AttestedProjection : ToolUp.Facts.CertificateEnvelope+DeclaredProjection { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.DirectProjection : ToolUp.Facts.CertificateEnvelope+DeclaredProjection { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.IsAttestedProjection : System.Boolean { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.IsDirectProjection : System.Boolean { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.IsUnknownProjection : System.Boolean { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection.Tag : System.Int32 { get }
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+Tags (class)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+Tags.AttestedProjection : System.Int32 (literal)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+Tags.DirectProjection : System.Int32 (literal)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+Tags.UnknownProjection : System.Int32 (literal)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+UnknownProjection (class)
+ToolUp.Facts.CertificateEnvelope+DeclaredProjection+UnknownProjection.predicateType : System.String { get }
 ToolUp.Facts.CertificateError (class)
 ToolUp.Facts.CertificateError.EmptyChain : ToolUp.Facts.CertificateError { get }
 ToolUp.Facts.CertificateError.IsEmptyChain : System.Boolean { get }
@@ -365,13 +380,16 @@ ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
 ToolUp.Facts.FactImport (class)
 ToolUp.Facts.FactImport.CertificateRefPrefix : System.String (literal)
+ToolUp.Facts.FactImport.attestedCertificateRef(ToolUp.Facts.AttestedGroundingCertificate) : System.String
 ToolUp.Facts.FactImport.certificateRef(ToolUp.Facts.GroundingCertificate) : System.String
 ToolUp.Facts.FactImport.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.IAuditLog) : ToolUp.Facts.IFactImportDoor
 ToolUp.Facts.FactImportRefusal (class)
 ToolUp.Facts.FactImportRefusal.IsImportContentIdMismatch : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportLevelNotAdmitted : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportRejectedByStore : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportRootNotAFact : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportStanceUnreadable : System.Boolean { get }
+ToolUp.Facts.FactImportRefusal.IsImportUnknownProjection : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportUntrustedPeer : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportUnverifiable : System.Boolean { get }
 ToolUp.Facts.FactImportRefusal.IsImportWithheldByPeer : System.Boolean { get }
@@ -379,12 +397,17 @@ ToolUp.Facts.FactImportRefusal.Tag : System.Int32 { get }
 ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch (class)
 ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch.certificateRoot : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportContentIdMismatch.derived : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportLevelNotAdmitted (class)
+ToolUp.Facts.FactImportRefusal+ImportLevelNotAdmitted.admitted : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactImportRefusal+ImportLevelNotAdmitted.level : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportRejectedByStore (class)
 ToolUp.Facts.FactImportRefusal+ImportRejectedByStore.reason : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportRootNotAFact (class)
 ToolUp.Facts.FactImportRefusal+ImportRootNotAFact.kind : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportStanceUnreadable (class)
 ToolUp.Facts.FactImportRefusal+ImportStanceUnreadable.stance : System.String { get }
+ToolUp.Facts.FactImportRefusal+ImportUnknownProjection (class)
+ToolUp.Facts.FactImportRefusal+ImportUnknownProjection.predicateType : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportUntrustedPeer (class)
 ToolUp.Facts.FactImportRefusal+ImportUntrustedPeer.peerId : System.String { get }
 ToolUp.Facts.FactImportRefusal+ImportUnverifiable (class)
@@ -393,9 +416,11 @@ ToolUp.Facts.FactImportRefusal+ImportWithheldByPeer (class)
 ToolUp.Facts.FactImportRefusal+ImportWithheldByPeer.policyRef : System.String { get }
 ToolUp.Facts.FactImportRefusal+Tags (class)
 ToolUp.Facts.FactImportRefusal+Tags.ImportContentIdMismatch : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportLevelNotAdmitted : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportRejectedByStore : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportRootNotAFact : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportStanceUnreadable : System.Int32 (literal)
+ToolUp.Facts.FactImportRefusal+Tags.ImportUnknownProjection : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportUntrustedPeer : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportUnverifiable : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportWithheldByPeer : System.Int32 (literal)
@@ -572,12 +597,16 @@ ToolUp.Facts.InvalidationOutcome+Tags.SurfacedOnly : System.Int32 (literal)
 ToolUp.Facts.NoFactRecomputer (class)
 ToolUp.Facts.NoFactRecomputer..ctor()
 ToolUp.Facts.PeerTrustAnchor (class)
-ToolUp.Facts.PeerTrustAnchor..ctor(System.String, ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Facts.Disclosure)
+ToolUp.Facts.PeerTrustAnchor..ctor(System.String, ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Facts.Disclosure, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.ArtefactSigning.AttestationLevel])
+ToolUp.Facts.PeerTrustAnchor.AdmissibleLevels : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.ArtefactSigning.AttestationLevel] { get }
 ToolUp.Facts.PeerTrustAnchor.DisclosureCeiling : ToolUp.Facts.Disclosure { get }
 ToolUp.Facts.PeerTrustAnchor.PeerId : System.String { get }
 ToolUp.Facts.PeerTrustAnchor.PublicKey : ToolUp.ArtefactSigning.PublicKeyMetadata { get }
 ToolUp.Facts.PeerTrustAnchorModule (class)
+ToolUp.Facts.PeerTrustAnchorModule.admits(ToolUp.ArtefactSigning.AttestationLevel, ToolUp.Facts.PeerTrustAnchor) : System.Boolean
 ToolUp.Facts.PeerTrustAnchorModule.create(System.String, ToolUp.ArtefactSigning.PublicKeyMetadata) : ToolUp.Facts.PeerTrustAnchor
+ToolUp.Facts.PeerTrustAnchorModule.defaultAdmissibleLevels : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.ArtefactSigning.AttestationLevel] { get }
+ToolUp.Facts.PeerTrustAnchorModule.withAdmissibleLevels(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.AttestationLevel], ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
 ToolUp.Facts.PeerTrustAnchorModule.withCeiling(ToolUp.Facts.Disclosure, ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)

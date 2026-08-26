@@ -23,7 +23,13 @@ open ToolUp.ArtefactSigning
 //
 //   1. **verifies the certificate offline** against key material supplied
 //      for THAT peer — the standard-statement path, so the check is the one
-//      any conforming implementation performs;
+//      any conforming implementation performs. Both published projections
+//      are read: the direct certificate and the levels-bound attested one,
+//      routed on the predicate type the document declares. Where the
+//      document claims an attestation level, that level is an ADMISSION
+//      input — the anchor declares which levels it accepts, and a level it
+//      does not is a refusal of its own rather than a disclosure
+//      adjustment;
 //   2. **re-derives the content-addressed fact id** from the offered
 //      identity tuple and compares it to the root the certificate is issued
 //      over. This is the load-bearing step, and it is only possible because
@@ -62,12 +68,16 @@ open ToolUp.ArtefactSigning
 // nothing (GP 13), and one that composes only the fact store is
 // byte-for-byte what it was (GP 11).
 
-/// The key material a deployment holds for one peer, plus the most
-/// permissive stance an import from that peer may reach.
+/// The key material a deployment holds for one peer, the most permissive
+/// stance an import from that peer may reach, and the attestation levels it
+/// will admit from them.
 ///
-/// **Identity by value (GP 12 rule 1)** — a public key, a name, and a
-/// stance. No handle, no resolver, no callback into a key service: an
-/// anchor is a value a composition root can be read off the page.
+/// **Identity by value (GP 12 rule 1)** — a public key, a name, a stance
+/// and a set of levels. No handle, no resolver, no callback into a key
+/// service and no predicate function: an anchor is a value a composition
+/// root can be read off the page, and every one of its fields can be
+/// printed. A policy expressed as a callback would be readable only by
+/// running it.
 type PeerTrustAnchor = {
     /// The name this deployment knows the peer by. The caller states it at
     /// import; it is never read out of the offered document, so a document
@@ -80,9 +90,44 @@ type PeerTrustAnchor = {
     /// anything else can only narrow, since the effective stance is the
     /// floor of the two (`Disclosure.floor`).
     DisclosureCeiling: Disclosure
+    /// The attestation levels an import from this peer may carry — a SET
+    /// this deployment declares, never a bar a level is compared against.
+    ///
+    /// **Why a set and not a threshold.** `AttestationLevel` is not
+    /// totally ordered. `Reserved of label` exists so a level this build
+    /// does not understand round-trips rather than failing to parse, and
+    /// the type's own doc comment says plainly that carrying such a label
+    /// is NOT evidence for the claim it names. Any `>=` comparison would
+    /// therefore admit `reserved:anything` above `IsolatedSigner` on the
+    /// strength of a string a peer chose — inverting the one rule the type
+    /// states about itself. A set cannot express that mistake: a level is
+    /// admitted because this deployment named it, or it is not admitted.
+    ///
+    /// **Orthogonal to `DisclosureCeiling`, deliberately.** The ceiling
+    /// governs how widely an imported fact may be surfaced once it is here;
+    /// the level governs whether the peer's document is admitted at all.
+    /// Folding one into the other — "an `Attribution` fact is forced to
+    /// `Restricted`" — would make the effective stance the product of two
+    /// lattices that do not compose, and would encode a policy nothing in
+    /// this substrate has a basis for.
+    AdmissibleLevels: Set<AttestationLevel>
 }
 
 module PeerTrustAnchor =
+
+    /// The levels an anchor admits when it declares none of its own:
+    /// `Attribution` and `IsolatedSigner`, the two this build understands.
+    ///
+    /// **Not a widening relative to the path that already works.** A direct
+    /// certificate carries no level at all and is admitted unconditionally,
+    /// so an `Attribution`-level document — which says at least as much,
+    /// bound into its signed bytes — cannot be the stricter case. A
+    /// deployment that wants the higher bar declares
+    /// `withAdmissibleLevels [ IsolatedSigner ]`; that is the opt-in, and a
+    /// deployment that composes no import door is untouched either way
+    /// (GP 11 / GP 13).
+    let defaultAdmissibleLevels: Set<AttestationLevel> =
+        Set.ofList [ Attribution; IsolatedSigner ]
 
     /// An anchor with no ceiling of its own — the peer's sealed stance
     /// governs. The identity of `Disclosure.floor`, so this is the
@@ -91,6 +136,7 @@ module PeerTrustAnchor =
         PeerId = peerId
         PublicKey = publicKey
         DisclosureCeiling = Surfaceable
+        AdmissibleLevels = defaultAdmissibleLevels
     }
 
     /// Impose a ceiling on imports from this peer. Can only narrow what
@@ -100,6 +146,30 @@ module PeerTrustAnchor =
         anchor with
             DisclosureCeiling = ceiling
     }
+
+    /// Declare exactly which attestation levels an import from this peer
+    /// may carry. Replaces the default set rather than adding to it, so the
+    /// composition root states the whole policy in one place.
+    ///
+    /// A `Reserved` label passed here is inert: `admits` refuses every
+    /// reserved level unconditionally, so naming one neither admits it nor
+    /// makes the anchor admit nothing.
+    let withAdmissibleLevels (levels: AttestationLevel list) (anchor: PeerTrustAnchor) : PeerTrustAnchor = {
+        anchor with
+            AdmissibleLevels = Set.ofList levels
+    }
+
+    /// Whether this anchor admits a certificate claiming `level`.
+    ///
+    /// **A `Reserved` label is refused before the set is consulted**, under
+    /// every policy including one that names it. A reserved level is a
+    /// claim this build cannot evaluate, and admitting it would be admitting
+    /// a string — the exact failure a threshold comparison makes silently
+    /// and this check makes impossible.
+    let admits (level: AttestationLevel) (anchor: PeerTrustAnchor) : bool =
+        match level with
+        | Reserved _ -> false
+        | known -> anchor.AdmissibleLevels.Contains known
 
 /// A peer's offered fact: the identity tuple the certificate's root is
 /// derived from, plus the value.
@@ -203,6 +273,23 @@ type FactImportRefusal =
     /// read. Refused rather than defaulted: a default is either a widening
     /// or a misreport of what the peer actually said.
     | ImportStanceUnreadable of stance: string
+    /// The document declares a predicate type neither published projection
+    /// uses, so there is no reader for it here. Distinct from
+    /// `ImportUnverifiable` carrying a predicate-type mismatch: that verdict
+    /// names an expectation, and naming one of two arbitrarily would tell a
+    /// holder their statement was the wrong one of a pair it is not a member
+    /// of. Quotes the type it declared.
+    | ImportUnknownProjection of predicateType: string
+    /// The certificate verified, is genuine, and claims an attestation level
+    /// this deployment does not admit from this peer.
+    ///
+    /// Deliberately NOT `ImportUnverifiable`: "your key's custody does not
+    /// meet my bar" and "this did not verify" send an operator to entirely
+    /// different places — the first to a policy declaration or a peer's
+    /// signing arrangements, the second to the bytes — which is the
+    /// distinction this whole DU exists to keep. Names the level offered and
+    /// the ones admitted, because neither side is knowable from the other.
+    | ImportLevelNotAdmitted of level: string * admitted: string list
     /// The certificate verified and the id matched, and the store refused
     /// the assertion. Carries the store's own reason.
     | ImportRejectedByStore of reason: string
@@ -220,6 +307,15 @@ module FactImportRefusal =
             $"the peer withheld this fact at its own export door under policy '{policyRef}'; it was not offered"
         | ImportStanceUnreadable stance ->
             $"the certificate declares a disclosure stance this build cannot read: '{stance}'"
+        | ImportUnknownProjection predicateType ->
+            $"the document declares predicate type '{predicateType}', which is neither certificate projection this door reads"
+        | ImportLevelNotAdmitted(level, admitted) ->
+            let admittedText =
+                match admitted with
+                | [] -> "none"
+                | levels -> String.Join(", ", levels)
+
+            $"the certificate claims attestation level '{level}', which this deployment does not admit from this peer (admitted: {admittedText})"
         | ImportRejectedByStore reason -> $"the fact store refused the assertion: {reason}"
 
 /// The import door. One method, because an import is one indivisible act:
@@ -234,8 +330,9 @@ module FactImportRefusal =
 /// primitive.
 type IFactImportDoor =
     /// Import `offer` from `peerId` under the DSSE-wrapped certificate in
-    /// `certificateJson`. Returns the asserted local fact, or a typed
-    /// refusal — in which case nothing was written.
+    /// `certificateJson` — either published projection, routed on the
+    /// predicate type the document itself declares. Returns the asserted
+    /// local fact, or a typed refusal — in which case nothing was written.
     abstract Import:
         scopeId: string * peerId: string * offer: ImportedFactOffer * certificateJson: string ->
             Async<Result<Fact, FactImportRefusal>>
@@ -258,18 +355,30 @@ module FactImport =
     /// can check for themselves that the ref names that document. The key
     /// id is inside those bytes (`DeploymentKeyId` is part of the signed
     /// body), so the ref binds who sealed it without saying so twice.
-    let certificateRef (certificate: GroundingCertificate) : string =
+    let private refOfBody (body: GroundingCertificateBody) : string =
         CertificateRefPrefix
-        + DsseEnvelope.sha256Hex (GroundingCertificate.canonicalBytes certificate.Body)
+        + DsseEnvelope.sha256Hex (GroundingCertificate.canonicalBytes body)
+
+    let certificateRef (certificate: GroundingCertificate) : string = refOfBody certificate.Body
+
+    /// The content-addressed reference for a verified ATTESTED certificate.
+    ///
+    /// The same digest the direct projection's ref takes over the same body,
+    /// because both seals cover byte-identical bodies — a property this
+    /// inherits rather than re-establishes. So a fact imported under either
+    /// document joins to one ref, and a third party holding either can check
+    /// that the ref names it.
+    let attestedCertificateRef (certificate: AttestedGroundingCertificate) : string = refOfBody certificate.Body
 
     /// The certificate's node for its own root, when the chain carries one.
-    let private rootNode (certificate: GroundingCertificate) : CertificateNode option =
-        certificate.Body.Nodes |> List.tryFind (fun n -> n.Id = certificate.Body.Root)
+    let private rootNode (body: GroundingCertificateBody) : CertificateNode option =
+        body.Nodes |> List.tryFind (fun n -> n.Id = body.Root)
 
     /// The peer's sealed stance for the root fact, or the refusal that
-    /// stands in its place. Reads only from the SIGNED body.
-    let private declaredStance (certificate: GroundingCertificate) : Result<Disclosure, FactImportRefusal> =
-        match rootNode certificate with
+    /// stands in its place. Reads only from the SIGNED body — which is the
+    /// same body on both projections, so this is one reader and not two.
+    let private declaredStance (body: GroundingCertificateBody) : Result<Disclosure, FactImportRefusal> =
+        match rootNode body with
         | None -> Error(ImportRootNotAFact "absent")
         | Some node when node.Kind <> "Fact" -> Error(ImportRootNotAFact node.Kind)
         | Some node when node.Withheld ->
@@ -300,6 +409,9 @@ module FactImport =
         Metric = offer.Metric.Value
         DeclaredDisclosure = ""
         EffectiveDisclosure = ""
+        // Absent until a document that CLAIMS a level has been read and
+        // verified. Never seeded with a level nobody offered.
+        AttestationLevel = ""
         Reason = ""
         OccurredAt = DateTimeOffset.UtcNow
     }
@@ -340,102 +452,172 @@ module FactImport =
                 | Some anchor ->
                     let payload = emptyPayload peerId anchor.PublicKey.KeyId offer derived
 
-                    // (1) Verify offline against this peer's key alone.
+                    // (1) Route on the projection the document declares.
                     //
-                    // No subject expectation is passed. The envelope helper
-                    // would happily check one, but folding the id
-                    // comparison into the signature check would collapse
-                    // two answers a holder acts on differently — "this
-                    // document does not verify" and "this document is
-                    // genuine and about a different fact" — into a single
-                    // verdict. The comparison happens below, AFTER the
-                    // signature is established, which is what makes the
-                    // mismatch verdict's claim true.
-                    match CertificateEnvelope.verifyAndReadJson anchor.PublicKey None certificateJson with
+                    // The caller nominates nothing and there is no
+                    // fall-back leg: one document, one route, one verdict.
+                    // This reads a field out of the UNVERIFIED payload,
+                    // against the surrounding discipline that a document
+                    // never nominates how it is checked — safe only because
+                    // each leg then verifies the signature over the PAE
+                    // first and re-checks the predicate type inside the
+                    // signed statement, so a document that lies about its
+                    // own shape is routed to a reader that refuses it.
+                    match CertificateEnvelope.declaredProjection certificateJson with
                     | Error verdict -> return! refuse payload (ImportUnverifiable verdict)
-                    | Ok certificate ->
-                        let ref' = certificateRef certificate
+                    | Ok(CertificateEnvelope.UnknownProjection predicateType) ->
+                        return! refuse payload (ImportUnknownProjection predicateType)
+                    | Ok projection ->
+                        // (2) Verify offline against this peer's key alone,
+                        // on the leg the projection selected.
+                        //
+                        // No subject expectation is passed on either leg.
+                        // The envelope helpers would happily check one, but
+                        // folding the id comparison into the signature
+                        // check would collapse two answers a holder acts on
+                        // differently — "this document does not verify" and
+                        // "this document is genuine and about a different
+                        // fact" — into a single verdict. The comparison
+                        // happens below, AFTER the signature is
+                        // established, which is what makes the mismatch
+                        // verdict's claim true.
+                        //
+                        // The attested leg's reader also reconciles every
+                        // surfaced field against the seal, so a document
+                        // whose published level disagrees with the sealed
+                        // one is refused HERE, before any level policy is
+                        // consulted. A policy must never be applied to a
+                        // level the signature does not cover.
+                        let verified =
+                            match projection with
+                            | CertificateEnvelope.AttestedProjection ->
+                                CertificateEnvelope.verifyAndReadAttestedJson anchor.PublicKey None certificateJson
+                                |> Result.map (fun c -> c.Body, Some c.Envelope.Level, attestedCertificateRef c)
+                            | _ ->
+                                CertificateEnvelope.verifyAndReadJson anchor.PublicKey None certificateJson
+                                |> Result.map (fun c -> c.Body, None, certificateRef c)
 
-                        let payload = {
-                            payload with
-                                CertificateRoot = certificate.Body.Root
-                                CertificateRef = ref'
-                        }
+                        match verified with
+                        | Error verdict -> return! refuse payload (ImportUnverifiable verdict)
+                        | Ok(body, level, ref') ->
+                            let payload = {
+                                payload with
+                                    CertificateRoot = body.Root
+                                    CertificateRef = ref'
+                                    AttestationLevel =
+                                        level |> Option.map AttestationLevel.name |> Option.defaultValue ""
+                            }
 
-                        // (2) Re-derive and compare. The content address
-                        // covers the subject, the metric, the period, the
-                        // peer's method identity AND the input hashes, so
-                        // a single altered field in the offer lands here
-                        // rather than in the store.
-                        if certificate.Body.Root <> derived then
-                            return! refuse payload (ImportContentIdMismatch(certificate.Body.Root, derived))
-                        else
-                            // The envelope's own statement subject must
-                            // name the root its predicate carries. Both are
-                            // inside the signed bytes, so this catches a
-                            // self-inconsistent statement rather than a
-                            // tampered one — cheap, crypto-free, and the
-                            // last structural thing left to check.
-                            match
-                                DsseEnvelope.parse certificateJson
-                                |> Result.mapError EnvelopeMalformed
-                                |> Result.bind (
-                                    DsseEnvelope.checkShape (CertificateEnvelope.expectation (Some derived))
-                                )
-                            with
-                            | Error verdict -> return! refuse payload (ImportUnverifiable verdict)
-                            | Ok _ ->
-                                match declaredStance certificate with
-                                | Error refusal -> return! refuse payload refusal
-                                | Ok declared ->
-                                    // (3) The conservative floor. An
-                                    // anchor with no ceiling leaves the
-                                    // peer's stance exactly as sealed.
-                                    let effective = Disclosure.floor declared anchor.DisclosureCeiling
+                            // (3) Admission on the attestation level. A
+                            // property of the document and this peer, not
+                            // of the offer, so it is decided as soon as the
+                            // seal is established and before anything about
+                            // the offered fact is compared.
+                            //
+                            // The direct projection claims no level and is
+                            // not measured against one: a level nobody
+                            // asserted cannot be admitted or refused, and
+                            // inventing one to compare would be exactly the
+                            // default this door refuses to make elsewhere.
+                            match level with
+                            | Some claimed when not (PeerTrustAnchor.admits claimed anchor) ->
+                                return!
+                                    refuse
+                                        payload
+                                        (ImportLevelNotAdmitted(
+                                            AttestationLevel.name claimed,
+                                            anchor.AdmissibleLevels |> Set.toList |> List.map AttestationLevel.name
+                                        ))
+                            | _ ->
 
-                                    let payload = {
-                                        payload with
-                                            DeclaredDisclosure = Disclosure.toString declared
-                                            EffectiveDisclosure = Disclosure.toString effective
-                                    }
+                                // (4) Re-derive and compare. The content
+                                // address covers the subject, the metric,
+                                // the period, the peer's method identity
+                                // AND the input hashes, so a single altered
+                                // field in the offer lands here rather than
+                                // in the store.
+                                if body.Root <> derived then
+                                    return! refuse payload (ImportContentIdMismatch(body.Root, derived))
+                                else
+                                    // The envelope's own statement subject
+                                    // must name the root its predicate
+                                    // carries. Both are inside the signed
+                                    // bytes, so this catches a
+                                    // self-inconsistent statement rather
+                                    // than a tampered one — cheap,
+                                    // crypto-free, and the last structural
+                                    // thing left to check. The expectation
+                                    // is the one THIS projection publishes,
+                                    // never the other's.
+                                    let selfConsistent =
+                                        match CertificateEnvelope.expectationFor projection (Some derived) with
+                                        | None -> Error(EnvelopeMalformed "no reader is published for this projection")
+                                        | Some expectation ->
+                                            DsseEnvelope.parse certificateJson
+                                            |> Result.mapError EnvelopeMalformed
+                                            |> Result.bind (DsseEnvelope.checkShape expectation)
 
-                                    // (4) Assert with `Imported`
-                                    // provenance. The method changes — an
-                                    // imported fact is this deployment's
-                                    // assertion that a peer computed
-                                    // something, not a claim to have
-                                    // computed it — so the local id
-                                    // differs from the peer's by
-                                    // construction, and the certificate
-                                    // ref is what joins them.
-                                    let draft: FactDraft = {
-                                        Subject = offer.Subject
-                                        Metric = offer.Metric
-                                        Value = offer.Value
-                                        Period = offer.Period
-                                        Method = Imported ref'
-                                        Evidence = {
-                                            ResultRef = None
-                                            InputHashes = offer.InputHashes
-                                            TriggerRef = None
-                                        }
-                                        Confidence = offer.Confidence
-                                        Disclosure = effective
-                                    }
+                                    match selfConsistent with
+                                    | Error verdict -> return! refuse payload (ImportUnverifiable verdict)
+                                    | Ok _ ->
+                                        match declaredStance body with
+                                        | Error refusal -> return! refuse payload refusal
+                                        | Ok declared ->
+                                            // (5) The conservative floor. An
+                                            // anchor with no ceiling leaves
+                                            // the peer's stance exactly as
+                                            // sealed. Orthogonal to the
+                                            // level: the stance decides how
+                                            // widely the fact may be
+                                            // surfaced, the level decided
+                                            // whether the document was
+                                            // admitted at all.
+                                            let effective = Disclosure.floor declared anchor.DisclosureCeiling
 
-                                    match! store.Assert(scopeId, draft) with
-                                    | Error reason -> return! refuse payload (ImportRejectedByStore reason)
-                                    | Ok fact ->
-                                        do!
-                                            audit.Record(
-                                                scopeId,
-                                                AuditEvent.FactImportAccepted {
-                                                    payload with
-                                                        ImportedFactId = fact.FactId
+                                            let payload = {
+                                                payload with
+                                                    DeclaredDisclosure = Disclosure.toString declared
+                                                    EffectiveDisclosure = Disclosure.toString effective
+                                            }
+
+                                            // (6) Assert with `Imported`
+                                            // provenance. The method changes
+                                            // — an imported fact is this
+                                            // deployment's assertion that a
+                                            // peer computed something, not a
+                                            // claim to have computed it — so
+                                            // the local id differs from the
+                                            // peer's by construction, and the
+                                            // certificate ref is what joins
+                                            // them.
+                                            let draft: FactDraft = {
+                                                Subject = offer.Subject
+                                                Metric = offer.Metric
+                                                Value = offer.Value
+                                                Period = offer.Period
+                                                Method = Imported ref'
+                                                Evidence = {
+                                                    ResultRef = None
+                                                    InputHashes = offer.InputHashes
+                                                    TriggerRef = None
                                                 }
-                                            )
+                                                Confidence = offer.Confidence
+                                                Disclosure = effective
+                                            }
 
-                                        return Ok fact
+                                            match! store.Assert(scopeId, draft) with
+                                            | Error reason -> return! refuse payload (ImportRejectedByStore reason)
+                                            | Ok fact ->
+                                                do!
+                                                    audit.Record(
+                                                        scopeId,
+                                                        AuditEvent.FactImportAccepted {
+                                                            payload with
+                                                                ImportedFactId = fact.FactId
+                                                        }
+                                                    )
+
+                                                return Ok fact
             }
 
     /// Construct the import door over the composed fact store, the peer

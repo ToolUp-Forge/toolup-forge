@@ -3699,6 +3699,18 @@ type FactImportPayload = {
     /// declared stance and the anchor's ceiling. Never wider than
     /// `DeclaredDisclosure`. Empty on a refusal.
     EffectiveDisclosure: string
+    /// The attestation level the peer's certificate claims, as its stable
+    /// wire name — present only when the offered document was the
+    /// levels-bound projection, and recorded on a refusal on level grounds
+    /// as well as on an accepted import.
+    ///
+    /// **Empty means the document claimed no level, never that it claimed
+    /// the weakest one.** A certificate carrying a detached seal makes no
+    /// statement about the signing key's custody at all, and defaulting
+    /// this field to a level nobody claimed would put an assertion into the
+    /// trail that no signature covers — which is the one thing an audit row
+    /// must never do.
+    AttestationLevel: string
     /// The typed refusal, rendered. Empty on an accepted import.
     Reason: string
     OccurredAt: DateTimeOffset
