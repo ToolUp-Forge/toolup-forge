@@ -1422,6 +1422,14 @@
              the attest seam (provider-absent + stub ledger), and the
              closure digest bound into the sealed record. -->
         <Compile Include="InProcess\BuildTranscriptTests.fs" />
+        <!-- Phase 717 — the dependency SBOM projected from the recorded
+             closure: both documents validated against the format's own
+             published schema (vendored under fixtures/sbom-schemas, so
+             the check is offline), unattested entries present and marked,
+             byte-identical output probed in BOTH directions, and the
+             opt-in platform-admin route's refusals. After
+             BuildTranscriptTests, whose closure vocabulary it projects. -->
+        <Compile Include="InProcess\SbomProjectionTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding
              and a drifted composition each do not — probed separately), the
@@ -2116,6 +2124,15 @@
               Link="fixtures\eval-mixed-dim.json"
               CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
+    <!-- Phase 717 — the published SPDX 2.3 / CycloneDX 1.6 JSON schemas,
+         vendored verbatim so the SBOM conformance pack validates offline
+         against the formats' own definitions rather than a local
+         paraphrase. Provenance, upstream tags, licences and hashes are in
+         the fixture directory's README. Test-tier only — nothing here
+         reaches a packable assembly. -->
+    <ItemGroup>
+        <None Include="fixtures\sbom-schemas\*.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
@@ -2131,6 +2148,10 @@
              set for the Public-API approval baseline. Test-tier only; never
              reaches a shipped package (GP 13). -->
         <PackageReference Include="System.Reflection.MetadataLoadContext" />
+        <!-- Phase 717 — JSON Schema evaluator for the SBOM conformance
+             pack. Test-tier only; never reaches a shipped package (GP 1 /
+             GP 13). Rationale + version pin in Directory.Packages.props. -->
+        <PackageReference Include="JsonSchema.Net" />
         <!-- Phase 617 — the linux-x64 SkiaSharp native, so the
              `IAssetStore` contract pack (which mints real PNGs through
              SkiaSharp) runs on a Linux CI runner instead of erroring

@@ -4530,6 +4530,10 @@ ToolUp.Platform.IRetrievalTracer+RetrievalTrace.StageTimings : Microsoft.FSharp.
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopK : System.Int32 { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopScore : System.Double { get }
+ToolUp.Platform.ISbomSource (interface)
+ToolUp.Platform.ISbomSource.Closure() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]]
+ToolUp.Platform.ISbomSource.Describe() : System.String
+ToolUp.Platform.ISbomSource.Options() : ToolUp.Platform.SbomOptions
 ToolUp.Platform.ISeamAuthorityEvidence (interface)
 ToolUp.Platform.ISeamAuthorityEvidence.SeamAuthority : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity] { get }
 ToolUp.Platform.ISeamAuthorityGate (interface)
@@ -6934,6 +6938,79 @@ ToolUp.Platform.SSEConnectionManager.Broadcast(System.String, System.Byte[]) : S
 ToolUp.Platform.SSEConnectionManager.BroadcastWithKind(System.String, System.Byte[], System.String) : System.Void
 ToolUp.Platform.SSEConnectionManager.Remove(System.String, ToolUp.Platform.IConnectionSink) : System.Void
 ToolUp.Platform.SSEConnectionManager.Snapshot() : ToolUp.Platform.SseManagerSnapshot
+ToolUp.Platform.SbomAdminEndpoint (class)
+ToolUp.Platform.SbomAdminEndpoint.CycloneDxFormat : System.String (literal)
+ToolUp.Platform.SbomAdminEndpoint.RoutePath : System.String (literal)
+ToolUp.Platform.SbomAdminEndpoint.SpdxFormat : System.String (literal)
+ToolUp.Platform.SbomAdminEndpoint.render(ToolUp.Platform.ISbomSource, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SbomAdminEndpoint+Rendered, ToolUp.Platform.SbomAdminEndpoint+RenderFailure]]
+ToolUp.Platform.SbomAdminEndpoint.route(ToolUp.Platform.ISbomSource) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure (class)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure.IsSourceUnavailable : System.Boolean { get }
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure.IsUnknownFormat : System.Boolean { get }
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure.Tag : System.Int32 { get }
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+SourceUnavailable (class)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+SourceUnavailable.reason : System.String { get }
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+Tags (class)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+Tags.SourceUnavailable : System.Int32 (literal)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+Tags.UnknownFormat : System.Int32 (literal)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+UnknownFormat (class)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailure+UnknownFormat.requested : System.String { get }
+ToolUp.Platform.SbomAdminEndpoint+RenderFailureModule (class)
+ToolUp.Platform.SbomAdminEndpoint+RenderFailureModule.describe(ToolUp.Platform.SbomAdminEndpoint+RenderFailure) : System.String
+ToolUp.Platform.SbomAdminEndpoint+Rendered (class)
+ToolUp.Platform.SbomAdminEndpoint+Rendered..ctor(System.String, System.String)
+ToolUp.Platform.SbomAdminEndpoint+Rendered.Body : System.String { get }
+ToolUp.Platform.SbomAdminEndpoint+Rendered.ContentType : System.String { get }
+ToolUp.Platform.SbomAttestation (class)
+ToolUp.Platform.SbomAttestation..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.SbomAttestation.Code : System.String { get }
+ToolUp.Platform.SbomAttestation.Detail : System.String { get }
+ToolUp.Platform.SbomAttestation.ReleaseActDigest : System.String { get }
+ToolUp.Platform.SbomAttestation.ReleaseActId : System.String { get }
+ToolUp.Platform.SbomComponent (class)
+ToolUp.Platform.SbomComponent..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.SbomAttestation)
+ToolUp.Platform.SbomComponent.Attestation : ToolUp.Platform.SbomAttestation { get }
+ToolUp.Platform.SbomComponent.ContentDigest : System.String { get }
+ToolUp.Platform.SbomComponent.Id : System.String { get }
+ToolUp.Platform.SbomComponent.Purl : System.String { get }
+ToolUp.Platform.SbomComponent.Source : System.String { get }
+ToolUp.Platform.SbomComponent.Version : System.String { get }
+ToolUp.Platform.SbomOptions (class)
+ToolUp.Platform.SbomOptions..ctor(ToolUp.Platform.SbomSubject, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.SbomOptions.ContentDigestAlgorithm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.SbomOptions.Created : System.String { get }
+ToolUp.Platform.SbomOptions.Creator : System.String { get }
+ToolUp.Platform.SbomOptions.DocumentNamespace : System.String { get }
+ToolUp.Platform.SbomOptions.PurlType : System.String { get }
+ToolUp.Platform.SbomOptions.SerialNumber : System.String { get }
+ToolUp.Platform.SbomOptions.Subject : ToolUp.Platform.SbomSubject { get }
+ToolUp.Platform.SbomOptionsModule (class)
+ToolUp.Platform.SbomOptionsModule.defaults : ToolUp.Platform.SbomOptions { get }
+ToolUp.Platform.SbomProjection (class)
+ToolUp.Platform.SbomProjection.AttestedCode : System.String (literal)
+ToolUp.Platform.SbomProjection.CycloneDxAttestationProperty : System.String (literal)
+ToolUp.Platform.SbomProjection.CycloneDxReleaseActProperty : System.String (literal)
+ToolUp.Platform.SbomProjection.CycloneDxScopeProperty : System.String (literal)
+ToolUp.Platform.SbomProjection.CycloneDxSpecVersion : System.String (literal)
+ToolUp.Platform.SbomProjection.CycloneDxUnattestedReasonProperty : System.String (literal)
+ToolUp.Platform.SbomProjection.SpdxAttestationRefType : System.String (literal)
+ToolUp.Platform.SbomProjection.SpdxReleaseActRefType : System.String (literal)
+ToolUp.Platform.SbomProjection.SpdxVersion : System.String (literal)
+ToolUp.Platform.SbomProjection.attestation(ToolUp.Platform.ClosureAttestation) : ToolUp.Platform.SbomAttestation
+ToolUp.Platform.SbomProjection.ofTranscript(ToolUp.Platform.SbomOptions, ToolUp.Platform.BuildTranscript) : ToolUp.Platform.SoftwareBillOfMaterials
+ToolUp.Platform.SbomProjection.project(ToolUp.Platform.SbomOptions, ToolUp.Platform.DependencyClosure) : ToolUp.Platform.SoftwareBillOfMaterials
+ToolUp.Platform.SbomProjection.scope : ToolUp.Platform.SbomScope { get }
+ToolUp.Platform.SbomProjection.scopeText(ToolUp.Platform.SbomScope) : System.String
+ToolUp.Platform.SbomProjection.toCycloneDxJson(ToolUp.Platform.SoftwareBillOfMaterials) : System.String
+ToolUp.Platform.SbomProjection.toSpdxJson(ToolUp.Platform.SoftwareBillOfMaterials) : System.String
+ToolUp.Platform.SbomScope (class)
+ToolUp.Platform.SbomScope..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.SbomScope.Covers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SbomScope.Excludes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SbomSubject (class)
+ToolUp.Platform.SbomSubject..ctor(System.String, System.String)
+ToolUp.Platform.SbomSubject.Name : System.String { get }
+ToolUp.Platform.SbomSubject.Version : System.String { get }
 ToolUp.Platform.ScaleDeclarations (class)
 ToolUp.Platform.ScaleDeclarations..ctor(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]])
 ToolUp.Platform.ScaleDeclarations.Capabilities : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability] { get }
@@ -7608,6 +7685,16 @@ ToolUp.Platform.SmokeTests.Defaults+NotificationChannelSmoke (class)
 ToolUp.Platform.SmokeTests.Defaults+NotificationChannelSmoke..ctor(ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.SmokeTests.Defaults+SmokeJobHandler (class)
 ToolUp.Platform.SmokeTests.Defaults+SmokeJobHandler..ctor()
+ToolUp.Platform.SoftwareBillOfMaterials (class)
+ToolUp.Platform.SoftwareBillOfMaterials..ctor(ToolUp.Platform.SbomSubject, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SbomComponent], ToolUp.Platform.SbomScope)
+ToolUp.Platform.SoftwareBillOfMaterials.Components : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SbomComponent] { get }
+ToolUp.Platform.SoftwareBillOfMaterials.ContentDigestAlgorithm : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.SoftwareBillOfMaterials.Created : System.String { get }
+ToolUp.Platform.SoftwareBillOfMaterials.Creator : System.String { get }
+ToolUp.Platform.SoftwareBillOfMaterials.DocumentNamespace : System.String { get }
+ToolUp.Platform.SoftwareBillOfMaterials.Scope : ToolUp.Platform.SbomScope { get }
+ToolUp.Platform.SoftwareBillOfMaterials.SerialNumber : System.String { get }
+ToolUp.Platform.SoftwareBillOfMaterials.Subject : ToolUp.Platform.SbomSubject { get }
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]

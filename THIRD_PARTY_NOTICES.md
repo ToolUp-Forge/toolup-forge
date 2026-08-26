@@ -5,7 +5,7 @@ NuGet dependency the ToolUp SDK consumes (direct and transitive) along with
 its declared licence as published on nuget.org. The curated headline list
 of major direct dependencies lives in [`NOTICE.md`](NOTICE.md).
 
-Last regenerated: 2026-07-22 05:07:15 UTC.
+Last regenerated: 2026-08-26 12:35:46 UTC.
 
 Entries showing `(licence not declared)` are upstream packages whose NuGet
 metadata omits a licence — check the package's repository or README directly.
@@ -108,10 +108,17 @@ metadata omits a licence — check the package's repository or README directly.
 | `Grpc.Net.Common` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.Common` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `HNSW` | `26.4.177` | `MIT` | [link](https://github.com/curiosity-ai/hnsw.net) |
+| `Humanizer.Core` | `3.0.1` | `MIT` | [link](https://github.com/Humanizr/Humanizer) |
+| `Json.More.Net` | `2.2.0` | `MIT` | [link](https://github.com/json-everything/json-everything) |
+| `JsonPointer.Net` | `6.0.1` | `MIT` | [link](https://github.com/json-everything/json-everything) |
+| `JsonSchema.Net` | `8.0.5` | `MIT` | [link](https://github.com/json-everything/json-everything) |
 | `K4os.Compression.LZ4` | `1.3.8` | [link](https://github.com/MiloszKrajewski/K4os.Compression.LZ4/blob/master/LICENSE?raw=true) | [link](https://github.com/MiloszKrajewski/K4os.Compression.LZ4) |
 | `libsodium` | `1.0.20.1` | `ISC` | [link](https://libsodium.org/) |
 | `MailKit` | `4.16.0` | `MIT` | [link](http://www.mimekit.net/) |
 | `Markdig` | `1.2.0` | `BSD-2-Clause` | [link](https://xoofx.github.io/markdig) |
+| `MathNet.Numerics` | `5.0.0` | `MIT` | [link](https://numerics.mathdotnet.com/) |
+| `Mathnet.Numerics.FSharp` | `5.0.0` | `MIT` | [link](https://numerics.mathdotnet.com/) |
+| `MathNet.Numerics.FSharp` | `5.0.0` | `MIT` | [link](https://numerics.mathdotnet.com/) |
 | `McMaster.NETCore.Plugins` | `2.0.0` | `Apache-2.0` | [link](https://github.com/natemcmaster/DotNetCorePlugins) |
 | `MessagePack` | `3.1.8` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
 | `MessagePack.Annotations` | `3.1.8` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
@@ -149,6 +156,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `8.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `10.0.0` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Extensions.DependencyInjection.Abstractions` | `10.0.7` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Diagnostics` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Diagnostics.Abstractions` | `10.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Diagnostics.Abstractions` | `10.0.3` | `MIT` | [link](https://dot.net/) |
@@ -204,6 +212,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Playwright` | `1.49.0` | `MIT` | [link](https://github.com/microsoft/playwright-dotnet) |
 | `MimeKit` | `4.16.0` | `MIT` | [link](https://www.mimekit.net/) |
 | `Mono.Cecil` | `0.11.4` | `MIT` | [link](http://github.com/jbevain/cecil/) |
+| `Neo4j.Driver` | `5.28.1` | `Apache-2.0` | [link](https://github.com/neo4j/neo4j-dotnet-driver) |
 | `Newtonsoft.Json` | `13.0.4` | `MIT` | [link](https://www.newtonsoft.com/json) |
 | `Npgsql` | `9.0.3` | `PostgreSQL` | [link](https://github.com/npgsql/npgsql) |
 | `NSec.Cryptography` | `25.4.0` | `MIT` | [link](https://nsec.rocks/) |
@@ -222,6 +231,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `Pipelines.Sockets.Unofficial` | `2.2.16` | `MIT` | [link](https://github.com/mgravell/Pipelines.Sockets.Unofficial) |
 | `Portable.BouncyCastle` | `1.9.0` | [link](https://www.bouncycastle.org/csharp/licence.html) | [link](https://www.bouncycastle.org/csharp/) |
 | `SkiaSharp` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
+| `SkiaSharp.NativeAssets.Linux.NoDependencies` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.macOS` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.Win32` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `Snappier` | `1.3.1` | `BSD-3-Clause` | [link](https://brantburnett.github.io/Snappier/) |
@@ -245,7 +255,8 @@ metadata omits a licence — check the package's repository or README directly.
 | `System.Reflection.MetadataLoadContext` | `10.0.7` | `MIT` | [link](https://dot.net/) |
 | `System.Security.Cryptography.Pkcs` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `System.Security.Cryptography.ProtectedData` | `4.5.0` | [link](https://github.com/dotnet/corefx/blob/master/LICENSE.TXT) | [link](https://dot.net/) |
+| `Tesseract` | `5.2.0` | `Apache-2.0` | [link](https://github.com/charlesw/tesseract/) |
 | `WebPush` | `1.0.13` | [link](https://github.com/web-push-libs/web-push-csharp/blob/master/LICENSE) | [link](https://github.com/web-push-libs/web-push-csharp/) |
 | `ZstdSharp.Port` | `0.8.8` | `MIT` | [link](https://github.com/oleg-st/ZstdSharp) |
 
-Total: 233 packages.
+Total: 244 packages.
