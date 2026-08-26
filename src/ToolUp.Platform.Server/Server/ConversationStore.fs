@@ -99,18 +99,6 @@ let private parseConversationIdFromManifest (objectId: string) : ConversationId 
     else
         None
 
-let private parseTurnNumber (objectId: string) : int option =
-    let marker = Separator + TurnInfix + Separator
-
-    match objectId.LastIndexOf(marker) with
-    | -1 -> None
-    | i ->
-        let tail = objectId.Substring(i + marker.Length)
-
-        match Int32.TryParse(tail) with
-        | true, n -> Some n
-        | _ -> None
-
 /// Standard zero-padded turn-id format. The substrate accepts any
 /// monotonic-string turn-id from `IConversationWriter.AppendTurn`,
 /// but the persistent impl rewrites to this canonical form so

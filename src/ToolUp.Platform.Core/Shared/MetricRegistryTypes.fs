@@ -324,19 +324,6 @@ type IMetricRegistry =
 /// diagnostic that names both.
 module MetricRegistry =
 
-    let private firstDuplicate
-        (idOf: 'a -> string)
-        (moduleOf: 'a -> string)
-        (regs: 'a list)
-        : (string * string list) option =
-        regs
-        |> List.groupBy idOf
-        |> List.tryPick (fun (id, group) ->
-            if List.length group > 1 then
-                Some(id, group |> List.map moduleOf |> List.distinct)
-            else
-                None)
-
     /// The immutable registry implementation. Private — consumers hold
     /// the `IMetricRegistry` interface; construction is through `build`
     /// (or `tryBuild`) so the duplicate check is never bypassed.

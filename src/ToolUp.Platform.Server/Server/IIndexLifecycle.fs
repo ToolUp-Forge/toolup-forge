@@ -38,8 +38,16 @@ open ToolUp.Platform.IEmbeddingCache
 /// partial delete is loud and retryable rather than silently
 /// half-complete (GP 9).
 type IndexLifecycleReport = {
-    /// Targets that completed without error this call
-    /// (`"vector-store"`, `"sparse-index"`, `"embedding-cache"`).
+    /// Targets that completed without error this call — `"vector-store"`
+    /// and, when a sparse index is composed, `"sparse-index"`.
+    ///
+    /// **Not `"embedding-cache"`.** The cache is hash-keyed, so the only
+    /// flush it supports is a total one; that is proportionate to `Erase`
+    /// (which reports the cache leg in its own `ErasureSummary`) and wildly
+    /// disproportionate to deleting one chunk or one scope. This list named
+    /// three targets until 2026-08-26 and only ever carried two — the
+    /// comment described an intent, not the code (origin: Phase 626's
+    /// report, which surfaced it as an unreferenced `cacheTarget`).
     Succeeded: string list
     /// `(targetName, error)` per failing target-level operation.
     Failures: (string * string) list
@@ -265,15 +273,38 @@ type DefaultIndexLifecycle
             // be served from cache afterwards. Hash-keyed cache — a full
             // flush is the privacy-correct (and only possible) response.
             // Skipped on dryRun: previews must not cost the cache.
-            if not dryRun then
-                match embeddingCache with
-                | Some cache -> do! cache.Clear()
-                | None -> ()
+            //
+            // The cache leg reports as DATA, like its two siblings
+            // (tidy-drain 2026-08-26; origin: Phase 626's report, which
+            // found `cacheTarget` unreferenced — the symptom of this leg
+            // having been added without being wired into the machinery the
+            // others use). It used to be a bare `do! cache.Clear()`, so a
+            // throwing cache aborted the whole `Erase` with an exception
+            // AFTER the vector and sparse legs had already erased, and the
+            // caller learned nothing about what had survived. That is
+            // exactly the half-complete-and-silent outcome the seam's
+            // per-target isolation exists to prevent.
+            //
+            // It is a `HandlerPartialFailure` rather than a `Note` on an
+            // `Ok`, and the distinction is the point: a cache that could
+            // not be flushed may still serve the erased subject's vectors,
+            // so the run must be resumable, not merely annotated. The
+            // partial summary carries what the other two legs did achieve.
+            let! cacheOutcome =
+                match embeddingCache, dryRun with
+                | Some cache, false -> async {
+                    try
+                        do! cache.Clear()
+                        return Result.Ok()
+                    with ex ->
+                        return Result.Error ex.Message
+                  }
+                | _ -> async.Return(Result.Ok())
 
             return
                 match vectorResult, sparseResult with
                 | Result.Ok v, Result.Ok s ->
-                    Result.Ok {
+                    let summary = {
                         HandlerName = "index-lifecycle"
                         RecordsAffected = v.RecordsAffected + s.RecordsAffected
                         Note =
@@ -281,6 +312,13 @@ type DefaultIndexLifecycle
                                 [
                                     v.Note |> Option.map (sprintf "%s: %s" vectorTarget)
                                     s.Note |> Option.map (sprintf "%s: %s" sparseTarget)
+                                    (match embeddingCache with
+                                     | None -> Some(sprintf "%s: no embedding cache composed" cacheTarget)
+                                     | Some _ when dryRun -> Some(sprintf "%s: not flushed (dry run)" cacheTarget)
+                                     | Some _ ->
+                                         match cacheOutcome with
+                                         | Result.Ok() -> Some(sprintf "%s: flushed" cacheTarget)
+                                         | Result.Error _ -> None)
                                 ]
                                 |> List.choose id
 
@@ -289,6 +327,20 @@ type DefaultIndexLifecycle
                             else
                                 Some(String.concat "; " parts)
                     }
+
+                    match cacheOutcome with
+                    | Result.Ok() -> Result.Ok summary
+                    | Result.Error detail ->
+                        Result.Error(
+                            HandlerPartialFailure(
+                                "index-lifecycle",
+                                summary,
+                                sprintf
+                                    "%s flush failed after the vector and sparse legs erased: %s. Erased vectors may still be served from the derived-embedding cache until it is flushed."
+                                    cacheTarget
+                                    detail
+                            )
+                        )
                 | Result.Error err, _ -> Result.Error err
                 | _, Result.Error err -> Result.Error err
         }

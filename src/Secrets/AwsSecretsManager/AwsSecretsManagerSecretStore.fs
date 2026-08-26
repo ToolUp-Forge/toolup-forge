@@ -66,10 +66,27 @@ type AwsSecretsManagerConfig = {
     /// AWS region in SDK string form ("us-east-1", "eu-west-2", ...).
     /// Read from `TOOLUP_AWS_SECRETS_REGION`.
     Region: string
+    /// Optional Secrets-Manager-compatible endpoint override (LocalStack,
+    /// or any AWS-API-compatible endpoint) — the mirror of
+    /// `AwsS3StorageConfig.EndpointUrl`. `None` (default) preserves today's
+    /// behaviour exactly: the region alone selects the endpoint, subject to
+    /// the AWS SDK's own `AWS_ENDPOINT_URL_SECRETS_MANAGER` resolution.
+    ///
+    /// Prefer this field over that variable wherever the endpoint is known
+    /// at composition time. The variable's failure mode is silent and
+    /// expensive: when it is absent the SDK resolves the REAL Secrets
+    /// Manager for the region, and a caller that believed it was pointed at
+    /// an emulator writes and deletes secrets in a live account — with a
+    /// 7-30 day deletion-recovery window making the mess durable. An
+    /// explicit `Some` cannot be absent by accident.
+    EndpointUrl: string option
 }
 
 module AwsSecretsManagerConfig =
-    let defaults = { Region = "us-east-1" }
+    let defaults = {
+        Region = "us-east-1"
+        EndpointUrl = None
+    }
 
 // ─── Naming ──────────────────────────────────────────────────────────
 
@@ -113,6 +130,11 @@ module private Naming =
 type AwsSecretsManagerSecretStore(config: AwsSecretsManagerConfig) =
     let clientConfig = AmazonSecretsManagerConfig()
     do clientConfig.RegionEndpoint <- RegionEndpoint.GetBySystemName config.Region
+
+    do
+        match config.EndpointUrl with
+        | Some url -> clientConfig.ServiceURL <- url
+        | None -> ()
     // Concrete client, not `IAmazonSecretsManager`: under AWS SDK v4 the
     // interface carries static abstract members and naming it as an
     // ordinary type raises FS3536. Only instance methods are used.
@@ -242,7 +264,11 @@ let fromEnv () : ISecretStore option =
     match Environment.GetEnvironmentVariable ToolUp.Platform.ConfigKeys.Names.awsSecretsRegion with
     | null
     | "" -> None
-    | region -> Some(create { Region = region })
+    | region ->
+        // No env key for the endpoint override, deliberately — see the
+        // field's doc comment. The whole point of the field is to replace
+        // an environment-resolved endpoint with an explicit one.
+        Some(create { Region = region; EndpointUrl = None })
 
 // ─── Phase 9c portability audit (six rules) ──────────────────────────
 //

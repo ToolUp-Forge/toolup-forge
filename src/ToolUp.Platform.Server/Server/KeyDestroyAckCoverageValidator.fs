@@ -75,8 +75,13 @@ let private RecommendedCompanion =
 /// documented to avoid. An UNRECOGNISED channel type is treated as
 /// distributed there (a false Warning aimed at a correctly-configured
 /// deployment teaches operators to ignore the preflight); `None` — no
-/// channel instance registered — means there is no fanout path to assess,
-/// and this Warning arm abstains rather than guessing.
+/// classifiable channel registration — means there is no fanout path to
+/// assess *here*, and this arm abstains rather than guessing.
+///
+/// `None` no longer conflates two cases (2026-08-26). "Nothing registered"
+/// really is nothing to assess; "registered as a factory" is a fanout path
+/// whose reachability is unknown, and `composedChannelIsOpaque` gives that
+/// its own arm above rather than letting it read as clean.
 let private inProcessChannel (services: IServiceCollection) : bool =
     PerScopeKeyResolverDistributedValidator.composedChannelIsInProcess services
     |> Option.defaultValue false
@@ -85,9 +90,15 @@ let private inProcessChannel (services: IServiceCollection) : bool =
 /// (crypto-shredding) one. A `SingleKeyResolver` has no `DestroyKey`
 /// path, and a custom resolver owns its own coherence story.
 let private perScopeResolverComposed (services: IServiceCollection) : bool =
-    match PerScopeKeyResolverDistributedValidator.registeredInstance<IBlobEncryptionKeyResolver> services with
-    | Some instance -> instance :? PerScopeKeyResolver.PerScopeKeyResolver
-    | None -> false
+    match PerScopeKeyResolverDistributedValidator.probeRegistration<IBlobEncryptionKeyResolver> services with
+    | PerScopeKeyResolverDistributedValidator.KnownInstance instance ->
+        instance :? PerScopeKeyResolver.PerScopeKeyResolver
+    // A typed registration declares the concrete resolver without handing
+    // over an instance, and classifies just as well.
+    | PerScopeKeyResolverDistributedValidator.KnownType implType ->
+        typeof<PerScopeKeyResolver.PerScopeKeyResolver>.IsAssignableFrom implType
+    | PerScopeKeyResolverDistributedValidator.NotRegistered
+    | PerScopeKeyResolverDistributedValidator.Opaque -> false
 
 /// Phase 22b — warn when the crypto-shred acknowledgement fanout has no
 /// transport that can reach another replica, in a deployment shape whose
@@ -107,7 +118,30 @@ type KeyDestroyAckCoverageValidator(config: ServerConfig, services: IServiceColl
         member _.Validate() = async {
             let teamShaped = DeploymentConfig.hasTeamScope config
 
-            if teamShaped && perScopeResolverComposed services && inProcessChannel services then
+            if
+                teamShaped
+                && perScopeResolverComposed services
+                && PerScopeKeyResolverDistributedValidator.composedChannelIsOpaque services
+            then
+                // The channel IS registered — as a factory, the ordinary
+                // shape when the connection string is itself resolved from
+                // DI — so nothing about it is knowable before the container
+                // is built, and building it here would create different
+                // singletons from the runtime's. This arm used to be
+                // silence: `inProcessChannel` defaulted an unreadable probe
+                // to `false`, so a factory-registered channel produced no
+                // finding of any kind (origin: Phase 458 ship report). That
+                // is the wrong default for a coverage check — it is
+                // strongest precisely where a deployment did something
+                // unusual. Say what could not be read, and where to look.
+                return
+                    Warning(
+                        sprintf
+                            "PerScopeKeyResolver is composed in a %s deployment and an INotificationChannel IS registered, but as a FACTORY (or open generic), so preflight cannot tell whether the composed channel can leave the process. PerScopeKeyResolver.DestroyKey (the GDPR-erasure / contract-termination crypto-shred path) publishes a KeyDestroyed envelope so every OTHER replica evicts its cached key and records an EncryptionKeyDestroyAcknowledged audit event; an in-process channel makes that publish reach nobody, silently. This is NOT a finding that the channel is wrong — only that it is unreadable here. Confirm the composed channel on the /dev/inspect \"Crypto-shred fanout\" panel at runtime, or register the channel as a singleton INSTANCE so preflight can classify it. If this deployment runs more than one replica and the factory yields an in-process channel, switch to %s."
+                            (DeploymentConfig.surfacesLabel config)
+                            RecommendedCompanion
+                    )
+            elif teamShaped && perScopeResolverComposed services && inProcessChannel services then
                 return
                     Warning(
                         sprintf

@@ -554,6 +554,74 @@ type DatasetStoreMode =
     /// place.
     | CustomDatasetStore
 
+/// Phase 528 — tuning for the session registry. Carried on the mode DU
+/// rather than as loose `ServerConfig` fields so a deployment that never
+/// composes a registry cannot set them in isolation and wonder why
+/// nothing happened.
+type SessionRegistryOptions = {
+    /// Bounded staleness, in seconds, of `SessionRevocationMiddleware`'s
+    /// in-process "not revoked" cache. This IS the revocation window and
+    /// the whole point of it being a named knob: an operator who needs a
+    /// revoke to bite within a second can pay a store read per request,
+    /// and one who does not can keep the read off the hot path. Zero
+    /// disables the cache entirely (every authenticated request reads the
+    /// store).
+    ///
+    /// The cache is deliberately one-sided. A *revoked* verdict is never
+    /// cached-away — revocation is terminal, so once seen it is applied
+    /// for the process lifetime of that entry, and the only staleness
+    /// that can ever exist is a session that is still being honoured
+    /// slightly after it was revoked. There is no window in which a
+    /// revoked session is honoured again.
+    RevocationCacheSeconds: int
+    /// How long a session record is retained after `LastSeenAt` before
+    /// `ListForUser` stops returning it. Bounds the growth of the
+    /// per-scope prefix without a sweeper: an expired record is filtered
+    /// on read and overwritten when the same credential returns.
+    RetentionDays: int
+}
+
+module SessionRegistryOptions =
+    /// 30-second revocation window, 30-day retention. The window matches
+    /// the order of magnitude an operator expects from "signed out
+    /// everywhere" without putting a store read on every authenticated
+    /// request; the retention matches the Phase 337 anonymous-binding
+    /// lifetime, so an anonymous session's record does not outlive the
+    /// cookie that can present it.
+    let defaults: SessionRegistryOptions = {
+        RevocationCacheSeconds = 30
+        RetentionDays = 30
+    }
+
+/// Phase 528 — selects the session-registry substrate (`ISessionRegistry`)
+/// backing the active-sessions view, sign-out-everywhere, and admin
+/// force-revoke. Default: `NoSessionRegistry` — nothing recorded, no
+/// middleware registered, no route mounted, zero cost (GP 13).
+type SessionRegistryMode =
+    /// No session registry (default). Sessions are not recorded, the
+    /// revocation middleware is not registered, and `ISessionApi` 404s —
+    /// a deployment that upgrades stays byte-for-byte unchanged (GP 11).
+    | NoSessionRegistry
+    /// Register the blob-backed `SessionRegistry` over the composed
+    /// `IBlobStorage`, under `_platform/sessions/{scopeId}/`. BCL-only
+    /// JSON, no vendor dependency (GP 1).
+    | BlobSessionRegistry of SessionRegistryOptions
+    /// A companion-provided `ISessionRegistry` (e.g. a Redis-backed one)
+    /// is registered in DI by the deployment; `compose` registers no
+    /// default and leaves the consumer's singleton in place. The options
+    /// still apply — they configure the middleware, not the store.
+    | CustomSessionRegistry of SessionRegistryOptions
+
+module SessionRegistryMode =
+    /// The options a mode carries, or `None` when no registry is
+    /// composed. The single reader every wiring site uses, so the
+    /// "is a registry composed?" question is asked one way everywhere.
+    let options (mode: SessionRegistryMode) : SessionRegistryOptions option =
+        match mode with
+        | NoSessionRegistry -> None
+        | BlobSessionRegistry opts
+        | CustomSessionRegistry opts -> Some opts
+
 /// Phase 449 — selects the model-fit substrate (the `IModelFitProvider`
 /// envelope + `_platform.modelfit.run` job handler). Default:
 /// `NoModelFitting` — no registry, no job handler, zero cost (GP 13).
@@ -2336,6 +2404,14 @@ type ServerConfig = {
     /// vendor dependency); `CustomDatasetStore` leaves a companion-registered
     /// singleton (e.g. a Parquet-codec store) in place.
     Datasets: DatasetStoreMode
+    /// Phase 528 — session-registry selection. Default:
+    /// `NoSessionRegistry` — no session recording, no revocation
+    /// middleware, no `ISessionApi` route, zero cost (GP 13).
+    /// `BlobSessionRegistry` registers the blob-backed default over
+    /// `IBlobStorage`; `CustomSessionRegistry` leaves a
+    /// companion-registered singleton (e.g. Redis) in place. Both carry
+    /// the `SessionRegistryOptions` that set the revocation window.
+    SessionRegistry: SessionRegistryMode
     /// Phase 449 — model-fit substrate selection. Default: `NoModelFitting`
     /// — no fit envelope, zero cost. `EnabledModelFitting` indexes the
     /// registered `IModelFitProvider` companions + binds the fit-run job
@@ -3526,6 +3602,10 @@ module ServerConfig =
         EntityGraphProjection = NoEntityGraphProjection
         TimeSeriesStore = NoTimeSeriesStore
         Datasets = NoDatasets
+        // Phase 528 — no session registry; nothing is recorded, the
+        // revocation middleware is not registered and ISessionApi 404s
+        // (GP 11 / GP 13).
+        SessionRegistry = NoSessionRegistry
         ModelFitting = NoModelFitting
         ModelExecution = NoModelExecutionApi
         // Phase 318 — no external-compute backend composed; the seam

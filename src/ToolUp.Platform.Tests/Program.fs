@@ -1028,6 +1028,10 @@ let allTests =
         ConsentStateStoreTests.tests
         ConsentStateStoreTests.entityBackedTests
         ConsentStateStoreTests.restartPersistenceTests
+        // Phase 528 — session registry + revocation.
+        SessionRegistryTests.tests
+        SessionRegistryTests.derivationTests
+        SessionRegistryTests.blobBackedTests
         AdAnalyticsSinkTests.tests
         AdAnalyticsSinkTests.noOpTests
         UserClaimsTests.tests

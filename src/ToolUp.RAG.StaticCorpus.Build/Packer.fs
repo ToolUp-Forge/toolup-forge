@@ -58,10 +58,6 @@ module Packer =
 
     // ── Config JSON ────────────────────────────────────────────────
 
-    let private jsonOptions =
-        let o = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
-        o
-
     /// Parse `staticcorpus.json` text. `configDir` is the directory of the
     /// config file — the default `BaseDir` and the root for a relative
     /// `Output`. Raises on malformed JSON / missing required fields.

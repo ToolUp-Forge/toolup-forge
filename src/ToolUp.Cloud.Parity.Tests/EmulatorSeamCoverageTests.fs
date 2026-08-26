@@ -5,23 +5,32 @@ open Microsoft.FSharp.Reflection
 
 // ─── Phase 193 — the emulator-seam ratchet ────────────────────────────
 //
-// Two legs of the matrix are dark not because the emulator is missing but
-// because the COMPANION has no way to be pointed at one (see the comments
-// in `EmulatorLegs`). A dark leg reports a `pending` case, and pending
-// output is easy to stop reading — so the gap would sit there indefinitely,
-// and worse, a companion could GAIN the seam and nobody would notice the
+// When Phase 193 shipped, two legs of the matrix were dark not because the
+// emulator was missing but because the COMPANION had no way to be pointed
+// at one. A dark leg reports a `pending` case, and pending output is easy
+// to stop reading — so the gap would have sat there indefinitely, and
+// worse, a companion could have GAINED the seam with nobody noticing the
 // leg was still switched off.
 //
-// These tests are the ratchet. They run everywhere, need no emulator and no
-// Docker, and read the companions' config records by reflection to assert
-// the CURRENT seam coverage. Each is written to fail — loudly, with
-// instructions — the moment the state it characterises changes:
+// These tests are the ratchet that stopped that. They run everywhere, need
+// no emulator and no Docker, and read the companions' config records by
+// reflection to assert the CURRENT seam coverage. Each is written to fail —
+// loudly, with instructions — the moment the state it characterises changes:
 //
 //   * A companion that HAS a seam must keep it, or the leg depending on it
 //     breaks and the reason would otherwise be a puzzle.
 //   * A companion that LACKS one must either still lack it, or the leg gets
-//     armed. These assertions are NOT an endorsement of the gap; they are
-//     what makes closing it impossible to do silently.
+//     armed. Those assertions were NOT an endorsement of the gap; they were
+//     what made closing it impossible to do silently.
+//
+// **Both gaps are now CLOSED (2026-08-26, tidy-drain).**
+// `GoogleCloudStorageConfig` and `AwsSecretsManagerConfig` each gained an
+// `EndpointUrl`, mirroring `AwsS3StorageConfig`, and both legs are armed in
+// `EmulatorLegs`. The two "still has NO seam" assertions therefore INVERT
+// rather than being deleted: the ratchet's job did not end when the seam
+// landed, it changed direction. A companion that quietly drops the field
+// again would otherwise switch its leg back off in silence, which is the
+// exact failure this file exists to prevent.
 //
 // This is the same discipline as the divergence fixture: a matrix cell that
 // cannot fail is not measuring anything.
@@ -56,24 +65,24 @@ let tests =
                  + "EmulatorLegs.blobStorageFactory rather than leaving it silently skipped. Fields: "
                  + string (fieldNames<ToolUp.Storage.AwsS3Storage.AwsS3StorageConfig> ()))
 
-        testCase "GoogleCloudStorageConfig still has NO endpoint seam — the fake-gcs leg stays dark"
+        testCase "GoogleCloudStorageConfig HAS an endpoint seam (the fake-gcs blob + audit legs depend on it)"
         <| fun _ ->
-            Expect.isFalse
+            Expect.isTrue
                 (hasEndpointSeam<ToolUp.Storage.GoogleCloudStorage.GoogleCloudStorageConfig> ())
-                ("GoogleCloudStorageConfig has GAINED an endpoint/emulator seam. That is the change the "
-                 + "fake-gcs-server leg was waiting for: arm it in EmulatorLegs.blobStorageFactory (the "
-                 + "FakeGcs branch, replacing the NoCompanionSeam error), add the fake-gcs service to the "
-                 + "compose matrix if it is not already there, and delete this test. Leaving it as-is "
-                 + "means GCP is the one cloud with no emulator-backed parity coverage while the SDK "
-                 + "claims 'the same image everywhere'.")
+                ("GoogleCloudStorageConfig has LOST its endpoint/emulator seam. It is what arms the "
+                 + "fake-gcs-server legs of both the IBlobStorage and IAuditSink packs — removing it makes "
+                 + "GCP the one cloud with no emulator-backed parity coverage while the SDK claims 'the "
+                 + "same image everywhere'. Restore the field, or arm the leg differently in "
+                 + "EmulatorLegs.blobStorageFactory rather than leaving it silently skipped. Fields: "
+                 + string (fieldNames<ToolUp.Storage.GoogleCloudStorage.GoogleCloudStorageConfig> ()))
 
-        testCase "AwsSecretsManagerConfig still has NO endpoint seam — the secrets leg needs the SDK env var"
+        testCase "AwsSecretsManagerConfig HAS an endpoint seam (the LocalStack secrets leg depends on it)"
         <| fun _ ->
-            Expect.isFalse
+            Expect.isTrue
                 (hasEndpointSeam<ToolUp.Secrets.AwsSecretsManager.AwsSecretsManagerConfig> ())
-                ("AwsSecretsManagerConfig has GAINED an endpoint seam. The LocalStack ISecretStore leg "
-                 + "currently reaches the emulator only via the AWS SDK's AWS_ENDPOINT_URL_SECRETS_MANAGER "
-                 + "resolution, and guards hard against that variable being absent because the fallback is "
-                 + "the REAL Secrets Manager. Switch the leg to the explicit config field — it removes that "
-                 + "footgun entirely — then delete this test.")
+                ("AwsSecretsManagerConfig has LOST its endpoint seam. Without it the LocalStack ISecretStore "
+                 + "leg can reach the emulator only via the AWS SDK's AWS_ENDPOINT_URL_SECRETS_MANAGER "
+                 + "resolution, whose fallback when the variable is absent is the REAL Secrets Manager — the "
+                 + "footgun the explicit field removed. Restore it. Fields: "
+                 + string (fieldNames<ToolUp.Secrets.AwsSecretsManager.AwsSecretsManagerConfig> ()))
     ]
