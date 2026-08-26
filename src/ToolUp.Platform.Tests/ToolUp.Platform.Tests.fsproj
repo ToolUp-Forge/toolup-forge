@@ -661,6 +661,11 @@
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <Compile Include="InProcess\LdapAuthProviderTests.fs" />
+        <!-- Phase 530 — SCIM 2.0 provisioning conformance pack: recorded
+             Entra ID + Okta lifecycle sequences replayed against the real
+             TeamStore, plus the bearer gate, scope isolation, and the
+             wire model. No live IdP. -->
+        <Compile Include="InProcess\ScimProvisioningTests.fs" />
         <Compile Include="InProcess\PasskeyAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
@@ -1043,6 +1048,8 @@
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
+        <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->
+        <Compile Include="InProcess\QueryRewriteComposeTests.fs" />
         <!-- Phase 559 — the query_facts AI tool (disclosure-gated fact reads). -->
         <Compile Include="InProcess\FactQueryToolTests.fs" />
         <!-- Phase 703 — the query_metric_population AI tool: the bounded
@@ -2008,6 +2015,10 @@
              validator, all exercised via an in-memory fake directory (no
              live LDAP server needed). -->
         <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" />
+        <!-- Phase 530 — SCIM 2.0 inbound-provisioning companion. The
+             conformance pack replays recorded Entra ID / Okta request
+             sequences against the shipped TeamStore. -->
+        <ProjectReference Include="..\AuthProviders\Scim\Scim.fsproj" />
         <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
         <!-- Phase 564 — Reporting Server (the disclosure export door in ReportApiHandler). -->

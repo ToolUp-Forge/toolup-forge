@@ -242,6 +242,20 @@ let private deliverOnce
 /// each consume the post-write hook and double-dispatch. Documented
 /// in `TECHNICAL_GUIDE.md`; replacing with a durable queue (Akka,
 /// Orleans Reminders, EventGrid) is the Phase 9c migration path.
+///
+/// **There is no mutual exclusion around delivery or retry, and that is
+/// intended.** `ExecuteAsync` dequeues an event and `Async.Start`s its
+/// fan-out without awaiting, so deliveries to independent subscriptions
+/// never head-of-line-block each other and a subscription whose endpoint
+/// is timing out through its whole retry ladder cannot stall the queue
+/// for every other subscriber; pacing is the retry loop's own
+/// `Async.Sleep`. So this dispatcher holds no `SemaphoreSlim` to migrate
+/// onto `IDistributedLock` — a spec that assumes one is describing a
+/// different subsystem. What multi-instance operation actually needs
+/// here is the durable queue above (so one replica owns an event) rather
+/// than a lease over a lock this file does not take;
+/// `MultiInstanceAdminCoherenceValidator` warns when `ReplicaCount > 1`
+/// and webhooks are composed.
 type WebhookDispatcherService
     (
         registry: IWebhookRegistry,

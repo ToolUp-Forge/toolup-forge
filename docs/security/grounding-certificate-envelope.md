@@ -158,6 +158,50 @@ public key gets the envelope's answer; a holder with the key history gets both.
 | direct | offline, public key | `IArtefactVerifier` over the canonical body bytes — also offline |
 | attested | offline, public key | `IApplicationSigner` over the same bytes — needs the key history, so not offline |
 
+## At the import door
+
+The certificate-verified fact import door accepts **both projections**. Which reader runs is decided
+by the `predicateType` the document itself declares — the caller nominates nothing, and there is no
+try-one-then-the-other fallback, because a fallback's verdict would name whichever attempt happened
+to run second and so describe a check that was not the one that mattered. A statement declaring
+neither type is refused as an *unknown projection*, quoting the type it declared, rather than as a
+mismatch against one of the two arbitrarily chosen.
+
+Routing reads a field out of the payload before any signature has been established. That is safe here
+only because of what follows it: every route verifies the signature over the PAE first and then
+re-checks the predicate type inside the signed statement against that projection's own expectation, so
+a document that lies about its own shape is routed to a reader that refuses it. The worst a liar
+achieves is being refused with one verdict rather than another.
+
+### What the attestation level decides, and what it does not
+
+**It decides admission.** A trust anchor declares the levels it will accept from that peer as a **set**
+— never a threshold. `AttestationLevel` is not totally ordered: `reserved:<label>` exists so a level a
+build does not understand round-trips, and carrying such a label is not evidence for the claim it
+names. Any `>=` comparison would therefore admit `reserved:anything` above `isolated-signer` on the
+strength of a string the peer chose, inverting the one rule the type states about itself. A reserved
+label is refused under **every** policy, including one that names it.
+
+The default set is `attribution` + `isolated-signer`. That is not a widening relative to the path that
+already worked: a direct certificate carries no level at all and is admitted unconditionally, so an
+`attribution`-level document — which says at least as much, bound into its signed bytes — cannot be
+the stricter case. Raising the bar to `isolated-signer` alone is the opt-in.
+
+**It does not decide disclosure.** The level and the anchor's disclosure ceiling are orthogonal. The
+ceiling governs how widely an imported fact may be surfaced once it is here; the level governs whether
+the peer's document is admitted at all. Folding one into the other — "an `attribution` fact is forced
+to restricted" — would make the effective stance the product of two lattices that do not compose.
+
+**It does not decide identity, and it is not defaulted.** A level a document did not claim is recorded
+as absent, never as the weakest one: the direct projection makes no statement about the signing key's
+custody, and inventing one would put an assertion into the audit trail that no signature covers. An
+import refused on level grounds is reported distinctly from one that failed to verify — "your key's
+custody does not meet my bar" and "this did not verify" send an operator to entirely different places.
+
+Ordering: a document whose *surfaced* level disagrees with its seal is refused by the reconciliation
+above **before** any level policy is consulted. A policy is never applied to a level the signature does
+not cover.
+
 ## Signing seam
 
 The envelope signer is `IStatementEnvelopeSigner` (in `ToolUp.Platform.Server`), filled by

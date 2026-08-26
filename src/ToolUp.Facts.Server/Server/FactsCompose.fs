@@ -518,8 +518,9 @@ module FactsCompose =
     /// Each anchor carries one peer's public key — the whole of what
     /// offline verification needs — and, optionally, a ceiling narrowing
     /// what an import from that peer may disclose
-    /// (`PeerTrustAnchor.withCeiling`). No key is discovered, so no key is
-    /// implicitly trusted.
+    /// (`PeerTrustAnchor.withCeiling`) and the set of attestation levels it
+    /// admits (`PeerTrustAnchor.withAdmissibleLevels`). No key is
+    /// discovered, so no key is implicitly trusted.
     let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app

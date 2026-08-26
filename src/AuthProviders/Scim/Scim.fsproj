@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Scim</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Scim</AssemblyName>
+    <Description>SCIM 2.0 (RFC 7643 / RFC 7644) inbound provisioning companion for ToolUp.Platform: hosts /scim/v2/{Users,Groups} plus the ServiceProviderConfig / Schemas / ResourceTypes discovery documents, and maps an enterprise IdP's user and group lifecycle onto ITeamStore membership and IPermissionStore writes. Bearer-gated from ISecretStore with a constant-time compare; one token provisions exactly one team. Protocol-only — no vendor SDK, BCL and Giraffe only. Opt-in: a deployment that does not compose it mounts zero routes.</Description>
+    <PackageTags>fsharp;sdk;auth;scim;scim2;provisioning;deprovisioning;entra;okta;onelogin;enterprise;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile order is the dependency order: the wire model and its
+         codec depend on nothing but the BCL + the platform's TeamRole;
+         the lifecycle mapping depends on the model and the shipped
+         stores; the Giraffe surface + composition root depend on both. -->
+    <Compile Include="ScimTypes.fs" />
+    <Compile Include="ScimHandler.fs" />
+    <Compile Include="ScimRoutes.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- AspNetCore framework reference for HttpContext visibility. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- Giraffe + System.Text.Json arrive transitively via
+       ToolUp.Platform.Server. There is no vendor PackageReference here
+       and there should never be one: SCIM is an IETF protocol, so the
+       companion is protocol-only by construction (GP 1).
+       FSharp.Core is implicit via the .NET SDK. -->
+</Project>

@@ -4621,7 +4621,8 @@ ToolUp.Platform.ExternalWorkSpecModule.withProfile(ToolUp.Platform.ExecutionProf
 ToolUp.Platform.ExternalWorkSpecModule.withSubmitterClass(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.ExternalWorkSpecModule.withTimeout(System.TimeSpan, ToolUp.Platform.ExternalWorkSpec) : ToolUp.Platform.ExternalWorkSpec
 ToolUp.Platform.FactImportPayload (class)
-ToolUp.Platform.FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.FactImportPayload.AttestationLevel : System.String { get }
 ToolUp.Platform.FactImportPayload.CertificateRef : System.String { get }
 ToolUp.Platform.FactImportPayload.CertificateRoot : System.String { get }
 ToolUp.Platform.FactImportPayload.DeclaredDisclosure : System.String { get }
