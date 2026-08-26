@@ -871,6 +871,14 @@
              both consume it. Depends on DataProtection + HttpContext only,
              so it sits safely this early. -->
         <Compile Include="Server\AnonymousSessionBinding.fs" />
+        <!-- Phase 528 — session registry. The interface + its blob-backed
+             default sit here, after AnonymousSessionBinding.fs (whose
+             sealed anonymous session id the derivation consumes) and
+             before Middleware.fs / SessionRevocationMiddleware.fs, which
+             are its callers. Depends on IBlobStorage + the Core session
+             types only. -->
+        <Compile Include="Server\ISessionRegistry.fs" />
+        <Compile Include="Server\SessionRegistry.fs" />
         <Compile Include="Server\Scope\StorageScopeResolver.fs" />
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
@@ -934,6 +942,13 @@
              before BuildRouteHandlers (which mounts the route). -->
         <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
+        <!-- Phase 528 — revoked-session refusal + session recording.
+             After Middleware.fs, whose ScopeResolutionMiddleware stamps
+             the Subject / StorageScope it reads; before
+             BuildRouteHandlers (which mounts ISessionApi) and
+             ConfigurePipeline (which registers the middleware). -->
+        <Compile Include="Server\SessionRevocationMiddleware.fs" />
+        <Compile Include="Server\SessionApiHandler.fs" />
         <!-- Phase 132 — admin structural backstop. Path-prefix
              authorisation middleware over the raw `_platform` admin
              handlers; registered after ScopeResolutionMiddleware (which

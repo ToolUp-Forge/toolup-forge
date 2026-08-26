@@ -265,6 +265,12 @@
              ModuleVisibilityTypes.fs (its payloads) and beside
              FeatureFlagApi.fs, whose gating attributes it mirrors. -->
         <Compile Include="Shared\ModuleVisibilityApi.fs" />
+        <!-- Phase 528 — session-registry wire types + ISessionApi. After
+             AuthAttributes.fs (its gating markers) and before SDK.Shared.fs,
+             which carries the SessionRegistryMode opt-in and the
+             ServerConfig field. Fable-safe (values + BCL only) so the
+             client renders SessionRecord directly. -->
+        <Compile Include="Shared\SessionTypes.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
         <!-- Phase 214 / 689 — the ConfigKeys module: reserved config-subsystem

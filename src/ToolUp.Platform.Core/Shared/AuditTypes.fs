@@ -1330,6 +1330,43 @@ type ShareTokenRevokedPayload = {
     ResourceId: string
 }
 
+/// Phase 528 — one recorded session was revoked, by its owner or by a
+/// team administrator. `ActorUserId` is who performed the revocation and
+/// `SubjectUserId` is whose session it was; they differ exactly on the
+/// admin force-revoke path, which is the case worth being able to find
+/// in the trail later.
+///
+/// `SessionId` is the derived, one-way session id — safe to record
+/// because it is a hash of the credential rather than the credential
+/// (see `SessionTypes.fs`). No token, cookie value, or `User-Agent` is
+/// carried here: the audit row answers "which session, revoked by whom,
+/// when", and anything more would put credential-adjacent material into
+/// the one store designed to be replicated off-box.
+type SessionRevokedPayload = {
+    ActorUserId: string
+    SubjectUserId: string
+    SessionId: string
+    /// Coarse device descriptor as stored on the record — enough to
+    /// recognise which session was cut off without re-deriving it.
+    DeviceDescriptor: string
+    /// `true` when the actor revoked someone else's session (the
+    /// admin force-revoke path). Denormalised rather than left to a
+    /// reader comparing the two id fields, so an alerting rule over the
+    /// audit stream can key off it directly.
+    ByAdministrator: bool
+}
+
+/// Phase 528 — a wholesale revocation: sign-out-everywhere, or a team
+/// administrator cutting off another user entirely. `RevokedCount` is
+/// how many records moved from active to revoked, so a trail reader can
+/// tell a real sign-out-everywhere from a no-op repeat.
+type AllSessionsRevokedPayload = {
+    ActorUserId: string
+    SubjectUserId: string
+    RevokedCount: int
+    ByAdministrator: bool
+}
+
 // ─── Service accounts (Phase 527) ────────────────────────────────────
 //
 // Machine principals and their scoped API tokens. Reserved
@@ -4147,6 +4184,17 @@ type AuditEvent =
     /// the actor; subsequent `Validate` calls reject the token with
     /// `RevokedToken`.
     | ShareTokenRevoked of ShareTokenRevokedPayload
+    /// Phase 528 — `ISessionRegistry.Revoke` succeeded on one session.
+    /// The actor is the caller who revoked; the subject is the session's
+    /// owner. Recorded under the session's own scope, so a team's trail
+    /// carries its members' revocations.
+    | SessionRevoked of SessionRevokedPayload
+    /// Phase 528 — `ISessionRegistry.RevokeAllForUser` succeeded:
+    /// sign-out-everywhere, or an administrator cutting a user off
+    /// wholesale. Distinct from a burst of `SessionRevoked` rows because
+    /// the INTENT differs, and an alerting rule that cares about mass
+    /// revocation should not have to infer it from a count.
+    | AllSessionsRevoked of AllSessionsRevokedPayload
     /// Phase 527 — `IServiceAccountStore.Create` succeeded. Reserved
     /// `SourceModule = "_platform.audit.service_accounts"`.
     | ServiceAccountCreated of ServiceAccountCreatedPayload
@@ -4722,6 +4770,8 @@ module AuditEvent =
         | ShareTokenIssued _ -> "ShareTokenIssued"
         | ShareTokenUsed _ -> "ShareTokenUsed"
         | ShareTokenRevoked _ -> "ShareTokenRevoked"
+        | SessionRevoked _ -> "SessionRevoked"
+        | AllSessionsRevoked _ -> "AllSessionsRevoked"
         | ServiceAccountCreated _ -> "ServiceAccountCreated"
         | ServiceAccountPermissionsChanged _ -> "ServiceAccountPermissionsChanged"
         | ServiceAccountTokenMinted _ -> "ServiceAccountTokenMinted"

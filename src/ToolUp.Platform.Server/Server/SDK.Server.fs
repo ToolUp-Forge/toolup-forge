@@ -676,6 +676,13 @@ let compose
     // the consumer's own `IDatasetStore` singleton in place.
     registerDatasetStore services config
 
+    // Phase 528 — session registry. Conditional on
+    // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
+    // registration entirely, so neither the revocation middleware nor the
+    // ISessionApi route has a store to resolve; `BlobSessionRegistry`
+    // registers the blob-backed default lazily; `CustomSessionRegistry`
+    // leaves the consumer's own `ISessionRegistry` singleton in place.
+    registerSessionRegistry services config
     // Phase 527 — service-account substrate. Conditional on
     // `ServerConfig.ServiceAccounts`; `NoServiceAccounts` (default) skips
     // registration entirely; `EnabledServiceAccounts` registers the
