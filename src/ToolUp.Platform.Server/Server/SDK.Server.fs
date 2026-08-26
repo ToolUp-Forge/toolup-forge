@@ -676,6 +676,14 @@ let compose
     // the consumer's own `IDatasetStore` singleton in place.
     registerDatasetStore services config
 
+    // Phase 552 — consented-grant registry. Conditional on
+    // `ServerConfig.GrantConsent`; `NoGrantConsentStore` (default) skips
+    // registration entirely and Phase 551's `RequiresCounterpartyApproval`
+    // arm keeps refusing every grant. Registers the verifier alongside
+    // (empty keyring, `TryAddSingleton`) so a composed store can never be
+    // paired with no verifier at all.
+    registerGrantConsentStore services config
+
     // Phase 528 — session registry. Conditional on
     // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
     // registration entirely, so neither the revocation middleware nor the

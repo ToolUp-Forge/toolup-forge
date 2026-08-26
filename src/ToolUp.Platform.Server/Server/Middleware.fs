@@ -591,8 +591,92 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         ->
                                         let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
 
-                                        ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
-                                            box (TeamPermissions.grantsFor user.UserId doc)
+                                        let subjectGrants = TeamPermissions.grantsFor user.UserId doc
+
+                                        ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
+
+                                        // Phase 552 — resolve the consent
+                                        // verdict for each module the
+                                        // subject holds a grant record on
+                                        // that declares
+                                        // `RequiresCounterpartyApproval`.
+                                        // Resolved PER REQUEST rather than
+                                        // cached, which is the whole of
+                                        // 552.D: a revocation takes effect
+                                        // at the very next call, not at the
+                                        // next sweep. The set is bounded by
+                                        // the subject's own counterparty
+                                        // grants — typically none, and never
+                                        // more than the modules that
+                                        // deployment declared — so the cost
+                                        // is zero for every deployment that
+                                        // declares no counterparty arm, and
+                                        // one registry read per genuinely
+                                        // counterparty-gated module
+                                        // otherwise (GP 13).
+                                        let counterpartyModules =
+                                            subjectGrants
+                                            |> Map.toList
+                                            |> List.choose (fun (moduleName, _) ->
+                                                match
+                                                    GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve
+                                                        registry
+                                                        moduleName
+                                                with
+                                                | GrantPolicy.RequiresCounterpartyApproval party ->
+                                                    Some(moduleName, party)
+                                                | _ -> None)
+
+                                        if not (List.isEmpty counterpartyModules) then
+                                            let consentStore =
+                                                match
+                                                    ctx.RequestServices.GetService(
+                                                        typeof<GrantConsentStore.IGrantConsentStore>
+                                                    )
+                                                with
+                                                | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+                                                | _ -> None
+
+                                            let verifier =
+                                                match
+                                                    ctx.RequestServices.GetService(
+                                                        typeof<GrantConsentStore.IGrantConsentVerifier>
+                                                    )
+                                                with
+                                                | :? GrantConsentStore.IGrantConsentVerifier as v -> v
+                                                // No verifier composed ⇒
+                                                // nothing can be checked ⇒
+                                                // nothing is admitted. Never
+                                                // a fall-through to "trust
+                                                // the record".
+                                                | _ -> GrantConsentStore.denyingVerifier
+
+                                            let auditLog =
+                                                match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+                                                | :? IAuditLog as log -> Some log
+                                                | _ -> None
+
+                                            let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
+
+                                            for moduleName, party in counterpartyModules do
+                                                let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
+
+                                                let! resolved =
+                                                    runAsync (
+                                                        GrantConsentStore.resolveLive
+                                                            consentStore
+                                                            verifier
+                                                            auditLog
+                                                            Async.Start
+                                                            DateTimeOffset.UtcNow
+                                                            subject
+                                                            party
+                                                    )
+
+                                                verdicts <-
+                                                    verdicts |> Map.add moduleName (resolved |> Result.map ignore)
+
+                                            ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
                                     | _ -> ()
                                 | _ -> ()
 

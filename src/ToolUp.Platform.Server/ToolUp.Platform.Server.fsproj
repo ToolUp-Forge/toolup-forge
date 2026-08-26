@@ -808,6 +808,20 @@
              per-request grant records), RemotingHelpers.fs (the dispatch
              gate), and ServerApp.fs (which builds the registry). -->
         <Compile Include="Server\GrantPolicyGuard.fs" />
+        <!-- Phase 552 — the consented-grant registry: IGrantConsentStore and
+             its in-memory / blob-backed implementations, the signature
+             verifier over a party's registered key material, the lifecycle
+             (propose / approve / revoke — revocation is a record, never a
+             delete), and the dispatch guard that resolves Phase 551's
+             RequiresCounterpartyApproval arm through it ON USE. After
+             GrantPolicyGuard.fs (it implements that file's
+             CounterpartyConsentOracle seam and extends its dispatch guard)
+             and before Middleware.fs (which stamps the per-request consent
+             verdicts) and RemotingHelpers.fs (the dispatch gate). Carries
+             crypto, so it is server-side: the wire types + the canonical
+             payload live in Platform.Core, on the IModuleBindingVerifier
+             precedent. -->
+        <Compile Include="Server\GrantConsentStore.fs" />
         <!-- Phase 555 — dual control (two-person rule) for sensitive admin
              mutations: the pending-approval store, the propose / approve /
              reject / expire ceremony, and the IPermissionStore decorator that

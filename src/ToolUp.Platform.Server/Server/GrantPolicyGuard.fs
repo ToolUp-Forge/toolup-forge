@@ -203,6 +203,42 @@ let guardDispatch
 
         Error payload
 
+// ─── The counterparty seam (Phase 552) ───────────────────────────────
+
+/// Phase 552 — resolves whether a live, signature-valid, unexpired,
+/// unrevoked consent record exists for one (subject × module) grant under
+/// the party a module's `RequiresCounterpartyApproval` arm names.
+///
+/// **An interface rather than a function type, and declared HERE rather
+/// than beside the store**, for one reason each. An interface because the
+/// write guard below must be constructible with and without it and the
+/// two constructors have to disambiguate by type; here because this file
+/// compiles before `GrantConsentStore.fs`, which supplies the shipped
+/// implementation over `IGrantConsentStore` + `IGrantConsentVerifier`.
+///
+/// The seam is what keeps Phase 551 honest about what it does NOT know.
+/// 551 refused every counterparty grant because nothing in the estate
+/// could produce the artifact; it did not hard-code that refusal into the
+/// concept. `denyAll` below IS that refusal, named — so a deployment with
+/// no consent registry behaves exactly as 551 shipped, and the difference
+/// between "refuses because it is impossible" and "refuses because it is
+/// unconfigured" stays visible rather than being folded into a `match`
+/// arm nobody can compose over.
+type CounterpartyConsentOracle =
+    /// `true` only when consent is live for this exact grant under this
+    /// exact party, verified NOW. Async because resolving it is a store
+    /// read plus a signature check (GP 12 rule 2).
+    abstract IsConsentLive: teamId: string * subjectId: string * moduleName: string * party: PartyRef -> Async<bool>
+
+module CounterpartyConsentOracle =
+    /// The pre-552 oracle: nothing is ever consented. What a deployment
+    /// composing no consent registry gets, and what every existing
+    /// construction of the decorator below keeps getting.
+    let denyAll =
+        { new CounterpartyConsentOracle with
+            member _.IsConsentLive(_, _, _, _) = async { return false }
+        }
+
 // ─── Write-time enforcement (551.C) ──────────────────────────────────
 
 /// Evidence an administrator presents with a grant. Carried explicitly
@@ -305,6 +341,13 @@ let evaluateGrant
 let private isBacked (policy: GrantPolicy) (record: ModuleGrantRecord option) =
     match policy with
     | GrantPolicy.AdminDiscretion -> true
+    // Phase 552 — the counterparty arm's backing is BOTH halves: this
+    // record AND a live consent artifact. `isBacked` is the pure,
+    // document-only half, so it answers `false` here and the async
+    // `validateEntry` below adds the oracle. Keeping it out of this
+    // function is deliberate: a pure predicate that silently meant
+    // "backed, assuming someone else checked the registry" is the shape
+    // that produces a guard nobody can read correctly.
     | GrantPolicy.RequiresCounterpartyApproval _ -> false
     | _ ->
         match record with
@@ -316,31 +359,69 @@ let private isBacked (policy: GrantPolicy) (record: ModuleGrantRecord option) =
         // pending state unwritable.
         | Some r -> GrantPolicy.strictness r.SatisfiedPolicy >= GrantPolicy.strictness policy
 
+/// Phase 552 — is a counterparty-arm grant record adequate backing on the
+/// DOCUMENT side? Exact policy equality, not a strictness comparison:
+/// every `RequiresCounterpartyApproval` arm ranks 3, so `>=` would let a
+/// record whose evidence was gathered for party A satisfy a module that
+/// now requires party B. The parties are incomparable — which is the same
+/// judgement `GrantPolicy.tighten` makes at compose time, applied here to
+/// evidence rather than to declarations.
+let private isCounterpartyRecordAdequate (policy: GrantPolicy) (record: ModuleGrantRecord option) =
+    match record with
+    | None -> false
+    | Some r -> r.State = GrantState.Active && r.SatisfiedPolicy = policy
+
 /// Validate one (subject, module, permissions) grant against the
-/// registry and the records present in the document being written.
+/// registry, the records present in the document being written, and —
+/// for the counterparty arm — the live consent registry.
+///
+/// Async because the counterparty arm consults a store; every other arm
+/// resolves without touching it, so an estate that declares no
+/// counterparty policy performs no consent work here at all (GP 13).
 let private validateEntry
     (registry: ModuleGrantPolicyRegistry)
+    (consent: CounterpartyConsentOracle)
+    (teamId: string)
     (records: Map<string, Map<string, ModuleGrantRecord>>)
     (userId: string)
     (moduleName: string)
     (permissions: ModulePermission list)
-    : Result<unit, GrantRefusal> =
-    if List.isEmpty permissions then
-        Ok()
-    else
-        let policy = ModuleGrantPolicyRegistry.resolve registry moduleName
+    : Async<Result<unit, GrantRefusal>> =
+    async {
+        if List.isEmpty permissions then
+            return Ok()
+        else
+            let policy = ModuleGrantPolicyRegistry.resolve registry moduleName
 
-        match policy with
-        | GrantPolicy.AdminDiscretion -> Ok()
-        | GrantPolicy.RequiresCounterpartyApproval party ->
-            Error(GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
-        | _ ->
-            let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+            match policy with
+            | GrantPolicy.AdminDiscretion -> return Ok()
+            | GrantPolicy.RequiresCounterpartyApproval party ->
+                // Phase 552 — BOTH halves, and in this order. The consent
+                // is asked about first because it is the expensive, live
+                // fact; a document record without it is exactly the forged
+                // row Phase 551 recorded as refusable, and a live consent
+                // without a record is a grant nobody actually wrote.
+                let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
 
-            if isBacked policy record then
-                Ok()
-            else
-                Error(GrantRefusal.UnbackedGrant(moduleName, policy))
+                let! consented = consent.IsConsentLive(teamId, userId, moduleName, party)
+
+                if consented && isCounterpartyRecordAdequate policy record then
+                    return Ok()
+                elif consented then
+                    // Consent is live but the document carries no adequate
+                    // record — the write is trying to create authority
+                    // without recording what satisfied the policy.
+                    return Error(GrantRefusal.UnbackedGrant(moduleName, policy))
+                else
+                    return Error(GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
+            | _ ->
+                let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+
+                if isBacked policy record then
+                    return Ok()
+                else
+                    return Error(GrantRefusal.UnbackedGrant(moduleName, policy))
+    }
 
 /// A policy-bearing module may never be handed out through team
 /// DEFAULTS: a default applies to every member who lacks an explicit
@@ -373,8 +454,25 @@ let private validateDefaults
 /// in a composition with no audit substrate; a refusal without a log
 /// still refuses (audit is best-effort per the `IAuditLog` contract, and
 /// the control is the refusal, not the row).
+/// **Phase 552 note on the constructors.** The primary now takes a
+/// `CounterpartyConsentOracle`, and the secondary preserves the pre-552
+/// argument shape exactly — `(inner, registry, ?auditLog, ?actorId)` —
+/// delegating with `CounterpartyConsentOracle.denyAll`. That is a
+/// deliberate two-constructor shape rather than a fifth optional
+/// argument: an optional parameter folds into ONE widened constructor,
+/// so adding it would DELETE the existing `..ctor` token from the
+/// public-API baseline (a genuine break, per the documented Phase 175
+/// rule), while an explicit secondary keeps that token and adds one.
+/// Every existing call site, in the SDK and in a consumer, compiles and
+/// behaves identically — and gets the pre-552 refusal by name.
 type GrantPolicyPermissionStore
-    (inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, ?auditLog: IAuditLog, ?actorId: string) =
+    (
+        inner: IPermissionStore,
+        registry: ModuleGrantPolicyRegistry,
+        consent: CounterpartyConsentOracle,
+        auditLog: IAuditLog option,
+        actorId: string option
+    ) =
 
     let actor = defaultArg actorId "unknown"
 
@@ -403,6 +501,13 @@ type GrantPolicyPermissionStore
     let refuse (subjectId: string) (moduleName: string) (refusal: GrantRefusal) (teamId: string) =
         record subjectId moduleName refusal teamId
         Error(GrantRefusal.describe refusal)
+
+    /// The pre-552 shape: no consent registry, so the counterparty arm
+    /// refuses every grant exactly as Phase 551 shipped it. Preserved as
+    /// an explicit secondary constructor, not folded into an optional
+    /// parameter — see the type's doc comment for why.
+    new(inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, ?auditLog: IAuditLog, ?actorId: string) =
+        GrantPolicyPermissionStore(inner, registry, CounterpartyConsentOracle.denyAll, auditLog, actorId)
 
     interface IPermissionStore with
         member _.GetTeamPermissions teamId = inner.GetTeamPermissions teamId
@@ -434,12 +539,24 @@ type GrantPolicyPermissionStore
                             userId, moduleName, perms
             ]
 
-            let entryFailure =
+            // Sequential rather than parallel: the counterparty arm reads
+            // the consent registry, and the first refusal is the answer —
+            // fanning out would perform reads for entries whose verdict is
+            // already decided, against an authorization store, per write.
+            let! entryFailure =
                 changedEntries
-                |> List.tryPick (fun (userId, moduleName, perms) ->
-                    match validateEntry registry permissions.Grants userId moduleName perms with
-                    | Ok() -> None
-                    | Error e -> Some(userId, moduleName, e))
+                |> List.fold
+                    (fun acc (userId, moduleName, perms) -> async {
+                        match! acc with
+                        | Some _ as found -> return found
+                        | None ->
+                            match!
+                                validateEntry registry consent teamId permissions.Grants userId moduleName perms
+                            with
+                            | Ok() -> return None
+                            | Error e -> return Some(userId, moduleName, e)
+                    })
+                    (async { return None })
 
             match entryFailure with
             | Some(userId, moduleName, e) -> return refuse userId moduleName e teamId
@@ -469,13 +586,32 @@ type GrantPolicyPermissionStore
                 match ModuleGrantPolicyRegistry.resolve registry moduleName with
                 | GrantPolicy.AdminDiscretion ->
                     return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-                | GrantPolicy.RequiresCounterpartyApproval party ->
-                    return
-                        refuse
-                            userId
-                            moduleName
-                            (GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
-                            teamId
+                | GrantPolicy.RequiresCounterpartyApproval party as policy ->
+                    // Phase 552 — symmetric with the arms below: a RE-grant
+                    // of a module whose consent is live and whose record is
+                    // already adequate is a no-op on the policy question and
+                    // is let through. What this path still cannot do is
+                    // CREATE the record — it has nowhere to carry the
+                    // evidence — so a first counterparty grant refuses here
+                    // and points at `GrantConsents.grantWithCounterpartyApproval`.
+                    let! existing = inner.GetTeamPermissions teamId
+
+                    let existingRecord =
+                        existing.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+
+                    let! consented = consent.IsConsentLive(teamId, userId, moduleName, party)
+
+                    if consented && isCounterpartyRecordAdequate policy existingRecord then
+                        return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+                    elif consented then
+                        return refuse userId moduleName (GrantRefusal.UnbackedGrant(moduleName, policy)) teamId
+                    else
+                        return
+                            refuse
+                                userId
+                                moduleName
+                                (GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
+                                teamId
                 | policy ->
                     // An adequate record may already exist (a re-grant of
                     // an already-consented module), in which case the

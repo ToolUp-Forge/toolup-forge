@@ -114,10 +114,20 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
             |> Option.map (fun t -> $"team-{t}")
             |> Option.defaultValue accessCtx.UserId
 
+        // Phase 552 — the same control, extended by exactly one arm:
+        // `RequiresCounterpartyApproval` now resolves through the consent
+        // registry (via the verdicts `ScopeResolutionMiddleware` stamped
+        // for THIS request) instead of refusing unconditionally. Every
+        // other arm delegates to the Phase 551 guard unchanged, and an
+        // empty registry still short-circuits before anything is read —
+        // so a deployment declaring no policy is byte-for-byte its
+        // pre-551 self, and one declaring no COUNTERPARTY policy is
+        // byte-for-byte its pre-552 self.
         match
-            GrantPolicyGuard.guardDispatch
+            GrantConsentStore.guardDispatchWithConsent
                 (resolveRegistry ctx)
                 (GrantPolicyGuard.grantsFromItems ctx.Items)
+                (GrantConsentStore.consentVerdictsFromItems ctx.Items)
                 auditLog
                 Async.Start
                 scopeId

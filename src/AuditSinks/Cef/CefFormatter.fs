@@ -159,6 +159,21 @@ let private highEvents =
         // `UnconsentedGrantRefused` with reason `no-grant-record` is the
         // signature of a permission row written outside the guard.
         "GrantPolicyRefused"
+        // Phase 552 — the two rows that CHANGE who may reach a
+        // counterparty-gated module, plus the tamper alert.
+        // `GrantConsentApproved` is High for the same reason
+        // `PermissionChanged` is: it is the moment third-party authority
+        // becomes grantable. `GrantConsentRevoked` is High because its
+        // ABSENCE is what a reviewer looks for when access should have
+        // stopped and did not.
+        "GrantConsentApproved"
+        "GrantConsentRevoked"
+        // The forgery signal: a record presenting itself as consent that
+        // does not verify — a bad signature, an unregistered key, an
+        // algorithm downgrade, a record filed against another subject.
+        // Emitted only on those grounds, never for an ordinary revocation
+        // or expiry, so its rate is meaningful rather than a baseline.
+        "GrantConsentVerificationDenied"
         "KnowledgeOriginalRetrievalDenied"
         "ModelArtifactTransitionDenied"
         "ModelFitGateFailed"
@@ -195,6 +210,12 @@ let private mediumEvents =
         "EncryptionKeyDestroyAcknowledged"
         "EntityDeleted"
         "FileDeleted"
+        // Phase 552 — a consent lodged awaiting the counterparty. Medium,
+        // not High: it confers nothing at dispatch, so it is an operations
+        // queue rather than an authority change. Its sibling
+        // `GrantConsentApproved` is the row that changes access, and it
+        // sits in the High table.
+        "GrantConsentProposed"
         "HealthStateChanged"
         "MemberRemoved"
         "MemberRoleChanged"

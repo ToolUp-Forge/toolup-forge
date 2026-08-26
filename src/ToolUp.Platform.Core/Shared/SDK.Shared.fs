@@ -622,6 +622,46 @@ module SessionRegistryMode =
         | BlobSessionRegistry opts
         | CustomSessionRegistry opts -> Some opts
 
+/// Phase 552 — selects the consented-grant registry (`IGrantConsentStore`)
+/// that a module's declared `RequiresCounterpartyApproval` grant policy is
+/// resolved through, at the grant write AND again at dispatch.
+///
+/// Default `NoGrantConsentStore`: no store is registered, no consent blob
+/// is written or read, and the dispatch path performs one failed service
+/// lookup — so a deployment that declares no counterparty policy is
+/// byte-for-byte its pre-552 self (GP 11 / GP 13). It is also the reason
+/// the Phase 551 arm refuses conservatively: with no store composed there
+/// is no artifact that could satisfy the policy, and admitting the grant
+/// anyway would make the declaration decorative.
+type GrantConsentMode =
+    /// No registry (default). `RequiresCounterpartyApproval` refuses every
+    /// grant, at write and at dispatch — the shipped Phase 551 behaviour.
+    | NoGrantConsentStore
+    /// Register the in-process `InMemoryGrantConsentStore`. Dev and test
+    /// only: records do not survive a restart and two app instances do not
+    /// share them, which for an authorization artifact means one instance
+    /// can honour a consent another has seen revoked.
+    | InMemoryGrantConsent
+    /// Register the blob-backed default over the composed `IBlobStorage`,
+    /// under `_platform/grant-consent/{teamId}/`. BCL-only JSON, no vendor
+    /// dependency (GP 1), no state between calls (GP 12 rule 4).
+    | BlobGrantConsent
+    /// A consumer- or companion-provided `IGrantConsentStore` is registered
+    /// in DI by the deployment; `compose` registers no default and leaves
+    /// that singleton in place.
+    | CustomGrantConsentStore
+
+module GrantConsentMode =
+    /// Whether a registry is composed at all. The single reader every
+    /// wiring site uses, so "is consent resolvable here?" is asked one way
+    /// everywhere rather than by re-matching the DU at each call.
+    let isComposed (mode: GrantConsentMode) =
+        match mode with
+        | NoGrantConsentStore -> false
+        | InMemoryGrantConsent
+        | BlobGrantConsent
+        | CustomGrantConsentStore -> true
+
 /// Phase 449 — selects the model-fit substrate (the `IModelFitProvider`
 /// envelope + `_platform.modelfit.run` job handler). Default:
 /// `NoModelFitting` — no registry, no job handler, zero cost (GP 13).
@@ -3326,6 +3366,18 @@ type ServerConfig = {
     /// write the module would never admit is refused outright rather than
     /// parked awaiting an approval that could not have applied it.
     AdminMutationPolicy: AdminMutationPolicy
+    /// Phase 552 — the consented-grant registry backing a module's declared
+    /// `RequiresCounterpartyApproval` policy. Default `NoGrantConsentStore`
+    /// — nothing registered, nothing read, and that arm keeps refusing
+    /// every grant exactly as Phase 551 shipped it (GP 11 + GP 13).
+    ///
+    /// Composing a store is only half: signatures are checked by an
+    /// `IGrantConsentVerifier`, and the default one is built over an EMPTY
+    /// keyring, so until the deployment registers its counterparty keys
+    /// every record denies with `consent-unknown-key`. That is deliberate
+    /// — a registry that admitted unverified records would be worse than
+    /// the refusal it replaced.
+    GrantConsent: GrantConsentMode
     /// Phase 594 — the data-vocabulary packs this deployment pins. Default
     /// `[]` — no pack pinned, so the composition validator's
     /// `vocabulary-typename-unknown` / `vocabulary-schema-mismatch` rules
@@ -3737,6 +3789,7 @@ module ServerConfig =
         Presence = NoPresence
         ModuleVisibility = NoModuleVisibility
         AdminMutationPolicy = AdminMutationPolicy.SingleAdmin
+        GrantConsent = NoGrantConsentStore
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
         ExpectedModules = None

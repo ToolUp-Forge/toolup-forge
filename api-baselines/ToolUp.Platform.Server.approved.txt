@@ -1155,6 +1155,7 @@ ToolUp.Platform.ComposeStores.registerDeployPlane(Microsoft.Extensions.Dependenc
 ToolUp.Platform.ComposeStores.registerEntityOutbox(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]]) : System.Void
 ToolUp.Platform.ComposeStores.registerExternalCompute(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.ComposeStores.registerGrantConsentStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
 ToolUp.Platform.ComposeStores.registerServiceAccountStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -3644,6 +3645,55 @@ ToolUp.Platform.GateVerdict.Name : System.String { get }
 ToolUp.Platform.GateVerdict.Observed : System.Double { get }
 ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
+ToolUp.Platform.GrantConsentStore (class)
+ToolUp.Platform.GrantConsentStore.ModuleGrantConsentsItemsKey : System.String (literal)
+ToolUp.Platform.GrantConsentStore.consentVerdictsFromItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore.denyingVerifier : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier { get }
+ToolUp.Platform.GrantConsentStore.grantWithCounterpartyApproval(ToolUp.Platform.PermissionStore+IPermissionStore, ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.DateTimeOffset, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantWriteOutcome, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore.guardDispatchWithConsent(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.UnconsentedGrantRefusedPayload]
+ToolUp.Platform.GrantConsentStore.resolveLive(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], System.DateTimeOffset, ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore.verifierOver(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentStore+ConsentPartyKey]) : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier
+ToolUp.Platform.GrantConsentStore+BlobGrantConsentStore (class)
+ToolUp.Platform.GrantConsentStore+BlobGrantConsentStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.GrantConsentStore+ConsentPartyKey (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKey..ctor(ToolUp.Platform.PartyRef, System.String, ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKey.KeyId : System.String { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKey.Material : ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKey.Party : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial.IsConsentEcdsaP256 : System.Boolean { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial.IsConsentHmacSha256 : System.Boolean { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial.Tag : System.Int32 { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+ConsentEcdsaP256 (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+ConsentEcdsaP256.publicKeySpkiBase64 : System.String { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+ConsentHmacSha256 (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+ConsentHmacSha256.keyBase64 : System.String { get }
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+Tags (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+Tags.ConsentEcdsaP256 : System.Int32 (literal)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial+Tags.ConsentHmacSha256 : System.Int32 (literal)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterialModule (class)
+ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterialModule.token(ToolUp.Platform.GrantConsentStore+ConsentPartyKeyMaterial) : System.String
+ToolUp.Platform.GrantConsentStore+ConsentSigning (class)
+ToolUp.Platform.GrantConsentStore+ConsentSigning.signEcdsaP256(System.Security.Cryptography.ECDsa, System.String, ToolUp.Platform.GrantConsentRecord) : ToolUp.Platform.ConsentSignature
+ToolUp.Platform.GrantConsentStore+ConsentSigning.signHmacSha256(System.Byte[], System.String, ToolUp.Platform.GrantConsentRecord) : ToolUp.Platform.ConsentSignature
+ToolUp.Platform.GrantConsentStore+DefaultGrantConsentVerifier (class)
+ToolUp.Platform.GrantConsentStore+DefaultGrantConsentVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentStore+ConsentPartyKey])
+ToolUp.Platform.GrantConsentStore+GrantConsents (class)
+ToolUp.Platform.GrantConsentStore+GrantConsents.approve(ToolUp.Platform.GrantConsentStore+IGrantConsentStore, ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore+GrantConsents.draft(ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef, ToolUp.Platform.ConsentStatus, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String) : ToolUp.Platform.GrantConsentRecord
+ToolUp.Platform.GrantConsentStore+GrantConsents.newConsentId() : System.String
+ToolUp.Platform.GrantConsentStore+GrantConsents.propose(ToolUp.Platform.GrantConsentStore+IGrantConsentStore, ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore+GrantConsents.revoke(ToolUp.Platform.GrantConsentStore+IGrantConsentStore, ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]]
+ToolUp.Platform.GrantConsentStore+IGrantConsentStore (interface)
+ToolUp.Platform.GrantConsentStore+IGrantConsentStore.ListForSubject(ToolUp.Platform.ConsentSubject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentRecord], System.String]]
+ToolUp.Platform.GrantConsentStore+IGrantConsentStore.Put(ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.GrantConsentStore+IGrantConsentStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentRecord], System.String]]
+ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier (interface)
+ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier.Verify(ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]
+ToolUp.Platform.GrantConsentStore+InMemoryGrantConsentStore (class)
+ToolUp.Platform.GrantConsentStore+InMemoryGrantConsentStore..ctor()
+ToolUp.Platform.GrantConsentStore+StoreCounterpartyConsentOracle (class)
+ToolUp.Platform.GrantConsentStore+StoreCounterpartyConsentOracle..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.GrantNotification (class)
 ToolUp.Platform.GrantNotification.GrantNoticeKey : System.String (literal)
 ToolUp.Platform.GrantNotification.diff(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, System.String, System.String, System.DateTimeOffset, ToolUp.Platform.TeamPermissions, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantNotification+GrantNotice]
@@ -3703,6 +3753,10 @@ ToolUp.Platform.GrantPolicyGuard.grantsFromItems(System.Collections.Generic.IDic
 ToolUp.Platform.GrantPolicyGuard.guardDispatch(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit], System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.UnconsentedGrantRefusedPayload]
 ToolUp.Platform.GrantPolicyGuard.isDispatchGrantLive(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], System.String) : System.Boolean
 ToolUp.Platform.GrantPolicyGuard.refusalPayload(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], System.String, System.String) : ToolUp.Platform.UnconsentedGrantRefusedPayload
+ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracle (interface)
+ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracle.IsConsentLive(System.String, System.String, System.String, ToolUp.Platform.PartyRef) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracleModule (class)
+ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracleModule.denyAll : ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracle { get }
 ToolUp.Platform.GrantPolicyGuard+GrantEvidence (class)
 ToolUp.Platform.GrantPolicyGuard+GrantEvidence..ctor(System.Boolean, System.String)
 ToolUp.Platform.GrantPolicyGuard+GrantEvidence.Acknowledged : System.Boolean { get }
@@ -3712,6 +3766,7 @@ ToolUp.Platform.GrantPolicyGuard+GrantEvidenceModule.acknowledged(System.String)
 ToolUp.Platform.GrantPolicyGuard+GrantEvidenceModule.none : ToolUp.Platform.GrantPolicyGuard+GrantEvidence { get }
 ToolUp.Platform.GrantPolicyGuard+GrantPolicyPermissionStore (class)
 ToolUp.Platform.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.PermissionStore+IPermissionStore, ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.PermissionStore+IPermissionStore, ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.GrantPolicyGuard+CounterpartyConsentOracle, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry (class)
 ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.GrantPolicy])
 ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry.Policies : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.GrantPolicy] { get }

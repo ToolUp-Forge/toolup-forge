@@ -2471,6 +2471,126 @@ type AdminMutationExpiredPayload = {
     ExpiredAtUtc: DateTimeOffset
 }
 
+// ─── Phase 552 — the consented-grant registry ────────────────────────
+//
+// Four events, and the split is the same one the record type makes
+// (`ConsentDenial.isTrustFailure`): three lifecycle acts, and ONE alert.
+//
+// The three acts are separate rather than one `GrantConsentChanged` row
+// with a status field because they are three different reviews. "What
+// has a counterparty been asked to approve" is an operations queue;
+// "what did a counterparty approve, and over what bytes" is the evidence
+// an assurance reader samples; "what has been withdrawn" is the one that
+// must be reconcilable against access that stopped. A status field would
+// make each a filter over the other two's volume.
+//
+// The fourth — `GrantConsentVerificationDenied` — fires ONLY on a trust
+// failure: a signature that does not validate, a key nobody registered,
+// an algorithm downgrade, a record filed against the wrong subject or
+// party. It deliberately does NOT fire on an ordinary lifecycle denial
+// (revoked, expired, not yet approved), because those are already fully
+// described by the `UnconsentedGrantRefused` row the dispatch refusal
+// emits, and drowning a forgery alert in the volume of ordinary
+// revocations is exactly how a forgery alert stops being read.
+
+/// Phase 552 — a consent record was lodged in the registry awaiting the
+/// counterparty. Authority was REQUESTED, not created: a proposal
+/// confers nothing at dispatch.
+type GrantConsentProposedPayload = {
+    /// The lodged record's opaque id — the join key to the approval or
+    /// revocation that later supersedes it.
+    ConsentId: string
+    TeamId: string
+    /// The principal the grant would be for.
+    SubjectId: string
+    /// The module the grant targets. Mirrors the `IPermissionStore` /
+    /// `AccessContext.ModulePermissions` key, so a consent row joins to a
+    /// grant row with no second naming axis to drift.
+    ModuleName: string
+    /// The counterparty whose approval the module's declared
+    /// `GrantPolicy` requires (`PartyRef.value`).
+    Party: string
+    /// The signing key id the record presents. Recorded even on a
+    /// proposal so a later "which key signed what" review needs no
+    /// payload reads.
+    KeyId: string
+    /// Who lodged the record with the deployment — never the signer. The
+    /// signer is proved by the signature under `Party`.
+    RecordedBy: string
+    /// When an eventual approval would lapse, if the record carries an
+    /// expiry.
+    ExpiresAtUtc: DateTimeOffset option
+}
+
+/// Phase 552 — a counterparty's signed approval was accepted into the
+/// registry. This is the row that says authority became grantable, and
+/// it is the one an assurance reader samples: it names the exact record
+/// approved and the proposal it supersedes.
+type GrantConsentApprovedPayload = {
+    ConsentId: string
+    TeamId: string
+    SubjectId: string
+    ModuleName: string
+    Party: string
+    KeyId: string
+    RecordedBy: string
+    /// The `ConsentId` this approval answers. `""` when the approval was
+    /// lodged without a preceding proposal (legitimate for an
+    /// out-of-band agreement recorded in one act).
+    Supersedes: string
+    ExpiresAtUtc: DateTimeOffset option
+}
+
+/// Phase 552 — a consent was withdrawn. A revocation is a new record,
+/// never a row delete, so this row and the approval it supersedes both
+/// stand in the trail.
+///
+/// **Its operational meaning is immediate**: the dispatch check resolves
+/// consent on use, so the next call against the affected module refuses.
+/// There is no sweep to wait for and no cache to invalidate, which is
+/// what makes this row reconcilable against access actually stopping.
+type GrantConsentRevokedPayload = {
+    ConsentId: string
+    TeamId: string
+    SubjectId: string
+    ModuleName: string
+    Party: string
+    KeyId: string
+    RecordedBy: string
+    /// The `ConsentId` being withdrawn.
+    Supersedes: string
+}
+
+/// Phase 552 — something presenting itself as consent failed VERIFICATION
+/// (`ConsentDenial.isTrustFailure`). The security signal of the family.
+///
+/// Distinct from `UnconsentedGrantRefused`, which fires at the module
+/// access gate for every inert grant including the ordinary ones. This
+/// one fires only where a record exists and is not what it claims: a
+/// signature that does not validate over the canonical payload, a key id
+/// nobody registered for the party, a declared algorithm disagreeing
+/// with the registered key's, or a record filed against a different
+/// subject or party. Any of those on a production deployment means a
+/// forged or replayed artifact, not a policy outcome.
+type GrantConsentVerificationDeniedPayload = {
+    /// The record's id, or `""` when nothing readable was presented.
+    ConsentId: string
+    TeamId: string
+    SubjectId: string
+    ModuleName: string
+    /// The party the MODULE requires approval from — the expectation,
+    /// not the record's self-assertion.
+    Party: string
+    /// The key id the record presented. `""` when unreadable.
+    KeyId: string
+    /// The algorithm the record DECLARED. Recorded because a value
+    /// disagreeing with the registered key's is the downgrade attempt
+    /// itself, and it is invisible once the refusal is reduced to a code.
+    DeclaredAlgorithm: string
+    /// Stable denial discriminator (`ConsentDenial.code`).
+    DenialCode: string
+}
+
 /// Phase 18 — a typed inter-platform peer contract call resolved on the
 /// receiver (the host dispatched it to a terminal outcome). Emitted once
 /// per inbound call by the peer host's contract handler. Reserved
@@ -4617,6 +4737,20 @@ type AuditEvent =
     /// Phase 555 — a pending mutation lapsed without a decision and was
     /// swept.
     | AdminMutationExpired of AdminMutationExpiredPayload
+    /// Phase 552 — a consent record was lodged awaiting the counterparty.
+    /// Authority was requested, not created.
+    | GrantConsentProposed of GrantConsentProposedPayload
+    /// Phase 552 — a counterparty's signed approval was accepted. The row
+    /// that makes a `RequiresCounterpartyApproval` grant possible.
+    | GrantConsentApproved of GrantConsentApprovedPayload
+    /// Phase 552 — a consent was withdrawn. Effective at the next call,
+    /// because consent is verified on use.
+    | GrantConsentRevoked of GrantConsentRevokedPayload
+    /// Phase 552 — a presented consent record failed verification on a
+    /// TRUST ground (bad signature, unregistered key, algorithm
+    /// disagreement, wrong subject/party). Not emitted for ordinary
+    /// lifecycle denials.
+    | GrantConsentVerificationDenied of GrantConsentVerificationDeniedPayload
     /// Phase 18 — a typed inter-platform peer contract call resolved on
     /// the receiver. Emitted once per inbound call by the peer host's
     /// contract handler after dispatch reaches a terminal outcome.
@@ -5020,6 +5154,10 @@ module AuditEvent =
         | AdminMutationRejected _ -> "AdminMutationRejected"
         | AdminMutationApprovalRefused _ -> "AdminMutationApprovalRefused"
         | AdminMutationExpired _ -> "AdminMutationExpired"
+        | GrantConsentProposed _ -> "GrantConsentProposed"
+        | GrantConsentApproved _ -> "GrantConsentApproved"
+        | GrantConsentRevoked _ -> "GrantConsentRevoked"
+        | GrantConsentVerificationDenied _ -> "GrantConsentVerificationDenied"
         | PeerCallCompleted _ -> "PeerCallCompleted"
         | PeerJobCompleted _ -> "PeerJobCompleted"
         | PeerCleanRoomDecision _ -> "PeerCleanRoomDecision"

@@ -1101,6 +1101,45 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> AdminMutationExpired(fromAuditJson<AdminMutationExpiredPayload> j)
     }
+    // Phase 552 — the consented-grant registry. Three lifecycle acts and
+    // one alert: `GrantConsentVerificationDenied` fires only where a
+    // presented record is not what it claims (`ConsentDenial.isTrustFailure`),
+    // never for an ordinary revocation or expiry — those are already
+    // described by the `UnconsentedGrantRefused` row the dispatch refusal
+    // emits, and burying a forgery alert in their volume is how a forgery
+    // alert stops being read.
+    {
+        EventType = "GrantConsentProposed"
+        TryEncode =
+            (function
+            | GrantConsentProposed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantConsentProposed(fromAuditJson<GrantConsentProposedPayload> j)
+    }
+    {
+        EventType = "GrantConsentApproved"
+        TryEncode =
+            (function
+            | GrantConsentApproved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantConsentApproved(fromAuditJson<GrantConsentApprovedPayload> j)
+    }
+    {
+        EventType = "GrantConsentRevoked"
+        TryEncode =
+            (function
+            | GrantConsentRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantConsentRevoked(fromAuditJson<GrantConsentRevokedPayload> j)
+    }
+    {
+        EventType = "GrantConsentVerificationDenied"
+        TryEncode =
+            (function
+            | GrantConsentVerificationDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantConsentVerificationDenied(fromAuditJson<GrantConsentVerificationDeniedPayload> j)
+    }
     {
         EventType = "PeerCallCompleted"
         TryEncode =

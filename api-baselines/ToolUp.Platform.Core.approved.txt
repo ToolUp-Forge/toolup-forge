@@ -960,6 +960,10 @@ ToolUp.Platform.AuditEvent.IsFileReprocessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFileUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmissionUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsFormSubmitted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGrantConsentApproved : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGrantConsentProposed : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGrantConsentRevoked : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsGrantConsentVerificationDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsGrantPolicyRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsGroundingEnvelopeMutated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsGroundingMutationRefused : System.Boolean { get }
@@ -1215,6 +1219,14 @@ ToolUp.Platform.AuditEvent+FormSubmissionUpdated (class)
 ToolUp.Platform.AuditEvent+FormSubmissionUpdated.Item : ToolUp.Platform.FormSubmissionUpdatedPayload { get }
 ToolUp.Platform.AuditEvent+FormSubmitted (class)
 ToolUp.Platform.AuditEvent+FormSubmitted.Item : ToolUp.Platform.FormSubmittedPayload { get }
+ToolUp.Platform.AuditEvent+GrantConsentApproved (class)
+ToolUp.Platform.AuditEvent+GrantConsentApproved.Item : ToolUp.Platform.GrantConsentApprovedPayload { get }
+ToolUp.Platform.AuditEvent+GrantConsentProposed (class)
+ToolUp.Platform.AuditEvent+GrantConsentProposed.Item : ToolUp.Platform.GrantConsentProposedPayload { get }
+ToolUp.Platform.AuditEvent+GrantConsentRevoked (class)
+ToolUp.Platform.AuditEvent+GrantConsentRevoked.Item : ToolUp.Platform.GrantConsentRevokedPayload { get }
+ToolUp.Platform.AuditEvent+GrantConsentVerificationDenied (class)
+ToolUp.Platform.AuditEvent+GrantConsentVerificationDenied.Item : ToolUp.Platform.GrantConsentVerificationDeniedPayload { get }
 ToolUp.Platform.AuditEvent+GrantPolicyRefused (class)
 ToolUp.Platform.AuditEvent+GrantPolicyRefused.Item : ToolUp.Platform.GrantPolicyRefusedPayload { get }
 ToolUp.Platform.AuditEvent+GroundingEnvelopeMutated (class)
@@ -1453,6 +1465,10 @@ ToolUp.Platform.AuditEvent+Tags.FileReprocessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FileUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmissionUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.FormSubmitted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GrantConsentApproved : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GrantConsentProposed : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GrantConsentRevoked : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.GrantConsentVerificationDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.GrantPolicyRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.GroundingEnvelopeMutated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.GroundingMutationRefused : System.Int32 (literal)
@@ -2931,6 +2947,56 @@ ToolUp.Platform.ConsentDecision+Tags (class)
 ToolUp.Platform.ConsentDecision+Tags.Denied : System.Int32 (literal)
 ToolUp.Platform.ConsentDecision+Tags.Granted : System.Int32 (literal)
 ToolUp.Platform.ConsentDecision+Tags.NotYetDecided : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial (class)
+ToolUp.Platform.ConsentDenial.IsAlgorithmNotAllowed : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsExpired : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsNoConsentRecord : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsNoConsentStore : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsNoVerifier : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsNotApproved : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsPartyMismatch : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsRevoked : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsSignatureInvalid : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsStoreUnavailable : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsSubjectMismatch : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.IsUnknownKey : System.Boolean { get }
+ToolUp.Platform.ConsentDenial.NoConsentRecord : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.NoConsentStore : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.NoVerifier : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.Revoked : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.SignatureInvalid : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.SubjectMismatch : ToolUp.Platform.ConsentDenial { get }
+ToolUp.Platform.ConsentDenial.Tag : System.Int32 { get }
+ToolUp.Platform.ConsentDenial+AlgorithmNotAllowed (class)
+ToolUp.Platform.ConsentDenial+AlgorithmNotAllowed.declared : System.String { get }
+ToolUp.Platform.ConsentDenial+Expired (class)
+ToolUp.Platform.ConsentDenial+Expired.expiredAt : System.DateTimeOffset { get }
+ToolUp.Platform.ConsentDenial+NotApproved (class)
+ToolUp.Platform.ConsentDenial+NotApproved.status : System.String { get }
+ToolUp.Platform.ConsentDenial+PartyMismatch (class)
+ToolUp.Platform.ConsentDenial+PartyMismatch.expected : System.String { get }
+ToolUp.Platform.ConsentDenial+PartyMismatch.found : System.String { get }
+ToolUp.Platform.ConsentDenial+StoreUnavailable (class)
+ToolUp.Platform.ConsentDenial+StoreUnavailable.reason : System.String { get }
+ToolUp.Platform.ConsentDenial+Tags (class)
+ToolUp.Platform.ConsentDenial+Tags.AlgorithmNotAllowed : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.Expired : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.NoConsentRecord : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.NoConsentStore : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.NoVerifier : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.NotApproved : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.PartyMismatch : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.Revoked : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.SignatureInvalid : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.StoreUnavailable : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.SubjectMismatch : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+Tags.UnknownKey : System.Int32 (literal)
+ToolUp.Platform.ConsentDenial+UnknownKey (class)
+ToolUp.Platform.ConsentDenial+UnknownKey.keyId : System.String { get }
+ToolUp.Platform.ConsentDenialModule (class)
+ToolUp.Platform.ConsentDenialModule.code(ToolUp.Platform.ConsentDenial) : System.String
+ToolUp.Platform.ConsentDenialModule.describe(ToolUp.Platform.ConsentDenial) : System.String
+ToolUp.Platform.ConsentDenialModule.isTrustFailure(ToolUp.Platform.ConsentDenial) : System.Boolean
 ToolUp.Platform.ConsentEvent (class)
 ToolUp.Platform.ConsentEvent..ctor(System.String, ToolUp.Platform.ConsentCategory, ToolUp.Platform.ConsentDecision, System.DateTimeOffset, System.String)
 ToolUp.Platform.ConsentEvent.AnonymousUserId : System.String { get }
@@ -2952,6 +3018,12 @@ ToolUp.Platform.ConsentProviderMode+Tags (class)
 ToolUp.Platform.ConsentProviderMode+Tags.CustomConsentProvider : System.Int32 (literal)
 ToolUp.Platform.ConsentProviderMode+Tags.FundingChoicesConsent : System.Int32 (literal)
 ToolUp.Platform.ConsentProviderMode+Tags.NoConsentProvider : System.Int32 (literal)
+ToolUp.Platform.ConsentSignature (class)
+ToolUp.Platform.ConsentSignature..ctor(System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.ConsentSignature.DeclaredAlgorithm : System.String { get }
+ToolUp.Platform.ConsentSignature.KeyId : System.String { get }
+ToolUp.Platform.ConsentSignature.SignedAtUtc : System.DateTimeOffset { get }
+ToolUp.Platform.ConsentSignature.Value : System.String { get }
 ToolUp.Platform.ConsentState (class)
 ToolUp.Platform.ConsentState..ctor(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ConsentCategory], System.DateTimeOffset, System.Int32)
 ToolUp.Platform.ConsentState.ConsentVersion : System.Int32 { get }
@@ -2974,6 +3046,29 @@ ToolUp.Platform.ConsentStateStoreMode+Tags (class)
 ToolUp.Platform.ConsentStateStoreMode+Tags.EntityBackedConsentStateStore : System.Int32 (literal)
 ToolUp.Platform.ConsentStateStoreMode+Tags.InMemoryConsentStateStore : System.Int32 (literal)
 ToolUp.Platform.ConsentStateStoreMode+Tags.NoConsentStateStore : System.Int32 (literal)
+ToolUp.Platform.ConsentStatus (class)
+ToolUp.Platform.ConsentStatus.Approved : ToolUp.Platform.ConsentStatus { get }
+ToolUp.Platform.ConsentStatus.IsApproved : System.Boolean { get }
+ToolUp.Platform.ConsentStatus.IsProposed : System.Boolean { get }
+ToolUp.Platform.ConsentStatus.IsRevoked : System.Boolean { get }
+ToolUp.Platform.ConsentStatus.Proposed : ToolUp.Platform.ConsentStatus { get }
+ToolUp.Platform.ConsentStatus.Revoked : ToolUp.Platform.ConsentStatus { get }
+ToolUp.Platform.ConsentStatus.Tag : System.Int32 { get }
+ToolUp.Platform.ConsentStatus+Tags (class)
+ToolUp.Platform.ConsentStatus+Tags.Approved : System.Int32 (literal)
+ToolUp.Platform.ConsentStatus+Tags.Proposed : System.Int32 (literal)
+ToolUp.Platform.ConsentStatus+Tags.Revoked : System.Int32 (literal)
+ToolUp.Platform.ConsentStatusModule (class)
+ToolUp.Platform.ConsentStatusModule.ofToken(System.String) : ToolUp.Platform.ConsentStatus
+ToolUp.Platform.ConsentStatusModule.toToken(ToolUp.Platform.ConsentStatus) : System.String
+ToolUp.Platform.ConsentSubject (class)
+ToolUp.Platform.ConsentSubject..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ConsentSubject.ModuleName : System.String { get }
+ToolUp.Platform.ConsentSubject.SubjectId : System.String { get }
+ToolUp.Platform.ConsentSubject.TeamId : System.String { get }
+ToolUp.Platform.ConsentSubjectModule (class)
+ToolUp.Platform.ConsentSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.ConsentSubject
+ToolUp.Platform.ConsentSubjectModule.isIncomplete(ToolUp.Platform.ConsentSubject) : System.Boolean
 ToolUp.Platform.ContainerInfo (class)
 ToolUp.Platform.ContainerInfo..ctor(System.String, System.String, System.String, ToolUp.Platform.ContainerStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ContainerInfo.ContainerId : System.String { get }
@@ -5316,6 +5411,82 @@ ToolUp.Platform.FormSubmittedPayload.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.UserId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.WorkflowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GrantConsent (class)
+ToolUp.Platform.GrantConsent.addressesGrant(ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef, ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]
+ToolUp.Platform.GrantConsent.current(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentRecord]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]
+ToolUp.Platform.GrantConsentApprovedPayload (class)
+ToolUp.Platform.GrantConsentApprovedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.GrantConsentApprovedPayload.ConsentId : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.GrantConsentApprovedPayload.KeyId : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.ModuleName : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.Party : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.RecordedBy : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.SubjectId : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.Supersedes : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentMode (class)
+ToolUp.Platform.GrantConsentMode.BlobGrantConsent : ToolUp.Platform.GrantConsentMode { get }
+ToolUp.Platform.GrantConsentMode.CustomGrantConsentStore : ToolUp.Platform.GrantConsentMode { get }
+ToolUp.Platform.GrantConsentMode.InMemoryGrantConsent : ToolUp.Platform.GrantConsentMode { get }
+ToolUp.Platform.GrantConsentMode.IsBlobGrantConsent : System.Boolean { get }
+ToolUp.Platform.GrantConsentMode.IsCustomGrantConsentStore : System.Boolean { get }
+ToolUp.Platform.GrantConsentMode.IsInMemoryGrantConsent : System.Boolean { get }
+ToolUp.Platform.GrantConsentMode.IsNoGrantConsentStore : System.Boolean { get }
+ToolUp.Platform.GrantConsentMode.NoGrantConsentStore : ToolUp.Platform.GrantConsentMode { get }
+ToolUp.Platform.GrantConsentMode.Tag : System.Int32 { get }
+ToolUp.Platform.GrantConsentMode+Tags (class)
+ToolUp.Platform.GrantConsentMode+Tags.BlobGrantConsent : System.Int32 (literal)
+ToolUp.Platform.GrantConsentMode+Tags.CustomGrantConsentStore : System.Int32 (literal)
+ToolUp.Platform.GrantConsentMode+Tags.InMemoryGrantConsent : System.Int32 (literal)
+ToolUp.Platform.GrantConsentMode+Tags.NoGrantConsentStore : System.Int32 (literal)
+ToolUp.Platform.GrantConsentModeModule (class)
+ToolUp.Platform.GrantConsentModeModule.isComposed(ToolUp.Platform.GrantConsentMode) : System.Boolean
+ToolUp.Platform.GrantConsentProposedPayload (class)
+ToolUp.Platform.GrantConsentProposedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.GrantConsentProposedPayload.ConsentId : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.GrantConsentProposedPayload.KeyId : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.ModuleName : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.Party : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.RecordedBy : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.SubjectId : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentRecord (class)
+ToolUp.Platform.GrantConsentRecord..ctor(System.String, ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef, ToolUp.Platform.ConsentStatus, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], ToolUp.Platform.ConsentSignature, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.GrantConsentRecord.ConsentId : System.String { get }
+ToolUp.Platform.GrantConsentRecord.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.GrantConsentRecord.IssuedAtUtc : System.DateTimeOffset { get }
+ToolUp.Platform.GrantConsentRecord.Party : ToolUp.Platform.PartyRef { get }
+ToolUp.Platform.GrantConsentRecord.RecordedBy : System.String { get }
+ToolUp.Platform.GrantConsentRecord.Signature : ToolUp.Platform.ConsentSignature { get }
+ToolUp.Platform.GrantConsentRecord.Status : ToolUp.Platform.ConsentStatus { get }
+ToolUp.Platform.GrantConsentRecord.Subject : ToolUp.Platform.ConsentSubject { get }
+ToolUp.Platform.GrantConsentRecord.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GrantConsentRecordModule (class)
+ToolUp.Platform.GrantConsentRecordModule.canonicalPayload(ToolUp.Platform.GrantConsentRecord) : System.String
+ToolUp.Platform.GrantConsentRecordModule.isExpiredAt(System.DateTimeOffset, ToolUp.Platform.GrantConsentRecord) : System.Boolean
+ToolUp.Platform.GrantConsentRecordModule.isSafeId(System.String) : System.Boolean
+ToolUp.Platform.GrantConsentRevokedPayload (class)
+ToolUp.Platform.GrantConsentRevokedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.GrantConsentRevokedPayload.ConsentId : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.KeyId : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.ModuleName : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.Party : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.RecordedBy : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.SubjectId : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.Supersedes : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload (class)
+ToolUp.Platform.GrantConsentVerificationDeniedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.ConsentId : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.DeclaredAlgorithm : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.DenialCode : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.KeyId : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.ModuleName : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.Party : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.SubjectId : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.TeamId : System.String { get }
 ToolUp.Platform.GrantPolicy (class)
 ToolUp.Platform.GrantPolicy.AdminDiscretion : ToolUp.Platform.GrantPolicy { get }
 ToolUp.Platform.GrantPolicy.IsAdminDiscretion : System.Boolean { get }
@@ -9259,7 +9430,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralShareTokenKey : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
@@ -9317,6 +9488,7 @@ ToolUp.Platform.ServerConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOptio
 ToolUp.Platform.ServerConfig.ExternalCompute : ToolUp.Platform.ExternalComputeMode { get }
 ToolUp.Platform.ServerConfig.FactStore : ToolUp.Platform.FactStoreMode { get }
 ToolUp.Platform.ServerConfig.FeatureFlags : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag] { get }
+ToolUp.Platform.ServerConfig.GrantConsent : ToolUp.Platform.GrantConsentMode { get }
 ToolUp.Platform.ServerConfig.GraphStore : ToolUp.Platform.GraphStoreMode { get }
 ToolUp.Platform.ServerConfig.HealthStateTracking : System.Boolean { get }
 ToolUp.Platform.ServerConfig.I18nCoverageMode : ToolUp.Platform.I18nCoverageMode { get }

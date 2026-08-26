@@ -222,6 +222,17 @@
              (values + BCL only) so an approval queue can render server-side
              and client-side from one type. -->
         <Compile Include="Shared\Types\AdminMutationTypes.fs" />
+        <!-- Phase 552 — the consented-grant registry's wire types: the signed
+             consent record, its lifecycle, the canonical payload a
+             counterparty signs, and the typed denials. After
+             PermissionTypes.fs (the record carries a PartyRef and the
+             lifecycle mirrors GrantState) and before SDK.Shared.fs, which
+             carries the ServerConfig field. Fable-safe (records + string
+             building over BCL primitives) so the bytes a party signs are
+             computed identically on every tier — the crypto that consumes
+             them lives server-side behind IGrantConsentVerifier, on the
+             IModuleBindingVerifier precedent. -->
+        <Compile Include="Shared\Types\GrantConsentTypes.fs" />
         <!-- Phase 66 Stream A.1 — Subject / SurfaceProfile / SurfaceRequirement
              types compiled before AccessContext (which now carries a Subject
              field). ShareTokenTypes hoisted alongside because Subject.ClaimBearer

@@ -96,6 +96,9 @@ let private registeredTests =
         // Phase 219 — derived/computed columns in CSV mapping.
         DerivedColumnEvalTests.tests
         IColumnMappingStoreContract.tests
+        // Phase 552 — IGrantConsentStore conformance over both shipped
+        // implementations (in-memory + blob-backed).
+        IGrantConsentStoreContract.tests
         // Phase 7b — user-authored schema store conformance (CRUD, version
         // history, migration direct + via the job handler, scope isolation,
         // audit emission).
@@ -967,6 +970,14 @@ let private registeredTests =
         // refused grant notifies nobody, and a channel outage leaves the
         // grant durable while logging the failure.
         GrantNotificationTests.tests
+        // Phase 552 — the consented-grant registry. The signed consent
+        // record and its canonical payload, the lifecycle resolution,
+        // verification against a party's registered key material (no `alg`
+        // trust from the record, no fall-back on any trust ground), the
+        // propose → approve → revoke handshake with revocation effective at
+        // the very next call, the counterparty grant write Phase 551 left
+        // unreachable, and the trust-vs-lifecycle audit split.
+        GrantConsentTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

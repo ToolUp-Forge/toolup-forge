@@ -193,8 +193,37 @@ let registerTeamPermissionStores
         if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
             inner
         else
+            // Phase 552 — the counterparty oracle. Built over whatever
+            // consent registry `registerGrantConsentStore` composed; when
+            // none was (the default `NoGrantConsentStore`), the oracle is
+            // constructed with `None` and answers `false` for everything,
+            // which is precisely the Phase 551 refusal. So the decorator is
+            // built the same way in both cases and the difference is a
+            // resolved service, not a branch — there is no configuration in
+            // which the counterparty arm is enforced by one code path here
+            // and a different one there.
+            let consentOracle =
+                let consentStore =
+                    match sp.GetService(typeof<GrantConsentStore.IGrantConsentStore>) with
+                    | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+                    | _ -> None
+
+                let verifier =
+                    match sp.GetService(typeof<GrantConsentStore.IGrantConsentVerifier>) with
+                    | :? GrantConsentStore.IGrantConsentVerifier as v -> v
+                    | _ -> GrantConsentStore.denyingVerifier
+
+                GrantConsentStore.StoreCounterpartyConsentOracle(
+                    consentStore,
+                    verifier,
+                    (fun () -> System.DateTimeOffset.UtcNow),
+                    auditLog
+                )
+                :> GrantPolicyGuard.CounterpartyConsentOracle
+
             let guarded =
-                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, auditLog) :> IPermissionStore
+                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, Some auditLog, None)
+                :> IPermissionStore
 
             // Phase 556 — the grant-event notice loop, OUTSIDE the write
             // guard because it must observe what was actually written: a

@@ -62,6 +62,14 @@
              isolation, not-composed byte-identity, six-rule audit. -->
         <Compile Include="Graph\EntityGraphProjectionTests.fs" />
         <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
+        <!-- Phase 552 — IGrantConsentStore conformance, run over BOTH shipped
+             implementations: round-trip fidelity including the optional
+             expiry / supersession fields (a store that drops one turns an
+             expiring consent into a permanent one, silently), subject
+             isolation, append-only accumulation (revocation never deletes
+             the approval it withdraws), and path-traversal refusal on the
+             consent id. -->
+        <Compile Include="Contracts\IGrantConsentStoreContract.fs" />
         <!-- Phase 442 — presence tracker + advisory soft-lock conformance. -->
         <Compile Include="Contracts\IPresenceTrackerContract.fs" />
         <Compile Include="Contracts\IEntityLockStoreContract.fs" />
@@ -327,6 +335,15 @@
              the delivery discipline (a channel outage never fails the grant;
              an unpolicied module notifies nobody). -->
         <Compile Include="InProcess\GrantNotificationTests.fs" />
+        <!-- Phase 552 — the consented-grant registry: the canonical payload
+             binding every meaning-bearing field, the lifecycle resolution
+             (supersession, deterministic tiebreak, expiry, revocation),
+             signature verification refusing on every trust ground with no
+             fall-back, the propose/approve/revoke handshake with revocation
+             effective at the very next resolution, the write path Phase 551
+             could not reach, and the audit split that keeps the tamper alert
+             meaningful. -->
+        <Compile Include="InProcess\GrantConsentTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

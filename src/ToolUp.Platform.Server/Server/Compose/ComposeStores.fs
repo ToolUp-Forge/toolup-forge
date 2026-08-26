@@ -254,6 +254,49 @@ let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
         |> ignore
 
+/// Phase 552 — register the consented-grant registry when
+/// `ServerConfig.GrantConsent` selects a backend. `BlobGrantConsent`
+/// registers the blob-backed default over the composed `IBlobStorage`
+/// (BCL-only JSON, no vendor dependency — GP 1) via a lazy factory;
+/// `InMemoryGrantConsent` registers the dev/test store;
+/// `CustomGrantConsentStore` registers nothing, leaving the consumer's own
+/// `IGrantConsentStore` singleton in DI; `NoGrantConsentStore` (the
+/// default) registers nothing, and the Phase 551
+/// `RequiresCounterpartyApproval` arm keeps refusing every grant exactly
+/// as it shipped — zero runtime cost when unused (GP 13).
+///
+/// **The verifier is registered with an EMPTY keyring**, and only when a
+/// store is composed. `TryAddSingleton`, so a deployment that registered
+/// its counterparty keys — `services.AddSingleton<IGrantConsentVerifier>
+/// (GrantConsentStore.verifierOver keys)` — is never overridden. Until it
+/// does, every record denies with `consent-unknown-key`, naming the key id
+/// it could not resolve. That is the deliberate failure shape: a registry
+/// that admitted unverified records would be strictly worse than the
+/// blanket refusal it replaced, and one that failed silently would be
+/// indistinguishable from a revocation.
+let registerGrantConsentStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.GrantConsent with
+    | NoGrantConsentStore -> ()
+    | CustomGrantConsentStore ->
+        // Consumer / companion composed its own IGrantConsentStore; it
+        // still gets the default verifier unless it composed one too.
+        services.TryAddSingleton<GrantConsentStore.IGrantConsentVerifier>(GrantConsentStore.verifierOver [])
+    | InMemoryGrantConsent ->
+        services.TryAddSingleton<GrantConsentStore.IGrantConsentStore>(fun (_: System.IServiceProvider) ->
+            GrantConsentStore.InMemoryGrantConsentStore() :> GrantConsentStore.IGrantConsentStore)
+
+        services.TryAddSingleton<GrantConsentStore.IGrantConsentVerifier>(GrantConsentStore.verifierOver [])
+    | BlobGrantConsent ->
+        services.TryAddSingleton<GrantConsentStore.IGrantConsentStore>(fun (sp: System.IServiceProvider) ->
+            let storage = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+
+            match sp.GetService(typeof<ILogger>) with
+            | :? ILogger as logger ->
+                GrantConsentStore.BlobGrantConsentStore(storage, logger) :> GrantConsentStore.IGrantConsentStore
+            | _ -> GrantConsentStore.BlobGrantConsentStore(storage) :> GrantConsentStore.IGrantConsentStore)
+
+        services.TryAddSingleton<GrantConsentStore.IGrantConsentVerifier>(GrantConsentStore.verifierOver [])
+
 /// Phase 448 — register the dataset store when `ServerConfig.Datasets`
 /// selects a backend. `BlobDatasets` registers the blob-backed
 /// `BlobDatasetStore` over the composed `IDataObjectStore` (BCL-only
