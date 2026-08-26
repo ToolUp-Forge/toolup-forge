@@ -455,6 +455,15 @@
              DeployPlaneTypes.fs because it uses the DeployId / TenantId /
              BuildId aliases. -->
         <Compile Include="Shared\Types\DeployRecordTypes.fs" />
+        <!-- Phase 713 — the evidence chain as data: the ordered hop model,
+             the four-case link verdict, the declared caps + typed refusals,
+             and the canonical form the verdict digest is taken over. Pure
+             projection with no dependency on the substrates it describes
+             (every field is a string, an int or a record of the same), so
+             it sits here purely for narrative locality beside the deploy
+             record. Fable-safe — the SHA-256 over the canonical form is
+             computed server-side, as it is for the verification report. -->
+        <Compile Include="Shared\Types\EvidenceChainTypes.fs" />
         <!-- Phase 54 — tenant-lifecycle substrate shared types
              (TenantLifecyclePhase / LifecycleHookResult / LifecycleSummary
              / TenantLifecycleEvent). Async-free + Fable-compatible; the

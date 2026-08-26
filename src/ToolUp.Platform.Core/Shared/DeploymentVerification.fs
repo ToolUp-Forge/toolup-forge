@@ -220,6 +220,19 @@ module DeploymentVerification =
     [<Literal>]
     let AcceptedAcknowledgementSection = "accepted-acknowledgements"
 
+    /// Phase 713 — the ninth section: one ordered traversal from the
+    /// upstream work that authored this deployment's sources to the
+    /// ledger position that anchors its evidence.
+    ///
+    /// The only section whose subject is a JOIN rather than a substrate.
+    /// The eight above each read one verifier and report what it said; a
+    /// reader holding all eight still had to stitch them together, and
+    /// the answer they got depended on which stitches they thought to
+    /// try. The chain carries every hop it walked, breaks included, so
+    /// the stitching is the artefact rather than the reader's exercise.
+    [<Literal>]
+    let EvidenceChainSection = "evidence-chain"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

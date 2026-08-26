@@ -1616,6 +1616,21 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> DeploymentVerified(fromAuditJson<DeploymentVerifiedPayload> j)
     }
+    // Phase 713 — one walk of the evidence chain. An audited READ, for
+    // the same reason the row above is: the walk mutates nothing and
+    // cannot be refused, only gated, so there is one event type and no
+    // refusal counterpart. Written on every outcome including the
+    // complete one — a trail carrying only broken walks cannot
+    // distinguish a deployment nobody traced from one that was traced
+    // and was whole.
+    {
+        EventType = "EvidenceChainWalked"
+        TryEncode =
+            (function
+            | EvidenceChainWalked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EvidenceChainWalked(fromAuditJson<EvidenceChainWalkedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.
