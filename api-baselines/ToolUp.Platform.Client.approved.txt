@@ -1241,6 +1241,65 @@ ServiceStatusBoardUI+Msg+Tags.SnapshotLoaded : System.Int32 (literal)
 ServiceStatusBoardUI+Msg+Tags.ToggleCollapsed : System.Int32 (literal)
 ServiceStatusBoardUI+Msg+ToggleCollapsed (class)
 ServiceStatusBoardUI+Msg+ToggleCollapsed.section : System.String { get }
+SessionSecurityUI (class)
+SessionSecurityUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SessionSecurityConfig]) : ToolUp.Platform.ErasedModule
+SessionSecurityUI.init() : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+SessionSecurityUI.lastSeenLabel(System.DateTimeOffset, System.DateTimeOffset) : System.String
+SessionSecurityUI.update(SessionSecurityUI+Msg, SessionSecurityUI+Model) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+SessionSecurityUI.view(SessionSecurityUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+SessionSecurityUI+Model (class)
+SessionSecurityUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+SessionSecurityUI+Model.Busy : System.Boolean { get }
+SessionSecurityUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+SessionSecurityUI+Model.Loaded : System.Boolean { get }
+SessionSecurityUI+Model.PendingRevoke : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+SessionSecurityUI+Model.PendingRevokeAll : System.Boolean { get }
+SessionSecurityUI+Model.Sessions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord] { get }
+SessionSecurityUI+Model.Status : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+SessionSecurityUI+Msg (class)
+SessionSecurityUI+Msg.AskRevokeAll : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.CancelRevoke : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.CancelRevokeAll : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.ConfirmRevokeAll : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.DismissError : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.DismissStatus : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.IsAskRevoke : System.Boolean { get }
+SessionSecurityUI+Msg.IsAskRevokeAll : System.Boolean { get }
+SessionSecurityUI+Msg.IsCancelRevoke : System.Boolean { get }
+SessionSecurityUI+Msg.IsCancelRevokeAll : System.Boolean { get }
+SessionSecurityUI+Msg.IsConfirmRevoke : System.Boolean { get }
+SessionSecurityUI+Msg.IsConfirmRevokeAll : System.Boolean { get }
+SessionSecurityUI+Msg.IsDismissError : System.Boolean { get }
+SessionSecurityUI+Msg.IsDismissStatus : System.Boolean { get }
+SessionSecurityUI+Msg.IsLoad : System.Boolean { get }
+SessionSecurityUI+Msg.IsRevokeAllCompleted : System.Boolean { get }
+SessionSecurityUI+Msg.IsRevokeCompleted : System.Boolean { get }
+SessionSecurityUI+Msg.IsSessionsLoaded : System.Boolean { get }
+SessionSecurityUI+Msg.Load : SessionSecurityUI+Msg { get }
+SessionSecurityUI+Msg.Tag : System.Int32 { get }
+SessionSecurityUI+Msg+AskRevoke (class)
+SessionSecurityUI+Msg+AskRevoke.Item : System.String { get }
+SessionSecurityUI+Msg+ConfirmRevoke (class)
+SessionSecurityUI+Msg+ConfirmRevoke.Item : System.String { get }
+SessionSecurityUI+Msg+RevokeAllCompleted (class)
+SessionSecurityUI+Msg+RevokeAllCompleted.Item : Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String] { get }
+SessionSecurityUI+Msg+RevokeCompleted (class)
+SessionSecurityUI+Msg+RevokeCompleted.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+SessionSecurityUI+Msg+SessionsLoaded (class)
+SessionSecurityUI+Msg+SessionsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], System.String] { get }
+SessionSecurityUI+Msg+Tags (class)
+SessionSecurityUI+Msg+Tags.AskRevoke : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.AskRevokeAll : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.CancelRevoke : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.CancelRevokeAll : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.ConfirmRevoke : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.ConfirmRevokeAll : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.DismissError : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.DismissStatus : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.Load : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.RevokeAllCompleted : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.RevokeCompleted : System.Int32 (literal)
+SessionSecurityUI+Msg+Tags.SessionsLoaded : System.Int32 (literal)
 SidebarPreferences (class)
 SidebarPreferences.hiddenIds(SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 SidebarPreferences.hide(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
@@ -3324,7 +3383,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3366,6 +3425,7 @@ ToolUp.Platform.ClientConfig.Presence : ToolUp.Platform.PresenceMode { get }
 ToolUp.Platform.ClientConfig.PublicEntryDispatchers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]] { get }
 ToolUp.Platform.ClientConfig.RequestSeam : ToolUp.Platform.ClientRequestSeam { get }
 ToolUp.Platform.ClientConfig.ServiceStatusBoard : ToolUp.Platform.ServiceStatusBoardMode { get }
+ToolUp.Platform.ClientConfig.SessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
 ToolUp.Platform.ClientConfig.ShowDebugOnlyModules : System.Boolean { get }
 ToolUp.Platform.ClientConfig.Surfaces : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile] { get }
 ToolUp.Platform.ClientConfig.TeamConfig : ToolUp.Platform.TeamConfigMode { get }
@@ -4375,6 +4435,27 @@ ToolUp.Platform.ServiceStatusBoardMode+Tags.ConfiguredServiceStatusBoard : Syste
 ToolUp.Platform.ServiceStatusBoardMode+Tags.DefaultServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.ExternalServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.NoServiceStatusBoard : System.Int32 (literal)
+ToolUp.Platform.SessionSecurityConfig (class)
+ToolUp.Platform.SessionSecurityConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.SessionSecurityConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.SessionSecurityConfig.Name : System.String { get }
+ToolUp.Platform.SessionSecurityMode (class)
+ToolUp.Platform.SessionSecurityMode.DefaultSessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
+ToolUp.Platform.SessionSecurityMode.IsConfiguredSessionSecurity : System.Boolean { get }
+ToolUp.Platform.SessionSecurityMode.IsDefaultSessionSecurity : System.Boolean { get }
+ToolUp.Platform.SessionSecurityMode.IsExternalSessionSecurity : System.Boolean { get }
+ToolUp.Platform.SessionSecurityMode.IsNoSessionSecurity : System.Boolean { get }
+ToolUp.Platform.SessionSecurityMode.NoSessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
+ToolUp.Platform.SessionSecurityMode.Tag : System.Int32 { get }
+ToolUp.Platform.SessionSecurityMode+ConfiguredSessionSecurity (class)
+ToolUp.Platform.SessionSecurityMode+ConfiguredSessionSecurity.Item : ToolUp.Platform.SessionSecurityConfig { get }
+ToolUp.Platform.SessionSecurityMode+ExternalSessionSecurity (class)
+ToolUp.Platform.SessionSecurityMode+ExternalSessionSecurity.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.SessionSecurityMode+Tags (class)
+ToolUp.Platform.SessionSecurityMode+Tags.ConfiguredSessionSecurity : System.Int32 (literal)
+ToolUp.Platform.SessionSecurityMode+Tags.DefaultSessionSecurity : System.Int32 (literal)
+ToolUp.Platform.SessionSecurityMode+Tags.ExternalSessionSecurity : System.Int32 (literal)
+ToolUp.Platform.SessionSecurityMode+Tags.NoSessionSecurity : System.Int32 (literal)
 ToolUp.Platform.SidebarVisibility (class)
 ToolUp.Platform.SidebarVisibility.canNavigateTo`1(Microsoft.FSharp.Core.FSharpFunc`2[m, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts], ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, m) : System.Boolean
 ToolUp.Platform.SidebarVisibility.decide`1(Microsoft.FSharp.Core.FSharpFunc`2[m, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts], ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, m) : ToolUp.Platform.SidebarVisibility+NavigationDecision

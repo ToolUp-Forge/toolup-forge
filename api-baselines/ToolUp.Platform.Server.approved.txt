@@ -1131,6 +1131,7 @@ ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.Dependenc
 ToolUp.Platform.ComposeStores.registerExternalCompute(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
+ToolUp.Platform.ComposeStores.registerSessionRegistry(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerTimeSeriesStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerUserSchemaStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -4558,6 +4559,13 @@ ToolUp.Platform.IServerHost.App : Microsoft.FSharp.Core.FSharpOption`1[Microsoft
 ToolUp.Platform.IServerHost.Host : Microsoft.Extensions.Hosting.IHost { get }
 ToolUp.Platform.IServerHost.Invoke(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.IServerHost.RunBlocking() : System.Int32
+ToolUp.Platform.ISessionRegistry (interface)
+ToolUp.Platform.ISessionRegistry.IsRevoked(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.ISessionRegistry.ListForUser(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], ToolUp.Platform.SessionError]]
+ToolUp.Platform.ISessionRegistry.Record(ToolUp.Platform.SessionRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SessionRecord, ToolUp.Platform.SessionError]]
+ToolUp.Platform.ISessionRegistry.Revoke(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SessionError]]
+ToolUp.Platform.ISessionRegistry.RevokeAllForUser(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.SessionError]]
+ToolUp.Platform.ISessionRegistry.Touch(System.String, System.String, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SessionError]]
 ToolUp.Platform.IShareTokenStore (interface)
 ToolUp.Platform.IShareTokenStore.Issue(ToolUp.Platform.ShareTokenIssueRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ShareToken, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.IShareTokenStore.ListByIssuer(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
@@ -7527,9 +7535,26 @@ ToolUp.Platform.ServiceStatusBoardApiHandler.serviceStatusBoardApi(ToolUp.Platfo
 ToolUp.Platform.ServiceStatusBoardDepsValidator (class)
 ToolUp.Platform.ServiceStatusBoardDepsValidator+ServiceStatusBoardDepsValidator (class)
 ToolUp.Platform.ServiceStatusBoardDepsValidator+ServiceStatusBoardDepsValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.SessionApiHandler (class)
+ToolUp.Platform.SessionApiHandler.sessionApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ISessionApi
 ToolUp.Platform.SessionFileStoreInstanceValidator (class)
 ToolUp.Platform.SessionFileStoreInstanceValidator+SessionFileStoreInstanceValidator (class)
 ToolUp.Platform.SessionFileStoreInstanceValidator+SessionFileStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.SessionRegistry (class)
+ToolUp.Platform.SessionRegistry.Container : System.String (literal)
+ToolUp.Platform.SessionRegistry+BlobBackedSessionRegistry (class)
+ToolUp.Platform.SessionRegistry+BlobBackedSessionRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.SessionRegistry+BlobBackedSessionRegistryModule (class)
+ToolUp.Platform.SessionRegistry+BlobBackedSessionRegistryModule.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], System.Int32) : ToolUp.Platform.ISessionRegistry
+ToolUp.Platform.SessionRegistry+SessionIdentity (class)
+ToolUp.Platform.SessionRegistry+SessionIdentity.ofAnonymousSession(System.String) : System.String
+ToolUp.Platform.SessionRegistry+SessionIdentity.ofCredential(System.String, System.String) : System.String
+ToolUp.Platform.SessionRegistry+SessionIdentity.ofSubject(ToolUp.Platform.Subject, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.SessionRevocation (class)
+ToolUp.Platform.SessionRevocation.CurrentSessionItemsKey : System.String (literal)
+ToolUp.Platform.SessionRevocation+SessionRevocationMiddleware (class)
+ToolUp.Platform.SessionRevocation+SessionRevocationMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
+ToolUp.Platform.SessionRevocation+SessionRevocationMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ShareTokenAuth (class)
 ToolUp.Platform.ShareTokenAuth.HeaderName : System.String (literal)
 ToolUp.Platform.ShareTokenAuth.QueryParamName : System.String (literal)
