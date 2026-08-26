@@ -1,0 +1,49 @@
+{
+  "corpus": "evidence-chain-break-injection",
+  "part": "D — absent-vs-broken discrimination, at every hop",
+  "description": "Collapsing 'nothing in this deployment joins these two facts' into 'the join is recorded and does not hold' is the central risk of the whole model: the two have different readers, different remedies and different urgency, and a chain that folded them would be readable as a clean bill by a deployment that had simply composed nothing. One dedicated pair per hop, so the discrimination is pinned everywhere rather than at whichever hop happened to be probed.",
+  "pairs": [
+    {
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "absentCase": "work-source-absent",
+      "brokenCase": "work-head-severed"
+    },
+    {
+      "hop": "build-transcript",
+      "ordinal": 2,
+      "absentCase": "transcript-absent",
+      "brokenCase": "transcript-digest-mismatch"
+    },
+    {
+      "hop": "dependency-closure",
+      "ordinal": 3,
+      "absentCase": "closure-absent",
+      "brokenCase": "closure-digest-mismatch"
+    },
+    {
+      "hop": "deploy-record",
+      "ordinal": 4,
+      "absentCase": "deploy-sealer-absent",
+      "brokenCase": "deploy-seal-mismatch"
+    },
+    {
+      "hop": "boot-verification",
+      "ordinal": 5,
+      "absentCase": "boot-absent",
+      "brokenCase": "boot-composition-rejected"
+    },
+    {
+      "hop": "evidence-pack",
+      "ordinal": 6,
+      "absentCase": "pack-unsigned",
+      "brokenCase": "pack-assembly-failed"
+    },
+    {
+      "hop": "ledger-position",
+      "ordinal": 7,
+      "absentCase": "ledger-absent",
+      "brokenCase": "ledger-broken-at-position"
+    }
+  ]
+}

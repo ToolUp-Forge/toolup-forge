@@ -1499,6 +1499,18 @@
              shapes and verdict digest it builds its fixture chains
              from. -->
         <Compile Include="InProcess\EvidenceBundleExportTests.fs" />
+        <!-- Phase 715 — the break-injection corpus: one healthy synthetic
+             chain with both canonical forms pinned, then one variant per
+             break class asserting the specific verdict AND the specific
+             position, each demonstrated to fail against code lacking its
+             check (a discriminating twin for the walked chain, a
+             deliberately-weakened copy of the verifier for the bundle and
+             the document). Fixtures live once under tests/fixtures/
+             evidence-chain/ and are READ here, never reconstructed
+             inline. After EvidenceBundleExportTests, whose exporter and
+             envelope it injects into, and after BuildTranscriptTests,
+             whose StubSealer it reuses. -->
+        <Compile Include="InProcess\EvidenceChainBreakTests.fs" />
         <!-- Phase 657 — boot verification preflight (the honest deployment
              verifies; a broken seal, an edited artifact, a swapped binding
              and a drifted composition each do not — probed separately), the
@@ -2214,6 +2226,16 @@
          reaches a packable assembly. -->
     <ItemGroup>
         <None Include="fixtures\sbom-schemas\*.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <!-- Phase 715 — the evidence-chain break-injection corpus. ONE home,
+         at the repo-root tests/fixtures/ tree, linked into the runner's
+         output so the pack reads the same files a reader browses rather
+         than a second copy that could drift from them. Test-tier only —
+         nothing here reaches a packable assembly. -->
+    <ItemGroup>
+        <None Include="..\..\tests\fixtures\evidence-chain\*.json"
+              Link="fixtures\evidence-chain\%(Filename)%(Extension)"
+              CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
