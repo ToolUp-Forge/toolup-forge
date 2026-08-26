@@ -1946,6 +1946,11 @@
              with the binding is not refused — so the refusal is about
              the disagreement and not about assertions existing. -->
         <Compile Include="InProcess\FederatedModelExecutionTests.fs" />
+        <!-- Phase 336 — fail-closed dispatch consistency: the surface gate's
+             missing-Subject seam and the PlatformAdmin backstop's premium
+             discriminator, both pinned closed alongside the correct-path
+             behaviour they must not disturb (GP 11). -->
+        <Compile Include="InProcess\FailClosedDispatchTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

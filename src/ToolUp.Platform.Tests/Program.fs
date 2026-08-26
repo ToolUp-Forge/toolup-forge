@@ -1809,6 +1809,17 @@ let allTests =
         // exactly the kind of code that passes by doing nothing. An
         // absent corpus is one loud failure, never a skip.
         Conformance.ModelExecutionSpecConformance.tests
+        // Phase 336 — fail-closed dispatch consistency. The two seams in the
+        // dispatch-authorization layer that failed OPEN where every other
+        // decision point fails closed: the surface gate's missing-Subject
+        // fall-through (reachable via a swallowed ScopeResolutionMiddleware
+        // resolver exception, not only an unsupported pipeline) and the
+        // PlatformAdmin backstop's case-sensitive `/premium` discriminator
+        // sitting beside a case-INsensitive prefix guard. Each arm carries
+        // its correct-path control — a public route still admitted without a
+        // Subject, `premium-status` still open — so "everything is refused"
+        // cannot pass as a fix.
+        FailClosedDispatchTests.tests
     ]
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
