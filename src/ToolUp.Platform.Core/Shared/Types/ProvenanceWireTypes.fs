@@ -109,6 +109,15 @@ type WireProvenanceRef =
     | DataObjectRef of string
     | ResultRef of string
     | FactRef of string
+    /// **A message root resolves to nothing on its own, by contract.**
+    /// No provenance store holds "which facts did this message cite" —
+    /// that is an assertion the answer made, not a fact about the message
+    /// — so a walk seeded here yields the bare message node and no edges,
+    /// and a `GetNode` on it reads `Absent`. Read that as "this root needs its cited
+    /// facts", never as "no such message": root the chain at the facts
+    /// the message cited instead (the server-side
+    /// `IProvenanceGraph.GetChainForMessage` takes them as an argument and
+    /// attaches the `CitesFact` edges).
     | MessageRef of string
     | ModelArtifactRef of string
 
@@ -293,6 +302,10 @@ type IProvenanceQueryApi = {
     [<RequiresClaim "scope">]
     GetCaps: unit -> Async<WireProvenanceCaps>
     /// One node by ref: `Found`, `Withheld`, or `Absent`.
+    ///
+    /// **`Absent` on a `MessageRef` is not "no such message"** — a
+    /// message root carries no provenance of its own on this contract.
+    /// See `WireProvenanceRef.MessageRef`.
     [<RequiresClaim "scope">]
     GetNode: WireProvenanceRef -> Async<WireProvenanceNodeAnswer>
     /// The edges incident on a ref, split into outgoing and incoming.
