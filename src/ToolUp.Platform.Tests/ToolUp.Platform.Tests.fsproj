@@ -794,6 +794,10 @@
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
+        <!-- Phase 460 — the signing key as an operator-managed secret:
+             the refusal ladder, the provenance marker, and the
+             first-write race. -->
+        <Compile Include="InProcess\ShareTokenSigningKeyGovernanceTests.fs" />
         <!-- Phase 329 — fail-loud DataProtection key-ring backend. -->
         <Compile Include="InProcess\DataProtectionBackendTests.fs" />
         <Compile Include="InProcess\JobSchedulerInstanceValidatorTests.fs" />
