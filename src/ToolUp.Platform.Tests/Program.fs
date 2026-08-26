@@ -1183,6 +1183,18 @@ let allTests =
         BuildTranscriptTests.closureAttestationTests
         BuildTranscriptTests.closureCaptureTests
         BuildTranscriptTests.closureBindingTests
+        // Phase 717 — the SBOM projected from that closure. Each pack is
+        // probed in both directions: the schema check is proven able to
+        // REFUSE, the completeness check runs against a wholly-unattested
+        // closure a filtering emitter would empty, and determinism is
+        // paired with a field-by-field perturbation that must move the
+        // bytes.
+        SbomProjectionTests.sbomSchemaConformanceTests
+        SbomProjectionTests.sbomUnattestedPresenceTests
+        SbomProjectionTests.sbomDeterminismTests
+        SbomProjectionTests.sbomHonestyTests
+        SbomProjectionTests.sbomScopeStatementTests
+        SbomProjectionTests.sbomEndpointTests
         // Phase 657 — the boot question nobody was asking: is the running
         // composition the one that was sealed? Probed in both directions
         // per axis, plus the verified profile's mandatory capability gate
