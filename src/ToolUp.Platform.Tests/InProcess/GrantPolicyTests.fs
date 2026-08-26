@@ -220,6 +220,52 @@ let tests =
             test "a module that declares nothing carries AdminDiscretion" {
                 Expect.equal (ServerModule.create "Plain").GrantPolicy GrantPolicy.AdminDiscretion "the pre-551 default"
             }
+
+            test "ModuleSurface classifies GrantPolicy, and reports it only when declared" {
+                // The `ServerModule` drift guard fails on any registration
+                // field the descriptor does not classify — deliberately, so
+                // a new field gets classified by a decision rather than by
+                // omission. `GrantPolicy` is `Provides` on the
+                // `DefaultSurfaceRequirement` precedent (a module-declared
+                // access posture a composition reads off the registration),
+                // and its ENTRY is conditional on the `BindingStamp`
+                // precedent, because `AdminDiscretion` is this field's
+                // "declares nothing".
+                let plain = ServerModule.create "Plain"
+                let plainSurface = ModuleSurface.describe plain
+
+                match
+                    plainSurface.Coverage
+                    |> List.filter (fun c -> c.Origin = "server" && c.Field = nameof plain.GrantPolicy)
+                with
+                | [ c ] -> Expect.equal c.Facet ProvidesFacet "classified as a declaration the module offers"
+                | other -> failtestf "expected exactly one GrantPolicy coverage row, got %A" other
+
+                Expect.isEmpty plainSurface.Unclassified "the field is classified, so nothing drifts"
+
+                Expect.isEmpty
+                    (plainSurface.Provides |> List.filter (fun e -> e.Kind = "grant-policy"))
+                    "an AdminDiscretion module reports no grant-policy entry — byte-identical to pre-551"
+
+                let declared =
+                    ServerModule.create "Partner"
+                    |> ServerModule.withGrantPolicy (
+                        GrantPolicy.RequiresCounterpartyApproval(PartyRef.create "acme-dpo")
+                    )
+
+                match
+                    (ModuleSurface.describe declared).Provides
+                    |> List.filter (fun e -> e.Kind = "grant-policy")
+                with
+                | [ e ] ->
+                    Expect.equal e.Field (nameof declared.GrantPolicy) "attributed to the registration field"
+
+                    Expect.equal
+                        e.Key
+                        "requires-counterparty-approval:acme-dpo"
+                        "the wire token is the declared identity, party and all"
+                | other -> failtestf "expected exactly one grant-policy entry, got %A" other
+            }
         ]
 
         // ── 2. The write guard, per arm ──────────────────────────────

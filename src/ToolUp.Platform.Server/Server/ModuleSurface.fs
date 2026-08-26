@@ -208,6 +208,17 @@ module ModuleSurface =
             c (nameof m.ComponentId) ProvidesFacet
             c (nameof m.Metrics) ProvidesFacet
             c (nameof m.Subjects) ProvidesFacet
+            // Phase 551 — the module's declared grant policy. `Provides`
+            // rather than `Needs`, on the `DefaultSurfaceRequirement`
+            // precedent two lines up: both are module-DECLARED access
+            // postures that a composition reads off the registration. The
+            // `Needs` side of this descriptor is exclusively "substrate
+            // interface implied by a registration", and a grant policy
+            // implies none — `IPermissionStore` is registered
+            // unconditionally by `ComposeTeamRuntime`, so reporting it as
+            // an implied need would name a dependency that is never a
+            // composition decision.
+            c (nameof m.GrantPolicy) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -298,6 +309,25 @@ module ModuleSurface =
 
                 [ entry (nameof m.BindingStamp) "binding-stamp" kind "" None ]
 
+        // Phase 551 — emitted only when the module declares a policy, on
+        // the `BindingStamp` precedent immediately above: `AdminDiscretion`
+        // is this field's "declares nothing" value exactly as `None` is
+        // `BindingStamp`'s, so an undeclared module's surface is
+        // byte-identical to its pre-551 self (GP 11). The FIELD is covered
+        // unconditionally — coverage is the drift guard's subject, the
+        // entry is the declaration's.
+        let grantPolicy =
+            match m.GrantPolicy with
+            | GrantPolicy.AdminDiscretion -> []
+            | declared ->
+                // The wire token IS the declared identity, and it carries
+                // the `PartyRef` on the counterparty arm — a string drawn
+                // from the module's own registration, so the SDK still
+                // names no module and no party (GP 9).
+                [
+                    entry (nameof m.GrantPolicy) "grant-policy" (GrantPolicy.toToken declared) "" None
+                ]
+
         let metrics =
             m.Metrics
             |> List.map (fun d -> entry (nameof m.Metrics) "metric" d.Id d.Name (Some(ComponentId.forMetric d.Id)))
@@ -319,6 +349,7 @@ module ModuleSurface =
             routeOverrides
             jobs
             bindingStamp
+            grantPolicy
             metrics
             subjects
         ]
