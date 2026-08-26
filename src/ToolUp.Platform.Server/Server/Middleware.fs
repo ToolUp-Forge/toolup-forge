@@ -73,9 +73,24 @@ module SubjectRequestExtractor =
         // the only sanctioned construction path.
         let! user = authProvider.GetUser(ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx)
 
+        // Phase 337 — the sealed binding cookie is the ONLY source of a
+        // verified anonymous session id. When it is present the id it
+        // carries wins outright, including over a differing `X-User-Id`:
+        // the server-issued value is authoritative and the header is an
+        // echo. When it is absent the header value is still carried (it
+        // remains useful to a resolver for diagnostics and to the legacy
+        // shape), but flagged unverified — so no resolver honouring the
+        // contract can let it select a scope.
+        let claimedSessionId = sessionIdFrom ctx
+        let boundSessionId = AnonymousSessionBinding.boundSessionId ctx
+
         return {
             User = Some user
-            SessionId = sessionIdFrom ctx
+            SessionId =
+                match boundSessionId with
+                | Some bound -> Some bound
+                | None -> claimedSessionId
+            SessionIdVerified = Option.isSome boundSessionId
             Claim = claimFrom ctx
             Headers = headersOf ctx
         }
@@ -334,10 +349,16 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
     /// `Error _`. Uses the request's session id (or a fresh GUID) so
     /// the resulting Subject's storage scope is stable across the
     /// request's downstream calls.
+    ///
+    /// Phase 337 — the same server-verification gate as the resolver's
+    /// step 3. This path is reached on a resolver `Error`, i.e. exactly
+    /// when something has already gone wrong, so honouring an unverified
+    /// claimed id here would hand an attacker the victim's scope via a
+    /// *failed* resolution — the softest door in the building.
     let fallbackAnonymous (request: SubjectResolutionRequest) : Subject =
         let sid =
             match request.SessionId with
-            | Some id when id <> "" -> id
+            | Some id when id <> "" && request.SessionIdVerified -> id
             | _ -> Guid.NewGuid().ToString()
 
         AnonymousSession sid
@@ -421,6 +442,23 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                         ctx.Items["ToolUp.Subject"] <- box subject
                         ctx.Items["ToolUp.ScopeResult"] <- box scopeResult
+
+                        // Phase 337 — seal whatever anonymous session the
+                        // request actually resolved to into the binding
+                        // cookie, so this browser arrives verified (and
+                        // therefore continuous) next time. This is what
+                        // makes rejecting an unverified claim above cost
+                        // nothing: a first-time visitor is issued a fresh
+                        // session here and keeps it thereafter.
+                        //
+                        // A no-op when the browser is already bound to
+                        // this id, so a steady-state anonymous request
+                        // emits no `Set-Cookie`. Only anonymous subjects
+                        // are bound — an authenticated request neither
+                        // needs nor receives one (GP 11 / GP 13).
+                        match subject with
+                        | AnonymousSession sid -> AnonymousSessionBinding.ensureBound ctx sid
+                        | _ -> ()
 
                         match scopeResult with
                         | Ok scope ->

@@ -186,9 +186,24 @@ type DefaultSubjectResolver
                 | _ ->
                     // Step 3 — anonymous session.
                     if supportsAnonymous then
+                        // Phase 337 — an anonymous session id selects a
+                        // storage scope, so it is an authorisation input,
+                        // and it must be server-verified for the same
+                        // reason the authenticated branch above re-probes
+                        // membership rather than trusting a claimed team
+                        // id (GP 4). Until this gate the id was taken
+                        // verbatim from `X-User-Id`: a caller could name
+                        // any anonymous session and be handed its scope.
+                        //
+                        // Unverified (or absent) ⇒ mint a fresh id rather
+                        // than honour the claim. The server-tier extractor
+                        // seals whatever id the request settles on into
+                        // the binding cookie, so the caller's NEXT request
+                        // arrives verified and continuous — the claim is
+                        // never the thing that made it so.
                         let sessionId =
                             match request.SessionId with
-                            | Some id when id <> "" -> id
+                            | Some id when id <> "" && request.SessionIdVerified -> id
                             | _ -> Guid.NewGuid().ToString()
 
                         return Ok(Subject.AnonymousSession sessionId)

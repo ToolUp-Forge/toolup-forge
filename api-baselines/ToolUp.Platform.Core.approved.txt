@@ -9056,10 +9056,11 @@ ToolUp.Platform.SubjectResolutionError+Tags.UnsupportedSubject : System.Int32 (l
 ToolUp.Platform.SubjectResolutionError+UnsupportedSubject (class)
 ToolUp.Platform.SubjectResolutionError+UnsupportedSubject.Item : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectResolutionRequest (class)
-ToolUp.Platform.SubjectResolutionRequest..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.SubjectResolutionRequest..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.SubjectResolutionRequest.Claim : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim] { get }
 ToolUp.Platform.SubjectResolutionRequest.Headers : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.SubjectResolutionRequest.SessionId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.SubjectResolutionRequest.SessionIdVerified : System.Boolean { get }
 ToolUp.Platform.SubjectResolutionRequest.User : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser] { get }
 ToolUp.Platform.SubmitterClass (class)
 ToolUp.Platform.SubmitterClass.AgentInitiated : ToolUp.Platform.SubmitterClass { get }
