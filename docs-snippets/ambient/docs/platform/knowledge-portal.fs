@@ -10,7 +10,6 @@
 // auto-opened module.
 open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.PublicRendering
-open ToolUp.PublicRendering.PublicRenderingCompose
 
 [<AutoOpen>]
 module PageAmbient =

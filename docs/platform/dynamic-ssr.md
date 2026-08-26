@@ -67,8 +67,6 @@ let clientPages =
 ## Registering sources
 
 ```fsharp
-open ToolUp.PublicRendering.PublicRenderingCompose
-
 PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.withConfig config
 |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
@@ -77,7 +75,7 @@ PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.run
 ```
 
-The compose root lives in `ToolUp.PublicRendering.PublicRenderingCompose`, so a composition file opens that module (or spells the calls `PublicRenderingCompose.PublicRenderingServerApp.…`); `open ToolUp.PublicRendering` alone brings in the types and the source / layout helpers, not the builder.
+The compose root lives in `ToolUp.PublicRendering.PublicRenderingCompose`, which is `[<AutoOpen>]` under its namespace: `open ToolUp.PublicRendering` brings in the builder alongside the types and the source / layout helpers, so a composition file needs no second `open`. Opening the module explicitly, or spelling the calls `PublicRenderingCompose.PublicRenderingServerApp.…`, both still work.
 
 Multiple `withContentSource` calls compose; resolution is in registration order, first `Some` wins. The helper composes additively the same way `withLayout` / `withFeed` do.
 

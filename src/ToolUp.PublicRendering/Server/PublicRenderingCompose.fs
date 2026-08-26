@@ -1,3 +1,13 @@
+// `[<AutoOpen>]` under the `ToolUp.PublicRendering` namespace makes the
+// compose root reachable from `open ToolUp.PublicRendering` alone — the
+// idiom every documented call site (this companion's own README included)
+// was already written in. Purely additive (GP 11): an explicit
+// `open ToolUp.PublicRendering.PublicRenderingCompose` still compiles, and
+// the qualified `PublicRenderingCompose.withPublicRendering …` spelling is
+// unaffected. The module's whole top-level surface is one record type, one
+// nested `PublicRenderingServerApp` module and `withPublicRendering`, so
+// nothing generically-named leaks into a consumer's scope.
+[<AutoOpen>]
 module ToolUp.PublicRendering.PublicRenderingCompose
 
 open Microsoft.AspNetCore.Builder

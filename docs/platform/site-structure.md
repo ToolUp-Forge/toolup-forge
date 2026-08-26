@@ -111,8 +111,6 @@ PublicPage.hasTag "Product" page   // true (case-insensitive)
 `TaxonomyHandler.tagIndexSource` is an [`IContentSource`](../platform/dynamic-ssr.md) that serves `/tag/{slug}` pages listing every page carrying that tag, as a `NarrativeDocument` (rendered through the existing Phase 80 renderers — no hand-rolled markup). It composes through the existing `withContentSource` seam:
 
 ```fsharp
-open ToolUp.PublicRendering.PublicRenderingCompose
-
 PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.withConfig config
 |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout

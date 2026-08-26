@@ -16,7 +16,6 @@ byte-for-byte as before (GP 11) and allocates nothing for it (GP 13).
 ```fsharp
 open ToolUp.Platform
 open ToolUp.PublicRendering
-open ToolUp.PublicRendering.PublicRenderingCompose
 
 let config = {
     ServerConfig.defaults with
