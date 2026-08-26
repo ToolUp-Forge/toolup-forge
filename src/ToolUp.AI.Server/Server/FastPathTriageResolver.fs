@@ -401,8 +401,9 @@ let buildTriagePrompt (snapshot: AIFieldSnapshot) : string =
         "assistant that could have handled it properly; a `needs_full_agent` you did not have to give"
         "costs almost nothing. When the two are close, choose `needs_full_agent`."
         ""
-        "To CLEAR a field, answer `set_field` with a null value — but only for a field whose type is"
-        "`string-option`. Any other field's value must be a non-empty string."
+        "To CLEAR a field, answer `set_field` with a null value — but only for an optional-typed field,"
+        "one whose declared type name ends in `-option` (such as `string-option` or `enum-option`)."
+        "Any other field's value must be a non-empty string."
         ""
         "`confidence` is your own probability, 0 to 1, that a `set_field` answer is exactly what the"
         "user asked for. Report it honestly; a well-calibrated low number is more useful than a"
@@ -509,11 +510,22 @@ let planTriage (config: FastPathTriageConfig) (snapshot: AIFieldSnapshot) (decis
             match decision.Value with
             | None
             | Some "" ->
-                // Clearing. Only an optional-typed field can be cleared;
-                // asking to clear anything else is a declaration gap or a
-                // misread instruction, and either way the agent should see
-                // it.
-                if String.Equals(field.ValueType, "string-option", StringComparison.OrdinalIgnoreCase) then
+                // Clearing. Only an optional-typed field can be cleared — a
+                // value type whose name ends in `-option` (`string-option`,
+                // `enum-option`, or any future `X-option` convention). A clear
+                // sets the field to its empty state; the field's own decoder
+                // stays the final arbiter of whether that empty value is legal,
+                // so the resolver only decides whether the clear is honoured or
+                // handed to the agent. Asking to clear a non-optional field is a
+                // declaration gap or a misread instruction, and either way the
+                // agent should see it.
+                let valueType =
+                    if isNull field.ValueType then
+                        ""
+                    else
+                        field.ValueType.Trim().ToLowerInvariant()
+
+                if valueType.EndsWith("-option", StringComparison.Ordinal) then
                     TriageSetField(field, None, decision.Confidence)
                 else
                     TriageFallThrough OutcomeClearUnsupported

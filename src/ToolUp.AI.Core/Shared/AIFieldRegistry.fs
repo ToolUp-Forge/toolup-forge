@@ -62,11 +62,16 @@ type AIFieldDescriptor = {
     /// One-line human/model-readable description of what the field
     /// controls ("the country filter applied to the dataset").
     Description: string
-    /// Value-type hint. Free-form, but the resolver treats
-    /// `"string-option"` specially: only such a field may be cleared
-    /// (triage emitting a `null` value). Conventional values:
+    /// Value-type hint. Free-form, but the resolver treats an
+    /// **optional-typed** field specially — one whose name ends in
+    /// `-option`: only such a field may be cleared (triage emitting a
+    /// `null` value). Membership of a closed set is still enforced by the
+    /// owning surface's decoder, never by the resolver — the resolver only
+    /// decides whether a clear is honoured. Conventional values:
     /// `"string"` / `"string-option"` / `"number"` / `"boolean"` /
-    /// `"enum"`.
+    /// `"enum"` / `"enum-option"` (an optional closed set —
+    /// membership-constrained like `"enum"`, clearable like
+    /// `"string-option"`).
     ValueType: string
     /// Natural-language instruction patterns the surface's author
     /// declared for this field ("set country to {value}"). Used as

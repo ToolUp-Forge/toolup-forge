@@ -167,6 +167,49 @@ let private snapshot: AIFieldSnapshot = {
     StateSummary = "country=(none), period=2024-Q1"
 }
 
+// Optional-typing fixtures. The clearing rule is the `-option` suffix,
+// so the resolver must clear an `enum-option` (an optional closed set)
+// and a never-before-seen `foo-option`, while refusing the non-optional
+// `enum` / `foo` of the same families.
+let private statusField: AIFieldDescriptor = {
+    FieldId = "status"
+    Description = "the status filter (an optional closed set)"
+    ValueType = "enum-option"
+    InstructionPatterns = [ "set status to {value}"; "clear status" ]
+    ValueAliases = []
+}
+
+let private tierField: AIFieldDescriptor = {
+    FieldId = "tier"
+    Description = "the required tier (a closed set, not optional)"
+    ValueType = "enum"
+    InstructionPatterns = [ "set tier to {value}" ]
+    ValueAliases = []
+}
+
+let private fooOptionField: AIFieldDescriptor = {
+    FieldId = "foo"
+    Description = "a value type the resolver has never heard of, but optional"
+    ValueType = "foo-option"
+    InstructionPatterns = [ "set foo to {value}" ]
+    ValueAliases = []
+}
+
+let private fooField: AIFieldDescriptor = {
+    FieldId = "bar"
+    Description = "the non-optional sibling of foo"
+    ValueType = "foo"
+    InstructionPatterns = [ "set bar to {value}" ]
+    ValueAliases = []
+}
+
+let private optionalTypingSnapshot: AIFieldSnapshot = {
+    ModuleId = "sales"
+    Page = Some "/dashboard"
+    Fields = [ countryField; periodField; statusField; tierField; fooOptionField; fooField ]
+    StateSummary = "country=(none), period=2024-Q1"
+}
+
 let private config =
     FastPathTriageConfig.create (StubFieldRegistry(Some snapshot) :> IAIFieldRegistry)
 
@@ -307,6 +350,31 @@ let private pureTests =
                 (TriageFallThrough OutcomeClearUnsupported)
                 "a non-optional field cannot be cleared"
 
+        testCase "any optional-typed field clears; a non-optional sibling of the same family does not"
+        <| fun _ ->
+            // enum-option — the motivating case: an optional closed set,
+            // membership-constrained yet clearable.
+            match planTriage config optionalTypingSnapshot (decision "set_field" (Some "status") None 0.99) with
+            | TriageSetField(field, None, _) -> Expect.equal field.FieldId "status" "an enum-option field is cleared"
+            | other -> failtestf "clearing an enum-option field must be a hit, got %A" other
+
+            // plain enum — membership but not optional: the agent sees it.
+            Expect.equal
+                (planTriage config optionalTypingSnapshot (decision "set_field" (Some "tier") None 0.99))
+                (TriageFallThrough OutcomeClearUnsupported)
+                "a plain enum field cannot be cleared"
+
+            // The rule is the `-option` suffix, not an allow-list: a value
+            // type the resolver has never seen clears iff it is optional-typed.
+            match planTriage config optionalTypingSnapshot (decision "set_field" (Some "foo") None 0.99) with
+            | TriageSetField(_, None, _) -> ()
+            | other -> failtestf "a never-before-seen foo-option field must clear, got %A" other
+
+            Expect.equal
+                (planTriage config optionalTypingSnapshot (decision "set_field" (Some "bar") None 0.99))
+                (TriageFallThrough OutcomeClearUnsupported)
+                "while its non-optional foo sibling cannot"
+
         testCase "declared aliases are resolved before the value reaches the wire"
         <| fun _ ->
             match planTriage config snapshot (decision "set_field" (Some "Country") (Some "britain") 0.99) with
@@ -388,6 +456,11 @@ let private pureTests =
             Expect.stringContains prompt "britain->UK" "the declared alias"
             Expect.stringContains prompt "country=(none), period=2024-Q1" "the state summary"
             Expect.stringContains prompt "needs_full_agent" "and the bias instruction"
+
+            Expect.stringContains
+                prompt
+                "ends in `-option`"
+                "the general optional-typed clearing rule, not a single literal type name"
     ]
 
 // ─── Loop-intercept tests ────────────────────────────────────────
