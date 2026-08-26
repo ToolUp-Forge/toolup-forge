@@ -1,0 +1,219 @@
+{
+  "corpus": "evidence-chain-break-injection",
+  "part": "B — one variant per break class, at the walked-chain level",
+  "description": "Each case perturbs exactly one thing about the healthy baseline's sources and pins the verdict AND the position the walk must report. A case asserting only 'not intact' would pass against a walk that reported every hop broken at one invented coordinate, so neither field is optional.",
+  "walkDepth": 2,
+  "cases": [
+    {
+      "id": "work-head-severed",
+      "class": "severed-reference",
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "verdict": "broken",
+      "position": "wc-missing (corpus-work-system)",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The source system names a record as covering the deploy's sources and then holds nothing under that reference. The join is recorded and does not hold, which is a finding rather than a bound."
+    },
+    {
+      "id": "work-ancestor-severed",
+      "class": "severed-reference",
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "verdict": "linked",
+      "position": "wc-head",
+      "outcome": "chain-complete",
+      "falsification": "unproven",
+      "unproven": true,
+      "unprovenReason": "A severed ANCESTOR edge produces no verdict at all. The ancestor walk drops a reference it cannot resolve and returns the records it did reach, so the hop stays linked and the enumeration behind it is silently one line shorter. There is no verdict to assert and therefore no check to falsify; what is pinned instead is the silence itself — the finding count — so that a later phase can act on it rather than rediscover it.",
+      "expectedAncestorFindings": 1
+    },
+    {
+      "id": "work-record-withheld",
+      "class": "withheld-record",
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "verdict": "withheld",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "The join exists and the holder refused to show it. A working access control depresses the chain to partial and never to broken — reddening on one would teach a reader to route around the control rather than ask its holder."
+    },
+    {
+      "id": "work-source-absent",
+      "class": "absent-substrate",
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "No source is composed, so nobody was asked."
+    },
+    {
+      "id": "work-source-unanswering",
+      "class": "composed-and-unanswering",
+      "hop": "upstream-work-record",
+      "ordinal": 1,
+      "verdict": "broken",
+      "position": "2fd170c6bc8d4b4cbdd277e4d9f07edb3c39aa607e4629797f505824fb449526",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "A composed source that will not answer is a finding, not a bound. The position is the deploy record's own upstream-provenance reference — the only handle the walk has on what it failed to look up."
+    },
+    {
+      "id": "transcript-digest-mismatch",
+      "class": "digest-mismatch",
+      "hop": "build-transcript",
+      "ordinal": 2,
+      "verdict": "broken",
+      "position": "05145bddf702b5345d61e45bf2066508e72f1596276422c7c074f7a5a3cc51ea",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The deploy record's transcript digest is not the digest of the transcript in hand. The position is the digest of what WAS in hand, so the finding is actionable without a second read."
+    },
+    {
+      "id": "transcript-absent",
+      "class": "absent-substrate",
+      "hop": "build-transcript",
+      "ordinal": 2,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "No transcript is composed, so what this deployment was built from is unrecorded."
+    },
+    {
+      "id": "closure-digest-mismatch",
+      "class": "digest-mismatch",
+      "hop": "dependency-closure",
+      "ordinal": 3,
+      "verdict": "broken",
+      "position": "3f15cb30655879a4a0dc005afa78688c4b04c5d18749e9fd99a89eb2ae08bdde",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The record's upstream-provenance slot does not carry the digest of the closure in hand."
+    },
+    {
+      "id": "closure-absent",
+      "class": "absent-substrate",
+      "hop": "dependency-closure",
+      "ordinal": 3,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "No closure is composed, so which resolved packages this deployment stands on is unrecorded."
+    },
+    {
+      "id": "deploy-seal-mismatch",
+      "class": "digest-mismatch",
+      "hop": "deploy-record",
+      "ordinal": 4,
+      "verdict": "broken",
+      "position": "deploy-corpus-1",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The record was edited after it was sealed, so the seal no longer covers its canonical bytes."
+    },
+    {
+      "id": "deploy-sealer-absent",
+      "class": "absent-substrate",
+      "hop": "deploy-record",
+      "ordinal": 4,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "A seal carried rather than checked has not failed, and has not been verified either."
+    },
+    {
+      "id": "boot-composition-rejected",
+      "class": "digest-mismatch",
+      "hop": "boot-verification",
+      "ordinal": 5,
+      "verdict": "broken",
+      "position": "module-set",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The preflight ran and its answer was adverse; the position is what disagreed, carried from the preflight rather than re-derived."
+    },
+    {
+      "id": "boot-absent",
+      "class": "absent-substrate",
+      "hop": "boot-verification",
+      "ordinal": 5,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "The preflight never ran, so nothing joins the sealed composition to the running one."
+    },
+    {
+      "id": "pack-assembly-failed",
+      "class": "composed-and-unanswering",
+      "hop": "evidence-pack",
+      "ordinal": 6,
+      "verdict": "broken",
+      "position": "deploy-corpus-1",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "A composed pack that will not assemble is a break, not an absence."
+    },
+    {
+      "id": "pack-unsigned",
+      "class": "absent-substrate",
+      "hop": "evidence-pack",
+      "ordinal": 6,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "A pack assembled with no envelope signer composed binds nothing to this deployment. Reading it as a link would credit the deployment with tamper evidence it does not have."
+    },
+    {
+      "id": "pack-withheld",
+      "class": "withheld-record",
+      "hop": "evidence-pack",
+      "ordinal": 6,
+      "verdict": "withheld",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "The pack exists and the holder refused it under a stated policy."
+    },
+    {
+      "id": "ledger-broken-at-position",
+      "class": "ledger-break-at-position",
+      "hop": "ledger-position",
+      "ordinal": 7,
+      "verdict": "broken",
+      "position": "3071",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "The FIRST break in the chain is the position carried; everything after it is meaningless, which is why only the first is named."
+    },
+    {
+      "id": "ledger-unreadable",
+      "class": "composed-and-unanswering",
+      "hop": "ledger-position",
+      "ordinal": 7,
+      "verdict": "broken",
+      "position": "deploy-corpus-1",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "Reading a failed read as absence would make breaking your own ledger the cheapest way to end the chain quietly."
+    },
+    {
+      "id": "ledger-absent",
+      "class": "absent-substrate",
+      "hop": "ledger-position",
+      "ordinal": 7,
+      "verdict": "absent",
+      "position": "",
+      "outcome": "chain-partial",
+      "falsification": "discriminating-twin",
+      "note": "No ledger is composed, so this deployment's evidence is anchored nowhere."
+    }
+  ]
+}
