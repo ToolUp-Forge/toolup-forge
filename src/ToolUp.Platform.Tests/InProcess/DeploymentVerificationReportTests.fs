@@ -147,7 +147,16 @@ let private evidenceSectionIds = [
 /// have made those probes silently untrue rather than newly-failing.
 let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgementSection ]
 
-let private allSectionIds = evidenceSectionIds @ configSectionIds
+/// Phase 713. Driven by the evidence seam like the six above, but
+/// through a SIBLING interface that `healthyEvidence` does not supply —
+/// so it reads `not-composed` for every arrangement in this pack, and
+/// its own pack drives it. Kept a separate list for the reason the two
+/// configuration sections are: folding it into `evidenceSectionIds`
+/// would have made every "every section verified" probe below silently
+/// untrue rather than newly-failing.
+let private chainSectionIds = [ EvidenceChainSection ]
+
+let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds
 
 // ─── Phase 699 — process state for the two configuration sections ────
 //
@@ -440,7 +449,8 @@ let tests =
                     Expect.equal
                         payload.Sections
                         ((evidenceSectionIds |> List.map (fun id -> sprintf "%s=verified" id))
-                         @ (configSectionIds |> List.map (fun id -> sprintf "%s=not-composed" id)))
+                         @ (configSectionIds |> List.map (fun id -> sprintf "%s=not-composed" id))
+                         @ (chainSectionIds |> List.map (fun id -> sprintf "%s=not-composed" id)))
                         "the row carries one id=label entry per section"
                 | other -> failtestf "expected exactly one DeploymentVerified row, got %A" other
             }

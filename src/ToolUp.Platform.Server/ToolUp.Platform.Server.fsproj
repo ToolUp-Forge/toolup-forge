@@ -587,6 +587,17 @@
              (DSR) + IFieldClassifier (classification) + IExportEnvelopeSigner
              (manifest signing); needs all four declared first. -->
         <Compile Include="Server\EvidencePackGenerator.fs" />
+        <!-- Phase 713 — the evidence chain walker: IEvidenceChainWalker,
+             the NoEvidenceChainWalker default that carries no
+             implementation, and the shipped walk over the substrates a
+             deployment already records. After DeployRecords.fs (whose
+             transcript / closure / seal joins answer three hops),
+             WorkProvenanceSource.fs (the upstream attestation answers the
+             first) and EvidencePackGenerator.fs (whose generator the pack
+             read is derived from). The ledger hop arrives as a thunk
+             because the chained ledger lives downstream of this assembly
+             (GP 1). -->
+        <Compile Include="Server\EvidenceChainWalker.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
         <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +
