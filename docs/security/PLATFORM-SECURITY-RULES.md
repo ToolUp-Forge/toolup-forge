@@ -483,18 +483,30 @@ carelessly.
 > `src/ToolUp.Platform.Server/Server/ShareTokenAuthMiddleware.fs` ·
 > `docs/migrations/136-share-link-token-leak-hardening.md` (Phase 136 part 1)
 
-> **AN-11 — The share-token signing key is treated as an operator-managed
-> secret, and an unmanaged key in a production-shaped deployment is surfaced.**
-> *Enablement:* Always on (the warning); key provisioning is operator work.
+> **AN-11 — The share-token signing key is an operator-managed secret, and a
+> production-shaped deployment refuses to boot on an unprovisioned one.**
+> *Enablement:* Always on (the refusal); key provisioning is operator work.
 > The store signs tokens with an HMAC-SHA256 key from `ISecretStore`. If absent
 > it generates one — a development convenience, not a production posture,
 > because a key the operator never set is invisible to backup and rotation
-> governance and, across replicas, is decided by a first-write race. A preflight
-> validator emits a warning when the share-token surface is live, the deployment
-> is production- or multi-instance-shaped, and the key is still absent.
+> governance and, across replicas, is decided by a first-write race. A
+> security-class preflight validator **refuses startup** when the share-token
+> surface is live, the deployment is production- or multi-instance-shaped, and
+> the key is still absent; `ServerConfig.AcceptEphemeralShareTokenKey`
+> (`TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1`) downgrades the refusal to a
+> `Warning` that names the flag rather than going silent. A key the SDK minted
+> is marked as such (`share_token_signing_key_origin`), so an unmanaged key
+> already in force is reported for as long as it holds rather than only on the
+> boot that created it; and the auto-generate path re-reads the store inside a
+> generation gate and adopts the persisted value, so replicas converge on one
+> key instead of racing.
 > **Evidence:**
 > `src/ToolUp.Platform.Server/Server/ShareTokenSigningKeyProvenanceValidator.fs` ·
+> `src/ToolUp.Platform.Server/Server/ShareTokenStore.fs` (§"Signing-key
+> resolution") ·
 > `src/ToolUp.Platform.Tests/Contracts/IShareTokenStoreContract.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/ShareTokenSigningKeyGovernanceTests.fs` ·
+> `DEPLOYMENT.md` (§"Share-token signing key — an operator-managed secret") ·
 > `docs/platform/security.md` (§"Share-token signing key is an operator-managed
 > secret" — includes the rotation procedure and its intended blast radius)
 

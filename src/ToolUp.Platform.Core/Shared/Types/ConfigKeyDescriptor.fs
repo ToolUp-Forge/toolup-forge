@@ -350,6 +350,10 @@ module Names =
     let acceptInMemoryOAuthStateMultiInstance =
         "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"
 
+    // --- Phase 460: share-token signing-key governance ---
+    [<Literal>]
+    let acceptEphemeralShareTokenKey = "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY"
+
     // --- Phase 689: keys previously read with no descriptor ---
     [<Literal>]
     let shareTokenStore = "TOOLUP_SHARE_TOKEN_STORE"
@@ -1172,6 +1176,15 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.acceptInMemoryOAuthStateMultiInstance
         Description =
             "Acknowledge the in-memory OAuth state store under a multi-instance deployment (callback may hit a replica without the state)."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = EscapeHatchCategory
+    }
+    {
+        EnvVar = Names.acceptEphemeralShareTokenKey
+        Description =
+            "Acknowledge an auto-generated (ephemeral, operator-unmanaged) share-token HMAC signing key in a production-shaped deployment. Without it, a public or multi-replica deployment whose share_token_signing_key is unprovisioned refuses to boot."
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
@@ -2393,6 +2406,7 @@ let all: ConfigKeyDescriptor list = [
 let manifestBindable: Set<string> =
     Set.ofList [
         Names.acceptEphemeralRagIndex
+        Names.acceptEphemeralShareTokenKey
         Names.acceptForwardedHeadersFromAnyProxy
         Names.acceptHeaderAuthInAuthMode
         Names.acceptInMemoryOAuthStateMultiInstance

@@ -167,6 +167,8 @@ let allTests =
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
+        // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
+        ShareTokenSigningKeyGovernanceTests.tests
         // Phase 329 — fail-loud DataProtection key-ring backend (validator + Warn).
         DataProtectionBackendTests.tests
         FileSecretStoreTests.tests
