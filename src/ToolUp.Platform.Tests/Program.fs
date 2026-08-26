@@ -952,6 +952,15 @@ let allTests =
         // the shipped chain order in which a Phase 551 policy refusal
         // pre-empts queueing.
         AdminMutationApprovalTests.tests
+        // Phase 556 — grant-event notification to affected principals. The
+        // pure write-delta classifier (recorded / activated / widened, and
+        // never on a revocation or a narrowing), both audiences with the
+        // declared party resolved only through the deployment's own
+        // PartyRef resolver, the per-audience message shapes, and the
+        // delivery discipline: an unpolicied module notifies nobody, a
+        // refused grant notifies nobody, and a channel outage leaves the
+        // grant durable while logging the failure.
+        GrantNotificationTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

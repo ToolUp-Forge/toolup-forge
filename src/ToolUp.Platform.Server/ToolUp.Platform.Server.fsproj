@@ -819,6 +819,15 @@
              dependency on GrantPolicyGuard: the policy-bearing question
              arrives as a predicate from the composition root. -->
         <Compile Include="Server\Scope\AdminMutationApproval.fs" />
+        <!-- Phase 556 — grant-event notification to affected principals: the
+             pure write-delta classifier, the per-audience message shapes, and
+             the IPermissionStore observer that bridges a landed grant to
+             INotificationChannel. After GrantPolicyGuard.fs (it reads the
+             ModuleGrantPolicyRegistry and the declared PartyRef) and outside
+             every decorator that can refuse or park a write, because it must
+             observe what was actually WRITTEN. Composed only when a policy is
+             declared AND a channel is resolvable. -->
+        <Compile Include="Server\GrantNotificationObserver.fs" />
         <Compile Include="Server\Scope\StoreIdSanitising.fs" />
         <!-- Phase 113 — IPermissionStore/tier-backed default for the
              host-neutral IActionAuthorizer seam (default-deny; policy as
