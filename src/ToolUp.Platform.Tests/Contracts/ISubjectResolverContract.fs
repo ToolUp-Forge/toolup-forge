@@ -63,6 +63,7 @@ let private aClaim: ShareTokenClaim = {
 let private emptyRequest: SubjectResolutionRequest = {
     User = None
     SessionId = None
+    SessionIdVerified = false
     Claim = None
     Headers = Map.empty
 }
@@ -170,16 +171,40 @@ let tests (name: string) (factory: ResolverFactory) =
         // ── Step 3 — anonymous session ────────────────────────────────
 
         testList "anonymous (step 3)" [
-            test "No user + Anonymous in Surfaces + SessionId → AnonymousSession with that id" {
+            test "No user + Anonymous in Surfaces + VERIFIED SessionId → AnonymousSession with that id" {
                 let resolver = factory Surfaces.anonymous None
 
                 match
                     run resolver {
                         emptyRequest with
                             SessionId = Some "sess-1"
+                            SessionIdVerified = true
                     }
                 with
-                | Ok(Subject.AnonymousSession sid) -> Expect.equal sid "sess-1" "supplied session id is used verbatim"
+                | Ok(Subject.AnonymousSession sid) ->
+                    Expect.equal sid "sess-1" "a server-verified session id is used as supplied"
+                | other -> failtestf "expected AnonymousSession, got %A" other
+            }
+
+            // Phase 337 — the conformance bar for the anonymous branch.
+            // An anonymous session id selects a storage scope, so honouring
+            // an unverified one lets any caller address any anonymous
+            // session's data by naming it. Every `ISubjectResolver`
+            // implementation must refuse it, not only the shipped default —
+            // which is why this sits in the contract pack.
+            test "No user + UNVERIFIED SessionId → a fresh id, never the claimed one" {
+                let resolver = factory Surfaces.anonymous None
+
+                match
+                    run resolver {
+                        emptyRequest with
+                            SessionId = Some "victim-session"
+                            SessionIdVerified = false
+                    }
+                with
+                | Ok(Subject.AnonymousSession sid) ->
+                    Expect.notEqual sid "victim-session" "an unverified claimed session id must not select a scope"
+                    Expect.isNotEmpty sid "a fresh session id is minted in its place"
                 | other -> failtestf "expected AnonymousSession, got %A" other
             }
 
@@ -200,6 +225,7 @@ let tests (name: string) (factory: ResolverFactory) =
                     emptyRequest with
                         User = Some AuthenticatedUser.anonymous
                         SessionId = Some "sess-2"
+                        SessionIdVerified = true
                 }
 
                 match run resolver request with
