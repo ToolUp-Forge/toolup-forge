@@ -13,6 +13,10 @@
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Sbom.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Build.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.HostPackaging.fs" />
+    <!-- Phase 213 — the Core-Web-Vitals budget parser + check behind the
+         VerifyCoreWebVitalsBudget target Build.fs registers. Independent
+         of SDK.Build.fs (its own options record, not BuildConfig). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CoreWebVitalsBudget.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -1,0 +1,9 @@
+{
+  "label": "no schema, no pages, a typo'd metric and an out-of-range floor",
+  "metrics": {
+    "largestContentfulPaintMS": 2500
+  },
+  "categories": {
+    "seo": 95
+  }
+}

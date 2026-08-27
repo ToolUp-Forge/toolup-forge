@@ -3315,4 +3315,17 @@ let main args =
         |> Proc.run
         |> ignore)
 
+    // Phase 213 — Lighthouse / Core-Web-Vitals budget gate. The deciding
+    // half only: it reads a committed budget file plus the Lighthouse
+    // JSON reports a run already produced, and fails on any breach. The
+    // measuring half (build the sample site, serve it on a throwaway
+    // port, drive Lighthouse over the budgeted page set) is
+    // dev-scripts/cwv-budget-gate.ps1, which sets TOOLUP_CWV_BUDGET /
+    // TOOLUP_CWV_REPORTS and invokes this target last.
+    //
+    // Registration is unconditional and reads no environment at startup,
+    // so every other target stays runnable with none of the variables
+    // set; the target body resolves and reports its own missing inputs.
+    CoreWebVitalsBudgetGate.registerTarget ()
+
     execute args

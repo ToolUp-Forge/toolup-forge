@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (190 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (193 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -317,6 +317,9 @@ These keys are read by the build, the test run or the analyzer, never by a runni
 | `TOOLUP_APPROVE_API` | bool | false | no | n/a | Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment. |
 | `TOOLUP_BEIR_CACHE` | string | — | no | n/a | Benchmark-only: directory the BEIR retrieval corpus is cached in. |
 | `TOOLUP_COOKBOOK_PATH` | string | — | no | n/a | Overrides the path the AG Charts AI cookbook is loaded from. |
+| `TOOLUP_CWV_BUDGET` | string | — | no | n/a | Build-time: path to the Core-Web-Vitals budget file the VerifyCoreWebVitalsBudget target checks against. Read only by that target; never consulted by a running deployment. |
+| `TOOLUP_CWV_REPORTS` | string | — | no | n/a | Build-time: directory of Lighthouse JSON reports the VerifyCoreWebVitalsBudget target evaluates. Read only by that target; never consulted by a running deployment. |
+| `TOOLUP_CWV_SERVER_METRICS` | string | — | no | n/a | Build-time: optional server-counter snapshot the Core-Web-Vitals gate cross-checks against the browser measurement. Unset skips the server-side signal. |
 | `TOOLUP_EMIT_SBOM` | bool | false | no | n/a | Build-time: emits a CycloneDX SBOM alongside the packed artefacts. |
 | `TOOLUP_ENTERPRISE_COOKBOOK_PATH` | string | — | no | n/a | Overrides the path the AG Grid Enterprise AI cookbook is loaded from. |
 | `TOOLUP_PUBLISH_SOURCE` | string | — | no | n/a | Build-time: overrides the NuGet source the Publish target pushes to. |
