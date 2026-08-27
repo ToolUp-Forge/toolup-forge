@@ -236,6 +236,15 @@
              under `ToolUp.RAG.Evaluation/fixtures/eval-mixed-dim.json`;
              this loader is the canonical deterministic generator. -->
         <Compile Include="Support\MixedDimFixture.fs" />
+        <!-- Corpus-search anchoring for git worktrees: the two
+             externally-resolved conformance corpora anchor their
+             fallback directory search at the repository's MAIN working
+             tree (git rev-parse -\-git-common-dir) and refuse to look
+             inside any other working tree of this repository — a
+             sibling worktree's transient contents must never resolve
+             as the corpus. Consumed by FederationWireCorpus.fs and
+             Conformance\ModelExecutionSpecConformance.fs. -->
+        <Compile Include="Support\CorpusAnchor.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />

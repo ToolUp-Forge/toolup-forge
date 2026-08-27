@@ -51,6 +51,7 @@ open System.Reflection
 open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.Tests.Support
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 
@@ -95,12 +96,19 @@ let private envDir (name: string) =
 let private isSpecHome (dir: string) =
     File.Exists(Path.Combine(dir, "wire-fixtures", "manifest.json"))
 
-/// Bounded search for the specification home: each ancestor of the repo
-/// root, then up to three levels beneath each. A SEARCH rather than a
+/// Bounded search for the specification home: each ancestor of the
+/// anchor, then up to three levels beneath each. A SEARCH rather than a
 /// relative path on purpose — a hard-coded `../../<...>/<...>` would encode
 /// one particular checkout layout into a repository that is cloned
 /// standalone, and would be wrong for everybody else.
-let private searchForSpecHome (start: string) =
+///
+/// The anchor is the repository's MAIN working tree when this checkout is
+/// a linked git worktree (see `Support.CorpusAnchor`), so a worktree of a
+/// checkout that sits inside a wider workspace finds the same spec home
+/// the checkout itself would — and the walk never enters a DIFFERENT
+/// working tree of this repository, whose transiently-present contents
+/// would otherwise make resolution non-deterministic between runs.
+let private searchForSpecHome (anchoring: CorpusAnchor.Anchoring) =
     let skip (name: string) =
         name.StartsWith '.'
         || name = "node_modules"
@@ -109,12 +117,16 @@ let private searchForSpecHome (start: string) =
         || name = "packages"
 
     let rec descend (dir: string) (depth: int) =
-        if depth > 3 then
+        if depth > 3 || CorpusAnchor.excluded anchoring dir then
             None
         else
             let candidate = Path.Combine(dir, SpecDirName)
 
-            if Directory.Exists candidate && isSpecHome candidate then
+            if
+                Directory.Exists candidate
+                && isSpecHome candidate
+                && not (CorpusAnchor.excluded anchoring candidate)
+            then
                 Some candidate
             else
                 try
@@ -135,7 +147,7 @@ let private searchForSpecHome (start: string) =
                 | null -> None
                 | parent -> ascend parent (levels + 1)
 
-    ascend start 0
+    ascend anchoring.Anchor 0
 
 /// The federation-seam specification home, or `None`.
 ///
@@ -145,6 +157,10 @@ let private searchForSpecHome (start: string) =
 /// accident of where files ended up — a specification owned by one of its
 /// implementations cannot be conformed to by the others on equal terms.
 ///
+/// The search anchor and the working trees the walk must refuse to enter.
+/// Resolved once — it shells git.
+let private anchoring = lazy (CorpusAnchor.resolve (repoRoot ()))
+
 /// Resolved ONCE. Every fixture read goes through here, and the fallback is
 /// a directory walk — resolving it per read would turn ~50 reads into ~50
 /// filesystem searches.
@@ -164,20 +180,27 @@ let private resolvedSpecHome =
          | Some _ -> None
          | None ->
              // An in-repo checkout first: it is what CI clones, and it is
-             // the cheapest thing to look for.
-             let inRepo = Path.Combine(repoRoot (), SpecDirName)
+             // the cheapest thing to look for — checked in this checkout
+             // and then in the main working tree, so a linked worktree of
+             // a checkout carrying an in-repo clone still resolves it.
+             [ repoRoot (); anchoring.Value.Anchor ]
+             |> List.distinct
+             |> List.tryPick (fun root ->
+                 let inRepo = Path.Combine(root, SpecDirName)
 
-             if Directory.Exists inRepo && isSpecHome inRepo then
-                 Some inRepo
-             else
-                 searchForSpecHome (repoRoot ()))
+                 if Directory.Exists inRepo && isSpecHome inRepo then
+                     Some inRepo
+                 else
+                     None)
+             |> Option.orElseWith (fun () -> searchForSpecHome anchoring.Value))
 
 let specHome () : string option = resolvedSpecHome.Value
 
 /// How to obtain the specification home — the whole of the remedy, in the
 /// failure message rather than in a document the reader is not looking at.
 let specHomeMissingMessage =
-    $"the federation-seam specification home was not found, so there is no corpus to certify against.
+    $"ENVIRONMENTAL FAILURE — the federation-seam specification home was not found, so there is no
+       corpus to certify against; this is the checkout's arrangement, not a defect in the code under test.
        This repository is an EMITTER of that specification, not its owner: the normative text and the
        conformance corpus live in their own public repository.
        Fix it in one of three ways:
@@ -185,7 +208,9 @@ let specHomeMissingMessage =
               git clone https://github.com/fuaran-ui/{SpecDirName}.git {SpecDirName}
          2. set {SpecDirVariable} to an existing checkout of it — if it is already set, it does
             not point at one (a spec home contains wire-fixtures/manifest.json), or
-         3. place a checkout named '{SpecDirName}' at or near this repository's parent.
+         3. place a checkout named '{SpecDirName}' at or near this repository's parent — for a
+            linked git worktree that means near the MAIN working tree, which is where the search
+            runs from; a checkout under a different worktree of this repository is never accepted.
        To run without the conformance leg, set {SpecOptionalVariable}=1 — which declines the leg
        deliberately rather than skipping it silently."
 
@@ -193,7 +218,13 @@ let specHomeMissingMessage =
 let corpusDir () =
     match specHome () with
     | Some dir -> Path.Combine(dir, "wire-fixtures")
-    | None -> failwith specHomeMissingMessage
+    | None ->
+        let worktreeNote =
+            match CorpusAnchor.mainWorkingTree (repoRoot ()) with
+            | Some main -> $" (This checkout is a linked git worktree; its main working tree is '{main}'.)"
+            | None -> ""
+
+        failwith (specHomeMissingMessage + worktreeNote)
 
 /// Is the conformance leg being declined deliberately? Only ever true when
 /// the specification home is absent AND somebody said so explicitly.

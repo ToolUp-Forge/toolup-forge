@@ -443,6 +443,19 @@ stray transpiled `.js` in the project root that `.gitignore` (`output/` only) do
 (Bonus from the same class: an XML comment in a `.fsproj` cannot contain `--` — `dotnet build`
 tolerates it but `dotnet fable`'s msbuild crack fails with MSB4025.)
 
+**Provisioning a git worktree for verification.** Create it at a SHORT path (e.g. `C:\wt\<name>`)
+— a deep worktree path hits Windows MAX_PATH and `fsc` then emits no dll and no error. The Platform
+test pack's two externally-resolved conformance corpora (the model-execution corpus,
+`TOOLUP_MODEL_EXECUTION_CORPUS`; the federation-seam specification home,
+`TOOLUP_FEDERATION_SPEC_DIR`) need **no env var in a worktree**: with the variable unset, resolution
+anchors its upward directory search at the repository's MAIN working tree (via `git rev-parse
+--git-common-dir`; see `src/ToolUp.Platform.Tests/Support/CorpusAnchor.fs`), so a worktree of a
+checkout that can resolve the corpora resolves the same ones. The search also refuses to look inside
+any OTHER working tree of this repository — two worktrees sharing a parent directory used to pick up
+each other's transiently-present corpus checkouts, which made the pack non-deterministic between
+runs (observed 2026-08-27). An absent corpus is still a loud, named, environmental failure — never a
+skip; set the env var only when the main checkout itself cannot see a corpus.
+
 **Expecto `--filter` joins the test path with `.`, not `/` — and a filter that matches nothing
 reports SUCCESS.** A slash-shaped filter (the shape test names suggest) selects zero tests, prints
 `0 tests run … Success!` and exits 0: a vacuous green. Read the *count*, never the exit code; if a

@@ -53,6 +53,14 @@ module ToolUp.Platform.Tests.Conformance.ModelExecutionSpecConformance
 // manifest's `specification` field — not for a path literal, so a
 // corpus that is renamed or relocated needs no edit here.
 //
+// The search is anchored at the repository's MAIN working tree (via
+// `Support.CorpusAnchor`), so a linked git worktree of a checkout that
+// sits inside a wider workspace resolves the same corpus the checkout
+// itself would, with no env var — and a candidate under a DIFFERENT
+// working tree of this repository is never accepted, because a sibling
+// worktree's transiently-present directories are some other session's
+// state, not a corpus to certify against.
+//
 // **An absent corpus is a loud failure, never a skip.** A conformance
 // suite that quietly does nothing when its corpus is missing is
 // indistinguishable from one that passes, and is worse than no suite at
@@ -94,6 +102,7 @@ open System.Text.Json
 open Expecto
 open FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Tests.Support
 
 // ─── Pins (602.B) ────────────────────────────────────────────────────
 
@@ -180,30 +189,46 @@ module Corpus =
             let nested = Path.Combine(dir, "wire-fixtures")
             if isCorpusDir nested then Some nested else None
 
-    let private searchRoots () = [
-        repoRoot ()
-        Path.GetFullPath(Path.Combine(repoRoot (), ".."))
-        Path.GetFullPath(Path.Combine(repoRoot (), "..", ".."))
-        Path.GetFullPath(Path.Combine(repoRoot (), "..", "..", ".."))
-    ]
+    /// Where the fallback search is anchored, and which working trees
+    /// it must refuse to read — see the file header's corpus-resolution
+    /// section. Resolved once: the anchoring shells git, and resolving
+    /// it per probe would turn one search into many.
+    let private anchoring = lazy (CorpusAnchor.resolve (repoRoot ()))
+
+    let private searchRoots () =
+        let anchor = anchoring.Value.Anchor
+
+        [
+            repoRoot ()
+            anchor
+            Path.GetFullPath(Path.Combine(anchor, ".."))
+            Path.GetFullPath(Path.Combine(anchor, "..", ".."))
+            Path.GetFullPath(Path.Combine(anchor, "..", "..", ".."))
+        ]
+        |> List.distinct
 
     /// Bounded breadth-first walk: a corpus checked out anywhere within
     /// three levels of an enclosing directory is found, and the walk
-    /// never descends into build output.
+    /// never descends into build output — nor into a different working
+    /// tree of this repository, whose contents are transient sibling
+    /// state and would make resolution non-deterministic between runs.
     let private search (root: string) (maxDepth: int) =
         let rec go (dir: string) (depth: int) =
-            match asFixtureDir dir with
-            | Some found -> Some found
-            | None when depth >= maxDepth -> None
-            | None ->
-                let children =
-                    try
-                        Directory.EnumerateDirectories dir
-                        |> Seq.filter (fun d -> not (pruned.Contains(Path.GetFileName d)))
-                        |> Seq.toList
-                    with _ -> []
+            if CorpusAnchor.excluded anchoring.Value dir then
+                None
+            else
+                match asFixtureDir dir with
+                | Some found -> Some found
+                | None when depth >= maxDepth -> None
+                | None ->
+                    let children =
+                        try
+                            Directory.EnumerateDirectories dir
+                            |> Seq.filter (fun d -> not (pruned.Contains(Path.GetFileName d)))
+                            |> Seq.toList
+                        with _ -> []
 
-                children |> List.tryPick (fun child -> go child (depth + 1))
+                    children |> List.tryPick (fun child -> go child (depth + 1))
 
         if Directory.Exists root then go root 0 else None
 
@@ -232,10 +257,18 @@ module Corpus =
             match searchRoots () |> List.tryPick (fun root -> search root 3) with
             | Some found -> found
             | None ->
+                let worktreeNote =
+                    match CorpusAnchor.mainWorkingTree (repoRoot ()) with
+                    | Some main ->
+                        $" This checkout is a linked git worktree; the search already ran from its main working tree ('{main}'), so a corpus resolvable from the main checkout needs no env var here — this one is absent from both."
+                    | None -> ""
+
                 failwithf
-                    "The model-execution conformance corpus was not found. Set %s to the corpus checkout, or place it within three directory levels of one of: %s. This is a hard failure by design — a conformance run without its corpus certifies nothing, so it must not be mistaken for a pass. The corpus revision this build is pinned to is %s."
+                    "ENVIRONMENTAL FAILURE — the model-execution conformance corpus is absent; this is not a defect in the code under test. Set %s to a corpus checkout: a directory whose manifest.json declares specification '%s', or the directory holding that under wire-fixtures/. With the env var unset, the corpus is searched for within three directory levels of each of: %s.%s A corpus under a different git worktree of this repository is never accepted. The hard failure is by design — a conformance run without its corpus certifies nothing, so it must not be mistaken for a pass. The corpus revision this build is pinned to is %s."
                     envVar
+                    Pin.specification
                     (searchRoots () |> String.concat "; ")
+                    worktreeNote
                     Pin.commit
 
     let dir = lazy (locate ())
