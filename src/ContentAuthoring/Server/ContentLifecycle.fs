@@ -23,6 +23,15 @@ open ToolUp.PublicRendering
 /// predicate via `FormsServerApp.withGuard ContentLifecycle.approveGuard
 /// (fun ctx -> ...)`, gating who may approve / unpublish / archive
 /// (GP 4 — role-gated transitions).
+///
+/// Phase 198 — the same name gates MINTING a draft preview link
+/// (`ContentPreview.mintPreviewLink`, whose `ContentPreview.mintGuard`
+/// carries the identical string): handing out a link that bypasses the
+/// publish-visibility filter is the same editorial authority as
+/// approving the publish itself, so it is deliberately the same gate
+/// rather than a second one an operator could leave unconfigured. This
+/// package depends on `ToolUp.PublicRendering` and not the reverse, so
+/// the spelling lives there too; the test pack pins the two together.
 [<Literal>]
 let approveGuard = "content:can-approve"
 
