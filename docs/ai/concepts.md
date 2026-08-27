@@ -154,9 +154,9 @@ and AIProviderRequest = {
 }
 
 and AIProviderResponse = {
-    Messages: AIProviderMessage list
-    StopReason: StopReason
+    Content: string                     // the assistant turn's text, already concatenated
     ToolCalls: AIProviderToolCall list
+    StopReason: string                  // provider-native, passed through unnormalised
     Usage: TokenUsage option
 }
 

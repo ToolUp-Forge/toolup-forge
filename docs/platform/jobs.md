@@ -6,13 +6,36 @@ The Platform's job scheduler runs cron-triggered, event-triggered, and manually-
 
 ```fsharp
 type IJobScheduler =
-    abstract Schedule: JobDefinition -> Async<Result<unit, ScheduleError>>
-    abstract Unschedule: jobId: JobId -> Async<unit>
-    abstract TriggerOnce: jobId: JobId -> Async<unit>
-    abstract GetSchedule: jobId: JobId -> Async<JobDefinition option>
-    abstract ListSchedules: scopeId: string -> Async<JobDefinition list>
-    abstract GetRunHistory: jobId: JobId -> Async<JobRun list>
+    // Compose-time handler registration. The async companion exists for
+    // distributed companions that register over the network (rule 2).
+    abstract RegisterHandler: name: string * handler: IJobHandler -> unit
+    abstract RegisterHandlerAsync: name: string * handler: IJobHandler -> Async<Result<unit, string>>
+
+    // Submit a job. The scheduler assigns the JobId — the caller supplies
+    // registration-time intent only, never runtime state (rule 1).
+    abstract Schedule: registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
+
+    // Lifecycle. Cancel is terminal; Disable / Enable are reversible.
+    // All three are idempotent and scope-qualified.
+    abstract Cancel: scopeId: string * jobId: JobId -> Async<unit>
+    abstract Disable: scopeId: string * jobId: JobId -> Async<unit>
+    abstract Enable: scopeId: string * jobId: JobId -> Async<unit>
+
+    // Reads. Get returns None for an unknown id rather than throwing.
+    abstract Get: scopeId: string * jobId: JobId -> Async<JobDefinition option>
+    abstract ListJobs: scopeId: string -> Async<JobDefinition list>
+    abstract GetRecentRuns: scopeId: string * jobId: JobId * count: int -> Async<JobRun list>
+
+    // Fire now, regardless of Trigger. Additive — a cron job stays on its
+    // schedule. Error when the job is unknown or Cancelled.
+    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, string>>
+
+    // Called by the JobNotifyEventStore decorator on every matching write.
+    abstract NotifyEventWritten: scopeId: string * eventType: string * eventId: Guid -> Async<unit>
 ```
+
+Every method is scope-qualified: a `JobId` is only meaningful inside its `scopeId`, so the pair is
+the key everywhere (rule 1 — identity by value, never a live handle).
 
 `JobDefinition`:
 
@@ -184,17 +207,26 @@ Off by default (`ServerConfig.JobProgress = NoJobProgress`), in which case the c
 When the scheduler is enabled, the SDK auto-injects `JobApi`:
 
 ```fsharp
-type IJobApi = {
-    Schedule: JobDefinition -> Async<Result<unit, ScheduleError>>
-    Unschedule: JobId -> Async<unit>
-    TriggerOnce: JobId -> Async<unit>
-    GetSchedule: JobId -> Async<JobDefinition option>
-    ListSchedules: unit -> Async<JobDefinition list>
-    GetRunHistory: JobId -> Async<JobRun list>
+type JobApi = {
+    // Reads — available to any team member.
+    ListJobs: unit -> Async<JobDefinition list>
+    GetJob: Guid -> Async<JobDefinition option>
+    GetRecentRuns: Guid * int -> Async<JobRun list>   // count capped server-side at 50
+
+    // Writes.
+    Schedule: JobRegistration -> Async<Result<Guid, ScheduleError>>
+    Cancel: Guid -> Async<Result<unit, string>>
+    Disable: Guid -> Async<Result<unit, string>>
+    Enable: Guid -> Async<Result<unit, string>>
+    TriggerOnce: Guid -> Async<Result<unit, string>>
 }
 ```
 
-Write paths (`Schedule` / `Unschedule` / `TriggerOnce`) are gated by `TeamRole.Owner | Admin`. `ScopeId` and `CreatedBy` on incoming `JobDefinition`s are overwritten server-side from the caller's `AccessContext` — clients can't impersonate.
+No `scopeId` parameter appears on the wire: the handler resolves the caller's scope from their
+`AccessContext` and passes it to `IJobScheduler` itself, which is why the remoting record is the
+scheduler interface with that argument removed rather than a different shape.
+
+Write paths (`Schedule` / `Cancel` / `Disable` / `Enable` / `TriggerOnce`) are gated by `TeamRole.Owner | Admin` in `Team` / `MultiTeam` mode; other modes are ungated, since a single-user deployment owns its own scope. `ScopeId` and `CreatedBy` on an incoming `JobRegistration` are overwritten server-side from the caller's `AccessContext` — clients can't impersonate.
 
 ## Writing a job handler
 

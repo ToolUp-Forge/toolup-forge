@@ -575,6 +575,139 @@ let main args =
     // harness that matches almost nothing scores far below the mark.
     let docSnippetFloorSeed = 300
 
+    // Phase 668 — doc-declared type parity.
+    //
+    // The compile gate above has one structural blind spot, and it is the
+    // one an api-reference page walks into by design. A block that
+    // REDECLARES a public SDK type — `type IJobScheduler = abstract …` —
+    // compiles green forever, because the local declaration SHADOWS the
+    // real type and the compiler never consults the surface the doc claims
+    // to describe. `docs/platform/jobs.md` taught a six-method
+    // `IJobScheduler` for as long as this gate has existed; four of those
+    // methods have not been on the interface for releases, and every run
+    // was green. Phase 660's zero-drift guarantee is hollow wherever a doc
+    // re-declares.
+    //
+    // So a second, compile-independent check: read the type names a block
+    // declares, resolve them against the Phase 175 `api-baselines/`
+    // rendering of the real public surface, and hold the declaration to
+    // what the surface says.
+    //
+    // ── The elision rule: SUBSET, and there is no marker ─────────────
+    //
+    // Doc listings are routinely simplified — six of eleven methods, the
+    // fields that matter to the page. Two rules could accommodate that: an
+    // ELISION MARKER inside the block (unmarked blocks must be exhaustive),
+    // or MEMBERSHIP-SUBSET TOLERANCE (whatever the block shows must be
+    // real; what it omits is its own business). Subset, for two reasons,
+    // and the second is the decisive one.
+    //
+    // First, the marker answers the wrong question. A member that CHANGED
+    // does not present here as a missing member; it presents as a member
+    // name the real type does not have (a rename) or a signature naming a
+    // type the real member does not use (a retype). Both are the EXTRA
+    // direction. A marker's whole semantic domain is the MISSING direction,
+    // so it can never speak to a changed member — and if it is read, as it
+    // inevitably would be, as "this listing is partial, relax", the
+    // relaxation leaks into the extra direction and starts hiding exactly
+    // the drift this check exists to catch. `IJobScheduler.Unschedule`
+    // would become an elision.
+    //
+    // Second, an unmarked-means-exhaustive rule reddens every listing on
+    // the page the next time the SDK GAINS a member — a maintenance tax
+    // unrelated to mis-teaching — so the marker would be applied wholesale
+    // and read thereafter as "reviewed", having been typed to go green.
+    // This file already carries that argument twice: the skip set is closed
+    // and widening it is a visible diff here, and the corpus floor's shrink
+    // is deliberately a hand edit rather than a flag.
+    //
+    // Subset tolerance needs no escape and offers none. It asserts the one
+    // claim a reader actually relies on — EVERY MEMBER THIS BLOCK TEACHES
+    // IS A MEMBER THE SDK HAS — and makes the missing direction a
+    // non-question by construction.
+    //
+    // ── What is compared, and why not more ───────────────────────────
+    //
+    // Per shown member: its NAME must exist on the real type, and the
+    // public SDK type names its declared signature mentions must be a
+    // SUBSET of those the real member's rendering mentions. That second
+    // half is what catches a retype — `Schedule: JobDefinition -> …`
+    // against a real `Schedule(JobRegistration)` — without pretending to
+    // normalise F# source syntax into reflection metadata.
+    //
+    // Full signature equality was implemented first and measured before
+    // being discarded: it produced 416 findings across the corpus, of which
+    // essentially none were drift. Metadata erases F# type abbreviations
+    // (`type JobId = Guid` renders as `System.Guid`, so a doc writing
+    // `JobId` looks wrong), primitives render as `System.String` where a
+    // doc writes `string`, and curried arrows render as tupled parameter
+    // lists. Restricting the comparison to names the surface itself OWNS,
+    // in the subset direction, dropped that to 5 — every one a genuine
+    // mis-teach. A gate whose findings are mostly rendering artefacts is
+    // one people learn to step over.
+    //
+    // Two residuals, stated rather than hidden, and both visible in the
+    // census line rather than papered over:
+    //   * a same-name member retyped only in BCL terms (`string` -> `int`)
+    //     is not caught — no surface-owned name changed;
+    //   * a SINGLE-LINE union (`type ChunkOrigin = Document | Note | …`)
+    //     is read as `not comparable`, because the member reader keys off
+    //     `|` at the start of a line. Six declarations sit in that bucket
+    //     today. Worth closing; not closed here, because widening the
+    //     reader is a corpus-wide change and this phase landed its own
+    //     corpus at zero.
+    //
+    // ── Three soundness filters, each measured ───────────────────────
+    //
+    //   * AMBIGUOUS NAMES ARE NOT COMPARED. A doc's own Elmish `Model` /
+    //     `Msg` example collides with the dozens of nested `…UI+Msg` types
+    //     the surface renders; matching a bare `Msg` to one of them was
+    //     never sound. A simple name resolving to more than one public type
+    //     is counted and skipped.
+    //   * BCL-COLLIDING SIMPLE NAMES ARE NOT SURFACE NAMES. A ToolUp module
+    //     named `String` would otherwise make every `System.String` field
+    //     in the baselines read as a ToolUp type and every doc `string`
+    //     read as a mismatch.
+    //   * F# CORE ALIASES ARE NOT SURFACE NAMES (`docParityAliasNames`) —
+    //     `Set<SubjectKind>` renders as `FSharpSet\`1[…]`, so a doc's `Set`
+    //     has no counterpart to be a subset of.
+    //
+    // The surface is read from the COMMITTED `api-baselines/` text, not
+    // from built DLLs. That is what makes this check independent of build
+    // state — it cannot be quietened by a stale `bin/`, and it runs before
+    // the snippet project is compiled at all. The baselines are themselves
+    // gated in both directions by the Phase 175 / 618 approval test, so a
+    // surface change that has not been folded into them fails there rather
+    // than silently moving the target here.
+    //
+    // SKIPPED blocks are IN SCOPE here, deliberately. `skip=signature` is
+    // precisely the `.fsi`-shaped api-reference listing, i.e. the highest-
+    // risk shape for this defect, and the check needs no compiler — so the
+    // one pool the compile gate cannot see is the one pool this check can.
+    let docParityAliasNames =
+        set [
+            "String"
+            "Set"
+            "Map"
+            "List"
+            "Array"
+            "Option"
+            "Async"
+            "Result"
+            "Seq"
+            "Choice"
+            "Ref"
+            "Lazy"
+            "Nullable"
+            "Task"
+            "Tuple"
+            "Char"
+            "Byte"
+            "Guid"
+            "DateTime"
+            "TimeSpan"
+        ]
+
     Target.create "VerifyDocSnippets" (fun _ ->
         // Read from the process argv rather than `p.Context.Arguments`:
         // FAKE's own CLI parser consumes trailing options before the
@@ -700,6 +833,320 @@ let main args =
             |> List.countBy id
             |> List.sortBy fst
 
+        // ---- Phase 668: the public surface, read from api-baselines ----
+        let apiBaselineDir = Path.Combine(repoRoot, "api-baselines")
+
+        let rxMatches (pattern: string) (input: string) =
+            System.Text.RegularExpressions.Regex.Matches(input, pattern)
+            |> Seq.map (fun m -> m.Value)
+            |> List.ofSeq
+
+        let rxGroups (pattern: string) (input: string) =
+            let m = System.Text.RegularExpressions.Regex.Match(input, pattern)
+
+            if m.Success then
+                Some [ for g in m.Groups -> g.Value ]
+            else
+                None
+
+        let simpleNameOf (s: string) =
+            let bare = s.Split('`')[0]
+            let i = max (bare.LastIndexOf '.') (bare.LastIndexOf '+')
+            if i >= 0 then bare.Substring(i + 1) else bare
+
+        // (full name, [member name, rendered member line]). Nested types
+        // keep their `+`, so the DU-case reader below finds `T+Case`.
+        let realTypes =
+            if Directory.Exists apiBaselineDir then
+                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
+                |> Seq.collect (fun f ->
+                    let lines =
+                        File.ReadAllLines f
+                        |> Array.filter (fun l -> l.Trim() <> "" && not (l.StartsWith "#"))
+
+                    lines
+                    |> Array.choose (rxGroups @"^(\S+) \((?:class|interface|struct|enum|delegate)\)$")
+                    |> Array.map (fun groups ->
+                        let full = groups[1]
+                        let prefix = full + "."
+
+                        let members =
+                            lines
+                            |> Array.filter (fun l -> l.StartsWith prefix)
+                            |> Array.map (fun l ->
+                                let rest = l.Substring prefix.Length
+                                let cut = rest.IndexOfAny [| '('; ' ' |]
+                                (if cut >= 0 then rest.Substring(0, cut) else rest), rest)
+                            |> List.ofArray
+
+                        full, members))
+                |> List.ofSeq
+            else
+                []
+
+        let realFullNames = realTypes |> List.map fst |> Set.ofList
+
+        // An F# `module X` holding a `type X` renders as BOTH `A.X` and
+        // `A.X+X`. That is not two competing types — it is a container and
+        // the thing inside it, and a doc writing `X` after `open A` means
+        // the latter. Left uncollapsed it reads as ambiguous, and the
+        // whole family of interfaces whose module shares their name
+        // (`IVectorStore`, `IRetrievalPipeline`, `IRetrievalTracer`, …)
+        // drops silently out of the comparison. Found by the
+        // demonstrated-red probe rather than by reading the code, which is
+        // what that discipline is for: the check was green on a
+        // deliberately staled signature.
+        let realByName =
+            realTypes
+            |> List.groupBy (fst >> simpleNameOf)
+            |> List.map (fun (name, candidates) ->
+                let fulls = candidates |> List.map fst |> Set.ofList
+
+                let collapsed =
+                    candidates
+                    |> List.filter (fun (full, _) -> not (fulls.Contains(full + "+" + name)))
+
+                name, (if collapsed.IsEmpty then candidates else collapsed))
+            |> Map.ofList
+
+        // A simple name the SURFACE uses for a BCL type is not evidence of
+        // a ToolUp type of that name — see the soundness filters above.
+        let bclSimpleNames =
+            realTypes
+            |> Seq.collect (fun (_, ms) -> ms |> Seq.map snd)
+            |> Seq.collect (rxMatches @"[A-Za-z_][A-Za-z0-9_.+`]*")
+            |> Seq.filter (fun v -> v.StartsWith "System." || v.StartsWith "Microsoft.")
+            |> Seq.map simpleNameOf
+            |> Set.ofSeq
+
+        let ownedSimpleNames =
+            Set.difference (realByName |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
+
+        let unambiguousTypeNames =
+            realByName |> Map.filter (fun _ v -> v.Length = 1) |> Map.keys |> Set.ofSeq
+
+        // The public SDK type names a DOC signature mentions. A trailing
+        // `//` comment is cut first: `Kind: HealthKind  // Liveness |
+        // Readiness` names two DU cases the real member never mentions, and
+        // prose is not a declaration.
+        let docTypeTokens (raw: string) =
+            let cut = raw.IndexOf "//"
+            let text = if cut >= 0 then raw.Substring(0, cut) else raw
+
+            rxMatches @"[A-Za-z_][A-Za-z0-9_]*" text
+            |> List.filter ownedSimpleNames.Contains
+            |> Set.ofList
+
+        // …and the ones a RENDERED member mentions. A token counts only
+        // when its full dotted name is a type the surface actually renders,
+        // which is what keeps `System.String` out. A nested `Outer+Inner`
+        // contributes both halves — a doc writes a module-nested type
+        // either way round.
+        let realTypeTokens (rendered: string) =
+            rxMatches @"[A-Za-z_][A-Za-z0-9_.+`]*" rendered
+            |> List.map (fun v -> v.Split('`')[0])
+            |> List.filter realFullNames.Contains
+            |> List.collect (fun bare -> [ for seg in bare.Split '+' -> simpleNameOf seg ])
+            |> Set.ofList
+
+        // Case names of a real DU: the nested `T+Case` types, plus the
+        // `IsCase` recognisers. Both are read because either can be absent
+        // depending on how the case is compiled; over-collecting only ever
+        // ACCEPTS a doc case, so the subset direction stays sound.
+        let realUnionCases (full: string) =
+            let nested = full + "+"
+
+            let fromNested =
+                realFullNames
+                |> Seq.filter (fun f -> f.StartsWith nested)
+                |> Seq.map (fun f -> f.Substring nested.Length)
+                |> Seq.filter (fun n -> n <> "Tags" && not (n.Contains "+"))
+                |> List.ofSeq
+
+            let fromRecognisers =
+                realTypes
+                |> List.tryFind (fun (f, _) -> f = full)
+                |> Option.map (fun (_, ms) ->
+                    ms
+                    |> List.map fst
+                    |> List.filter (fun n -> n.StartsWith "Is" && n.Length > 2)
+                    |> List.map (fun n -> n.Substring 2))
+                |> Option.defaultValue []
+
+            Set.ofList (fromNested @ fromRecognisers)
+
+        // ---- Phase 668: what each block DECLARES ----
+        //
+        // (rel, ordinal, doc line of the `type` head, type name, kind,
+        //  [member name, declared signature]). `kind` decides how the
+        //  members are read AND which comparison applies.
+        let declsIn (rel: string, _ord: int, start: int, body: string list) =
+            let arr = List.toArray body
+
+            let heads =
+                arr
+                |> Array.mapi (fun i l ->
+                    if l.StartsWith " " || l.StartsWith "\t" then
+                        None
+                    else
+                        rxGroups @"^(?:type|and)\s+(?:\[<[^\]]*>\]\s*)?([A-Za-z_][A-Za-z0-9_]*)" l
+                        |> Option.map (fun g -> i, g[1]))
+                |> Array.choose id
+
+            heads
+            |> Array.mapi (fun k (i, name) ->
+                let stop =
+                    if k + 1 < heads.Length then
+                        fst heads[k + 1]
+                    else
+                        arr.Length
+
+                let seg = arr[i .. stop - 1]
+
+                let matches pattern =
+                    seg
+                    |> Array.exists (fun l -> System.Text.RegularExpressions.Regex.IsMatch(l, pattern))
+
+                let kind =
+                    if matches @"^\s+abstract\s" then
+                        "interface"
+                    elif matches @"^\s*\|\s*[A-Z]" then
+                        "union"
+                    elif seg |> Array.exists (fun l -> l.Contains "{") then
+                        "record"
+                    else
+                        "other"
+
+                let members =
+                    match kind with
+                    | "interface" ->
+                        seg
+                        |> Array.choose (
+                            rxGroups @"^\s+abstract\s+(?:member\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$"
+                        )
+                        |> Array.map (fun g -> g[1], g[2])
+                    | "record" ->
+                        seg
+                        |> Array.choose (rxGroups @"^\s+(?:mutable\s+)?([A-Z][A-Za-z0-9_]*)\s*:\s*(.+)$")
+                        |> Array.map (fun g -> g[1], g[2])
+                    | "union" ->
+                        // `| Some x -> …` in a sample body is not a case
+                        // declaration; an arrow disqualifies the line.
+                        seg
+                        |> Array.filter (fun l -> not (l.Contains "->"))
+                        |> Array.choose (rxGroups @"^\s*\|\s*([A-Z][A-Za-z0-9_]*)\s*(?:of\b.*)?$")
+                        |> Array.map (fun g -> g[1], "")
+                    | _ -> [||]
+
+                rel, _ord, start + i, name, kind, List.ofArray members)
+            |> List.ofArray
+
+        let docDecls =
+            fsharpBlocks
+            |> List.collect (fun (rel, ord, start, _, _, body) -> declsIn (rel, ord, start, body))
+
+        let redeclarations =
+            docDecls
+            |> List.filter (fun (_, _, _, name, _, _) -> unambiguousTypeNames.Contains name)
+
+        let ambiguousRedeclarations =
+            docDecls
+            |> List.filter (fun (_, _, _, name, _, _) ->
+                realByName.ContainsKey name && not (unambiguousTypeNames.Contains name))
+            |> List.length
+
+        let notComparable =
+            redeclarations
+            |> List.filter (fun (_, _, _, _, kind, _) -> kind = "other")
+            |> List.length
+
+        // ---- Phase 668: the comparison ----
+        let parityFindings =
+            redeclarations
+            |> List.collect (fun (rel, ord, line, name, kind, members) ->
+                let full, realMembers = (realByName |> Map.find name).Head
+
+                let fail (memberName: string) (why: string) (docShape: string) (realShape: string) = [
+                    sprintf
+                        "%s (block %d, line %d): %s.%s — %s\n      doc  : %s\n      real : %s"
+                        rel
+                        ord
+                        line
+                        name
+                        memberName
+                        why
+                        docShape
+                        realShape
+                ]
+
+                match kind with
+                | "union" ->
+                    let cases = realUnionCases full
+
+                    members
+                    |> List.collect (fun (caseName, _) ->
+                        if cases.Contains caseName then
+                            []
+                        else
+                            fail
+                                caseName
+                                (sprintf "%s has no such case." full)
+                                (sprintf "| %s" caseName)
+                                (cases |> Set.toList |> List.sort |> String.concat " | "))
+                | "interface"
+                | "record" ->
+                    members
+                    |> List.collect (fun (memberName, memberSig) ->
+                        let candidates = realMembers |> List.filter (fun (n, _) -> n = memberName)
+
+                        match candidates with
+                        | [] ->
+                            fail
+                                memberName
+                                (sprintf "%s has no such member." full)
+                                (sprintf "%s: %s" memberName memberSig)
+                                (realMembers |> List.map fst |> List.distinct |> List.sort |> String.concat ", ")
+                        | _ ->
+                            let declared = docTypeTokens memberSig
+
+                            let ok =
+                                candidates
+                                |> List.exists (fun (_, rendered) -> Set.isSubset declared (realTypeTokens rendered))
+
+                            if ok then
+                                []
+                            else
+                                // Name the surface types the real member does
+                                // not carry. Across OVERLOADS that set can be
+                                // empty while no single overload is a superset
+                                // — each carries some of what the doc names —
+                                // so say that instead of printing nothing.
+                                let unmatched =
+                                    Set.difference
+                                        declared
+                                        (candidates |> List.map (snd >> realTypeTokens) |> Set.unionMany)
+
+                                let why =
+                                    if unmatched.IsEmpty then
+                                        sprintf
+                                            "no single overload of %s.%s carries all of %s."
+                                            full
+                                            memberName
+                                            (declared |> Set.toList |> List.sort |> String.concat ", ")
+                                    else
+                                        sprintf
+                                            "declared signature names %s, which %s.%s does not."
+                                            (unmatched |> Set.toList |> List.sort |> String.concat ", ")
+                                            full
+                                            memberName
+
+                                fail
+                                    memberName
+                                    why
+                                    (sprintf "%s: %s" memberName memberSig)
+                                    (candidates |> List.map snd |> String.concat "  |  "))
+                | _ -> [])
+
         // ---- ambient context, declared here and never in the docs ----
         let docSnippetPreamble = [
             "open System"
@@ -725,6 +1172,7 @@ let main args =
                 "open ToolUp.Forms"
                 "open ToolUp.Forms.FormSchema"
                 "open ToolUp.Forms.FormSubmission"
+                "open ToolUp.Forms.AggregationTypes"
             ]
             "docs/scheduling/",
             [
@@ -1173,6 +1621,26 @@ let main args =
 
             Trace.tracefn "  ambient pages   : %d (docs-snippets/ambient/)" ambientPages
 
+            // Phase 668 — the redeclaration census. A block that
+            // redeclares a public SDK type is invisible to the compile
+            // gate above (the local declaration shadows the real type), so
+            // the size of that pool belongs on the summary for the same
+            // reason the skip counts do: a blind spot nobody measures is
+            // one that grows. The two qualifiers are the check's own
+            // honest limits, not footnotes — an ambiguous name cannot be
+            // resolved to one type, and a `type X = …` with no members
+            // read has nothing to compare.
+            Trace.tracefn
+                "  redeclared types: %d in %d block(s) — %d compared, %d not comparable, %d ambiguous"
+                redeclarations.Length
+                (redeclarations
+                 |> List.map (fun (rel, ord, _, _, _, _) -> rel, ord)
+                 |> List.distinct
+                 |> List.length)
+                (redeclarations.Length - notComparable)
+                notComparable
+                ambiguousRedeclarations
+
             // A WATCHLIST, not a defect count. An `open` of a deliberately
             // fictional vendor namespace is legitimate in an illustrative
             // fragment; an `open` of a real SDK namespace that has since
@@ -1208,6 +1676,24 @@ let main args =
                 failwithf
                     "VerifyDocSnippets: %d baseline entr(ies) in docs-snippets/known-drift.txt now compile. Delete the FULL lines printed above — match on path, ordinal AND hash, never on the hash alone: identical illustrative blocks in different files share a hash, and a hash-only prune deletes the wrong file's entry silently. The ratchet only holds if a fixed snippet is removed from the list."
                     fixedButListed.Count
+
+            // Phase 668 — the parity failures. Reported AFTER the compile
+            // arms above, because a block that does not compile is the
+            // more urgent diagnosis, and BEFORE the baseline-zero check,
+            // because a stale redeclaration is a concrete fix while that
+            // one is a policy statement. Zero is the enforced state and
+            // there is no baseline: this check landed with its corpus
+            // burnt down, so an entry has never been a tolerated state and
+            // must not become one.
+            if not parityFindings.IsEmpty then
+                Trace.tracefn ""
+
+                for f in parityFindings do
+                    Trace.traceError ("    " + f)
+
+                failwithf
+                    "VerifyDocSnippets: %d documentation block(s) REDECLARE a public SDK type with a member the surface does not have. A redeclaration shadows the real type, so the compile arm above cannot see this — that is why the check exists. Fix the snippet against api-baselines/<assembly>.approved.txt (the rendered public surface). Showing FEWER members than the SDK has is fine and needs no marker; showing a member it does not have is not."
+                    parityFindings.Length
 
             // The baseline reached zero, so EMPTY is now the enforced state.
             //

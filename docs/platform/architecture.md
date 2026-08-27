@@ -175,9 +175,11 @@ The SDK ships a single notification channel abstraction:
 
 ```fsharp skip=fragment
 type INotificationChannel =
-    abstract Publish: scopeId: string -> Notification -> Async<unit>
-    abstract Subscribe: scopeId: string -> filter: (NotificationKind -> bool) -> handler: ... -> Async<Guid>
-    abstract Unsubscribe: Guid -> Async<unit>
+    abstract Publish: scopeId: string * notification: Notification -> Async<unit>
+    // The subscriber receives every envelope on the scope's topic and
+    // filters by kind itself — the channel takes no filter argument.
+    abstract Subscribe: scopeId: string * handler: (NotificationEnvelope -> unit) -> Async<Guid>
+    abstract Unsubscribe: subscriptionId: Guid -> Async<unit>
 ```
 
 Notifications carry five kinds: `SystemMessage`, `JobProgress`, `JobComplete`, `RefreshData`, `CustomNotification`. Plus three transactional kinds (`TransactionalEmail`, `TransactionalSms`, `MobilePush`) that ride the same envelope but bypass the wire transport via `DispatchingNotificationChannel` so PII never crosses pub/sub topics.
@@ -212,12 +214,14 @@ For compliance archival, the `IAuditSink` substrate replicates every `_platform.
 Opt in via `ServerConfig.JobScheduler = InProcessJobScheduler`. The default scheduler is a `BackgroundService` ticking every minute aligned to wall clock, with per-`JobId` `SemaphoreSlim` for concurrent-tick safety. Jobs are defined by:
 
 ```fsharp
+// An excerpt — see jobs.md for the whole record, which also carries the
+// scheduler-stamped runtime state (NextRunAt, LastRunStatus, ...).
 type JobDefinition = {
     JobId: JobId
-    HandlerName: string
-    Trigger: Trigger  // Cron expression | OnEvent | Manual
-    Retry: JobRetryPolicy
-    IdempotencyKey: IdempotencyKey option
+    Handler: string   // logical name, looked up against the handler registry
+    Trigger: Trigger  // CronTrigger expression | OnEvent | Manual
+    RetryPolicy: JobRetryPolicy
+    Idempotency: IdempotencyKey option
     Precision: JobPrecision  // Minute (Second precision rejected at registration)
 }
 ```

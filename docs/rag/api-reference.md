@@ -7,10 +7,18 @@ Public surface of `ToolUp.RAG`. Types are listed by package.
 ### `IngestionTypes`
 
 ```fsharp skip=fragment
+// One job per CHUNK, not per document: the queue's unit of work is the
+// thing that gets embedded, so a large document's failure retries only
+// the chunk that failed.
 type IngestionJob = {
-    DocumentId: Guid
+    ChunkId: string
+    DocumentId: string
+    DocumentName: string
+    Container: string
+    ScopeId: string
     Scope: VectorScope
-    Chunks: TextChunk list
+    Chunk: TextChunk
+    OriginatingUserId: string option
 }
 
 type IngestionQueue =
@@ -46,41 +54,56 @@ type VectorScope =
     | Team of teamId: string
     | User of userId: string
 
-type ChunkOrigin = UserContent | Narrative | Note | Synthetic
+// Stamped onto chunk metadata under ChunkMetadata.OriginKey ("_origin")
+// at ingestion time, so RAG never names a producer's own types.
+type ChunkOrigin =
+    | Document
+    | Note
+    | Narrative
+    | AIContext      // excluded from default retrieval — already injected verbatim
+    | Conversation
+    | Fact           // an exact fact hit merged in ahead of similarity matches
+    | Other of label: string
 
+// A chunk is content plus its metadata bag, and nothing else — no id
+// and no typed origin field. The id is supplied BY THE CALLER at index
+// time (`IVectorStore.Upsert`), which is what makes re-embedding an
+// overwrite rather than a duplicate; the origin travels in `Metadata`
+// alongside the embed-provider stamps, which is what lets a deployment
+// add a dimension without retyping the record.
 type TextChunk = {
-    Id: Guid
-    Text: string
+    Content: string
     Metadata: Map<string, string>
-    Origin: ChunkOrigin
 }
 
-type ChunkVector = {
-    Id: Guid
-    Text: string
-    Vector: float32[]
-    Metadata: Map<string, string>  // includes _embedProvider / _embedModel / _embedDim
-    Origin: ChunkOrigin
-}
-
+// A match is FLAT — it carries the chunk's content and metadata
+// directly rather than a nested chunk record, so a caller rendering a
+// citation reads one record. The embedding itself never leaves the
+// store; `_embedProvider` / `_embedModel` / `_embedDim` ride Metadata.
 type VectorMatch = {
-    Chunk: ChunkVector
+    ChunkId: string
+    Content: string
     Score: float
+    Scope: VectorScope
+    Metadata: Map<string, string>
 }
 
+// How results from SEVERAL SCOPES are combined — not which retrieval
+// algorithms run. Dense / sparse / rerank staging is pipeline
+// configuration, not a caller-supplied strategy.
 type MergeStrategy =
-    | DenseOnly
-    | SparseOnly
-    | DenseSparseHybrid
-    | DenseSparseRerank
+    | Interleaved   // re-rank across scopes by score; the most relevant chunks win
+    | Separate      // grouped by scope and labelled
 
+// An excerpt — the record also carries History, AdaptiveK, ActiveModule
+// and FactClause. Construct via RetrievalRequest.create to default them.
 type RetrievalRequest = {
     Query: string
-    RequestedScopes: VectorScope list
+    Scopes: VectorScope list
     TopK: int
-    MinScore: float
-    MergeStrategy: MergeStrategy
-    OriginFilter: ChunkOrigin list option
+    Merge: MergeStrategy
+    Filters: Map<string, string> option        // AND-combined metadata equality
+    OriginFilter: Set<ChunkOrigin> option
 }
 ```
 
@@ -141,7 +164,7 @@ Mirrored `AIServerApp` builders (all `withConfig`, `withAuth`, `withStorage`, ..
 RAG-specific builders:
 - `withTopK: int -> RAGServerApp -> RAGServerApp` (default 5)
 - `withMinScore: float option -> RAGServerApp -> RAGServerApp` (default 0.3)
-- `withMergeStrategy: MergeStrategy -> RAGServerApp -> RAGServerApp` (default `DenseOnly`)
+- `withMergeStrategy: MergeStrategy -> RAGServerApp -> RAGServerApp` (default `Interleaved`)
 - `withSnippetCharLimit: int -> RAGServerApp -> RAGServerApp` (default 1500)
 - `withOriginFilter: Set<ChunkOrigin> option -> RAGServerApp -> RAGServerApp` (default `None`)
 - `withGroundingMode: GroundingMode -> RAGServerApp -> RAGServerApp` (default `Permissive`)
@@ -276,23 +299,39 @@ type IImageEmbedder =
 
 ```fsharp
 type IRetrievalTracer =
-    abstract Trace: RetrievalTrace -> AccessContext -> Async<unit>
-    abstract Miss: scope: VectorScope -> queryHash: string -> Async<unit>
+    abstract Trace: trace: RetrievalTrace * ctx: AccessContext -> Async<unit>
+    // A MISS is its own record, not a degenerate trace: what a reader
+    // needs to diagnose "nothing came back" is the threshold and what
+    // sat under it, which a trace of an empty result set cannot say.
+    abstract Miss: miss: RetrievalMiss * ctx: AccessContext -> Async<unit>
 
 and RetrievalTrace = {
     QueryHash: string
     QueryLength: int
     RequestedScopes: VectorScope list
-    PermittedScopes: VectorScope list
+    PermittedScopes: VectorScope list   // after scope-authorisation narrowing
     TopK: int
+    AdaptiveK: bool
     CandidatePoolSize: int
     TopScore: float
-    Dense: bool
-    Sparse: bool
-    Reranked: bool
-    LatencyMs: int
+    DenseUsed: bool
+    SparseUsed: bool
+    RerankerName: string option         // None when no reranker ran
+    LatencyMs: int64
     Stages: string list
+    StageTimings: (string * float) list
     ResultCount: int
+    RewriteDecision: string option
+    RewrittenQueryHash: string option
+}
+
+and RetrievalMiss = {
+    QueryHash: string
+    QueryLength: int
+    Scopes: VectorScope list
+    MatchesAboveMinScore: int
+    MinScoreThreshold: float
+    TopScore: float
 }
 ```
 
@@ -312,7 +351,9 @@ type IReranker =
     abstract Rerank: query: string -> candidates: VectorMatch list -> topK: int -> Async<VectorMatch list>
 ```
 
-Optional. Required only when `MergeStrategy = DenseSparseRerank`.
+Optional, and not selected by `MergeStrategy` — that knob decides how scopes combine, not which
+stages run. Registering a reranker with `withReranker` is what turns the stage on; the pipeline then
+widens its candidate pool for it and records the reranker's name in `RetrievalTrace.RerankerName`.
 
 ### `IRagTelemetry`
 
