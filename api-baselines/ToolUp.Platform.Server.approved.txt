@@ -2773,6 +2773,12 @@ ToolUp.Platform.EgressGate.forExport(ToolUp.Platform.IFieldClassifier, Microsoft
 ToolUp.Platform.EgressGate.forResponse(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.EgressGate.make(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog) : ToolUp.Platform.IEgressGate
 ToolUp.Platform.EgressGate.permissiveEgressPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressDecision
+ToolUp.Platform.EmbeddingProviderEnv (class)
+ToolUp.Platform.EmbeddingProviderEnv.fromEnv(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver (class)
+ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]])
+ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver.Name : System.String { get }
+ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]] { get }
 ToolUp.Platform.EncryptedBlobStorage (class)
 ToolUp.Platform.EncryptedBlobStorage+EncryptedBlobStorage (class)
 ToolUp.Platform.EncryptedBlobStorage+EncryptedBlobStorage..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver)

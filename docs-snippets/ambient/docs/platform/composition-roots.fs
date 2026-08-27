@@ -21,6 +21,8 @@ module PageAmbient =
 
         let notificationResolvers: NotificationChannel.NotificationChannelResolver list = []
 
+        let embeddingResolvers: EmbeddingProviderEnv.EmbeddingProviderResolver list = []
+
         let slowRequestOverrides: Map<string, TimeSpan> = Map.empty
 
         let providerProfile: ToolUp.Platform.Providers.IProviderProfile = failwith "ambient"
@@ -47,6 +49,8 @@ module PageAmbient =
     let logger: ILogger = failwith "ambient"
 
     let blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage = failwith "ambient"
+
+    let secretStore: ToolUp.Platform.Secrets.ISecretStore = failwith "ambient"
 
     let config: ServerConfig = failwith "ambient"
 

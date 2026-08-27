@@ -11,6 +11,7 @@ OpenAIEmbeddingProvider.createWithBatchSize(ToolUp.Platform.Secrets+ISecretStore
 OpenAIEmbeddingProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String, System.Int32) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 OpenAIEmbeddingProvider.createWithOptions(ToolUp.Platform.Secrets+ISecretStore, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 OpenAIEmbeddingProvider.defaultModel : System.String (literal)
+OpenAIEmbeddingProvider.fromEnv(ToolUp.Platform.Secrets+ISecretStore) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]
 OpenAIEmbeddingProvider.probeEmbeddingsApi(ToolUp.Platform.Secrets+ISecretStore, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[OpenAIEmbeddingProvider+EmbeddingProbeResult]
 OpenAIEmbeddingProvider.withEmbedderAudit(ToolUp.Platform.IEventStore, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
 OpenAIEmbeddingProvider.withEmbedderBatchSize(System.Int32, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions

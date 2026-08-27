@@ -161,6 +161,22 @@ let embedder = OpenAIEmbeddingProvider.create secretStore
 
 The provider reads the API key per call from `ISecretStore` under the `_platform` scope. Key names are provider-specific (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). Rotation is transparent — write the new key to `ISecretStore`; the next call reads it.
 
+### Selecting the companion from configuration
+
+A deployment that would otherwise `#if DEBUG` between the two companions can dispatch on `TOOLUP_EMBEDDING_PROVIDER` instead, through the same resolver-list helper `ISecretStore` and `IBlobStorage` use:
+
+```fsharp skip=fragment
+let embedder =
+    EmbeddingProviderEnv.fromEnv logger [
+        { Name = "local"; Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
+        { Name = "openai"; Resolve = fun () -> OpenAIEmbeddingProvider.fromEnv secretStore }
+    ] (fun () -> OpenAIEmbeddingProvider.create secretStore)
+```
+
+The third argument is what an **unset** variable yields — so adopting the helper leaves an existing deployment's behaviour and startup log untouched until an operator sets something. `TOOLUP_EMBEDDING_MODEL` / `_DIMENSIONS` / `_BATCH_SIZE` tune the selected companion; the API key is deliberately not among them and stays in `ISecretStore`. Full table: the [configuration reference](../reference/config-reference.md).
+
+`TOOLUP_EMBEDDING_DIMENSIONS` is **required** for a model this build has no native size for. It is not defaulted, because a wrong length is indexed under a matching `EmbeddingVersion` stamp: every query then saturates cosine distance, retrieval returns nothing, and the re-embedding pass described above does not fire — the stamps still match.
+
 Distributed-ready providers MUST be stateless between calls (portability rule 4). `LocalEmbeddingProvider` is the documented exception (in-process IDF state); mark any new stateful provider as dev-only in its file header.
 
 ## Writing a new provider

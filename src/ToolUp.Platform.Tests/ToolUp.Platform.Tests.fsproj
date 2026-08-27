@@ -836,6 +836,10 @@
         <Compile Include="InProcess\HostActionAuditTests.fs" />
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
+        <!-- Phase 671 — EmbeddingProviderEnv.fromEnv: the selection arms
+             and, chiefly, the unset arm's byte-for-byte guarantee.
+             Env-mutating: wired into the Phase 653 sequenced group. -->
+        <Compile Include="InProcess\EmbeddingProviderEnvTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
         <!-- Phase 460 — the signing key as an operator-managed secret:
@@ -2180,6 +2184,10 @@
         <!-- Phase 14z — the local TF-IDF embedder, for its scope-keyed
              factory. Dev-only companion; no external dependency. -->
         <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
+        <!-- Phase 671 — the OpenAI embedder's `fromEnv` model / dimension
+             defaulting and its two refusals. Zero vendor dependencies
+             (BCL HttpClient), and no test here makes a network call. -->
+        <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" />
         <!-- Phase 500 — the OCR companion, for its option / fail-loud
              guards and the env-gated native arm. -->
         <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />

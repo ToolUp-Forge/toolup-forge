@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
   "title": "ToolUp deployment configuration manifest",
-  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 106 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 110 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -244,6 +244,25 @@
       "type": "string",
       "enum": [ "inprocess", "redis" ],
       "default": "inprocess"
+    },
+    "TOOLUP_EMBEDDING_BATCH_SIZE": {
+      "description": "Maximum inputs per batched embedding call for the API-backed embedding companion.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$",
+      "default": 64
+    },
+    "TOOLUP_EMBEDDING_DIMENSIONS": {
+      "description": "Output dimensionality declared for the selected embedding model. Needed only for a model the companion has no native size for; a wrong value silently corrupts the vector store, so a mismatch against a known model is refused.",
+      "type": [ "integer", "string" ],
+      "pattern": "^-?[0-9]+$"
+    },
+    "TOOLUP_EMBEDDING_MODEL": {
+      "description": "Embedding model id passed to the selected embedding-provider companion.",
+      "type": "string"
+    },
+    "TOOLUP_EMBEDDING_PROVIDER": {
+      "description": "Selects the IEmbeddingProvider companion EmbeddingProviderEnv.fromEnv resolves at startup. Unset leaves the composition root's own provider in place, unchanged.",
+      "type": "string"
     },
     "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT": {
       "description": "Exposes the RAG citation inspection dev endpoint.",

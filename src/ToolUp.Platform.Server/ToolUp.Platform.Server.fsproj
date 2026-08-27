@@ -170,6 +170,11 @@
              Module name is `BlobStorageEnv` because `BlobStorage` is
              reserved in Core for the interface module. -->
         <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
+        <!-- Phase 671 — `EmbeddingProviderEnv.fromEnv` (env-var-driven
+             embedding-provider selection). Module name is
+             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
+             reserved for the interface module compiled above. -->
+        <Compile Include="Server\Infra\EmbeddingProviderFromEnv.fs" />
         <Compile Include="Server\SecondaryIndex.fs" />
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />

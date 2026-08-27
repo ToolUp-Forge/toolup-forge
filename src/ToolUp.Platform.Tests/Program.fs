@@ -526,6 +526,14 @@ let private registeredTests =
                 AIProviderEnvValidatorTests.modelTests
                 AIProviderProbeValidatorTests.tests
                 OidcAuthValidatorTimeoutTests.tests
+                // Phase 671 — EmbeddingProviderEnv.fromEnv mutates
+                // TOOLUP_EMBEDDING_PROVIDER with the same snapshot /
+                // restore shape. It shares no variable with the four
+                // above, but its unset-arm assertion is exactly the
+                // shape a leaked sibling `SetEnvironmentVariable`
+                // breaks, so it belongs inside the group rather than
+                // beside it.
+                EmbeddingProviderEnvTests.tests
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests

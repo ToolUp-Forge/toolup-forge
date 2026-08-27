@@ -22,6 +22,15 @@ let notifChannel, notifHealth, notifValidator =
     NotificationChannel.fromEnv logger Wiring.notificationResolvers
 let authProvider = AuthProvider.fromEnv logger ToolUp.AuthProviders.OidcAuthProvider.fromConfig
 
+// 2b. RAG only: the embedding provider, same resolver-list shape
+//     (TOOLUP_EMBEDDING_PROVIDER). The last argument is what this
+//     deployment builds when the variable is unset — so an app that
+//     never sets it behaves exactly as it did before adopting the
+//     helper, and nothing is logged.
+let embedder =
+    EmbeddingProviderEnv.fromEnv logger Wiring.embeddingResolvers (fun () ->
+        LocalEmbeddingProvider.createPersistent blobStorage)
+
 // 3. ServerConfig from env + curated overrides.
 let config =
     ServerConfig.fromEnv logger {
@@ -39,7 +48,7 @@ let aiProviderFactory = Wiring.aiProviderFactory secretStore Wiring.providerProf
 //    In your own Server.fs `main` carries [<EntryPoint>]; every
 //    *ServerApp.run returns the int exit code it needs.
 let main _ =
-    RAGServerApp.create aiProviderFactory Wiring.providerProfile (LocalEmbeddingProvider.createPersistent blobStorage)
+    RAGServerApp.create aiProviderFactory Wiring.providerProfile embedder
     |> RAGServerApp.withConfig config
     |> RAGServerApp.withAuth authProvider
     |> RAGServerApp.withLogger logger
@@ -56,7 +65,18 @@ That's typically 25–50 lines. The hand-written reference composition root pre-
 A sibling file alongside `Server.fs` carrying the deployment-specific constructions that don't belong in the SDK helpers:
 
 - **Algorithm provider singletons** — stateless app-domain implementations (`MathNetElasticityEstimator`, `LevenbergMarquardtCurveFitter`, etc.). Created once, shared across requests.
-- **Cloud-companion resolver lists** — `secretStoreResolvers`, `blobStorageResolvers`, `notificationResolvers`. Naming the cloud companions the deployment ships.
+- **Cloud-companion resolver lists** — `secretStoreResolvers`, `blobStorageResolvers`, `notificationResolvers`, and (for a RAG app) `embeddingResolvers`. Naming the companions the deployment ships, so the SDK helper can dispatch to one by name without `ToolUp.Platform.Server` depending on any of them:
+
+  ```fsharp
+  let embeddingResolvers: EmbeddingProviderEnv.EmbeddingProviderResolver list = [
+      { Name = "local"
+        Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
+      { Name = "openai"
+        Resolve = fun () -> OpenAIEmbeddingProvider.fromEnv secretStore }
+  ]
+  ```
+
+  The OpenAI embedding companion reads its model, dimensionality and batch size from `TOOLUP_EMBEDDING_MODEL` / `_DIMENSIONS` / `_BATCH_SIZE`, and its **API key from `ISecretStore`** — never from the environment. Omit a resolver and the deployment simply cannot select that provider; `TOOLUP_EMBEDDING_PROVIDER` naming one it does not ship warns and keeps the fallback.
 - **Per-module API factories** — the `xxxApi (ctx: HttpContext) : XxxApi` constructions threading scope into module-domain routines.
 - **AI provider descriptors + builders + platform bundle** — Claude/OpenAI/etc. descriptors, `AIProviderBuilder` records, the `AIPlatformProvider` bundle. `aiProviderFactory` constructed from these via `DefaultAIProviderFactory.create … PlatformOnly (Some bundle)`, plus the `IProviderProfile` store (`providerProfile`) the AI / RAG composition roots take as their second argument.
 - **`allModules` list** — every `ServerModule.create … |> ServerModule.withGuardedApi …` chain.

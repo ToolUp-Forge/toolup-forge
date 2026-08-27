@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (186 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (190 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -276,6 +276,10 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_AI_PROBE_ON_STARTUP` | bool | false | no | pending | Probes the configured AI provider during preflight, so a bad key fails at boot rather than on first use. |
 | `TOOLUP_AI_PROVIDER` | string | — | no | pending | Selects the IAIProvider companion the AI surface resolves at startup. |
 | `TOOLUP_CONVERSATION_STORE` | enum: no | no | no | yes | Disables AI conversation persistence. Enabling it requires a retentionDays value, so it must be set in ServerConfig rather than here. |
+| `TOOLUP_EMBEDDING_BATCH_SIZE` | int | 64 | no | yes | Maximum inputs per batched embedding call for the API-backed embedding companion. |
+| `TOOLUP_EMBEDDING_DIMENSIONS` | int | — | no | yes | Output dimensionality declared for the selected embedding model. Needed only for a model the companion has no native size for; a wrong value silently corrupts the vector store, so a mismatch against a known model is refused. |
+| `TOOLUP_EMBEDDING_MODEL` | string | — | no | yes | Embedding model id passed to the selected embedding-provider companion. |
+| `TOOLUP_EMBEDDING_PROVIDER` | string | — | no | yes | Selects the IEmbeddingProvider companion EmbeddingProviderEnv.fromEnv resolves at startup. Unset leaves the composition root's own provider in place, unchanged. |
 | `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` | bool | false | no | pending | Refuses to start when the vector index fails its integrity check, instead of rebuilding it. |
 
 ## Public surface & rendering
