@@ -6,12 +6,21 @@ The Platform abstracts persistent storage behind `IBlobStorage`. Default in-proc
 
 ```fsharp
 type IBlobStorage =
-    abstract Save: container: string -> objectId: string -> contents: byte[] -> Async<unit>
-    abstract Load: container: string -> objectId: string -> Async<byte[] option>
-    abstract Delete: container: string -> objectId: string -> Async<unit>
-    abstract List: container: string -> prefix: string option -> Async<string list>
-    abstract Exists: container: string -> objectId: string -> Async<bool>
+    // Writes and reads are fallible by value — Error carries a message
+    // rather than throwing, so a backend's failure mode is part of the
+    // contract rather than of its exception vocabulary.
+    abstract Upload: container: string * objectId: string * contents: byte[] -> Async<Result<string, string>>
+    abstract Download: container: string * objectId: string -> Async<Result<byte[], string>>
+    abstract DownloadRange:
+        container: string * objectId: string * offset: int64 * length: int -> Async<Result<byte[], string>>
+    abstract Delete: container: string * objectId: string -> Async<Result<unit, string>>
+    abstract Exists: container: string * objectId: string -> Async<bool>
+    abstract List: container: string * prefix: string -> Async<string list>
+    abstract GetMetadata: container: string * objectId: string -> Async<Result<BlobMetadata, string>>
 ```
+
+Blob names returned by `List` are **always** `/`-delimited, on every backend and every OS — callers
+that strip a known prefix to recover an id depend on it.
 
 Containers are tenant-scoped (`team-{teamId}`, `user-{userId}`, `session-{guid}`, `claim-{scopeId}` for share-token-bound resources, `_platform`). The container + `Persist` flag for each request fall out of the resolved `Subject` and the matching `SurfaceProfile`'s `Persistence` knob — see [`surfaces.md`](surfaces.md#persistence-routing) for the full per-subject routing table. Object IDs are arbitrary strings — usually structured paths like `objects/{objectId}/v{N}.json`.
 
@@ -60,10 +69,20 @@ Envelope format:
 
 ```fsharp
 type IBlobEncryptionKeyResolver =
-    abstract ResolveKey: keyId: string -> Async<byte[] option>
-    abstract CreateKey: keyId: string -> actorUserId: string -> Async<byte[]>
-    abstract DestroyKey: keyId: string -> actorUserId: string -> Async<unit>
+    // Write path, called on every upload: the scope's CURRENT key. Its
+    // KeyId is stamped into the envelope so the read below can recover it.
+    abstract ResolveKey: scope: StorageScope -> Async<EncryptionKey>
+    // Read path, called on every download with the KeyId out of the
+    // envelope header. Fallible, and the cases are distinguishable on
+    // purpose: KeyDestroyed (a crypto-shred, surfaced as HTTP 410 Gone) is
+    // not KeyNotFound (a configuration error) is not a transient
+    // StorageFailure.
+    abstract ResolveKeyById: keyId: string -> Async<Result<EncryptionKey, KeyResolutionError>>
 ```
+
+Key *destruction* is deliberately not on the interface — it is a capability of the resolver that
+supports it (`PerScopeKeyResolver.DestroyKey`), not a contract every resolver must honour: a
+platform-wide `SingleKeyResolver` has nothing tenant-shaped to shred.
 
 Two shipped resolvers:
 

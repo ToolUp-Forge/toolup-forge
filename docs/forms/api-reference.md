@@ -444,16 +444,28 @@ val routeBuilder : typeName: string -> methodName: string -> string
 ### `AggregationTypes` (`module ToolUp.Forms.AggregationTypes`)
 
 ```fsharp
-/// Sketch — full record lives in ToolUp.Forms.AggregationTypes.
+/// One case per field kind, each carrying its own rollup record.
+/// OpaqueAggregation is the catch-all for kinds with no meaningful
+/// summary (file uploads, nested submissions, entity refs).
 type FieldAggregation =
-    | ChoiceCounts of Map<string, int>
-    | NumericSummary of {| Mean: float; Min: float; Max: float; StdDev: float |}
-    | TextSamples of string list
+    | NumericFieldAggregation of NumericAggregation
+    | ChoiceFieldAggregation of ChoiceAggregation
+    | BoolFieldAggregation of BoolAggregation
+    | TextFieldAggregation of TextAggregation
+    | DateFieldAggregation of DateAggregation
+    | OpaqueAggregation of count: int
 
 type AggregationSummary = {
     SchemaId: FormSchemaId
-    TotalResponses: int
-    PerField: Map<string, FieldAggregation>
+    SchemaVersion: int
+    SubmissionCount: int
+    InvitedCount: int
+    ResponseRate: float option
+    Recipients: RecipientResponseStatus list
+    FieldAggregations: Map<string, FieldAggregation>
+    /// Reserved IFormSubmissionAnalyser slot, keyed by (fieldId, analyserId).
+    /// Absent means no analyser is configured; default aggregations run no NLP.
+    AnalyserOutputs: Map<string * string, AnalyserOutput>
 }
 ```
 

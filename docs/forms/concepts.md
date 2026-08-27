@@ -383,16 +383,24 @@ Three flows out of the box:
 Admins query `IFormApi.GetAggregations` to get per-question response counts + summaries:
 
 ```fsharp
-// Shape sketch — exact fields live in ToolUp.Forms.AggregationTypes.
+// One case per field kind, each carrying its own rollup record.
+// OpaqueAggregation is the catch-all for kinds with no meaningful
+// summary (file uploads, entity refs) — it carries the answered count.
 type FieldAggregation =
-    | ChoiceCounts of Map<string, int>
-    | NumericSummary of {| Mean: float; Min: float; Max: float; StdDev: float |}
-    | TextSamples of string list
+    | NumericFieldAggregation of NumericAggregation
+    | ChoiceFieldAggregation of ChoiceAggregation
+    | BoolFieldAggregation of BoolAggregation
+    | TextFieldAggregation of TextAggregation
+    | DateFieldAggregation of DateAggregation
+    | OpaqueAggregation of count: int
 
+// An excerpt — the record also carries SchemaVersion, InvitedCount,
+// Recipients and the analyser slot. See forms/api-reference.md.
 type AggregationSummary = {
     SchemaId: FormSchemaId
-    TotalResponses: int
-    PerField: Map<string, FieldAggregation>
+    SubmissionCount: int
+    ResponseRate: float option
+    FieldAggregations: Map<string, FieldAggregation>
 }
 ```
 

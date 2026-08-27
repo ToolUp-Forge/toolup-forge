@@ -198,12 +198,11 @@ type ConfigFieldSchema = {
     Required: bool
 }
 
-type ModuleConfigSchema = {
-    ModuleKey: string
-    DisplayName: string
-    Description: string option
-    Fields: ConfigFieldSchema list
-}
+// The module key is NOT on the schema: a schema is attached to a module
+// by the registration that carries it (`ServerModule.withConfig`), so
+// duplicating the key here would let the two disagree. An empty `Fields`
+// is valid and means "no team-editable config".
+type ModuleConfigSchema = { Fields: ConfigFieldSchema list }
 ```
 
 Values persist as JSON-encoded strings (`"true"`, `42`, `"hello"`). That choice lets the store stay schema-agnostic; validation happens at the handler boundary in `ConfigHandler.fs` where both the schema and the incoming payload are in scope.

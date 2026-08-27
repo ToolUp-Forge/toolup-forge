@@ -8,11 +8,31 @@ Identity-only interface:
 
 ```fsharp skip=signature
 type IAuthProvider =
-    abstract GetUser: HttpContext -> Async<AuthenticatedUser option>
-    abstract ValidateRequest: HttpContext -> Async<Result<unit, AuthError>>
+    abstract GetUser: ctx: RequestContext -> Async<AuthenticatedUser>
+    abstract ValidateRequest: ctx: RequestContext -> Async<Result<AuthenticatedUser, string>>
+    /// Whether the identity this provider returns was verified by
+    /// cryptography (a signed token) rather than trusted from the wire.
+    /// `HeaderAuthProvider` reports false; the OIDC providers report true.
+    abstract IsCryptographicallyVerified: bool
 ```
 
-`GetUser` returns the resolved identity (or `None` for anonymous requests reaching a deployment whose `Surfaces` includes an `Anonymous` profile). `ValidateRequest` runs cheap pre-checks (token signature, expiry, issuer / audience) and returns `Error` to short-circuit the pipeline. `IAuthProvider` resolves authenticated identity only — the per-request `Subject` (`AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) is the SDK's job and falls out of `ISubjectResolver` against the auth provider's result. See [`surfaces.md`](surfaces.md#the-subject-model) for the subject model and the request-resolution flow.
+The parameter is `RequestContext`, not ASP.NET's `HttpContext`: the interface lives in
+`ToolUp.Platform.Core` and must stay free of a server-framework dependency, so the SDK narrows the
+request to the fields a provider actually reads before calling.
+
+The two read methods differ in strictness, not in subject. `GetUser` is the **lenient** contract: it
+returns the resolved identity, or the `anonymous` user when no credentials are present — which is why
+it returns `AuthenticatedUser` rather than an option, and why a deployment whose `Surfaces` includes
+an `Anonymous` profile needs no special case. `ValidateRequest` is the **strict** one: it runs the
+pre-checks (token signature, expiry, issuer / audience) and returns `Error` with a reason on missing,
+invalid, or expired credentials, which is what an authenticated scope resolver uses to short-circuit
+the pipeline.
+
+`IsCryptographicallyVerified` has no default, deliberately: identity verification is a security
+property no provider should acquire by omission. The startup auth-mode validator reads it — not the
+concrete type — and refuses to boot an auth-requiring deployment behind a provider reporting `false`.
+
+`IAuthProvider` resolves authenticated identity only — the per-request `Subject` (`AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) is the SDK's job and falls out of `ISubjectResolver` against the auth provider's result. See [`surfaces.md`](surfaces.md#the-subject-model) for the subject model and the request-resolution flow.
 
 `AuthenticatedUser` carries:
 - `UserId: string` — stable identity (typically the OIDC `sub` claim or equivalent)
