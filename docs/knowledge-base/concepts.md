@@ -79,6 +79,65 @@ app
 
 If you wire an HTTP endpoint that serves `OriginalDocument.Content` (a download / preview link), **set `Content-Disposition: attachment`** for inline-renderable types and pin the `Content-Type` from `OriginalDocument.ContentType` rather than letting the browser sniff. KB accepts arbitrary user content; csv / md / html / svg originals carry active markup and, served inline, execute in the deployment's origin — a stored-XSS vector.
 
+### Opening the original at the citation (the preview seam)
+
+"Fetch the original" and "where in the original did this answer come from" are two different questions, answered by two different pieces. The resolver returns bytes; a citation carries a `SourceLocator`. **`IOriginalPreviewSeam` is the join** — given a document and a citation's locator it returns a `PreviewTarget`: a content reference plus a neutral anchor.
+
+It is **opt-in and off the retrieval path**. An app that never composes a seam registers nothing and runs the unchanged original-retrieval code. `GetOriginalDocument` is not affected either way.
+
+```fsharp
+open KnowledgeBase.ServerOriginalPreviewSeam
+
+// Inline delivery — the bytes ride the response.
+let withInlinePreviews (app: ServerApp) : ServerApp =
+    app
+    |> withOriginalPreviewSeam (createDefault (KnowledgeBase.ServerOriginalSourceResolver.createDefault ()))
+
+// Byte-light delivery — a time-bound URL minted from the composed
+// IBlobStorage. No signer to write.
+let withBytelightPreviews (app: ServerApp) : ServerApp =
+    app |> withSignedOriginalUrls PreviewSignedUrlOptions.defaults
+```
+
+**Scope resolution happens before anything is minted.** Go through `previewOriginal`, which resolves `docId` within the caller's container and refuses an id from another scope with exactly the `NotInScope` an unknown id gets — so the surface is not an existence oracle, and a signed URL (a bearer token: whoever holds it can read the object until it expires) is never issued for a document the caller cannot see.
+
+#### The anchor contract
+
+`PreviewTarget.Anchor` tells your viewer where to open and what to highlight. The SDK ships **no viewer** — which PDF / PPTX / spreadsheet renderer to use is your choice (GP 1) — so the anchor is deliberately renderer-neutral. What each case means:
+
+| `PreviewAnchor` case | Applies to | What a viewer should do |
+|---|---|---|
+| `Page number` | PDF | Scroll to that **1-based** page. |
+| `Slide number` | PPTX | Open that **1-based** slide. |
+| `Sheet name` | XLSX | Activate the worksheet with that name. |
+| `Section heading` | DOCX, MD | Find the heading with that text and scroll to it. |
+| `Rows (startRow, endRow)` | CSV / TSV | Highlight the **inclusive, 1-based** source-row range. |
+| `CharRange (startOffset, endOffset)` | TXT and other text-shaped originals | Highlight the **half-open** `[start, end)` document-relative character span. |
+| `WholeDocument` | any | Open at the top and highlight nothing. |
+
+**`WholeDocument` is a real answer, not a fallback to fix.** A citation with no locator projects to it rather than to a guessed page 1 (GP 9) — so does a degenerate character span. Render it as "we know which document, not where inside it"; do not substitute a default location.
+
+The projection is `PreviewAnchor.ofLocator`, and it is total: every `SourceLocator` case has an anchor. A viewer must still handle every case, including ones the format in front of it cannot honour — a `Section` anchor on a PDF, say. Degrade to opening the document; never throw.
+
+#### Two delivery modes
+
+`PreviewTarget.Content` is either mode, and **`FileName` / `ContentType` / `SizeBytes` sit at the top level of the target in both** — so a viewer picks a renderer without downloading anything first.
+
+| Mode | `Content` | When |
+|---|---|---|
+| **Inline** | `Inline of OriginalDocument` — the bytes, in the response | The default (`createDefault`). Simple, and the only option on a backend that cannot mint URLs. |
+| **Signed URL** | `SignedUrl of url * expiresAt` — a time-bound link, bytes never touch the response | `withSignedOriginalUrls`, or `createSignedUrl` with your own `IPreviewUrlSigner`. For large originals, where inlining a 200 MB PDF is the cost you are trying to avoid. |
+
+Signed delivery is byte-light on **both** sides: existence and metadata are established through `IOriginalSourceResolver.ResolveMetadata` (a properties read), not by downloading the original. If you supply a custom resolver, implement that member — or delegate it to `OriginalSourceResolver.locationViaResolve`, which is correct but downloads, and is honest about it.
+
+Three outcomes are worth knowing, and the middle one is the point:
+
+- **The backend signed** → `SignedUrl`; the bytes never reach the app tier.
+- **The backend cannot sign** → **inline delivery, silently.** This is the local-filesystem answer, and the encrypted-at-rest answer too: `EncryptedBlobStorage` wraps the backend without the signing capability, so nobody is ever handed a URL to ciphertext. Structural, not a rule anyone has to remember — which is what makes `withSignedOriginalUrls` safe to compose on any deployment.
+- **Signing failed operationally** → `OriginalRetrievalFailed`, *not* a fallback. A deployment that chose to keep megabytes out of its responses does not want them silently reinstated by a transient storage fault.
+
+Whichever mode you serve, the "Serving originals safely" rules above still apply to the bytes.
+
 ## Multi-format extractors
 
 Shipped extractors:
