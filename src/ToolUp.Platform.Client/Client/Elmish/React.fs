@@ -129,7 +129,7 @@ module Program =
         withReactImpl placeholderId AppMode.Batched program
 
     /// Hydrate a server-rendered React tree into the placeholder rather than
-    /// rendering from scratch. Use when `ToolUp.Platform.Client.Bootstrap.PrerenderExport`
+    /// rendering from scratch. Use when `ToolUp.Platform.Bootstrap.PrerenderExport`
     /// has emitted static HTML for this route.
     let withReactHydrate (placeholderId: string) (program: Program<'arg, 'model, 'msg, ReactElement>) =
         withReactImpl placeholderId AppMode.Hydrate program

@@ -59,7 +59,7 @@ let private EntityObjectIdSeparator = "__"
 [<Literal>]
 let private EntityIndexPrefix = "entities/_indexes"
 
-/// `IDataObjectStore.parseObjectId` reads up to the first `/` — so the
+/// `DataObjectStore.parseObjectId` reads up to the first `/` — so the
 /// objectId can't contain a slash. Colons are illegal in Windows
 /// filenames. Double-underscore is the safest cross-platform separator
 /// (matches the existing IResultStore convention `{moduleName}__{resultType}`).

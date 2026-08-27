@@ -92,7 +92,7 @@ type Trigger =
     | CronTrigger of expression: string
     /// Fires whenever a `ModuleEvent` with this `EventType` is
     /// written to `IEventStore` in the same scope. The handler
-    /// receives the originating event's `Id` in `JobContext.TriggerInfo`.
+    /// receives the originating event's `Id` in `JobContext.TriggerSource`.
     | OnEvent of eventType: string
     /// Never fires automatically. The job sits in the store until
     /// an admin or another module calls `IJobScheduler.TriggerOnce`
@@ -161,7 +161,7 @@ type JobRunStatus =
     | Running
     /// Handler returned `JobResult.Success`. Terminal.
     | Succeeded
-    /// Handler returned `JobResult.Failure` or threw, AND retries
+    /// Handler returned `JobResult.TransientFailure` or threw, AND retries
     /// remain. Triggers another dispatch after backoff.
     | Failed
     /// Handler exhausted `RetryPolicy.MaxAttempts` consecutive

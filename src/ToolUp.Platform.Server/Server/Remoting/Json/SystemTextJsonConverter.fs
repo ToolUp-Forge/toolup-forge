@@ -341,8 +341,7 @@ type FSharpUnionConverter<'T>() =
 
 /// Detect Fable.Core.PojoAttribute / StringEnumAttribute on a type without
 /// requiring a reference to Fable.Core (matches by attribute FullName, same
-/// approach as the Newtonsoft path's `getUnionKind` at
-/// FableConverter.fs:156-163).
+/// approach as the Newtonsoft path's `getUnionKind`).
 module private UnionAttributes =
     let hasPojoAttribute (t: Type) =
         t.GetCustomAttributes(false)
@@ -374,7 +373,7 @@ type FSharpUnionConverterFactory() =
 // F# `[<Fable.Core.Pojo>]` DU converter (Kind.PojoDU)
 // =============================================================================
 //
-// Wire format (matches FableJsonConverter.fs:425-434 byte-for-byte):
+// Wire format (matches the Fable JSON converter byte-for-byte):
 //
 //   {"type": "<CaseName>", "<Field1>": <v1>, "<Field2>": <v2>, ...}
 //
@@ -452,7 +451,7 @@ type FSharpPojoDUConverterFactory() =
 // F# `[<Fable.Core.StringEnum>]` DU converter (Kind.StringEnum)
 // =============================================================================
 //
-// Wire format (matches FableJsonConverter.fs:444-450 byte-for-byte):
+// Wire format (matches the Fable JSON converter byte-for-byte):
 //
 //   "<caseName>"   — default: case name with first char lowercased
 //   "<compiled>"   — if the case has [<CompiledName "...">], that override

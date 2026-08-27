@@ -45,7 +45,7 @@ open KnowledgeBase.ServerIndexStorage
 // (with full extractor wiring) is a follow-up phase.
 //
 // Containers to scan: the consumer enumerates them. Typical sources:
-// `ITeamStore.ListAll` for team containers, plus the well-known platform
+// `ITeamStore.ListTeams` for team containers, plus the well-known platform
 // (`_platform`) / deployment (`_deployment`) containers if the consumer
 // uses them. The scan is idempotent — once-stuck documents that have
 // since been re-uploaded carry a fresh non-Failed status and are

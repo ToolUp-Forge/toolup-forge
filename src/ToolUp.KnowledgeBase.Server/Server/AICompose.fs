@@ -165,8 +165,8 @@ let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = a
                     |}
             | Some doc ->
                 // Mirrors KB's internal storage convention from
-                // src/ToolUp.KnowledgeBase/Server/Api/Documents.fs:35
-                // and src/ToolUp.KnowledgeBase/Server/Api/Narrative.fs:113.
+                // `Documents.fs` and `Narrative.fs` under
+                // `src/ToolUp.KnowledgeBase.Server/Server/Api/`.
                 let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
                 let! result = storage.Download(scope.Container, rawBlobName)
 

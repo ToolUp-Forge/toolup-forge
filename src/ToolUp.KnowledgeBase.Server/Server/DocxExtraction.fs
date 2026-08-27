@@ -30,7 +30,7 @@ type DocxExtractionMode =
 
 // Compose-time write-once flag, read per upload. Static mutable is
 // the same sanctioned shape as the KB ingestion `statusCache` and
-// the `NarrativeCommit.install` registration point: a deployment
+// the KB narrative-commit handler registration point: a deployment
 // calls the opt-in once during composition, before the server
 // accepts uploads; it is not a per-request toggle.
 let mutable private mode = DocxExtractionMode.Flat

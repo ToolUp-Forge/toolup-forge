@@ -17,7 +17,7 @@ open ToolUp.Platform
 //     against the `toolup.audit.write_failures_total` metric
 //     (Phase 114), and swallowed — audit emission must never fail the
 //     primary operation. Same idiom as the existing audit emission in
-//     `WebhookApiHandler.emitAudit` (`WebhookApiHandler.fs:139`).
+//     `WebhookApiHandler.emitAudit`.
 //
 //   * `GetAuditTrail` calls `IEventStore.ReadBySource` (filtered
 //     to the audit module by construction), deserialises each
@@ -82,7 +82,7 @@ module AuditMetrics =
 // single source of truth the three formerly-hand-maintained mirrors all
 // consume:
 //
-//   * `serialiseAuditEvent` (the write path — was `EventStoreAuditLog.serialise`)
+//   * `serialiseAuditEvent` (the write path — was EventStoreAuditLog.serialise)
 //   * `decodeAuditEvent` (the `GetAuditTrail` read path)
 //   * `AuditReplicator`'s batch decode (was a 21-case inline match that
 //     dropped 59 of ~80 event types into a silent `| _ -> None`)

@@ -114,7 +114,7 @@ type Msg =
 // ─── API proxy ───────────────────────────────────────────────────────
 
 // Header freshness is the CsrfClient request-guard's job — see
-// WebhookAdminUI.fs:73. `ModuleVisibilityApi.routeBuilder` is the default
+// `WebhookAdminUI`. `ModuleVisibilityApi.routeBuilder` is the default
 // `/api/{type}/{method}` shape, so no override is needed.
 let private visibilityApi: IModuleVisibilityApi =
     Api.makeProxy<IModuleVisibilityApi> (customOptions = UserSession.withRequestHeaders)

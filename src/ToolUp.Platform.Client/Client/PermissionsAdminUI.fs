@@ -166,7 +166,7 @@ type Msg =
 
 // ─── API proxies ─────────────────────────────────────────────────────
 
-// Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + SDK.Client.fs installRequestGuard.
+// Header freshness is the CsrfClient request-guard's job — see `UserSession.withRequestHeaders` + `CsrfClient.installRequestGuard`.
 let private teamApi: TeamApi =
     Api.makeProxy<TeamApi> (customOptions = UserSession.withRequestHeaders)
 

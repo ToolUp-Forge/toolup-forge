@@ -106,7 +106,7 @@ let private shippedSourceFiles (root: string) =
 // those reads — which would have made the sweep look like it had
 // migrated four keys when it had migrated twenty.
 
-/// `Names.foo` → `TOOLUP_FOO`, parsed from the registry source.
+/// Names.foo → `TOOLUP_FOO`, parsed from the registry source.
 let private bindingToVar (root: string) =
     let registrySource =
         Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "Types", "ConfigKeyDescriptor.fs")
@@ -192,8 +192,8 @@ let private globalAliases =
                  Map.add alias (Set.add binding existing) acc)
              Map.empty)
 
-/// Resolve an expression appearing in argument position — `Names.foo`,
-/// `ConfigKeys.Names.foo`, a fully-qualified `ToolUp.Platform.ConfigKeys
+/// Resolve an expression appearing in argument position — Names.foo,
+/// ConfigKeys.Names.foo, a fully-qualified `ToolUp.Platform.ConfigKeys
 /// .Names.foo`, a bare alias, or a type-qualified one
 /// (`OidcIssuerCspContributor.EnvVar`) — to its registry key.
 let private resolveKeyExpression
@@ -461,7 +461,7 @@ let tests =
 
             let region = text.Substring regionStart
 
-            // `Names.foo` → the literal it binds, parsed from the registry
+            // Names.foo → the literal it binds, parsed from the registry
             // source (the same parse the arm above uses).
             let bindingToVar = bindingToVar root
 

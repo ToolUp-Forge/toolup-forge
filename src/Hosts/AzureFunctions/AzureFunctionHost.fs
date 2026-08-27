@@ -52,7 +52,7 @@ open ToolUp.Platform
 //            .Build()
 //            .Run()
 //
-//    (`ServerApp.composeOnly` is a hypothetical helper that returns
+//    (ServerApp.composeOnly is a hypothetical helper that returns
 //    `IServerHost` without calling `RunBlocking()`. Until that helper
 //    lands as a top-level pattern, consumers can cache the
 //    `IServerHost` returned by `compose` directly via the low-level

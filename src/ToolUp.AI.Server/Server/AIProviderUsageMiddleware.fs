@@ -251,7 +251,7 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
 
 // ─── DI composition helper ───────────────────────────────────────
 //
-// Both `AICompose.composeAI` and `RAGCompose.composeWithRAG` need the
+// Both `AICompose.composeAI` and `RAGCompose.composeRAG` need the
 // same Metering+Quota wrap on their `IAIProviderFactory` registration.
 // Previously AICompose wrapped inline while RAGCompose registered the
 // raw factory — RAG-using deployments silently bypassed both

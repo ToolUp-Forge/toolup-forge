@@ -12,7 +12,7 @@ byte-identical. Nothing is forced on any consumer.
 
 ## Prerequisites
 
-- `ServerConfig.EntityStore = EnabledEntityStore` (`ServerApp.withEntityStore`).
+- `ServerConfig.EntityStore = EnabledEntityStore` — a config flag, not a builder step.
 - An `IGraphStore` in DI — the in-memory default
   (`GraphStore = InMemoryGraphStore`) suffices for dev; an engine companion
   (Neo4j / AGE) works unchanged for production.
@@ -32,8 +32,7 @@ byte-identical. Nothing is forced on any consumer.
 
 ```fsharp
 let app =
-    ServerApp.create "my-app"
-    |> ServerApp.withEntityStore
+    ServerApp.create "my-app"                   // with EntityStore = EnabledEntityStore on the config
     |> ServerApp.withEntity bookRegistration
     |> ServerApp.withEntity authorRegistration
     |> ServerApp.withEntityGraphProjection      // ← flips EntityGraphProjection = Enabled

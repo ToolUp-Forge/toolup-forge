@@ -360,7 +360,7 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
 //
 // Pure function: takes no IO. The handler resolves the inputs and
 // applies the result. Same shape is reused by the symmetric guard in
-// `AIAssistantHandler.SubmitMessage`.
+// `AIAssistantApi.SubmitMessage`.
 
 let checkOwnership (existing: ConversationMessage list) (callerUserId: string) : Result<unit, string> =
     match existing with

@@ -18,7 +18,7 @@ open ToolUp.AI
 // dispatch). forge stays free of orchestration imports.
 //
 // Sanctioned mutable global — same precedent as
-// `ClientToolRuntime.registry` and `NotificationClient.handlers`.
+// `ClientToolRuntime.registry` and `NotificationClient.state`.
 
 /// Outcome the bridge surfaces to the chat-send call sites.
 /// Carries everything the call site needs to short-circuit the
@@ -41,16 +41,16 @@ type FastPathRequest = {
 
 // Per-tab resolver cache, populated once at boot by
 // `AIClientConfig.run` (and by extension `Client.run` via the AI
-// wrapper) from `AIClientConfig.FastPathResolver`. A downstream
+// wrapper) through `FastPathBridge.setResolver`. A downstream
 // fast-path companion exports a `FastPathRequest -> ResolveOutcome`
-// value; consumers add it to `AIClientConfig.FastPathResolver` to
+// value; consumers install it with `FastPathBridge.setResolver` to
 // enable fast-path resolution. `None` = no resolver wired (the
 // agent loop runs unchanged). Sole writer is the AI-tier boot path;
 // downstream companions never touch this directly.
 let mutable private resolver: (FastPathRequest -> ResolveOutcome) option = None
 
-/// Called once by `AIClientConfig.run` with the value from
-/// `AIClientConfig.FastPathResolver`. Idempotent re-installs are
+/// Called once by `AIClientConfig.run` with the resolver value a
+/// consumer supplied. Idempotent re-installs are
 /// supported but in practice only happen if a test harness re-runs
 /// the boot sequence.
 let setResolver (r: (FastPathRequest -> ResolveOutcome) option) : unit = resolver <- r

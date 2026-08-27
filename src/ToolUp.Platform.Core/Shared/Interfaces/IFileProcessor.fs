@@ -49,8 +49,8 @@ type DataType = {
 /// Constants + helpers for the Phase 10a schema-evolution fields on
 /// `DataType`. A module that has not evolved its shape writes
 /// `SchemaVersion = DataTypes.initialSchemaVersion` and
-/// `Migrations = []`; `DataTypes.unversioned` is the same pair as a
-/// single value for registration sites that would otherwise repeat it.
+/// `Migrations = []`; both defaults are spelled out at each
+/// registration site rather than hidden behind a combined helper.
 module DataTypes =
 
     /// The version every data type starts at, and the version an

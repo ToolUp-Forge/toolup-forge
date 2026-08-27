@@ -45,7 +45,7 @@ type RunRow = {
 
 /// Run one query against the pipeline at the configured TopK and capture
 /// rank + latency. Replicates the eval project's private `runQuery` shape
-/// (RetrievalEval.fs:35) but parameterised by TopK — the eval helper
+/// (`RetrievalEval.fs`) but parameterised by TopK — the eval helper
 /// hard-codes 10, which would cap `Recall@100` at 10 and make the metric
 /// useless for benchmarks.
 let private runQuery (pipeline: IRetrievalPipeline) (topK: int) (q: LabelledQuery) : Async<QueryResult> = async {

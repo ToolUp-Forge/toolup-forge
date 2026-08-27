@@ -140,7 +140,7 @@ module Submission =
     let entityType = "Submission"
 
     /// Index name constants for predicate queries. Match the
-    /// declarations registered with `IEntityStore.withIndex` in
+    /// declarations registered with `EntityRegistration.withIndex` in
     /// `EntityRegistrations.fs`.
     [<Literal>]
     let indexFormId = "FormId"

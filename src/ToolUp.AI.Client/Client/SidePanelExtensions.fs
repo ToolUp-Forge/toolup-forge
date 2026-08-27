@@ -17,7 +17,7 @@ open Feliz
 // `Html.none` once its companion's status flips to a paused phase).
 //
 // Sanctioned mutable global — same precedent as
-// `ClientToolRuntime.registry` and `NotificationClient.handlers`.
+// `ClientToolRuntime.registry` and `NotificationClient.state`.
 // Per-tab singleton with effectively-final lifetime: registrations
 // happen once at module load, the list is read on every render of
 // the streaming-state toolbar.

@@ -367,7 +367,7 @@ let private staticJwtTests =
 // public half. No real OIDC issuer, no Kestrel.
 //
 // Each fixture uses GUID-suffixed URLs so the module-level JWKS /
-// discovery caches in `OidcAuthProvider.Jwks` don't bleed state
+// discovery caches in `OidcAuthProvider.Jwks.fs` don't bleed state
 // across tests.
 
 module private OidcFixture =

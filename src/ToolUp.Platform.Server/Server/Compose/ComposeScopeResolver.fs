@@ -28,7 +28,7 @@ open ToolUp.Platform.SurfaceEnforcement
 ///     `AuthenticatedUser` surface's `Persistence` chooses
 ///     `AuthenticatedEphemeralScopeResolver` / `AuthenticatedScopeResolver`;
 ///     otherwise `AnonymousScopeResolver`. Byte-identical mapping to
-///     the retiring `ServerConfig.legacyMode` 5-arm dispatch for every
+///     the retiring ServerConfig.legacyMode 5-arm dispatch for every
 ///     single-surface deployment.
 ///   - `ISubjectResolver` — `DefaultSubjectResolver` over
 ///     `config.Surfaces`. Post-Phase-66-Stream-A.2 the canonical shape

@@ -7,7 +7,7 @@ open ToolUp.Platform.ConfigValidation
 // ─── Gap #4 — OIDC config completeness (cascading-error fix) ────────
 //
 // When `TOOLUP_AUTH_MODE=oidc` but `TOOLUP_OIDC_ISSUER` is unset, the
-// composition root in `ToolUpApp-Server/Server.fs:132-159` logs a Warn
+// consumer's composition root logs a Warn
 // "TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_ISSUER not set, falling back
 // to HeaderAuthProvider" and returns `HeaderAuthProvider`. The
 // HeaderAuthProviderModeValidator then refuses startup because

@@ -14,7 +14,7 @@ module ToolUp.Platform.RegisteredModules
 // invented.
 //
 // Sanctioned mutable global — same precedent as
-// `NavigationRequest.listeners` and `NotificationClient.handlers`.
+// `NavigationRequest.listeners` and `NotificationClient.state`.
 // Per-tab singleton; the shell's `init` calls `publish` once with
 // the full module list, and companions read via `snapshot ()` from
 // the moment any navigation tool fires.

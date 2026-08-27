@@ -16,7 +16,7 @@ let private log = Logger.forCategory "client.navigation"
 // and translates each request into a `ModuleSelected` dispatch.
 //
 // Sanctioned mutable global — same precedent as
-// `ModuleStateObserver`, `NotificationClient.handlers`. Per-tab
+// `ModuleStateObserver`, `NotificationClient.state`. Per-tab
 // singleton; subscribers register at Client startup and never
 // unsubscribe (the shell's subscription lives for the page's
 // lifetime).

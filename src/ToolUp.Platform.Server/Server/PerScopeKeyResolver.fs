@@ -40,7 +40,7 @@ open ToolUp.Platform.BlobEncryption
 //   `ISecretStore`. Same backing store as `SingleKeyResolver`'s master
 //   key; one slot per scope.
 // - `IMemoryCache` with 5-minute sliding expiration mirrors the
-//   pattern in `TeamScopeResolver` (`StorageScopeResolver.fs:142`).
+//   pattern in `TeamScopeResolver` (`StorageScopeResolver.fs`).
 //   Cache eviction on `DestroyKey` via `cache.Remove`.
 // - Per-`scopeId` `SemaphoreSlim` is overkill — `IMemoryCache` plus
 //   "auto-create if absent" is correct under concurrent first-call

@@ -3,7 +3,7 @@ namespace ToolUp.Platform.Usage
 open System
 
 /// Per-scope (per-team) compute quota policy. Decorators wrapping
-/// `IAIProvider.SendMessage`, `IJobScheduler.SubmitNow`, and
+/// `IAIProvider.SendMessage`, `IJobScheduler.TriggerOnce`, and
 /// `IEmbeddingProvider.GenerateEmbedding` consult this before the
 /// actual call, returning a typed `QuotaBreached` error rather than
 /// throwing. Phase 9 already ships `DefaultTeamStorageQuotaBytes` +

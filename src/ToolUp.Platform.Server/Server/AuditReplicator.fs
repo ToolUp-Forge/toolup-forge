@@ -13,7 +13,7 @@ open ToolUp.Platform.BlobStorage
 //
 // `AuditReplicator` is the SDK-default `BackgroundService` that mirrors
 // every event written under `SourceModule = "_platform.audit"` to one
-// or more `IAuditSink`s. It runs only when `ServerConfig.AuditSinks`
+// or more `IAuditSink`s. It runs only when `ServerApp.AuditSinks`
 // is non-empty.
 //
 // Two pumps feed the same per-batch delivery code:
@@ -174,7 +174,7 @@ let private SourceModule = "_platform.audit-replicator"
 type private DeliveryItem = { Event: ModuleEvent }
 
 /// The replicator. Constructed in `compose` only when
-/// `ServerConfig.AuditSinks` is non-empty. Owns one bounded channel per
+/// `ServerApp.AuditSinks` is non-empty. Owns one bounded channel per
 /// sink (live-hook ingress) plus one shared catch-up timer.
 type AuditReplicator
     (

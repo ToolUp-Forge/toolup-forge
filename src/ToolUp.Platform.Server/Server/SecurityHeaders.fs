@@ -12,7 +12,7 @@ module ToolUp.Platform.SecurityHeaders
 //
 // Operators wanting the SDK's recommended baseline assign this map
 // to `ServerConfig.SecurityHeaders` (or via a future
-// `ServerApp.withSecurityHeaders` helper). Per-route overrides
+// ServerApp.withSecurityHeaders helper). Per-route overrides
 // continue to work — the middleware skips keys already present on
 // the response, so a handler that writes its own CSP wins.
 

@@ -21,7 +21,7 @@ open Fable.Core
 // Vite-defined constants substituted (the emit-output uses the literal
 // `__TOOLUP_MODULE__` token at runtime), consumers will need to keep
 // their own three `[<Emit>]` declarations and pass the resolved values
-// to `ClientConfig.fromBundleConstantValues`. The `MinimalApp` sample
+// to `ClientConfigDefaults.fromBundleConstantValues`. The `MinimalApp` sample
 // (`toolup-forge/samples/MinimalApp/`) verifies this empirically at
 // the end of Phase 11.G.
 

@@ -364,7 +364,7 @@ let runGuardedWith
 ///
 /// Phase 305 — `runGuardedRequest` carries the provisioning `request`
 /// through the same per-scope-serialised path (this is the provisioning
-/// entry point `PlatformTenantApiHandler.ProvisionTenant` calls);
+/// entry point `ITenantFleet.ProvisionTenant` calls);
 /// `runGuarded` delegates with `None`.
 let runGuardedRequest
     (emitAudit: string -> AuditEvent -> Async<unit>)

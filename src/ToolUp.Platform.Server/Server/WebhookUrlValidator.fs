@@ -16,7 +16,7 @@ open System.Net.Sockets
 // the SSRF vehicle.
 //
 // This module is the registration-time URL guard. Called from
-// `WebhookApiHandler.CreateSubscription` BEFORE the URL hits the
+// `IWebhookRegistry.CreateSubscription` BEFORE the URL hits the
 // registry. Refusal returns a clear `Error string` to the registrar
 // (HTTP 400 via Fable.Remoting).
 //

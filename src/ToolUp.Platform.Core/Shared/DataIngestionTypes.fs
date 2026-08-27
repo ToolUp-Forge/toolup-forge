@@ -217,7 +217,7 @@ type IngestionRun = {
     Error: IngestionError option
     /// Optional caller-supplied `JobId` if the ingestion was
     /// triggered through `IJobScheduler.TriggerOnce` or a scheduled
-    /// `Trigger.Cron`. Lets admin UIs cross-link from a
+    /// `Trigger.CronTrigger`. Lets admin UIs cross-link from a
     /// job's history to the matching ingestion run.
     JobId: Guid option
 }

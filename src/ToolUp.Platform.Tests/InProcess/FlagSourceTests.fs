@@ -51,9 +51,9 @@ let private ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
 
 // A minimal OpenFeature provider that reports the built-in No-op
 // provider's metadata name ("No-op Provider") and resolves every flag to
-// its supplied default. Registering it via `Api.Instance.SetProviderAsync`
+// its supplied default. Registering it via `OpenFeature.Api.Instance.SetProviderAsync`
 // reproduces the deterministic "composed but not wired" state the Health
-// probe + Validator key off — WITHOUT `Api.Instance.ShutdownAsync ()`,
+// probe + Validator key off — WITHOUT `OpenFeature.Api.Instance.ShutdownAsync ()`,
 // which is one-shot per process: it completes the singleton's internal
 // event channel, so a second call (the other unwired test) throws
 // `ChannelClosedException`. See `setUnwired`.
@@ -78,10 +78,10 @@ type private NoOpNamedProvider() =
     override _.ResolveStructureValueAsync(flagKey, defaultValue, _ctx, _ct) =
         Task.FromResult(OpenFeature.Model.ResolutionDetails<OpenFeature.Model.Value>(flagKey, defaultValue))
 
-/// Reset the process-wide `Api.Instance` to the deterministic "composed
+/// Reset the process-wide `OpenFeature.Api.Instance` to the deterministic "composed
 /// but not wired" state (metadata name "No-op Provider") by registering
 /// `NoOpNamedProvider`. Channel-safe and repeatable — unlike
-/// `Api.Instance.ShutdownAsync ()`, which can only run once per process.
+/// `OpenFeature.Api.Instance.ShutdownAsync ()`, which can only run once per process.
 let private setUnwired () =
     Api.Instance.SetProviderAsync(NoOpNamedProvider()) |> Async.AwaitTask
 
@@ -148,18 +148,18 @@ let tests =
             Expect.equal v "dark" "source variant resolved over declared default"
         }
 
-        // ─── Process-global `Api.Instance` cases (serialized) ───────────
-        // The cases below mutate the process-wide OpenFeature `Api.Instance`
+        // ─── Process-global `OpenFeature.Api.Instance` cases (serialized) ───────────
+        // The cases below mutate the process-wide OpenFeature `OpenFeature.Api.Instance`
         // singleton, so they must not run concurrently with each other —
         // otherwise one case's `SetProviderAsync` races another's metadata
         // read. `testSequencedGroup` serialises this sub-list against itself
         // while staying parallel to the rest of the pack. Each case fully
-        // establishes its own `Api.Instance` state at the top, so their
+        // establishes its own `OpenFeature.Api.Instance` state at the top, so their
         // relative order does not matter.
         //
         // The "composed but not wired" cases reach that state via
         // `setUnwired ()` (registers a No-op-named provider) rather than the
-        // one-shot `Api.Instance.ShutdownAsync ()`, which completes the
+        // one-shot `OpenFeature.Api.Instance.ShutdownAsync ()`, which completes the
         // singleton's event channel and throws `ChannelClosedException` on a
         // second call.
         testSequencedGroup "openfeature-api-instance"
@@ -180,7 +180,7 @@ let tests =
             }
 
             // ─── Phase 239 follow-on — companion health probe + preflight ─
-            // Both key off the process-wide `Api.Instance` provider metadata
+            // Both key off the process-wide `OpenFeature.Api.Instance` provider metadata
             // (the only public readiness signal in OpenFeature .NET 2.3.0).
             testCaseAsync "health probe is Degraded when no external provider is registered"
             <| async {
