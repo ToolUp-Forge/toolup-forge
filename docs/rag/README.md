@@ -51,7 +51,17 @@ open ToolUp.RAG
 
 // Each embedding-provider package exposes a top-level module; there is no
 // ToolUp.EmbeddingProviders.* namespace to open.
-let embedder = OpenAIEmbeddingProvider.create secretStore
+//
+// `EmbeddingProviderEnv.fromEnv` picks between the companions this
+// deployment ships, keyed on TOOLUP_EMBEDDING_PROVIDER. The last
+// argument is what it builds when the variable is unset — so this reads
+// exactly as `OpenAIEmbeddingProvider.create secretStore` did until an
+// operator sets the variable.
+let embedder =
+    EmbeddingProviderEnv.fromEnv logger [
+        { Name = "local"; Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
+        { Name = "openai"; Resolve = fun () -> OpenAIEmbeddingProvider.fromEnv secretStore }
+    ] (fun () -> OpenAIEmbeddingProvider.create secretStore)
 
 RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withConfig serverConfig
