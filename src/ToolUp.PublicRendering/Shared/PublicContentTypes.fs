@@ -391,3 +391,111 @@ type Redirect = {
     To: string
     StatusCode: int
 }
+
+// ─── Phase 198 — draft preview-link minting ───────────────────────────
+//
+// Phase 89 shipped the token-VALIDATING `/preview` route; these are the
+// typed request / response shapes for the other half — an authorised
+// editor MINTING a scope-bound preview link for an unpublished page. An
+// admin surface binds these records directly and never re-derives the
+// token format: the opaque token string is produced by, and only
+// meaningful to, `IShareTokenStore` (Phase 21b).
+//
+// Declines are a typed `Result` error rather than an exception or a raw
+// 500 — "previews are not enabled here" and "you may not mint" are
+// ordinary, expected answers on this surface, not faults (GP 2
+// default-deny, GP 13 opt-in).
+
+/// What an admin surface asks for when it wants a preview link. It
+/// deliberately carries NO scope id, no issuer, and no base URL: all
+/// three are derived server-side from the caller's resolved
+/// `AccessContext` and the deployment's own configuration, so a client
+/// cannot widen scope or retarget the link (GP 4 — structural, not a
+/// caller-supplied claim).
+type MintPreviewLinkRequest = {
+    /// Slug of the page to preview. May name a `Draft` / `Scheduled` /
+    /// `Archived` page — that is the point of the surface.
+    Slug: string
+    /// Requested lifetime of the link, from the moment it is minted.
+    /// Bounded by `MintPreviewLinkRequest.MaxTtl`.
+    Ttl: TimeSpan
+    /// Optional opaque recipient handle, echoed onto the token claim for
+    /// attribution (e.g. "sent to the client contact"). `None` for an
+    /// unattributed link.
+    AttributedHandle: string option
+}
+
+module MintPreviewLinkRequest =
+    /// Default lifetime when an admin surface expresses no preference —
+    /// long enough for "look at this before tomorrow's standup", short
+    /// enough that a leaked link ages out.
+    let DefaultTtl: TimeSpan = TimeSpan.FromHours 24.0
+
+    /// Upper bound on a requested lifetime. A preview link is a bypass of
+    /// the publish-visibility filter; an indefinite one is a published
+    /// page by another name. A longer TTL is a decline, never a silent
+    /// clamp — the caller asked for something this surface does not
+    /// grant, and should be told so.
+    let MaxTtl: TimeSpan = TimeSpan.FromDays 30.0
+
+    /// A request for `slug` at the default TTL, unattributed.
+    let forSlug (slug: string) : MintPreviewLinkRequest = {
+        Slug = slug
+        Ttl = DefaultTtl
+        AttributedHandle = None
+    }
+
+    /// Attribute the link to an opaque recipient handle.
+    let withAttribution (handle: string) (request: MintPreviewLinkRequest) : MintPreviewLinkRequest = {
+        request with
+            AttributedHandle = Some handle
+    }
+
+    /// Override the requested lifetime.
+    let withTtl (ttl: TimeSpan) (request: MintPreviewLinkRequest) : MintPreviewLinkRequest = { request with Ttl = ttl }
+
+/// A minted preview link. `Url` is what an editor copies; `Path` is the
+/// same target site-relative, for a surface that already knows its own
+/// origin. Both address the SAME Phase 89 `/preview` route — there is
+/// one preview-token format and one validation path.
+type PreviewLink = {
+    /// Absolute URL — `{baseUrl}/preview?token=...`.
+    Url: string
+    /// Site-relative path — `/preview?token=...`.
+    Path: string
+    /// The opaque share-token string. Exposed so an admin surface can
+    /// display / revoke by token; never parsed by a consumer.
+    Token: string
+    /// Id of the underlying share-token claim, for revocation via
+    /// `IShareTokenStore.Revoke`.
+    TokenId: string
+    /// Slug the link previews.
+    Slug: string
+    /// Authenticated identity the token was issued under.
+    IssuedBy: string
+    /// When the link stops working. After this the `/preview` route
+    /// rejects the token exactly as it rejects any expired one.
+    ExpiresAt: DateTimeOffset
+}
+
+/// Why a mint did not happen. Every case is an ordinary answer the
+/// surface is expected to render — none of them is a server fault, and
+/// none of them is a raw 500.
+[<RequireQualifiedAccess>]
+type PreviewLinkDecline =
+    /// The caller does not hold the minting role. Also the answer for an
+    /// anonymous caller, and for a share-token bearer trying to mint a
+    /// further link off the authority of the one it arrived on.
+    | Unauthorised
+    /// No `IShareTokenStore` is registered, so this deployment has no
+    /// preview surface at all — the same condition under which the
+    /// Phase 89 `/preview` route declines and 404s (GP 13).
+    | PreviewsNotEnabled
+    /// The request itself is not mintable — empty slug, non-positive TTL,
+    /// a TTL past `MintPreviewLinkRequest.MaxTtl`, or a caller with no
+    /// resolvable storage scope.
+    | InvalidRequest of reason: string
+    /// The share-token substrate refused or failed. The underlying error
+    /// is carried verbatim so a surface can distinguish an operator
+    /// problem from a caller one.
+    | MintFailed of error: ToolUp.Platform.ShareTokenError
