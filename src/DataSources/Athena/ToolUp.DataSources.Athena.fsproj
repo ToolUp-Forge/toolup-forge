@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.Athena</PackageId>
+    <AssemblyName>ToolUp.DataSources.Athena</AssemblyName>
+    <Description>AWS Athena IDataSource companion for ToolUp.Platform. Glue-catalogue introspection, start/poll/page async query execution with a connector-enforced timeout, S3 result staging that shares a bucket with ToolUp.Storage.AwsS3, and RFC 4180 CSV output. Credentials resolved per call through ISecretStore, or the AWS default credential chain.</Description>
+    <PackageTags>fsharp;sdk;data-source;ingestion;athena;aws;s3;warehouse;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AthenaDataSource.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\Common\ToolUp.DataSources.Common.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="AWSSDK.Athena" />
+    <PackageReference Include="AWSSDK.Core" />
+  </ItemGroup>
+</Project>

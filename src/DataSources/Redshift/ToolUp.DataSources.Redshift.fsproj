@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.Redshift</PackageId>
+    <AssemblyName>ToolUp.DataSources.Redshift</AssemblyName>
+    <Description>AWS Redshift IDataSource companion for ToolUp.Platform, over the Redshift Data API (no VPC route or database password needed). Provisioned clusters and Serverless workgroups; submit/poll/page async statement execution with a connector-enforced timeout; catalogue introspection via ListTables/DescribeTable; RFC 4180 CSV output. AWS credentials resolved per call through ISecretStore, or the AWS default credential chain.</Description>
+    <PackageTags>fsharp;sdk;data-source;ingestion;redshift;aws;warehouse;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="RedshiftDataSource.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\Common\ToolUp.DataSources.Common.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="AWSSDK.RedshiftDataAPIService" />
+    <PackageReference Include="AWSSDK.Core" />
+  </ItemGroup>
+</Project>

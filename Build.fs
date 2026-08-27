@@ -69,6 +69,14 @@ let config = {
             // style preservation, formula recalculation). No env gating.
             TestPack.create "ReportingDocx" "src/Reporting/Docx.Tests/ToolUp.Reporting.Docx.Tests.fsproj"
             TestPack.create "ReportingXlsx" "src/Reporting/Xlsx.Tests/ToolUp.Reporting.Xlsx.Tests.fsproj"
+            // Phase 10c — the IDataSource connector family under
+            // src/DataSources/. The pure surfaces (ConnectionScope
+            // parsing, the ISecretStore credential thunk, RFC 4180 CSV
+            // emission, per-backend catalogue SQL, identifier refusal,
+            // native-type classification) always run; each connector's
+            // remote arm is env-gated and reports Pending on a
+            // credential-free checkout.
+            TestPack.create "DataSources" "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj"
         ]
 }
 
