@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Reporting.Xlsx</PackageId>
+        <Description>ToolUp.Reporting XLSX rendering sub-companion — fills .xlsx report templates in two binding modes: {{key}} placeholder tokens in cell text, and a cell-address map ("Sheet1!B7" keys) that writes values directly into named cells of a visually-authored template, preserving each target cell's number formatting. Whole-cell numeric tokens write native numeric cells; formulas are left untouched and the workbook is marked for full recalculation on open. Implements IReportRenderer and registers through the standard RendererRegistry path.</Description>
+        <PackageTags>fsharp;sdk;server;reporting;xlsx;openxml;spreadsheetml;templates</PackageTags>
+        <!-- Phase 23 — Reporting sub-companion (the src/Reporting/<Format>/
+             directory convention). GP 1: the DocumentFormat.OpenXml vendor
+             dependency lives here only — ToolUp.Reporting.Core stays
+             dependency-free. GP 13: composing the renderer costs nothing
+             until a render is requested. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="ToolUp.Reporting.Xlsx.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="CellAddress.fs" />
+        <Compile Include="XlsxReportRenderer.fs" />
+    </ItemGroup>
+</Project>

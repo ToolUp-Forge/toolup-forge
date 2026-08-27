@@ -62,6 +62,13 @@ let config = {
             // (deliberately broken providers the pack must reject). No env
             // gating; the crypto runs in-process.
             TestPack.create "ArtefactSigning" "src/ToolUp.ArtefactSigning.Tests/ToolUp.ArtefactSigning.Tests.fsproj"
+            // Phase 23 — the Reporting DOCX / XLSX renderer sub-companions:
+            // the shared IReportRendererContract pack bound through each
+            // container format, plus format-specific fixtures (run
+            // coalescing, native-table promotion, cell-address writes,
+            // style preservation, formula recalculation). No env gating.
+            TestPack.create "ReportingDocx" "src/Reporting/Docx.Tests/ToolUp.Reporting.Docx.Tests.fsproj"
+            TestPack.create "ReportingXlsx" "src/Reporting/Xlsx.Tests/ToolUp.Reporting.Xlsx.Tests.fsproj"
         ]
 }
 
