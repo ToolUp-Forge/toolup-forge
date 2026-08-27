@@ -365,4 +365,271 @@ let tests =
                 File.Delete manifest
                 File.Delete asset
         }
+
+        // ── Phase 589 — certified-surface round-trip ──────────────────
+        //
+        // The CLI mints the certification with pure BCL crypto and its own
+        // canonical-bytes rendering; the server verifies it with
+        // `ModuleCertificationSigning.canonicalBytes`. Two independent
+        // implementations of one wire shape is exactly the drift this pins —
+        // and the surface JSON handed to the stamper on the PACK side is
+        // re-derived from the live registration on the COMPOSE side, so the
+        // hash equality asserted here spans both.
+
+        test "a CLI-minted certified surface verifies against the live module surface" {
+            let manifest = tempPath ()
+            let surfaceFile = tempPath ()
+
+            try
+                let key = RandomNumberGenerator.GetBytes 32
+
+                // Pack side: the module repo's conformance run emits the
+                // canonical projection of its own registration.
+                let packSideModule = {
+                    ServerModule.create "Sales" with
+                        RoutePrefixes = [ "/api/sales"; "/api/sales/reports" ]
+                }
+
+                File.WriteAllText(surfaceFile, ModuleSurface.certificationJson (ModuleSurface.describe packSideModule))
+
+                let code =
+                    StampCommand.command.Run [
+                        "--manifest"
+                        manifest
+                        "--module"
+                        "Sales"
+                        "--key-id"
+                        "k1"
+                        "--mac-key"
+                        Convert.ToBase64String key
+                        "--certified-surface"
+                        surfaceFile
+                    ]
+
+                Expect.equal code ExitOk "the stamp command succeeded"
+
+                match ModuleBindingManifest.loadCertifications manifest with
+                | Error e -> failtestf "loadCertifications failed: %s" e
+                | Ok map ->
+                    let certification = Map.find "Sales" map
+
+                    // Compose side: an INDEPENDENTLY-constructed registration
+                    // declaring the same surface in a different order.
+                    let composeSideModule = {
+                        ServerModule.create "Sales" with
+                            RoutePrefixes = [ "/api/sales/reports"; "/api/sales" ]
+                    }
+
+                    Expect.equal
+                        (DefaultModuleBindingVerifier.verifyCertification
+                            [ SymmetricAnchor("k1", key) ]
+                            "Sales"
+                            (ModuleSurface.describe composeSideModule)
+                            certification)
+                        Allowed
+                        "the CLI-minted certification verifies and the live surface still matches"
+            finally
+                File.Delete manifest
+                File.Delete surfaceFile
+        }
+
+        test "a CLI-minted certification refuses a drifted module, naming the facet" {
+            let manifest = tempPath ()
+            let surfaceFile = tempPath ()
+
+            try
+                let key = RandomNumberGenerator.GetBytes 32
+
+                let certified = {
+                    ServerModule.create "Sales" with
+                        RoutePrefixes = [ "/api/sales" ]
+                }
+
+                File.WriteAllText(surfaceFile, ModuleSurface.certificationJson (ModuleSurface.describe certified))
+
+                StampCommand.command.Run [
+                    "--manifest"
+                    manifest
+                    "--module"
+                    "Sales"
+                    "--key-id"
+                    "k1"
+                    "--mac-key"
+                    Convert.ToBase64String key
+                    "--certified-surface"
+                    surfaceFile
+                ]
+                |> ignore
+
+                let drifted = {
+                    ServerModule.create "Sales" with
+                        RoutePrefixes = [ "/api/sales"; "/api/sales/admin" ]
+                }
+
+                match ModuleBindingManifest.loadCertifications manifest with
+                | Error e -> failtestf "loadCertifications failed: %s" e
+                | Ok map ->
+                    match
+                        DefaultModuleBindingVerifier.verifyCertification
+                            [ SymmetricAnchor("k1", key) ]
+                            "Sales"
+                            (ModuleSurface.describe drifted)
+                            (Map.find "Sales" map)
+                    with
+                    | Allowed -> failtest "a module that gained a route since certification must be refused"
+                    | Rejected reason ->
+                        Expect.stringContains
+                            reason
+                            "route-prefix:/api/sales/admin"
+                            "the refusal names the provide added since certification"
+            finally
+                File.Delete manifest
+                File.Delete surfaceFile
+        }
+
+        test "a CLI-minted certification carries the conformance verdict into the signed bytes" {
+            let manifest = tempPath ()
+            let surfaceFile = tempPath ()
+            let verdictFile = tempPath ()
+
+            try
+                let key = RandomNumberGenerator.GetBytes 32
+
+                let m = {
+                    ServerModule.create "Sales" with
+                        RoutePrefixes = [ "/api/sales" ]
+                }
+
+                File.WriteAllText(surfaceFile, ModuleSurface.certificationJson (ModuleSurface.describe m))
+
+                File.WriteAllText(
+                    verdictFile,
+                    """{ "packVersion": "module-contract/1", "runStamp": "2026-08-27T09:00:00Z",
+                         "laws": [ { "law": "server/client id parity", "passed": true, "detail": "" },
+                                   { "law": "wire-TypeName uniqueness", "passed": true, "detail": "" } ] }"""
+                )
+
+                StampCommand.command.Run [
+                    "--manifest"
+                    manifest
+                    "--module"
+                    "Sales"
+                    "--key-id"
+                    "k1"
+                    "--mac-key"
+                    Convert.ToBase64String key
+                    "--certified-surface"
+                    surfaceFile
+                    "--conformance-verdict"
+                    verdictFile
+                ]
+                |> ignore
+
+                match ModuleBindingManifest.loadCertifications manifest with
+                | Error e -> failtestf "loadCertifications failed: %s" e
+                | Ok map ->
+                    let certification = Map.find "Sales" map
+
+                    match certification.Certified.Verdict with
+                    | None -> failtest "the verdict must round-trip through the manifest"
+                    | Some verdict ->
+                        Expect.equal verdict.PackVersion "module-contract/1" "the pack version round-trips"
+                        Expect.equal (List.length verdict.Laws) 2 "both law results round-trip"
+                        Expect.isTrue (verdict.Laws |> List.forall _.Passed) "and their results"
+
+                    Expect.equal
+                        (DefaultModuleBindingVerifier.verifyCertification
+                            [ SymmetricAnchor("k1", key) ]
+                            "Sales"
+                            (ModuleSurface.describe m)
+                            certification)
+                        Allowed
+                        "the CLI's verdict rendering matches ModuleCertificationSigning's"
+
+                    // The verdict is INSIDE the signed bytes: flipping a law
+                    // result must break the signature, not pass unnoticed.
+                    let tampered = {
+                        certification with
+                            Certified = {
+                                certification.Certified with
+                                    Verdict =
+                                        certification.Certified.Verdict
+                                        |> Option.map (fun v -> {
+                                            v with
+                                                Laws = v.Laws |> List.map (fun l -> { l with Passed = false })
+                                        })
+                            }
+                    }
+
+                    Expect.notEqual
+                        (DefaultModuleBindingVerifier.verifyCertification
+                            [ SymmetricAnchor("k1", key) ]
+                            "Sales"
+                            (ModuleSurface.describe m)
+                            tampered)
+                        Allowed
+                        "a flipped law result must fail closed"
+            finally
+                File.Delete manifest
+                File.Delete surfaceFile
+                File.Delete verdictFile
+        }
+
+        test "--certified-surface refuses more than one --module" {
+            let manifest = tempPath ()
+            let surfaceFile = tempPath ()
+
+            try
+                File.WriteAllText(
+                    surfaceFile,
+                    ModuleSurface.certificationJson (ModuleSurface.describe (ServerModule.create "Sales"))
+                )
+
+                let code =
+                    StampCommand.command.Run [
+                        "--manifest"
+                        manifest
+                        "--module"
+                        "Sales"
+                        "--module"
+                        "Inventory"
+                        "--key-id"
+                        "k1"
+                        "--mac-key"
+                        Convert.ToBase64String(RandomNumberGenerator.GetBytes 32)
+                        "--certified-surface"
+                        surfaceFile
+                    ]
+
+                Expect.equal
+                    code
+                    ExitUsage
+                    "a certified surface is one module's declaration set, never a shared payload"
+            finally
+                File.Delete manifest
+                File.Delete surfaceFile
+        }
+
+        test "a stamp with no --certified-surface carries no certification (GP 11)" {
+            let manifest = tempPath ()
+
+            try
+                StampCommand.command.Run [
+                    "--manifest"
+                    manifest
+                    "--module"
+                    "Sales"
+                    "--key-id"
+                    "k1"
+                    "--mac-key"
+                    Convert.ToBase64String(RandomNumberGenerator.GetBytes 32)
+                ]
+                |> ignore
+
+                match ModuleBindingManifest.loadCertifications manifest with
+                | Error e -> failtestf "loadCertifications on a stamp-only manifest should be Ok empty: %s" e
+                | Ok map -> Expect.isTrue (Map.isEmpty map) "no certified surface ⇒ no certification entry"
+            finally
+                File.Delete manifest
+        }
     ]

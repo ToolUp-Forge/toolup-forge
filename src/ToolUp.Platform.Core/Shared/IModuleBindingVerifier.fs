@@ -272,3 +272,86 @@ type ModuleSbomStamp = {
 type IModuleSbomVerifier =
     /// Decide whether `moduleId`'s presented signed SBOM verifies.
     abstract VerifySbom: moduleId: string * sbom: ModuleSbomStamp -> BindingOutcome
+
+// ─── Phase 589 — certified surface + conformance verdict ─────────────────
+//
+// Phase 165/166 bind *that* a module is stamped; Phase 216 records *what is
+// inside it*. Neither says anything about what the module **offers a
+// composition** — that label is `ModuleSurface` (Phase 581), derived from the
+// live registration at compose time, and the conformance verdict over it
+// (Phase 582) exists only in the module repo's own test run. So a module could
+// be certified conformant on Monday, gain a provide on Tuesday, and still load
+// under Monday's stamp: the stamp covers the module's *identity*, never its
+// *surface*.
+//
+// These types close that gap. The certified surface is the module's canonical
+// surface projection (JSON) plus its hash, optionally carrying the conformance
+// verdict of the run that certified it, and it is signed with the SAME stamp
+// shape (`JwsStamp` / `MacStamp`) minted under the SAME anchor as the module's
+// own binding stamp. At compose the verifier re-derives the live surface and
+// compares — so a drifted module is refused with the drifted facet named,
+// which is compose-time proof that what runs is what was certified.
+//
+// **Purely additive (GP 11 / GP 13):** a manifest entry with no
+// `certifiedSurface` section produces no `ModuleCertificationStamp`, a module
+// carrying no certification takes the pre-589 `addModule` path, and a
+// deployment that composes no certification verifier never derives a surface.
+// These are tier-shared contracts — records + strings only, BCL-pure and
+// Fable-safe. The canonical projection, its hash, the drift derivation and the
+// verifier interface (which must name `ModuleSurface`) live server-side in
+// `ModuleSurface` (`ToolUp.Platform.Server`); the crypto lives beside the
+// other stamp verification in `ToolUp.ArtefactSigning`.
+
+/// One law's result from a module conformance-pack run (Phase 582).
+type ModuleLawOutcome = {
+    /// The law's name as the pack reports it.
+    Law: string
+    /// `true` when the law held for the certified module.
+    Passed: bool
+    /// The pack's diagnostic; `""` when the result carries none.
+    Detail: string
+}
+
+/// The verdict a module's conformance-pack run produced, recorded alongside
+/// the surface it certified.
+type ModuleConformanceVerdict = {
+    /// The conformance pack's version, so a verdict can be read against the
+    /// law set that produced it.
+    PackVersion: string
+    /// Per-law results. Order-independent: the canonical bytes sort them, so
+    /// re-serialising a verdict does not invalidate its signature.
+    Laws: ModuleLawOutcome list
+    /// When the certifying run happened — an opaque string (an ISO-8601
+    /// instant by convention, a build id where that is the honest stamp).
+    /// Carried, never interpreted.
+    RunStamp: string
+}
+
+/// A module's certified label: the canonical JSON of the surface projection
+/// the certifying run observed, its hash, and optionally that run's verdict.
+///
+/// `SurfaceJson` is what makes a drift REPORTABLE rather than merely
+/// detectable — a hash alone can say "something moved", only the certified
+/// projection can say which provide appeared or vanished.
+type CertifiedModuleSurface = {
+    /// The canonical surface-projection JSON (`ModuleSurface.certificationJson`).
+    SurfaceJson: string
+    /// base64url SHA-256 over `SurfaceJson`'s UTF-8 bytes
+    /// (`ModuleSurface.certificationHash`). Redundant with `SurfaceJson` by
+    /// construction and checked against it — an inconsistent pair is refused
+    /// rather than trusted on either half.
+    SurfaceHash: string
+    /// The conformance verdict of the certifying run, when one was recorded.
+    Verdict: ModuleConformanceVerdict option
+}
+
+/// A module's optional signed certification, as carried in a stamp-manifest
+/// entry beside the module's own binding stamp.
+type ModuleCertificationStamp = {
+    /// The certified surface payload.
+    Certified: CertifiedModuleSurface
+    /// The binding stamp over the certification's canonical bytes — the SAME
+    /// stamp shape minted under the SAME anchor as the module's own stamp, so
+    /// the certification is verified as a unit with it.
+    Signature: ModuleBindingStamp
+}

@@ -814,6 +814,13 @@ ToolUp.Platform.CertificateIssuanceIntegrity..ctor(System.Int32, Microsoft.FShar
 ToolUp.Platform.CertificateIssuanceIntegrity.Issued : System.Int32 { get }
 ToolUp.Platform.CertificateIssuanceIntegrity.LogIntegrityChecked : System.Boolean { get }
 ToolUp.Platform.CertificateIssuanceIntegrity.Recent : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CertifiedSurfaceProjection (class)
+ToolUp.Platform.CertifiedSurfaceProjection..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.CertifiedSurfaceProjection.Component : System.String { get }
+ToolUp.Platform.CertifiedSurfaceProjection.Described : System.String { get }
+ToolUp.Platform.CertifiedSurfaceProjection.Module : System.String { get }
+ToolUp.Platform.CertifiedSurfaceProjection.Needs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CertifiedSurfaceProjection.Provides : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ChampionChallengerGate (class)
 ToolUp.Platform.ChampionChallengerGate..ctor(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelEvaluationRunner, ToolUp.Platform.IAuditLog, ToolUp.Platform.ChampionChallengerPolicy)
 ToolUp.Platform.ChampionChallengerGate.PromoteChallenger(System.String, System.String, System.String, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.PromotionError]]
@@ -4683,6 +4690,8 @@ ToolUp.Platform.IModelScorer (interface)
 ToolUp.Platform.IModelScorer.Score(ToolUp.Platform.ScoreRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.ScoreError]]
 ToolUp.Platform.IModelSpecStore (interface)
 ToolUp.Platform.IModelSpecStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef]]
+ToolUp.Platform.IModuleCertificationVerifier (interface)
+ToolUp.Platform.IModuleCertificationVerifier.VerifyCertification(System.String, ToolUp.Platform.ModuleSurface, ToolUp.Platform.ModuleCertificationStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.Platform.IModuleVisibilityStore (interface)
 ToolUp.Platform.IModuleVisibilityStore.ClearProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IModuleVisibilityStore.GetProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile]]
@@ -6100,10 +6109,13 @@ ToolUp.Platform.ModuleBindingManifest.DefaultFileName : System.String (literal)
 ToolUp.Platform.ModuleBindingManifest.applyTo(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleBindingStamp], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ModuleBindingManifest.applyToAll(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleBindingStamp], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]
 ToolUp.Platform.ModuleBindingManifest.load(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleBindingStamp], System.String]
+ToolUp.Platform.ModuleBindingManifest.loadCertifications(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], System.String]
+ToolUp.Platform.ModuleBindingManifest.loadCertificationsFromDir(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], System.String]
 ToolUp.Platform.ModuleBindingManifest.loadFromDir(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleBindingStamp], System.String]
 ToolUp.Platform.ModuleBindingManifest.loadSboms(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleSbomStamp], System.String]
 ToolUp.Platform.ModuleBindingManifest.loadSbomsFromDir(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleSbomStamp], System.String]
 ToolUp.Platform.ModuleBindingManifest.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleBindingStamp], System.String]
+ToolUp.Platform.ModuleBindingManifest.parseCertifications(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], System.String]
 ToolUp.Platform.ModuleBindingManifest.parseSboms(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleSbomStamp], System.String]
 ToolUp.Platform.ModuleBindingRevocation (class)
 ToolUp.Platform.ModuleBindingRevocation.CurrentVersion : System.Int32 (literal)
@@ -6116,6 +6128,11 @@ ToolUp.Platform.ModuleBindingRevocation.parse(System.String) : Microsoft.FSharp.
 ToolUp.Platform.ModuleBindingRevocation.parseList(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]
 ToolUp.Platform.ModuleBindingRevocation.stampId(ToolUp.Platform.ModuleBindingStamp) : System.String
 ToolUp.Platform.ModuleBindingRevocation.toRevocationList(ToolUp.Platform.RevocationSet) : ToolUp.Platform.IBindingRevocationList
+ToolUp.Platform.ModuleCertificationGate (class)
+ToolUp.Platform.ModuleCertificationGate.admit(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleCertificationVerifier], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]
+ToolUp.Platform.ModuleCertificationGate.decide(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleCertificationVerifier], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], ToolUp.Platform.ServerModule) : ToolUp.Platform.BindingOutcome
+ToolUp.Platform.ModuleCertificationGate.decideAgainst(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleCertificationVerifier], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], ToolUp.Platform.ServerModule, ToolUp.Platform.ModuleSurface) : ToolUp.Platform.BindingOutcome
+ToolUp.Platform.ModuleCertificationGate.partition(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleCertificationVerifier], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleCertificationStamp], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]]
 ToolUp.Platform.ModuleContractShape (class)
 ToolUp.Platform.ModuleContractShape..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String)
 ToolUp.Platform.ModuleContractShape.DataTypeSlotPrefix : System.String { get }
@@ -6187,6 +6204,11 @@ ToolUp.Platform.ModuleSurfaceCoverage..ctor(System.String, System.String, ToolUp
 ToolUp.Platform.ModuleSurfaceCoverage.Facet : ToolUp.Platform.ModuleSurfaceFacet { get }
 ToolUp.Platform.ModuleSurfaceCoverage.Field : System.String { get }
 ToolUp.Platform.ModuleSurfaceCoverage.Origin : System.String { get }
+ToolUp.Platform.ModuleSurfaceDrift (class)
+ToolUp.Platform.ModuleSurfaceDrift..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModuleSurfaceDrift.Change : System.String { get }
+ToolUp.Platform.ModuleSurfaceDrift.Declaration : System.String { get }
+ToolUp.Platform.ModuleSurfaceDrift.Facet : System.String { get }
 ToolUp.Platform.ModuleSurfaceEntry (class)
 ToolUp.Platform.ModuleSurfaceEntry..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.ModuleSurfaceEntry.Field : System.String { get }
@@ -6207,9 +6229,19 @@ ToolUp.Platform.ModuleSurfaceFacet+Tags.NeedsFacet : System.Int32 (literal)
 ToolUp.Platform.ModuleSurfaceFacet+Tags.OpaqueFacet : System.Int32 (literal)
 ToolUp.Platform.ModuleSurfaceFacet+Tags.ProvidesFacet : System.Int32 (literal)
 ToolUp.Platform.ModuleSurfaceModule (class)
+ToolUp.Platform.ModuleSurfaceModule.certificationHash(ToolUp.Platform.ModuleSurface) : System.String
+ToolUp.Platform.ModuleSurfaceModule.certificationHashOfJson(System.String) : System.String
+ToolUp.Platform.ModuleSurfaceModule.certificationJson(ToolUp.Platform.ModuleSurface) : System.String
+ToolUp.Platform.ModuleSurfaceModule.certify(ToolUp.Platform.ModuleSurface) : ToolUp.Platform.CertifiedModuleSurface
+ToolUp.Platform.ModuleSurfaceModule.certifyWith(ToolUp.Platform.ModuleConformanceVerdict, ToolUp.Platform.ModuleSurface) : ToolUp.Platform.CertifiedModuleSurface
 ToolUp.Platform.ModuleSurfaceModule.describe(ToolUp.Platform.ServerModule) : ToolUp.Platform.ModuleSurface
+ToolUp.Platform.ModuleSurfaceModule.describeDrift(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSurfaceDrift]) : System.String
 ToolUp.Platform.ModuleSurfaceModule.describeJson(ToolUp.Platform.ServerModule) : System.String
 ToolUp.Platform.ModuleSurfaceModule.describeWith(ToolUp.Platform.ServerModule, Microsoft.FSharp.Core.FSharpOption`1[System.Object]) : ToolUp.Platform.ModuleSurface
+ToolUp.Platform.ModuleSurfaceModule.driftAgainst(ToolUp.Platform.CertifiedSurfaceProjection, ToolUp.Platform.ModuleSurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSurfaceDrift]
+ToolUp.Platform.ModuleSurfaceModule.driftFrom(System.String, ToolUp.Platform.ModuleSurface) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSurfaceDrift], System.String]
+ToolUp.Platform.ModuleSurfaceModule.parseProjection(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertifiedSurfaceProjection, System.String]
+ToolUp.Platform.ModuleSurfaceModule.project(ToolUp.Platform.ModuleSurface) : ToolUp.Platform.CertifiedSurfaceProjection
 ToolUp.Platform.ModuleSurfaceModule.toJson(ToolUp.Platform.ModuleSurface) : System.String
 ToolUp.Platform.ModuleVisibilityApiHandler (class)
 ToolUp.Platform.ModuleVisibilityApiHandler.moduleVisibilityApi(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IModuleVisibilityApi
