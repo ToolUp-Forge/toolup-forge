@@ -590,6 +590,23 @@ module Names =
     [<Literal>]
     let ragRefuseOnIndexCorruption = "TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION"
 
+    // Phase 671 — the embedding-provider cluster read by
+    // `EmbeddingProviderEnv.fromEnv` and the companions it resolves.
+    // The API key is NOT here and never will be: an API-keyed embedding
+    // companion reads its key through `ISecretStore`, not the
+    // environment (the provider-authoring rule).
+    [<Literal>]
+    let embeddingProvider = "TOOLUP_EMBEDDING_PROVIDER"
+
+    [<Literal>]
+    let embeddingModel = "TOOLUP_EMBEDDING_MODEL"
+
+    [<Literal>]
+    let embeddingDimensions = "TOOLUP_EMBEDDING_DIMENSIONS"
+
+    [<Literal>]
+    let embeddingBatchSize = "TOOLUP_EMBEDDING_BATCH_SIZE"
+
     [<Literal>]
     let awsS3Region = "TOOLUP_AWS_S3_REGION"
 
@@ -1999,6 +2016,40 @@ let all: ConfigKeyDescriptor list = [
         IsSecret = false
         Category = "AI"
     }
+    {
+        EnvVar = Names.embeddingProvider
+        Description =
+            "Selects the IEmbeddingProvider companion EmbeddingProviderEnv.fromEnv resolves at startup. Unset leaves the composition root's own provider in place, unchanged."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "AI"
+    }
+    {
+        EnvVar = Names.embeddingModel
+        Description = "Embedding model id passed to the selected embedding-provider companion."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "AI"
+    }
+    {
+        EnvVar = Names.embeddingDimensions
+        Description =
+            "Output dimensionality declared for the selected embedding model. Needed only for a model the companion has no native size for; a wrong value silently corrupts the vector store, so a mismatch against a known model is refused."
+        Type = IntKey
+        Default = None
+        IsSecret = false
+        Category = "AI"
+    }
+    {
+        EnvVar = Names.embeddingBatchSize
+        Description = "Maximum inputs per batched embedding call for the API-backed embedding companion."
+        Type = IntKey
+        Default = Some "64"
+        IsSecret = false
+        Category = "AI"
+    }
     // --- Public surface & rendering ---
     {
         EnvVar = Names.publicRendering
@@ -2448,6 +2499,10 @@ let manifestBindable: Set<string> =
         Names.deploymentReadiness
         Names.deploymentVerification
         Names.distributedLock
+        Names.embeddingBatchSize
+        Names.embeddingDimensions
+        Names.embeddingModel
+        Names.embeddingProvider
         Names.enableCitationDevEndpoint
         Names.enableDevEndpoints
         Names.entityOutbox

@@ -692,6 +692,26 @@ let createPersistent (blobStorage: IBlobStorage) : IEmbeddingProvider =
 
     LocalEmbeddingProviderImpl(Some persister, initial, GlobalModelId) :> IEmbeddingProvider
 
+/// Phase 671 — the resolver entry point for `EmbeddingProviderEnv.fromEnv`
+/// (`TOOLUP_EMBEDDING_PROVIDER=local`). `createPersistent` when the
+/// deployment threads its `IBlobStorage` in, `create` when it does not.
+///
+/// It reads no environment variable of its own: this provider has no
+/// model or dimension to select — the model id is a build constant
+/// (`GlobalModelId`) and the dimensionality is fixed at 512 by the
+/// hashed feature space, so `TOOLUP_EMBEDDING_MODEL` /
+/// `TOOLUP_EMBEDDING_DIMENSIONS` have nothing to say to it. It is
+/// therefore total: `None` from a resolver means "selected, but not
+/// constructible here", and that cannot arise for this companion.
+///
+/// Returns `IEmbeddingProvider option` rather than `IEmbeddingProvider`
+/// because the resolver contract is one shape for every companion — an
+/// API-backed one legitimately declines.
+let fromEnv (blobStorage: IBlobStorage option) : IEmbeddingProvider option =
+    match blobStorage with
+    | Some blob -> Some(createPersistent blob)
+    | None -> Some(create ())
+
 // ─── Phase 14z — scope-keyed factory ─────────────────────────────
 
 /// A family of TF-IDF providers, one per `VectorScope`, sharing nothing

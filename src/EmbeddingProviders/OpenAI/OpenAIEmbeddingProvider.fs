@@ -557,6 +557,96 @@ let createWithBatchSize (secretStore: ISecretStore) (batchSize: int) : IEmbeddin
     |> withEmbedderBatchSize batchSize
     |> createWithOptions secretStore
 
+// ─── Phase 671 — env-driven construction (the resolver entry point) ──
+//
+// Read through the `ConfigResolution` seam, so a deployment manifest can
+// declare these exactly as an environment variable does. THE API KEY IS
+// NOT READ HERE and never will be: it resolves through `ISecretStore` at
+// embed time (see `postEmbedding`), which is the provider-authoring
+// rule — a secret in the environment is a secret in every process
+// listing, crash dump and container inspect on the host.
+
+/// Parse an integer-valued config key's resolved value, refusing an
+/// unparseable one rather than silently falling back. A typo in
+/// `TOOLUP_EMBEDDING_DIMENSIONS` that read as "unset" would build a
+/// provider with the wrong vector length, and a wrong length is the
+/// failure this file's `validateDimensions` comment describes at length:
+/// saturated cosine distance, "no relevant content", no error, and no
+/// self-heal.
+///
+/// It takes the ALREADY-RESOLVED value rather than the key name, so each
+/// call site carries a literal `ConfigResolution.tryValue
+/// ConfigKeys.Names.*` — the shape the registry's manifest-bindability
+/// check is anchored on. Resolving inside here instead would hide the
+/// seam call behind one indirection and the key would read as declared
+/// bindable while nothing resolved it.
+let private parseConfigInt (name: string) (raw: string option) : int option =
+    raw
+    |> Option.map (fun value ->
+        match Int32.TryParse(value.Trim()) with
+        | true, v -> v
+        | _ ->
+            invalidOp (
+                sprintf
+                    "%s=%s is not an integer. Set it to a whole number, or unset it to take the default."
+                    name
+                    value
+            ))
+
+/// Build an OpenAI embedding provider from the `TOOLUP_EMBEDDING_*`
+/// cluster — the resolver entry point for `EmbeddingProviderEnv.fromEnv`
+/// (`TOOLUP_EMBEDDING_PROVIDER=openai`).
+///
+/// - `TOOLUP_EMBEDDING_MODEL` — default `text-embedding-3-small`.
+/// - `TOOLUP_EMBEDDING_DIMENSIONS` — default: the model's native size
+///   for a model this build knows. For a model it does not know there is
+///   no safe default, so the variable becomes REQUIRED and its absence
+///   refuses startup by name; guessing 1536 would index mis-sized
+///   vectors under a matching version stamp, which no reembed can heal.
+///   A value that contradicts a known model's native size is refused by
+///   `createWithOptions`, as it is on every other construction path.
+/// - `TOOLUP_EMBEDDING_BATCH_SIZE` — default 64.
+///
+/// Always `Some`: every input has a default or a refusal, so there is no
+/// "configured but incomplete" state for this companion to decline on.
+/// A missing API key is deliberately NOT that state — it is the
+/// `OpenAIEmbeddingConfigValidator`'s to report at preflight, where an
+/// operator sees why, rather than a silent fallback to a different
+/// provider embedding a corpus into a different vector space.
+let fromEnv (secretStore: ISecretStore) : IEmbeddingProvider option =
+    let model =
+        ConfigResolution.tryValue ConfigKeys.Names.embeddingModel
+        |> Option.map _.Trim()
+        |> Option.filter (String.IsNullOrWhiteSpace >> not)
+        |> Option.defaultValue defaultModel
+
+    let dimensions =
+        match
+            ConfigResolution.tryValue ConfigKeys.Names.embeddingDimensions
+            |> parseConfigInt ConfigKeys.Names.embeddingDimensions
+        with
+        | Some d -> d
+        | None ->
+            match Map.tryFind model knownModelDimensions with
+            | Some native -> native
+            | None ->
+                invalidOp (
+                    sprintf
+                        "TOOLUP_EMBEDDING_MODEL=%s is not a model this build knows the native output size of, and TOOLUP_EMBEDDING_DIMENSIONS is unset. Set TOOLUP_EMBEDDING_DIMENSIONS to the model's documented dimensionality. It is not defaulted because a wrong length is indexed under a matching version stamp: every query then saturates cosine distance, retrieval returns nothing, and no reembed pass repairs it."
+                        model
+                )
+
+    let batchSize =
+        ConfigResolution.tryValue ConfigKeys.Names.embeddingBatchSize
+        |> parseConfigInt ConfigKeys.Names.embeddingBatchSize
+        |> Option.defaultValue defaultBatchSize
+
+    OpenAIEmbeddingOptions.defaults
+    |> withEmbedderModel model dimensions
+    |> withEmbedderBatchSize batchSize
+    |> createWithOptions secretStore
+    |> Some
+
 // ─── Live API probe (shared by health check + preflight) ──────────
 //
 // A one-shot real `embeddings.create` call against a fixed, tiny input.

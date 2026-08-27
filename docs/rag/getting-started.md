@@ -31,6 +31,31 @@ let embedder = OpenAIEmbeddingProvider.create secretStore
 
 The provider reads the OpenAI API key from `ISecretStore` under the `_platform` scope, key name `OPENAI_API_KEY`. Store it once at setup (the same way you stored the AI provider key in the AI walkthrough).
 
+### Selecting the provider per deployment
+
+Hard-coding `OpenAIEmbeddingProvider.create` means the dev, CI and production builds differ in source. `EmbeddingProviderEnv.fromEnv` moves the choice to configuration instead, the same way `SecretStore.fromEnv` and `BlobStorageEnv.fromEnv` do for their substrates:
+
+```fsharp skip=fragment
+let embedder =
+    EmbeddingProviderEnv.fromEnv logger [
+        { Name = "local"; Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
+        { Name = "openai"; Resolve = fun () -> OpenAIEmbeddingProvider.fromEnv secretStore }
+    ] (fun () -> OpenAIEmbeddingProvider.create secretStore)
+```
+
+`TOOLUP_EMBEDDING_PROVIDER=local` now gives an offline dev box the TF-IDF provider with no key and no source change; production leaves it unset or sets `openai`.
+
+| Variable | Meaning |
+|---|---|
+| `TOOLUP_EMBEDDING_PROVIDER` | Which resolver to use. **Unset keeps the third argument** — the provider this composition root builds itself — and logs nothing, so adopting the helper changes an existing deployment in no observable way. |
+| `TOOLUP_EMBEDDING_MODEL` | Model id for the selected companion. Defaults to `text-embedding-3-small` on the OpenAI one. |
+| `TOOLUP_EMBEDDING_DIMENSIONS` | Output dimensionality. Defaults to the model's native size; **required** for a model this build does not know, because a wrong length is indexed under a matching version stamp and no reembed pass repairs it. |
+| `TOOLUP_EMBEDDING_BATCH_SIZE` | Inputs per batched call (default 64). |
+
+There is deliberately no `TOOLUP_*` variable for the API key: it stays in `ISecretStore`, read per call, exactly as above. A value that names a provider this deployment did not wire a resolver for warns and keeps the fallback rather than booting with no embedder — but wire `OpenAIEmbeddingProvider.createValidator` into your config validators so a *missing key* is caught at preflight instead of at first ingestion.
+
+Every variable above is in the [configuration reference](../reference/config-reference.md), and may be set in a deployment manifest rather than the environment.
+
 ## 3. Switch from `AIServerApp.create` to `RAGServerApp.create`
 
 ```fsharp skip=fragment
