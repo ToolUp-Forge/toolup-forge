@@ -1,0 +1,221 @@
+# ─── Multi-cloud parity emulator lane (Phase 193 matrix, Phase 732) ───
+#
+# Boots each cloud's local emulator so the SAME IBlobStorage / ISecretStore
+# / IAuditSink contract packs can run against all three, proving
+# cross-cloud parity without deploying to a second cloud. Bring it up, arm
+# the harness variables, run the pack:
+#
+#     docker compose -f compose.parity.yml up -d --wait
+#
+#     $env:TOOLUP_PARITY_AZURITE                       = "UseDevelopmentStorage=true"
+#     $env:TOOLUP_PARITY_LOCALSTACK                    = "http://localhost:4566"
+#     $env:TOOLUP_PARITY_FAKEGCS                       = "http://localhost:4443"
+#     $env:TOOLUP_PARITY_LOCALSTACK_SECRETS            = "us-east-1"
+#     $env:TOOLUP_PARITY_LOCALSTACK_SECRETS_ENDPOINT   = "http://localhost:4566"
+#
+#     dotnet build ToolUp.Forge.sln
+#     dotnet src/ToolUp.Cloud.Parity.Tests/bin/Debug/net10.0/ToolUp.Cloud.Parity.Tests.dll
+#
+# and tear it down with:
+#
+#     docker compose -f compose.parity.yml down -v
+#
+# ── Why this is its own file, and why it carries NO `profiles:` gate ──
+#
+# Phase 193 put these services behind `profiles: ["parity"]` inside
+# `src/Hosts/Docker/compose.yml.template` — the only compose document the
+# repo then had. Two things followed, and Phase 732 exists because of
+# them. First, the template is a `dotnet new platformsdk-docker` scaffold
+# asset: its unsubstituted double-brace image-name tokens make the whole
+# document unparseable, so `docker compose` could never read the parity
+# block at all. (Spelled out rather than quoted, so a mechanical
+# "no unsubstituted tokens remain" scan over this file stays clean.)
+# Second, the documented invocation was `docker compose --profile
+# parity up -d` "from the repo root", where no `compose.yml` exists — it
+# resolved no file.
+#
+# So the lane moved here, to a real, parseable, token-free document at the
+# repo root, and the profile gate came off with it. The FILENAME is now
+# the gate: nothing reads this file unless `-f compose.parity.yml` names
+# it, which is a stronger gate than a profile and a visible one. Keeping
+# the profile as well would have re-introduced the same failure mode in
+# miniature — `docker compose -f compose.parity.yml up -d` against a fully
+# profiled document starts ZERO services and exits 0, which is a vacuous
+# success indistinguishable from a working lane. Dropping it means both
+# the short form and a habitual `--profile parity` do the right thing.
+#
+# ── The bucket-creation services are LOAD-BEARING, not convenience ──
+#
+# `AwsS3Storage` and `GoogleCloudStorage` deliberately do NOT create their
+# buckets — provisioning and ACLs are the deployment's business — so
+# without `localstack-init` / `fake-gcs-init` every S3 assertion fails on
+# `NoSuchBucket` and every GCS assertion on `NotFound`. `AzureBlobStorage`
+# is the exception: it calls `CreateIfNotExists` on its root container, so
+# the Azurite leg needs no init service.
+#
+# ── TOOL-AVAILABILITY SKIP ──
+#
+# The harness gates every leg on its variable above and reports a
+# `pending` case naming the reason when it is unset, so an absent emulator
+# (or an absent Docker daemon, or an image that cannot be pulled) skips
+# cleanly instead of failing. Set a variable ONLY when that emulator is
+# actually up: an armed leg pointed at nothing is correctly red, not
+# skipped. Equally, an ARMED run that still reports the pending counts has
+# failed to arm — read the case count, never the exit code.
+#
+# ── CI note ──
+#
+# Pre-pull these images in the job rather than relying on pull-on-demand —
+# the same lesson as the `IContainerScheduler` leg, where the Docker HTTP
+# API does not pull the way `docker run` does.
+
+# An explicit project name so container names, networks and the teardown
+# command above are stable regardless of the directory this is invoked
+# from — a git worktree would otherwise name the project after its own
+# folder and leave the previous lane's volumes orphaned.
+name: toolup-parity
+
+services:
+
+  # ── Azure, via Azurite (Blob / Queue / Table emulator) ──────────────
+  #
+  # Armed by TOOLUP_PARITY_AZURITE. Azurite's well-known development
+  # connection string (`UseDevelopmentStorage=true`) points at
+  # 127.0.0.1:10000 for blob, which is the port published below, so the
+  # leg needs nothing but that one variable. Blob is the only service the
+  # matrix exercises, hence `azurite-blob` rather than the full trio.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"
+    healthcheck:
+      # Azurite ships no shell utilities beyond node, so probe the blob
+      # endpoint with node itself. A 400 from the unauthenticated root is
+      # still proof the listener is up — any HTTP response means ready.
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get('http://127.0.0.1:10000/devstoreaccount1',
+          r => process.exit(0)).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # ── AWS, via LocalStack (S3 + Secrets Manager) ──────────────────────
+  #
+  # Armed by TOOLUP_PARITY_LOCALSTACK (blob + audit legs) and, for the
+  # secrets leg, TOOLUP_PARITY_LOCALSTACK_SECRETS plus
+  # TOOLUP_PARITY_LOCALSTACK_SECRETS_ENDPOINT. That second variable is not
+  # ceremony: the harness REFUSES to run the secrets leg without an
+  # explicit endpoint, because the AWS SDK's fallback resolution reaches
+  # the REAL Secrets Manager and the contract pack writes and deletes
+  # secrets.
+  #
+  # `:4` — the COMMUNITY image, and the pin is load-bearing (Phase 732).
+  # `localstack/localstack:latest` is now labelled "LocalStack Pro Docker
+  # image" and, as of 2026.8.0, REFUSES TO BOOT without a paid licence:
+  # `License activation failed! … Localstack returning with exit code 55`.
+  # Phase 193 wrote `:latest`, so the AWS leg of this matrix became
+  # unrunnable the day that tag flipped — and it would have failed as a
+  # dependency-start error rather than as anything naming a licence. A
+  # paid-by-default dependency in the default lane is also a GP 2
+  # violation. `:4` and `:3` carry the plain "LocalStack Docker image"
+  # label and need no token; `:stable` is Pro like `:latest`.
+  #
+  # The general lesson applies to every other `:latest` in this file: a
+  # floating tag silently changes what a conformance gate measures. They
+  # are left floating only because they currently work; pin them the
+  # moment one surprises you the way this one did.
+  localstack:
+    image: localstack/localstack:4
+    ports:
+      - "4566:4566"
+    environment:
+      # Only the two services the parity matrix exercises — a narrower
+      # start-up is faster and makes a missing service an explicit change.
+      SERVICES: s3,secretsmanager
+      DEBUG: "0"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+  # One-shot bucket creation for the S3 leg. Must match
+  # TOOLUP_PARITY_LOCALSTACK_BUCKET (default `toolup-parity`).
+  localstack-init:
+    image: amazon/aws-cli:latest
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      # Single `$` on purpose — compose interpolates from the HOST
+      # environment at `up` time, so overriding
+      # TOOLUP_PARITY_LOCALSTACK_BUCKET for the harness also moves the
+      # bucket this creates. A `$$` here would defer to the container's own
+      # (empty) environment and silently always use the default.
+      #
+      # `|| true` on an already-owned bucket keeps `up` idempotent: a
+      # second `up` against a still-running lane would otherwise exit
+      # non-zero on BucketAlreadyOwnedByYou and, under `--wait`, report the
+      # whole lane as failed.
+      - >-
+        aws --endpoint-url=http://localstack:4566 s3api create-bucket
+        --bucket ${TOOLUP_PARITY_LOCALSTACK_BUCKET:-toolup-parity} || true
+    depends_on:
+      localstack:
+        condition: service_healthy
+    restart: "no"
+
+  # ── GCP, via fake-gcs-server (Cloud Storage emulator) ───────────────
+  #
+  # Armed by TOOLUP_PARITY_FAKEGCS. The GCS leg has been live since
+  # 2026-08-26: `GoogleCloudStorageConfig` gained an `EndpointUrl` seam
+  # routed through `StorageClientBuilder.BaseUri`, so pointing the
+  # variable at this service runs the IBlobStorage and IAuditSink packs
+  # against it. `-scheme http` keeps it TLS-free for local use.
+  # `-external-url` is LOAD-BEARING and was the second defect Phase 732
+  # found by actually running the lane. fake-gcs-server stamps the host it
+  # BOUND to into every `selfLink` / `mediaLink` it returns, so without
+  # this flag a freshly created bucket reports
+  # `"selfLink":"http://0.0.0.0:4443/..."`. `Google.Cloud.Storage.V1`
+  # follows those links for object media, so uploads appeared to succeed
+  # and every subsequent Download / List / GetMetadata came back
+  # `NotFound` — 18 of the 20 GCS cases red, with an error naming nothing
+  # that would lead you here. Pointing it at the address the CLIENT uses
+  # makes the links resolvable.
+  fake-gcs:
+    image: fsouza/fake-gcs-server:latest
+    ports:
+      - "4443:4443"
+    command:
+      - "-scheme=http"
+      - "-port=4443"
+      - "-backend=memory"
+      - "-external-url=http://localhost:4443"
+
+  # Pre-creates the parity bucket, mirroring `localstack-init`. Single `$`
+  # on purpose, for the same reason as `localstack-init`.
+  #
+  # `fake-gcs` publishes no healthcheck (the image carries no shell or
+  # HTTP client to probe itself with), so readiness is handled on THIS
+  # side: curl retries a connection-refused start-up window rather than
+  # racing it. `-g` disables URL globbing so the `?project=` query string
+  # is sent literally.
+  fake-gcs-init:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        curl -sfg --retry 20 --retry-delay 2 --retry-connrefused --retry-all-errors
+        -X POST "http://fake-gcs:4443/storage/v1/b?project=toolup-parity"
+        -H 'Content-Type: application/json'
+        -d '{"name":"${TOOLUP_PARITY_FAKEGCS_BUCKET:-toolup-parity}"}'
+    depends_on:
+      - fake-gcs
+    restart: "no"

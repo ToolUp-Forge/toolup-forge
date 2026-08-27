@@ -334,6 +334,57 @@ jobs:
   # cases. Budget ~15 minutes for a completing run. `timeout-minutes`
   # stays generous but finite: a hang must fail loudly rather than burn
   # the 6-hour default, which is exactly how (1) was caught.
+  #
+  # ── The CloudParity emulator legs are NOT armed here. Deliberate. ──
+  #
+  # `CloudParity` is one of the fourteen packs below, so it RUNS on every
+  # push — but all nine of its emulator legs (3 seams x 3 clouds) report
+  # `pending` here, because none of the `TOOLUP_PARITY_*` variables is
+  # set and no emulator is booted. Only its 7 always-on cases (the
+  # divergence fixture + the seam ratchets) actually gate. That posture
+  # is named here rather than left to be re-derived, because a pack that
+  # is green while measuring nothing is the failure mode this whole
+  # matrix exists to avoid.
+  #
+  # Arming it is cheap and the machinery is ready: `docker` is already
+  # present on `ubuntu-latest` (the container-scheduler leg below relies
+  # on that), `compose.parity.yml` at the repo root brings the emulators
+  # up in one command, and the exact recipe is in
+  # docs/migrations/193-multi-cloud-parity-conformance-matrix.md.
+  #
+  # It is not armed because **no leg is green yet**, and Phase 732
+  # established that by running all three for the first time: 87 cases
+  # armed, 78 passing, 16 red. Arming any single leg today would land a
+  # knowingly-red gate, and a gate that is red on arrival is one people
+  # learn to step over — which costs more than the check earns. The
+  # alternative, arming a leg with its red cases excluded, trades a gate
+  # for a tick and is refused for the same reason Phase 614 refused it.
+  #
+  # The three blockers, none of them CI-setup problems and none fixable
+  # in a workflow file:
+  #
+  #   1. `DownloadRange past EOF returns Ok [||]` fails on ALL THREE
+  #      clouds (Azure 416 InvalidRange, AWS 416 not-satisfiable, GCP
+  #      likewise). The contract encodes local-only behaviour that no
+  #      real object store exhibits. Resolving it is a contract
+  #      decision, not a bug fix.
+  #   2. `ISecretStore` on LocalStack scores 1/9. Not the emulator — a
+  #      direct `aws secretsmanager` probe against the same container
+  #      works. `ToolUp.Secrets.AwsSecretsManager` matches vendor
+  #      exceptions with `:? ResourceNotFoundException`, but they arrive
+  #      wrapped in `AggregateException`, so no handler matches and the
+  #      companion's new-secret write path is dead.
+  #   3. Five GCP `DownloadRange` cases fail on fake-gcs-server's
+  #      whole-object checksum being returned for partial responses (an
+  #      emulator-fidelity limit), plus one more instance of (2)'s class
+  #      in `ToolUp.Storage.GoogleCloudStorage.Delete`.
+  #
+  # **Arm the Azurite leg first** once (1) and the Azure half of the
+  # audit story are settled: it is the cheapest (one container, no init
+  # service, no credentials) and already scores 25/26. Two steps —
+  # `docker compose -f compose.parity.yml up -d --wait azurite` and
+  # `TOOLUP_PARITY_AZURITE: UseDevelopmentStorage=true` in the `env:`
+  # of the VerifyAll step. Do not arm a leg while it has a red case.
   verify-all:
     runs-on: ubuntu-latest
     timeout-minutes: 60
