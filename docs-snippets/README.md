@@ -153,14 +153,17 @@ passing         : 271
 known drift     : 0 (docs-snippets/known-drift.txt)
 new failures    : 0
 fixed-but-listed: 0
-skip=fragment     352
+skip=fragment     359
 skip=signature    54
-ambient pages   : 30 (docs-snippets/ambient/)
+ambient pages   : 31 (docs-snippets/ambient/)
+redeclared types: 296 in 166 block(s) — 290 compared, 6 not comparable, 12 ambiguous
+fragment symbols: 359 fragment(s) walked — 1398 identifier(s) checked, 707 resolved,
+                  31 local, 625 outside, 35 ambiguous; 172 record region(s)
 unresolved opens: 9 skipped block(s) — illustrative, or moved?
 ```
 
-The last three lines measure the **blind spot**, which is the part worth watching once the
-failures are zero.
+The last lines measure the **blind spot**, which is the part worth watching once the failures are
+zero.
 
 `skip=` counts are the blocks nothing checks. `ambient pages` is how many pages have bought their
 way out of that. `unresolved opens` names skipped blocks whose `open` does not resolve — read it
@@ -168,6 +171,33 @@ as a watchlist, not a defect count: an `open` of a deliberately fictional vendor
 right in an illustrative fragment, while an `open` of a real SDK namespace that has since moved
 is rot the gate cannot act on, because the block declared itself uncheckable. Only reading them
 tells you which.
+
+## The fragment symbol-existence lint
+
+`skip=fragment` exempts a block from **compilation**, never from being true, so a rename rots it
+silently — the drift class this gate exists to catch, in the pool the gate cannot see. Two
+compile-free arms hold those blocks to a weaker claim: every dotted, capitalized identifier
+(`ServerApp.withStorage`) and every record-construction field label either **resolves against the
+public-surface name universe** the `api-baselines/` render, or names something the block itself
+introduces, or fails the target by name and line.
+
+It asserts **existence, not correctness** — a renamed API is caught, a retyped one is not. Zero
+findings is the enforced state, and there is no baseline: it landed with its corpus burnt down.
+
+**What it will not fire on**, so a fragment stays free to be an excerpt: a lowercase root
+(`ctx.Progress.Report`), a placeholder or vendor name nothing in the universe answers to
+(`MyModule.analyse`, `Fable.Core.JsInterop`), a name the block or any earlier block on the page or
+the page's ambient preamble declares, an ambiguous simple name, and anything inside a string
+literal, a comment, or an `open` / `namespace` / `module` path. The governing idea is one line: the
+lint speaks only about names the surface owns. The full rule, with the measurements behind each
+threshold, is at the `VerifyDocSnippets` header in `Build.fs`.
+
+**It is a bridge and it is meant to be deleted.** Every fragment converted to a compiled block —
+usually by giving its page an [ambient preamble](ambient/README.md) — leaves the lint's universe by
+construction, because the scan reads `skip=fragment` and nothing else. When the `skip=fragment`
+count reaches the floor that conversion work lands on (the residue of genuinely elided,
+prose-shaped excerpts), the whole section goes, census line included. The `fragments walked` figure
+is what that decision reads.
 
 ## Why this project is not in the solution
 

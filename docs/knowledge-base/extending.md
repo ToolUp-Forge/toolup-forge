@@ -55,11 +55,13 @@ let myIngestionStatusObserver : IIngestionStatusObserver =
 In the composition root:
 
 ```fsharp skip=fragment
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> ...
+// Vectorisation handlers ride on the module that owns the data type —
+// `ServerModule.withVectorisation [ myVectorisationHandler ]` — not on
+// the RAG app.
 |> RAGServerApp.addModules [ myKnowledgeBaseModule ]    // your module
-|> RAGServerApp.withIngestionStatusObserver myIngestionStatusObserver
-|> RAGServerApp.withVectorisationHandler myVectorisationHandler
+|> RAGServerApp.withIngestionObserver myIngestionStatusObserver
 |> RAGServerApp.run
 ```
 
@@ -139,7 +141,7 @@ let epubVectorisationHandler : VectorisationHandler = {
                     "_fileName", fileName
                     "_chapterTitle", chapter.Title
                 ]
-                Origin = ChunkOrigin.UserContent
+                Origin = ChunkOrigin.Document
             })
         return chunks
     }
@@ -149,10 +151,10 @@ let epubVectorisationHandler : VectorisationHandler = {
 Wire alongside KB:
 
 ```fsharp skip=fragment
+// Each module declares its own handler with
+// `ServerModule.withVectorisation`, so wiring the module wires the handler.
 RAGServerApp.create (...)
 |> RAGServerApp.addModules [ kbModule; epubModule ]
-|> RAGServerApp.withVectorisationHandler kbVectorisationHandler
-|> RAGServerApp.withVectorisationHandler epubVectorisationHandler
 |> ...
 ```
 
@@ -212,10 +214,10 @@ For documents where embedded tables are important (financial reports, scientific
 ```fsharp skip=fragment
 let tableExtractor = CamelotTableExtractor.create pythonSidecar :> ITableExtractor
 
-RAGServerApp.create (...)
-|> ...
-|> RAGServerApp.withTableExtractor tableExtractor
-|> ...
+// Registered in DI BEFORE the RAG composition runs — `composeRAG` probes
+// for an already-registered `ITableExtractor` and falls back to the no-op
+// only when it finds none. There is no `RAGServerApp` pipeline step.
+services.AddSingleton<ITableExtractor>(tableExtractor)
 ```
 
 The KB extractor calls `ExtractTables` alongside text extraction; tables go through `Chunking.chunkSpreadsheet` (same as XLSX sheets) for header-aware indexed chunks. The output shape (`ExtractedTable`) is compatible with `Chunking.SheetData` so consumers pipe through without translation.
@@ -248,7 +250,7 @@ let composedObserver = ChainedObserver([
 
 RAGServerApp.create (...)
 |> ...
-|> RAGServerApp.withIngestionStatusObserver composedObserver
+|> RAGServerApp.withIngestionObserver composedObserver
 |> ...
 ```
 

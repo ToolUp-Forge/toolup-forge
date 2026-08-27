@@ -524,11 +524,15 @@ Internal types exposed for apps that want to compose additional Elmish wrappers 
 ### `ConversationPanel` (Feliz component)
 
 ```fsharp skip=fragment
-ConversationPanel.render
-    {| ConversationId = ConversationId
-       Messages = ConversationMessage list
-       OnSubmit = string -> unit
-       ActiveModule = string option |}
+ConversationPanel.View
+    isOpen           // bool
+    title            // string
+    messages         // ConversationMessage list
+    streamingContent // string — the in-flight assistant turn, "" when idle
+    onSendMessage    // string -> unit
+    onClose          // unit -> unit
+    onClearSession   // unit -> unit
+    onCancel         // (unit -> unit) option
 ```
 
 Reusable chat panel. Used internally by the AI assistant module + the side panel. Apps can drop it into their own modules for chat-shaped UI without adopting the full assistant.

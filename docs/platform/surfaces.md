@@ -330,8 +330,10 @@ let config = {
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withAuth authProvider
-|> ServerApp.withRegisteredPeers peers
 |> ServerApp.addModules modules
+// Peers themselves are registered one tier up, on the `PeerServerApp`
+// wrapper (`PeerServerApp.withLocalPeer`); `ServerApp` only carries the
+// route prefixes the surface validator skips.
 |> ServerApp.run
 ```
 

@@ -47,10 +47,10 @@ type RedisLockedBookingScheduler(entityStore: IEntityStore, redis: IConnectionMu
 Wire:
 
 ```fsharp skip=fragment
-ServerApp.empty
-|> ...
-|> ServerApp.withBookingScheduler (RedisLockedBookingScheduler(entityStore, redis) :> IBookingScheduler)
-|> SchedulingServerApp.fromServerApp
+// The scheduler is a DI registration, read by the scheduling composition:
+services.AddSingleton<IBookingScheduler>(RedisLockedBookingScheduler(entityStore, redis))
+
+SchedulingServerApp.create ()
 |> ...
 ```
 
@@ -264,12 +264,14 @@ let waitListPromoter scopeId =
         let! waitList = readWaitListForResource cancelledBooking.ResourceId
         match waitList with
         | next :: _ ->
-            let! _ = schedulingApi.Book {
-                ResourceId = cancelledBooking.ResourceId
-                Start = cancelledBooking.Start
-                End = cancelledBooking.End
-                Notes = Some $"Promoted from wait list — {next.CustomerId}"
-            }
+            let! _ =
+                schedulingApi.Book {
+                    cancelledBooking with
+                        Id = Guid.NewGuid().ToString()
+                        Status = Confirmed
+                        BookedFor = Some next.CustomerId
+                        Title = $"Promoted from wait list — {next.CustomerId}"
+                }
             do! markWaitListEntryFulfilled next.Id
             do! sendPromotionEmail next.Email
         | [] -> ()

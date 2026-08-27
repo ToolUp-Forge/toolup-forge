@@ -221,15 +221,12 @@ let formView
         prop.children [
             Html.h2 [ prop.text schema.DisplayName ]
 
-            FormRenderer.render
-                {| Schema = schema
-                   InitialValues = Map.empty
-                   OnSubmit = onSubmit |}
+            FormRenderer.FormRenderer schema onSubmit
         ]
     ]
 ```
 
-`FormRenderer.render` is a Feliz component exposed by `ToolUp.Forms.Client`. It uses `React.useState` for in-flight values; only dispatches upward on submit. The user types freely without per-keystroke Elmish dispatch.
+`FormRenderer.FormRenderer` is a Feliz component exposed by `ToolUp.Forms.Client`. It uses `React.useState` for in-flight values; only dispatches upward on submit. The user types freely without per-keystroke Elmish dispatch.
 
 Client-side validation mirrors the server's; the server's is authoritative.
 
@@ -271,12 +268,7 @@ open ToolUp.Forms.FormSubmission
 
 ```fsharp skip=fragment
 let submissionsView model dispatch =
-    FormSubmissionsList.render
-        {| Submissions = model.Submissions
-           Schema = MyModule.SharedTypes.leadCaptureSchema
-           Workflow = Some leadWorkflow
-           OnTransition = fun submissionId event ->
-               dispatch (TransitionWorkflow (submissionId, event)) |}
+    FormSubmissionsList.FormSubmissionsList model.Submissions
 ```
 
 The list view shows one row per submission, formatted per schema. Workflow-aware rows show a `WorkflowBadge` (current state) + per-transition action buttons (filtered by what's permitted from the current state).

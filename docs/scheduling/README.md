@@ -83,10 +83,19 @@ Book a slot:
 
 ```fsharp skip=fragment
 let! result = schedulingApi.Book {
-    ResourceId = ResourceId "chair-1"
-    Start = DateTime(2026, 5, 12, 14, 0, 0)
-    End = DateTime(2026, 5, 12, 15, 0, 0)
-    Notes = Some "Customer: Jane Smith"
+    Id = Guid.NewGuid().ToString()
+    Type = "appointment"
+    Version = 1
+    ResourceId = "chair-1"
+    Title = "Customer: Jane Smith"
+    StartUtc = DateTimeOffset(2026, 5, 12, 14, 0, 0, TimeSpan.Zero)
+    EndUtc = DateTimeOffset(2026, 5, 12, 15, 0, 0, TimeSpan.Zero)
+    Status = Confirmed
+    BookedBy = currentUserId
+    BookedFor = None
+    Recurrence = None
+    ParentBookingId = None
+    Metadata = Map.empty
 }
 // result : Result<Booking, BookingError>
 ```

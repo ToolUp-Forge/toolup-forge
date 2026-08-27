@@ -97,13 +97,10 @@ open Feliz
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 
-// `FormRenderer.render` is exposed by `ToolUp.Forms.Client`; signature
-// shown here for clarity. Use directly in your module's `ClientView.fs`.
+// `FormRenderer.FormRenderer` is the Feliz component exposed by
+// `ToolUp.Forms.Client`. Use it directly in your module's `ClientView.fs`.
 let onboardingView (schema: FormSchema) (dispatch: Map<string, FieldValue> -> unit) =
-    FormRenderer.render
-        {| Schema = schema
-           InitialValues = Map.empty
-           OnSubmit = dispatch |}
+    FormRenderer.FormRenderer schema dispatch
 ```
 
 That's it. Validation runs server-side on submit; the workflow engine moves through transitions; the audit log records every state change.

@@ -115,13 +115,13 @@ type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
         }
 ```
 
-Register via `withRetrievalTracer`:
+Register it in DI **before** the RAG composition runs. `composeRAG` probes
+for an already-registered `IRetrievalTracer` and falls back to the default
+only when it finds none, so registration is the whole of the wiring — there
+is no `RAGServerApp` pipeline step for it:
 
 ```fsharp skip=fragment
-RAGServerApp.create (...)
-|> ...
-|> RAGServerApp.withRetrievalTracer (DatadogRetrievalTracer(httpClient, apiKey))
-|> RAGServerApp.run
+services.AddSingleton<IRetrievalTracer>(DatadogRetrievalTracer(httpClient, apiKey))
 ```
 
 Trace failures must be swallowed — retrieval can't fail because the tracer failed. The default tracer wraps `Trace` in try/with; custom tracers should too.

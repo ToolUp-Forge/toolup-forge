@@ -694,10 +694,9 @@ No default impl ships. Consumers register custom analysers in the DI container; 
 ### `FormRenderer`
 
 ```fsharp skip=fragment
-FormRenderer.render
-    {| Schema : FormSchema
-       InitialValues : Map<string, FieldValue>
-       OnSubmit : Map<string, FieldValue> -> unit |}
+FormRenderer.FormRenderer schema onSubmit
+// schema   : FormSchema
+// onSubmit : Map<string, FieldValue> -> unit
 ```
 
 Feliz component. Uses `React.useState` for in-flight values. Dispatches `OnSubmit` only on user submit (Enter or button click).
@@ -705,9 +704,8 @@ Feliz component. Uses `React.useState` for in-flight values. Dispatches `OnSubmi
 ### `WorkflowBadge`
 
 ```fsharp skip=fragment
-WorkflowBadge.render
-    {| State : SubmissionState
-       Workflow : WorkflowDefinition |}
+WorkflowBadge.WorkflowBadge state
+// state : SubmissionState
 ```
 
 Renders a state pill with hover for the available-transitions list.
@@ -715,11 +713,8 @@ Renders a state pill with hover for the available-transitions list.
 ### `FormSubmissionsList`
 
 ```fsharp skip=fragment
-FormSubmissionsList.render
-    {| Submissions : Submission list
-       Schema : FormSchema
-       Workflow : WorkflowDefinition option
-       OnTransition : SubmissionId -> TransitionEvent -> unit |}
+FormSubmissionsList.FormSubmissionsList submissions
+// submissions : Submission list
 ```
 
 Table of submissions with optional per-row transition buttons (filtered by available transitions from current state).
@@ -727,9 +722,8 @@ Table of submissions with optional per-row transition buttons (filtered by avail
 ### `PublicEmbed`
 
 ```fsharp skip=fragment
-PublicEmbed.render
-    {| Token : string         // from URL parameter
-       BaseUrl : string |}
+PublicEmbed.PublicEmbed token
+// token : string — from the URL parameter
 ```
 
 Standalone Feliz component. Renders the form with no app shell — meant to be embedded in a minimal `index.html` at `/r/{token}`.
@@ -737,13 +731,13 @@ Standalone Feliz component. Renders the form with no app shell — meant to be e
 ### `SurveyDashboardView` + `SurveyListView`
 
 ```fsharp skip=fragment
-SurveyDashboardView.render
-    {| SchemaId : FormSchemaId
-       Aggregations : AggregationSummary |}
+SurveyDashboardView.SurveyDashboardView schema aggregations
+// schema       : FormSchema
+// aggregations : AggregationSummary
 
-SurveyListView.render
-    {| Surveys : SurveyOverviewRow list
-       OnSelect : FormSchemaId -> unit |}
+SurveyListView.SurveyListView surveys onSelect
+// surveys  : SurveyOverviewRow list
+// onSelect : string -> unit
 ```
 
 Apps wire these into their own admin module.

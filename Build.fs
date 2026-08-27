@@ -716,6 +716,108 @@ let main args =
             "TimeSpan"
         ]
 
+    // Phase 672 — the fragment symbol-existence lint.
+    //
+    // `skip=fragment` buys silence, and the census above says how much:
+    // 352 blocks at the time this was written, six times the Phase 660
+    // estimate. A fragment is exempt from compilation, so a
+    // `PlatformMode`-class rename rots it and every run stays green —
+    // the exact drift class this target exists to catch, occurring in
+    // the one pool the target cannot see.
+    //
+    // Existence, unlike correctness, is checkable WITHOUT compiling. A
+    // fragment's dotted, capitalized identifiers (`ServerApp.withStorage`,
+    // `ChunkOrigin.Note`) and its record-construction field labels either
+    // resolve against the name universe the Phase 175 `api-baselines/`
+    // render, or name something the block itself introduces, or they are
+    // a lie. That is a weak check and it is deliberately weak: a RENAMED
+    // api is caught, a RETYPED one is not. Retyping is compilation's job,
+    // and redeclaration is 668's.
+    //
+    // ── The false-positive budget is the whole design ────────────────
+    //
+    // A fragment is, by its own marker, an excerpt full of names that are
+    // not SDK names: locals of a surrounding program, deliberate
+    // placeholders (`MyModule.analyse`), vendor identifiers, BCL calls.
+    // A lint that fires on those is a lint someone turns off, and the
+    // obvious remedy — an allow-list file — is a second baseline, which
+    // this file has twice argued against. So the escape is a SHAPE rule
+    // instead, and it has one governing idea: THE LINT SPEAKS ONLY ABOUT
+    // NAMES THE SURFACE OWNS.
+    //
+    //   * ROOT-ANCHORED. A chain is checked only where a segment names a
+    //     container the surface owns. `MyModule.analyse`, `Console.Write`,
+    //     `Fable.Core.JsInterop` anchor nowhere and are not checked — not
+    //     because they were listed, but because nothing in the universe
+    //     answers to them. This one rule carries most of the budget.
+    //   * A VALUE'S PROPERTY IS NOT A CONTAINER. Every segment before the
+    //     anchor must be capitalized, so `ctx.Progress.Report` cannot
+    //     anchor at `Progress` even when a `Progress` type exists.
+    //   * WHAT THE BLOCK INTRODUCES WINS. A `type` / `module` / capitalized
+    //     `let` in the block, in ANY block of the same page (a reader reads
+    //     a page top to bottom — the same accumulation the compile arm
+    //     gives `open`), or in the page's ambient preamble, takes the name
+    //     out of the check.
+    //   * AMBIGUOUS NAMES ARE NOT COMPARED, on 668's measured reasoning: a
+    //     simple name resolving to more than one container was never
+    //     soundly matchable to one of them.
+    //   * DU CASES DO NOT CONTRIBUTE CONTAINER NAMES. `ContentBody+Html`
+    //     would otherwise put Feliz's `Html.div` inside the universe and
+    //     fail it. The case is still reachable as a MEMBER of its parent,
+    //     which is how a doc legitimately writes `ContentBody.Html`.
+    //   * DECLARATION LINES ARE NOT MEMBER ACCESSES. `open` / `namespace` /
+    //     `module` carry a namespace path; asking whether a namespace
+    //     segment "has a member" is not a question.
+    //   * STRING LITERALS AND COMMENTS ARE STRIPPED, and the BCL-colliding
+    //     and F#-core-alias filters above apply unchanged.
+    //
+    // ── Two arms, because a rename does not always present as a dot ───
+    //
+    // The dotted arm alone misses the shape a record-building fragment
+    // takes: `docs/platform/jobs.md` builds a job with `HandlerName`,
+    // `Retry` and `IdempotencyKey`, none of which the surface has had for
+    // releases, and not one of them is dotted. So a second arm reads
+    // RECORD-CONSTRUCTION FIELD LABELS.
+    //
+    // It has no type annotation to anchor on, so it INFERS one: the
+    // surface record whose members cover most of the region's labels. An
+    // inference needs a floor or it invents anchors, and these three were
+    // measured rather than picked — the first cut, without them, produced
+    // ten findings that were all wrong anchor:
+    //   * a region needs >= `docFragmentMinRecordLabels` labels;
+    //   * the best candidate must match >= `docFragmentMinRecordMatches`
+    //     of them AND at least half of them;
+    //   * that best must be UNIQUE — a tie means the doc is describing
+    //     something the surface does not uniquely name, and silence is
+    //     the honest answer.
+    // One BRACE REGION is one construction. Tracking depth alone folds a
+    // nested literal into its parent's label set, which then anchors on
+    // neither type and reports the nesting itself as missing fields; that
+    // was most of the first cut's remaining noise. `{| … |}` opens no
+    // region at all — an anonymous record has no surface type to be held to.
+    //
+    // ── Retirement (672.C) ───────────────────────────────────────────
+    //
+    // THIS LINT IS A BRIDGE AND IS MEANT TO BE DELETED. Phase 660.B is
+    // converting `skip=fragment` blocks to compiled ones at docs-project
+    // pace, and every block it converts leaves this lint's universe by
+    // construction — the scan reads `skip=fragment` and nothing else, so
+    // no edit here is ever needed to hand a block over. What the lint
+    // gives is coverage of the blocks 660.B has not reached yet, and its
+    // value falls as that pool does.
+    //
+    // The deletion condition is therefore a NUMBER, not a judgement: when
+    // the `skip=fragment` count on the summary reaches the floor 660.B
+    // lands on — the residue of genuinely elided, prose-shaped excerpts
+    // that no ambient preamble can rescue — this whole section goes, with
+    // its census line, and the remaining fragments are accepted as
+    // unchecked. Deleting it earlier would drop live coverage; keeping it
+    // afterwards is a second gate over a handful of blocks, paid for on
+    // every run. The `fragments walked` figure on the census line is what
+    // that decision reads.
+    let docFragmentMinRecordLabels = 3
+    let docFragmentMinRecordMatches = 3
+
     Target.create "VerifyDocSnippets" (fun _ ->
         // Read from the process argv rather than `p.Context.Arguments`:
         // FAKE's own CLI parser consumes trailing options before the
@@ -1154,6 +1256,407 @@ let main args =
                                     (sprintf "%s: %s" memberName memberSig)
                                     (candidates |> List.map snd |> String.concat "  |  "))
                 | _ -> [])
+
+        // ---- Phase 672: the name universe a fragment is held to ----
+        //
+        // Same `api-baselines/` reading as 668 above, re-keyed for the
+        // question this arm asks. 668 resolves a DECLARED type name to one
+        // rendered type; this resolves a USED container name to the set of
+        // members a doc may name on it, which is a union rather than a
+        // choice — over-accepting only ever passes a doc, and the subset
+        // direction stays sound.
+        let nestedByParent =
+            realFullNames
+            |> Seq.choose (fun f ->
+                let i = f.LastIndexOf '+'
+
+                if i > 0 then
+                    Some(f.Substring(0, i), f.Substring(i + 1))
+                else
+                    None)
+            |> Seq.groupBy fst
+            |> Seq.map (fun (parent, xs) -> parent, xs |> Seq.map snd |> List.ofSeq)
+            |> Map.ofSeq
+
+        let realMemberNames =
+            realTypes
+            |> List.map (fun (f, ms) -> f, (ms |> List.map fst |> Set.ofList))
+            |> Map.ofList
+
+        // F# appends `Module` to a module that shares its name with a type
+        // in the same scope, so `RAGServerAppModule` IS what a doc calls
+        // `RAGServerApp`. The alias is ADDITIVE, never a replacement:
+        // `ServerModule` is a TYPE whose own name ends in `Module`, and
+        // replacing would file it under `Server` and lose it.
+        let docFacingNamesOf (full: string) =
+            let s = simpleNameOf full
+
+            if s.EndsWith "Module" && s.Length > 6 then
+                [ s; s.Substring(0, s.Length - 6) ]
+            else
+                [ s ]
+
+        let isDuCase (full: string) =
+            let i = full.LastIndexOf '+'
+
+            if i < 0 then
+                false
+            else
+                match realMemberNames.TryFind(full.Substring(0, i)) with
+                | Some ms -> ms.Contains("Is" + full.Substring(i + 1))
+                | None -> false
+
+        // doc-facing container name -> (distinct containers, member names)
+        let surfaceContainers =
+            let byName =
+                System.Collections.Generic.Dictionary<string, ResizeArray<string * (string * string) list>>()
+
+            for (full, members) in realTypes do
+                for key in docFacingNamesOf full do
+                    if not (byName.ContainsKey key) then
+                        byName[key] <- ResizeArray()
+
+                    byName[key].Add(full, members)
+
+            byName
+            |> Seq.map (fun kv ->
+                let usable =
+                    kv.Value |> Seq.filter (fun (full, _) -> not (isDuCase full)) |> List.ofSeq
+
+                // Two renderings can be ONE doc-facing container: a module
+                // and the type it shadows (`X` / `XModule`), and a module
+                // and the type nested inside it (`A.X` / `A.X+X`). Generic
+                // arity is a third such detail. Collapse only WITHIN this
+                // key's candidates — the global form of the first rule
+                // fuses `ToolUp.Platform.Server` with the unrelated
+                // `ToolUp.Platform.ServerModule`.
+                let dropArity (f: string) =
+                    System.Text.RegularExpressions.Regex.Replace(f, @"`\d+", "")
+
+                let here = usable |> List.map (fst >> dropArity) |> Set.ofList
+
+                let canonical (raw: string) =
+                    let full = dropArity raw
+
+                    let f =
+                        if
+                            full.EndsWith "Module"
+                            && full.Length > 6
+                            && here.Contains(full.Substring(0, full.Length - 6))
+                        then
+                            full.Substring(0, full.Length - 6)
+                        else
+                            full
+
+                    let nested = f + "+" + simpleNameOf f
+                    if here.Contains nested then nested else f
+
+                // A GENERIC member renders with its arity —
+                // ``ModuleQueryBus.ask`2``, ``Cmd.none`1`` — and a doc
+                // writes the bare name. Stripping it here is load-bearing
+                // rather than tidy: without it every generic function in
+                // the surface reads as absent, which is a false positive on
+                // exactly the composition helpers the docs teach most.
+                let members =
+                    usable
+                    |> List.collect (fun (full, ms) ->
+                        (ms |> List.map fst) @ (nestedByParent.TryFind full |> Option.defaultValue []))
+                    |> List.map (fun m -> m.Split('`')[0])
+                    |> Set.ofList
+
+                kv.Key, (usable |> List.map (fst >> canonical) |> List.distinct, members))
+            |> Seq.filter (fun (_, (fulls, _)) -> not fulls.IsEmpty)
+            |> Map.ofSeq
+
+        let ownedContainerNames =
+            Set.difference (surfaceContainers |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
+
+        // ---- Phase 672: what a fragment says ----
+        let stripDocLiterals (line: string) =
+            let cut = line.IndexOf "//"
+            let text = if cut >= 0 then line.Substring(0, cut) else line
+
+            let noTriple =
+                System.Text.RegularExpressions.Regex.Replace(text, @"""""""[\s\S]*?""""""", @"""""")
+
+            System.Text.RegularExpressions.Regex.Replace(noTriple, @"""(\\.|[^""\\])*""", @"""""")
+
+        let declaredNamesIn (body: string list) =
+            body
+            |> List.collect (fun line ->
+                let t = stripDocLiterals line
+
+                [
+                    yield!
+                        rxGroups @"^\s*(?:type|and)\s+(?:\[<[^\]]*>\]\s*)?([A-Za-z_][A-Za-z0-9_]*)" t
+                        |> Option.map (fun g -> g[1])
+                        |> Option.toList
+                    yield!
+                        rxGroups @"^\s*(?:\[<[^\]]*>\]\s*)?module\s+(?:rec\s+)?([A-Za-z_][A-Za-z0-9_.]*)" t
+                        |> Option.map (fun g -> simpleNameOf g[1])
+                        |> Option.toList
+                    yield!
+                        rxGroups @"^\s*let\s+(?:mutable\s+|rec\s+|inline\s+)*([A-Z][A-Za-z0-9_]*)" t
+                        |> Option.map (fun g -> g[1])
+                        |> Option.toList
+                ])
+            |> Set.ofList
+
+        // Page accumulation, exactly as the compile arm gives `open`: a
+        // page introduces a type in its first block and reads it from its
+        // fifth, and a reader reads the page top to bottom. The ambient
+        // preamble counts for the same reason — it declares what the
+        // page's surrounding program would have provided.
+        let pageDeclaredNames =
+            let ambientNamesFor (rel: string) =
+                let path = Path.Combine(ambientDir, rel.Substring(0, rel.Length - 3) + ".fs")
+
+                if File.Exists path then
+                    declaredNamesIn (File.ReadAllLines path |> List.ofArray)
+                else
+                    Set.empty
+
+            fsharpBlocks
+            |> List.groupBy (fun (rel, _, _, _, _, _) -> rel)
+            |> List.map (fun (rel, blocks) ->
+                rel,
+                blocks
+                |> List.collect (fun (_, _, _, _, _, body) -> declaredNamesIn body |> Set.toList)
+                |> Set.ofList
+                |> Set.union (ambientNamesFor rel))
+            |> Map.ofList
+
+        let fragmentBlocks =
+            fsharpBlocks
+            |> List.filter (fun (_, _, _, _, info, _) ->
+                info.Split(' ') |> Array.exists (fun a -> a = "skip=fragment"))
+
+        // A declaration line carries a NAMESPACE path, not a member access.
+        let isDeclarationLine (t: string) =
+            System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*(open|namespace|#r|#load)\b")
+            || System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*(?:\[<[^\]]*>\]\s*)?module\b")
+
+        // Arm 1 — dotted, capitalized identifiers. The anchor is the first
+        // segment the surface owns, and every segment before it must be
+        // capitalized (so a lowercase value's property can never anchor).
+        let anchorOf (chain: string) =
+            let segs = chain.Split('.')
+
+            let rec go i =
+                if i >= segs.Length - 1 then
+                    None
+                elif not (System.Char.IsUpper(segs[i].[0])) then
+                    None
+                elif ownedContainerNames.Contains segs[i] then
+                    Some(segs[i], segs[i + 1])
+                else
+                    go (i + 1)
+
+            go 0
+
+        // Arm 2 — one brace region is one record construction.
+        let labelRx =
+            System.Text.RegularExpressions.Regex(@"(?:^|\{|;)\s*([A-Z][A-Za-z0-9_]*)\s*=(?![=>])")
+
+        let recordRegionsIn (body: string list) (startLine: int) =
+            let out = ResizeArray<int * Set<string>>()
+            let stack = System.Collections.Generic.Stack<int * ResizeArray<string>>()
+
+            let close () =
+                let line, labels = stack.Pop()
+
+                if line >= 0 && labels.Count > 0 then
+                    out.Add(line, Set.ofSeq labels)
+
+            body
+            |> List.iteri (fun i raw ->
+                let t = stripDocLiterals raw
+
+                // by the position of the NAME, so a label lands in the
+                // region open at that point in the line
+                let atPos =
+                    labelRx.Matches t
+                    |> Seq.map (fun m -> m.Groups[1].Index, m.Groups[1].Value)
+                    |> Map.ofSeq
+
+                let mutable c = 0
+
+                while c < t.Length do
+                    match atPos.TryFind c with
+                    | Some name when stack.Count > 0 -> (snd (stack.Peek())).Add name
+                    | _ -> ()
+
+                    match t[c] with
+                    | '{' ->
+                        if c + 1 < t.Length && t[c + 1] = '|' then
+                            // anonymous record — collect and discard
+                            stack.Push(-1, ResizeArray())
+                            c <- c + 1
+                        else
+                            stack.Push(startLine + i, ResizeArray())
+                    | '}' when stack.Count > 0 -> close ()
+                    | _ -> ()
+
+                    c <- c + 1)
+
+            // an unclosed region — the elided `|> ...` tail of a fragment
+            // — is still a construction and still checkable
+            while stack.Count > 0 do
+                close ()
+
+            List.ofSeq out
+
+        let recordAnchorCandidates =
+            surfaceContainers
+            |> Map.toList
+            |> List.filter (fun (_, (fulls, ms)) -> fulls.Length = 1 && ms.Count >= docFragmentMinRecordMatches)
+            |> List.map (fun (name, (_, ms)) -> name, ms)
+
+        // A finding's value is the fix it suggests. `ServerConfig` renders
+        // ~150 members, so the whole set is unreadable and an alphabetical
+        // truncation of it reliably omits the answer — every `with*` helper
+        // sorts after every field. Rank by shared trigrams, tie-broken by
+        // shared prefix. Prefix alone was tried and measured against the
+        // demonstrated-red probe: for a `withStorage` -> `withBlobStorage`
+        // rename it offered `withScheduledJob` first, because an INFIX
+        // insertion is exactly the case a prefix measure cannot see, and
+        // insertion is a common rename shape.
+        let nearestTo (wanted: string) (members: Set<string>) =
+            let trigrams (s: string) =
+                let t = s.ToLowerInvariant()
+
+                if t.Length < 3 then
+                    Set.singleton t
+                else
+                    set [ for i in 0 .. t.Length - 3 -> t.Substring(i, 3) ]
+
+            let wantedGrams = trigrams wanted
+
+            let sharedPrefix (candidate: string) =
+                let n = min wanted.Length candidate.Length
+
+                let rec go i =
+                    if
+                        i < n
+                        && System.Char.ToLowerInvariant wanted[i] = System.Char.ToLowerInvariant candidate[i]
+                    then
+                        go (i + 1)
+                    else
+                        i
+
+                go 0
+
+            members
+            |> Set.toList
+            |> List.filter (fun m -> m <> ".ctor" && not (m.StartsWith "Is" && members.Contains(m.Substring 2)))
+            |> List.sortBy (fun m -> -(Set.intersect wantedGrams (trigrams m)).Count, -(sharedPrefix m), m)
+            |> List.truncate 10
+            |> String.concat ", "
+
+        // (dotted candidates, resolvable, local, out-of-universe, ambiguous)
+        let mutable fragDotted = 0
+        let mutable fragResolvable = 0
+        let mutable fragLocal = 0
+        let mutable fragOutside = 0
+        let mutable fragAmbiguous = 0
+        let mutable fragRecordRegions = 0
+
+        let fragmentFindings =
+            fragmentBlocks
+            |> List.collect (fun (rel, ord, start, _, _, body) ->
+                let declared =
+                    Set.union (declaredNamesIn body) (pageDeclaredNames.TryFind rel |> Option.defaultValue Set.empty)
+
+                let dotted =
+                    body
+                    |> List.mapi (fun i line -> start + i, stripDocLiterals line)
+                    |> List.filter (fun (_, t) -> not (isDeclarationLine t))
+                    |> List.collect (fun (ln, t) ->
+                        System.Text.RegularExpressions.Regex.Matches(
+                            t,
+                            @"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
+                        )
+                        |> Seq.map (fun m -> ln, m.Value)
+                        |> List.ofSeq)
+
+                fragDotted <- fragDotted + dotted.Length
+
+                let dottedFindings =
+                    dotted
+                    |> List.collect (fun (ln, chain) ->
+                        match anchorOf chain with
+                        | None ->
+                            fragOutside <- fragOutside + 1
+                            []
+                        | Some(root, memberName) when declared.Contains root ->
+                            fragLocal <- fragLocal + 1
+                            []
+                        | Some(root, memberName) ->
+                            let fulls, members = surfaceContainers |> Map.find root
+
+                            if fulls.Length > 1 then
+                                fragAmbiguous <- fragAmbiguous + 1
+                                []
+                            elif members.Contains memberName then
+                                fragResolvable <- fragResolvable + 1
+                                []
+                            else
+                                [
+                                    sprintf
+                                        "%s:%d (block %d): %s — %s has no member `%s`.\n      nearest: %s"
+                                        rel
+                                        ln
+                                        ord
+                                        chain
+                                        root
+                                        memberName
+                                        (nearestTo memberName members)
+                                ])
+
+                let regions = recordRegionsIn body start
+                fragRecordRegions <- fragRecordRegions + regions.Length
+
+                let recordFindings =
+                    regions
+                    |> List.collect (fun (ln, labels) ->
+                        if labels.Count < docFragmentMinRecordLabels then
+                            []
+                        else
+                            let scored =
+                                recordAnchorCandidates
+                                |> List.choose (fun (name, ms) ->
+                                    let hit = Set.intersect labels ms |> Set.count
+
+                                    if hit >= docFragmentMinRecordMatches && not (declared.Contains name) then
+                                        Some(name, hit, ms)
+                                    else
+                                        None)
+
+                            match scored with
+                            | [] -> []
+                            | _ ->
+                                let best = scored |> List.map (fun (_, hit, _) -> hit) |> List.max
+
+                                match scored |> List.filter (fun (_, hit, _) -> hit = best) with
+                                | [ (name, hit, ms) ] when float hit >= 0.5 * float labels.Count ->
+                                    match Set.difference labels ms |> Set.toList |> List.sort with
+                                    | [] -> []
+                                    | missing ->
+                                        missing
+                                        |> List.map (fun field ->
+                                            sprintf
+                                                "%s:%d (block %d): %s has no field `%s` (matched %d of %d labels).\n      nearest: %s"
+                                                rel
+                                                ln
+                                                ord
+                                                name
+                                                field
+                                                hit
+                                                labels.Count
+                                                (nearestTo field ms))
+                                | _ -> [])
+
+                dottedFindings @ recordFindings)
 
         // ---- ambient context, declared here and never in the docs ----
         let docSnippetPreamble = [
@@ -1649,6 +2152,29 @@ let main args =
                 notComparable
                 ambiguousRedeclarations
 
+            // Phase 672 — the fragment census. It sits beside the skip
+            // counts because it MEASURES one of them: `skip=fragment` is
+            // the largest unchecked pool, and this line says how much of
+            // it a compile-free existence check can still see. The four
+            // classifications are the allow-shape rule made countable —
+            // `outside` is the placeholder / vendor / BCL traffic the lint
+            // deliberately says nothing about, and a collapse in
+            // `resolved` against a steady `checked` is the tell that the
+            // universe or the extractor has broken.
+            //
+            // `fragments walked` is also the RETIREMENT reading (672.C):
+            // this whole check deletes when Phase 660.B's conversion work
+            // brings that number to its landing floor.
+            Trace.tracefn
+                "  fragment symbols: %d fragment(s) walked — %d identifier(s) checked, %d resolved, %d local, %d outside, %d ambiguous; %d record region(s)"
+                fragmentBlocks.Length
+                fragDotted
+                fragResolvable
+                fragLocal
+                fragOutside
+                fragAmbiguous
+                fragRecordRegions
+
             // A WATCHLIST, not a defect count. An `open` of a deliberately
             // fictional vendor namespace is legitimate in an illustrative
             // fragment; an `open` of a real SDK namespace that has since
@@ -1702,6 +2228,22 @@ let main args =
                 failwithf
                     "VerifyDocSnippets: %d documentation block(s) REDECLARE a public SDK type with a member the surface does not have. A redeclaration shadows the real type, so the compile arm above cannot see this — that is why the check exists. Fix the snippet against api-baselines/<assembly>.approved.txt (the rendered public surface). Showing FEWER members than the SDK has is fine and needs no marker; showing a member it does not have is not."
                     parityFindings.Length
+
+            // Phase 672 — the fragment findings. Last of the three
+            // compile-independent arms, and reported last because it is
+            // the weakest claim of the three: it asserts only that a name
+            // exists. Zero is the enforced state and there is no baseline
+            // — this check landed with its corpus burnt down, so an entry
+            // has never been a tolerated state and must not become one.
+            if not fragmentFindings.IsEmpty then
+                Trace.tracefn ""
+
+                for f in fragmentFindings do
+                    Trace.traceError ("    " + f)
+
+                failwithf
+                    "VerifyDocSnippets: %d finding(s) — a `skip=fragment` block names an SDK symbol the public surface does not have. A fragment is exempt from COMPILATION, not from being true — the marker says the block cannot be compiled, never that its API names stopped mattering. Fix the snippet against api-baselines/<assembly>.approved.txt. If the name is a placeholder or a local of the surrounding program the page does not show, it must not be spelled like an SDK container: rename it, or give the page a docs-snippets/ambient/ preamble and drop the skip marker entirely, which is the better fix — a block under the compile arm needs no lint at all. See docs-snippets/README.md."
+                    fragmentFindings.Length
 
             // The baseline reached zero, so EMPTY is now the enforced state.
             //

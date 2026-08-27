@@ -113,11 +113,11 @@ module MyApp.Composition
 
 open ToolUp.Platform
 
-let serverHost: IServerHost =
+let app =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Anonymous
+            Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
             Webhooks = NoWebhooks
@@ -127,12 +127,13 @@ let serverHost: IServerHost =
             HealthStateTracking = false
     }
     |> ServerApp.addModule (MyApp.Module.register ())
-    // The host adapter drives `Invoke` per cloud invocation; do NOT
-    // call `ServerApp.run` (which would call `RunBlocking`).
-    |> ServerApp.composeOnly
+
+// The host adapter drives `Invoke` per cloud invocation; do NOT call
+// `ServerApp.run`, which composes and then calls `RunBlocking`.
+let serverHost: IServerHost = composeWithoutRunning app
 ```
 
-`composeOnly` is the low-level entry point that returns the `IServerHost` without calling `RunBlocking()`. (If not yet available in your SDK version, the same shape is reachable by calling `ToolUp.Platform.Server.compose` directly with the positional argument list.)
+**There is no compose-only step on the `ServerApp` pipeline today.** `ServerApp.run` composes and then blocks, which is exactly what a serverless adapter must not do, so `composeWithoutRunning` above stands in for the one call that returns an `IServerHost` without running it: `ToolUp.Platform.Server.compose`, invoked directly with its positional argument list. That list is long and unstable, which is why this guide does not spell it out — a pipeline step returning `IServerHost` is the shape this page wants, and it is not shipped.
 
 After composition, every adapter calls `Host.StartAsync(CancellationToken.None).Wait()` once at cold-start so ASP.NET Core's internal services (logger factory, config root, options) are ready. Under `ServerlessHost = ServerlessHost` every `IHostedService` registration is gated off, so `StartAsync` is effectively a no-op — the call still has to happen for the framework internals.
 
@@ -439,21 +440,22 @@ let serverHost: IServerHost =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Team
+            Surfaces = Surfaces.team
             ServerlessHost = ServerlessHost
             ProcessProfile = AllInOne
-            BlobStorage = AzureBlobStorage(Env.required "TOOLUP_AZURE_BLOB_CONNECTION")
             RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
             Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
-            SecretStore = AzureKeyVaultSecrets(Env.required "TOOLUP_AZURE_KEYVAULT_URI")
             JobScheduler = NoJobScheduler
             Webhooks = NoWebhooks
             AuditLog = NoAuditLog
             UsageMetering = NoUsageMetering
             HealthStateTracking = false
     }
+    // Blob storage is a composed companion, not a `ServerConfig` field;
+    // `ISecretStore` arrives through the secret-store resolver list.
+    |> ServerApp.withStorage (AzureBlobStorage.create azureBlobConfig)
     |> ServerApp.addModule (MyApp.Module.register ())
-    |> ServerApp.composeOnly
+    |> composeWithoutRunning
 ```
 
 **Worker silo composition root.** Same domain modules; opposite background-subsystem posture.
@@ -469,19 +471,18 @@ let main _ =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Team
+            Surfaces = Surfaces.team
             ServerlessHost = KestrelHost
             ProcessProfile = WorkerOnly
-            BlobStorage = AzureBlobStorage(Env.required "TOOLUP_AZURE_BLOB_CONNECTION")
             RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
             Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
-            SecretStore = AzureKeyVaultSecrets(Env.required "TOOLUP_AZURE_KEYVAULT_URI")
             JobScheduler = InProcessJobScheduler
             Webhooks = EnabledWebhooks
             AuditLog = EnabledAuditLog
             UsageMetering = EnabledUsageMetering
             HealthStateTracking = true
     }
+    |> ServerApp.withStorage (AzureBlobStorage.create azureBlobConfig)
     |> ServerApp.addModule (MyApp.Module.register ())
     |> ServerApp.run
 
@@ -537,7 +538,7 @@ What is NOT pre-resolved: module-level singletons registered through their own `
 
 ```fsharp skip=fragment
 // In the consumer's Composition.fs, after the SDK compose
-let host = ServerApp.empty |> ... |> ServerApp.composeOnly
+let host = ServerApp.empty |> ... |> composeWithoutRunning
 host.Host.StartAsync(CancellationToken.None).Wait()
 // Force any module hot-path singleton to materialise before first request
 host.App.Services.GetRequiredService<MyModule.HotPath.IExpensiveClient>() |> ignore

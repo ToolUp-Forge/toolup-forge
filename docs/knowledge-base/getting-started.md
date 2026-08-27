@@ -82,15 +82,17 @@ The KB module supports a "Standing AI Context" page where the team can write per
 let standingContextBuilder =
     KnowledgeBase.Server.standingContextBuilder blobStorage (Some logger)
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> ...
 |> RAGServerApp.withAIConfig {
-    AIAssistantServerConfig.defaults with
-        SystemPrompt = Some (SystemPromptBuilder.compose [
-            SystemPromptBuilder.fromStatic "You are a helpful assistant. ..."
-            standingContextBuilder
-            // ... other builders (active module, RAG retrieval, etc.)
-        ])
+    Branding = branding
+    SystemPrompt = Some (SystemPromptBuilder.compose [
+        SystemPromptBuilder.fromStatic "You are a helpful assistant. ..."
+        standingContextBuilder
+        // ... other builders (active module, RAG retrieval, etc.)
+    ])
+    MaxHistoryMessages = None
+    AISurfaceDerivation = TrustClient
 }
 |> RAGServerApp.run
 ```

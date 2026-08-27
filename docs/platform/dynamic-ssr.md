@@ -127,7 +127,7 @@ let clientReport =
 
 ```fsharp skip=fragment
 let body =
-    [ NarrativeFromData.chart NarrativeFromData.Line (Some "Revenue trend")
+    [ NarrativeFromData.chart ChartKind.Line (Some "Revenue trend")
         [ "Jan", 12_500.0; "Feb", 13_900.0; "Mar", 15_200.0 ]
       NarrativeFromData.metricGrid [ "MoM", "+9.4%", Some 0.094 ] ]
 

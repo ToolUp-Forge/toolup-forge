@@ -75,7 +75,7 @@ Client-side:
 ```fsharp skip=fragment
 let! slots =
     SchedulingClient.proxy.ListSlots {
-        ResourceId = ResourceId "stylist-1"
+        ResourceId = "stylist-1"
         Start = DateTime(2026, 5, 12)
         End = DateTime(2026, 5, 19)    // one week
     }
@@ -105,15 +105,24 @@ The server derives slots from the resource's `AvailabilityWindows` + buffer + ex
 ```fsharp skip=fragment
 let! result =
     SchedulingClient.proxy.Book {
-        ResourceId = ResourceId "stylist-1"
-        Start = DateTime(2026, 5, 12, 14, 0, 0)
-        End = DateTime(2026, 5, 12, 15, 0, 0)
-        Notes = Some "Customer: Jane Smith — colour + cut"
+        Id = Guid.NewGuid().ToString()
+        Type = "appointment"
+        Version = 1
+        ResourceId = "stylist-1"
+        Title = "Jane Smith — colour + cut"
+        StartUtc = DateTimeOffset(2026, 5, 12, 14, 0, 0, TimeSpan.Zero)
+        EndUtc = DateTimeOffset(2026, 5, 12, 15, 0, 0, TimeSpan.Zero)
+        Status = Confirmed
+        BookedBy = currentUserId
+        BookedFor = None
+        Recurrence = None
+        ParentBookingId = None
+        Metadata = Map.empty
     }
 
 match result with
 | Ok booking ->
-    // Booking confirmed — booking.BookingId is the reference
+    // Booking confirmed — booking.Id is the reference
     ...
 | Error OutsideAvailability ->
     // Slot is outside the stylist's availability windows
@@ -169,8 +178,7 @@ For recurring appointments ("weekly therapy session for 12 weeks"):
 let weeklyRule = {
     Frequency = Weekly
     Interval = 1
-    ByDayOfWeek = [ DayOfWeek.Tuesday ]
-    ByDayOfMonth = []
+    ByWeekday = [ DayOfWeek.Tuesday ]
     Count = Some 12
     Until = None
 }
@@ -182,12 +190,13 @@ let dates =
 
 // Book each date
 for date in dates do
-    let! _ = SchedulingClient.proxy.Book {
-        ResourceId = stylistId
-        Start = date.AddHours(14.)
-        End = date.AddHours(15.)
-        Notes = Some "Recurring — Jane Smith"
-    }
+    let! _ =
+        SchedulingClient.proxy.Book {
+            baseBooking with
+                Id = Guid.NewGuid().ToString()
+                StartUtc = date.AddHours 14.0
+                EndUtc = date.AddHours 15.0
+        }
 ```
 
 If any individual booking fails (slot occupied, outside availability), the loop continues; the caller decides whether to roll back the already-booked dates or partially proceed.

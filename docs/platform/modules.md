@@ -114,8 +114,6 @@ let helloModule =
     |> ServerModule.withGuardedApi helloApiFactory       // ToolUp.Remoting API
     |> ServerModule.withDataTypes [ helloDataType ]      // data type detection + processing
     |> ServerModule.withConfig helloConfigSchema         // per-module config
-    |> ServerModule.withNeedsData [ "SalesData" ]        // declares dependency
-    |> ServerModule.withProvides [ "HelloProcessed" ]    // declares output
     |> ServerModule.withAITools [ helloTool ]            // AI-callable tools
     |> ServerModule.withDefaultSurfaceRequirement
            SurfaceRequirement.userOrTeam                 // default per-route requirement

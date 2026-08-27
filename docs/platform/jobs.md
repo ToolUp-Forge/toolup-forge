@@ -139,15 +139,16 @@ For a job to react to "module X published event Y", register:
 
 ```fsharp skip=fragment
 let myJob = {
-    JobId = "react-to-y"
-    HandlerName = "my-handler"
-    Trigger = OnEvent("MyModule", "EventY")
-    Retry = JobRetryPolicy.defaults
-    IdempotencyKey = None
+    Handler = "my-handler"
+    Trigger = OnEvent "EventY"
+    RetryPolicy = JobRetryPolicy.defaults
+    Idempotency = None
+    ShardKey = None
     Precision = Minute
     Payload = ...
     ScopeId = ...
     CreatedBy = ...
+    Tags = Map.empty
 }
 scheduler.Schedule(myJob)
 ```
@@ -273,15 +274,21 @@ The handler registry is keyed by the registered name. Handler lookup at trigger 
 
 ```fsharp skip=fragment
 let summaryJob = {
-    JobId = "daily-summary"
-    HandlerName = "summary-email"
-    Trigger = Cron (CronExpression.parse "0 8 * * *")  // 08:00 UTC every day
-    Retry = { MaxAttempts = 3; BackoffSeconds = [60; 300; 900]; DeadLetterAfter = None }
-    IdempotencyKey = None
+    Handler = "summary-email"
+    Trigger = CronTrigger "0 8 * * *"  // 08:00 UTC every day
+    RetryPolicy = {
+        MaxAttempts = 3
+        InitialBackoff = TimeSpan.FromMinutes 1.0
+        MaxBackoff = TimeSpan.FromMinutes 15.0
+        DeadLetterDestination = None
+    }
+    Idempotency = None
+    ShardKey = None
     Precision = Minute
-    Payload = Json.serialize { TeamId = teamId } |> Encoding.UTF8.GetBytes
+    Payload = serialiseTeamPayload teamId   // Payload is pre-serialised JSON, a string
     ScopeId = ...
     CreatedBy = ...
+    Tags = Map.empty
 }
 ```
 
@@ -291,15 +298,16 @@ The handler resolves recipients via `ITeamStore`, builds a summary via the relev
 
 ```fsharp skip=fragment
 let reindexJob = {
-    JobId = "reindex-on-document-upload"
-    HandlerName = "reindex-handler"
-    Trigger = OnEvent("KnowledgeBase", "DocumentUploaded")
-    Retry = JobRetryPolicy.defaults
-    IdempotencyKey = None
+    Handler = "reindex-handler"
+    Trigger = OnEvent "DocumentUploaded"
+    RetryPolicy = JobRetryPolicy.defaults
+    Idempotency = None
+    ShardKey = None
     Precision = Minute
-    Payload = ...  // empty; handler reads from the event store
+    Payload = ""  // empty; handler reads from the event store
     ScopeId = ...
     CreatedBy = ...
+    Tags = Map.empty
 }
 ```
 
@@ -309,15 +317,16 @@ The handler reads recent `DocumentUploaded` events from `IEventStore` and chunks
 
 ```fsharp skip=fragment
 let cleanupJob = {
-    JobId = "cleanup-stale"
-    HandlerName = "stale-cleanup"
-    Trigger = Cron (CronExpression.parse "0 3 * * 0")  // 03:00 UTC every Sunday
-    Retry = JobRetryPolicy.singleAttempt
-    IdempotencyKey = None
+    Handler = "stale-cleanup"
+    Trigger = CronTrigger "0 3 * * 0"  // 03:00 UTC every Sunday
+    RetryPolicy = { JobRetryPolicy.defaults with MaxAttempts = 1 }
+    Idempotency = None
+    ShardKey = None
     Precision = Minute
     Payload = ...
     ScopeId = ...
     CreatedBy = ...
+    Tags = Map.empty
 }
 ```
 

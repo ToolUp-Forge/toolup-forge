@@ -50,10 +50,11 @@ AIServerApp.create aiProviderFactory providerProfile
 |> AIServerApp.run
 
 // + RAG (which wraps AI)
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embeddingProvider)
+RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
 |> RAGServerApp.withConfig config
+// AI tools ride on the module that owns them — `ServerModule.withAITools`
+// — so they arrive with `addModules`.
 |> RAGServerApp.addModules modules
-|> RAGServerApp.withAITools AITools.allTools
 |> RAGServerApp.run
 ```
 

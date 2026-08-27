@@ -298,11 +298,13 @@ let ragBuilder = RAGPromptBuilder.withRetrieval pipeline {
     ScopeStrategy = ActiveTeamPlusPlatform
 }
 
-AIServerApp.create (aiProviderFactory, aiConfigStore)
+AIServerApp.create aiProviderFactory providerProfile
 |> ...
 |> AIServerApp.withAIConfig {
-    AIAssistantServerConfig.defaults with
-        SystemPrompt = Some ragBuilder
+    Branding = branding
+    SystemPrompt = Some ragBuilder
+    MaxHistoryMessages = None
+    AISurfaceDerivation = TrustClient
 }
 |> AIServerApp.run
 ```

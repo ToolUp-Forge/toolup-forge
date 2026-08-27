@@ -128,14 +128,14 @@ member _.SendMessageStreaming(req, emit) = async {
             | Done reason ->
                 let final = String.concat "" (List.rev accumulated)
                 return {
-                    Messages = [ { Role = Assistant; Content = final } ]
+                    Content = final
                     StopReason = reason
                     ToolCalls = collectToolCalls accumulated
                     Usage = usage
                 }
             | Heartbeat -> ()
     return {
-        Messages = []
+        Content = ""
         StopReason = EndTurn
         ToolCalls = []
         Usage = usage
@@ -149,7 +149,7 @@ Populate `AIProviderResponse.Usage` with the provider's reported token counts:
 
 ```fsharp skip=fragment
 {
-    Messages = [...]
+    Content = text
     StopReason = EndTurn
     ToolCalls = []
     Usage = Some {
@@ -476,11 +476,13 @@ let composedBuilder =
         dataSummaryPromptBuilder
     ]
 
-AIServerApp.create (aiProviderFactory, aiConfigStore)
+AIServerApp.create aiProviderFactory providerProfile
 |> ...
 |> AIServerApp.withAIConfig {
-    AIAssistantServerConfig.defaults with
-        SystemPrompt = Some composedBuilder
+    Branding = branding
+    SystemPrompt = Some composedBuilder
+    MaxHistoryMessages = None
+    AISurfaceDerivation = TrustClient
 }
 |> ...
 ```
@@ -576,7 +578,7 @@ let provider =
     InMemoryProvider.create {
         OnSendMessage = fun req -> async {
             // Custom response logic for the test
-            return { Messages = [ ... ]; StopReason = EndTurn; ToolCalls = []; Usage = None }
+            return { Content = "..."; StopReason = EndTurn; ToolCalls = []; Usage = None }
         }
     }
 ```

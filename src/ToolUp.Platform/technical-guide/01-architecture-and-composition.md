@@ -227,18 +227,22 @@ ServerApp.empty
 |> ServerApp.addModules modules
 |> ServerApp.run
 
-// With AI:
-AIServerApp.empty
-|> AIServerApp.withBase (ServerApp.empty |> ... |> ServerApp.addModules modules)
-|> AIServerApp.withAIFactory aiProviderFactory
-|> AIServerApp.withAIConfigStore aiConfigStore
-|> AIServerApp.withAITools AITools.allTools
+// With AI: `create` takes the AI substrate up front, so there is no
+// empty-then-fill shape at this tier.
+AIServerApp.create aiProviderFactory providerProfile
+|> AIServerApp.withConfig config
+|> AIServerApp.addModules modules
 |> AIServerApp.run
 
-// With RAG:
-RAGServerApp.empty
-|> RAGServerApp.withAI (AIServerApp.empty |> ...)
-|> RAGServerApp.withEmbeddingProvider embeddingProvider
+// …or over an already-built base:
+AIServerApp.createFrom aiProviderFactory providerProfile baseServerApp
+|> AIServerApp.run
+
+// With RAG: the same shape one tier up — the embedder joins the two AI
+// arguments at construction.
+RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
+|> RAGServerApp.withConfig config
+|> RAGServerApp.addModules modules
 |> RAGServerApp.run
 ```
 

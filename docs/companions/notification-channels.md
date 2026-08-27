@@ -27,13 +27,11 @@ The reference deployment reads these env vars at startup and registers the Redis
 
 ```fsharp skip=fragment
 let notificationChannel =
-    RedisNotificationChannel.create
-        { ConnectionString = "localhost:6379" }
-        :> INotificationChannel
+    RedisNotificationChannel.fromConnectionString "localhost:6379" None
 
 ServerApp.empty
 |> ...
-|> ServerApp.withNotificationChannel notificationChannel
+|> ServerApp.withNotifications notificationChannel
 |> ...
 ```
 
@@ -272,7 +270,7 @@ open ToolUp.Platform
 
 type MyVendorEmailSink(settings: MyVendorSettings, secretStore: ISecretStore, httpClient: HttpClient) =
     interface INotificationSink with
-        member _.Kind = NotificationKind.Email
+        member _.Kind = NotificationKind.TransactionalEmail
         member _.Send(envelope) = async {
             let payload =
                 match envelope.Notification with
