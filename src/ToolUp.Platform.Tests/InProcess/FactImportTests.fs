@@ -306,6 +306,7 @@ let private exportPermittingGate store events =
                 PolicyRef = restrictedPolicy
                 Mode = Plain
                 PermitSurfaces = [ FactExport ]
+                ContributorScope = None
             }
         ] [])
         store

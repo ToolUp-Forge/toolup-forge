@@ -84,6 +84,16 @@ module DisclosureEvents =
     [<Literal>]
     let DeclassifiedType = "FactDisclosureDeclassified"
 
+    /// A fact carrying at least one contributing party's restricted data
+    /// disclosed at an egress surface (Phase 674.C — the per-party
+    /// **access** facet, plan D4). Emitted ONLY when the disclosed fact has
+    /// a contributing contributor scope, so a deployment that declares no
+    /// party never sees this row and stays byte-for-byte pre-674 (GP 11 /
+    /// GP 13). Rides the same `_facts` source module, so contribution,
+    /// access, refusal and declassification are one queryable record.
+    [<Literal>]
+    let AccessedType = "FactDisclosureAccessed"
+
 /// Payload of a `FactDisclosureDenied` audit event (JSON-serialised into
 /// `ModuleEvent.Payload`). PII-free: identifiers + classification only —
 /// the denied *value* never rides the audit row.
@@ -106,6 +116,16 @@ type FactDisclosureDeniedEvent = {
     /// Phase 592 — the taxonomy version the claim was judged against;
     /// empty when the facet is absent.
     TaxonomyVersion: string
+    /// Phase 674 — every contributing party whose restricted data reaches
+    /// this fact's lineage (the **contribution** facet, plan D4). Empty in
+    /// a deployment that declares no contributor scope, so a per-party
+    /// projection is derivable from this one stream without a second
+    /// (GP 6).
+    ContributorScopes: string list
+    /// Phase 674 — the contributing parties whose policy this derivation
+    /// path did NOT satisfy: the parties that caused the refusal. Names the
+    /// party, never the counterparty's data.
+    UnsatisfiedScopes: string list
 }
 
 // ─── Taint-propagating disclosure vocabulary (Phase 562) ─────────────
@@ -153,6 +173,20 @@ type DisclosurePolicy = {
     /// Taint of *derived* facts is governed separately by `DisclosureTaint`
     /// — this stance is only about a directly-classified fact's own egress.
     PermitSurfaces: FactEgressSurface list
+    /// Phase 674 — the **contributing party** this policy belongs to, as a
+    /// value-typed party id (plan D4). Deliberately NOT an auth principal:
+    /// a contributor scope is a declared data-provenance dimension of the
+    /// composition, not an identity the request carries — it is resolved
+    /// from the fact's own registered policy on the server side and can
+    /// never be asserted by a caller.
+    ///
+    /// `None` (the shipped shape) ⇒ the policy makes no per-party claim and
+    /// behaves byte-for-byte as Phase 562: its taint is cleared by any
+    /// declared declassification routine. `Some party` opts the policy into
+    /// the Phase 674 conjunction, at which point only a routine that names
+    /// `party` in its `AcceptingScopes` can clear its taint — one party's
+    /// consent can never launder another's data (plan D3).
+    ContributorScope: string option
 }
 
 /// Catalog metadata declaring a deterministic operation a **declassification
@@ -167,6 +201,18 @@ type DeclassificationRoutine = {
     /// Why this operation is a safe declassifier — recorded verbatim on
     /// every crossing (GP 6), so the audit trail explains the exemption.
     Rationale: string
+    /// Phase 674 — the contributor scopes that **accept** this routine as a
+    /// declassifier of their own restricted data (plan D3). Fail-closed by
+    /// construction: a party-scoped policy's taint is cleared only when this
+    /// list names that party, so the empty list (the shipped shape) accepts
+    /// *no* party and can never launder a scoped contribution. An
+    /// **unscoped** policy is unaffected — it is cleared by any declared
+    /// routine, exactly as Phase 562 (GP 11), so a deployment that declares
+    /// no contributor scope never pays for the conjunction (GP 13).
+    ///
+    /// A scope named here that no registered policy declares is inert: it
+    /// clears nothing. Acceptance is a claim about a party that exists.
+    AcceptingScopes: string list
 }
 
 /// The taint configuration a deployment registers at compose time (Phase
@@ -228,6 +274,46 @@ module DisclosureTaintConfig =
     let declassifierFor (config: DisclosureTaintConfig) (operationId: string) : DeclassificationRoutine option =
         config.Declassifiers.TryFind operationId
 
+    // ── Phase 674 — contributor scope + policy conjunction ────────
+    //
+    // Contributor scope is resolved from the REGISTERED POLICY, never from
+    // anything the caller supplies: `scopeOf` is a lookup in the composed
+    // vocabulary keyed by the ref the fact itself carries. There is no
+    // request-borne party claim anywhere in this file, and that is the
+    // point — a party id a caller could assert would be an authorisation
+    // token, and this is a provenance dimension.
+
+    /// The contributing party a registered policy belongs to (Phase 674).
+    /// `None` for an unscoped policy AND for an unregistered ref — an
+    /// unregistered ref is not a taint source at all (see
+    /// `isTaintPropagating`), so it never reaches the conjunction.
+    let scopeOf (config: DisclosureTaintConfig) (policyRef: string) : string option =
+        config.Policies.TryFind policyRef |> Option.bind _.ContributorScope
+
+    /// Every contributor scope the composed policy vocabulary declares,
+    /// distinct and ordered. Empty ⇒ a single-party (or party-agnostic)
+    /// deployment: the conjunction machinery is inert (GP 13).
+    let contributorScopes (config: DisclosureTaintConfig) : string list =
+        config.Policies
+        |> Map.toList
+        |> List.choose (fun (_, policy) -> policy.ContributorScope)
+        |> List.distinct
+        |> List.sort
+
+    /// Whether a declassification routine may clear the taint of the named
+    /// policy — the conjunction's single decision point (Phase 674.B).
+    ///
+    /// **Fail-closed.** An unscoped policy is cleared by any declared
+    /// routine (Phase 562, unchanged — the policy makes no party claim). A
+    /// party-scoped policy is cleared ONLY by a routine whose
+    /// `AcceptingScopes` names that party; absent, unknown or unevaluable
+    /// acceptance never clears, so an unsatisfied party's restriction
+    /// survives every other party's declassification.
+    let routineClears (config: DisclosureTaintConfig) (routine: DeclassificationRoutine) (policyRef: string) : bool =
+        match scopeOf config policyRef with
+        | None -> true
+        | Some party -> List.contains party routine.AcceptingScopes
+
 /// Payload of a `FactDisclosureDeclassified` audit event (Phase 562.C —
 /// JSON-serialised into `ModuleEvent.Payload`). PII-free: the fact being
 /// disclosed, the declassifier fact on its derivation path, the operation
@@ -253,7 +339,50 @@ type FactDisclosureDeclassifiedEvent = {
     /// Phase 592 — the taxonomy version the claim was judged against;
     /// empty when the facet is absent.
     TaxonomyVersion: string
+    /// Phase 674 — every contributing party whose restricted data reaches
+    /// the disclosed fact's lineage (the contribution facet).
+    ContributorScopes: string list
+    /// Phase 674 — the contributing parties whose taint THIS crossing
+    /// cleared, i.e. the parties that accepted this routine. Empty when the
+    /// cleared policies declare no party (the Phase 562 shape), which is
+    /// exactly the case in which no party accepted anything.
+    AcceptedScopes: string list
 }
+
+/// Payload of a `FactDisclosureAccessed` audit event (Phase 674.C). The
+/// per-party access facet: a fact carrying contributing parties' data left
+/// through an egress surface. PII-free — ids, parties, surface, principal;
+/// never a fact value. Emitted only when `ContributorScopes` is non-empty.
+type FactDisclosureAccessedEvent = {
+    /// Canonical surface name (`FactEgressSurface.toString`).
+    Surface: string
+    FactId: string
+    /// Registered metric id of the disclosed fact.
+    Metric: string
+    /// The contributing parties whose restricted data reaches this fact.
+    ContributorScopes: string list
+    /// The principal the disclosure was made to.
+    Principal: string
+    /// Phase 592 — the purpose the request claimed; empty when absent.
+    Purpose: string
+    /// Phase 592 — the taxonomy version; empty when the facet is absent.
+    TaxonomyVersion: string
+}
+
+/// Phase 674 — the typed refusal vocabulary for a multi-party conjunction
+/// failure. The verdict's policy ref names the **unsatisfied party**, not
+/// the counterparty's policy internals and never its data: the refused
+/// caller learns which consent is missing and nothing else.
+module DisclosureContributorScope =
+
+    /// The `FactNotDisclosable` ref for a derivation that failed one or
+    /// more contributing parties' policies. Stable and greppable; the
+    /// parties are already sorted+distinct by the walk.
+    [<Literal>]
+    let UnsatisfiedPrefix = "multi-party-unsatisfied:"
+
+    let unsatisfiedRef (scopes: string list) : string =
+        UnsatisfiedPrefix + String.concat "," scopes
 
 // ─── Purpose-bound disclosure — the declared-why facet (Phase 592) ───
 //

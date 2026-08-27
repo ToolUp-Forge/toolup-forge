@@ -909,6 +909,7 @@ let private registeredTests =
         DisclosureExportWebhookTests.tests
         // Phase 562 — taint-propagating disclosure + declassification routines.
         DisclosureTaintTests.tests
+        MultiPartyDisclosureTests.tests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests

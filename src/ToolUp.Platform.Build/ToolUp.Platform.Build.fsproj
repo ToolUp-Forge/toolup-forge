@@ -39,6 +39,14 @@
              their `Build.fs`; the target chains after `Fable`
              and writes prerendered HTML per declared route. -->
         <Compile Include="Build\SDK.PrerenderTarget.fs" />
+        <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate: the
+             declarative budget parser, the Lighthouse report reader, the
+             pure check between them, and the
+             `VerifyCoreWebVitalsBudget` FAKE target the CI runner script
+             invokes. Independent of SDK.Build.fs (it takes its own
+             options record rather than BuildConfig), so it may sit
+             anywhere after SDK.BuildTypes.fs. -->
+        <Compile Include="Build\SDK.CoreWebVitalsBudget.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fake.Core.Target" />

@@ -638,11 +638,15 @@ ToolUp.Facts.RecomputeJobPayload (class)
 ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
 ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }
 ToolUp.Facts.TaintCrossing (class)
-ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String)
+ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.TaintCrossing.AcceptedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintCrossing.DeclassifierFactId : System.String { get }
 ToolUp.Facts.TaintCrossing.OperationId : System.String { get }
 ToolUp.Facts.TaintCrossing.Rationale : System.String { get }
 ToolUp.Facts.TaintOutcome (class)
-ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])
+ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])
+ToolUp.Facts.TaintOutcome.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.Crossings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing] { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.TaintOutcome.InheritedPolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.TaintOutcome.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
