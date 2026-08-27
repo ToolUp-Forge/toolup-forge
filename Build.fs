@@ -86,6 +86,15 @@ let config = {
             // regression could land green. No env gating; the fixtures
             // are built in-process.
             TestPack.create "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj"
+            // Phase 574 — the SpreadsheetML write side: the workbook
+            // model's sheet-name / range validation, the emitted parts
+            // (shared strings, styles carrying the number formats,
+            // cols, mergeCells), the byte-identical-emit property, and
+            // the reopen proof run through the ToolUp.Tabular reader.
+            // No env gating; every fixture is built in-process.
+            TestPack.create
+                "OpenXmlSpreadsheet"
+                "src/ToolUp.OpenXml.Spreadsheet.Tests/ToolUp.OpenXml.Spreadsheet.Tests.fsproj"
             // Phase 127 / 207 — the AssetStore derivative pipeline: the
             // sync + async job-backed paths, and the opt-in dead-letter
             // / retry-observability surface with its default-off twin.

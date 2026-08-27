@@ -608,8 +608,11 @@ jobs:
           # of twelve let the two newest vanish silently — precisely the
           # protection the floor exists to give. It is a LOWER bound, so
           # ADDING a pack never needs an edit here; only removing one
-          # deliberately does.
-          EXPECTED_PACKS: 19
+          # deliberately does — but leaving it unraised is how the lag
+          # that prompted the 12 → 14 raise opened, so a new pack bumps
+          # it in the same commit. Raised 19 → 20 by Phase 574
+          # (OpenXmlSpreadsheet).
+          EXPECTED_PACKS: 20
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded

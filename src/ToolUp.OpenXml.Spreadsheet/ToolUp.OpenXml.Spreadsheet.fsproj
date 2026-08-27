@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.OpenXml.Spreadsheet</PackageId>
+        <Description>ToolUp.OpenXml.Spreadsheet — the SpreadsheetML write side: an immutable typed workbook model (sheets, rows, cells, cell values covering text / number / boolean / date-as-serial, number-format codes, column widths, merged ranges) with Emit.toBytes producing a valid .xlsx. Sheet names are validated against Excel's rules and returned as a recoverable Result rather than silently truncated, and emission is deterministic: two emits of the same model are byte-identical.</Description>
+        <PackageTags>fsharp;sdk;server;xlsx;openxml;spreadsheetml;excel;workbook;deterministic</PackageTags>
+        <!-- Phase 574 — single-tier companion (server-side; no Fable
+             client surface), mirroring ToolUp.OpenXml's shape.
+             Deliberately substrate-free: no ToolUp.Platform.*
+             reference — the workbook model and its emission are pure
+             document transforms, so the companion's only dependency is
+             the OpenXml SDK (GP 1: the vendor dep stays here, never in
+             ToolUp.Platform.*). README lives alongside the fsproj and
+             is packed via the Directory.Build.props auto-include. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="WorkbookModel.fs" />
+        <Compile Include="Package.fs" />
+        <Compile Include="Emit.fs" />
+    </ItemGroup>
+</Project>

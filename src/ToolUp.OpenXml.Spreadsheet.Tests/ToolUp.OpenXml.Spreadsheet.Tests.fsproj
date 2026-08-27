@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Fixtures.fs" />
+        <Compile Include="InProcess\WorkbookModelTests.fs" />
+        <Compile Include="InProcess\EmitTests.fs" />
+        <Compile Include="InProcess\ReopenTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.OpenXml.Spreadsheet\ToolUp.OpenXml.Spreadsheet.fsproj" />
+        <!-- Phase 574.C — the reopen proof runs through the EXISTING
+             read side rather than a parser this package ships, so the
+             emitted file is verified by something with no stake in how
+             it was written. -->
+        <ProjectReference Include="..\ToolUp.Tabular\ToolUp.Tabular.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <!-- The SDK-level readback asserts on merged ranges, column
+             widths and number-format codes, which the row reader does
+             not surface. -->
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+</Project>

@@ -186,3 +186,11 @@ feature with a different threat model and is deliberately out of scope.
 XLSX/XLSM *writing*, the legacy `.xls` binary format, **macro execution or
 extraction**, formula evaluation, and schema *inference* (schemas are declared, not
 guessed).
+
+**The write side lives in `ToolUp.OpenXml.Spreadsheet`.** This package reads a
+workbook that already exists; that one builds one from a typed model — sheets,
+rows, cells, number formats, column widths, merged ranges — and emits `.xlsx`
+bytes deterministically. The two are counterparts by design and share no code:
+a workbook emitted there reopens here with its values and its date-vs-number
+distinction intact, which is exactly what that package's test pack asserts,
+using this reader.

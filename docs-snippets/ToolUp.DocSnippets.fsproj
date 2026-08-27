@@ -168,6 +168,7 @@
     <ProjectReference Include="../src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj" />
     <ProjectReference Include="../src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj" />
+    <ProjectReference Include="../src/ToolUp.OpenXml.Spreadsheet/ToolUp.OpenXml.Spreadsheet.fsproj" />
     <ProjectReference Include="../src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj" />
     <ProjectReference Include="../src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj" />
