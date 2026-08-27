@@ -100,10 +100,20 @@ module ToolUp.Platform.Tests.Contracts.PublicApiApproval
 // metadata-only — no execution, no runtime load of Fable client assemblies
 // — so coverage tracks the Pack set, not the Tests dep graph. A discovered
 // packable assembly with NO committed baseline FAILS the test (a new public
-// package cannot silently escape the guard); a packable assembly not built
-// in the active config FAILS with a "build the solution first" message
-// (the canonical gate runs `dotnet build ToolUp.Forge.sln` before VerifyAll,
-// so every Debug DLL is present).
+// package cannot silently escape the guard).
+//
+// ── Unbuilt assemblies are ONE finding (Phase 731) ──
+// A packable assembly not built in the active config used to fail its own
+// case with a "build the solution first" message. Each message was right
+// and the SHAPE was wrong: an unbuilt tree is a single fact, and answering
+// it with 52 independent assertion failures reads as a catastrophic surface
+// break — which is how it was read, costing a session. The DLL is now
+// resolved when a case RUNS (`resolveDll`) rather than probed once at
+// discovery, and the missing build is reported once by `describeUnbuilt`
+// with the per-assembly cases deferring to it. The run is still red; a
+// precondition that let the pack report green would be a vacuous pass.
+// `VerifyAll` builds the solution itself before any pack, so this only
+// arises for a pack run on its own.
 //
 // This is test-tier + repo-baseline only — zero shipped code, a consumer
 // deployment is byte-for-byte unchanged (GP 13).
@@ -198,8 +208,10 @@ type PackableAssembly = {
     /// Output assembly name (== the rendered baseline file stem).
     Name: string
     ProjectPath: string
-    /// Resolved DLL in the active config, if built.
-    DllPath: string option
+    /// Directory holding the project. The built DLL is resolved FROM this
+    /// at case-execution time (`resolveDll`) rather than probed here —
+    /// see the note on `discoverPackable`.
+    ProjectDir: string
 }
 
 // Directory-based exclusions Pack applies that are NOT expressed via
@@ -253,31 +265,79 @@ let private assemblyNameOf (fsprojPath: string) =
         else
             text.Substring(start, stop - start).Trim()
 
-let private locateDll (root: string) (config: string) (projDir: string) (asmName: string) =
-    let candidate = Path.Combine(projDir, "bin", config, "net10.0", asmName + ".dll")
-    if File.Exists candidate then Some candidate else None
-
 /// Discover every packable assembly under `src/`, sorted by name for a
 /// deterministic per-assembly test order.
-let discoverPackable (root: string) (config: string) : PackableAssembly list =
+///
+/// **Discovery does NOT probe for built DLLs (Phase 731).** It used to,
+/// and the field it filled was read by each per-assembly case — so the
+/// answer to "is this assembly built?" was a snapshot taken once, when
+/// the module initialised at process start. Two consequences, both
+/// observed: a build landing DURING a run was invisible, and a pack run
+/// before `dotnet build ToolUp.Forge.sln` had populated the companion
+/// bins failed 52 cases independently, which reads as a surface break
+/// rather than as the single missing precondition it is. Resolution now
+/// happens per case, at execution (`resolveDll`), and the precondition is
+/// reported once (`describeUnbuilt`).
+/// The `config` argument it used to take went with the probe.
+let discoverPackable (root: string) : PackableAssembly list =
     let srcDir = Path.Combine(root, "src")
 
     Directory.EnumerateFiles(srcDir, "*.fsproj", SearchOption.AllDirectories)
     |> Seq.filter isPackableProject
-    |> Seq.map (fun fsproj ->
-        let projDir = Path.GetDirectoryName fsproj
-        let name = assemblyNameOf fsproj
-
-        {
-            Name = name
-            ProjectPath = fsproj
-            DllPath = locateDll root config projDir name
-        })
+    |> Seq.map (fun fsproj -> {
+        Name = assemblyNameOf fsproj
+        ProjectPath = fsproj
+        ProjectDir = Path.GetDirectoryName fsproj
+    })
     // Two fsprojs can share an <AssemblyName> only by mistake; dedup by
     // name so the baseline set is a clean 1:1 with assemblies.
     |> Seq.distinctBy _.Name
     |> Seq.sortBy _.Name
     |> List.ofSeq
+
+/// The assembly's built DLL in `config`, read from disk NOW. Called per
+/// case rather than per discovery — see `discoverPackable`.
+let resolveDll (config: string) (a: PackableAssembly) : string option =
+    let candidate =
+        Path.Combine(a.ProjectDir, "bin", config, "net10.0", a.Name + ".dll")
+
+    if File.Exists candidate then Some candidate else None
+
+/// Those of `assemblies` with no built DLL in `config`, in discovery order.
+let unbuiltAssemblies (config: string) (assemblies: PackableAssembly list) : PackableAssembly list =
+    assemblies |> List.filter (resolveDll config >> Option.isNone)
+
+/// The ONE message a missing solution build earns (Phase 731).
+///
+/// `None` when every assembly in `total` is built. Otherwise a single
+/// report naming the count and a bounded sample — bounded because the
+/// unbuilt case is routinely "all 52 of them", and a report that prints
+/// 52 names is the wall of text this exists to replace.
+///
+/// Lives here rather than inline in the test so it can be falsified
+/// directly: a guard whose only evidence is that it passed on a built
+/// tree has not been shown able to fire.
+let describeUnbuilt (config: string) (total: int) (missing: PackableAssembly list) : string option =
+    match missing with
+    | [] -> None
+    | _ ->
+        let sampleSize = 5
+        let sample = missing |> List.truncate sampleSize |> List.map _.Name
+
+        let elided =
+            match missing.Length - sample.Length with
+            | 0 -> ""
+            | n -> sprintf ", and %d more" n
+
+        Some(
+            sprintf
+                "SOLUTION NOT BUILT — %d of %d packable assemblies have no DLL in bin/%s/net10.0: %s%s.\n\nRun `dotnet build ToolUp.Forge.sln` first, then re-run this pack. The Public-API approval gate renders each assembly's surface from its built DLL, so an unbuilt tree has nothing to compare and this is a PRECONDITION, not a public-surface break — no baseline has drifted and nothing needs regenerating. The per-assembly cases below defer to this one finding rather than each reporting the same fact."
+                missing.Length
+                total
+                config
+                (String.concat ", " sample)
+                elided
+        )
 
 // ─── Resolver pool (transitive deps for MetadataLoadContext) ─────────
 

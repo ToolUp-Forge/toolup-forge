@@ -189,6 +189,117 @@ module internal Aggregate =
 
 open ToolUp.Platform
 
+/// How `VerifyAll` reaches a test pack (Phase 731).
+///
+/// It used to be `dotnet run --project <fsproj>` per pack — a build and a
+/// launch in one call. That launch path intermittently WEDGES before the
+/// suite starts: ~0% CPU, no output, indistinguishable from a slow pack
+/// until someone gives up waiting on it. Invoking the pack's already-built
+/// test dll instead has no such step, and did not reproduce the hang once
+/// across a campaign that hit it repeatedly the other way.
+///
+/// So the target builds ONCE up front, then launches dlls. The build is
+/// not an optimisation but a prerequisite — `dotnet <dll>` does not build,
+/// so a fresh checkout would otherwise have nothing to launch. It also
+/// makes the Public-API approval gate's precondition ("run `dotnet build
+/// ToolUp.Forge.sln` first") true of the canonical invocation rather than
+/// only of the CI job that happens to wrap it.
+///
+/// `internal` for the same reason `Aggregate` is, and here it is load-
+/// bearing rather than tidy: `BuildConfig` and `TestPack` are published
+/// types of `ToolUp.Platform.Build`, so a field carrying (say) the
+/// solution path would retype a public record — reddening the package's
+/// Public-API baseline and moving every consumer's `Build.fs` — to record
+/// something the target can discover for itself.
+module internal TestPackHost =
+
+    /// The one solution in the working directory, if there is exactly one.
+    ///
+    /// Ambiguity resolves to `None` on purpose: two solutions mean the
+    /// target cannot know which one covers the packs, and building the
+    /// wrong one is worse than building the projects individually.
+    let solutionInWorkingDir () : string option =
+        match !!"*.slnx" ++ "*.sln" |> List.ofSeq with
+        | [ single ] -> Some single
+        | _ -> None
+
+    /// Build everything the packs need, once, before any of them runs.
+    /// Raises on failure — a pack cannot run against a tree that did not
+    /// compile, so there is nothing for the aggregate to report about.
+    let buildOnce (packs: TestPack list) =
+        let build (what: string) (args: string list) =
+            Trace.tracefn "▶ VerifyAll: building %s" what
+
+            let result =
+                CreateProcess.fromRawCommand "dotnet" args
+                |> CreateProcess.withWorkingDirectory "."
+                |> Proc.run
+
+            if result.ExitCode <> 0 then
+                failwithf
+                    "VerifyAll: building %s failed (exit %d). No pack ran — fix the build first; the per-pack summary below would be about a tree that does not compile."
+                    what
+                    result.ExitCode
+
+        match solutionInWorkingDir () with
+        | Some sln -> build sln [ "build"; sln; "--nologo" ]
+        | None ->
+            // No single solution to lean on — build each pack's own
+            // project. Slower and narrower (it misses cross-project
+            // breakage a solution build catches), but it is the honest
+            // fallback for a consumer repo laid out differently.
+            for pack in packs do
+                build pack.Project [ "build"; pack.Project; "--nologo" ]
+
+    /// The pack's built assembly, asked of MSBuild rather than guessed.
+    ///
+    /// Deliberately not `<projDir>/bin/<config>/<tfm>/<name>.dll`: that
+    /// convention holds today and is exactly the kind of assumption that
+    /// breaks silently when a project sets `AssemblyName`, an output path,
+    /// or a second target framework. `TargetPath` is the property MSBuild
+    /// itself resolves the answer from.
+    let resolveTargetPath (project: string) : Result<string, string> =
+        let result =
+            CreateProcess.fromRawCommand "dotnet" [ "msbuild"; project; "-getProperty:TargetPath"; "-nologo" ]
+            |> CreateProcess.withWorkingDirectory "."
+            |> CreateProcess.redirectOutput
+            |> Proc.run
+
+        if result.ExitCode <> 0 then
+            Error(sprintf "could not resolve TargetPath for %s (dotnet msbuild exit %d)" project result.ExitCode)
+        else
+            let path = result.Result.Output.Trim()
+
+            if String.IsNullOrWhiteSpace path then
+                Error(sprintf "dotnet msbuild reported an empty TargetPath for %s" project)
+            elif not (IO.File.Exists path) then
+                Error(sprintf "%s resolves to %s, which does not exist — was the build skipped?" project path)
+            else
+                Ok path
+
+    /// Run one pack and return its exit code. The signature is the shape
+    /// `Aggregate.leg` wants: trace what is happening, never throw for an
+    /// ordinary failure, and hand back the code so the summary can name it.
+    let runPack (extraArgs: string list) (pack: TestPack) : int =
+        Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
+
+        match resolveTargetPath pack.Project with
+        | Error message ->
+            Trace.traceError (sprintf "VerifyAll: %s — %s" pack.Name message)
+            1
+        | Ok dll ->
+            // The working directory is the caller's, which is what
+            // `dotnet run --project` also handed the child (measured, not
+            // assumed — `dotnet run` does NOT move the child into the
+            // project directory). Any pack resolving a path relative to
+            // cwd therefore sees exactly what it saw before.
+            let result =
+                CreateProcess.fromRawCommand "dotnet" (dll :: extraArgs)
+                |> CreateProcess.withWorkingDirectory "."
+                |> Proc.run
+
+            result.ExitCode
+
 type BuildConfig = {
     ServerProject: string
     ClientProject: string
@@ -305,9 +416,16 @@ let registerTargets (config: BuildConfig) =
     Target.create "VerifyAll" (fun _ ->
         // Canonical "run every Expecto test pack" aggregator. Each pack
         // is a console runner (`<OutputType>Exe</OutputType>` per the
-        // forge convention) invoked via `dotnet run --project <path>`;
-        // `dotnet test` silently no-ops against them, hence this
-        // target exists to give operators + CI a single call shape.
+        // forge convention); `dotnet test` silently no-ops against them,
+        // hence this target exists to give operators + CI a single call
+        // shape.
+        //
+        // Phase 731: the target BUILDS ONCE and then invokes each pack's
+        // built dll directly, rather than shelling `dotnet run --project`
+        // per pack. See `TestPackHost` above for why (briefly: the
+        // `dotnet run` launch path intermittently hangs before the suite
+        // starts, and a hang is far more expensive than a failure because
+        // nothing about it says which it is).
         //
         // Packs run sequentially so the per-pack output isn't
         // interleaved (the parallel-pretty-printer is reserved for
@@ -320,7 +438,11 @@ let registerTargets (config: BuildConfig) =
         // known-red pack costs — briefly, "the gate is red" says nothing
         // about the eleven packs that never ran.
         // Diagnostic pass-through: `TOOLUP_TEST_ARGS` (whitespace-split)
-        // is appended to every pack invocation after `--`. Exists so CI
+        // is appended to every pack invocation. (Before Phase 731 it went
+        // after the `--` that separated `dotnet run`'s own arguments from
+        // the app's; invoking the dll directly, every argument is already
+        // the app's, so the separator has nothing left to separate and the
+        // pack sees the identical argv.) Exists so CI
         // can run the suite with e.g. `--debug` (Expecto names each test
         // as it starts) when hunting a failure that only reproduces on a
         // runner — a killed run then names its last-started test in the
@@ -336,26 +458,17 @@ let registerTargets (config: BuildConfig) =
             Trace.tracefn
                 "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
         | packs ->
+            // Outside the aggregate on purpose. The aggregate's whole
+            // value is "every leg ran, here is what each did"; a failed
+            // build means no leg CAN run, so folding it in as a leg would
+            // produce a summary of thirteen packs that never started plus
+            // one that never was one. It also keeps the summary's PASS /
+            // FAIL line count exactly one-per-pack, which CI counts
+            // against its EXPECTED_PACKS floor.
+            TestPackHost.buildOnce packs
+
             packs
-            |> List.map (fun pack ->
-                Aggregate.leg pack.Name (fun () ->
-                    Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
-
-                    // Deliberately NOT the file-top `dotnet` shim: that
-                    // decorates with `ensureExitCode`, which throws on a
-                    // non-zero exit and would take every later pack with
-                    // it. The invocation is otherwise identical.
-                    let args =
-                        match extraTestArgs with
-                        | [] -> [ "run"; "--project"; pack.Project ]
-                        | extra -> [ "run"; "--project"; pack.Project; "--" ] @ extra
-
-                    let result =
-                        CreateProcess.fromRawCommand "dotnet" args
-                        |> CreateProcess.withWorkingDirectory "."
-                        |> Proc.run
-
-                    result.ExitCode))
+            |> List.map (fun pack -> Aggregate.leg pack.Name (fun () -> TestPackHost.runPack extraTestArgs pack))
             |> Aggregate.runAll "VerifyAll" "pack")
 
     Target.create "Pack" (fun _ ->
