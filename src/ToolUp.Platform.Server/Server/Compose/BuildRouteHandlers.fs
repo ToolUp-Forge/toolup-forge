@@ -330,6 +330,17 @@ let buildRouteHandlers
         | NoDataIngestion -> []
         | EnabledDataIngestion -> [ makeApi DataIngestionApiHandler.dataIngestionApi ]
 
+    // Phase 10a — module data-migration admin API. Same opt-in shape:
+    // a deployment on `NoDataMigrations` mounts nothing and the paths
+    // 404 from the Giraffe terminal middleware. Both opted-in modes
+    // mount it — `ManualDataMigrations` exists precisely so the
+    // trigger is reachable while the startup sweep is not registered.
+    let dataMigrationApiHandler: HttpHandler list =
+        match config.DataMigrations with
+        | NoDataMigrations -> []
+        | EnabledDataMigrations
+        | ManualDataMigrations -> [ makeApi MigrationApiHandler.dataMigrationApi ]
+
     // OAuth Authorization Code endpoints. Same opt-in shape as the
     // data-ingestion API; disabled deployments produce an empty handler
     // list so /api/oauth/* paths 404 from the Giraffe terminal
@@ -734,6 +745,7 @@ let buildRouteHandlers
             @ maintenanceApiHandler
             @ modelExecutionApiHandler
             @ dataIngestionApiHandler
+            @ dataMigrationApiHandler
             @ oauthFlowRoutes
             @ oauth1aFlowRoutes
             @ healthMonitorApiHandler

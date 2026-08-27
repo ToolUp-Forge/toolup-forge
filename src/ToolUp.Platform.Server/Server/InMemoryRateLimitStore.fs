@@ -53,7 +53,7 @@ module InMemoryRateLimitStore =
             let windowStart = now - duration
             windowStart, duration
 
-    type private Store() =
+    type private Store(now: unit -> DateTimeOffset) =
         let counters = ConcurrentDictionary<string * RateLimitWindow, Counter>()
         let recentDecisions = ConcurrentQueue<RateLimitDecisionEvent>()
         let lockTable = ConcurrentDictionary<string * RateLimitWindow, obj>()
@@ -77,8 +77,7 @@ module InMemoryRateLimitStore =
 
                 match counters.TryGetValue storeKey with
                 | true, counter ->
-                    let now = DateTimeOffset.UtcNow
-                    let boundary, _ = windowBoundary window now
+                    let boundary, _ = windowBoundary window (now ())
 
                     if counter.WindowStart = boundary then
                         return counter.Count
@@ -89,7 +88,7 @@ module InMemoryRateLimitStore =
 
             member _.IncrementAndCheck(key, window, threshold) = async {
                 let storeKey = InboundRateLimitKey.asStoreKey key, window
-                let now = DateTimeOffset.UtcNow
+                let now = now ()
                 let boundary, duration = windowBoundary window now
 
                 let decision =
@@ -147,4 +146,23 @@ module InMemoryRateLimitStore =
     /// single-instance deployments. Multi-instance deployments need
     /// an external `IRateLimitStore` companion (Redis / Azure
     /// Table Storage / DynamoDB / Cosmos).
-    let create () : IRateLimitStore = Store() :> _
+    let create () : IRateLimitStore =
+        Store(fun () -> DateTimeOffset.UtcNow) :> _
+
+    /// Create a store reading time from `now` instead of the wall clock.
+    ///
+    /// **This exists so window-boundary behaviour is assertable without
+    /// racing a real second.** The fixed-window reset is defined against
+    /// a calendar boundary, so a test that increments twice "in the same
+    /// second" is only true if both calls land the same side of one — at
+    /// a random phase within the second, they sometimes do not, and the
+    /// case fails for a reason that has nothing to do with the store.
+    /// That is exactly the intermittent red the `PerSecond` contract case
+    /// showed in full-suite runs while passing 5/5 in isolation. Driving
+    /// the clock removes the race rather than widening a tolerance around
+    /// it, so the assertion stays exact.
+    ///
+    /// Additive: `create ()` is unchanged and still reads
+    /// `DateTimeOffset.UtcNow` (GP 11). Production composition never
+    /// calls this.
+    let createWithClock (now: unit -> DateTimeOffset) : IRateLimitStore = Store(now) :> _

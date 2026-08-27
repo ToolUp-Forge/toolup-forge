@@ -74,6 +74,37 @@ module FactsCompose =
                 Func<IServiceProvider, IFactEvidenceSource>(fun sp ->
                     FactStoreEvidenceSource.create (sp.GetRequiredService<IFactStore>()))
             )
+            // The provenance graph, composed on the SAME knob as the
+            // evidence source that feeds it. It was constructed ad hoc at
+            // every call site — the Phase 524 traversal, Phase 560's
+            // `AnswerPlanProvenance.chainForMessage`, and the certificate
+            // issuer below all rebuilt `lineage + evidence source` by
+            // hand — so a deployment that had composed the fact tier
+            // still had no `IProvenanceGraph` to resolve, and an answer
+            // surface wanting a one-call "show the working" API had to
+            // re-derive the join.
+            //
+            // Registered with the same `AddSingleton` shape as its
+            // siblings here, so a deployment that registers its own
+            // graph later in the compose chain still wins by last-wins;
+            // this is the floor, not an override.
+            //
+            // Built through `createWith` rather than `createWithFacts`
+            // because the artifact leg is an OPTION the graph already
+            // models: `IArtifactProvenanceSource` (Phase 646) is filled
+            // by `ModelArtifactProvenance.source` over an
+            // `IModelRegistry` and is not registered by any forge
+            // compose today, so `tryService` resolves `None` and the
+            // graph is byte-for-byte the `createWithFacts` one it
+            // replaces (GP 11). A deployment that DOES register the
+            // source gets the artifact hops with no second knob.
+            .AddSingleton<IProvenanceGraph>(
+                Func<IServiceProvider, IProvenanceGraph>(fun sp ->
+                    ProvenanceGraph.createWith
+                        (resolveLineage sp)
+                        (tryService<IFactEvidenceSource> sp)
+                        (tryService<IArtifactProvenanceSource> sp))
+            )
             // Phase 525 — the disclosure egress gate is registered with the
             // store, never separately: a deployment cannot compose the fact
             // tier without its egress doors armed. Dormant with no
@@ -221,13 +252,12 @@ module FactsCompose =
                 Func<IServiceProvider, IGroundingCertificateIssuer>(fun sp ->
                     let events = sp.GetRequiredService<IEventStore>()
 
-                    let lineage =
-                        match sp.GetService(typeof<ILineageStore>) with
-                        | :? ILineageStore as l -> l
-                        | _ -> LineageStore.EventStoreLineageStore(events) :> ILineageStore
-
-                    let graph =
-                        ProvenanceGraph.createWithFacts lineage (sp.GetRequiredService<IFactEvidenceSource>())
+                    // The composed graph, not a second one built here.
+                    // Both are registered on this same knob, so the
+                    // resolve cannot fail — and a deployment that swapped
+                    // the graph now has its certificates walk the graph
+                    // it swapped in, which is what registering one is for.
+                    let graph = sp.GetRequiredService<IProvenanceGraph>()
 
                     let signer =
                         match sp.GetService(typeof<ToolUp.ArtefactSigning.IArtefactSigner>) with

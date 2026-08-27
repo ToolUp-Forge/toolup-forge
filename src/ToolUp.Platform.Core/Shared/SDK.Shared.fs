@@ -537,6 +537,30 @@ type TimeSeriesStoreMode =
     /// singleton in place.
     | CustomTimeSeriesStore
 
+/// Phase 10a — selects the module data-migration substrate. Default:
+/// `NoDataMigrations` — no registry, no status store, no background
+/// runner, no `IDataMigrationApi` route, and not a single blob read at
+/// startup. A deployment whose modules have never evolved a persisted
+/// shape pays nothing (GP 13), and one that upgrades into this SDK
+/// version behaves byte-for-byte as before until it opts in (GP 11).
+type DataMigrationMode =
+    /// No migration substrate (default).
+    | NoDataMigrations
+    /// Register the registry, the blob-backed status store, the
+    /// `IDataMigrationApi` route, AND the startup runner. The runner
+    /// sweeps every team returned by `ITeamStore.ListTeams` for
+    /// objects whose stamped schema version lags the version their
+    /// module declares, and upgrades them through the registered
+    /// chain.
+    | EnabledDataMigrations
+    /// Register the registry, the status store and the API route, but
+    /// NOT the background runner: a pass runs only when an
+    /// Owner / Admin presses the button in the admin module. For
+    /// deployments that want the upgrade to be a deliberate, observed
+    /// act rather than something that happens inside a deploy's
+    /// startup window.
+    | ManualDataMigrations
+
 /// Phase 448 — selects the dataset substrate (`IDatasetStore`) for immutable,
 /// versioned, rectangular typed datasets. Default: `NoDatasets` — no
 /// `IDatasetStore` registered, zero cost (GP 13).
@@ -2438,6 +2462,13 @@ type ServerConfig = {
     /// `CustomTimeSeriesStore` leaves a companion-registered singleton
     /// (e.g. `ToolUp.TimeSeriesStores.Timescale`) in place.
     TimeSeriesStore: TimeSeriesStoreMode
+    /// Phase 10a — module data-migration substrate selection. Default:
+    /// `NoDataMigrations` — nothing registered, nothing swept, zero
+    /// cost (GP 13). `EnabledDataMigrations` adds the startup runner;
+    /// `ManualDataMigrations` registers everything except the runner,
+    /// leaving the admin module's trigger as the only way a pass
+    /// starts.
+    DataMigrations: DataMigrationMode
     /// Phase 448 — dataset substrate selection. Default: `NoDatasets` — no
     /// `IDatasetStore` registered, zero cost. `BlobDatasets` registers the
     /// blob-backed default over `IDataObjectStore` (JSON-frame codec, no
@@ -3699,6 +3730,9 @@ module ServerConfig =
         // no bridge and leaves the entity store byte-identical (GP 13).
         EntityGraphProjection = NoEntityGraphProjection
         TimeSeriesStore = NoTimeSeriesStore
+        // Phase 10a — no migration registry, no status store, no
+        // startup sweep, no API route (GP 11 / GP 13).
+        DataMigrations = NoDataMigrations
         Datasets = NoDatasets
         // Phase 528 — no session registry; nothing is recorded, the
         // revocation middleware is not registered and ISessionApi 404s

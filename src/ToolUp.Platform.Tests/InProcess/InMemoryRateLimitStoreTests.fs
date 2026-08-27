@@ -1,5 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.InMemoryRateLimitStoreTests
 
+open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
@@ -81,6 +82,82 @@ let tests =
                      | DenyWithError _ -> true
                      | _ -> false))
                 "at least one Deny event recorded"
+        }
+
+        // ── Window boundaries, driven rather than raced ──────────────
+        //
+        // The shared contract pack asserts the `PerSecond` reset across a
+        // REAL second, which is what every implementation (including a
+        // remote store) has to be held to — but it also means the case
+        // lives or dies on where in the second it happens to start. It
+        // failed once in a full 4,273-case run and passed 5/5 in
+        // isolation, which is the signature of a wall-clock race, not of
+        // a broken store. These cases pin the same semantics with the
+        // clock supplied, so a genuine window defect fails deterministically
+        // and a busy machine never does.
+
+        testCaseAsync "PerSecond: two calls inside one second share a window (clock-driven)"
+        <| async {
+            let now = ref (DateTimeOffset(2026, 8, 27, 10, 0, 0, 100, TimeSpan.Zero))
+            let store = InMemoryRateLimitStore.createWithClock (fun () -> now.Value)
+            let key = IpAddressKey "7.7.7.7"
+
+            let! _ = store.IncrementAndCheck(key, PerSecond, 5)
+            // Still the same calendar second — 100ms → 900ms.
+            now.Value <- now.Value.AddMilliseconds 800.0
+            let! _ = store.IncrementAndCheck(key, PerSecond, 5)
+
+            let! count = store.GetCurrent(key, PerSecond)
+            Expect.equal count 2 "both calls land in the same PerSecond window"
+        }
+
+        testCaseAsync "PerSecond: crossing the boundary resets the count (clock-driven)"
+        <| async {
+            let now = ref (DateTimeOffset(2026, 8, 27, 10, 0, 0, 100, TimeSpan.Zero))
+            let store = InMemoryRateLimitStore.createWithClock (fun () -> now.Value)
+            let key = IpAddressKey "8.8.8.8"
+
+            let! _ = store.IncrementAndCheck(key, PerSecond, 5)
+            let! _ = store.IncrementAndCheck(key, PerSecond, 5)
+
+            // Into the NEXT calendar second.
+            now.Value <- now.Value.AddMilliseconds 1000.0
+            let! result = store.IncrementAndCheck(key, PerSecond, 5)
+
+            match result with
+            | Ok(AllowWithRemaining remaining) ->
+                Expect.equal remaining 4 "post-boundary call sees a fresh window (threshold - 1)"
+            | other -> failwithf "expected a fresh-window Allow, got %A" other
+
+            let! count = store.GetCurrent(key, PerSecond)
+            Expect.equal count 1 "the reset count is 1, not 3"
+        }
+
+        testCaseAsync "PerSecond: a count at threshold before the boundary allows after it (clock-driven)"
+        <| async {
+            // The behaviour a rate limiter exists for, and the one a
+            // broken boundary silently destroys: an exhausted budget must
+            // become spendable again in the next window.
+            let now = ref (DateTimeOffset(2026, 8, 27, 10, 0, 0, 0, TimeSpan.Zero))
+            let store = InMemoryRateLimitStore.createWithClock (fun () -> now.Value)
+            let key = IpAddressKey "6.6.6.6"
+
+            for _ in 1..2 do
+                let! _ = store.IncrementAndCheck(key, PerSecond, 2)
+                ()
+
+            let! denied = store.IncrementAndCheck(key, PerSecond, 2)
+
+            match denied with
+            | Ok(DenyWithError _) -> ()
+            | other -> failwithf "expected a deny at threshold, got %A" other
+
+            now.Value <- now.Value.AddSeconds 1.0
+            let! allowed = store.IncrementAndCheck(key, PerSecond, 2)
+
+            match allowed with
+            | Ok(AllowWithRemaining remaining) -> Expect.equal remaining 1 "budget is spendable again next window"
+            | other -> failwithf "expected an allow in the new window, got %A" other
         }
 
         test "RouteLimit.perIpPerMinute builds the canonical per-IP shape" {

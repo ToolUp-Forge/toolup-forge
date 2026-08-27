@@ -716,6 +716,64 @@ MappingDataManagerUI+WizardStep+Tags.PickTarget : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewData : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewMapping : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewValidation : System.Int32 (literal)
+MigrationStatusUI (class)
+MigrationStatusUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.MigrationAdminConfig]) : ToolUp.Platform.ErasedModule
+MigrationStatusUI.init() : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MigrationStatusUI.update(MigrationStatusUI+Msg, MigrationStatusUI+Model) : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MigrationStatusUI+LoadState`1 (class)
+MigrationStatusUI+LoadState`1.IsLoadError : System.Boolean { get }
+MigrationStatusUI+LoadState`1.IsLoaded : System.Boolean { get }
+MigrationStatusUI+LoadState`1.IsLoading : System.Boolean { get }
+MigrationStatusUI+LoadState`1.IsNotLoaded : System.Boolean { get }
+MigrationStatusUI+LoadState`1.Loading : MigrationStatusUI+LoadState`1[T] { get }
+MigrationStatusUI+LoadState`1.NotLoaded : MigrationStatusUI+LoadState`1[T] { get }
+MigrationStatusUI+LoadState`1.Tag : System.Int32 { get }
+MigrationStatusUI+LoadState`1+LoadError (class)
+MigrationStatusUI+LoadState`1+LoadError.Item : System.String { get }
+MigrationStatusUI+LoadState`1+Loaded (class)
+MigrationStatusUI+LoadState`1+Loaded.Item : T { get }
+MigrationStatusUI+LoadState`1+Tags (class)
+MigrationStatusUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
+MigrationStatusUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
+MigrationStatusUI+LoadState`1+Tags.Loading : System.Int32 (literal)
+MigrationStatusUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
+MigrationStatusUI+Model (class)
+MigrationStatusUI+Model..ctor(MigrationStatusUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.MigrationStatus], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+MigrationStatusUI+Model.DataTypes : MigrationStatusUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo]] { get }
+MigrationStatusUI+Model.ExpandedFailures : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+MigrationStatusUI+Model.LastError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+MigrationStatusUI+Model.Statuses : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.MigrationStatus] { get }
+MigrationStatusUI+Model.Triggering : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+MigrationStatusUI+Msg (class)
+MigrationStatusUI+Msg.DismissError : MigrationStatusUI+Msg { get }
+MigrationStatusUI+Msg.IsDataTypesLoaded : System.Boolean { get }
+MigrationStatusUI+Msg.IsDismissError : System.Boolean { get }
+MigrationStatusUI+Msg.IsRefresh : System.Boolean { get }
+MigrationStatusUI+Msg.IsStatusesLoaded : System.Boolean { get }
+MigrationStatusUI+Msg.IsToggleFailures : System.Boolean { get }
+MigrationStatusUI+Msg.IsTriggerClicked : System.Boolean { get }
+MigrationStatusUI+Msg.IsTriggerComplete : System.Boolean { get }
+MigrationStatusUI+Msg.Refresh : MigrationStatusUI+Msg { get }
+MigrationStatusUI+Msg.Tag : System.Int32 { get }
+MigrationStatusUI+Msg+DataTypesLoaded (class)
+MigrationStatusUI+Msg+DataTypesLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo], System.String] { get }
+MigrationStatusUI+Msg+StatusesLoaded (class)
+MigrationStatusUI+Msg+StatusesLoaded.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus] { get }
+MigrationStatusUI+Msg+Tags (class)
+MigrationStatusUI+Msg+Tags.DataTypesLoaded : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.DismissError : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.Refresh : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.StatusesLoaded : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.ToggleFailures : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.TriggerClicked : System.Int32 (literal)
+MigrationStatusUI+Msg+Tags.TriggerComplete : System.Int32 (literal)
+MigrationStatusUI+Msg+ToggleFailures (class)
+MigrationStatusUI+Msg+ToggleFailures.Item : System.String { get }
+MigrationStatusUI+Msg+TriggerClicked (class)
+MigrationStatusUI+Msg+TriggerClicked.Item : System.String { get }
+MigrationStatusUI+Msg+TriggerComplete (class)
+MigrationStatusUI+Msg+TriggerComplete.Item1 : System.String { get }
+MigrationStatusUI+Msg+TriggerComplete.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationStatus, System.String] { get }
 ModuleVisibilityAdminUI (class)
 ModuleVisibilityAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityAdminConfig]) : ToolUp.Platform.ErasedModule
 ModuleVisibilityAdminUI.init() : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ModuleVisibilityAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -3460,7 +3518,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3485,6 +3543,7 @@ ToolUp.Platform.ClientConfig.HomeModule : ToolUp.Platform.HomeModuleMode { get }
 ToolUp.Platform.ClientConfig.HomeRecents : System.Boolean { get }
 ToolUp.Platform.ClientConfig.InputsPaneWidth : ToolUp.Platform.InputsPaneWidth { get }
 ToolUp.Platform.ClientConfig.LoadingIndicator : ToolUp.Platform.LoadingIndicatorMode { get }
+ToolUp.Platform.ClientConfig.MigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
 ToolUp.Platform.ClientConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.ModuleVisibilityAdmin : ToolUp.Platform.ModuleVisibilityAdminMode { get }
 ToolUp.Platform.ClientConfig.NoActiveTeamLanding : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig] { get }
@@ -4147,6 +4206,27 @@ ToolUp.Platform.Logger.defaultLogger : ToolUp.Platform.ILogger { get }
 ToolUp.Platform.Logger.forCategory(System.String) : ToolUp.Platform.ILogger
 ToolUp.Platform.Logger+ConsoleLogger (class)
 ToolUp.Platform.Logger+ConsoleLogger..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.MigrationAdminConfig (class)
+ToolUp.Platform.MigrationAdminConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.MigrationAdminConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.MigrationAdminConfig.Name : System.String { get }
+ToolUp.Platform.MigrationAdminMode (class)
+ToolUp.Platform.MigrationAdminMode.DefaultMigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
+ToolUp.Platform.MigrationAdminMode.IsConfiguredMigrationAdmin : System.Boolean { get }
+ToolUp.Platform.MigrationAdminMode.IsDefaultMigrationAdmin : System.Boolean { get }
+ToolUp.Platform.MigrationAdminMode.IsExternalMigrationAdmin : System.Boolean { get }
+ToolUp.Platform.MigrationAdminMode.IsNoMigrationAdmin : System.Boolean { get }
+ToolUp.Platform.MigrationAdminMode.NoMigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
+ToolUp.Platform.MigrationAdminMode.Tag : System.Int32 { get }
+ToolUp.Platform.MigrationAdminMode+ConfiguredMigrationAdmin (class)
+ToolUp.Platform.MigrationAdminMode+ConfiguredMigrationAdmin.Item : ToolUp.Platform.MigrationAdminConfig { get }
+ToolUp.Platform.MigrationAdminMode+ExternalMigrationAdmin (class)
+ToolUp.Platform.MigrationAdminMode+ExternalMigrationAdmin.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.MigrationAdminMode+Tags (class)
+ToolUp.Platform.MigrationAdminMode+Tags.ConfiguredMigrationAdmin : System.Int32 (literal)
+ToolUp.Platform.MigrationAdminMode+Tags.DefaultMigrationAdmin : System.Int32 (literal)
+ToolUp.Platform.MigrationAdminMode+Tags.ExternalMigrationAdmin : System.Int32 (literal)
+ToolUp.Platform.MigrationAdminMode+Tags.NoMigrationAdmin : System.Int32 (literal)
 ToolUp.Platform.ModuleArea (class)
 ToolUp.Platform.ModuleArea.Administration : ToolUp.Platform.ModuleArea { get }
 ToolUp.Platform.ModuleArea.IsAdministration : System.Boolean { get }

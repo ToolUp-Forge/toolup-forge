@@ -19,6 +19,8 @@ let private registeredTests =
         InMemoryEventStoreTests.tests
         PersistentEventStoreTests.tests
         DataObjectStoreTests.tests
+        // Phase 10a — module data-migration framework.
+        DataMigrationTests.tests
         // Phase 447 — seed / fixture-pack loader.
         SeedDataLoaderTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).
@@ -548,6 +550,10 @@ let private registeredTests =
         OidcSignInContractTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
+        // Phase 10f — Google Analytics 4 connector: IDataSource +
+        // IOAuthCredentialFlow contract re-binds over a faked network,
+        // query interpretation, schema catalogue, env-gated live arm.
+        GoogleAnalyticsTests.tests
         LdapAuthProviderTests.tests
         // Phase 530 — SCIM 2.0 provisioning: recorded Entra ID + Okta
         // sequences (create → assign group → change role → deactivate)

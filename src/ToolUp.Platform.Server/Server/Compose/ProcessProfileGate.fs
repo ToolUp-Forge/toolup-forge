@@ -55,6 +55,13 @@ type BackgroundSubsystem =
     /// version-witnessed entity saves and discards never-committed
     /// intents. Same wildcard-arm profile as the audit fallback replay.
     | EntityOutboxRelaySubsystem
+    /// Phase 10a — one-shot startup sweep upgrading stored objects
+    /// whose stamped schema version lags what their module declares.
+    /// Same wildcard-arm profile as the audit fallback replay: runs on
+    /// `AllInOne` / `WorkerOnly`; skipped on `WebOnly` (a sibling
+    /// worker silo does the upgrading), `DispatcherOnly` (not an
+    /// outbound dispatcher) and `ServerlessHost`.
+    | DataMigrationSweepSubsystem
     /// Usage-metering batch flusher.
     | UsageBatchFlusherSubsystem
     /// Periodic IHealthCheck poll + state-change audit emission.

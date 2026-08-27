@@ -125,6 +125,7 @@ let private forgeApiRecords: (string * Type) list = [
     "IModuleQueryBusApi", typeof<ToolUp.Platform.IModuleQueryBusApi>
     "IUserDirectoryApi", typeof<ToolUp.Platform.IUserDirectoryApi>
     "IDataIngestionApi", typeof<ToolUp.Platform.IDataIngestionApi>
+    "IDataMigrationApi", typeof<ToolUp.Platform.IDataMigrationApi>
     "IWebhookApi", typeof<ToolUp.Platform.IWebhookApi>
     "IHealthMonitorApi", typeof<ToolUp.Platform.IHealthMonitorApi>
     "MaintenanceApi", typeof<ToolUp.Platform.MaintenanceApi>

@@ -157,6 +157,8 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
             Schema = schema
         }
         Id = id
+        SchemaVersion = DataTypes.initialSchemaVersion
+        Migrations = []
         Detect = fun _ -> async { return false }
         Process = stubProcess
     }

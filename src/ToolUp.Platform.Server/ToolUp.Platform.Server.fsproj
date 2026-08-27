@@ -805,6 +805,17 @@
              on the later Giraffe / TeamManagement / AccessContext surface. -->
         <Compile Include="Server\OAuth1aFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
+        <!-- Phase 10a — module data-migration substrate (server half):
+             chain resolution + registry, the blob-backed status store, the
+             runner + its startup sweep, and the IDataMigrationApi handler.
+             Placed after Teams\TeamManagement.fs because the sweep enumerates
+             scopes via ITeamStore and the handler reuses the Owner/Admin
+             role gate; before BuildRouteHandlers mounts the route and
+             ComposeStores registers the singletons. -->
+        <Compile Include="Server\MigrationRegistry.fs" />
+        <Compile Include="Server\MigrationStatusStore.fs" />
+        <Compile Include="Server\MigrationRunner.fs" />
+        <Compile Include="Server\MigrationApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
         <!-- Phase 551 — module-declared grant policy: the compose-time
              registry, the IPermissionStore write-guard decorator, and the

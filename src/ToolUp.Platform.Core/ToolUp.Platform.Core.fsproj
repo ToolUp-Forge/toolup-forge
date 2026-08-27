@@ -147,6 +147,12 @@
         <Compile Include="Shared\Types\ColumnMappingApi.fs" />
         <Compile Include="Shared\Visualisation.fs" />
         <Compile Include="Shared\TimeManagement.fs" />
+        <!-- Phase 10a — module data-migration substrate (Fable-safe half):
+             the version stamp, the IDataMigrator seam, the chain-error DU,
+             and the per-team status record the admin UI renders. Before
+             IFileProcessor.fs, whose DataType carries SchemaVersion +
+             Migrations. BCL-only, no server coupling. -->
+        <Compile Include="Shared\MigrationTypes.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
         <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
         <!-- Phase 648 — the provenance walk's read-only wire contract: the
@@ -511,6 +517,10 @@
         <Compile Include="Shared\PlatformTenantApi.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
+        <!-- Phase 10a — IDataMigrationApi ToolUp.Remoting contract. After
+             MigrationTypes.fs (returns MigrationStatus) and after
+             AuthAttributes.fs (carries the classifier markers). -->
+        <Compile Include="Shared\MigrationApi.fs" />
         <Compile Include="Shared\MaintenanceApi.fs" />
         <Compile Include="Shared\PlatformAdminApi.fs" />
         <Compile Include="Shared\UsageTypes.fs" />

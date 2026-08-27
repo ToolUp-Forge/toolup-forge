@@ -1266,6 +1266,60 @@ let composeTests =
             Expect.isFalse (isNull (box (sp.GetService<IAnswerPlanner>()))) "the planner rides the one knob"
         }
 
+        test "EnabledFactStore registers IProvenanceGraph, so 'show the working' is one resolve" {
+            let _, sp = composedUnder EnabledFactStore None None
+
+            Expect.isFalse
+                (isNull (box (sp.GetService<IProvenanceGraph>())))
+                "the graph rides the same knob — no consumer has to rebuild lineage + evidence by hand"
+        }
+
+        test "NoFactStore registers no IProvenanceGraph (GP 13)" {
+            let _, sp = composedUnder NoFactStore None None
+
+            Expect.isTrue
+                (isNull (sp.GetService(typeof<IProvenanceGraph>)))
+                "a deployment that never composed the fact tier pays nothing for the graph"
+        }
+
+        testCaseAsync "the composed IProvenanceGraph walks the composed fact store's evidence"
+        <| async {
+            // Assert on what only the EVIDENCE SOURCE can produce, not on
+            // the root node. A `FactRef` walk always seeds its own root —
+            // with `Disclosure = None` and no edges — so "a FactNode with
+            // this id exists" passes even on a graph composed with no
+            // fact source at all, and pins nothing. The annotated
+            // disclosure and the `DerivedFrom` edge to the fact's input
+            // hash come only from `IFactEvidenceSource.GetFact`, so they
+            // are what actually distinguishes a correctly-wired
+            // registration. (Confirmed by probe: the root-node form
+            // passed with the source cut out; these two do not.)
+            let _, sp = composedUnder EnabledFactStore None None
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+            let graph = sp.GetRequiredService<IProvenanceGraph>()
+
+            let stored = assertFact store scope (draft "revenue" [ "hash-a" ] (Scalar 100m))
+
+            let! chain = graph.GetChain(scope, FactRef stored.FactId, Upstream, 3)
+
+            let factNode =
+                chain.Nodes |> List.tryFind (fun n -> n.Id = stored.FactId && n.Kind = FactNode)
+
+            match factNode with
+            | None -> failtest "the composed graph did not resolve the fact at all"
+            | Some n ->
+                Expect.equal
+                    n.Disclosure
+                    (Some "Surfaceable")
+                    "the node carries the disclosure class — which only the composed evidence source supplies"
+
+            Expect.isTrue
+                (chain.Edges
+                 |> List.exists (fun e -> e.From = stored.FactId && e.To = "hash-a" && e.Kind = DerivedFrom))
+                "the walk reaches the fact's input hash — the evidence source is wired to the composed store"
+        }
+
         test "NoFactStore composes byte-identically: no planner registered, the app untouched (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with

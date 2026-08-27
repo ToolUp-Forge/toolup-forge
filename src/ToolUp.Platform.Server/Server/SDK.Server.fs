@@ -889,6 +889,21 @@ let compose
     // validators that are scoped to ingestion being active.
     registerDataIngestion services config resolvedBlobStorage secretStore dataObjectStore eventStore resolvedLogger
 
+    // Phase 10a — opt-in module data-migration substrate (extracted to
+    // `ComposeStores.registerDataMigrations`). `NoDataMigrations` (the
+    // default) registers nothing and mounts no route; the startup sweep
+    // is additionally gated on the process-profile matrix. Registered
+    // after the ingestion block because ingestion is a primary producer
+    // of the objects a migration upgrades.
+    registerDataMigrations
+        services
+        config
+        (dataTypeRegistrations |> List.map snd |> List.distinctBy _.Id)
+        dataObjectStore
+        resolvedBlobStorage
+        eventStore
+        resolvedLogger
+
     // Phase 10h — opt-in OAuth token refresher substrate (extracted to
     // `ComposeJobs.registerOAuthRefresher`). Requires
     // `JobScheduler = InProcessJobScheduler`; misconfigured pair logs a

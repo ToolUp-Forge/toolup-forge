@@ -93,6 +93,8 @@ let private sampleDataType: DataType = {
         Schema = None
     }
     Id = "SampleCsv"
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
     Detect =
         fun content -> async {
             let headers = CsvHeaders.parse content

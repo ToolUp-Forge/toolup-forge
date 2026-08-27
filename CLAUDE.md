@@ -311,13 +311,14 @@ This rule retires when the upstream packages ship nullness annotations.
 
 ## Type erasure boundaries
 
-Type erasure (`box`/`unbox`) is contained in six sanctioned boundaries inside forge:
+Type erasure (`box`/`unbox`) is contained in seven sanctioned boundaries inside forge:
 1. **`ClientModule.register`** — erases per-module `'Model`/`'Msg` for the heterogeneous module list.
 2. **`DataTypeDisplay.RenderSummary`** — every data-producing module boxes its summary record in its server-side `DataType.Process` and unboxes in the client-side `RenderSummary` callback. Symmetric same-module-known-type cast on both ends.
 3. **Narrative `Component` block renderers** (Phase 87) — the `NarrativeElement.Component of name * props` case carries a stringly-typed `Map<string,string>` rather than a typed payload, so a deployment can register custom block renderers (`props -> XmlNode` in `NarrativeLayout`, bridged to the SDK's `string -> Map -> string option` resolver in `NarrativeHtml.RenderOptions`) without forking the `NarrativeElement` DU. The "erasure" is the stringly-typed prop bag at the registry seam; renderers are pure and resolve by name, with an unregistered name degrading to a safe placeholder.
 4. **`GridApiRegistry`** (`AgGrid.fs`) — boxed `IGridApi` handles in a keyed registry; symmetric unbox at the same-module read site.
 5. **`EntityStore` registrations** (`Server/EntityStore.fs`) — symmetric box/unbox of `EntityRegistration<'T>` in the name-keyed registration dictionary.
 6. **`AuthUIProvider` handler dispatch** (`AuthUIProvider.fs`) — the auth-UI delegate registry boxes the provider config for the registered handler.
+7. **`IDataMigrator.Migrate`** (Phase 10a, `Shared/MigrationTypes.fs`) — a data-migration step takes and returns `obj` because only the module that owns the data type knows its V_n and V_(n+1) record shapes; the SDK never does. Same shape as boundary 2: the runner boxes the stored content on the way in, the module's migrator casts to its own known type, and the runner accepts a `byte[]` or a `string` back and REFUSES anything else with a typed failure rather than writing bytes it cannot account for.
 
 Fable/JS interop boxing (React dependency arrays, `isNull (box x)` probes, erased-type coercions in the AG Grid bindings) and `HttpContext.Items` stamps are idiomatic interop, not domain erasure, and don't count against this list. Module code outside these boundaries never sees type erasure.
 

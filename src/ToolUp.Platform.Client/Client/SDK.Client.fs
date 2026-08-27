@@ -3526,6 +3526,21 @@ module Client =
             | _, ConfiguredDataIngestionAdmin cfg -> [ DataIngestionUI.create (Some cfg) ]
             | _, ExternalDataIngestionAdmin custom -> [ custom ]
 
+        // Phase 10a — data-migration admin. Same Anonymous suppression
+        // as the blocks around it: an Anonymous deployment has no role
+        // concept, and the manual trigger is an Owner / Admin act.
+        // Default `NoMigrationAdmin` — opt in by setting
+        // `ClientConfig.MigrationAdmin` AND `ServerConfig.DataMigrations`
+        // to one of the enabled modes; without the server substrate the
+        // route is not mounted and the module would be a dead end.
+        let migrationAdmin =
+            match ClientConfig.requiresAnyAuth config, config.MigrationAdmin with
+            | false, _
+            | _, NoMigrationAdmin -> []
+            | _, DefaultMigrationAdmin -> [ MigrationStatusUI.create None ]
+            | _, ConfiguredMigrationAdmin cfg -> [ MigrationStatusUI.create (Some cfg) ]
+            | _, ExternalMigrationAdmin custom -> [ custom ]
+
         // Phase 9h — data-subject-request admin. Same Anonymous
         // suppression: Anonymous deployments have no persistent scope
         // for a request to attach to. Default `NoDataSubjectRequestAdmin`
@@ -3608,6 +3623,7 @@ module Client =
             @ healthMonitor
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
+            @ migrationAdmin
             @ tenantLifecycleAdmin
             @ platformUsers
 

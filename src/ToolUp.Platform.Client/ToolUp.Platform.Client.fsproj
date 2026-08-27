@@ -329,6 +329,11 @@
         <!-- Phase 10g — OAuth 1.0a credential form helpers (Feliz). -->
         <Compile Include="Client\OAuth1aCredentialUIHelpers.fs" />
         <Compile Include="Client\DataIngestionUI.fs" />
+        <!-- Phase 10a — module data-migration admin: declared schema
+             version + per-scope progress + Owner/Admin manual trigger +
+             the per-object failure log. Opt-in via
+             ClientConfig.MigrationAdmin. -->
+        <Compile Include="Client\MigrationStatusUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
         <!-- Phase 54e — tenant-lifecycle diagnostics admin. Surfaces the
              durable last LifecycleSummary (IPlatformTenantApi.GetLifecycleSummary)
