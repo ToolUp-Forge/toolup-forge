@@ -1089,6 +1089,15 @@
              inheritance, per-site page/sitemap serving, render-cache key
              namespacing, startup validator matrix. -->
         <Compile Include="InProcess\MultiSiteTests.fs" />
+        <!-- Phase 212 — SEO / structured-data conformance lint: JSON-LD
+             (@context / @type / required properties / script-embedding
+             safety), sitemap <urlset> + <sitemapindex> against the
+             sitemaps.org 0.9 schema, canonical self-reference and
+             hreflang reciprocity across the host-aware site registry,
+             and the robots directive vocabulary. Pure-string and offline
+             (GP 12); test-only (GP 13). After MultiSiteTests.fs — it
+             renders pages for PublicSiteDef origins. -->
+        <Compile Include="InProcess\StructuredDataConformanceTests.fs" />
         <!-- Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
              AudienceGate matrix + handler 401/403 + sitemap exclusion +
              cross-tenant isolation. -->

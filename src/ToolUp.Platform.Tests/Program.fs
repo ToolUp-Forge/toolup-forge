@@ -874,6 +874,12 @@ let private registeredTests =
         // per-site serving + sitemap origins, render-cache namespacing,
         // startup validator matrix.
         MultiSiteTests.tests
+        // Phase 212 — SEO / structured-data conformance lint: the JSON-LD
+        // emitters, the sitemap <urlset>/<sitemapindex>, canonical +
+        // hreflang across the host-aware site registry, the robots
+        // directive vocabulary, and the negative self-tests that prove
+        // each rule rejects a malformed input.
+        StructuredDataConformanceTests.tests
         // Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
         // AudienceGate evaluate matrix + handler authorization pre-check
         // (401/403/200) + sitemap exclusion + cross-tenant isolation.
