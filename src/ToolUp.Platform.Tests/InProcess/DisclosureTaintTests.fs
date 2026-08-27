@@ -69,16 +69,19 @@ let private taintCfg =
             PolicyRef = "licensed"
             Mode = TaintPropagating
             PermitSurfaces = [ FactRetrieval ]
+            ContributorScope = None
         }
         {
             PolicyRef = "plain-hold"
             Mode = Plain
             PermitSurfaces = [ FactRetrieval ]
+            ContributorScope = None
         }
     ] [
         {
             OperationId = "aggregate-over-k"
             Rationale = "aggregation over ≥5 members loses individual attribution"
+            AcceptingScopes = []
         }
     ]
 
