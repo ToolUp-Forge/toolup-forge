@@ -10,6 +10,7 @@ module ToolUp.AssetStore.Tests.Doubles
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
+open ToolUp.Platform.Metrics
 open ToolUp.AssetStore
 
 let nullLogger =
@@ -71,6 +72,24 @@ type RecordingNotificationChannel() =
 
         member _.Unsubscribe(_) : Async<unit> =
             failwith "not used by the derivative pack"
+
+/// Records every counter increment, so a test can assert that a
+/// derivation moved the retry / failure counters — and, on the
+/// non-opted-in path, that it moved nothing at all.
+type RecordingMetricsSink() =
+    let increments = ConcurrentQueue<string * Map<string, string>>()
+
+    member _.Increments = increments |> List.ofSeq
+
+    /// How many times `metric` was incremented, across all tag sets.
+    member this.CountOf(metric: string) =
+        this.Increments |> List.filter (fst >> (=) metric) |> List.length
+
+    interface IMetricsSink with
+        member _.Increment(name, tags) = increments.Enqueue(name, tags)
+
+        member _.Record(_, _, _) = ()
+        member _.SetGauge(_, _, _) = ()
 
 /// Manual-pump scheduler: `Schedule` records the registration
 /// (honouring idempotency-key dedup like the real scheduler),

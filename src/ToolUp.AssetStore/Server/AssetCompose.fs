@@ -14,6 +14,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Metrics
 open ToolUp.Platform.Server
 
 // ─── Phase 39 — AssetStoreServerApp composition root ────────────
@@ -61,6 +62,13 @@ type AssetStoreServerApp = {
     /// (default) registers no job handler and emits no channel
     /// traffic (GP 13); async-mode profile entries fail typed.
     AsyncDerivation: AsyncDerivationOptions option
+    /// Phase 207 — opt-in dead-letter + retry observability over the
+    /// async pipeline. `None` (default) is exactly the Phase 127
+    /// behaviour: no dead-letter blob, no failure notification, no
+    /// counters, no `IMetricsSink` resolution (GP 11 / GP 13).
+    /// Ignored without `AsyncDerivation` — there is no background
+    /// derivation to observe.
+    DerivativeDlq: DerivativeDlqOptions option
 }
 
 /// Compose-time options for the async derivation mode (Phase 127).
@@ -68,6 +76,31 @@ and AsyncDerivationOptions = {
     /// Retry behaviour the scheduler applies to derivation jobs
     /// (GP 12 rule 3 — retry as data).
     RetryPolicy: JobRetryPolicy
+}
+
+/// Compose-time options for the Phase 207 dead-letter + retry
+/// observability surface. Supplied through
+/// `AssetStoreServerAppModule.withDerivativeDlq`; a deployment that
+/// never calls it constructs none of this.
+and DerivativeDlqOptions = {
+    /// Optional bounded-retry override. `None` keeps the budget
+    /// `AsyncDerivationOptions.RetryPolicy` already declares; `Some`
+    /// replaces it wholesale, so a deployment can widen the budget
+    /// and name a dead-letter destination in one place. The override
+    /// reaches both the handler's exhaustion test and the
+    /// registration the coordinator stamps, so the two can never
+    /// disagree about how many attempts there are.
+    RetryPolicy: JobRetryPolicy option
+    /// Persist a `DerivativeDeadLetterRecord` on terminal failure.
+    RecordDeadLetters: bool
+    /// Publish a `DerivativeFailedNotification` on terminal failure,
+    /// under `DerivativeJobs.DerivativeFailedNotificationKey`.
+    NotifyOnFailure: bool
+    /// Emit the `DerivativeJobs.RetryMetric` /
+    /// `DerivativeJobs.FailedMetric` counters against the
+    /// deployment's registered `IMetricsSink`. Costs nothing when
+    /// metrics are disabled — the SDK default sink is a no-op.
+    EmitMetrics: bool
 }
 
 module AsyncDerivationOptions =
@@ -80,6 +113,18 @@ module AsyncDerivationOptions =
         }
     }
 
+module DerivativeDlqOptions =
+    /// All three surfaces on, retry budget inherited. Opting in at
+    /// all is the deliberate act (GP 11); once opted in, an operator
+    /// asking for a dead-letter queue wants the record, the
+    /// notification and the counters.
+    let defaults: DerivativeDlqOptions = {
+        RetryPolicy = None
+        RecordDeadLetters = true
+        NotifyOnFailure = true
+        EmitMetrics = true
+    }
+
 module AssetStoreServerApp =
 
     let create () : AssetStoreServerApp = {
@@ -90,6 +135,7 @@ module AssetStoreServerApp =
         StoreOverride = None
         MimeRenderers = MimeRendererRegistry.empty
         AsyncDerivation = None
+        DerivativeDlq = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -227,6 +273,27 @@ module AssetStoreServerApp =
             AsyncDerivation = Some options
     }
 
+    /// Phase 207 — opt into dead-letter + retry observability for the
+    /// async derivation pipeline: a derivation that exhausts its
+    /// bounded retry budget persists a `DerivativeDeadLetterRecord`
+    /// an operator can sweep, publishes a
+    /// `DerivativeFailedNotification` on its own notification key,
+    /// and moves the `DerivativeJobs.RetryMetric` /
+    /// `DerivativeJobs.FailedMetric` counters. `DerivativeDlqOptions.defaults`
+    /// turns all three on and inherits the composed retry budget.
+    ///
+    /// Without this call nothing changes (GP 11 / GP 13): the handler
+    /// is constructed with `DerivativeObservability.disabled`, so no
+    /// dead-letter blob is written, no failure notification is
+    /// published, and no `IMetricsSink` is resolved. Requires
+    /// `AssetStoreServerAppModule.withAsyncDerivation` — without a
+    /// background pipeline there is nothing to observe, and the
+    /// option is ignored.
+    let withDerivativeDlq (options: DerivativeDlqOptions) (app: AssetStoreServerApp) : AssetStoreServerApp = {
+        app with
+            DerivativeDlq = Some options
+    }
+
     /// Drive the final composition. When
     /// `ServerConfig.AssetStore = NoAssetStore`, short-circuits
     /// to `ServerApp.run` — byte-for-byte the same shape as the
@@ -245,10 +312,20 @@ module AssetStoreServerApp =
             let explicitStore = app.StoreOverride
             let mimeRenderers = app.MimeRenderers
             let asyncDerivation = app.AsyncDerivation
+            let derivativeDlq = app.DerivativeDlq
 
             let asLogger =
                 app.Base.Logger
                 |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+            // Phase 207 — the DLQ surface observes the async
+            // pipeline; without one there is nothing to observe. Say
+            // so at compose time rather than leaving the operator to
+            // wonder why no dead-letter record ever appears.
+            if derivativeDlq.IsSome && asyncDerivation.IsNone then
+                asLogger.Warn(
+                    "[AssetStore] withDerivativeDlq set without withAsyncDerivation — no background derivation to observe; the option is ignored"
+                )
 
             // ─── DI registrations ────────────────────────────────
             let assetStoreServiceConfig (services: IServiceCollection) =
@@ -287,26 +364,59 @@ module AssetStoreServerApp =
                                                 | :? INotificationChannel as c -> Some c
                                                 | _ -> None
 
-                                            scheduler.RegisterHandler(
-                                                DerivativeJobs.HandlerName,
-                                                DerivativeJobHandler(
-                                                    blob,
-                                                    profiles,
-                                                    mimeRenderers,
-                                                    channel,
-                                                    asLogger,
-                                                    asyncOptions.RetryPolicy.MaxAttempts
-                                                )
-                                            )
+                                            // Phase 207 — the DLQ opt-in
+                                            // may replace the retry
+                                            // budget. Resolve it ONCE and
+                                            // use it for both the
+                                            // handler's exhaustion test
+                                            // and the registration the
+                                            // coordinator stamps, so the
+                                            // two cannot disagree.
+                                            let retryPolicy =
+                                                derivativeDlq
+                                                |> Option.bind _.RetryPolicy
+                                                |> Option.defaultValue asyncOptions.RetryPolicy
 
-                                            Some(
-                                                DerivativeJobCoordinator(
-                                                    blob,
-                                                    scheduler,
-                                                    asyncOptions.RetryPolicy,
-                                                    asLogger
-                                                )
-                                            )
+                                            // Not opted in ⇒ the Phase 127
+                                            // constructor, unchanged.
+                                            let handler =
+                                                match derivativeDlq with
+                                                | None ->
+                                                    DerivativeJobHandler(
+                                                        blob,
+                                                        profiles,
+                                                        mimeRenderers,
+                                                        channel,
+                                                        asLogger,
+                                                        retryPolicy.MaxAttempts
+                                                    )
+                                                | Some dlqOptions ->
+                                                    let metrics =
+                                                        if dlqOptions.EmitMetrics then
+                                                            match sp.GetService(typeof<IMetricsSink>) with
+                                                            | :? IMetricsSink as sink -> Some sink
+                                                            | _ -> None
+                                                        else
+                                                            None
+
+                                                    DerivativeJobHandler(
+                                                        blob,
+                                                        profiles,
+                                                        mimeRenderers,
+                                                        channel,
+                                                        asLogger,
+                                                        retryPolicy.MaxAttempts,
+                                                        {
+                                                            RecordDeadLetters = dlqOptions.RecordDeadLetters
+                                                            NotifyOnFailure = dlqOptions.NotifyOnFailure
+                                                            Metrics = metrics
+                                                            DeadLetterDestination = retryPolicy.DeadLetterDestination
+                                                        }
+                                                    )
+
+                                            scheduler.RegisterHandler(DerivativeJobs.HandlerName, handler)
+
+                                            Some(DerivativeJobCoordinator(blob, scheduler, retryPolicy, asLogger))
                                         | _ ->
                                             asLogger.Warn(
                                                 "[AssetStore] withAsyncDerivation set but no IJobScheduler is registered — async-mode derivatives will fail typed"

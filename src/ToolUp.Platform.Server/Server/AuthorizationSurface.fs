@@ -1260,3 +1260,565 @@ module SeamAuthoritySurface =
             })
             |> ordered
     }
+
+// ─── Phase 554 — the META-AUTHORITY facet of the same manifest ────────
+//
+// The two projections above answer "what may reach this component?" and
+// "what may this component reach?". A counterparty evaluating whether to
+// let their data into a deployment asks a third question first, and it is
+// one level up from both: **who can hand out access to this module, by
+// which path, and what must be true before they can?**
+//
+// Phase 551 gave modules a voice on the second half — a declared
+// `GrantPolicy` narrowing the preconditions on being granted at all. What
+// it did not give anyone is a way to READ the resulting authority
+// structure without following the write paths through the source. So
+// "the only grant paths to our module demand our co-signature" was a
+// claim in prose, checked by a reviewer with a code search, re-checked
+// from scratch every time either side changed.
+//
+// This facet makes it derived data. Per module carrying a declared
+// policy: the policy, the **principal classes** that can still write a
+// grant against it, the write paths still open, and what each of those
+// demands. A counterparty inspects the manifest instead of trusting the
+// sentence.
+//
+// **Two halves, one derived and one declared, and the split is the whole
+// honesty of the thing.**
+//
+//   * The MODULE half is derived from registrations, exactly as every
+//     other projection in this file is (GP 9): the policy comes off
+//     `ServerModule.GrantPolicy`, so a module that declares a policy
+//     appears here with no change to this file, and one that declares
+//     nothing appears nowhere.
+//   * The PATH half is the SDK describing **its own** write paths —
+//     `IPermissionStore`'s mutating members and the policy-aware entry
+//     points beside them. Nothing can derive that: which principal class
+//     reaches a store member is a fact about the admin surfaces and the
+//     composition, not about any registration. So it is a declaration,
+//     with the precedent already in this file (`InHandlerGateDeclaration`
+//     — seams 1 and 2 read declarations too), and it is kept honest the
+//     same way: by a drift guard that reflects over the real surfaces and
+//     fails on a member the table does not classify. A path the table
+//     forgot would understate who can grant, which is the one direction a
+//     manifest of authority must never fail in.
+//
+// **Live consent state is deliberately absent.** Phase 552's
+// `IGrantConsentStore` knows which counterparty approvals exist right
+// now; this is static composition truth — what the composition PERMITS,
+// not what has been agreed. The live view is the attestation
+// certificate's job. Folding a runtime store read in here would make the
+// manifest a query against a moving target and quietly turn a
+// composition-time artefact into a runtime one.
+//
+// **A sibling projection, never fields grown onto `AuthorizationSurface`**
+// — the rule this file already records twice. The projections join on
+// `ComponentId`, which all three carry.
+
+/// A class of principal able to write module-access grants. Coarse by
+/// design: a counterparty reviewing a deployment cares which KIND of
+/// actor can hand out access to their module, not which individual.
+///
+/// The classes are the ones forge's own write paths actually admit, which
+/// is why there are five rather than the three an admin-centric reading
+/// would expect. The last two are the ones a review is most likely to
+/// miss: under `RequiresSubjectConsent` the grantee themselves completes
+/// the authority, and under `RequiresCounterpartyApproval` the named
+/// party's signature is part of the write.
+type GrantPrincipalClass =
+    /// A team-scoped administrator — the `TeamRoles.canManageMembers`
+    /// predicate, i.e. `Owner` or `Admin`. Named for the reviewer's
+    /// vocabulary; the membership is the predicate, not the single role.
+    | TeamOwnerPrincipal
+    /// A platform administrator, who bypasses the team-role gates
+    /// server-side through the `IPlatformAdminStore` short-circuit.
+    | PlatformAdminPrincipal
+    /// Composed server-side code with no interactive caller at the moment
+    /// of the write — a consumer's own service calling the grant entry
+    /// point, or the dual-control approver applying a parked mutation.
+    | ServiceAccountPrincipal
+    /// The grantee. Not an administrator at all, and reachable only where
+    /// a policy records a grant pending the subject's own acceptance.
+    | GranteeSubjectPrincipal
+    /// The party a `RequiresCounterpartyApproval` arm names. Their
+    /// verified consent record is an input to the write, so they are part
+    /// of the authority chain rather than an observer of it.
+    | CounterpartyPrincipal
+
+/// What a write path can prove about a declared precondition. The bridge
+/// between the path table and a module's declared policy: which paths
+/// stay open against a module is computed from this, never hand-listed
+/// per policy arm.
+type GrantPolicySatisfaction =
+    /// The path carries no evidence at all, so it can only write a grant
+    /// on a module that demands none.
+    | SatisfiedByAdminDiscretion
+    /// The path carries the administrator's explicit acknowledgement and
+    /// justification, or writes the grant record alongside the permission
+    /// entry in one document update.
+    | SatisfiedByDeclaredEvidence
+    /// The path presents a verified, unexpired, unrevoked consent record
+    /// from the party the module named.
+    | SatisfiedByCounterpartyConsent
+    /// The path confers authority on a grant that was ALREADY recorded
+    /// rather than creating one — the grantee's acceptance of a pending
+    /// record.
+    | SatisfiedByRecordedConsent
+    /// The member mutates the permission document without conferring
+    /// module authority (the exposure axis). Classified rather than
+    /// omitted: the drift guard's subject is coverage, so a member that
+    /// grants nothing says so explicitly and a NEW member cannot pass by
+    /// being overlooked.
+    | SatisfiesNoGrantPolicy
+
+/// One SDK-owned path by which a module-access grant reaches the
+/// permission document.
+///
+/// Field names are `Path*`-prefixed for the Phase 431 field-inference
+/// reason recorded on `AuthorizationSurface.Exposed`.
+type GrantWritePath = {
+    /// The declaring surface's simple type name — `IPermissionStore`,
+    /// `PermissionGrants`, `GrantConsentStore`. The drift guard reflects
+    /// over the real type and matches on this.
+    PathSurface: string
+    /// The member or function name on that surface.
+    PathMember: string
+    /// The principal classes that reach this path.
+    PathPrincipals: GrantPrincipalClass list
+    /// What the path can prove. A path may prove more than one thing —
+    /// the whole-document write validates records it carries AND consults
+    /// the consent oracle for the counterparty arm.
+    PathSatisfies: GrantPolicySatisfaction list
+    /// One line stating what the path demands before it creates
+    /// authority. Rendered verbatim into the facet's precondition
+    /// summary, so it is written for the reviewer, not for the compiler.
+    PathDemands: string
+}
+
+/// One module's meta-authority: who can be granted access to it, by which
+/// path, under which declared policy.
+///
+/// Field names are `Authority*`-prefixed for the Phase 431
+/// field-inference reason recorded on `AuthorizationSurface.Exposed`.
+type GrantAuthorityEntry = {
+    /// The module's registration `Name` — the key
+    /// `ModuleGrantPolicyRegistry` resolves a policy by, so the manifest
+    /// and the enforcement are keyed alike.
+    AuthorityModule: string
+    /// The module's stable Phase 279 identity, so this facet joins to the
+    /// other two projections.
+    AuthorityComponent: ComponentId
+    /// The Phase 551 policy the module declared.
+    AuthorityPolicy: GrantPolicy
+    /// The principal classes able to write a grant against it, deduped
+    /// and held in the canonical class order.
+    AuthorityPrincipals: GrantPrincipalClass list
+    /// The identities of the write paths still open against it, sorted
+    /// ordinally.
+    AuthorityOpenPaths: string list
+    /// What those paths demand — one line each, deduped and sorted, so a
+    /// reviewer reads the preconditions without dereferencing the paths.
+    AuthorityPreconditions: string list
+}
+
+/// The derived meta-authority of a composition: one entry per module
+/// carrying a declared grant policy, in a deterministic module-name
+/// order.
+///
+/// **Only policy-bearing modules appear**, on the reasoning
+/// `SeamAuthoritySurface.ofSignature` already records for its own
+/// absences: a module declaring `AdminDiscretion` has declared nothing,
+/// and listing every such module as "an administrator may grant it"
+/// would bury the declared ones in a roster of non-declarations. It also
+/// makes the facet empty for a deployment that declares no policy, which
+/// is the same nothing that deployment already pays (GP 11 / GP 13).
+type GrantAuthoritySurface = { Authority: GrantAuthorityEntry list }
+
+/// A module's meta-authority projected to plain strings — the shape a
+/// golden file or an external reviewer's tool persists, so neither
+/// depends on the F# union representations round-tripping through a
+/// serialiser.
+type GrantAuthorityWireEntry = {
+    AuthorityModuleName: string
+    AuthorityComponentIdentity: string
+    AuthorityPolicyToken: string
+    AuthorityPrincipalLabels: string list
+    AuthorityPathIdentities: string list
+    AuthorityPreconditionLines: string list
+}
+
+/// The `GrantPrincipalClass` vocabulary + its canonical order.
+module GrantPrincipalClass =
+
+    /// The persisted label for a principal class.
+    let label (principal: GrantPrincipalClass) : string =
+        match principal with
+        | TeamOwnerPrincipal -> "team-owner"
+        | PlatformAdminPrincipal -> "platform-admin"
+        | ServiceAccountPrincipal -> "service-account"
+        | GranteeSubjectPrincipal -> "grantee-subject"
+        | CounterpartyPrincipal -> "counterparty"
+
+    /// Read a persisted label back. An unrecognised label reads as
+    /// `PlatformAdminPrincipal` — the broadest administrative class, so a
+    /// surface of unknown provenance is never read back as the narrow
+    /// `GranteeSubjectPrincipal` and made to look more constrained than it
+    /// is. The manifest may overstate who can grant; it must never
+    /// understate it.
+    let ofLabel (raw: string) : GrantPrincipalClass =
+        match (if isNull raw then "" else raw.Trim()) with
+        | "team-owner" -> TeamOwnerPrincipal
+        | "service-account" -> ServiceAccountPrincipal
+        | "grantee-subject" -> GranteeSubjectPrincipal
+        | "counterparty" -> CounterpartyPrincipal
+        | _ -> PlatformAdminPrincipal
+
+    /// Canonical ordering rank — administrative classes first, widest
+    /// first, then the two non-administrative classes a review is most
+    /// likely to overlook. A rank rather than a label sort, so the
+    /// rendered line reads in the order a reviewer thinks in and does not
+    /// re-order if a label is ever reworded.
+    let rank (principal: GrantPrincipalClass) : int =
+        match principal with
+        | PlatformAdminPrincipal -> 0
+        | TeamOwnerPrincipal -> 1
+        | ServiceAccountPrincipal -> 2
+        | GranteeSubjectPrincipal -> 3
+        | CounterpartyPrincipal -> 4
+
+    /// Every class, in canonical order. Exhaustive by construction — the
+    /// `rank` match above fails to compile if a case is added and not
+    /// ranked, and this list is what the drift guard counts against.
+    let all: GrantPrincipalClass list = [
+        PlatformAdminPrincipal
+        TeamOwnerPrincipal
+        ServiceAccountPrincipal
+        GranteeSubjectPrincipal
+        CounterpartyPrincipal
+    ]
+
+    /// Dedupe + order a set of classes.
+    let ordered (principals: GrantPrincipalClass list) : GrantPrincipalClass list =
+        principals |> List.distinct |> List.sortBy rank
+
+/// The `GrantPolicySatisfaction` vocabulary + the one place a declared
+/// policy is matched against what a path can prove.
+module GrantPolicySatisfaction =
+
+    /// The persisted label for a satisfaction.
+    let label (satisfaction: GrantPolicySatisfaction) : string =
+        match satisfaction with
+        | SatisfiedByAdminDiscretion -> "admin-discretion"
+        | SatisfiedByDeclaredEvidence -> "declared-evidence"
+        | SatisfiedByCounterpartyConsent -> "counterparty-consent"
+        | SatisfiedByRecordedConsent -> "recorded-consent"
+        | SatisfiesNoGrantPolicy -> "confers-no-module-authority"
+
+    /// Does a path proving `satisfaction` still write a grant against a
+    /// module declaring `policy`?
+    ///
+    /// This mirrors the shipped Phase 551 / 552 guard semantics, arm for
+    /// arm, and is the single place they are stated as data:
+    ///
+    /// * `AdminDiscretion` admits the evidence-free paths AND the
+    ///   evidence-carrying one (`evaluateGrant` returns `Ok None` — the
+    ///   grant is ordinary and no record is written).
+    /// * `RequiresAcknowledgement` admits only a path that can carry the
+    ///   acknowledgement + justification. The legacy per-member write and
+    ///   the team defaults have nowhere to put either, which is why they
+    ///   refuse by construction rather than by a check someone must
+    ///   remember.
+    /// * `RequiresSubjectConsent` admits that same path — which records
+    ///   the grant PENDING — and, separately, the grantee's own
+    ///   acceptance, which is what makes it live.
+    /// * `RequiresCounterpartyApproval` admits only a path that presents a
+    ///   verified consent record. Every other path refuses, including
+    ///   under Phase 552: a document record without live consent is the
+    ///   forged row Phase 551 recorded as refusable.
+    let admits (policy: GrantPolicy) (satisfaction: GrantPolicySatisfaction) : bool =
+        match satisfaction with
+        | SatisfiesNoGrantPolicy -> false
+        | SatisfiedByAdminDiscretion -> policy = GrantPolicy.AdminDiscretion
+        | SatisfiedByDeclaredEvidence ->
+            match policy with
+            | GrantPolicy.AdminDiscretion
+            | GrantPolicy.RequiresAcknowledgement
+            | GrantPolicy.RequiresSubjectConsent -> true
+            | GrantPolicy.RequiresCounterpartyApproval _ -> false
+        | SatisfiedByRecordedConsent -> policy = GrantPolicy.RequiresSubjectConsent
+        | SatisfiedByCounterpartyConsent ->
+            match policy with
+            | GrantPolicy.RequiresCounterpartyApproval _ -> true
+            | _ -> false
+
+/// Identity + policy resolution for one declared write path.
+module GrantWritePath =
+
+    /// The addressable identity of a path — `<Surface>.<Member>`. What
+    /// the facet lists and a golden file persists.
+    let identity (path: GrantWritePath) : string =
+        path.PathSurface.Trim() + "." + path.PathMember.Trim()
+
+    /// Is this path still able to write a grant against a module
+    /// declaring `policy`?
+    let isOpenUnder (policy: GrantPolicy) (path: GrantWritePath) : bool =
+        path.PathSatisfies |> List.exists (GrantPolicySatisfaction.admits policy)
+
+/// Derivation, queries and projection over a composition's grant
+/// authority. Pure over already-collected registrations plus the SDK's
+/// own declared write-path table; nothing is built until a caller asks
+/// (GP 13), and nothing is registered into DI ever.
+module GrantAuthoritySurface =
+
+    /// The facet of a composition where no module declares a policy.
+    let empty: GrantAuthoritySurface = { Authority = [] }
+
+    let private compareOrdinal (a: string) (b: string) = String.CompareOrdinal(a, b)
+
+    let private sortedLines (lines: string list) : string list =
+        lines
+        |> List.filter (String.IsNullOrWhiteSpace >> not)
+        |> List.map _.Trim()
+        |> List.distinct
+        |> List.sortWith compareOrdinal
+
+    // ── the declared write-path table ─────────────────────────────────
+
+    /// **Every path by which a module-access grant reaches the permission
+    /// document in a forge composition**, with the principal classes that
+    /// reach it and what it can prove.
+    ///
+    /// This is the one table in this file that is authored rather than
+    /// derived, for the reason the section header states: which principal
+    /// class reaches a store member is a fact about the admin surfaces,
+    /// not about any registration. It is kept complete by
+    /// `AuthorizationSurfaceTests`' drift guard, which reflects over
+    /// `IPermissionStore` and the grant entry points and fails on a
+    /// member this table does not classify — so a new write path cannot
+    /// arrive unenumerated, which is the only way this facet could lie in
+    /// the direction that matters.
+    ///
+    /// Ordered by identity, and `assemble` re-sorts anyway, so a
+    /// consumer's own table composes with this one deterministically.
+    let platformWritePaths: GrantWritePath list = [
+        {
+            PathSurface = "IPermissionStore"
+            PathMember = "SetTeamPermissions"
+            PathPrincipals = [ PlatformAdminPrincipal; ServiceAccountPrincipal ]
+            PathSatisfies = [
+                SatisfiedByAdminDiscretion
+                SatisfiedByDeclaredEvidence
+                SatisfiedByCounterpartyConsent
+            ]
+            PathDemands =
+                "the same document update must carry an adequate grant record for every entry it adds or widens; the counterparty arm additionally needs live consent from the named party"
+        }
+        {
+            PathSurface = "IPermissionStore"
+            PathMember = "SetMemberPermissions"
+            PathPrincipals = [ PlatformAdminPrincipal; TeamOwnerPrincipal ]
+            PathSatisfies = [ SatisfiedByAdminDiscretion ]
+            PathDemands =
+                "carries no evidence — a first grant on a policy-bearing module refuses by construction and points at the policy-aware entry point"
+        }
+        {
+            PathSurface = "IPermissionStore"
+            PathMember = "SetTeamDefaults"
+            PathPrincipals = [ PlatformAdminPrincipal; TeamOwnerPrincipal ]
+            PathSatisfies = [ SatisfiedByAdminDiscretion ]
+            PathDemands =
+                "a team default has no subject to acknowledge, consent, or be recorded against, so a policy-bearing module is refused outright rather than silently defaulted in"
+        }
+        {
+            PathSurface = "IPermissionStore"
+            PathMember = "SetModuleExposure"
+            PathPrincipals = [ PlatformAdminPrincipal; TeamOwnerPrincipal ]
+            PathSatisfies = [ SatisfiesNoGrantPolicy ]
+            PathDemands = "visibility only — changes what the team is offered, never what a member is authorised to do"
+        }
+        {
+            PathSurface = "PermissionGrants"
+            PathMember = "grantModuleAccess"
+            PathPrincipals = [ PlatformAdminPrincipal; TeamOwnerPrincipal; ServiceAccountPrincipal ]
+            PathSatisfies = [ SatisfiedByAdminDiscretion; SatisfiedByDeclaredEvidence ]
+            PathDemands =
+                "an explicit acknowledgement and a non-empty justification; under subject consent the grant is recorded PENDING and confers nothing until the grantee accepts"
+        }
+        {
+            PathSurface = "PermissionGrants"
+            PathMember = "acceptGrant"
+            PathPrincipals = [ GranteeSubjectPrincipal ]
+            PathSatisfies = [ SatisfiedByRecordedConsent ]
+            PathDemands =
+                "an existing pending grant record for this subject and module — it activates a recorded grant and can never mint one"
+        }
+        {
+            PathSurface = "GrantConsentStore"
+            PathMember = "grantWithCounterpartyApproval"
+            PathPrincipals = [ PlatformAdminPrincipal; ServiceAccountPrincipal; CounterpartyPrincipal ]
+            PathSatisfies = [ SatisfiedByCounterpartyConsent ]
+            PathDemands =
+                "a signature-valid, unexpired, unrevoked consent record from the party the module named — refused when the module names no counterparty at all"
+        }
+    ]
+
+    // ── assembly ──────────────────────────────────────────────────────
+
+    let private ordered (entries: GrantAuthorityEntry list) : GrantAuthorityEntry list =
+        entries
+        |> List.sortWith (fun a b -> compareOrdinal a.AuthorityModule b.AuthorityModule)
+
+    /// The single assembly point, so every derivation shares one ordering
+    /// and one collapse rule.
+    ///
+    /// **A duplicate module name collapses to the LAST declaration**, and
+    /// the direction is copied rather than chosen: the composition folds
+    /// its declarations into the policy registry through `Map.ofList`,
+    /// which is last-wins, and this facet's job is to report the policy
+    /// the registry ENFORCES. Picking the stricter of the two would read
+    /// better and would be wrong the moment the two disagreed.
+    let private assemble (entries: GrantAuthorityEntry list) : GrantAuthoritySurface =
+        let collapsed =
+            entries
+            |> List.groupBy _.AuthorityModule
+            |> List.map (fun (_, group) -> List.last group)
+
+        { Authority = ordered collapsed }
+
+    // ── derivation from the live module registrations (554.A) ─────────
+
+    /// Derive the facet from composed modules and a write-path table.
+    ///
+    /// `attribute` resolves a module to the identity its entry is
+    /// recorded under — the same parameter, with the same default, that
+    /// `ofModulesWith` takes one section up, so a composition root that
+    /// keys components differently says so once.
+    ///
+    /// Nothing here is a hand-listed module table: a module that declares
+    /// a policy appears with no change to this function, and one that
+    /// declares none appears nowhere.
+    let ofModulesWith
+        (attribute: ServerModule -> ComponentId)
+        (paths: GrantWritePath list)
+        (modules: ServerModule list)
+        : GrantAuthoritySurface =
+        modules
+        |> List.filter (fun m -> m.GrantPolicy <> GrantPolicy.AdminDiscretion)
+        |> List.map (fun serverModule ->
+            let policy = serverModule.GrantPolicy
+            let openPaths = paths |> List.filter (GrantWritePath.isOpenUnder policy)
+
+            {
+                AuthorityModule = serverModule.Name
+                AuthorityComponent = attribute serverModule
+                AuthorityPolicy = policy
+                AuthorityPrincipals = openPaths |> List.collect _.PathPrincipals |> GrantPrincipalClass.ordered
+                AuthorityOpenPaths = openPaths |> List.map GrantWritePath.identity |> sortedLines
+                AuthorityPreconditions = openPaths |> List.map _.PathDemands |> sortedLines
+            })
+        |> assemble
+
+    /// `ofModulesWith` under the default attribution and the SDK's own
+    /// write-path table — the call a composition root makes.
+    let ofModules (modules: ServerModule list) : GrantAuthoritySurface =
+        ofModulesWith AuthorizationSurface.componentIdOf platformWritePaths modules
+
+    // ── queries ───────────────────────────────────────────────────────
+
+    /// One module's entry, when it declared a policy.
+    let entryFor (moduleName: string) (surface: GrantAuthoritySurface) : GrantAuthorityEntry option =
+        surface.Authority |> List.tryFind (fun e -> e.AuthorityModule = moduleName)
+
+    /// The principal classes able to write a grant against a named
+    /// module. **A module that declared no policy answers with every
+    /// class that reaches an evidence-free path** rather than with the
+    /// empty list: nothing was declared, so nothing was narrowed, and an
+    /// empty answer would read as "nobody can grant this" — the one
+    /// misreading a meta-authority manifest must not produce.
+    let principalsOf (moduleName: string) (surface: GrantAuthoritySurface) : GrantPrincipalClass list =
+        match entryFor moduleName surface with
+        | Some entry -> entry.AuthorityPrincipals
+        | None ->
+            platformWritePaths
+            |> List.filter (GrantWritePath.isOpenUnder GrantPolicy.AdminDiscretion)
+            |> List.collect _.PathPrincipals
+            |> GrantPrincipalClass.ordered
+
+    /// Every module that named a counterparty, with the party it named —
+    /// the query a counterparty runs to find its own modules.
+    let counterpartyModules (surface: GrantAuthoritySurface) : (string * PartyRef) list =
+        surface.Authority
+        |> List.choose (fun entry ->
+            match entry.AuthorityPolicy with
+            | GrantPolicy.RequiresCounterpartyApproval party -> Some(entry.AuthorityModule, party)
+            | _ -> None)
+
+    // ── rendering ─────────────────────────────────────────────────────
+
+    /// One entry rendered for a human — the headline line of the review
+    /// artifact.
+    let describe (entry: GrantAuthorityEntry) : string =
+        let principals =
+            entry.AuthorityPrincipals
+            |> List.map GrantPrincipalClass.label
+            |> String.concat ","
+
+        sprintf "%s [%s] grantable-by {%s}" entry.AuthorityModule (GrantPolicy.toToken entry.AuthorityPolicy) principals
+
+    /// The whole facet rendered deterministically — the block a review
+    /// artifact carries and a golden file diffs. **No timestamp, no
+    /// machine identity, no ordering that depends on registration order**:
+    /// two runs over the same composition produce byte-identical text, so
+    /// a difference in the artifact is a difference in the composition.
+    let render (surface: GrantAuthoritySurface) : string =
+        if List.isEmpty surface.Authority then
+            "(no module declares a grant policy)"
+        else
+            [
+                for entry in surface.Authority do
+                    describe entry
+                    yield! entry.AuthorityOpenPaths |> List.map (fun path -> "    via " + path)
+                    yield! entry.AuthorityPreconditions |> List.map (fun demand -> "    demands " + demand)
+            ]
+            |> String.concat "\n"
+
+    // ── wire projection (554.B) ───────────────────────────────────────
+
+    /// Project the facet to plain strings for persistence. Deterministic
+    /// — modules in name order, everything within an entry already sorted
+    /// by the derivation.
+    let toWire (surface: GrantAuthoritySurface) : GrantAuthorityWireEntry list =
+        surface.Authority
+        |> ordered
+        |> List.map (fun entry -> {
+            AuthorityModuleName = entry.AuthorityModule
+            AuthorityComponentIdentity = ComponentId.value entry.AuthorityComponent
+            AuthorityPolicyToken = GrantPolicy.toToken entry.AuthorityPolicy
+            AuthorityPrincipalLabels = entry.AuthorityPrincipals |> List.map GrantPrincipalClass.label
+            AuthorityPathIdentities = entry.AuthorityOpenPaths
+            AuthorityPreconditionLines = entry.AuthorityPreconditions
+        })
+
+    /// Read a persisted wire projection back. Round-trips `toWire`
+    /// exactly, which is what lets a review compare a committed baseline
+    /// against a live derivation.
+    ///
+    /// The policy token round-trips through `GrantPolicy.ofToken`, which
+    /// is **fail-closed** — an unrecognised token reads as the strictest
+    /// arm this node can construct, never as `AdminDiscretion`. A
+    /// baseline written by a newer deployment therefore reads back as
+    /// more constrained than it may be, never as less.
+    let ofWire (entries: GrantAuthorityWireEntry list) : GrantAuthoritySurface =
+        entries
+        |> List.map (fun entry -> {
+            AuthorityModule = entry.AuthorityModuleName
+            AuthorityComponent = ComponentId.create entry.AuthorityComponentIdentity
+            AuthorityPolicy = GrantPolicy.ofToken entry.AuthorityPolicyToken
+            AuthorityPrincipals =
+                entry.AuthorityPrincipalLabels
+                |> List.map GrantPrincipalClass.ofLabel
+                |> GrantPrincipalClass.ordered
+            AuthorityOpenPaths = entry.AuthorityPathIdentities
+            AuthorityPreconditions = entry.AuthorityPreconditionLines
+        })
+        |> assemble
