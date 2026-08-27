@@ -106,16 +106,51 @@ type CoherenceConfig = {
     /// rely on the per-scope scheduled job's audit rows + alerts; the
     /// health probe is a coarse process-level signal for this one scope.
     HealthScope: string
+    /// Derive each metric's vintage window from its registry
+    /// `StalenessPolicy` instead of applying `VintageWindow` globally.
+    ///
+    /// The rest of this check is already registry-derived —
+    /// comparability comes from `RollUp.Additive` and the registered
+    /// hierarchy, and the numeric tolerance is registry data. The
+    /// vintage window was the one heuristic left on a single global
+    /// knob, which is a poor fit for a deployment mixing an hourly
+    /// metric with a quarterly one: one day is far too loose for the
+    /// first and far too tight for the second, and no single value
+    /// serves both.
+    ///
+    /// With this on, a metric declaring `FreshFor window` is classified
+    /// against **its own** declared freshness — the deployment has
+    /// already said how long a value of this metric stays current, and a
+    /// comparable set spread wider than that is mixed-vintage by that
+    /// declaration. `UntilSuperseded` and `UntilUpstreamChange` name no
+    /// wall-clock window at all, so they keep `VintageWindow`, as does a
+    /// metric with no declaration and any run with no registry.
+    ///
+    /// **Off by default (GP 11).** Classification feeds audit rows and
+    /// alerts, so turning it on changes what an existing deployment's
+    /// alerting fires on — that is a deployment's decision to make, not
+    /// an upgrade's to make for it.
+    DeriveVintageFromStaleness: bool
 }
 
 /// Construction for `CoherenceConfig`.
 module CoherenceConfig =
     /// The zero-config posture: a one-day vintage window, a 1% unit-slip
-    /// sensitivity, and the `_platform` health scope.
+    /// sensitivity, the `_platform` health scope, and the global vintage
+    /// window rather than per-metric derivation.
     let defaults: CoherenceConfig = {
         VintageWindow = TimeSpan.FromDays 1.0
         UnitSlipRelativeTolerance = 0.01m
         HealthScope = "_platform"
+        DeriveVintageFromStaleness = false
+    }
+
+    /// `defaults` with per-metric vintage derivation on — the
+    /// per-metric-honesty posture for a deployment whose metrics declare
+    /// meaningfully different `FreshFor` windows.
+    let withDerivedVintage (config: CoherenceConfig) : CoherenceConfig = {
+        config with
+            DeriveVintageFromStaleness = true
     }
 
 /// Reserved event-type discriminator for a coherence finding audit row,
@@ -185,6 +220,34 @@ module CoherenceCheck =
         | [] -> TimeSpan.Zero
         | asOfs -> (List.max asOfs) - (List.min asOfs)
 
+    /// The vintage window a given metric is classified against: its own
+    /// declared `FreshFor` when the deployment opted into per-metric
+    /// derivation and the registry declares one, else the global
+    /// `CoherenceConfig.VintageWindow`.
+    ///
+    /// `UntilSuperseded` / `UntilUpstreamChange` deliberately fall
+    /// through to the global default rather than to "infinite": they say
+    /// a fact does not go stale *on age*, which is a statement about
+    /// staleness, not a claim that any `AsOf` spread is coherent. Reading
+    /// them as an unbounded window would silently switch `MixedVintage`
+    /// off for exactly the metrics whose values move by supersession.
+    let internal vintageWindowFor
+        (registry: Grounding.IMetricRegistry option)
+        (config: CoherenceConfig)
+        (metric: MetricRef)
+        : TimeSpan =
+        if not config.DeriveVintageFromStaleness then
+            config.VintageWindow
+        else
+            registry
+            |> Option.bind (fun reg -> reg.TryGetMetric metric.Value)
+            |> Option.bind (fun d ->
+                match d.Staleness with
+                | Grounding.FreshFor window -> Some window
+                | Grounding.UntilSuperseded
+                | Grounding.UntilUpstreamChange -> None)
+            |> Option.defaultValue config.VintageWindow
+
     /// Classify a discrepancy over its comparable set (parent :: children).
     /// Ordered strongest-signal first: an explicit `Absent` child ⇒
     /// partial load; a power-of-ten ratio ⇒ unit slip; a wide `AsOf`
@@ -193,6 +256,7 @@ module CoherenceCheck =
     /// otherwise unclassified.
     let private classify
         (config: CoherenceConfig)
+        (vintageWindow: TimeSpan)
         (tolerance: decimal)
         (found: decimal)
         (expected: decimal)
@@ -202,7 +266,7 @@ module CoherenceCheck =
             PartialLoad
         elif isUnitSlip config found expected then
             UnitSlip
-        elif vintageSpread comparable > config.VintageWindow then
+        elif vintageSpread comparable > vintageWindow then
             MixedVintage
         elif found - expected > tolerance then
             PartialLoad
@@ -277,7 +341,14 @@ module CoherenceCheck =
                                 Found = found
                                 Discrepancy = discrepancy
                                 Tolerance = tolerance
-                                Cause = classify config tolerance found expected (parent :: children)
+                                Cause =
+                                    classify
+                                        config
+                                        (vintageWindowFor registry config parent.Metric)
+                                        tolerance
+                                        found
+                                        expected
+                                        (parent :: children)
                                 ChildCount = List.length children
                             }))
 

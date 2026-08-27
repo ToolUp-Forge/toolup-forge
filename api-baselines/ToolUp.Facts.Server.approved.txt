@@ -220,12 +220,14 @@ ToolUp.Facts.CoherenceCheck.check(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Pl
 ToolUp.Facts.CoherenceCheck.run(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]]
 ToolUp.Facts.CoherenceCheck.summarise(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]) : System.String
 ToolUp.Facts.CoherenceConfig (class)
-ToolUp.Facts.CoherenceConfig..ctor(System.TimeSpan, System.Decimal, System.String)
+ToolUp.Facts.CoherenceConfig..ctor(System.TimeSpan, System.Decimal, System.String, System.Boolean)
+ToolUp.Facts.CoherenceConfig.DeriveVintageFromStaleness : System.Boolean { get }
 ToolUp.Facts.CoherenceConfig.HealthScope : System.String { get }
 ToolUp.Facts.CoherenceConfig.UnitSlipRelativeTolerance : System.Decimal { get }
 ToolUp.Facts.CoherenceConfig.VintageWindow : System.TimeSpan { get }
 ToolUp.Facts.CoherenceConfigModule (class)
 ToolUp.Facts.CoherenceConfigModule.defaults : ToolUp.Facts.CoherenceConfig { get }
+ToolUp.Facts.CoherenceConfigModule.withDerivedVintage(ToolUp.Facts.CoherenceConfig) : ToolUp.Facts.CoherenceConfig
 ToolUp.Facts.CoherenceEvents (class)
 ToolUp.Facts.CoherenceEvents.FindingType : System.String (literal)
 ToolUp.Facts.CoherenceFinding (class)

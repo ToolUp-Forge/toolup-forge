@@ -80,6 +80,24 @@ let private registry: IMetricRegistry =
         }
     ]
 
+/// The same registry, but with `revenue` declaring `staleness` — the
+/// input the per-metric vintage window is derived from.
+let private registryWithStaleness (staleness: StalenessPolicy) : IMetricRegistry =
+    MetricRegistry.build [
+        {
+            Module = "sales"
+            Definition = {
+                metricDef "revenue" (Some(Additive 1m)) with
+                    Staleness = staleness
+            }
+        }
+    ] [
+        {
+            Module = "sales"
+            Definition = subjectDef "product" [ "brand"; "sku" ]
+        }
+    ]
+
 /// A hand-built current-head fact at `path` (under the `product` hierarchy)
 /// with `value` and transaction time `asOf`, metric `metric` (default
 /// `revenue`). FactId is cosmetic here — the pure check never reads it.
@@ -280,6 +298,99 @@ let tests =
                 findings.[0].Cause
                 MixedVintage
                 "a 10-day vintage spread ⇒ mixed vintage (beats the magnitude fingerprint)"
+        }
+
+        // ── Per-metric vintage windows (derived from StalenessPolicy) ──
+        //
+        // Everything else in this check is registry-derived —
+        // comparability from `RollUp.Additive`, tolerance from the same
+        // declaration. The vintage window was the last global heuristic,
+        // which serves a deployment mixing an hourly metric with a
+        // quarterly one badly in both directions.
+
+        test "derived vintage OFF by default: an hourly metric still gets the one-day global window (GP 11)" {
+            // The GP 11 anchor. Same registry, same facts, same six-hour
+            // spread as the case below — and with the default config the
+            // classification must be what it always was. If this ever
+            // reads MixedVintage, the feature stopped being opt-in.
+            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromHours 1.0))
+
+            let facts = [
+                revenue [ "acme" ] (Scalar 130m) (t0.AddHours 6.0)
+                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+            ]
+
+            let findings = CoherenceCheck.check (Some reg) cfg facts
+            Expect.hasLength findings 1 "one finding either way — only the CAUSE is at issue"
+
+            Expect.notEqual
+                findings.[0].Cause
+                MixedVintage
+                "six hours is inside the one-day global window, so the default posture is unchanged"
+        }
+
+        test "derived vintage ON: a six-hour spread on a FreshFor-1h metric is MixedVintage" {
+            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromHours 1.0))
+            let derived = CoherenceConfig.withDerivedVintage cfg
+
+            let facts = [
+                revenue [ "acme" ] (Scalar 130m) (t0.AddHours 6.0)
+                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+            ]
+
+            let findings = CoherenceCheck.check (Some reg) derived facts
+            Expect.hasLength findings 1 "one finding"
+
+            Expect.equal
+                findings.[0].Cause
+                MixedVintage
+                "the metric declares it stays fresh one hour; a six-hour spread is mixed by that declaration"
+        }
+
+        test "derived vintage ON: a spread inside the metric's own FreshFor window is NOT MixedVintage" {
+            // The other direction, and the one that shows the window is
+            // really being read per-metric rather than merely tightened:
+            // a 10-day spread — which the GLOBAL one-day window calls
+            // mixed — is coherent for a metric declared fresh for 30 days.
+            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromDays 30.0))
+            let derived = CoherenceConfig.withDerivedVintage cfg
+
+            let facts = [
+                revenue [ "acme" ] (Scalar 130m) (t0.AddDays 10.0)
+                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+            ]
+
+            Expect.equal
+                (CoherenceCheck.check (Some registry) cfg facts).[0].Cause
+                MixedVintage
+                "control: the same facts under the global window ARE mixed vintage"
+
+            Expect.notEqual
+                (CoherenceCheck.check (Some reg) derived facts).[0].Cause
+                MixedVintage
+                "ten days is inside a declared 30-day freshness window"
+        }
+
+        test "derived vintage ON: UntilSuperseded keeps the global window, it does not mean 'never mixed'" {
+            // `UntilSuperseded` says a fact does not go stale on AGE. It
+            // is not a claim that any spread is coherent, so it must fall
+            // through to the global window rather than switching the
+            // classification off for the metrics that use it.
+            let derived = CoherenceConfig.withDerivedVintage cfg
+
+            let facts = [
+                revenue [ "acme" ] (Scalar 130m) (t0.AddDays 10.0)
+                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+            ]
+
+            // `registry`'s metricDef declares Staleness = UntilSuperseded.
+            let findings = CoherenceCheck.check (Some registry) derived facts
+
+            Expect.equal findings.[0].Cause MixedVintage "no declared wall-clock window ⇒ the global one still applies"
         }
 
         test "cause: Unclassified — parent below the sum, same vintage, no scale signal" {
