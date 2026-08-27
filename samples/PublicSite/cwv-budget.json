@@ -1,0 +1,27 @@
+{
+  "schema": "toolup.cwv-budget/v1",
+  "label": "PublicSite (default budget)",
+  "pages": [
+    "/",
+    "/about",
+    "/pricing",
+    "/faq",
+    "/news/2026-05-22-launch"
+  ],
+  "metrics": {
+    "largestContentfulPaintMs": 2500,
+    "cumulativeLayoutShift": 0.1,
+    "totalBlockingTimeMs": 200,
+    "firstContentfulPaintMs": 1800
+  },
+  "categories": {
+    "performance": 0.9,
+    "seo": 0.95,
+    "accessibility": 0.9,
+    "bestPractices": 0.9
+  },
+  "serverSignals": {
+    "minConditionalGet304Rate": 0.45,
+    "required": false
+  }
+}

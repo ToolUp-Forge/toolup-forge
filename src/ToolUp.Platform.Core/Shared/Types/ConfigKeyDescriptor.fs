@@ -805,6 +805,19 @@ module Names =
     [<Literal>]
     let regenConfigReference = "TOOLUP_REGEN_CONFIG_REFERENCE"
 
+    // Phase 213 — the Core-Web-Vitals budget gate's three inputs. Build-time
+    // only: the VerifyCoreWebVitalsBudget target reads them, and a running
+    // deployment never consults any of the three.
+
+    [<Literal>]
+    let cwvBudget = "TOOLUP_CWV_BUDGET"
+
+    [<Literal>]
+    let cwvReports = "TOOLUP_CWV_REPORTS"
+
+    [<Literal>]
+    let cwvServerMetrics = "TOOLUP_CWV_SERVER_METRICS"
+
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader
 /// gains a new env var; the coverage test fails if a reader consults a
 /// var with no descriptor, and the golden-file test fails until the
@@ -2419,6 +2432,33 @@ let all: ConfigKeyDescriptor list = [
             "Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment."
         Type = BoolKey
         Default = Some "false"
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.cwvBudget
+        Description =
+            "Build-time: path to the Core-Web-Vitals budget file the VerifyCoreWebVitalsBudget target checks against. Read only by that target; never consulted by a running deployment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.cwvReports
+        Description =
+            "Build-time: directory of Lighthouse JSON reports the VerifyCoreWebVitalsBudget target evaluates. Read only by that target; never consulted by a running deployment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.cwvServerMetrics
+        Description =
+            "Build-time: optional server-counter snapshot the Core-Web-Vitals gate cross-checks against the browser measurement. Unset skips the server-side signal."
+        Type = StringKey
+        Default = None
         IsSecret = false
         Category = ToolingCategory
     }

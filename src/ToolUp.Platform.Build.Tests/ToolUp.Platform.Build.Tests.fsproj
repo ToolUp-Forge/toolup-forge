@@ -8,6 +8,8 @@
     <ItemGroup>
         <Compile Include="SbomTests.fs" />
         <Compile Include="PackagedModuleConformanceTests.fs" />
+        <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
+        <Compile Include="CoreWebVitalsBudgetTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -19,5 +21,18 @@
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
+    </ItemGroup>
+    <!-- Phase 213 — Core-Web-Vitals gate fixtures: Lighthouse report JSON
+         reduced to the fields the gate reads, plus the budgets and
+         server-counter snapshots they are checked against. -->
+    <ItemGroup>
+        <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The SHIPPED default budget, linked in so a typo in it fails
+             this pack rather than the first CI gate run. Linked rather
+             than copied: there is one budget file and the sample owns
+             it. -->
+        <None Include="..\..\samples\PublicSite\cwv-budget.json"
+              Link="fixtures\cwv\shipped-budget.json"
+              CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>
