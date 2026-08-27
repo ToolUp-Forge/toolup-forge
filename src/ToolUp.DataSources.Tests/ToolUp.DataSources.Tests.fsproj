@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Test pack for the Phase 10c `IDataSource` companions under
+         src/DataSources/. Two halves:
+
+         • ALWAYS-ON unit tests over the pure surfaces — ConnectionScope
+           parsing, the ISecretStore credential thunk, RFC 4180 CSV
+           emission, catalogue-SQL generation for every backend, SQL
+           identifier validation, and native-type → ColumnType
+           classification. These need no credential and run on a fresh
+           checkout.
+
+         • ENV-GATED remote arms binding `RemoteDataSourceContract`
+           against a real warehouse. Each arm reports a single Pending
+           case naming the variables it wanted when they are unset, so a
+           credential-free checkout is clean and a CI job that should
+           have had credentials shows "skipped" rather than a green that
+           proves nothing.
+
+         It is a pack of its own rather than a slice of
+         ToolUp.Platform.Tests deliberately: it drags in ten cloud and
+         database SDKs, and the Platform pack is the single most-run
+         gate in the repo. Same reasoning as ToolUp.AIProviders.Tests,
+         and the same shape. -->
+    <ItemGroup>
+        <Compile Include="Support\TestFakes.fs" />
+        <Compile Include="Support\RemoteDataSourceContract.fs" />
+        <Compile Include="Tests\ConnectorSupportTests.fs" />
+        <Compile Include="Tests\SqlDataSourceTests.fs" />
+        <Compile Include="Tests\BigQueryDataSourceTests.fs" />
+        <Compile Include="Tests\AthenaDataSourceTests.fs" />
+        <Compile Include="Tests\RedshiftDataSourceTests.fs" />
+        <Compile Include="Tests\SynapseDataSourceTests.fs" />
+        <Compile Include="Tests\SnowflakeDataSourceTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Substrate. -->
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <!-- Connectors under test. -->
+        <ProjectReference Include="..\DataSources\Common\ToolUp.DataSources.Common.fsproj" />
+        <ProjectReference Include="..\DataSources\Sql\ToolUp.DataSources.Sql.fsproj" />
+        <ProjectReference Include="..\DataSources\BigQuery\ToolUp.DataSources.BigQuery.fsproj" />
+        <ProjectReference Include="..\DataSources\Athena\ToolUp.DataSources.Athena.fsproj" />
+        <ProjectReference Include="..\DataSources\Redshift\ToolUp.DataSources.Redshift.fsproj" />
+        <ProjectReference Include="..\DataSources\Synapse\ToolUp.DataSources.Synapse.fsproj" />
+        <ProjectReference Include="..\DataSources\Snowflake\ToolUp.DataSources.Snowflake.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>
