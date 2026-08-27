@@ -27,7 +27,9 @@ bytes inline or as a stored blob by byte budget.
 | Format | Rendered by |
 |---|---|
 | `Markdown` / `Html` | in-process, zero-dependency renderers in `ToolUp.Reporting.Core` |
-| `Pdf` / `Docx` / `Xlsx` | a sub-companion renderer the deployment adds by `PackageReference` |
+| `Pdf` | `ToolUp.Reporting.HtmlPdf` (HTML template → paginated PDF via headless Chromium) |
+| `Docx` | `ToolUp.Reporting.Docx` (structural-model template fill; styles/numbering/tables preserved) |
+| `Xlsx` | `ToolUp.Reporting.Xlsx` (token templates + cell-address-map writes into visually-authored workbooks) |
 | `Pptx` | **nothing here — served by the deck export tier.** See below. |
 
 ## Deck export

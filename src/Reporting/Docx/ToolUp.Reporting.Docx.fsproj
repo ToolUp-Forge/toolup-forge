@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Reporting.Docx</PackageId>
+        <Description>ToolUp.Reporting DOCX rendering sub-companion — fills .docx report templates ({{key}} placeholder tokens in document text) through ToolUp.OpenXml's structural model, so styles, numbering, tables and untouched parts round-trip intact. Implements IReportRenderer and registers through the standard RendererRegistry path. Table-kind placeholders occupying a whole paragraph render as native Word tables.</Description>
+        <PackageTags>fsharp;sdk;server;reporting;docx;openxml;wordprocessingml;templates</PackageTags>
+        <!-- Phase 23 — Reporting sub-companion (the src/Reporting/<Format>/
+             directory convention). Built on ToolUp.OpenXml's structural
+             model per the standing design note: Import → substitute over
+             runs → Emit preserves styles/numbering/tables for free and
+             keeps the door open to emitting fills as tracked changes.
+             GP 1: the OpenXml vendor dependency arrives transitively via
+             ToolUp.OpenXml only — ToolUp.Reporting.Core stays
+             dependency-free. GP 13: composing the renderer costs nothing
+             until a render is requested. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="ToolUp.Reporting.Docx.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="DocxReportRenderer.fs" />
+    </ItemGroup>
+</Project>

@@ -25,28 +25,37 @@ open ToolUp.Reporting
 let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 let private utf8Decode (b: byte[]) = Encoding.UTF8.GetString b
 
-let private mkTemplate (format: TemplateFormat) (body: string) (placeholders: PlaceholderSchema list) : ReportTemplate = {
-    Id = "test-template"
-    DisplayName = "Test"
-    Format = format
-    Body = utf8 body
-    Placeholders = placeholders
-    Version = 1
-}
+let private mkTemplateBytes
+    (format: TemplateFormat)
+    (body: byte[])
+    (placeholders: PlaceholderSchema list)
+    : ReportTemplate =
+    {
+        Id = "test-template"
+        DisplayName = "Test"
+        Format = format
+        Body = body
+        Placeholders = placeholders
+        Version = 1
+    }
 
-/// Bind the pack with an explicit output projection. Text-shaped
-/// renderers project with `utf8Decode` (the `tests` overload below);
-/// binary-output renderers (PDF and friends) supply a text
-/// extraction so the substitution / format-hint / determinism
-/// assertions run against the rendered *content* — raw PDF bytes
-/// carry compressed streams + creation-timestamp metadata, so
-/// neither substring search nor byte equality is meaningful there.
-let testsWith
+/// Bind the pack with an explicit template-body builder AND output
+/// projection. Container formats whose template is not raw text
+/// (DOCX / XLSX — a zip package carrying the placeholder tokens in
+/// document text) supply `buildBody`, which wraps the pack's textual
+/// fixture bodies in a minimal valid container, and `projectOutput`,
+/// which extracts the rendered text back out so the substitution /
+/// format-hint / determinism assertions run against content.
+let testsWithBody
     (name: string)
     (factory: unit -> IReportRenderer)
     (format: TemplateFormat)
+    (buildBody: string -> byte[])
     (projectOutput: byte[] -> string)
     =
+    let mkTemplate (format: TemplateFormat) (body: string) (placeholders: PlaceholderSchema list) =
+        mkTemplateBytes format (buildBody body) placeholders
+
     testList $"{name} — IReportRenderer contract" [
         testCaseAsync "Renderer claims the expected format"
         <| async {
@@ -236,6 +245,21 @@ let testsWith
             | _ -> failtest "Both renders should succeed"
         }
     ]
+
+/// Bind the pack with an explicit output projection over raw-text
+/// template bodies. Binary-OUTPUT renderers whose template body is
+/// still text (the HTML→PDF renderer) supply a text extraction so the
+/// substitution / format-hint / determinism assertions run against the
+/// rendered *content* — raw PDF bytes carry compressed streams +
+/// creation-timestamp metadata, so neither substring search nor byte
+/// equality is meaningful there.
+let testsWith
+    (name: string)
+    (factory: unit -> IReportRenderer)
+    (format: TemplateFormat)
+    (projectOutput: byte[] -> string)
+    =
+    testsWithBody name factory format utf8 projectOutput
 
 /// Bind the pack for text-shaped renderers (output bytes are UTF-8
 /// text). The original entry point — existing bindings are unchanged.
