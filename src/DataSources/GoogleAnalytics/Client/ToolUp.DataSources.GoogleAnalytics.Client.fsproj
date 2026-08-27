@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.GoogleAnalytics.Client</PackageId>
+    <AssemblyName>ToolUp.DataSources.GoogleAnalytics.Client</AssemblyName>
+    <Description>Client-side credential form for the ToolUp.Platform Google Analytics 4 connector: a three-step Feliz panel (OAuth client credentials, consent bounce, property selection and disconnect) registered against the per-Kind data-source credential UI registry.</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;datasource;google-analytics;ga4;oauth;client</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GoogleAnalyticsCredentialUI.fs" />
+  </ItemGroup>
+  <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <!-- No ProjectReference to the server-tier GoogleAnalytics companion:
+       it carries the Google client libraries, which must never reach a
+       Fable-compiled tier. The two secret-key strings the form's help
+       text refers to are the flow's, and the form does not construct
+       them — the composition root's SaveClientCredentials does.
+       Fable.Core / Feliz / FSharp.Core resolve transitively via
+       ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

@@ -138,6 +138,23 @@
     <PackageVersion Include="Google.Apis.Auth" Version="1.73" />
     <PackageVersion Include="Google.Apis.Core" Version="1.73" />
     <PackageVersion Include="Google.Apis.Storage.v1" Version="1.73.0.4115" />
+    <!-- Phase 10f — Google Analytics 4 connector companion
+         (src/DataSources/GoogleAnalytics). Companion-only deps (GP 1):
+         no ToolUp.Platform.* project references either package.
+         `Google.Analytics.Data.V1Beta` is the GA4 Data API (reports) and
+         `Google.Apis.GoogleAnalyticsAdmin.v1beta` the Admin API
+         (property discovery); the OAuth half of the connector is BCL
+         HttpClient only and needs neither.
+
+         The Data API package has no stable release and never has had
+         one — the GA4 Data API is itself a v1beta surface, and Google
+         has shipped only prereleases since 2020. Pinning a `-beta` here
+         is therefore the newest thing that exists, not a choice to run
+         ahead of a stable line. The Admin pin tracks the same 1.73
+         Google.Apis line as `Google.Apis` / `Google.Apis.Auth` /
+         `Google.Apis.Core` above; move the four together. -->
+    <PackageVersion Include="Google.Analytics.Data.V1Beta" Version="2.0.0-beta10" />
+    <PackageVersion Include="Google.Apis.GoogleAnalyticsAdmin.v1beta" Version="1.73.0.4107" />
     <!-- Phase 16 — Google Cloud Functions host adapter companion
          (src/Hosts/GoogleCloudFunctions). Framework carries the
          `IHttpFunction` interface the adapter implements; Hosting

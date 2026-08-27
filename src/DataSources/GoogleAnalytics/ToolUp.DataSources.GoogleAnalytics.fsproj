@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.GoogleAnalytics</PackageId>
+    <AssemblyName>ToolUp.DataSources.GoogleAnalytics</AssemblyName>
+    <Description>Google Analytics 4 connector for ToolUp.Platform: an IDataSource over the GA4 Data API (reports) and Analytics Admin API (property discovery), plus the paired IOAuthCredentialFlow for Google's Authorization Code with offline access (PKCE, refresh-token lifecycle, revocation). Queries are JSON-encoded RunReportRequest objects; a bare property id is accepted as a shorthand.</Description>
+    <PackageTags>fsharp;sdk;datasource;google-analytics;ga4;analytics;oauth;credential-flow;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GoogleAnalyticsSchema.fs" />
+    <Compile Include="GoogleOAuthFlow.fs" />
+    <Compile Include="GoogleAnalyticsDataSource.fs" />
+    <Compile Include="GoogleAnalyticsLiveTransport.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- GP 1 — the Google client libraries are declared here and nowhere
+       else; no ToolUp.Platform.* project gains a Google dependency. -->
+  <ItemGroup>
+    <PackageReference Include="Google.Analytics.Data.V1Beta" />
+    <PackageReference Include="Google.Apis.GoogleAnalyticsAdmin.v1beta" />
+    <PackageReference Include="Google.Apis.Auth" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
