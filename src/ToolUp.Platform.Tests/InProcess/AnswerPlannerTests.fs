@@ -1304,8 +1304,7 @@ let composeTests =
             let! chain = graph.GetChain(scope, FactRef stored.FactId, Upstream, 3)
 
             let factNode =
-                chain.Nodes
-                |> List.tryFind (fun n -> n.Id = stored.FactId && n.Kind = FactNode)
+                chain.Nodes |> List.tryFind (fun n -> n.Id = stored.FactId && n.Kind = FactNode)
 
             match factNode with
             | None -> failtest "the composed graph did not resolve the fact at all"
