@@ -1,0 +1,65 @@
+sections 3
+section 1 blocks=3
+  sectPr <w:sectPr><w:pgSz w:w="11906" w:h="16838" /><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" /></w:sectPr>
+  block 1 heading level=1
+    style "Heading1"
+    mark [-]
+    comments []
+    pPr <w:pPr><w:pStyle w:val="Heading1" /></w:pPr>
+    run 1 text="Portrait section" fmt=- rStyle=- rev=[-]
+      rPr -
+  block 2 paragraph
+    style -
+    mark [-]
+    comments []
+    pPr -
+    run 1 text="Content of the first section." fmt=- rStyle=- rev=[-]
+      rPr -
+  block 3 paragraph
+    style -
+    mark [-]
+    comments []
+    pPr -
+    run 1 text="Last paragraph before the first break." fmt=- rStyle=- rev=[-]
+      rPr -
+section 2 blocks=2
+  sectPr <w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape" /><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" /></w:sectPr>
+  block 1 heading level=1
+    style "Heading1"
+    mark [-]
+    comments []
+    pPr <w:pPr><w:pStyle w:val="Heading1" /></w:pPr>
+    run 1 text="Landscape section" fmt=- rStyle=- rev=[-]
+      rPr -
+  block 2 paragraph
+    style -
+    mark [-]
+    comments []
+    pPr -
+    run 1 text="Last paragraph before the second break." fmt=- rStyle=- rev=[-]
+      rPr -
+section 3 blocks=2
+  sectPr <w:sectPr><w:pgSz w:w="11906" w:h="16838" /><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" /></w:sectPr>
+  block 1 heading level=1
+    style "Heading1"
+    mark [-]
+    comments []
+    pPr <w:pPr><w:pStyle w:val="Heading1" /></w:pPr>
+    run 1 text="Final section" fmt=- rStyle=- rev=[-]
+      rPr -
+  block 2 paragraph
+    style -
+    mark [-]
+    comments []
+    pPr -
+    run 1 text="Content of the final section." fmt=- rStyle=- rev=[-]
+      rPr -
+styles 4
+  style id="Normal" name="Normal" type="paragraph" basedOn=-
+  style id="Heading1" name="heading 1" type="paragraph" basedOn="Normal"
+  style id="Heading2" name="heading 2" type="paragraph" basedOn="Normal"
+  style id="Emphasis" name="Emphasis" type="character" basedOn=-
+  stylesXml <w:styles><w:style w:type="paragraph" w:styleId="Normal" w:default="true"><w:name w:val="Normal" /></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1" /><w:basedOn w:val="Normal" /></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2" /><w:basedOn w:val="Normal" /></w:style><w:style w:type="character" w:styleId="Emphasis"><w:name w:val="Emphasis" /><w:rPr><w:i /></w:rPr></w:style></w:styles>
+numbering 0
+  numberingXml -
+comments 0

@@ -106,61 +106,90 @@ LocalStack outside compose means creating the bucket yourself, or every S3 asser
 Honest per-cell coverage, because a matrix that implies coverage it does not have is worse than one
 that does not exist:
 
-**Measured 2026-08-27, after the `AggregateException` fix below** — the first run (Phase 732, same
-day) scored 78/87 with 16 red; fixing the wrapped-vendor-exception class in the AWS Secrets Manager
-and GCS companions closed 10 of them. Cell format is *passing / armed*:
+**Measured 2026-08-27, after Phase 733** — the first run (Phase 732, same day) scored 78/87 with 16
+red; the wrapped-vendor-exception fix in the AWS Secrets Manager and GCS companions closed 10, and
+Phase 733 closed the last 2 that were companion defects by carrying the same fix into the Azure and
+S3 blob companions. Phase 733 also added one `IBlobStorage` case (partial overlap). Cell format is
+*passing / armed*:
 
 | Seam | Azure / Azurite | AWS / LocalStack | GCP / fake-gcs-server |
 |---|---|---|---|
-| `IBlobStorage` | ⚠️ 19/20 | ⚠️ 19/20 | ⚠️ 16/20 |
+| `IBlobStorage` | ✅ 21/21 | ✅ 21/21 | ⚠️ 16/21 |
 | `IAuditSink` | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
 | `ISecretStore` | ⛔ no emulator exists | ✅ 9/9 | ⛔ no emulator exists |
 
-**87 cases armed, 81 passing, 6 red, 2 permanently skipped** (the two `ISecretStore` cells with no
-emulator in existence), plus the 7 always-on cases that need no emulator — 94 run in total, against
+**90 cases armed, 85 passing, 5 red, 2 permanently skipped** (the two `ISecretStore` cells with no
+emulator in existence), plus the 7 always-on cases that need no emulator — 97 run in total, against
 **7 run and 9 skipped** on an unarmed checkout.
 
-The two remaining red clusters are each a genuine finding, not harness noise; neither is a defect
-in this harness or in `compose.parity.yml`:
+**Every remaining red is one cause on one leg:** the GCP `DownloadRange` cases, an emulator-fidelity
+limit rather than a companion defect (§ *The GCP blob rows*). **The Azure and AWS legs are wholly
+green**, which is what made the CI arming below possible.
 
-1. **`DownloadRange past EOF` fails on Azure and AWS** — the contract encodes local-only
-   behaviour (§ *The one finding that is unanimous*). GCP's instance of the same case now passes,
-   because its 416 handler was itself a victim of the `AggregateException` class and fires again.
-2. **GCP `DownloadRange` × 4** — an emulator-fidelity limit (§ *The GCP blob rows*).
+Two earlier clusters are closed. **The wrapped-vendor-exception class** — which had `ISecretStore`
+on AWS at 1/9, broke GCP `Delete` idempotency, and (found later) killed the past-EOF handler on
+Azure and S3 — is fixed across all four companions (§ *The AWS secrets rows*). **The unanimous
+`DownloadRange past EOF` failure** turned out to be that same class rather than the contract
+disagreement it looked like (§ below).
 
-A third cluster — **the wrapped-vendor-exception class** that had `ISecretStore` on AWS at 1/9 and
-broke GCP `Delete` idempotency — was fixed on 2026-08-27, the same day the first run surfaced it
-(§ *The AWS secrets rows*, § *The GCP blob rows*).
+### CI arming (Phase 733)
+
+The **Azurite leg is armed in CI** — the `cloud-parity` job in `.github/workflows/checks.yml` boots
+Azurite, runs this pack, and asserts a case FLOOR as well as zero failures. The floor is the point:
+an unarmed pack reports `Success!` and exits 0 having measured nothing, so a gate that read only the
+exit status would report green while the leg silently returned to `pending`. **The LocalStack leg is
+green too and is the next arming candidate** — it needs more setup (the `localstack-init` bucket
+service, AWS credentials, and three env vars), which is the only reason it was not taken in the same
+pass. The GCP leg is not armable while its emulator limit stands.
 
 The `IAuditSink` row rides on the blob row: the three archive sinks each take an `IBlobStorage`
 (`create name settings blobStorage`), so each cloud's sink binds over that same cloud's
 emulator-backed storage. That is what makes audit parity reachable without a fourth emulator — and
 it is, notably, the one row that is green on every cloud.
 
-### The one finding that is unanimous — `DownloadRange past EOF`
+### The one finding that looked unanimous — `DownloadRange past EOF`, CLOSED 2026-08-27
 
 `IBlobStorageContract` asserts that a range read starting at or beyond the blob's size returns
-`Ok [||]`. **All three clouds failed it on the first run**, and the local in-memory double passes
-it:
+`Ok [||]`. **All three clouds failed it on the first run**, and the local in-memory double passed
+it. That reads as a cross-cloud contract disagreement — the contract encoding local-only behaviour
+no real object store exhibits, since HTTP 416 is what the protocol specifies — and Phase 732
+recorded it as a contract decision needing its own phase rather than patching it.
 
-| Cloud | What actually happens |
-|---|---|
-| Azure / Azurite | HTTP 416, `ErrorCode: InvalidRange` |
-| AWS / LocalStack | HTTP 416, *"The requested range is not satisfiable"* |
-| GCP / fake-gcs-server | HTTP 416, but the companion's handler maps it to `Ok [||]` — dead until the `AggregateException` fix, **passing since 2026-08-27** |
+**It was not a contract disagreement.** Phase 733 opened that decision and found the premise false
+on inspection: all three companions **already** mapped 416 to `Ok [||]`, deliberately, each with a
+comment saying so, since Phase 455. The mapping was **unreachable**. `Async.AwaitTask` can surface a
+faulted task's `AggregateException` rather than the vendor exception inside it, so
+`| :? RequestFailedException as ex when ex.Status = 416` (and the S3 and GCS equivalents) never
+matched, and the 416 fell through the catch-all as an `Error`. The measured error strings say it
+outright — Azure's read `One or more errors occurred. (The range specified is invalid …)`, which is
+`AggregateException.Message` verbatim.
 
-This is the matrix doing precisely the job it was built for. The contract was written against
-`LocalFileStorage` / `InMemoryBlobStorage`, where reading past the end yields an empty array; no
-real object store behaves that way, because HTTP 416 is what the underlying protocol specifies. So
-a consumer that range-reads at EOF gets `Ok [||]` in dev and an exception in Azure and AWS in
-production. (GCS already carried the 416→`Ok [||]` mapping and now honours the contract — see the
-table row — which tilts the decision below, since one shipped companion already normalises.)
+So this is the same wrapped-vendor-exception class as § *The AWS secrets rows*, in a fourth and
+fifth companion. **The claim in that section that `ToolUp.Storage.AzureBlobStorage` is "not
+affected: its equivalent cases pass" was wrong**, and the way it was wrong is worth keeping:
+Azure's `404` arms are equally unreachable, but their fall-through is *also* an `Error`, so no case
+could see the difference. Only the `416` arm has a fall-through that changes the ANSWER. A dead
+catch clause is invisible wherever it and the catch-all agree.
 
-Resolving the Azure/AWS legs is a deliberate contract decision rather than a bug fix, which is why
-Phase 732 records it instead of patching it: either the contract relaxes to accept 416-as-empty and
-the companions normalise it, or the contract keeps `Ok [||]` and the companions clamp the range
-before issuing the request. Both are defensible; both change shipped runtime behaviour and need
-their own phase.
+| Cloud | Before | Now |
+|---|---|---|
+| Azure / Azurite | 416 wrapped → `Error` from the catch-all | ✅ matched through `(\|Unwrapped\|)` |
+| AWS / LocalStack | 416 wrapped → `Error` from the catch-all | ✅ matched through `(\|Unwrapped\|)` |
+| GCP / fake-gcs-server | same class, fixed 2026-08-27 | ✅ |
+
+**The contract decision was still taken, on the evidence, and recorded** in the doc-comment on
+`IBlobStorage.DownloadRange`: the seam keeps `Ok [||]` and implementations normalise. The consumer
+sweep is why — `IContentRangeReader.ReadContentRange` and `IStreamingDatasetCodec.DecodeChunk` both
+re-state past-EOF → `Ok [||]` as their own documented semantics, and the streaming paging path
+treats any range-read error as "streaming unavailable" and silently falls back to materialising the
+whole blob. Making end-of-stream an error would not raise anything; it would quietly abandon the
+bounded read path on exactly the multi-GB vintages it exists for.
+
+Phase 733 also pinned the **partial-overlap** clause (`offset < size < offset + length` → the
+overlapping bytes only) with its own contract case, including the `offset = size` boundary where it
+meets the fully-past clause. The clouds all clamp partial overlap natively and refuse only the
+fully-past case, so the two clauses are answered by different backend paths — which is precisely why
+the boundary between them is worth a case.
 
 ### The AWS secrets rows — a dead write path, found on the first run, FIXED 2026-08-27
 
@@ -194,8 +223,16 @@ one case that has a catch-all: `DeleteSecret is idempotent on missing keys` retu
 **The same class affects `ToolUp.Storage.GoogleCloudStorage`**, whose `Delete` carries
 `| :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()` and
 falls through to its catch-all for exactly the same reason. So this is a pattern across the cloud
-companions, not a single slip. `ToolUp.Storage.AzureBlobStorage` is **not** affected: its
-equivalent cases pass.
+companions, not a single slip.
+
+> **Correction (Phase 733, 2026-08-27).** This paragraph originally continued
+> "`ToolUp.Storage.AzureBlobStorage` is **not** affected: its equivalent cases pass." **That was
+> wrong**, and it was wrong in an instructive way. Azure's `404` arms are equally unreachable — but
+> their fall-through is *also* an `Error`, so no contract case can tell a matched 404 from an
+> unmatched one. The only arm whose reachability changes an ANSWER is `416`, and that case *was*
+> red; it was attributed to the contract rather than to this class. `AwsS3Storage` was affected
+> identically. Both are fixed. **"Its cases pass" is not evidence a catch clause fires** — it is
+> only evidence that the clause and the catch-all agree on the cases you happen to have.
 
 **Fixed 2026-08-27.** Both companions gained a private `(|Unwrapped|)` active pattern (flatten the
 `AggregateException`, take the single inner exception a one-Task await carries; a bare exception
@@ -203,10 +240,29 @@ passes through unchanged) and every vendor-typed catch site — plus the generic
 `ex -> Error ex.Message` handlers, whose messages were the "One or more errors occurred" symptom —
 now matches through it. Re-measured armed: `ISecretStore` on AWS **9/9**, GCP `Delete` idempotency
 and GCP `DownloadRange past EOF` both green. An unmatched wrapped exception still rethrows the
-original `AggregateException`, so nothing that used to escape is now swallowed. The other cloud
-companion families (`AwsS3Storage`, the audit sinks) showed no red of this class in the armed run,
-but carry the same direct-type-test shape where their vendor SDKs happen not to wrap today — a
-broader sweep remains open.
+original `AggregateException`, so nothing that used to escape is now swallowed.
+
+**Phase 733 carried the same pattern into `AzureBlobStorage` and `AwsS3Storage`, scoped to their
+`DownloadRange` handlers** — the arms its parity cases actually measure. **The broader sweep is
+Phase 734, done the same day (2026-08-27):** every remaining direct vendor-exception type test
+over an async await in the estate's companions now matches through `(|Unwrapped|)` — the rest of
+`AwsS3Storage` (`Download`, `Exists`, `GetMetadata`, `currentETag`, and the conditional-write seam
+733 flagged, whose `PreconditionFailed` test distinguishes `ETagMismatch` from
+`ConditionalWriteFailure` — an arm whose reachability changes an answer, uncovered by any parity
+case) + its encryption-at-rest validator, the rest of `AzureBlobStorage` (same seam),
+`AzureKeyVaultSecretStore` (whose `GetSecret` 404 handler had no catch-all, so a wrapped 404
+escaped raw), the three `IBlobEncryptionKeyResolver` companions (AWS KMS / Azure Key Vault / GCP
+KMS — the KeyNotFound / KeyDestroyed crypto-shred classification), the SMTP and WebPush
+notification sinks (vendor classification over non-generic `do! Task` awaits), the GA4 live
+transport (no catch-alls — a wrapped exception escaped raw), and the `DbException` sites in
+`ConnectorSupport.classify` + the Sql/Snowflake/Synapse connectors. Audited and deliberately
+unchanged: `GcpSecretManager` + `VaultSecretStore` (pure BCL `HttpClient`, status-code branching,
+no vendor exception types), **the audit sinks** (same — no vendor type tests), `LdapConnection`
+(its vendor branch and catch-all produce identical results, and the discriminating
+`ErrorCode = 49` test runs synchronously inside `Task.Run`), and the Voice providers (every
+branch yields the same `Transient` classification). Re-measured armed after the sweep: two runs,
+94 cases — 90/2/4 and 89/2/5 — the only red being the GCP `DownloadRange` emulator-hash cluster
+below plus one flaky GCP `GetMetadata` DateTime parse (pre-existing, tracked separately).
 
 ### The GCP blob rows — 16/20 (14/20 before the `AggregateException` fix)
 

@@ -145,6 +145,22 @@ module SynapseDataSource =
     [<Literal>]
     let private SqlScope = "https://database.windows.net/.default"
 
+    /// Driver exceptions can surface at the query `with` handler
+    /// wrapped in `AggregateException`, so a direct `:? DbException`
+    /// type test never fires — the class the first armed cloud-parity
+    /// run (2026-08-27) proved live in the AWS companions. A wrapped
+    /// `DbException` would escape to `Errors.guard` and lose the site's
+    /// `SchemaMismatch` classification. Match through the wrapper:
+    /// flatten and take the single inner exception a one-Task await
+    /// carries; a bare exception passes through unchanged.
+    let private (|Unwrapped|) (ex: exn) =
+        match ex with
+        | :? AggregateException as aggregate ->
+            match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+            | Some inner -> inner
+            | None -> ex
+        | _ -> ex
+
     /// Parse the `auth` ConnectionScope value.
     let parseAuth (raw: string option) : Result<SynapseAuth, IngestionError> =
         match raw with
@@ -379,7 +395,7 @@ module SynapseDataSource =
                                     use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
                                     let! bytes = Csv.ofReader reader
                                     return Ok bytes
-                                with :? DbException as ex ->
+                                with Unwrapped(:? DbException as ex) ->
                                     // The connection opened, so
                                     // the endpoint is reachable —
                                     // a failure HERE is the

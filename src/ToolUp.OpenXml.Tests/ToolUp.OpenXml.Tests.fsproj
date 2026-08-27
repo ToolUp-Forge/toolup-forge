@@ -7,11 +7,21 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Fixtures.fs" />
+        <!-- Phase 206 — the round-trip fidelity corpus: the fixture
+             builders and the golden gate, ahead of every pack that
+             consumes them. The committed goldens beside them are read
+             from the SOURCE tree at run time (resolved from the test
+             assembly path), so they are deliberately not copied to the
+             output directory — a regeneration must rewrite the files
+             under review, not a build artefact. -->
+        <Compile Include="Corpus\CorpusFixtures.fs" />
+        <Compile Include="Corpus\Goldens.fs" />
         <Compile Include="InProcess\ImportTests.fs" />
         <Compile Include="InProcess\RoundTripTests.fs" />
         <Compile Include="InProcess\CustomPartTests.fs" />
         <Compile Include="InProcess\RevisionTests.fs" />
         <Compile Include="InProcess\KnowledgeBaseTests.fs" />
+        <Compile Include="RoundTripFidelityTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

@@ -1,0 +1,83 @@
+== parts ==
+/word/document.xml application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
+/word/styles.xml application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml
+== /word/document.xml ==
+w:document
+  w:body
+    w:p
+      w:pPr
+        w:pStyle w:val="Heading1"
+      w:r
+        w:t xml:space="preserve" "Styled runs"
+    w:p
+      w:r
+        w:t xml:space="preserve" "plain "
+      w:r
+        w:rPr
+          w:b
+        w:t xml:space="preserve" "bold"
+      w:r
+        w:t xml:space="preserve" " "
+      w:r
+        w:rPr
+          w:i
+        w:t xml:space="preserve" "italic"
+      w:r
+        w:t xml:space="preserve" " "
+      w:r
+        w:rPr
+          w:u w:val="single"
+        w:t xml:space="preserve" "underlined"
+      w:r
+        w:t xml:space="preserve" " "
+      w:r
+        w:rPr
+          w:strike
+        w:t xml:space="preserve" "struck"
+    w:p
+      w:r
+        w:t xml:space="preserve" "combined "
+      w:r
+        w:rPr
+          w:b
+          w:i
+          w:strike
+          w:u w:val="single"
+        w:t xml:space="preserve" "all four"
+    w:p
+      w:pPr
+        w:pStyle w:val="Heading2"
+      w:r
+        w:t xml:space="preserve" "Character styles"
+    w:p
+      w:r
+        w:t xml:space="preserve" "a "
+      w:r
+        w:rPr
+          w:rStyle w:val="Emphasis"
+        w:t xml:space="preserve" "character-styled"
+      w:r
+        w:t xml:space="preserve" " span"
+    w:p
+      w:r
+        w:t xml:space="preserve" "before"
+        w:tab
+        w:br
+        w:t xml:space="preserve" "after"
+    w:sectPr
+      w:pgSz w:h="16838" w:w="11906"
+      w:pgMar w:bottom="1440" w:left="1440" w:right="1440" w:top="1440"
+== /word/styles.xml ==
+w:styles
+  w:style w:default="true" w:styleId="Normal" w:type="paragraph"
+    w:name w:val="Normal"
+  w:style w:styleId="Heading1" w:type="paragraph"
+    w:name w:val="heading 1"
+    w:basedOn w:val="Normal"
+  w:style w:styleId="Heading2" w:type="paragraph"
+    w:name w:val="heading 2"
+    w:basedOn w:val="Normal"
+  w:style w:styleId="Emphasis" w:type="character"
+    w:name w:val="Emphasis"
+    w:rPr
+      w:i

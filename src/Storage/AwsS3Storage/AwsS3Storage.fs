@@ -46,6 +46,28 @@ module AwsS3StorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
+/// AWS SDK exceptions can surface at this companion's `with` handlers
+/// wrapped in `AggregateException`, so a direct `:? AmazonS3Exception`
+/// test never fires. Measured by the armed cloud-parity run (Phase 733,
+/// 2026-08-27): the `RequestedRangeNotSatisfiable` arm of `DownloadRange`
+/// sat dead and a fully-past-EOF range returned `Error "One or more errors
+/// occurred. (The requested range is not satisfiable)"` instead of the
+/// contract's `Ok [||]`. The 404 arms were unaffected in EFFECT only
+/// because their fall-through is also an `Error` — the semantic 416 arm is
+/// the one where being unreachable changes an answer.
+///
+/// Match through the wrapper: flatten and take the single inner exception
+/// a one-Task await carries; a bare exception passes through unchanged, so
+/// an unmatched case still rethrows the original. Mirrors the pattern
+/// `ToolUp.Storage.GoogleCloudStorage` carries for the same class.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 // Returns the concrete `AmazonS3Client`. Under AWS SDK v4 `IAmazonS3`
 // carries static abstract members, so naming it as an ordinary type
 // raises FS3536 (IWSAM-as-type); the client is only ever used through
@@ -85,8 +107,8 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             let! response = client.GetObjectMetadataAsync req |> Async.AwaitTask
             return Ok(Some response.ETag)
         with
-        | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound -> return Ok None
-        | ex -> return Error ex.Message
+        | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound -> return Ok None
+        | Unwrapped ex -> return Error ex.Message
     }
 
     interface IBlobStorage with
@@ -106,7 +128,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.InputStream <- new MemoryStream(content)
                 let! _ = client.PutObjectAsync req |> Async.AwaitTask
                 return Ok $"s3://{config.BucketName}/{req.Key}"
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -120,9 +142,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                 return Ok(ms.ToArray())
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -144,12 +166,15 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                     do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                     return Ok(ms.ToArray())
                 with
-                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+                | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                     return Error $"Blob not found: {toolupContainer}/{blobName}"
-                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
-                    // Past-EOF clamp per the interface contract.
+                | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
+                    // Fully past EOF → `Ok [||]` per the interface
+                    // contract. Matched through `Unwrapped` because S3's
+                    // 416 arrives wrapped; see the pattern's doc-comment
+                    // for what that cost.
                     return Ok Array.empty
-                | ex -> return Error ex.Message
+                | Unwrapped ex -> return Error ex.Message
         }
 
         member _.Delete(toolupContainer, blobName) = async {
@@ -162,7 +187,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.Key <- blobKey toolupContainer blobName
                 let! _ = client.DeleteObjectAsync req |> Async.AwaitTask
                 return Ok()
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -206,7 +231,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! _ = client.GetObjectMetadataAsync req |> Async.AwaitTask
                 return true
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound -> return false
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound -> return false
             | _ -> return false
         }
 
@@ -230,9 +255,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                         ContentType = contentType
                     }
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -264,9 +289,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                 return Ok(ms.ToArray(), response.ETag)
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -285,7 +310,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! response = client.PutObjectAsync req |> Async.AwaitTask
                 return Ok response.ETag
             with
-            | :? AmazonS3Exception as ex when
+            | Unwrapped(:? AmazonS3Exception as ex) when
                 ex.StatusCode = HttpStatusCode.PreconditionFailed
                 || ex.StatusCode = HttpStatusCode.Conflict
                 ->
@@ -293,11 +318,11 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 | Ok current -> return Error(ETagMismatch current)
                 | Error msg ->
                     return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 // `If-Match` against an absent key — the blob the caller
                 // expected is gone.
                 return Error(ETagMismatch None)
-            | ex -> return Error(ConditionalWriteFailure ex.Message)
+            | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -323,7 +348,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.Expires <- DateTime.UtcNow.Add ttl
                 let! url = client.GetPreSignedURLAsync req |> Async.AwaitTask
                 return Ok url
-            with ex ->
+            with Unwrapped ex ->
                 return Error(SignedUrlRefusal.SigningFailed ex.Message)
         }
 
