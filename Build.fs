@@ -102,6 +102,20 @@ let config = {
             // no env gating, no SkiaSharp native needed — the pack's
             // renderers are doubles.
             TestPack.create "AssetStore" "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj"
+            // Phase 576.C — the Skia ISvgRasterizer companion: real
+            // rasterisation (requested width honoured, height from the
+            // document's own aspect), the failure surface as values
+            // rather than exceptions, and the end-to-end proof that a
+            // figure composed with it carries both parts. Its own pack
+            // rather than a leg of the OpenXml one, deliberately: that
+            // pack's strip-imports evidence is that no rendering engine
+            // is in its process at all, which a shared pack would
+            // destroy. Needs a SkiaSharp native for the running RID —
+            // the fsproj carries the Linux one, as ToolUp.Platform.Tests
+            // does; no env gating.
+            TestPack.create
+                "SvgRasterizerSkia"
+                "src/SvgRasterizers/Skia.Tests/ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj"
         ]
 }
 

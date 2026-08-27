@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="InProcess\RasterizerTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Skia\ToolUp.OpenXml.SvgRasterizer.Skia.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <!-- The end-to-end case reopens an emitted .docx to prove both
+             parts landed; the rasteriser's own cases need no SDK. -->
+        <PackageReference Include="DocumentFormat.OpenXml" />
+        <!-- Phase 617's precedent, for the same reason: the pack renders
+             REAL pixels through SkiaSharp, so a Linux runner with no
+             native for its RID would error out every case with
+             `DllNotFoundException: libSkiaSharp`. `NoDependencies`
+             because the pack must run on a bare SDK container — it
+             costs the system font set, which only affects how `<text>`
+             renders, and no case here asserts on glyphs. This does not
+             reverse the shipped companion's host-specific stance: that
+             fsproj still leaves the native choice to the consumer, and
+             now says so loudly at `create` instead of at first
+             render. -->
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    </ItemGroup>
+</Project>

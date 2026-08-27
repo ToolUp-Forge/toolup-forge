@@ -1,24 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.OpenXml.Tests.Program
+module ToolUp.OpenXml.SvgRasterizer.Skia.Tests.Program
 
-open Expecto
-open ToolUp.OpenXml.Tests
-open ToolUp.OpenXml.Tests.InProcess
 open System.Reflection
+open Expecto
+open ToolUp.OpenXml.SvgRasterizer.Skia.Tests.InProcess
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
-    testList "ToolUp.OpenXml.Tests" [
-        ImportTests.tests
-        RoundTripTests.tests
-        CustomPartTests.tests
-        RevisionTests.tests
-        FigureTests.tests
-        KnowledgeBaseTests.tests
-        RoundTripFidelityTests.tests
-    ]
+    testList "ToolUp.OpenXml.SvgRasterizer.Skia.Tests" [ RasterizerTests.tests ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
@@ -31,9 +22,8 @@ let allTests =
 /// Sequenced by default, for the reason `docs/platform/testing-
 /// conventions.md` records: Expecto replaces the console writers with a
 /// synchronized pair, and a parallel test writing through them can
-/// deadlock against the real console stream lock. This pack joins
-/// `VerifyAll` with Phase 206, so it inherits the same default every
-/// other pack runs under. `--parallel` overrides it.
+/// deadlock against the real console stream lock. `--parallel`
+/// overrides it.
 [<EntryPoint>]
 let main argv =
     runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests

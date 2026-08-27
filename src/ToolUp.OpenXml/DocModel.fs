@@ -126,6 +126,49 @@ module ParagraphModel =
             | _ -> Some run.Text)
         |> String.concat ""
 
+// ─── Phase 576 — figures ─────────────────────────────────────────
+
+/// What a figure block embeds.
+type FigureContent =
+    /// A raster payload — `image/png` or `image/jpeg` — embedded as an
+    /// image part the drawing's `a:blip` references directly.
+    | RasterImage of bytes: byte[] * mimeType: string
+    /// An SVG document embedded **verbatim** (UTF-8, no BOM) as an
+    /// `image/svg+xml` part referenced through the `svgBlip` blip
+    /// extension Word and PowerPoint have honoured since 2016, with an
+    /// optional PNG fallback part for clients that predate it. Vector
+    /// first: a deterministic renderer's bytes are the bytes in the
+    /// package.
+    | VectorSvg of svgText: string * pngFallback: byte[] option
+
+/// How a figure's on-page extents are decided.
+type FigureSize =
+    /// Pixel extents, lowered to EMU at 96 dpi — the default unit.
+    | Pixels of widthPx: int * heightPx: int
+    /// Explicit EMU extents (the OOXML unit) — the override for a
+    /// caller that already knows the page geometry.
+    | Emu of cx: int64 * cy: int64
+    /// Derived from the payload itself at 96 dpi: an SVG's `viewBox`
+    /// (then its `width` / `height` when unitless or `px`), a PNG's or
+    /// JPEG's header dimensions. A payload declaring nothing readable
+    /// falls back to the SVG specification's default replaced-element
+    /// size (300 x 150), never to zero.
+    | Intrinsic
+
+/// An embedded picture: the payload, the extents, and the identity
+/// Word shows in its selection pane and reads out as alt text.
+type FigureModel = {
+    Content: FigureContent
+    Size: FigureSize
+    /// `wp:docPr/@name` — the figure's label in Word's selection pane.
+    /// Not required to be unique (the `id` is, and emission assigns
+    /// it).
+    Name: string
+    /// `wp:docPr/@descr` — the accessible description (Word's "alt
+    /// text"). `None` writes no attribute.
+    Description: string option
+}
+
 /// Block elements. Table cells nest blocks, so the table shape and
 /// the block DU are mutually recursive.
 type Block =
@@ -135,6 +178,12 @@ type Block =
     /// A paragraph carrying a `w:numPr` numbering reference.
     | ListItem of numbering: NumberingRef * paragraph: ParagraphModel
     | Table of TableModel
+    /// An embedded picture — a raster image, or an SVG embedded
+    /// vector-first. Emission lowers it to a paragraph carrying an
+    /// inline `w:drawing` plus the image part(s) it references
+    /// (Phase 576); the model itself carries the payload by value, so
+    /// no live OpenXml part handle ever reaches it (GP 12 rule 1).
+    | Figure of FigureModel
     /// A block-level element outside the model's vocabulary, carried
     /// verbatim (outer XML) so emission re-attaches it unchanged.
     /// Every `OpaqueBlock` has a matching `ResidueEntry` with
@@ -190,12 +239,15 @@ module Block =
 
     /// The block's visible plain text (deleted-revision runs
     /// excluded). Tables join cells with tabs and rows with
-    /// newlines; opaque blocks contribute nothing.
+    /// newlines; a figure contributes its accessible description (the
+    /// alt text) and nothing when it declares none; opaque blocks
+    /// contribute nothing.
     let rec text (block: Block) : string =
         match block with
         | Heading(_, p)
         | Paragraph p
         | ListItem(_, p) -> ParagraphModel.text p
+        | Figure figure -> figure.Description |> Option.defaultValue ""
         | Table t ->
             t.Rows
             |> List.map (fun row ->

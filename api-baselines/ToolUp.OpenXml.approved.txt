@@ -4,12 +4,15 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.OpenXml.Block (class)
+ToolUp.OpenXml.Block.IsFigure : System.Boolean { get }
 ToolUp.OpenXml.Block.IsHeading : System.Boolean { get }
 ToolUp.OpenXml.Block.IsListItem : System.Boolean { get }
 ToolUp.OpenXml.Block.IsOpaqueBlock : System.Boolean { get }
 ToolUp.OpenXml.Block.IsParagraph : System.Boolean { get }
 ToolUp.OpenXml.Block.IsTable : System.Boolean { get }
 ToolUp.OpenXml.Block.Tag : System.Int32 { get }
+ToolUp.OpenXml.Block+Figure (class)
+ToolUp.OpenXml.Block+Figure.Item : ToolUp.OpenXml.FigureModel { get }
 ToolUp.OpenXml.Block+Heading (class)
 ToolUp.OpenXml.Block+Heading.level : System.Int32 { get }
 ToolUp.OpenXml.Block+Heading.paragraph : ToolUp.OpenXml.ParagraphModel { get }
@@ -23,6 +26,7 @@ ToolUp.OpenXml.Block+Paragraph.Item : ToolUp.OpenXml.ParagraphModel { get }
 ToolUp.OpenXml.Block+Table (class)
 ToolUp.OpenXml.Block+Table.Item : ToolUp.OpenXml.TableModel { get }
 ToolUp.OpenXml.Block+Tags (class)
+ToolUp.OpenXml.Block+Tags.Figure : System.Int32 (literal)
 ToolUp.OpenXml.Block+Tags.Heading : System.Int32 (literal)
 ToolUp.OpenXml.Block+Tags.ListItem : System.Int32 (literal)
 ToolUp.OpenXml.Block+Tags.OpaqueBlock : System.Int32 (literal)
@@ -96,6 +100,57 @@ ToolUp.OpenXml.Emit.toBytes(ToolUp.OpenXml.DocModel) : System.Byte[]
 ToolUp.OpenXml.Emit.toBytesWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.OpenXml.CustomPart], ToolUp.OpenXml.DocModel) : System.Byte[]
 ToolUp.OpenXml.Emit.toStream(ToolUp.OpenXml.DocModel, System.IO.Stream) : System.Void
 ToolUp.OpenXml.Emit.toStreamWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.OpenXml.CustomPart], ToolUp.OpenXml.DocModel, System.IO.Stream) : System.Void
+ToolUp.OpenXml.FigureContent (class)
+ToolUp.OpenXml.FigureContent.IsRasterImage : System.Boolean { get }
+ToolUp.OpenXml.FigureContent.IsVectorSvg : System.Boolean { get }
+ToolUp.OpenXml.FigureContent.Tag : System.Int32 { get }
+ToolUp.OpenXml.FigureContent+RasterImage (class)
+ToolUp.OpenXml.FigureContent+RasterImage.bytes : System.Byte[] { get }
+ToolUp.OpenXml.FigureContent+RasterImage.mimeType : System.String { get }
+ToolUp.OpenXml.FigureContent+Tags (class)
+ToolUp.OpenXml.FigureContent+Tags.RasterImage : System.Int32 (literal)
+ToolUp.OpenXml.FigureContent+Tags.VectorSvg : System.Int32 (literal)
+ToolUp.OpenXml.FigureContent+VectorSvg (class)
+ToolUp.OpenXml.FigureContent+VectorSvg.pngFallback : Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]] { get }
+ToolUp.OpenXml.FigureContent+VectorSvg.svgText : System.String { get }
+ToolUp.OpenXml.FigureModel (class)
+ToolUp.OpenXml.FigureModel..ctor(ToolUp.OpenXml.FigureContent, ToolUp.OpenXml.FigureSize, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.OpenXml.FigureModel.Content : ToolUp.OpenXml.FigureContent { get }
+ToolUp.OpenXml.FigureModel.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.OpenXml.FigureModel.Name : System.String { get }
+ToolUp.OpenXml.FigureModel.Size : ToolUp.OpenXml.FigureSize { get }
+ToolUp.OpenXml.FigureSize (class)
+ToolUp.OpenXml.FigureSize.Intrinsic : ToolUp.OpenXml.FigureSize { get }
+ToolUp.OpenXml.FigureSize.IsEmu : System.Boolean { get }
+ToolUp.OpenXml.FigureSize.IsIntrinsic : System.Boolean { get }
+ToolUp.OpenXml.FigureSize.IsPixels : System.Boolean { get }
+ToolUp.OpenXml.FigureSize.Tag : System.Int32 { get }
+ToolUp.OpenXml.FigureSize+Emu (class)
+ToolUp.OpenXml.FigureSize+Emu.cx : System.Int64 { get }
+ToolUp.OpenXml.FigureSize+Emu.cy : System.Int64 { get }
+ToolUp.OpenXml.FigureSize+Pixels (class)
+ToolUp.OpenXml.FigureSize+Pixels.heightPx : System.Int32 { get }
+ToolUp.OpenXml.FigureSize+Pixels.widthPx : System.Int32 { get }
+ToolUp.OpenXml.FigureSize+Tags (class)
+ToolUp.OpenXml.FigureSize+Tags.Emu : System.Int32 (literal)
+ToolUp.OpenXml.FigureSize+Tags.Intrinsic : System.Int32 (literal)
+ToolUp.OpenXml.FigureSize+Tags.Pixels : System.Int32 (literal)
+ToolUp.OpenXml.Figures (class)
+ToolUp.OpenXml.Figures.DefaultName : System.String (literal)
+ToolUp.OpenXml.Figures.EmuPerPixel : System.Int64 (literal)
+ToolUp.OpenXml.Figures.defaultSize : System.Tuple`2[System.Int32, System.Int32] { get }
+ToolUp.OpenXml.Figures.extents(ToolUp.OpenXml.FigureModel) : System.Tuple`2[System.Int64, System.Int64]
+ToolUp.OpenXml.Figures.image(System.Byte[], System.String, ToolUp.OpenXml.FigureSize) : ToolUp.OpenXml.Block
+ToolUp.OpenXml.Figures.imageNamed(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Byte[], System.String, ToolUp.OpenXml.FigureSize) : ToolUp.OpenXml.Block
+ToolUp.OpenXml.Figures.intrinsicSize(ToolUp.OpenXml.FigureContent) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.OpenXml.Figures.rasterIntrinsicSize(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
+ToolUp.OpenXml.Figures.svg(System.String, ToolUp.OpenXml.FigureSize, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]]) : ToolUp.OpenXml.Block
+ToolUp.OpenXml.Figures.svgIntrinsicSize(System.String) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.OpenXml.Figures.svgNamed(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.OpenXml.FigureSize, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]]) : ToolUp.OpenXml.Block
+ToolUp.OpenXml.Figures.svgNamedWith(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.OpenXml.ISvgRasterizer], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.OpenXml.FigureSize) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.OpenXml.Block]
+ToolUp.OpenXml.Figures.svgWith(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.OpenXml.ISvgRasterizer], System.String, ToolUp.OpenXml.FigureSize) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.OpenXml.Block]
+ToolUp.OpenXml.ISvgRasterizer (interface)
+ToolUp.OpenXml.ISvgRasterizer.Rasterize(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.OpenXml.Import (class)
 ToolUp.OpenXml.Import.fromBytes(System.Byte[]) : ToolUp.OpenXml.ImportedDocument
 ToolUp.OpenXml.Import.fromStream(System.IO.Stream) : ToolUp.OpenXml.ImportedDocument

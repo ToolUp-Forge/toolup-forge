@@ -169,6 +169,14 @@ let internal extract (docId: string) (fileName: string) (bytes: byte[]) : (TextC
             | Table table ->
                 flushText ()
                 flushTable table
+            | Figure figure ->
+                // A figure's only extractable text is its accessible
+                // description; a figure without one contributes
+                // nothing, exactly as an opaque block does.
+                match figure.Description with
+                | Some description when description.Trim().Length > 0 -> pendingText.Add(description.Trim())
+                | Some _
+                | None -> ()
             | OpaqueBlock _ -> ()
 
     flushText ()

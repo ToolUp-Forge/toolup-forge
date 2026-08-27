@@ -239,6 +239,11 @@ let createWith (componentRenderers: NarrativeOoxml.ComponentRenderers) : IReport
                                         })
                             }
                           ]
+                        // A figure carries a byte payload, not runs, so
+                        // there is no placeholder token in it to
+                        // substitute — it passes through untouched, as
+                        // an opaque block does.
+                        | Block.Figure _
                         | OpaqueBlock _ -> [ block ]
 
                     let substituted = {

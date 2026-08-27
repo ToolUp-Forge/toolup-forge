@@ -611,8 +611,9 @@ jobs:
           # deliberately does — but leaving it unraised is how the lag
           # that prompted the 12 → 14 raise opened, so a new pack bumps
           # it in the same commit. Raised 19 → 20 by Phase 574
-          # (OpenXmlSpreadsheet).
-          EXPECTED_PACKS: 20
+          # (OpenXmlSpreadsheet). Raised 20 → 21 by Phase 576
+          # (SvgRasterizerSkia).
+          EXPECTED_PACKS: 21
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded

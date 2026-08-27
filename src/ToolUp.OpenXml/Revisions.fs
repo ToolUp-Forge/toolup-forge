@@ -91,6 +91,7 @@ module Revisions =
         | Paragraph _ -> "paragraph"
         | ListItem _ -> "list item"
         | Table _ -> "table"
+        | Figure _ -> "figure"
         | OpaqueBlock _ -> "opaque block"
 
     /// Decompose a paragraph-like block into its paragraph + a
@@ -104,6 +105,10 @@ module Revisions =
         | Heading(level, p) -> Ok(p, (fun updated -> Heading(level, updated)))
         | ListItem(numbering, p) -> Ok(p, (fun updated -> ListItem(numbering, updated)))
         | Table _
+        // A figure carries no runs, so there is nothing for a tracked
+        // change to wrap — the same refusal a table gets, for the same
+        // reason.
+        | Figure _
         | OpaqueBlock _ -> Error(NotAParagraphBlock(address, blockKind block))
 
     let private updateParagraphAt

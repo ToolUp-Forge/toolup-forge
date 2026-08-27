@@ -67,6 +67,7 @@ let rec renderBlock (block: Block) =
             |> String.concat "|")
         |> String.concat ";"
         |> sprintf "T[%s]"
+    | Figure _ -> "F"
     | OpaqueBlock _ -> "O"
 
 let renderModel (model: DocModel) =

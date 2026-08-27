@@ -183,6 +183,21 @@ let rec private renderBlock (out: StringBuilder) (indent: string) (index: int) (
 
                 cell.Blocks
                 |> List.iteri (fun blockIndex nested -> renderBlock out cellIndent (blockIndex + 1) nested)))
+    | Figure figure ->
+        // Phase 576 — import does not yet produce figures (a `w:drawing`
+        // still arrives as residue), so no committed golden carries this
+        // shape; the arm renders the payload's identity rather than its
+        // bytes so that when import grows the case the golden stays
+        // readable and stable.
+        let kind, byteCount =
+            match figure.Content with
+            | RasterImage(bytes, mimeType) -> mimeType, (if isNull bytes then 0 else bytes.Length)
+            | VectorSvg(svgText, _) -> "image/svg+xml", (if isNull svgText then 0 else svgText.Length)
+
+        out
+            .AppendLine(sprintf "%sblock %d figure %s" indent index kind)
+            .AppendLine(sprintf "%s  name %s payload=%d" indent figure.Name byteCount)
+        |> ignore
     | OpaqueBlock outerXml ->
         out
             .AppendLine(sprintf "%sblock %d opaque" indent index)

@@ -20,6 +20,13 @@
         <Compile Include="InProcess\RoundTripTests.fs" />
         <Compile Include="InProcess\CustomPartTests.fs" />
         <Compile Include="InProcess\RevisionTests.fs" />
+        <!-- Phase 576 — figure emission (raster + native SVG), the
+             ISvgRasterizer seam, the byte-determinism property, and the
+             proof that this package carries no rendering engine. That
+             last one is why the pack deliberately does NOT reference the
+             rasteriser companion: the strip-imports evidence is the
+             whole suite passing without it in the process. -->
+        <Compile Include="InProcess\FigureTests.fs" />
         <Compile Include="InProcess\KnowledgeBaseTests.fs" />
         <Compile Include="RoundTripFidelityTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from

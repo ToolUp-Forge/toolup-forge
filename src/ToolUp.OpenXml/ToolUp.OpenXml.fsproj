@@ -19,6 +19,13 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="DocModel.fs" />
+        <!-- Phase 576 — the figure seam + the figure model half. Both
+             sit above the plumbing: the seam has no dependency at all,
+             and Figures is pure construction + sizing (no OpenXml
+             types), so a caller can build and test figures without
+             opening a package. -->
+        <Compile Include="ISvgRasterizer.fs" />
+        <Compile Include="Figures.fs" />
         <Compile Include="Package.fs" />
         <Compile Include="Import.fs" />
         <Compile Include="Emit.fs" />

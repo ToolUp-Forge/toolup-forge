@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.OpenXml.SvgRasterizer.Skia</PackageId>
+        <Description>Skia-backed ISvgRasterizer companion for ToolUp.OpenXml — renders an SVG figure to PNG bytes so the emitted .docx can carry a raster fallback part alongside the native svgBlip vector part, for Office clients that predate the 2016 SVG extension. Opt-in: ToolUp.OpenXml itself carries no rendering engine and no native dependency, and a document emitted without this companion embeds SVG-only rather than failing.</Description>
+        <PackageTags>fsharp;sdk;server;docx;openxml;svg;rasterizer;skia;figures</PackageTags>
+        <!-- Phase 576.C — the first `ISvgRasterizer` implementation.
+             GP 1: the rendering-engine dependency lives here and never
+             in `ToolUp.OpenXml`, whose figure surface stays managed-only
+             and native-free. GP 2: MIT throughout — Svg.Skia and its
+             Svg.* siblings, SkiaSharp, HarfBuzzSharp — so the default
+             composition remains free-by-default. GP 13: a deployment
+             that never composes it pays nothing, because nothing in the
+             base package references it.
+
+             This is a native-bearing companion, but NOT one of the
+             vendored-binary kind the companion-authoring guide's
+             P/Invoke section governs: the native payloads arrive as
+             ordinary NuGet native-asset packages that SkiaSharp and
+             HarfBuzzSharp publish per RID, so there is no vendored
+             binary to hash-pin, no C shim, and no RID matrix for this
+             repo to maintain. What the guide's rule about failing
+             loudly at `create` time still applies to is the probe in
+             `SkiaSvgRasterizer.create`, which names the missing native
+             asset package instead of surfacing a DllNotFoundException
+             from inside a document emit.
+
+             The SkiaSharp native asset is deliberately NOT declared
+             here — it is host-specific, and this follows the same
+             stance `ToolUp.AssetStore` takes: a Linux consumer adds
+             SkiaSharp.NativeAssets.Linux (or the NoDependencies
+             variant) itself. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="SkiaSvgRasterizer.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="SkiaSharp" />
+        <PackageReference Include="Svg.Skia" />
+    </ItemGroup>
+</Project>

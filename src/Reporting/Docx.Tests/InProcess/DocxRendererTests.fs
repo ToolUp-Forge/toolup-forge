@@ -482,32 +482,85 @@ let private projectionTests =
             Expect.stringContains text "a=1;b=2" "the series data survives"
             Expect.isGreaterThanOrEqual (countBlocks isTable blocks) 1 "the degradation is a native table"
 
-        testCase "A registered SVG component states the figure is not embedded and keeps the data"
+        // Phase 576 — the three cases below asserted the honest
+        // degradation Phase 575 shipped while `ToolUp.OpenXml` had no
+        // figure-emit capability. It has one now, so a resolved
+        // component becomes a real embedded figure and the degradation
+        // is reserved for the unregistered case above.
+        testCase "A registered SVG component embeds a native SVG figure"
         <| fun () ->
-            // Until the OOXML figure-emit capability is composed there is
-            // no block that can carry the SVG, so the projection says so
-            // rather than dropping the component silently.
+            let chartSvg =
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\"><rect width=\"200\" height=\"100\"/></svg>"
+
             let renderers: NarrativeOoxml.ComponentRenderers =
-                fun _ _ -> NarrativeOoxml.Svg "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"
+                fun _ _ -> NarrativeOoxml.ComponentResult.Svg chartSvg
 
             let document =
                 NarrativeFixtures.componentDocument "chart" (Map [ "chart.points", "a=1;b=2" ])
 
-            let text = NarrativeOoxml.project renderers document |> blocksText
-            Expect.stringContains text "[figure: chart" "the figure is named"
-            Expect.stringContains text "not embedded" "the absence is stated honestly"
-            Expect.stringContains text "a=1;b=2" "the data degradation still carries the series"
+            let blocks = NarrativeOoxml.project renderers document
 
-        testCase "A registered raster component names its MIME type in the honest degradation"
+            let figures =
+                blocks
+                |> List.choose (function
+                    | Block.Figure figure -> Some figure
+                    | _ -> None)
+
+            Expect.hasLength figures 1 "the component became one figure block"
+            Expect.equal figures.Head.Content (VectorSvg(chartSvg, None)) "the SVG is carried verbatim, vector-first"
+            Expect.equal figures.Head.Size FigureSize.Intrinsic "sized from the payload's own viewBox"
+            Expect.equal figures.Head.Name "Component: chart" "the component name labels the figure"
+            Expect.equal figures.Head.Description (Some "Component: chart") "and doubles as its alt text"
+
+            let text = blocksText blocks
+            Expect.isFalse (text.Contains "not embedded") "the honest-degradation marker is gone"
+            Expect.equal (countBlocks isTable blocks) 0 "an embedded figure replaces the props table"
+
+        testCase "A registered raster component embeds an image figure carrying its MIME type"
         <| fun () ->
             let renderers: NarrativeOoxml.ComponentRenderers =
-                fun _ _ -> NarrativeOoxml.Image([| 1uy; 2uy |], "image/png")
+                fun _ _ -> NarrativeOoxml.ComponentResult.Image([| 1uy; 2uy |], "image/png")
 
-            let text =
+            let blocks =
                 NarrativeOoxml.project renderers (NarrativeFixtures.componentDocument "chart" Map.empty)
-                |> blocksText
 
-            Expect.stringContains text "image/png" "the raster result names its MIME type"
+            let figures =
+                blocks
+                |> List.choose (function
+                    | Block.Figure figure -> Some figure
+                    | _ -> None)
+
+            Expect.hasLength figures 1 "the component became one figure block"
+
+            Expect.equal
+                figures.Head.Content
+                (RasterImage([| 1uy; 2uy |], "image/png"))
+                "payload and MIME type preserved"
+
+        testCase "An SVG figure survives emission as a native svg part"
+        <| fun () ->
+            let chartSvg =
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\"><rect width=\"200\" height=\"100\"/></svg>"
+
+            let renderers: NarrativeOoxml.ComponentRenderers =
+                fun _ _ -> NarrativeOoxml.ComponentResult.Svg chartSvg
+
+            let bytes =
+                NarrativeOoxml.project renderers (NarrativeFixtures.componentDocument "chart" Map.empty)
+                |> buildDocxOf
+
+            use stream = new MemoryStream(bytes)
+            use document = WordprocessingDocument.Open(stream, false)
+
+            let parts =
+                document.MainDocumentPart.Parts
+                |> Seq.choose (fun pair ->
+                    match pair.OpenXmlPart with
+                    | :? ImagePart as part -> Some(pair.RelationshipId, part.ContentType)
+                    | _ -> None)
+                |> List.ofSeq
+
+            Expect.equal parts [ "rTuFigSvg1", "image/svg+xml" ] "one native SVG part, no rasteriser composed"
 
         testCase "The Phase 564 disclosure door redacts before projection"
         <| fun () ->
@@ -669,7 +722,9 @@ let private narrativePlaceholderTests =
         testCase "createWith routes component blocks through the supplied registry"
         <| fun () ->
             let renderers: NarrativeOoxml.ComponentRenderers =
-                fun name _ -> NarrativeOoxml.Svg $"<svg data-name=\"{name}\"/>"
+                fun name _ ->
+                    NarrativeOoxml.ComponentResult.Svg
+                        $"<svg xmlns=\"http://www.w3.org/2000/svg\" data-name=\"{name}\"/>"
 
             let document =
                 NarrativeFixtures.componentDocument "chart" (Map [ "chart.points", "a=1" ])
@@ -680,9 +735,33 @@ let private narrativePlaceholderTests =
                 |> Async.RunSynchronously
                 |> expectOk
 
-            let text = extractText bytes
-            Expect.stringContains text "[figure: chart" "the registered renderer's result reached the projection"
-            Expect.isFalse (text.Contains "[component: chart]") "a registered name does not take the unresolved path"
+            // Phase 576 — the registered result is now an embedded
+            // figure rather than a text marker, so the evidence is the
+            // package's parts, not its prose.
+            use stream = new MemoryStream(bytes)
+            use rendered = WordprocessingDocument.Open(stream, false)
+
+            let svgPayloads =
+                rendered.MainDocumentPart.Parts
+                |> Seq.choose (fun pair ->
+                    match pair.OpenXmlPart with
+                    | :? ImagePart as part when part.ContentType = "image/svg+xml" ->
+                        use partStream = part.GetStream()
+                        use reader = new StreamReader(partStream, Encoding.UTF8)
+                        Some(reader.ReadToEnd())
+                    | _ -> None)
+                |> List.ofSeq
+
+            Expect.equal svgPayloads.Length 1 "the registered renderer's result reached the package"
+
+            Expect.stringContains
+                svgPayloads.Head
+                "data-name=\"chart\""
+                "the registry was called with the component's name"
+
+            Expect.isFalse
+                ((extractText bytes).Contains "[component: chart]")
+                "a registered name does not take the unresolved path"
     ]
 
 let tests =

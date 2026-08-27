@@ -288,6 +288,22 @@
          re-encodes raster images; it renders no text. -->
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.1" />
+    <!-- Phase 576 — the SVG rasterisation companion
+         (`src/SvgRasterizers/Skia/`), which produces the optional PNG
+         fallback part of an SVG figure behind `ISvgRasterizer`. MIT
+         throughout (Svg.Skia / Svg.Model / Svg.Custom / Svg.SceneGraph
+         / Svg.Animation, and HarfBuzzSharp for text shaping).
+         4.9.1 rather than the 5.x line DELIBERATELY: 5.x moved to
+         SkiaSharp 4.148.0, and pulling a second SkiaSharp major into
+         this solution would put every existing SkiaSharp consumer into
+         NU1605. 4.9.1 has a net10.0 target group and depends on
+         SkiaSharp 3.119.2 — the version already pinned above — so the
+         companion joins the estate's existing native supply chain
+         rather than opening a second one. Its HarfBuzzSharp native
+         assets arrive transitively for win / linux / macOS; the
+         SkiaSharp native stays host-specific at consumer level, exactly
+         as it does for the asset store. -->
+    <PackageVersion Include="Svg.Skia" Version="4.9.1" />
     <PackageVersion Include="System.ClientModel" Version="1.11" />
     <PackageVersion Include="System.CodeDom" Version="10.0.6" />
     <PackageVersion Include="System.Collections.Immutable" Version="8.0" />

@@ -243,23 +243,42 @@ let private propsTable (props: Map<string, string>) : Block list =
 
 /// Render a resolved component result.
 ///
-/// **This is the Phase 576 seam point.** `ToolUp.OpenXml` carries no
-/// figure-emit capability yet — there is no block that can attach an
-/// image or an SVG part — so an `Svg` / `Image` result cannot become a
-/// figure today. Rather than drop it, the projection states plainly that
-/// the figure was not embedded and then renders the component's data
-/// degradation beneath, so the reader loses the picture but never the
-/// content. Phase 576 replaces the two result branches below with calls
-/// to `Figures.svg` / `Figures.image`; nothing else in this module
-/// changes, and the `Fallback` branch stays as the no-renderer route.
+/// **Phase 576 closed the seam this comment used to describe.** A
+/// resolved `Svg` / `Image` result now becomes a real embedded figure
+/// through `Figures.svg` / `Figures.image` — the block that carries the
+/// payload and lowers to a `w:drawing` plus its image parts. The
+/// `Fallback` branch is unchanged: a component no renderer claims still
+/// degrades to its bracketed marker plus the data table, so the reader
+/// loses the picture but never the content.
+///
+/// Sizing is `FigureSize.Intrinsic`: an SVG is measured from its own
+/// `viewBox`, a PNG or JPEG from its header. A renderer that wants a
+/// specific on-page size scales its own payload, which is the only
+/// place that knows what the figure is FOR.
+///
+/// **The PNG fallback part is deliberately not produced here.**
+/// `ISvgRasterizer` is asynchronous (GP 12 rule 2) and this projection
+/// is a pure synchronous function, so threading a rasteriser through it
+/// would mean making the whole projection async for a part that only
+/// pre-2016 Office clients read. A caller that needs the fallback
+/// rasterises ahead of the projection and returns
+/// `ComponentResult.Image`, or builds the figure with
+/// `Figures.svgNamedWith` and places it directly.
 let private componentBlocks (options: ProjectionOptions) (name: string) (props: Map<string, string>) : Block list =
     let unresolved marker =
         plainParagraph [ Run.plain marker ] :: propsTable props
 
+    // The component's registered name is the only identity available
+    // here, so it serves as both Word's selection-pane label and the
+    // figure's accessible description — a figure with no alt text at
+    // all would be worse for a screen reader than an imperfect one.
+    let figureName = sprintf "Component: %s" name
+
     match options.ComponentRenderers name props with
-    | Svg _ -> unresolved (sprintf "[figure: %s — SVG not embedded (no OOXML figure emitter composed)]" name)
-    | Image(_, mimeType) ->
-        unresolved (sprintf "[figure: %s — %s not embedded (no OOXML figure emitter composed)]" name mimeType)
+    | ComponentResult.Svg svg -> [ Figures.svgNamed figureName (Some figureName) svg FigureSize.Intrinsic None ]
+    | ComponentResult.Image(bytes, mimeType) -> [
+        Figures.imageNamed figureName (Some figureName) bytes mimeType FigureSize.Intrinsic
+      ]
     | Fallback -> unresolved (sprintf "[component: %s]" name)
 
 let rec private elementBlocks (options: ProjectionOptions) (element: NarrativeElement) : Block list =

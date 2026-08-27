@@ -41,15 +41,32 @@ let private standardNamespaces = [
     "pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"
 ]
 
+/// Emission-wide counters plus the part every figure hangs off.
+///
 /// Revision ids must be unique document-wide; one counter spans all
-/// `w:ins` / `w:del` the emission produces.
-type private EmitContext = { mutable NextRevisionId: int }
+/// `w:ins` / `w:del` the emission produces. Figure ordinals do the
+/// same job for `wp:docPr/@id` and for the relationship ids the
+/// drawing XML names — see `figureRelationshipId`.
+type private EmitContext = {
+    mutable NextRevisionId: int
+    mutable NextFigureOrdinal: int
+    /// The main document part figure image parts are added to. Figure
+    /// parts must be reached by a MAIN-DOCUMENT relationship — a
+    /// package-root relationship (what `CustomPart` attaches) is not
+    /// addressable from `a:blip/@r:embed`.
+    MainPart: MainDocumentPart
+}
 
 module private EmitContext =
     let nextId (ctx: EmitContext) : string =
         let id = ctx.NextRevisionId
         ctx.NextRevisionId <- id + 1
         string id
+
+    let nextFigureOrdinal (ctx: EmitContext) : int =
+        let ordinal = ctx.NextFigureOrdinal
+        ctx.NextFigureOrdinal <- ordinal + 1
+        ordinal
 
 // ─── Model walks (for generated parts) ───────────────────────────
 
@@ -391,10 +408,170 @@ let private emitParagraph
 
     p
 
+// ─── Figure emission (Phase 576) ─────────────────────────────────
+//
+// A figure lowers to a paragraph holding one inline `w:drawing`, plus
+// the image part(s) that drawing references off the MAIN DOCUMENT
+// part's relationships. The drawing XML is built as a string and
+// re-parsed rather than assembled through the DrawingML object model:
+// the fragment is fixed, `svgBlip` lives in an extension namespace the
+// SDK has no typed element for, and building it as text keeps the
+// whole shape readable in one place.
+
+/// The `a:extLst` extension uri Office uses for the SVG blip, and the
+/// namespace of the `svgBlip` element inside it. Both are fixed by
+/// Office's published extension, not chosen here.
+[<Literal>]
+let private SvgExtensionUri = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"
+
+[<Literal>]
+let private SvgExtensionNs =
+    "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
+
+/// SVG text lowers to bytes as UTF-8 **without** a BOM: the payload is
+/// the caller's byte-for-byte, so a deterministic renderer's output
+/// survives into the package unchanged.
+let private utf8NoBom = UTF8Encoding false
+
+/// Relationship ids for figure parts are assigned **explicitly**,
+/// never left to the SDK.
+///
+/// `MainDocumentPart.AddImagePart` without an id mints a random one
+/// (`R97b4636297444240`), and that id lands verbatim in the drawing
+/// XML — so two emits of the same model would differ in bytes while
+/// rendering identically. That is the shape that survives review and
+/// then breaks a content-addressed or golden-file consumer, so the
+/// emitter owns the ids: `rTuFig<kind><ordinal>`, ordinal being the
+/// figure's 1-based position in emission order. The prefix cannot
+/// collide with the SDK's own allocations, which are either `rId<n>`
+/// or `R<hex>`.
+let private figureRelationshipId (kind: string) (ordinal: int) : string = sprintf "rTuFig%s%d" kind ordinal
+
+/// The image-part content type for a figure's declared MIME type. An
+/// unrecognised type is embedded as PNG — the shape a caller supplying
+/// one almost always meant, and never a failed emit.
+let private imagePartType (mimeType: string) : PartTypeInfo =
+    match
+        (if isNull mimeType then
+             ""
+         else
+             mimeType.Trim().ToLowerInvariant())
+    with
+    | "image/jpeg"
+    | "image/jpg" -> ImagePartType.Jpeg
+    | "image/gif" -> ImagePartType.Gif
+    | "image/bmp" -> ImagePartType.Bmp
+    | "image/tiff" -> ImagePartType.Tiff
+    | _ -> ImagePartType.Png
+
+let private addImagePart (main: MainDocumentPart) (partType: PartTypeInfo) (relationshipId: string) (bytes: byte[]) =
+    let part = main.AddImagePart(partType, relationshipId)
+    use payload = new MemoryStream(bytes)
+    part.FeedData payload
+
+/// The `pic:blipFill` for a figure. `primaryRelationshipId` is what
+/// `a:blip/@r:embed` points at — the PNG fallback part when one
+/// exists, otherwise the SVG part itself, which a current Office
+/// client renders directly. `svgRelationshipId` adds the `svgBlip`
+/// extension so a 2016-or-later client renders the vector in
+/// preference to whatever the blip resolved to.
+let private blipFillXml (primaryRelationshipId: string) (svgRelationshipId: string option) : string =
+    let blip =
+        match svgRelationshipId with
+        | None -> sprintf "<a:blip r:embed=\"%s\"/>" primaryRelationshipId
+        | Some svgRelationshipId ->
+            sprintf "<a:blip r:embed=\"%s\">" primaryRelationshipId
+            + sprintf "<a:extLst><a:ext uri=\"%s\">" SvgExtensionUri
+            + sprintf "<asvg:svgBlip xmlns:asvg=\"%s\" r:embed=\"%s\"/>" SvgExtensionNs svgRelationshipId
+            + "</a:ext></a:extLst></a:blip>"
+
+    "<pic:blipFill>" + blip + "<a:stretch><a:fillRect/></a:stretch></pic:blipFill>"
+
+/// The inline `w:drawing` referencing a figure's parts at the given
+/// EMU extents. The fragment declares its own namespace prefixes,
+/// because the SDK parses it as standalone element XML.
+let private drawingXml
+    (blipFill: string)
+    (ordinal: int)
+    (name: string)
+    (description: string option)
+    (cx: int64)
+    (cy: int64)
+    : string =
+    let escape (value: string) =
+        System.Security.SecurityElement.Escape(if isNull value then "" else value)
+
+    let safeName = escape name
+
+    let descriptionAttribute =
+        description
+        |> Option.map (fun text -> sprintf " descr=\"%s\"" (escape text))
+        |> Option.defaultValue ""
+
+    "<w:drawing xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+    + "<wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">"
+    + sprintf "<wp:extent cx=\"%d\" cy=\"%d\"/>" cx cy
+    + "<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>"
+    + sprintf "<wp:docPr id=\"%d\" name=\"%s\"%s/>" ordinal safeName descriptionAttribute
+    + "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic>"
+    + sprintf
+        "<pic:nvPicPr><pic:cNvPr id=\"%d\" name=\"%s\"%s/><pic:cNvPicPr/></pic:nvPicPr>"
+        ordinal
+        safeName
+        descriptionAttribute
+    + blipFill
+    + sprintf
+        "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"%d\" cy=\"%d\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>"
+        cx
+        cy
+    + "</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"
+
+let private emitFigure (ctx: EmitContext) (figure: FigureModel) : Wordprocessing.Paragraph =
+    let ordinal = EmitContext.nextFigureOrdinal ctx
+    let cx, cy = Figures.extents figure
+
+    let blipFill =
+        match figure.Content with
+        | RasterImage(bytes, mimeType) ->
+            let relationshipId = figureRelationshipId "Img" ordinal
+            addImagePart ctx.MainPart (imagePartType mimeType) relationshipId bytes
+            blipFillXml relationshipId None
+        | VectorSvg(svgText, pngFallback) ->
+            let svgRelationshipId = figureRelationshipId "Svg" ordinal
+
+            addImagePart
+                ctx.MainPart
+                ImagePartType.Svg
+                svgRelationshipId
+                (utf8NoBom.GetBytes(if isNull svgText then "" else svgText))
+
+            let fallbackRelationshipId =
+                pngFallback
+                |> Option.filter (fun bytes -> not (isNull bytes) && bytes.Length > 0)
+                |> Option.map (fun bytes ->
+                    let relationshipId = figureRelationshipId "Fbk" ordinal
+                    addImagePart ctx.MainPart ImagePartType.Png relationshipId bytes
+                    relationshipId)
+
+            blipFillXml (defaultArg fallbackRelationshipId svgRelationshipId) (Some svgRelationshipId)
+
+    let paragraph = Wordprocessing.Paragraph()
+    // Build the run then append the drawing explicitly: a
+    // `Run(Drawing …)` ctor resolves to the IEnumerable overload
+    // (a Drawing enumerates its own children) and re-parents them.
+    let run = Wordprocessing.Run()
+
+    run.AppendChild(Wordprocessing.Drawing(drawingXml blipFill ordinal figure.Name figure.Description cx cy))
+    |> ignore
+
+    paragraph.AppendChild run |> ignore
+    paragraph
+
 // ─── Block / table emission ──────────────────────────────────────
 
 let rec private emitBlock (ctx: EmitContext) (block: Block) : OpenXmlElement =
     match block with
+    | Figure figure -> emitFigure ctx figure
     | Paragraph paragraph -> emitParagraph ctx paragraph NoProps
     | Heading(level, paragraph) -> emitParagraph ctx paragraph (FromStyle(sprintf "Heading%d" level))
     | ListItem(numbering, paragraph) -> emitParagraph ctx paragraph (FromNumbering numbering)
@@ -570,7 +747,12 @@ let private toStreamCore (model: DocModel) (stream: Stream) : unit =
     emitNumbering doc model
     emitComments doc model.Comments
 
-    let ctx = { NextRevisionId = 1 }
+    let ctx = {
+        NextRevisionId = 1
+        NextFigureOrdinal = 1
+        MainPart = main
+    }
+
     let lastIndex = model.Sections.Length - 1
 
     model.Sections

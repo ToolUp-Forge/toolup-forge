@@ -71,6 +71,7 @@ needs: sections → block elements, plus the document-level parts.
 | `Paragraph` | styled runs (bold / italic / underline / strike + style ids), comment anchors, revision marks |
 | `ListItem (numberingRef, paragraph)` | `w:numPr` numbering id + indent level |
 | `Table` | rows → cells → nested blocks |
+| `Figure` | an embedded picture — a raster image, or an SVG embedded vector-first |
 | `OpaqueBlock` | any block-level element outside the vocabulary, carried verbatim |
 | `Section.RawProperties` | `w:sectPr` (page size, margins, columns) |
 | `StyleDefinitions` / `NumberingDefinitions` | parsed identity rows + the verbatim part XML |
@@ -164,6 +165,48 @@ imported.CustomParts = [ part ]                            // round-trips intact
 The `Emit.toBytes` signature is unchanged (it delegates to `toBytesWith []`);
 `toStreamWith` is the streaming twin. `Package.attachCustomParts` /
 `Package.readCustomParts` expose the OPC-level plumbing for lower-level consumers.
+
+## Figures — raster images and native SVG
+
+A `Figure` block embeds a picture. Emission lowers it to a paragraph carrying an
+inline `w:drawing` plus the image part(s) it references off the main document
+part's relationships.
+
+```fsharp
+// A raster image, sized from its own PNG / JPEG header.
+let logo = Figures.image logoBytes "image/png" FigureSize.Intrinsic
+
+// An SVG, embedded verbatim as a native image/svg+xml part through the
+// svgBlip extension Word has honoured since 2016. Sized from its viewBox.
+let chart = Figures.svgNamed "Revenue" (Some "Quarterly revenue") chartSvg FigureSize.Intrinsic None
+
+let bytes = Emit.toBytes (DocModel.ofBlocks [ logo; chart ])
+```
+
+Three properties are worth knowing before you build on it:
+
+- **Vector first.** An SVG's bytes go into the package unchanged (UTF-8, no BOM),
+  so a deterministic renderer's output survives end to end.
+- **The PNG fallback is optional and needs a rasteriser.** Older clients read a
+  raster part instead of the vector one; producing it is the one step this package
+  cannot do without a rendering engine, so it sits behind the `ISvgRasterizer`
+  seam and nowhere else. With none composed the embed is SVG-only — never an error
+  — and this package carries no rendering engine and no native dependency (GP 13).
+  `Figures.svgWith (Some rasterizer) svgText size` runs the seam; a rasteriser that
+  fails costs the figure its fallback, never the figure.
+- **The emit is deterministic.** Figure relationship ids are assigned explicitly
+  (`rTuFigImg1` / `rTuFigSvg1` / `rTuFigFbk1`), not left to the SDK's random
+  generator, so two emits of the same model produce byte-identical document and
+  image parts. (Package-level byte equality is a different question: OPC ZIP
+  entries carry a wall-clock timestamp.)
+
+Sizing is 96 dpi: `Pixels` converts at 9525 EMU per pixel, `Emu` is the explicit
+override, and `Intrinsic` reads the payload — an SVG's `viewBox` (then its
+`width` / `height`), a PNG's IHDR, a JPEG's frame header — falling back to the SVG
+specification's 300×150 default replaced size rather than to zero.
+
+Import does not yet produce `Figure` blocks: a `w:drawing` arriving from an
+imported document is still reported in the residue report, unchanged.
 
 ## Out of scope
 
