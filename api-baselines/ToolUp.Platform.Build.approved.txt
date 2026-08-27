@@ -32,11 +32,152 @@ ToolUp.Platform.BuildOutput.ClientBundlePath : System.String { get }
 ToolUp.Platform.BuildOutput.ServerPublishPath : System.String { get }
 ToolUp.Platform.BuildOutputModule (class)
 ToolUp.Platform.BuildOutputModule.defaults : ToolUp.Platform.BuildOutput { get }
+ToolUp.Platform.CoreWebVitalsBudget (class)
+ToolUp.Platform.CoreWebVitalsBudget..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CoreWebVitalsServerSignals])
+ToolUp.Platform.CoreWebVitalsBudget.CategoryFloors : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]] { get }
+ToolUp.Platform.CoreWebVitalsBudget.Label : System.String { get }
+ToolUp.Platform.CoreWebVitalsBudget.MetricCeilings : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]] { get }
+ToolUp.Platform.CoreWebVitalsBudget.Pages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CoreWebVitalsBudget.ServerSignals : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CoreWebVitalsServerSignals] { get }
+ToolUp.Platform.CoreWebVitalsBudgetGate (class)
+ToolUp.Platform.CoreWebVitalsBudgetGate.SchemaToken : System.String (literal)
+ToolUp.Platform.CoreWebVitalsBudgetGate.assertWithinBudget(ToolUp.Platform.CoreWebVitalsGateOptions) : System.Void
+ToolUp.Platform.CoreWebVitalsBudgetGate.breaches(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsFinding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsFinding]
+ToolUp.Platform.CoreWebVitalsBudgetGate.check(ToolUp.Platform.CoreWebVitalsBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LighthousePageReport], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RenderMetricsSnapshot]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsFinding]
+ToolUp.Platform.CoreWebVitalsBudgetGate.normalisePagePath(System.String) : System.String
+ToolUp.Platform.CoreWebVitalsBudgetGate.parseBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CoreWebVitalsBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate.parseReport(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LighthousePageReport, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate.parseSnapshot(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RenderMetricsSnapshot, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate.registerTarget() : System.Void
+ToolUp.Platform.CoreWebVitalsBudgetGate.report(ToolUp.Platform.CoreWebVitalsBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsFinding]) : System.String
+ToolUp.Platform.CoreWebVitalsBudgetGate.verify(ToolUp.Platform.CoreWebVitalsGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.CoreWebVitalsBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate+Load (class)
+ToolUp.Platform.CoreWebVitalsBudgetGate+Load.budget(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CoreWebVitalsBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate+Load.reports(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LighthousePageReport], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsBudgetGate+Load.snapshot(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RenderMetricsSnapshot, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsFinding (class)
+ToolUp.Platform.CoreWebVitalsFinding.IsCategoryFloorBreached : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsCategoryNotReported : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsConditionalGet304RateBreached : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsMetricCeilingBreached : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsMetricNotReported : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsPageNotBudgeted : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsPageNotReported : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsRenderMsBreached : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.IsServerSignalsNotSampled : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding.Tag : System.Int32 { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryFloorBreached (class)
+ToolUp.Platform.CoreWebVitalsFinding+CategoryFloorBreached.category : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryFloorBreached.floor : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryFloorBreached.observed : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryFloorBreached.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryNotReported (class)
+ToolUp.Platform.CoreWebVitalsFinding+CategoryNotReported.category : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.CoreWebVitalsFinding+CategoryNotReported.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+ConditionalGet304RateBreached (class)
+ToolUp.Platform.CoreWebVitalsFinding+ConditionalGet304RateBreached.floor : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+ConditionalGet304RateBreached.observed : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricCeilingBreached (class)
+ToolUp.Platform.CoreWebVitalsFinding+MetricCeilingBreached.ceiling : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricCeilingBreached.metric : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricCeilingBreached.observed : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricCeilingBreached.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricNotReported (class)
+ToolUp.Platform.CoreWebVitalsFinding+MetricNotReported.metric : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsFinding+MetricNotReported.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+PageNotBudgeted (class)
+ToolUp.Platform.CoreWebVitalsFinding+PageNotBudgeted.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+PageNotBudgeted.reportLabel : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+PageNotReported (class)
+ToolUp.Platform.CoreWebVitalsFinding+PageNotReported.page : System.String { get }
+ToolUp.Platform.CoreWebVitalsFinding+RenderMsBreached (class)
+ToolUp.Platform.CoreWebVitalsFinding+RenderMsBreached.ceiling : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+RenderMsBreached.observed : System.Double { get }
+ToolUp.Platform.CoreWebVitalsFinding+ServerSignalsNotSampled (class)
+ToolUp.Platform.CoreWebVitalsFinding+ServerSignalsNotSampled.required : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsFinding+Tags (class)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.CategoryFloorBreached : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.CategoryNotReported : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.ConditionalGet304RateBreached : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.MetricCeilingBreached : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.MetricNotReported : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.PageNotBudgeted : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.PageNotReported : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.RenderMsBreached : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFinding+Tags.ServerSignalsNotSampled : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsFindingModule (class)
+ToolUp.Platform.CoreWebVitalsFindingModule.isBreach(ToolUp.Platform.CoreWebVitalsFinding) : System.Boolean
+ToolUp.Platform.CoreWebVitalsFindingModule.render(ToolUp.Platform.CoreWebVitalsFinding) : System.String
+ToolUp.Platform.CoreWebVitalsGateOptions (class)
+ToolUp.Platform.CoreWebVitalsGateOptions..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.CoreWebVitalsGateOptions.BudgetFile : System.String { get }
+ToolUp.Platform.CoreWebVitalsGateOptions.ReportsDirectory : System.String { get }
+ToolUp.Platform.CoreWebVitalsGateOptions.ServerMetricsFile : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CoreWebVitalsGateOptionsModule (class)
+ToolUp.Platform.CoreWebVitalsGateOptionsModule.BudgetVariable : System.String (literal)
+ToolUp.Platform.CoreWebVitalsGateOptionsModule.ReportsVariable : System.String (literal)
+ToolUp.Platform.CoreWebVitalsGateOptionsModule.ServerMetricsVariable : System.String (literal)
+ToolUp.Platform.CoreWebVitalsGateOptionsModule.create(System.String, System.String) : ToolUp.Platform.CoreWebVitalsGateOptions
+ToolUp.Platform.CoreWebVitalsGateOptionsModule.fromEnvironment() : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CoreWebVitalsGateOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.CoreWebVitalsMetric (class)
+ToolUp.Platform.CoreWebVitalsMetric.CumulativeLayoutShift : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsMetric.FirstContentfulPaint : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsMetric.IsCumulativeLayoutShift : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsMetric.IsFirstContentfulPaint : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsMetric.IsLargestContentfulPaint : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsMetric.IsTotalBlockingTime : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsMetric.LargestContentfulPaint : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsMetric.Tag : System.Int32 { get }
+ToolUp.Platform.CoreWebVitalsMetric.TotalBlockingTime : ToolUp.Platform.CoreWebVitalsMetric { get }
+ToolUp.Platform.CoreWebVitalsMetric+Tags (class)
+ToolUp.Platform.CoreWebVitalsMetric+Tags.CumulativeLayoutShift : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsMetric+Tags.FirstContentfulPaint : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsMetric+Tags.LargestContentfulPaint : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsMetric+Tags.TotalBlockingTime : System.Int32 (literal)
+ToolUp.Platform.CoreWebVitalsMetricModule (class)
+ToolUp.Platform.CoreWebVitalsMetricModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CoreWebVitalsMetric] { get }
+ToolUp.Platform.CoreWebVitalsMetricModule.auditId(ToolUp.Platform.CoreWebVitalsMetric) : System.String
+ToolUp.Platform.CoreWebVitalsMetricModule.key(ToolUp.Platform.CoreWebVitalsMetric) : System.String
+ToolUp.Platform.CoreWebVitalsMetricModule.ofKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CoreWebVitalsMetric]
+ToolUp.Platform.CoreWebVitalsMetricModule.unit(ToolUp.Platform.CoreWebVitalsMetric) : System.String
+ToolUp.Platform.CoreWebVitalsServerSignals (class)
+ToolUp.Platform.CoreWebVitalsServerSignals..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Boolean)
+ToolUp.Platform.CoreWebVitalsServerSignals.MaxRenderMs : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.CoreWebVitalsServerSignals.MinConditionalGet304Rate : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.CoreWebVitalsServerSignals.Required : System.Boolean { get }
+ToolUp.Platform.CoreWebVitalsServerSignalsModule (class)
+ToolUp.Platform.CoreWebVitalsServerSignalsModule.none : ToolUp.Platform.CoreWebVitalsServerSignals { get }
 ToolUp.Platform.HostPackaging (class)
 ToolUp.Platform.HostPackaging.MinBundleBytes : System.Int64 (literal)
 ToolUp.Platform.HostPackaging.packAwsLambda(System.String, System.String) : System.Void
 ToolUp.Platform.HostPackaging.packAzureFunctions(System.String, System.String) : System.Void
 ToolUp.Platform.HostPackaging.packGoogleCloudFunctions(System.String, System.String) : System.Void
+ToolUp.Platform.LighthouseCategory (class)
+ToolUp.Platform.LighthouseCategory.Accessibility : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.LighthouseCategory.BestPractices : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.LighthouseCategory.IsAccessibility : System.Boolean { get }
+ToolUp.Platform.LighthouseCategory.IsBestPractices : System.Boolean { get }
+ToolUp.Platform.LighthouseCategory.IsPerformance : System.Boolean { get }
+ToolUp.Platform.LighthouseCategory.IsSeo : System.Boolean { get }
+ToolUp.Platform.LighthouseCategory.Performance : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.LighthouseCategory.Seo : ToolUp.Platform.LighthouseCategory { get }
+ToolUp.Platform.LighthouseCategory.Tag : System.Int32 { get }
+ToolUp.Platform.LighthouseCategory+Tags (class)
+ToolUp.Platform.LighthouseCategory+Tags.Accessibility : System.Int32 (literal)
+ToolUp.Platform.LighthouseCategory+Tags.BestPractices : System.Int32 (literal)
+ToolUp.Platform.LighthouseCategory+Tags.Performance : System.Int32 (literal)
+ToolUp.Platform.LighthouseCategory+Tags.Seo : System.Int32 (literal)
+ToolUp.Platform.LighthouseCategoryModule (class)
+ToolUp.Platform.LighthouseCategoryModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LighthouseCategory] { get }
+ToolUp.Platform.LighthouseCategoryModule.key(ToolUp.Platform.LighthouseCategory) : System.String
+ToolUp.Platform.LighthouseCategoryModule.ofKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LighthouseCategory]
+ToolUp.Platform.LighthouseCategoryModule.reportId(ToolUp.Platform.LighthouseCategory) : System.String
+ToolUp.Platform.LighthousePageReport (class)
+ToolUp.Platform.LighthousePageReport..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]])
+ToolUp.Platform.LighthousePageReport.CategoryScores : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]] { get }
+ToolUp.Platform.LighthousePageReport.MetricValues : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]] { get }
+ToolUp.Platform.LighthousePageReport.PagePath : System.String { get }
+ToolUp.Platform.LighthousePageReport.ReportLabel : System.String { get }
 ToolUp.Platform.PackagedModuleCheckOptions (class)
 ToolUp.Platform.PackagedModuleCheckOptions..ctor(System.String, System.String, ToolUp.Platform.PackagedModuleManifestSource, ToolUp.Platform.PackagedModuleContract)
 ToolUp.Platform.PackagedModuleCheckOptions.Contract : ToolUp.Platform.PackagedModuleContract { get }
@@ -108,6 +249,12 @@ ToolUp.Platform.Prerender+PrerenderTargetOptions.CssLinkUrl : Microsoft.FSharp.C
 ToolUp.Platform.Prerender+PrerenderTargetOptions.OutputDirectory : System.String { get }
 ToolUp.Platform.Prerender+PrerenderTargetOptionsModule (class)
 ToolUp.Platform.Prerender+PrerenderTargetOptionsModule.defaults : ToolUp.Platform.Prerender+PrerenderTargetOptions { get }
+ToolUp.Platform.RenderMetricsSnapshot (class)
+ToolUp.Platform.RenderMetricsSnapshot..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Platform.RenderMetricsSnapshot.ConditionalGet200 : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.RenderMetricsSnapshot.ConditionalGet304 : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.RenderMetricsSnapshot.RenderMsMax : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.RenderMetricsSnapshot.SnapshotLabel : System.String { get }
 ToolUp.Platform.Sbom (class)
 ToolUp.Platform.Sbom.EmitFlag : System.String (literal)
 ToolUp.Platform.Sbom.buildCycloneDx(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Sbom+Component], System.String, System.String) : System.String

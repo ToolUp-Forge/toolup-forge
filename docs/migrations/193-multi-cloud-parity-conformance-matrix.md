@@ -280,6 +280,19 @@ Two of the first run's six red were the `AggregateException` class above, **fixe
 `Delete is idempotent on missing blobs`, and `DownloadRange past EOF` (its 416 handler could not
 fire through the wrapper; past-EOF returns no bytes, so the hash limit does not bite it).
 
+**The flaky `GetMetadata` DateTime parse — fixed 2026-08-27.** The Google.Apis generated
+`UpdatedDateTimeOffset` property re-parses the raw RFC3339 `updated` wire string on every read with
+an exact format that accepts **at most 3 fractional-second digits** (measured against the pinned
+`Google.Apis.Core` 1.73: `.561Z` parses, `.5612Z` and `.561202Z` throw `FormatException` — the
+observed *"String was not recognized as a valid DateTime"*). Real GCS always emits exactly 3
+digits; fake-gcs-server emits Go's `RFC3339Nano`, which trims trailing zeros to a **variable**
+count — so the case passed only when the timestamp happened to trim to ≤ 3 digits, which is the
+whole intermittency. `GoogleCloudStorage.GetMetadata` now catches the `FormatException` (even the
+`.HasValue` probe throws, because the getter is the parser) and falls back to a lenient
+`DateTimeOffset.TryParse` of `UpdatedRaw`, then to `DateTime.UtcNow`. Re-measured armed: the full
+GCP blob leg 5×, plus the `GetMetadata` case in isolation 10× — 15/15 passes, with the
+`DownloadRange` hash cluster above the only remaining red.
+
 ### The GCP blob gap — the finding this phase was written to catch, now CLOSED
 
 When Phase 193 shipped, **`GoogleCloudStorageConfig` could not be pointed at an emulator.** It

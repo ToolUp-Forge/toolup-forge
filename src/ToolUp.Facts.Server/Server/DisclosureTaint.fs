@@ -25,6 +25,15 @@ open System.Collections.Generic
 // that does not chain facts through series outputs sees no taint, exactly
 // as before (GP 11).
 //
+// **Phase 674 — the conjunction.** Taint is carried as the SET of
+// contributing policies rather than one representative, and a policy may
+// declare a contributor scope (a party). A declassification routine then
+// clears only the parties that accepted it, so a joint fact discloses only
+// when the path satisfies EVERY contributing party's policy. Fail-closed:
+// a party-scoped policy needs an explicit acceptance, and an unscoped
+// policy behaves exactly as Phase 562, so a deployment declaring no scope
+// is unchanged.
+//
 // **Pure core.** The walk (`analyze`) is a pure function over an explicit
 // `FactDerivationGraph`, so it is unit-testable with hand-built graphs and
 // carries no store dependency; `buildGraph` projects an `IFactStore`
@@ -48,6 +57,11 @@ type TaintCrossing = {
     DeclassifierFactId: string
     OperationId: string
     Rationale: string
+    /// Phase 674 — the contributing parties whose taint this crossing
+    /// actually cleared (the routine's accepting scopes ∩ what reached it).
+    /// Empty when the cleared policies declare no party — the Phase 562
+    /// shape, in which no party accepted anything.
+    AcceptedScopes: string list
 }
 
 /// The taint analysis for one target fact at one egress check.
@@ -55,7 +69,24 @@ type TaintOutcome = {
     /// The target inherits an undeclassified restriction from an upstream
     /// input ⇒ the gate must deny even though the target's own disclosure
     /// permits egress. `None` when the target is clean.
+    ///
+    /// Phase 674 keeps this as the *representative* of `InheritedPolicyRefs`
+    /// (the nearest declared policy first) so the single-party verdict and
+    /// its deny ref are byte-for-byte Phase 562.
     InheritedPolicyRef: string option
+    /// Phase 674 — EVERY tainting policy that reaches the target and that
+    /// no accepted declassification cleared. The conjunction is exactly
+    /// "this list is empty": a path satisfies every contributing party's
+    /// policy or the gate denies.
+    InheritedPolicyRefs: string list
+    /// Phase 674 — the contributing parties among `InheritedPolicyRefs`,
+    /// distinct and sorted. These are the parties whose consent is missing;
+    /// the deny names them.
+    UnsatisfiedScopes: string list
+    /// Phase 674 — every contributing party whose restricted data reaches
+    /// the target's lineage at all, cleared or not (the contribution facet,
+    /// plan D4). Distinct and sorted.
+    ContributorScopes: string list
     /// Declassification crossings on the target's derivation (deduped by
     /// declassifier fact id). Audited when the target discloses.
     Crossings: TaintCrossing list
@@ -85,82 +116,154 @@ module DisclosureTaint =
     /// Taint of a fact's *output* propagates downstream along derivation
     /// edges: a fact's output is tainted iff it is a taint source itself OR
     /// any input's output is tainted — *unless* the fact is a declassifier,
-    /// whose output is always clean (and whose clearing of a tainted input
-    /// is recorded as a crossing). The target's verdict is driven by its
-    /// *inputs*: it inherits taint iff an input's output is tainted and the
-    /// target is not itself a declassifier. The target's own disclosure is
-    /// handled by the Phase 525 resolver, not here — so a directly-
-    /// classified fact permitted at the surface is not self-denied.
+    /// which clears the taint its routine is entitled to clear (and whose
+    /// clearing is recorded as a crossing). The target's verdict is driven
+    /// by its *inputs*: it inherits whatever taint survives. The target's
+    /// own disclosure is handled by the Phase 525 resolver, not here — so a
+    /// directly-classified fact permitted at the surface is not self-denied.
+    ///
+    /// **Phase 674 — the conjunction.** Taint is carried as the SET of
+    /// contributing policies rather than one representative, and a
+    /// declassifier clears only the policies its `AcceptingScopes` entitles
+    /// it to (`DisclosureTaintConfig.routineClears`). Two consequences, both
+    /// the point of the phase:
+    ///
+    ///  - a routine accepted by party A does **not** clear party B's taint —
+    ///    B's restriction survives A's declassification and the target
+    ///    denies, so one party's consent can never launder another's data
+    ///    (plan D3);
+    ///  - the verdict is a conjunction over the contributing parties: every
+    ///    one must be satisfied, and any survivor denies.
+    ///
+    /// Fail-closed throughout: a party-scoped policy is cleared only by an
+    /// explicit acceptance, so an absent, unknown or unevaluable acceptance
+    /// denies. An **unscoped** policy is cleared by any declared routine —
+    /// exactly Phase 562 — so a deployment that declares no contributor
+    /// scope is byte-for-byte unchanged (GP 11 / GP 13).
     let analyze (config: DisclosureTaintConfig) (graph: FactDerivationGraph) (targetId: string) : TaintOutcome =
-        // Memoised output-taint per fact id: `Some policyRef` when the
-        // fact's output carries taint (naming a representative source
-        // policy), `None` when clean. Declassifier outputs are always
-        // clean.
-        let memo = Dictionary<string, string option>()
+        // Memoised output-taint per fact id: the distinct policy refs the
+        // fact's output carries, nearest-declared first. Empty ⇒ clean.
+        let memo = Dictionary<string, string list>()
         // Crossings deduped by declassifier fact id.
         let crossings = Dictionary<string, TaintCrossing>()
+        // Phase 674 — every contributing party seen anywhere on the walked
+        // lineage, cleared or not (the contribution facet).
+        let contributors = HashSet<string>()
 
-        let recordCrossing (factId: string) (routine: DeclassificationRoutine) =
+        let noteContributor (policyRef: string) =
+            match DisclosureTaintConfig.scopeOf config policyRef with
+            | Some party -> contributors.Add party |> ignore
+            | None -> ()
+
+        let recordCrossing (factId: string) (routine: DeclassificationRoutine) (cleared: string list) =
             if not (crossings.ContainsKey factId) then
                 crossings[factId] <- {
                     DeclassifierFactId = factId
                     OperationId = routine.OperationId
                     Rationale = routine.Rationale
+                    AcceptedScopes =
+                        cleared
+                        |> List.choose (DisclosureTaintConfig.scopeOf config)
+                        |> List.distinct
+                        |> List.sort
                 }
 
-        let rec outputTaint (visiting: Set<string>) (factId: string) : string option =
+        let rec outputTaint (visiting: Set<string>) (factId: string) : string list =
             match memo.TryGetValue factId with
             | true, cached -> cached
             | _ ->
                 // Cycle guard — the content-addressed store is acyclic, but
                 // never let a malformed graph loop.
                 if visiting.Contains factId then
-                    None
+                    []
                 else
                     let result =
                         match graph.Facts.TryFind factId with
                         // An input with no visible producing fact contributes
                         // no taint (it is not a taint source we can see).
-                        | None -> None
+                        | None -> []
                         | Some fact ->
                             let visiting' = Set.add factId visiting
 
-                            let inputTaint = graph.UpstreamOf factId |> List.tryPick (outputTaint visiting')
+                            let inputTaint =
+                                graph.UpstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
 
                             match declassifierOf config fact with
                             | Some routine ->
-                                // A declassifier clears taint; record the
-                                // crossing when it actually had tainted input.
-                                if inputTaint.IsSome then
-                                    recordCrossing factId routine
+                                // A declassifier clears only what its
+                                // accepting scopes entitle it to; anything
+                                // else flows on. The crossing is recorded
+                                // when it actually cleared something.
+                                let cleared, retained =
+                                    inputTaint
+                                    |> List.partition (DisclosureTaintConfig.routineClears config routine)
 
-                                None
+                                if not (List.isEmpty cleared) then
+                                    recordCrossing factId routine cleared
+
+                                retained
                             | None ->
                                 // Own source first (so the deny names the
-                                // nearest declared policy), else inherited.
+                                // nearest declared policy), then inherited —
+                                // a fact can be a source AND carry upstream
+                                // taint, and the conjunction needs both.
                                 match taintSourcePolicy config fact with
-                                | Some _ as src -> src
+                                | Some src -> src :: inputTaint |> List.distinct
                                 | None -> inputTaint
+
+                    // Every policy this fact's output carries is a
+                    // contribution; a ref cleared upstream by a declassifier
+                    // was already noted at the source fact that minted it,
+                    // so clearing never erases the contribution facet.
+                    for policyRef in result do
+                        noteContributor policyRef
 
                     memo[factId] <- result
                     result
 
-        // The target's inherited taint = any input's output taint, cleared
-        // if the target is itself a declassifier (its output is clean and
-        // the crossing is recorded).
-        let inputTaint = graph.UpstreamOf targetId |> List.tryPick (outputTaint Set.empty)
+        // The target's inherited taint = the union of its inputs' output
+        // taint, less whatever the target's own routine (if it is a
+        // declassifier) is entitled to clear.
+        let inputTaint =
+            graph.UpstreamOf targetId
+            |> List.collect (outputTaint Set.empty)
+            |> List.distinct
 
-        let inheritedPolicyRef =
-            match graph.Facts.TryFind targetId |> Option.bind (declassifierOf config) with
+        let targetFact = graph.Facts.TryFind targetId
+
+        let inheritedPolicyRefs =
+            match targetFact |> Option.bind (declassifierOf config) with
             | Some routine ->
-                if inputTaint.IsSome then
-                    recordCrossing targetId routine
+                let cleared, retained =
+                    inputTaint
+                    |> List.partition (DisclosureTaintConfig.routineClears config routine)
 
-                None
+                if not (List.isEmpty cleared) then
+                    recordCrossing targetId routine cleared
+
+                retained
             | None -> inputTaint
 
+        // The target's own registered policy is a contribution too — a
+        // party's own fact disclosed under its own policy is still that
+        // party's data leaving (the audit facet, plan D4). Its egress
+        // stance is the Phase 525 resolver's business, not the walk's.
+        match targetFact with
+        | Some fact ->
+            match fact.Disclosure with
+            | Restricted policyRef -> noteContributor policyRef
+            | _ -> ()
+        | None -> ()
+
         {
-            InheritedPolicyRef = inheritedPolicyRef
+            InheritedPolicyRef = List.tryHead inheritedPolicyRefs
+            InheritedPolicyRefs = inheritedPolicyRefs
+            UnsatisfiedScopes =
+                inheritedPolicyRefs
+                |> List.choose (DisclosureTaintConfig.scopeOf config)
+                |> List.distinct
+                |> List.sort
+            ContributorScopes = contributors |> List.ofSeq |> List.sort
             Crossings = crossings.Values |> List.ofSeq
         }
 

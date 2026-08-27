@@ -8,6 +8,7 @@ module ToolUp.Storage.GoogleCloudStorage
 #nowarn "44"
 
 open System
+open System.Globalization
 open System.IO
 open System.Net
 open Google
@@ -307,11 +308,30 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
 
                 let size = if obj.Size.HasValue then int64 obj.Size.Value else 0L
 
+                // The Google.Apis `UpdatedDateTimeOffset` getter re-parses the
+                // raw RFC3339 `updated` wire string with an exact format on
+                // every read, so even the `.HasValue` probe throws
+                // FormatException on variants a GCS-compatible emulator can
+                // emit (fake-gcs-server sometimes trims fractional seconds).
+                // Real GCS always emits the exact shape; a lenient re-parse of
+                // the raw string degrades the timestamp, not the whole
+                // GetMetadata call.
                 let lastModified =
-                    if obj.UpdatedDateTimeOffset.HasValue then
-                        obj.UpdatedDateTimeOffset.Value.UtcDateTime
-                    else
-                        DateTime.UtcNow
+                    try
+                        if obj.UpdatedDateTimeOffset.HasValue then
+                            obj.UpdatedDateTimeOffset.Value.UtcDateTime
+                        else
+                            DateTime.UtcNow
+                    with :? FormatException ->
+                        match
+                            DateTimeOffset.TryParse(
+                                obj.UpdatedRaw,
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.AssumeUniversal
+                            )
+                        with
+                        | true, parsed -> parsed.UtcDateTime
+                        | false, _ -> DateTime.UtcNow
 
                 let contentType =
                     if String.IsNullOrEmpty obj.ContentType then

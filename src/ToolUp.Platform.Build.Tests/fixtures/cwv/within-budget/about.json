@@ -1,0 +1,18 @@
+{
+  "lighthouseVersion": "12.2.1",
+  "requestedUrl": "http://127.0.0.1:51841/about",
+  "finalDisplayedUrl": "http://127.0.0.1:51841/about",
+  "categories": {
+    "performance": { "id": "performance", "title": "Performance", "score": 0.97 },
+    "accessibility": { "id": "accessibility", "title": "Accessibility", "score": 0.98 },
+    "best-practices": { "id": "best-practices", "title": "Best Practices", "score": 1 },
+    "seo": { "id": "seo", "title": "SEO", "score": 1 }
+  },
+  "audits": {
+    "first-contentful-paint": { "id": "first-contentful-paint", "score": 1, "numericValue": 703.2, "numericUnit": "millisecond" },
+    "largest-contentful-paint": { "id": "largest-contentful-paint", "score": 1, "numericValue": 884.5, "numericUnit": "millisecond" },
+    "total-blocking-time": { "id": "total-blocking-time", "score": 1, "numericValue": 12.5, "numericUnit": "millisecond" },
+    "cumulative-layout-shift": { "id": "cumulative-layout-shift", "score": 1, "numericValue": 0.004, "numericUnit": "unitless" },
+    "speed-index": { "id": "speed-index", "score": 1, "numericValue": 703.2, "numericUnit": "millisecond" }
+  }
+}
