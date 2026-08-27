@@ -19,6 +19,10 @@
         <Compile Include="InProcess\ModuleBindingTrustResolverTests.fs" />
         <Compile Include="InProcess\BindingRevocationContractTests.fs" />
         <Compile Include="InProcess\ModuleSbomManifestTests.fs" />
+        <!-- Phase 589 — certified-surface stamp: the module's ModuleSurface
+             projected canonically, signed, and re-derived at compose. After the
+             SBOM tests, whose minting shape it mirrors. -->
+        <Compile Include="InProcess\ModuleCertificationTests.fs" />
         <Compile Include="InProcess\ApplicationSigningTests.fs" />
         <Compile Include="InProcess\SigningProviderConformanceTests.fs" />
         <Compile Include="InProcess\DeployRecordSealingTests.fs" />

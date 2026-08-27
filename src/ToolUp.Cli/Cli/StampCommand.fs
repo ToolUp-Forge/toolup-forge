@@ -128,6 +128,133 @@ let sbomJson (components: SbomComponent list) : JsonObject =
     o["components"] <- arr
     o
 
+// ── Phase 589 — certified-surface minting ─────────────────────────────
+//
+// `--certified-surface` embeds the module's CERTIFIED SURFACE: the canonical
+// surface-projection JSON the module repo's conformance run produced
+// (`ModuleSurface.certificationJson`), its hash, and optionally that run's
+// verdict (`--conformance-verdict`). It is signed under the SAME key as the
+// stamp, over canonical bytes that MUST match
+// `ToolUp.ArtefactSigning.ModuleCertificationSigning.canonicalBytes` (a
+// round-trip test pins the two).
+//
+// Unlike an SBOM, a certified surface belongs to exactly ONE module — it IS
+// that module's declaration set — so `--certified-surface` with more than one
+// `--module` is a usage error rather than a shared payload.
+
+/// The surface JSON is embedded and hashed VERBATIM (after trimming the
+/// surrounding whitespace a file write adds), because it is already canonical
+/// when the certifying run emits it. Re-serialising it here would let the
+/// stamper and the verifier disagree about what "canonical" means.
+let certifiedSurfaceHash (surfaceJson: string) : string =
+    base64Url (SHA256.HashData(Encoding.UTF8.GetBytes surfaceJson))
+
+/// A parsed conformance verdict, in the shape the canonical bytes render:
+/// (packVersion, runStamp, laws as (law, passed, detail)).
+type ConformanceVerdict = {
+    PackVersion: string
+    RunStamp: string
+    Laws: (string * bool * string) list
+}
+
+/// Canonical bytes the certification signature covers. MUST byte-match
+/// `ModuleCertificationSigning.canonicalBytes` (server side): module id,
+/// surface hash, surface JSON, and the rendered verdict, joined by `0x1e`. The
+/// law list is sorted (order-independent, the SBOM precedent); an absent
+/// verdict renders `""`.
+let certificationCanonicalBytes
+    (moduleId: string)
+    (surfaceJson: string)
+    (surfaceHash: string)
+    (verdict: ConformanceVerdict option)
+    : byte[] =
+    let unitSep = string (char 0x1f)
+    let groupSep = string (char 0x1d)
+    let recordSep = string (char 0x1e)
+
+    let renderedVerdict =
+        match verdict with
+        | None -> ""
+        | Some v ->
+            let laws =
+                v.Laws
+                |> List.map (fun (law, passed, detail) ->
+                    String.concat unitSep [ law; (if passed then "pass" else "fail"); detail ])
+                |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+                |> String.concat groupSep
+
+            String.concat unitSep [ v.PackVersion; v.RunStamp; laws ]
+
+    Encoding.UTF8.GetBytes(String.concat recordSep [ moduleId; surfaceHash; surfaceJson; renderedVerdict ])
+
+/// Read a verdict file into the canonical shape. A present-but-unreadable file
+/// is an error — never a silently-dropped verdict, which would sign a
+/// certification that claims less than the operator asked for.
+let parseVerdictFile (path: string) : Result<ConformanceVerdict, string> =
+    try
+        match JsonNode.Parse(File.ReadAllText path) with
+        | :? JsonObject as o ->
+            let str (name: string) =
+                match o[name] with
+                | null -> ""
+                | v -> v.GetValue<string>()
+
+            let laws =
+                match o["laws"] with
+                | :? JsonArray as arr -> [
+                    for node in arr do
+                        match node with
+                        | :? JsonObject as law ->
+                            let s (name: string) =
+                                match law[name] with
+                                | null -> ""
+                                | v -> v.GetValue<string>()
+
+                            let passed =
+                                match law["passed"] with
+                                | null -> false
+                                | v -> v.GetValue<bool>()
+
+                            yield (s "law", passed, s "detail")
+                        | _ -> ()
+                  ]
+                | _ -> []
+
+            Ok {
+                PackVersion = str "packVersion"
+                RunStamp = str "runStamp"
+                Laws = laws
+            }
+        | _ -> Error(sprintf "--conformance-verdict '%s' is not a JSON object" path)
+    with ex ->
+        Error(sprintf "--conformance-verdict '%s' is not readable: %s" path ex.Message)
+
+/// The `certifiedSurface` JSON object written into the manifest entry.
+let certifiedSurfaceJson (surfaceJson: string) (surfaceHash: string) (verdict: ConformanceVerdict option) : JsonObject =
+    let o = JsonObject()
+    o["surfaceJson"] <- JsonValue.Create surfaceJson
+    o["surfaceHash"] <- JsonValue.Create surfaceHash
+
+    match verdict with
+    | None -> ()
+    | Some v ->
+        let laws = JsonArray()
+
+        for (law, passed, detail) in v.Laws do
+            let l = JsonObject()
+            l["law"] <- JsonValue.Create law
+            l["passed"] <- JsonValue.Create passed
+            l["detail"] <- JsonValue.Create detail
+            laws.Add l
+
+        let verdictObject = JsonObject()
+        verdictObject["packVersion"] <- JsonValue.Create v.PackVersion
+        verdictObject["runStamp"] <- JsonValue.Create v.RunStamp
+        verdictObject["laws"] <- laws
+        o["verdict"] <- verdictObject
+
+    o
+
 // ── option model ─────────────────────────────────────────────────────
 
 type KeySource =
@@ -146,6 +273,11 @@ type Options = {
     SbomFiles: string list
     /// `name@version` package references recorded in the SBOM (Phase 216).
     SbomPackages: SbomComponent list
+    /// File holding the module's canonical surface-projection JSON, embedded
+    /// and signed as the certified surface (Phase 589).
+    CertifiedSurfaceFile: string option
+    /// File holding the conformance verdict recorded alongside it (Phase 589).
+    ConformanceVerdictFile: string option
 }
 
 let private defaults = {
@@ -156,6 +288,8 @@ let private defaults = {
     Unbind = false
     SbomFiles = []
     SbomPackages = []
+    CertifiedSurfaceFile = None
+    ConformanceVerdictFile = None
 }
 
 let rec private parse (opts: Options) (args: string list) : Result<Options, string> =
@@ -195,7 +329,21 @@ let rec private parse (opts: Options) (args: string list) : Result<Options, stri
                     SbomPackages = opts.SbomPackages @ [ (name, version, "") ]
             }
             rest
-    | ("--manifest" | "--module" | "--key-id" | "--mac-key" | "--mac-key-file" | "--ec-key-file" | "--sbom-file" | "--sbom-package") :: [] ->
+    | "--certified-surface" :: v :: rest ->
+        parse
+            {
+                opts with
+                    CertifiedSurfaceFile = Some v
+            }
+            rest
+    | "--conformance-verdict" :: v :: rest ->
+        parse
+            {
+                opts with
+                    ConformanceVerdictFile = Some v
+            }
+            rest
+    | ("--manifest" | "--module" | "--key-id" | "--mac-key" | "--mac-key-file" | "--ec-key-file" | "--sbom-file" | "--sbom-package" | "--certified-surface" | "--conformance-verdict") :: [] ->
         Error(sprintf "missing value for %s" (List.head args))
     | unknown :: _ -> Error(sprintf "unrecognised argument: %s" unknown)
 
@@ -218,10 +366,17 @@ let private helpText = [
     "  --unbind                 Remove the named modules' entries instead of stamping."
     "  --sbom-file <path>       File whose content hash becomes an SBOM component (repeatable)."
     "  --sbom-package <n@ver>   Package reference recorded in the SBOM, name@version (repeatable)."
+    "  --certified-surface <f>  File holding the module's canonical surface-projection JSON"
+    "                           (ModuleSurface.certificationJson). Exactly one --module."
+    "  --conformance-verdict <f>  File holding the conformance verdict recorded with it."
     ""
     "An SBOM (--sbom-file / --sbom-package) is signed under the same key as the stamp and"
     "merged into the entry; re-stamping regenerates it. Without either flag the entry is a"
     "plain Phase-166 stamp (byte-for-byte unchanged)."
+    ""
+    "A certified surface (--certified-surface) is signed under the same key too, and the"
+    "composing deployment re-derives the live surface and refuses the module if it has"
+    "drifted. It belongs to one module, so it takes exactly one --module."
 ]
 
 let private usageError (message: string) =
@@ -350,30 +505,82 @@ let private runWith (opts: Options) : int =
                                 yield! opts.SbomPackages
                             ]
 
-                            match resolveMinter keyId opts.Key with
-                            | Error e -> usageError e
-                            | Ok(signer, disposable) ->
-                                use _ = disposable
-
-                                for m in opts.Modules do
-                                    let entry = signer.MintModule m
-
-                                    if not (List.isEmpty sbomComponents) then
-                                        entry["sbom"] <- sbomJson sbomComponents
-                                        entry["sbomSig"] <- signer.SignBytes(sbomCanonicalBytes m sbomComponents)
-
-                                        printfn
-                                            "stamped %s (key-id %s, %d SBOM components)"
-                                            m
-                                            keyId
-                                            sbomComponents.Length
+                            // Phase 589 — resolve the certified surface (and its
+                            // optional verdict) before opening the signer. A
+                            // certified surface is ONE module's declaration set,
+                            // so more than one --module is a usage error rather
+                            // than a payload silently shared across them.
+                            let certification =
+                                match opts.CertifiedSurfaceFile with
+                                | None ->
+                                    if opts.ConformanceVerdictFile.IsSome then
+                                        Error "--conformance-verdict requires --certified-surface"
                                     else
-                                        printfn "stamped %s (key-id %s)" m keyId
+                                        Ok None
+                                | Some surfaceFile when not (File.Exists surfaceFile) ->
+                                    Error(sprintf "--certified-surface '%s' does not exist" surfaceFile)
+                                | Some _ when List.length opts.Modules <> 1 ->
+                                    Error
+                                        "--certified-surface certifies one module's surface, so exactly one --module is required"
+                                | Some surfaceFile ->
+                                    let surfaceJson = (File.ReadAllText surfaceFile).Trim()
 
-                                    bindings[m] <- entry
+                                    let verdict =
+                                        match opts.ConformanceVerdictFile with
+                                        | None -> Ok None
+                                        | Some verdictFile when not (File.Exists verdictFile) ->
+                                            Error(sprintf "--conformance-verdict '%s' does not exist" verdictFile)
+                                        | Some verdictFile -> parseVerdictFile verdictFile |> Result.map Some
 
-                                writeDocument manifestPath doc
-                                ExitOk
+                                    verdict
+                                    |> Result.map (fun v -> Some(surfaceJson, certifiedSurfaceHash surfaceJson, v))
+
+                            match certification with
+                            | Error e -> usageError e
+                            | Ok certified ->
+
+                                match resolveMinter keyId opts.Key with
+                                | Error e -> usageError e
+                                | Ok(signer, disposable) ->
+                                    use _ = disposable
+
+                                    for m in opts.Modules do
+                                        let entry = signer.MintModule m
+
+                                        if not (List.isEmpty sbomComponents) then
+                                            entry["sbom"] <- sbomJson sbomComponents
+                                            entry["sbomSig"] <- signer.SignBytes(sbomCanonicalBytes m sbomComponents)
+
+                                            printfn
+                                                "stamped %s (key-id %s, %d SBOM components)"
+                                                m
+                                                keyId
+                                                sbomComponents.Length
+                                        else
+                                            printfn "stamped %s (key-id %s)" m keyId
+
+                                        match certified with
+                                        | None -> ()
+                                        | Some(surfaceJson, surfaceHash, verdict) ->
+                                            entry["certifiedSurface"] <-
+                                                certifiedSurfaceJson surfaceJson surfaceHash verdict
+
+                                            entry["certifiedSurfaceSig"] <-
+                                                signer.SignBytes(
+                                                    certificationCanonicalBytes m surfaceJson surfaceHash verdict
+                                                )
+
+                                            printfn
+                                                "  certified surface %s (%d law results)"
+                                                surfaceHash
+                                                (verdict
+                                                 |> Option.map (fun v -> List.length v.Laws)
+                                                 |> Option.defaultValue 0)
+
+                                        bindings[m] <- entry
+
+                                    writeDocument manifestPath doc
+                                    ExitOk
 
 let command = {
     Path = [ "stamp" ]

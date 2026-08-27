@@ -186,6 +186,143 @@ module ModuleBindingManifest =
         with ex ->
             Error(sprintf "module-binding manifest is not valid JSON: %s" ex.Message)
 
+    // ─── Phase 589 — optional per-entry certified surface ───────────────
+    //
+    // A manifest entry may additionally carry the module's CERTIFIED SURFACE:
+    // a `certifiedSurface` object (`surfaceJson` — the canonical projection the
+    // certifying run observed; `surfaceHash`; an optional `verdict` recording
+    // that run's conformance-pack result) plus a `certifiedSurfaceSig` object
+    // of the SAME stamp shape as the module stamp, covering the certification's
+    // canonical bytes. As with the SBOM, the reader only PARSES — the crypto
+    // and the live-vs-certified comparison live in the
+    // `DefaultModuleBindingVerifier` (`ToolUp.ArtefactSigning`). An entry with
+    // no `certifiedSurface` section yields nothing here, so a stamp-only
+    // manifest is byte-for-byte the Phase-166 reader.
+
+    let private parseLaw (moduleId: string) (el: JsonElement) : Result<ModuleLawOutcome, string> =
+        if el.ValueKind <> JsonValueKind.Object then
+            Error(sprintf "a conformance law result for '%s' must be a JSON object" moduleId)
+        else
+            let str (name: string) =
+                match el.TryGetProperty name with
+                | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
+                | _ -> ""
+
+            match el.TryGetProperty "law" with
+            | true, n when n.ValueKind = JsonValueKind.String ->
+                Ok {
+                    Law = n.GetString()
+                    Passed =
+                        match el.TryGetProperty "passed" with
+                        | true, p -> p.ValueKind = JsonValueKind.True
+                        | _ -> false
+                    Detail = str "detail"
+                }
+            | _ -> Error(sprintf "a conformance law result for '%s' is missing the string field 'law'" moduleId)
+
+    /// Parse the optional `verdict` object of a certification. `Ok None` when
+    /// absent (a certification may record the surface without a verdict).
+    let private parseVerdict
+        (moduleId: string)
+        (certified: JsonElement)
+        : Result<ModuleConformanceVerdict option, string> =
+        match certified.TryGetProperty "verdict" with
+        | false, _ -> Ok None
+        | true, v when v.ValueKind <> JsonValueKind.Object ->
+            Error(sprintf "the certification for '%s' has a non-object 'verdict'" moduleId)
+        | true, v ->
+            let str (name: string) =
+                match v.TryGetProperty name with
+                | true, x when x.ValueKind = JsonValueKind.String -> x.GetString()
+                | _ -> ""
+
+            let laws =
+                match v.TryGetProperty "laws" with
+                | true, l when l.ValueKind = JsonValueKind.Array ->
+                    (Ok [], l.EnumerateArray())
+                    ||> Seq.fold (fun acc el ->
+                        match acc with
+                        | Error _ -> acc
+                        | Ok xs -> parseLaw moduleId el |> Result.map (fun law -> xs @ [ law ]))
+                | true, _ -> Error(sprintf "the conformance verdict 'laws' for '%s' must be a JSON array" moduleId)
+                | false, _ -> Ok [] // a verdict with no law results is valid (an empty run)
+
+            laws
+            |> Result.map (fun ls ->
+                Some {
+                    PackVersion = str "packVersion"
+                    Laws = ls
+                    RunStamp = str "runStamp"
+                })
+
+    /// Parse the optional certified-surface section of one entry. `Ok None`
+    /// when the entry carries none (the uncertified path); `Error` when
+    /// `certifiedSurface` is present but malformed or unsigned — fail-closed,
+    /// never silently dropped.
+    let private parseCertificationEntry
+        (moduleId: string)
+        (entry: JsonElement)
+        : Result<ModuleCertificationStamp option, string> =
+        match entry.TryGetProperty "certifiedSurface" with
+        | false, _ -> Ok None
+        | true, certified when certified.ValueKind <> JsonValueKind.Object ->
+            Error(sprintf "binding for '%s' has a non-object 'certifiedSurface' section" moduleId)
+        | true, certified ->
+            let requiredString (name: string) =
+                match certified.TryGetProperty name with
+                | true, v when v.ValueKind = JsonValueKind.String -> Ok(v.GetString())
+                | _ -> Error(sprintf "the certification for '%s' is missing the string field '%s'" moduleId name)
+
+            match requiredString "surfaceJson", requiredString "surfaceHash" with
+            | Error e, _
+            | _, Error e -> Error e
+            | Ok surfaceJson, Ok surfaceHash ->
+                match parseVerdict moduleId certified with
+                | Error e -> Error e
+                | Ok verdict ->
+                    match entry.TryGetProperty "certifiedSurfaceSig" with
+                    | true, sig' when sig'.ValueKind = JsonValueKind.Object ->
+                        parseEntry moduleId sig'
+                        |> Result.map (fun signature ->
+                            Some {
+                                Certified = {
+                                    SurfaceJson = surfaceJson
+                                    SurfaceHash = surfaceHash
+                                    Verdict = verdict
+                                }
+                                Signature = signature
+                            })
+                    | _ ->
+                        Error(
+                            sprintf
+                                "binding for '%s' carries a 'certifiedSurface' but no 'certifiedSurfaceSig' signature object"
+                                moduleId
+                        )
+
+    /// Parse a manifest document into the `moduleId → signed-certification`
+    /// map. Only entries that carry a `certifiedSurface` section appear; a
+    /// stamp-only manifest yields an empty map.
+    let parseCertifications (json: string) : Result<Map<string, ModuleCertificationStamp>, string> =
+        try
+            use doc = JsonDocument.Parse json
+            let root = doc.RootElement
+
+            match root.TryGetProperty "bindings" with
+            | true, bindings when bindings.ValueKind = JsonValueKind.Object ->
+                (Ok Map.empty, bindings.EnumerateObject())
+                ||> Seq.fold (fun acc prop ->
+                    match acc with
+                    | Error _ -> acc
+                    | Ok m ->
+                        match parseCertificationEntry prop.Name prop.Value with
+                        | Ok None -> Ok m
+                        | Ok(Some certification) -> Ok(Map.add prop.Name certification m)
+                        | Error e -> Error e)
+            | true, _ -> Error "module-binding manifest 'bindings' must be a JSON object"
+            | false, _ -> Ok Map.empty
+        with ex ->
+            Error(sprintf "module-binding manifest is not valid JSON: %s" ex.Message)
+
     /// Load a manifest from `path`. An absent file yields an empty map (the
     /// GP-13 "no manifest" path); a present-but-malformed file is an
     /// `Error` the caller fails closed on rather than silently ignoring.
@@ -218,6 +355,23 @@ module ModuleBindingManifest =
     /// directory.
     let loadSbomsFromDir (dir: string) : Result<Map<string, ModuleSbomStamp>, string> =
         loadSboms (Path.Combine(dir, DefaultFileName))
+
+    /// Load the `moduleId → signed-certification` map from `path` (Phase 589).
+    /// An absent file yields an empty map; a present-but-malformed file is an
+    /// `Error` the caller fails closed on.
+    let loadCertifications (path: string) : Result<Map<string, ModuleCertificationStamp>, string> =
+        if not (File.Exists path) then
+            Ok Map.empty
+        else
+            try
+                parseCertifications (File.ReadAllText path)
+            with ex ->
+                Error(sprintf "failed to read module-binding manifest '%s': %s" path ex.Message)
+
+    /// Load the certification map from the conventional `module-bindings.json`
+    /// in a directory.
+    let loadCertificationsFromDir (dir: string) : Result<Map<string, ModuleCertificationStamp>, string> =
+        loadCertifications (Path.Combine(dir, DefaultFileName))
 
     /// Apply a manifest to one module: attach the stamp filed under the
     /// module's name, or leave the module unchanged when it has no entry.

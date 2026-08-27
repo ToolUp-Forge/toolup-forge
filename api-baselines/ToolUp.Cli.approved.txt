@@ -63,11 +63,20 @@ ToolUp.Cli.ModuleCommand+Options.Register : Microsoft.FSharp.Collections.FSharpL
 ToolUp.Cli.Program (class)
 ToolUp.Cli.Program.main(System.String[]) : System.Int32
 ToolUp.Cli.StampCommand (class)
+ToolUp.Cli.StampCommand.certificationCanonicalBytes(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Cli.StampCommand+ConformanceVerdict]) : System.Byte[]
+ToolUp.Cli.StampCommand.certifiedSurfaceHash(System.String) : System.String
+ToolUp.Cli.StampCommand.certifiedSurfaceJson(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Cli.StampCommand+ConformanceVerdict]) : System.Text.Json.Nodes.JsonObject
 ToolUp.Cli.StampCommand.command : ToolUp.Cli.Dispatch+Command { get }
 ToolUp.Cli.StampCommand.mintJws(System.Security.Cryptography.ECDsa, System.String, System.String) : System.Text.Json.Nodes.JsonObject
 ToolUp.Cli.StampCommand.mintMac(System.Byte[], System.String, System.String) : System.Text.Json.Nodes.JsonObject
+ToolUp.Cli.StampCommand.parseVerdictFile(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.StampCommand+ConformanceVerdict, System.String]
 ToolUp.Cli.StampCommand.sbomCanonicalBytes(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]]) : System.Byte[]
 ToolUp.Cli.StampCommand.sbomJson(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]]) : System.Text.Json.Nodes.JsonObject
+ToolUp.Cli.StampCommand+ConformanceVerdict (class)
+ToolUp.Cli.StampCommand+ConformanceVerdict..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Boolean, System.String]])
+ToolUp.Cli.StampCommand+ConformanceVerdict.Laws : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Boolean, System.String]] { get }
+ToolUp.Cli.StampCommand+ConformanceVerdict.PackVersion : System.String { get }
+ToolUp.Cli.StampCommand+ConformanceVerdict.RunStamp : System.String { get }
 ToolUp.Cli.StampCommand+KeySource (class)
 ToolUp.Cli.StampCommand+KeySource.IsEcKeyFile : System.Boolean { get }
 ToolUp.Cli.StampCommand+KeySource.IsMacKeyBase64 : System.Boolean { get }
@@ -87,7 +96,9 @@ ToolUp.Cli.StampCommand+KeySource+Tags.MacKeyBase64 : System.Int32 (literal)
 ToolUp.Cli.StampCommand+KeySource+Tags.MacKeyFile : System.Int32 (literal)
 ToolUp.Cli.StampCommand+KeySource+Tags.NoKey : System.Int32 (literal)
 ToolUp.Cli.StampCommand+Options (class)
-ToolUp.Cli.StampCommand+Options..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Cli.StampCommand+KeySource, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]])
+ToolUp.Cli.StampCommand+Options..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Cli.StampCommand+KeySource, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Cli.StampCommand+Options.CertifiedSurfaceFile : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.StampCommand+Options.ConformanceVerdictFile : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.StampCommand+Options.Key : ToolUp.Cli.StampCommand+KeySource { get }
 ToolUp.Cli.StampCommand+Options.KeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.StampCommand+Options.Manifest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

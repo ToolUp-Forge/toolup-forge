@@ -76,6 +76,56 @@ module ModuleSbomSigning =
 
         Encoding.UTF8.GetBytes(moduleId + recordSep + body)
 
+// ─── Phase 589 — certified-surface canonical bytes ──────────────────────
+//
+// The bytes a certification signature covers. Same single-source-of-truth
+// posture as the SBOM module above: shared by the verifier (here) and by any
+// deploy-time stamper that mints a certification (the `toolup stamp
+// --certified-surface` path, which replicates it with pure BCL and is pinned
+// to it by a round-trip test).
+//
+// The surface JSON is embedded VERBATIM rather than re-canonicalised, because
+// it is already canonical by construction (`ModuleSurface.certificationJson`
+// sorts and de-duplicates every list, and its projection is strings only) —
+// and re-deriving it here would mean the signer and the verifier could
+// disagree about what "canonical" means, which is precisely the failure the
+// hash exists to catch. The verdict's LAW LIST is sorted, on the SBOM
+// precedent: re-serialising a verdict must not invalidate its signature, but
+// altering any law's name, result, or detail must.
+module ModuleCertificationSigning =
+    let private unitSep = string (char 0x1f)
+    let private groupSep = string (char 0x1d)
+    let private recordSep = string (char 0x1e)
+
+    /// The verdict's contribution to the signed bytes; `""` when the
+    /// certification records no verdict, so an unverdicted certification signs
+    /// exactly the surface.
+    let private renderVerdict (verdict: ModuleConformanceVerdict option) : string =
+        match verdict with
+        | None -> ""
+        | Some v ->
+            let laws =
+                v.Laws
+                |> List.map (fun l -> String.concat unitSep [ l.Law; (if l.Passed then "pass" else "fail"); l.Detail ])
+                |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+                |> String.concat groupSep
+
+            String.concat unitSep [ v.PackVersion; v.RunStamp; laws ]
+
+    /// Canonical bytes the certification signature is computed over: the module
+    /// id, the surface hash, the canonical surface JSON, and the rendered
+    /// verdict. Bound to `moduleId` so a certification minted for one module
+    /// cannot be replayed onto another.
+    let canonicalBytes (moduleId: string) (certified: CertifiedModuleSurface) : byte[] =
+        Encoding.UTF8.GetBytes(
+            String.concat recordSep [
+                moduleId
+                certified.SurfaceHash
+                certified.SurfaceJson
+                renderVerdict certified.Verdict
+            ]
+        )
+
 /// Default `IModuleBindingVerifier`. Construct over the deployment's trust
 /// anchors (`DefaultModuleBindingVerifier.create anchors`). Stateless and
 /// synchronous — every `Verify` re-checks the presented stamp against the
@@ -249,6 +299,78 @@ type DefaultModuleBindingVerifier
 
             outcome
 
+    // ─── Phase 589 — certified-surface verification ─────────────────────
+    interface IModuleCertificationVerifier with
+        member _.VerifyCertification
+            (moduleId: string, live: ModuleSurface, certification: ModuleCertificationStamp)
+            : BindingOutcome =
+            let certified = certification.Certified
+
+            // 1. AUTHENTICITY. The certification is signed under the same anchor
+            //    set as the module's own stamp, over its canonical bytes — so a
+            //    forged or edited certification fails here, before any of its
+            //    content is believed.
+            let cryptoOutcome, _ =
+                verifyStamp (ModuleCertificationSigning.canonicalBytes moduleId certified) certification.Signature
+
+            match cryptoOutcome with
+            | Rejected reason -> Rejected reason
+            | Allowed ->
+
+                // 2. INTERNAL CONSISTENCY. The declared hash must be the hash of the
+                //    declared JSON. Both are signed, so a mismatch is not tampering
+                //    — it is a stamper that computed one of them differently, which
+                //    would otherwise let step 3 compare against a hash no surface
+                //    can ever produce. Refuse rather than pick a half to trust.
+                let recomputed = ModuleSurface.certificationHashOfJson certified.SurfaceJson
+
+                if recomputed <> certified.SurfaceHash then
+                    Rejected(
+                        sprintf
+                            "module '%s' presents a certification whose declared surface hash does not match its own surface JSON"
+                            moduleId
+                    )
+                else
+
+                    // 3. DRIFT. The live surface, derived from the registration being
+                    //    composed, must hash to the certified value. This is the whole
+                    //    point: compose-time proof that what runs is what was certified.
+                    let liveHash = ModuleSurface.certificationHash live
+
+                    if liveHash = certified.SurfaceHash then
+                        Allowed
+                    else
+                        // The hashes differ, so SOMETHING moved. Name it — a hash can
+                        // only say "not this"; the certified projection is carried
+                        // precisely so the refusal can say which provide appeared or
+                        // vanished.
+                        match ModuleSurface.driftFrom certified.SurfaceJson live with
+                        | Error parseError ->
+                            Rejected(
+                                sprintf
+                                    "module '%s' has drifted from its certified surface, and the certified projection could not be read to name the difference: %s"
+                                    moduleId
+                                    parseError
+                            )
+                        | Ok [] ->
+                            // Signed, self-consistent, projection-identical — yet a
+                            // different hash. That means the certified JSON is not the
+                            // canonical rendering of its own projection (a stamper that
+                            // re-serialised it), so nothing has actually drifted but
+                            // nothing can be trusted to match either.
+                            Rejected(
+                                sprintf
+                                    "module '%s' presents a certified surface whose declarations match the live surface but whose JSON is not the canonical rendering — re-certify with ModuleSurface.certify"
+                                    moduleId
+                            )
+                        | Ok drifts ->
+                            Rejected(
+                                sprintf
+                                    "module '%s' has drifted from its certified surface: %s"
+                                    moduleId
+                                    (ModuleSurface.describeDrift drifts)
+                            )
+
 module DefaultModuleBindingVerifier =
     /// Construct a verifier over the deployment's trust anchors. An empty
     /// anchor set admits unstamped modules but rejects every stamped one
@@ -276,6 +398,26 @@ module DefaultModuleBindingVerifier =
     /// anchors it gates module loads with.
     let verifySbom (anchors: ModuleBindingAnchor list) (moduleId: string) (sbom: ModuleSbomStamp) : BindingOutcome =
         (DefaultModuleBindingVerifier(anchors) :> IModuleSbomVerifier).VerifySbom(moduleId, sbom)
+
+    /// Phase 589 — verify a module's signed certification against the anchor
+    /// set AND against the `live` surface derived from the registration being
+    /// composed. `Allowed` only when the certification is authentic, internally
+    /// consistent, and still describes the live surface; `Rejected` names the
+    /// drifted facets otherwise.
+    let verifyCertification
+        (anchors: ModuleBindingAnchor list)
+        (moduleId: string)
+        (live: ModuleSurface)
+        (certification: ModuleCertificationStamp)
+        : BindingOutcome =
+        (DefaultModuleBindingVerifier(anchors) :> IModuleCertificationVerifier)
+            .VerifyCertification(moduleId, live, certification)
+
+    /// Phase 589 — the certification verifier as a composable seam, for the
+    /// `ModuleCertificationGate` shape a composition root pipes its module list
+    /// through.
+    let certificationVerifier (anchors: ModuleBindingAnchor list) : IModuleCertificationVerifier =
+        DefaultModuleBindingVerifier(anchors) :> IModuleCertificationVerifier
 
 // ─── Phase 215 — signed revocation-list loader ──────────────────────────
 //

@@ -4,6 +4,8 @@
 namespace ToolUp.Platform
 
 open System
+open System.Security.Cryptography
+open System.Text
 open System.Text.Json
 open FSharp.Reflection
 open ToolUp.Remoting.Json.SystemTextJson
@@ -153,6 +155,63 @@ type ModuleSurface = {
     /// page / flag / event-topic side of the surface is only derivable
     /// with one.
     ClientDescribed: bool
+}
+
+// ─── Phase 589 — the certifiable projection of a surface ─────────────────
+//
+// A certification has to hash SOMETHING, and the obvious candidate — the whole
+// `ModuleSurface` record — is the wrong one. Four of its fields (`Coverage`,
+// `Unclassified`, `Stale`, and the `Reason` prose on `Opaque`) are the
+// DESCRIPTOR's self-report: they describe what this SDK version knows how to
+// classify, not what the module declares. Hashing them would decertify every
+// module in the estate the moment a `ServerModule` field was added — a
+// mass-decertification event in which no module had changed — and a gate that
+// fires when nothing is wrong is one people learn to switch off.
+//
+// So the certified projection is the module's DECLARATIONS: its identity, the
+// side of the registration that was described, and the provide / need sets
+// keyed `"<kind>:<key>"`. `Label` and `Slot` are excluded too — a `Label` is a
+// display name (renaming a data type's `DisplayName` is not a composability
+// change) and a `Slot` is derived from the `Key` deterministically, so it
+// carries no independent claim.
+//
+// Deterministic by construction, not by convention: every list is a sorted,
+// de-duplicated list of strings, and record fields serialise in declaration
+// order — so two independent derivations of the same registration, on
+// different machines, in different processes, produce byte-identical JSON.
+
+/// The subset of a `ModuleSurface` a certification covers — what the module
+/// DECLARES, as opposed to what the descriptor reports about itself.
+type CertifiedSurfaceProjection = {
+    /// The module's registration `Name`.
+    Module: string
+    /// The module's resolved `ComponentId`, rendered.
+    Component: string
+    /// Which registrations the certified surface was derived from: `"server"`
+    /// (server registration alone) or `"server+client"`. Carried because the
+    /// two are not comparable — certifying `server+client` and re-deriving
+    /// `server` at a gate that has no client registration would read as dozens
+    /// of vanished provides, when the honest report is that a different half
+    /// of the module was described.
+    Described: string
+    /// What the module offers a composition, as sorted `"<kind>:<key>"` tokens.
+    Provides: string list
+    /// What the module requires from a composition, same shape.
+    Needs: string list
+}
+
+/// One divergence between a certified surface and the live one.
+type ModuleSurfaceDrift = {
+    /// Which part of the projection moved: `module` / `component` /
+    /// `described` / `provides` / `needs`.
+    Facet: string
+    /// `added` (live declares it, the certification did not), `removed` (the
+    /// certification declared it, the live surface does not), or `changed`
+    /// (a single-valued facet holds a different value).
+    Change: string
+    /// The declaration itself — a `"<kind>:<key>"` token for the set facets, or
+    /// `"<certified> -> <live>"` for a single-valued one.
+    Declaration: string
 }
 
 module ModuleSurface =
@@ -880,3 +939,284 @@ module ModuleSurface =
 
     /// `describe` + `toJson` in one call.
     let describeJson (serverModule: ServerModule) : string = describe serverModule |> toJson
+
+    // ── Phase 589 — certifiable projection, hash, and drift ──────────────
+
+    /// Ordinal string sort — culture-independent, so the canonical JSON does
+    /// not depend on the machine's locale.
+    /// Ordinal string sort + de-duplication. Both matter, and neither is
+    /// inherited from `describe`: `ordered` sorts ENTRIES by `(Kind, Key,
+    /// Field)`, which is not the same relation as an ordinal sort of the
+    /// `"<kind>:<key>"` tokens, and it de-duplicates nothing — two registration
+    /// fields declaring one key (a route prefix listed twice) reach the
+    /// projection as two identical tokens. Canonicalising here means the
+    /// certified hash does not depend on the descriptor's internal ordering.
+    let private ordinal (xs: string list) : string list =
+        xs |> List.distinct |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+
+    /// The declaration token for one entry: `"<kind>:<key>"`.
+    let private token (e: ModuleSurfaceEntry) : string = e.Kind + ":" + e.Key
+
+    /// Project a surface onto the facets a certification covers. See the
+    /// commentary on `CertifiedSurfaceProjection` for what is deliberately
+    /// excluded and why.
+    let project (surface: ModuleSurface) : CertifiedSurfaceProjection = {
+        Module = surface.Module
+        Component = surface.Component.Value
+        Described =
+            if surface.ClientDescribed then
+                "server+client"
+            else
+                "server"
+        Provides = surface.Provides |> List.map token |> ordinal
+        Needs = surface.Needs |> List.map token |> ordinal
+    }
+
+    /// The canonical JSON a certification is computed over. Deterministic: the
+    /// projection's lists are sorted and de-duplicated, its fields are strings
+    /// and string lists only, and records serialise in declaration order — so
+    /// two independent derivations of the same registration are byte-identical.
+    let certificationJson (surface: ModuleSurface) : string =
+        JsonSerializer.Serialize(project surface, jsonOptions)
+
+    /// base64url (RFC 4648 §5, unpadded) SHA-256 over a canonical projection
+    /// JSON string's UTF-8 bytes. Split out from `certificationHash` because
+    /// the deploy-time stamper hashes the JSON it was HANDED (it has no
+    /// registration to describe), and both paths must agree byte for byte.
+    let certificationHashOfJson (canonicalJson: string) : string =
+        let digest = SHA256.HashData(Encoding.UTF8.GetBytes canonicalJson)
+
+        Convert.ToBase64String(digest).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+    /// The certified-surface hash of a live surface.
+    let certificationHash (surface: ModuleSurface) : string =
+        certificationJson surface |> certificationHashOfJson
+
+    /// Build the certified label for a surface, with no conformance verdict.
+    let certify (surface: ModuleSurface) : CertifiedModuleSurface =
+        let json = certificationJson surface
+
+        {
+            SurfaceJson = json
+            SurfaceHash = certificationHashOfJson json
+            Verdict = None
+        }
+
+    /// Build the certified label for a surface, recording the conformance
+    /// verdict of the run that certified it.
+    let certifyWith (verdict: ModuleConformanceVerdict) (surface: ModuleSurface) : CertifiedModuleSurface = {
+        certify surface with
+            Verdict = Some verdict
+    }
+
+    /// Read a canonical projection back from its JSON.
+    let parseProjection (canonicalJson: string) : Result<CertifiedSurfaceProjection, string> =
+        try
+            let parsed =
+                JsonSerializer.Deserialize<CertifiedSurfaceProjection>(canonicalJson, jsonOptions)
+
+            if isNull (box parsed) then
+                Error "the certified surface JSON is null"
+            else
+                let p = parsed
+                let str (s: string) = if isNull (box s) then "" else s
+
+                // A missing field deserialises to null through the STJ converter
+                // set (not to `[]` / `""`), and a null F# list NREs on the first
+                // list operation — so coerce before anything reads them. `[]` is
+                // the `Empty` singleton, never null.
+                Ok {
+                    Module = str p.Module
+                    Component = str p.Component
+                    Described = str p.Described
+                    Provides = if isNull (box p.Provides) then [] else p.Provides
+                    Needs = if isNull (box p.Needs) then [] else p.Needs
+                }
+        with ex ->
+            Error(sprintf "the certified surface JSON is not a readable projection: %s" ex.Message)
+
+    /// Diff a certified projection against a live surface. An empty list means
+    /// the live surface still matches what was certified.
+    ///
+    /// A `Described` mismatch short-circuits: certifying `server+client` and
+    /// re-deriving `server` differs in nearly every entry, and reporting sixty
+    /// phantom removals would bury the one fact that explains them.
+    let driftAgainst (certified: CertifiedSurfaceProjection) (live: ModuleSurface) : ModuleSurfaceDrift list =
+        let liveProjection = project live
+
+        let changed facet (certifiedValue: string) (liveValue: string) =
+            if certifiedValue = liveValue then
+                []
+            else
+                [
+                    {
+                        Facet = facet
+                        Change = "changed"
+                        Declaration = certifiedValue + " -> " + liveValue
+                    }
+                ]
+
+        let identity =
+            changed "module" certified.Module liveProjection.Module
+            @ changed "component" certified.Component liveProjection.Component
+
+        let described = changed "described" certified.Described liveProjection.Described
+
+        if not described.IsEmpty then
+            identity @ described
+        else
+            let setDrift facet (certifiedSet: string list) (liveSet: string list) =
+                let c = Set.ofList certifiedSet
+                let l = Set.ofList liveSet
+
+                [
+                    for declaration in Set.difference l c |> Set.toList ->
+                        {
+                            Facet = facet
+                            Change = "added"
+                            Declaration = declaration
+                        }
+                    for declaration in Set.difference c l |> Set.toList ->
+                        {
+                            Facet = facet
+                            Change = "removed"
+                            Declaration = declaration
+                        }
+                ]
+
+            identity
+            @ setDrift "provides" certified.Provides liveProjection.Provides
+            @ setDrift "needs" certified.Needs liveProjection.Needs
+
+    /// `parseProjection` + `driftAgainst` — the shape a verifier holding a
+    /// certified JSON string and a live registration needs.
+    let driftFrom (certifiedJson: string) (live: ModuleSurface) : Result<ModuleSurfaceDrift list, string> =
+        parseProjection certifiedJson
+        |> Result.map (fun certified -> driftAgainst certified live)
+
+    /// Render a drift list as one neutral diagnostic line, suitable for a
+    /// startup log. Names every drifted facet — the point of carrying the
+    /// certified projection rather than only its hash.
+    let describeDrift (drifts: ModuleSurfaceDrift list) : string =
+        drifts
+        |> List.map (fun d -> sprintf "%s %s '%s'" d.Facet d.Change d.Declaration)
+        |> String.concat "; "
+
+/// Opt-in verifier of a module's signed certification (Phase 589), implemented
+/// by `DefaultModuleBindingVerifier` (`ToolUp.ArtefactSigning`). Separate from
+/// `IModuleBindingVerifier` so the Phase 165 interface stays unchanged: a
+/// deployment that never certifies a module never touches this surface.
+///
+/// It lives here rather than beside the other binding contracts in
+/// `ToolUp.Platform.Core` for one structural reason — it must name
+/// `ModuleSurface`, which is a Server-tier type (its derivation reads the
+/// `ServerModule` registration). The DATA contracts it carries
+/// (`CertifiedModuleSurface` / `ModuleCertificationStamp`) are tier-shared and
+/// do live in Core.
+///
+/// **Verification rule (load-bearing, two halves):** the certification's
+/// signature MUST verify under some configured anchor over its canonical
+/// bytes, AND the `live` surface's certification hash MUST equal the certified
+/// one. A failure of either is `Rejected`; a hash failure names the drifted
+/// facets.
+type IModuleCertificationVerifier =
+    /// Decide whether `moduleId`'s live surface still matches the certified
+    /// one its `certification` attests to.
+    abstract VerifyCertification:
+        moduleId: string * live: ModuleSurface * certification: ModuleCertificationStamp -> BindingOutcome
+
+/// Phase 589 — the compose-time certified-surface gate.
+///
+/// **Why it is a list operation over the module list rather than a branch
+/// inside `ServerApp.addModule`.** The gate must DERIVE the live surface, and
+/// that derivation reads the `ServerModule` registration — so `ModuleSurface`
+/// necessarily compiles *after* `ServerApp`, and `addModule` cannot name it.
+/// The shape here is therefore the one Phase 166 already established for the
+/// same reason: the composition root pipes its module list through this gate
+/// before `addModules`, exactly as it pipes it through
+/// `ModuleBindingManifest.applyToAll` to attach the stamps in the first place.
+///
+/// ```fsharp skip=fragment
+/// let certifications = ModuleBindingManifest.loadCertificationsFromDir deployDir
+/// modules
+/// |> ModuleBindingManifest.applyToAll stamps
+/// |> ModuleCertificationGate.admit (Some verifier) certifications
+/// ```
+///
+/// **GP 11 / GP 13.** A module with no entry in the certification map is
+/// `Allowed` untouched and its surface is never derived, so a deployment that
+/// certifies nothing pays nothing and behaves byte-for-byte as it did pre-589.
+/// A module that IS certified on a deployment with no verifier fails closed —
+/// the same posture `addModule` takes for a stamped module with no binding
+/// verifier, and for the same reason: a certified module is self-protecting.
+module ModuleCertificationGate =
+
+    /// Decide one module against the certification filed under its name, using
+    /// an explicitly-supplied live surface. Use this from a composition root
+    /// that holds the module's client registration too — pass
+    /// `ModuleSurface.describeWith (m, Some(box clientRegistration))` so a
+    /// `server+client` certification is compared against a `server+client`
+    /// derivation.
+    let decideAgainst
+        (verifier: IModuleCertificationVerifier option)
+        (certifications: Map<string, ModuleCertificationStamp>)
+        (m: ServerModule, live: ModuleSurface)
+        : BindingOutcome =
+        match Map.tryFind m.Name certifications with
+        | None -> Allowed
+        | Some certification ->
+            match verifier with
+            | Some v -> v.VerifyCertification(m.Name, live, certification)
+            | None ->
+                Rejected
+                    "module carries a certified surface but this deployment has no module-certification verifier configured"
+
+    /// Decide one module against its certification, deriving the live surface
+    /// from the server registration alone.
+    let decide
+        (verifier: IModuleCertificationVerifier option)
+        (certifications: Map<string, ModuleCertificationStamp>)
+        (m: ServerModule)
+        : BindingOutcome =
+        // The derivation is INSIDE the `Some` arm of `decideAgainst`'s lookup
+        // for the zero-cost path, so an uncertified module never describes.
+        if Map.containsKey m.Name certifications then
+            decideAgainst verifier certifications (m, ModuleSurface.describe m)
+        else
+            Allowed
+
+    /// Partition a module list into the modules the gate admits and the
+    /// `(moduleName, reason)` pairs it refused. The refusals are neutral
+    /// diagnostics naming the drifted facets — suitable for a startup log.
+    let partition
+        (verifier: IModuleCertificationVerifier option)
+        (certifications: Map<string, ModuleCertificationStamp>)
+        (modules: ServerModule list)
+        : ServerModule list * (string * string) list =
+        let decided = modules |> List.map (fun m -> m, decide verifier certifications m)
+
+        let admitted =
+            decided
+            |> List.choose (fun (m, outcome) ->
+                match outcome with
+                | Allowed -> Some m
+                | Rejected _ -> None)
+
+        let refused =
+            decided
+            |> List.choose (fun (m, outcome) ->
+                match outcome with
+                | Rejected reason -> Some(m.Name, reason)
+                | Allowed -> None)
+
+        admitted, refused
+
+    /// The admitted modules alone — the `applyToAll` shape a composition root
+    /// pipes through before `addModules`. Use `partition` when the refusals
+    /// need logging.
+    let admit
+        (verifier: IModuleCertificationVerifier option)
+        (certifications: Map<string, ModuleCertificationStamp>)
+        (modules: ServerModule list)
+        : ServerModule list =
+        partition verifier certifications modules |> fst
