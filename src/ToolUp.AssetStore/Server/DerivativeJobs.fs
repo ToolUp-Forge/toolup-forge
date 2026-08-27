@@ -9,6 +9,7 @@ open System.Threading
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Metrics
 
 // ─── Phase 127 — async job-backed derivation ─────────────────────
 //
@@ -68,6 +69,97 @@ type DerivativeReadyNotification = {
     Error: string option
 }
 
+// ─── Phase 207 — dead-letter + retry observability ───────────────
+//
+// Phase 127 already records a terminal `StatusFailed` once a
+// derivation exhausts its retry budget, so the request path answers
+// a typed error rather than an eternal Pending. What it does NOT do
+// is leave anything an operator can sweep: the failure lives only in
+// the per-(hash, name) status blob the next successful derivation
+// clears, no counter moves, and the only notification is the ready
+// channel's `Outcome = "Failed"` — indistinguishable, to a
+// subscriber filtering on the ready key, from a completion.
+//
+// This phase adds the three surfaces that make an exhausted
+// derivation observable — a dead-letter record, a dedicated failure
+// notification, and retry / failure counters — behind
+// `DerivativeObservability`. Every field of that record is off in
+// `DerivativeObservability.disabled`, which is what the Phase 127
+// handler constructor supplies, so a deployment that does not opt in
+// through `AssetStoreServerAppModule.withDerivativeDlq` runs the
+// unchanged Phase 127 path: no extra blob write, no extra publish,
+// no sink resolution (GP 11 / GP 13).
+
+/// Persisted dead-letter record for a derivation that exhausted its
+/// bounded retry budget. Lives at
+/// `assets/derivative-dlq/{hash}/{name}.json` — beside, not inside,
+/// the status blob, so clearing a status (the next successful
+/// derivation does) never erases the operator's record of the
+/// failure. Every field is by value (GP 12 rule 1): a sweep tool
+/// re-drives the derivation from this record alone.
+type DerivativeDeadLetterRecord = {
+    ScopeContainer: string
+    AssetId: string
+    ContentHash: string
+    DerivativeName: string
+    ProfileId: string
+    /// The final attempt's error message — the same text
+    /// `DerivativeStatus.StatusFailed` carries.
+    Error: string
+    /// Attempt number the budget was exhausted on.
+    Attempts: int
+    FailedAt: DateTimeOffset
+    /// `JobRetryPolicy.DeadLetterDestination` verbatim when the
+    /// deployment declared one. `None` means the record was written
+    /// locally only — the SDK never routes to a destination itself,
+    /// it carries the operator's string through for a companion to
+    /// interpret (GP 12 rule 3).
+    Destination: string option
+}
+
+/// Payload published on the notification channel when an async
+/// derivation exhausts its retry budget. Mirrors
+/// `DerivativeReadyNotification` in shape and scope key, on its own
+/// notification key so a subscriber can filter terminal failures
+/// without parsing the ready payload's `Outcome` field.
+type DerivativeFailedNotification = {
+    AssetId: string
+    ContentHash: string
+    DerivativeName: string
+    Error: string
+    Attempts: int
+    FailedAt: DateTimeOffset
+    /// `true` when a `DerivativeDeadLetterRecord` was persisted for
+    /// this failure — so a subscriber knows whether a sweep will
+    /// find it.
+    DeadLettered: bool
+}
+
+/// Opt-in observability posture for `DerivativeJobHandler`.
+/// `DerivativeObservability.disabled` is the Phase 127 behaviour and
+/// the value the six-argument handler constructor supplies.
+type DerivativeObservability = {
+    /// Write a `DerivativeDeadLetterRecord` on terminal failure.
+    RecordDeadLetters: bool
+    /// Publish a `DerivativeFailedNotification` on terminal failure.
+    NotifyOnFailure: bool
+    /// Sink for the retry / failure counters. `None` emits none.
+    Metrics: IMetricsSink option
+    /// Carried into the dead-letter record; the SDK does not route
+    /// to it.
+    DeadLetterDestination: string option
+}
+
+module DerivativeObservability =
+    /// The Phase 127 posture: no dead-letter record, no failure
+    /// notification, no counters, nothing resolved from DI.
+    let disabled: DerivativeObservability = {
+        RecordDeadLetters = false
+        NotifyOnFailure = false
+        Metrics = None
+        DeadLetterDestination = None
+    }
+
 [<RequireQualifiedAccess>]
 module DerivativeJobs =
 
@@ -81,8 +173,35 @@ module DerivativeJobs =
     [<Literal>]
     let DerivativeReadyNotificationKey = "AssetStore.DerivativeReady"
 
+    /// Phase 207 — `Notification.CustomNotification` key a terminal
+    /// derivation failure is published under. Distinct from
+    /// `DerivativeJobs.DerivativeReadyNotificationKey` on purpose:
+    /// the ready key's payload has always carried an
+    /// `Outcome = "Failed"` variant, but a subscriber wanting only
+    /// terminal failures had to parse the payload to find it.
+    /// Published only when the deployment opts in.
+    [<Literal>]
+    let DerivativeFailedNotificationKey = "AssetStore.DerivativeFailed"
+
+    /// Counter incremented once per retryable attempt that did NOT
+    /// exhaust the budget — the leading indicator, visible while
+    /// derivations are still recovering on their own.
+    [<Literal>]
+    let RetryMetric = "assetstore.derivative.retry"
+
+    /// Counter incremented once per derivation that exhausted its
+    /// bounded retry budget or failed permanently.
+    [<Literal>]
+    let FailedMetric = "assetstore.derivative.failed"
+
     let statusKey (contentHash: string) (derivativeName: string) =
         sprintf "assets/derivative-status/%s/%s.json" contentHash derivativeName
+
+    /// Phase 207 — dead-letter blob key for (hash, name). Kept out
+    /// of the `assets/derivative-status/` prefix so a status clear
+    /// never removes the operator's record.
+    let deadLetterKey (contentHash: string) (derivativeName: string) =
+        sprintf "assets/derivative-dlq/%s/%s.json" contentHash derivativeName
 
     let internal readStatus (blob: IBlobStorage) (container: string) (hash: string) (name: string) = async {
         let! download = blob.Download(container, statusKey hash name)
@@ -105,6 +224,37 @@ module DerivativeJobs =
         let! _ = blob.Delete(container, statusKey hash name)
         return ()
     }
+
+    /// Phase 207 — persist a dead-letter record. Called only on the
+    /// opted-in path.
+    let internal writeDeadLetter (blob: IBlobStorage) (record: DerivativeDeadLetterRecord) = async {
+        let bytes = System.Text.Encoding.UTF8.GetBytes(DerivativeJobsJson.toJson record)
+
+        let! _ = blob.Upload(record.ScopeContainer, deadLetterKey record.ContentHash record.DerivativeName, bytes)
+
+        return ()
+    }
+
+    /// Read a persisted dead-letter record, if one exists. The read
+    /// half of the sweep surface — an operator tool (or a test)
+    /// re-drives a failed derivation from the returned record.
+    let readDeadLetter
+        (blob: IBlobStorage)
+        (container: string)
+        (hash: string)
+        (name: string)
+        : Async<DerivativeDeadLetterRecord option> =
+        async {
+            let! download = blob.Download(container, deadLetterKey hash name)
+
+            return
+                match download with
+                | Error _ -> None
+                | Ok bytes ->
+                    DerivativeJobsJson.tryFromJson<DerivativeDeadLetterRecord> (
+                        System.Text.Encoding.UTF8.GetString bytes
+                    )
+        }
 
 /// Enqueue seam between the request path and the scheduler. One
 /// instance per deployment (constructed by `AssetCompose.run` when
@@ -203,8 +353,21 @@ type DerivativeJobHandler
         mimeRenderers: MimeRendererRegistry,
         notifications: INotificationChannel option,
         logger: ILogger,
-        maxAttempts: int
+        maxAttempts: int,
+        observability: DerivativeObservability
     ) =
+
+    /// Counter emission. Swallows sink faults for the same reason
+    /// `IMetricsSink` is fire-and-forget: an observability failure
+    /// must never change a derivation's outcome.
+    let count (metric: string) (derivativeName: string) =
+        match observability.Metrics with
+        | None -> ()
+        | Some sink ->
+            try
+                sink.Increment(metric, Map.ofList [ "derivative", derivativeName ])
+            with ex ->
+                logger.Warn(sprintf "[AssetStore] derivative metric emission failed: %s" ex.Message)
 
     let notify (container: string) (payload: DerivativeReadyNotification) = async {
         match notifications with
@@ -223,8 +386,52 @@ type DerivativeJobHandler
                 logger.Warn(sprintf "[AssetStore] derivative notification publish failed: %s" ex.Message)
     }
 
+    /// Phase 207 — the terminal-failure publish, on its own
+    /// notification key. Reached only when the deployment opted in.
+    let notifyFailed (container: string) (payload: DerivativeFailedNotification) = async {
+        match notifications with
+        | None -> ()
+        | Some channel ->
+            try
+                do!
+                    channel.Publish(
+                        container,
+                        CustomNotification(
+                            DerivativeJobs.DerivativeFailedNotificationKey,
+                            DerivativeJobsJson.toJson payload
+                        )
+                    )
+            with ex ->
+                logger.Warn(sprintf "[AssetStore] derivative failure notification publish failed: %s" ex.Message)
+    }
+
     let derivativeCacheKey (hash: string) (spec: GeneralDerivativeSpec) =
         sprintf "assets/derivatives/%s/%s.%s" hash spec.Name spec.FileExtension
+
+    /// Phase 127 shape, preserved verbatim. A deployment that has not
+    /// opted into the Phase 207 surface constructs through this
+    /// overload and gets `DerivativeObservability.disabled` — the
+    /// unchanged handler. An explicit secondary constructor rather
+    /// than an optional parameter, so the six-argument token stays in
+    /// the public surface instead of folding into one widened form.
+    new
+        (
+            blobStorage: IBlobStorage,
+            profiles: DerivativeProfileRegistry,
+            mimeRenderers: MimeRendererRegistry,
+            notifications: INotificationChannel option,
+            logger: ILogger,
+            maxAttempts: int
+        ) =
+        DerivativeJobHandler(
+            blobStorage,
+            profiles,
+            mimeRenderers,
+            notifications,
+            logger,
+            maxAttempts,
+            DerivativeObservability.disabled
+        )
 
     interface IJobHandler with
         member _.Execute(ctx: JobContext) = async {
@@ -243,14 +450,48 @@ type DerivativeJobHandler
                     Error = None
                 }
 
+                /// Phase 207 — the dead-letter half, skipped entirely
+                /// when not opted in. Returns whether a record was
+                /// persisted, which the failure notification carries
+                /// so a subscriber knows a sweep will find it. A
+                /// write fault is logged and swallowed: recording the
+                /// failure must not change the job's outcome.
+                let tryWriteDeadLetter (message: string) (failedAt: DateTimeOffset) = async {
+                    if not observability.RecordDeadLetters then
+                        return false
+                    else
+                        try
+                            do!
+                                DerivativeJobs.writeDeadLetter blobStorage {
+                                    ScopeContainer = container
+                                    AssetId = payload.AssetId
+                                    ContentHash = hash
+                                    DerivativeName = name
+                                    ProfileId = payload.ProfileId
+                                    Error = message
+                                    Attempts = ctx.Attempt
+                                    FailedAt = failedAt
+                                    Destination =
+                                        observability.DeadLetterDestination |> Option.orElse ctx.DeadLetterDestination
+                                }
+
+                            return true
+                        with ex ->
+                            logger.Warn(sprintf "[AssetStore] dead-letter record write failed: %s" ex.Message)
+
+                            return false
+                }
+
                 let recordFailure (message: string) = async {
+                    let failedAt = DateTimeOffset.UtcNow
+
                     do!
                         DerivativeJobs.writeStatus
                             blobStorage
                             container
                             hash
                             name
-                            (StatusFailed(message, ctx.Attempt, DateTimeOffset.UtcNow))
+                            (StatusFailed(message, ctx.Attempt, failedAt))
 
                     do!
                         notify container {
@@ -258,6 +499,24 @@ type DerivativeJobHandler
                                 Outcome = "Failed"
                                 Error = Some message
                         }
+
+                    // Phase 207 — every line below is inert under
+                    // `DerivativeObservability.disabled`.
+                    count DerivativeJobs.FailedMetric name
+
+                    let! deadLettered = tryWriteDeadLetter message failedAt
+
+                    if observability.NotifyOnFailure then
+                        do!
+                            notifyFailed container {
+                                AssetId = payload.AssetId
+                                ContentHash = hash
+                                DerivativeName = name
+                                Error = message
+                                Attempts = ctx.Attempt
+                                FailedAt = failedAt
+                                DeadLettered = deadLettered
+                            }
                 }
 
                 /// Terminal error — retrying will not change the
@@ -276,6 +535,11 @@ type DerivativeJobHandler
                 let transient (message: string) = async {
                     if ctx.Attempt >= maxAttempts then
                         do! recordFailure message
+                    else
+                        // Phase 207 — the leading indicator: budget
+                        // still has room, so this attempt is a retry
+                        // rather than a failure. Inert with no sink.
+                        count DerivativeJobs.RetryMetric name
 
                     return TransientFailure message
                 }

@@ -77,6 +77,13 @@ let config = {
             // remote arm is env-gated and reports Pending on a
             // credential-free checkout.
             TestPack.create "DataSources" "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj"
+            // Phase 127 / 207 — the AssetStore derivative pipeline: the
+            // sync + async job-backed paths, and the opt-in dead-letter
+            // / retry-observability surface with its default-off twin.
+            // Hermetic (in-memory blob storage, manual-pump scheduler);
+            // no env gating, no SkiaSharp native needed — the pack's
+            // renderers are doubles.
+            TestPack.create "AssetStore" "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj"
         ]
 }
 
