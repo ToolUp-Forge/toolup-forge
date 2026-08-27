@@ -78,8 +78,10 @@ ToolUp.ArtefactSigning.DefaultArtefactVerifierModule.create(ToolUp.Platform.Secr
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifier (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingRevocationList], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingTransparencyLog])
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.certificationVerifier(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleCertificationVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifyCertification(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSurface, ToolUp.Platform.ModuleCertificationStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifySbom(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.ArtefactSigning.DeployRecordSealer (class)
 ToolUp.ArtefactSigning.DeployRecordSealer.ofProvider(ToolUp.ArtefactSigning.SigningProvider) : ToolUp.Platform.IDeployRecordSealer
@@ -166,6 +168,8 @@ ToolUp.ArtefactSigning.ModuleBindingTrustResolver (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustResolver.resolve(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IModuleBindingVerifier, System.String]]
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator..ctor(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.ArtefactSigning.ModuleCertificationSigning (class)
+ToolUp.ArtefactSigning.ModuleCertificationSigning.canonicalBytes(System.String, ToolUp.Platform.CertifiedModuleSurface) : System.Byte[]
 ToolUp.ArtefactSigning.ModuleSbomSigning (class)
 ToolUp.ArtefactSigning.ModuleSbomSigning.canonicalBytes(System.String, ToolUp.Platform.ModuleSbom) : System.Byte[]
 ToolUp.ArtefactSigning.PayloadVerificationError (class)

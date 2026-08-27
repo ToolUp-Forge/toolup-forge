@@ -18,6 +18,7 @@ let private registeredTests =
         ModuleBindingTrustResolverTests.tests
         BindingRevocationContractTests.tests
         ModuleSbomManifestTests.tests
+        ModuleCertificationTests.tests
         ApplicationSigningTests.tests
         SigningProviderConformanceTests.tests
         DeployRecordSealingTests.tests

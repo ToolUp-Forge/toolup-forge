@@ -2180,6 +2180,11 @@ ToolUp.Platform.CertificateIssuedPayload.KeyId : System.String { get }
 ToolUp.Platform.CertificateIssuedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.CertificateIssuedPayload.Seal : System.String { get }
 ToolUp.Platform.CertificateIssuedPayload.Subject : System.String { get }
+ToolUp.Platform.CertifiedModuleSurface (class)
+ToolUp.Platform.CertifiedModuleSurface..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConformanceVerdict])
+ToolUp.Platform.CertifiedModuleSurface.SurfaceHash : System.String { get }
+ToolUp.Platform.CertifiedModuleSurface.SurfaceJson : System.String { get }
+ToolUp.Platform.CertifiedModuleSurface.Verdict : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConformanceVerdict] { get }
 ToolUp.Platform.ClaimBearerConfig (class)
 ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
@@ -7491,6 +7496,10 @@ ToolUp.Platform.ModuleBindingTrustConfig.AllowUnbound : System.Boolean { get }
 ToolUp.Platform.ModuleBindingTrustConfig.Anchors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleBindingAnchorRef] { get }
 ToolUp.Platform.ModuleBindingTrustConfigModule (class)
 ToolUp.Platform.ModuleBindingTrustConfigModule.defaults : ToolUp.Platform.ModuleBindingTrustConfig { get }
+ToolUp.Platform.ModuleCertificationStamp (class)
+ToolUp.Platform.ModuleCertificationStamp..ctor(ToolUp.Platform.CertifiedModuleSurface, ToolUp.Platform.ModuleBindingStamp)
+ToolUp.Platform.ModuleCertificationStamp.Certified : ToolUp.Platform.CertifiedModuleSurface { get }
+ToolUp.Platform.ModuleCertificationStamp.Signature : ToolUp.Platform.ModuleBindingStamp { get }
 ToolUp.Platform.ModuleConfigEntry (class)
 ToolUp.Platform.ModuleConfigEntry..ctor(System.String, System.String, ToolUp.Platform.ModuleConfigSchema)
 ToolUp.Platform.ModuleConfigEntry.DisplayName : System.String { get }
@@ -7507,6 +7516,11 @@ ToolUp.Platform.ModuleConfigView..ctor(System.String, ToolUp.Platform.ModuleConf
 ToolUp.Platform.ModuleConfigView.ModuleKey : System.String { get }
 ToolUp.Platform.ModuleConfigView.Schema : ToolUp.Platform.ModuleConfigSchema { get }
 ToolUp.Platform.ModuleConfigView.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ModuleConformanceVerdict (class)
+ToolUp.Platform.ModuleConformanceVerdict..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleLawOutcome], System.String)
+ToolUp.Platform.ModuleConformanceVerdict.Laws : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleLawOutcome] { get }
+ToolUp.Platform.ModuleConformanceVerdict.PackVersion : System.String { get }
+ToolUp.Platform.ModuleConformanceVerdict.RunStamp : System.String { get }
 ToolUp.Platform.ModuleEvent (class)
 ToolUp.Platform.ModuleEvent..ctor(System.Guid, System.DateTime, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModuleEvent.EventType : System.String { get }
@@ -7565,6 +7579,11 @@ ToolUp.Platform.ModuleIdentityRow.ComponentId : ToolUp.Platform.ComponentId { ge
 ToolUp.Platform.ModuleIdentityRow.Id : System.String { get }
 ToolUp.Platform.ModuleIdentityRow.Name : System.String { get }
 ToolUp.Platform.ModuleIdentityRow.Origin : ToolUp.Platform.ModuleIdOrigin { get }
+ToolUp.Platform.ModuleLawOutcome (class)
+ToolUp.Platform.ModuleLawOutcome..ctor(System.String, System.Boolean, System.String)
+ToolUp.Platform.ModuleLawOutcome.Detail : System.String { get }
+ToolUp.Platform.ModuleLawOutcome.Law : System.String { get }
+ToolUp.Platform.ModuleLawOutcome.Passed : System.Boolean { get }
 ToolUp.Platform.ModulePermission (class)
 ToolUp.Platform.ModulePermission.Admin : ToolUp.Platform.ModulePermission { get }
 ToolUp.Platform.ModulePermission.IsAdmin : System.Boolean { get }
