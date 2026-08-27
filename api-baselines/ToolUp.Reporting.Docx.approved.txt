@@ -5,3 +5,30 @@
 # still be folded into this file in the same PR.
 ToolUp.Reporting.Docx.DocxReportRenderer (class)
 ToolUp.Reporting.Docx.DocxReportRenderer.create() : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.Docx.DocxReportRenderer.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult]]) : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.Docx.NarrativeOoxml (class)
+ToolUp.Reporting.Docx.NarrativeOoxml.ensureListNumbering(ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions, ToolUp.OpenXml.DocModel) : ToolUp.OpenXml.DocModel
+ToolUp.Reporting.Docx.NarrativeOoxml.freeNumberingIds(ToolUp.OpenXml.NumberingDefinitions) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.Reporting.Docx.NarrativeOoxml.project(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult]], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.OpenXml.Block]
+ToolUp.Reporting.Docx.NarrativeOoxml.projectWith(ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.OpenXml.Block]
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult (class)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult.Fallback : ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult.IsFallback : System.Boolean { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult.IsImage : System.Boolean { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult.IsSvg : System.Boolean { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult.Tag : System.Int32 { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Image (class)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Image.bytes : System.Byte[] { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Image.mimeType : System.String { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Svg (class)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Svg.svg : System.String { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Tags (class)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Tags.Fallback : System.Int32 (literal)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Tags.Image : System.Int32 (literal)
+ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult+Tags.Svg : System.Int32 (literal)
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions (class)
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult]], System.Int32, System.Int32)
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions.BulletNumberingId : System.Int32 { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions.ComponentRenderers : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult]] { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions.Default : ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions { get }
+ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions.OrderedNumberingId : System.Int32 { get }

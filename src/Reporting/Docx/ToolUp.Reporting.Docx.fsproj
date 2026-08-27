@@ -23,6 +23,10 @@
         <ProjectReference Include="..\..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Phase 575 — the NarrativeDocument → structural-block projection
+             sits below the renderer, which expands a NarrativeValue
+             placeholder through it at the token's anchor paragraph. -->
+        <Compile Include="NarrativeOoxml.fs" />
         <Compile Include="DocxReportRenderer.fs" />
     </ItemGroup>
 </Project>

@@ -4,6 +4,7 @@
 module ToolUp.Reporting.Docx.DocxReportRenderer
 
 open ToolUp.OpenXml
+open ToolUp.Platform.Narrative
 open ToolUp.Reporting
 open ToolUp.Reporting.PlaceholderSubstitution
 
@@ -30,6 +31,12 @@ open ToolUp.Reporting.PlaceholderSubstitution
 //   * `Image`-kind values render as a bracketed marker — the structural
 //     model does not carry image parts (they round-trip as residue);
 //     mirrors MarkdownRenderer's posture.
+//   * A `NarrativeValue` placeholder whose token is the entire paragraph
+//     expands through `NarrativeOoxml` at that anchor — the narrative's
+//     headings, lists, tables and callouts become native Word structures
+//     rather than flattened text. In an inline position (a token inside a
+//     sentence) there is no anchor to expand into, so the value takes the
+//     plaintext projection.
 //   * Unknown `{{key}}` tokens pass through unchanged so authors can
 //     spot template/schema drift.
 
@@ -68,7 +75,7 @@ let private wholeParagraphToken (paragraph: ParagraphModel) : string option =
 
 let private nativeTable (columns: ColumnSchema list) (rows: Map<string, PlaceholderValue> list) : TableModel =
     let cell (runs: Run list) : TableCell = {
-        Blocks = [ Paragraph(ParagraphModel.create runs) ]
+        Blocks = [ Block.Paragraph(ParagraphModel.create runs) ]
         RawProperties = None
     }
 
@@ -117,17 +124,51 @@ let private tableAsText (columns: ColumnSchema list) (rows: Map<string, Placehol
 
     header :: dataLines |> String.concat "\n"
 
-let create () : IReportRenderer =
+/// Narrative placeholders are validated as their anchor's declared kind
+/// (`Text`) rather than as a case `PlaceholderSubstitution.validate`
+/// knows, so a genuinely mismatched slot — a narrative supplied for a
+/// `Table`-kind placeholder — still fails, while the narrative channel
+/// this renderer expands structurally does not.
+let private validationView (values: Map<string, PlaceholderValue>) : Map<string, PlaceholderValue> =
+    values
+    |> Map.map (fun _ value ->
+        match value with
+        | NarrativeValue _ -> TextValue ""
+        | other -> other)
+
+let private narrativeKeys (values: Map<string, PlaceholderValue>) =
+    values
+    |> Map.filter (fun _ value ->
+        match value with
+        | NarrativeValue _ -> true
+        | _ -> false)
+
+/// Build a renderer that resolves narrative `Component` blocks through
+/// the supplied registry. The registry is a composition-root concern —
+/// Reporting never names a rendering companion (GP 1) — so a deployment
+/// that has one registers it here and one that has none composes
+/// `create`, whose components take their data-table degradation.
+let createWith (componentRenderers: NarrativeOoxml.ComponentRenderers) : IReportRenderer =
     { new IReportRenderer with
         member _.SupportedFormats = [ Docx ]
         member _.Name = name
 
         member _.Render(template, values) = async {
-            match validate template.Placeholders values with
+            let narratives = narrativeKeys values
+
+            match validate template.Placeholders (validationView values) with
             | Error e -> return Error e
             | Ok() ->
                 try
                     let imported = Import.fromBytes template.Body
+                    let bulletId, orderedId = NarrativeOoxml.freeNumberingIds imported.Model.Numbering
+
+                    let projection = {
+                        NarrativeOoxml.ProjectionOptions.Default with
+                            ComponentRenderers = componentRenderers
+                            BulletNumberingId = bulletId
+                            OrderedNumberingId = orderedId
+                    }
 
                     let renderKey (key: string) =
                         match template.Placeholders |> List.tryFind (fun p -> p.Key = key), values.TryFind key with
@@ -135,6 +176,11 @@ let create () : IReportRenderer =
                             match schema.Kind, value with
                             | Image _, _ -> $"[image: {key} (not supported by {name})]"
                             | Table cols, TableValue rows -> tableAsText cols rows
+                            // A narrative token sitting inside a sentence has
+                            // no anchor paragraph to expand into, so it takes
+                            // the plaintext projection — the same degradation
+                            // the format-free renderers apply.
+                            | _, NarrativeValue document -> NarrativePlaintext.render document
                             | _ -> renderScalar schema.Kind value
                         | _ -> $"{{{{{key}}}}}"
 
@@ -143,6 +189,13 @@ let create () : IReportRenderer =
                     let tryTableFor (key: string) : TableModel option =
                         match template.Placeholders |> List.tryFind (fun p -> p.Key = key), values.TryFind key with
                         | Some { Kind = Table cols }, Some(TableValue rows) -> Some(nativeTable cols rows)
+                        | _ -> None
+
+                    // A whole-paragraph token bound to a narrative expands
+                    // into that narrative's own blocks at the anchor.
+                    let tryNarrativeFor (key: string) : NarrativeDocument option =
+                        match template.Placeholders |> List.tryFind (fun p -> p.Key = key), narratives.TryFind key with
+                        | Some _, Some(NarrativeValue document) -> Some document
                         | _ -> None
 
                     let substituteParagraph (paragraph: ParagraphModel) = {
@@ -156,15 +209,21 @@ let create () : IReportRenderer =
                                 })
                     }
 
-                    let rec substituteBlock (block: Block) : Block =
+                    let rec substituteBlock (block: Block) : Block list =
                         match block with
-                        | Paragraph p ->
-                            match wholeParagraphToken p |> Option.bind tryTableFor with
-                            | Some table -> Block.Table table
-                            | None -> Paragraph(substituteParagraph p)
-                        | Heading(level, p) -> Heading(level, substituteParagraph p)
-                        | ListItem(numbering, p) -> ListItem(numbering, substituteParagraph p)
-                        | Block.Table t ->
+                        | Block.Paragraph p ->
+                            match wholeParagraphToken p with
+                            | Some key ->
+                                match tryTableFor key with
+                                | Some table -> [ Block.Table table ]
+                                | None ->
+                                    match tryNarrativeFor key with
+                                    | Some document -> NarrativeOoxml.projectWith projection document
+                                    | None -> [ Block.Paragraph(substituteParagraph p) ]
+                            | None -> [ Block.Paragraph(substituteParagraph p) ]
+                        | Block.Heading(level, p) -> [ Block.Heading(level, substituteParagraph p) ]
+                        | Block.ListItem(numbering, p) -> [ Block.ListItem(numbering, substituteParagraph p) ]
+                        | Block.Table t -> [
                             Block.Table {
                                 t with
                                     Rows =
@@ -175,24 +234,39 @@ let create () : IReportRenderer =
                                                     row.Cells
                                                     |> List.map (fun c -> {
                                                         c with
-                                                            Blocks = c.Blocks |> List.map substituteBlock
+                                                            Blocks = c.Blocks |> List.collect substituteBlock
                                                     })
                                         })
                             }
-                        | OpaqueBlock _ -> block
+                          ]
+                        | OpaqueBlock _ -> [ block ]
 
-                    let model = {
+                    let substituted = {
                         imported.Model with
                             Sections =
                                 imported.Model.Sections
                                 |> List.map (fun s -> {
                                     s with
-                                        Blocks = s.Blocks |> List.map substituteBlock
+                                        Blocks = s.Blocks |> List.collect substituteBlock
                                 })
                     }
+
+                    // Only a render that carried a narrative can have minted
+                    // list numbering the template does not declare, so a
+                    // narrative-free render is left exactly as it was (GP 11).
+                    let model =
+                        if Map.isEmpty narratives then
+                            substituted
+                        else
+                            NarrativeOoxml.ensureListNumbering projection substituted
 
                     return Ok(Emit.toBytesWith imported.CustomParts model)
                 with ex ->
                     return Error(RendererFailure(name, $"template could not be processed as .docx: {ex.Message}"))
         }
     }
+
+/// The renderer with no component registry: every `Component` block in a
+/// projected narrative takes its data-table degradation.
+let create () : IReportRenderer =
+    createWith (fun _ _ -> NarrativeOoxml.Fallback)
