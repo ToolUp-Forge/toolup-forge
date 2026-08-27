@@ -729,8 +729,15 @@ type DualControlPermissionStore
     /// channel carries. Prefixed with a stable greppable code and naming
     /// the request id, because a caller that cannot see the typed outcome
     /// still has to tell an operator what to approve.
+    ///
+    /// Phase 730 — the text is now MINTED from `DualControlSignal`, the
+    /// same module `GrantPolicyGuard.grantModuleAccess` recognises it with.
+    /// Previously this literal lived here alone and any reader had to
+    /// re-spell it; one reworded string at either end and the recognition
+    /// silently stopped matching. The rendering is unchanged, byte for
+    /// byte, so no operator runbook or log query moves.
     let queuedMessage (queued: AdminMutationQueued) =
-        $"DUAL-CONTROL-PENDING-APPROVAL: the write did not apply. It is queued as request '{queued.RequestId}' and requires approval by a second, distinct administrator before {queued.ExpiresAtUtc:o}."
+        DualControlSignal.message queued.RequestId queued.ExpiresAtUtc
 
     /// The whole write path: gate, then either apply verbatim or park.
     ///

@@ -277,16 +277,27 @@ let private runFullAgentLoop
         // unrestricted anonymous context and the gate passes everything).
         let access = reconstructAccessContext ctx
 
+        // Phase 730: the grant / consent gate, resolved ONCE alongside the
+        // access context and for the same reason — the stamps it reads do
+        // not change mid-turn, and re-resolving per tool call would let a
+        // mid-conversation consent revocation apply inconsistently across
+        // a parallel tool batch. A deployment declaring no `GrantPolicy`
+        // gets a constant `true` here at the cost of one failed
+        // `GetService` (GP 13).
+        let grantGate = moduleGrantGate ctx
+
         // Phase 36.A: filter the per-turn tool list by the caller's
-        // per-module `Read` permission, then (Phase 6g.A) by the
-        // request's surface. Tools sourced from a module the caller
-        // cannot read never reach the provider, so the model neither
-        // sees them nor plans around them; tools declared as
+        // per-module `Read` permission, then (Phase 730) by whether the
+        // caller's authority on that module is actually LIVE, then
+        // (Phase 6g.A) by the request's surface. Tools sourced from a
+        // module the caller cannot read — or holds only a pending or
+        // consent-revoked grant on — never reach the provider, so the
+        // model neither sees them nor plans around them; tools declared as
         // `SidePanelOnly` / `FullPageOnly` are excluded when the chat is
         // from the other surface; `Both` (the default for existing
         // tools) always passes through.
         let tools =
-            registry.ListAccessible access
+            registry.ListAccessible(access, grantGate)
             |> List.filter (fun t -> isToolVisibleOnSurface surface t.Definition)
             |> List.map _.ProviderDef
 
@@ -868,6 +879,40 @@ let private runFullAgentLoop
                                             tool.Definition.SourceModule
 
                                         do! writeUnauthorizedToolAudit tool.Definition.Name reason
+
+                                        return Error(Denied(tc.Name, reason))
+                                    | Some tool when not (guardToolGrant ctx access tool.Definition.SourceModule) ->
+                                        // ─── Phase 730 — grant / consent re-check ───
+                                        //
+                                        // The same defence-in-depth argument as
+                                        // the RBAC arm above, one layer in. The
+                                        // caller HOLDS a permission entry on this
+                                        // module — that is why the arm above did
+                                        // not fire — but the authority behind it
+                                        // is inert: a grant recorded pending the
+                                        // subject's own acceptance, or one whose
+                                        // counterparty consent has been revoked.
+                                        // The list filter already dropped it this
+                                        // turn, so reaching here means a forged
+                                        // name or a replayed history from when the
+                                        // grant WAS live, which is exactly the
+                                        // case a revocation has to survive.
+                                        //
+                                        // `guardToolGrant` both decides and emits
+                                        // the `UnconsentedGrantRefused` row — the
+                                        // same event the Remoting seam emits for
+                                        // the same refusal, so an operator asking
+                                        // "was inert authority reached for" reads
+                                        // one stream, not two.
+                                        let reason =
+                                            $"module '{tool.Definition.SourceModule}' requires a live grant under its declared policy; yours is not currently live"
+
+                                        logger.Warn(
+                                            sprintf
+                                                "AI tool '%s' (source module '%s') refused at dispatch: the caller's grant on that module is not live under its declared GrantPolicy. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
+                                                tool.Definition.Name
+                                                tool.Definition.SourceModule
+                                        )
 
                                         return Error(Denied(tc.Name, reason))
                                     | Some tool ->

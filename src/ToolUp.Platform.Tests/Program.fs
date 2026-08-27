@@ -978,6 +978,14 @@ let private registeredTests =
         // the very next call, the counterparty grant write Phase 551 left
         // unreachable, and the trust-vs-lifecycle audit split.
         GrantConsentTests.tests
+        // Phase 730 — grant-governance completeness. The GrantRecorded audit
+        // twin closing the refusal-only trail Phase 551 shipped; the honest
+        // classification of an inner-store failure (a Phase 555 QUEUED write
+        // is parked, not unbacked, and a storage outage is neither); and the
+        // AI tool gate — a module whose grant is pending or whose consent was
+        // revoked is now neither listed to the model nor dispatchable by it,
+        // with the list filter and the audited boundary sharing ONE decision.
+        GrantGovernanceTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

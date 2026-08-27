@@ -502,6 +502,64 @@ type GrantPolicyPermissionStore
         record subjectId moduleName refusal teamId
         Error(GrantRefusal.describe refusal)
 
+    /// Phase 730 — the success twin of `record`, emitted from this same
+    /// decorator so a grant cannot be admitted without a row.
+    ///
+    /// Takes the record the write PERSISTED rather than one the caller
+    /// asserts, so `State` describes what the document actually says. A
+    /// policy-bearing entry written without one is unreachable — the
+    /// validation above refuses it — so `None` here means the entry was
+    /// `AdminDiscretion`, which this event deliberately does not cover.
+    let recordGranted
+        (teamId: string)
+        (subjectId: string)
+        (moduleName: string)
+        (permissions: ModulePermission list)
+        (grantRecord: ModuleGrantRecord option)
+        =
+        match auditLog, grantRecord with
+        | None, _
+        | _, None -> ()
+        | Some log, Some r ->
+            let payload: GrantRecordedPayload = {
+                ActorId = actor
+                SubjectId = subjectId
+                ModuleName = moduleName
+                DeclaredPolicy = ModuleGrantPolicyRegistry.resolve registry moduleName |> GrantPolicy.toToken
+                State = GrantState.toToken r.State
+                // Sorted, so two writes granting the same authority in a
+                // different order produce the same row and a reviewer
+                // diffing them sees nothing rather than noise.
+                Permissions =
+                    permissions
+                    |> List.map ModulePermission.toToken
+                    |> List.sort
+                    |> String.concat ","
+                Justification = r.Justification
+            }
+
+            // Best-effort per the `IAuditLog` contract, exactly like the
+            // refusal path. The write has already committed by the time
+            // this runs; a downed audit pipeline must not turn a
+            // successful grant into an error.
+            async {
+                try
+                    do! log.Record($"team-{teamId}", GrantRecorded payload)
+                with _ ->
+                    ()
+            }
+            |> Async.Start
+
+    /// The policy-bearing subset of a write's delta — the entries this
+    /// event covers. Shared by both write paths so they cannot disagree
+    /// about what counts as a governed grant.
+    let governedGrants (entries: (string * string * ModulePermission list) list) =
+        entries
+        |> List.filter (fun (_, moduleName, perms) ->
+            not (List.isEmpty perms)
+            && ModuleGrantPolicyRegistry.resolve registry moduleName
+               <> GrantPolicy.AdminDiscretion)
+
     /// The pre-552 shape: no consent registry, so the counterparty arm
     /// refuses every grant exactly as Phase 551 shipped it. Preserved as
     /// an explicit secondary constructor, not folded into an optional
@@ -570,7 +628,23 @@ type GrantPolicyPermissionStore
                         | _ -> ""
 
                     return refuse "" moduleName e teamId
-                | Ok() -> return! inner.SetTeamPermissions(teamId, permissions)
+                | Ok() ->
+                    let! written = inner.SetTeamPermissions(teamId, permissions)
+
+                    // Phase 730 — emit the success twin AFTER the write
+                    // commits, and only then. A row claiming a grant that
+                    // the store then refused would be worse than no row:
+                    // it asserts authority that does not exist.
+                    match written with
+                    | Ok() ->
+                        for userId, moduleName, perms in governedGrants changedEntries do
+                            let grantRecord =
+                                permissions.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+
+                            recordGranted teamId userId moduleName perms grantRecord
+                    | Error _ -> ()
+
+                    return written
         }
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) = async {
@@ -602,7 +676,17 @@ type GrantPolicyPermissionStore
                     let! consented = consent.IsConsentLive(teamId, userId, moduleName, party)
 
                     if consented && isCounterpartyRecordAdequate policy existingRecord then
-                        return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+                        let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+
+                        // Phase 730 — a re-grant on a governed module is
+                        // still authority changing hands, so it earns a
+                        // row. The record is the one already on the
+                        // document: this path cannot create one.
+                        match written with
+                        | Ok() -> recordGranted teamId userId moduleName permissions existingRecord
+                        | Error _ -> ()
+
+                        return written
                     elif consented then
                         return refuse userId moduleName (GrantRefusal.UnbackedGrant(moduleName, policy)) teamId
                     else
@@ -623,7 +707,16 @@ type GrantPolicyPermissionStore
                         existing.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
 
                     if isBacked policy record then
-                        return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+                        let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+
+                        // Phase 730 — same reasoning as the counterparty
+                        // arm above: the policy question is a no-op on a
+                        // re-grant, the authority question is not.
+                        match written with
+                        | Ok() -> recordGranted teamId userId moduleName permissions record
+                        | Error _ -> ()
+
+                        return written
                     else
                         return
                             refuse userId moduleName (GrantRefusal.AcknowledgementRequired(moduleName, policy)) teamId
@@ -719,12 +812,48 @@ module PermissionGrants =
                     )
 
                 match written with
-                | Error _ ->
-                    // The decorator refused, or storage did. Either way
-                    // nothing was persisted; surface it as the refusal the
-                    // policy would have produced rather than inventing a
-                    // success.
-                    return Error(GrantRefusal.UnbackedGrant(request.ModuleName, policy))
+                | Error e ->
+                    // Phase 730 — classify the inner failure instead of
+                    // relabelling it.
+                    //
+                    // This arm used to map EVERY inner error onto
+                    // `UnbackedGrant`, which said "the written permission
+                    // entry carries no adequate grant record". By the time
+                    // control reaches here that statement is provably
+                    // false: `evaluateGrant` has already admitted the
+                    // grant, and the write above put the entry and its
+                    // record into the document TOGETHER precisely so the
+                    // pair could never be inconsistent. So the one thing
+                    // the old message asserted was the one thing that
+                    // could not have happened.
+                    //
+                    // Three inner outcomes are genuinely distinct and want
+                    // three different operator responses:
+                    //
+                    //  * PARKED by the Phase 555 dual-control gate. Not a
+                    //    refusal at all — the write was accepted into a
+                    //    two-person ceremony and needs a second
+                    //    administrator to approve a named request. Reported
+                    //    on the `Ok` side, matching
+                    //    `AdminMutationWriteOutcome.QueuedForApproval`.
+                    //  * A storage or decorator failure. Reported as
+                    //    `StoreUnavailable` carrying the inner message
+                    //    VERBATIM, so whatever the store had to say
+                    //    survives instead of being overwritten.
+                    //  * A refusal from a decorator composed OUTSIDE this
+                    //    one that speaks the grant-policy vocabulary. It
+                    //    already describes itself; it is still carried as
+                    //    `StoreUnavailable`, because this function did not
+                    //    make that decision and must not claim to have.
+                    //
+                    // Recognition of the parked case goes through
+                    // `DualControlSignal`, which is also what mints the
+                    // message — see that module for why a prose-prefix
+                    // match spelled out at both ends is the defect shape
+                    // this deliberately avoids.
+                    match DualControlSignal.tryParseRequestId e with
+                    | Some requestId -> return Ok(GrantWriteOutcome.QueuedForApproval requestId)
+                    | None -> return Error(GrantRefusal.StoreUnavailable(request.ModuleName, e))
                 | Ok() ->
                     return
                         Ok(

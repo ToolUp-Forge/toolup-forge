@@ -1055,6 +1055,18 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> UnconsentedGrantRefused(fromAuditJson<UnconsentedGrantRefusedPayload> j)
     }
+    // Phase 730 — the success twin the pair above was missing. Phase 551
+    // made every REFUSED grant dashboardable and left every ADMITTED one
+    // invisible, so the trail answered "what was blocked" but not "who was
+    // given access to what".
+    {
+        EventType = "GrantRecorded"
+        TryEncode =
+            (function
+            | GrantRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> GrantRecorded(fromAuditJson<GrantRecordedPayload> j)
+    }
     // Phase 555 — the dual-control ceremony. Five event types rather than
     // one row with an outcome field: "what is queued", "who approved
     // what", "what was turned down", "what was attempted and refused"

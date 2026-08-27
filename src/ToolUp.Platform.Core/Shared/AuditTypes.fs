@@ -2360,6 +2360,56 @@ type UnconsentedGrantRefusedPayload = {
     InertReason: string
 }
 
+/// Phase 730 — a grant on a policy-bearing module was RECORDED. The
+/// success twin of `GrantPolicyRefused`, and the reason it exists is that
+/// Phase 551 shipped only the refusal half: every grant a policy turned
+/// down was dashboardable and every grant it ADMITTED was invisible, so
+/// the audit trail could answer "what was blocked" and not "who was given
+/// access to what" — which is the question a grant trail is for (GP 6).
+///
+/// Emitted from the same choke point as its refusal twin — the
+/// `GrantPolicyPermissionStore` decorator, on the delta of a write that
+/// SUCCEEDED — so no caller has to remember to emit it and no write path
+/// can acquire authority silently.
+///
+/// **Scope, stated because the narrower reading is deliberate.** This
+/// fires only for modules declaring a policy stricter than
+/// `AdminDiscretion`, exactly like the refusal. A deployment that declares
+/// no policy composes no decorator and its audit stream is byte-for-byte
+/// its pre-730 self (GP 11). Ordinary `AdminDiscretion` permission changes
+/// remain the business of `PermissionChanged`; this event is about the
+/// governed set, and widening it would bury the governed rows in the
+/// volume of routine ones.
+type GrantRecordedPayload = {
+    /// The administrator who performed the grant.
+    ActorId: string
+    /// The subject who now holds (or is recorded pending on) the module.
+    SubjectId: string
+    /// Module granted. The same key the module declared its policy under
+    /// and the same key `AccessContext.ModulePermissions` uses — one
+    /// naming axis, so nothing can drift.
+    ModuleName: string
+    /// The module's declared policy, as its stable wire token. Joins this
+    /// row to its refusal twin.
+    DeclaredPolicy: string
+    /// `GrantState.toToken` — `"active"` or `"pending-consent"`. **The
+    /// load-bearing field.** "Authority now exists" and "authority is
+    /// recorded and confers nothing until the subject accepts" are
+    /// different facts with different urgency, and without this they are
+    /// the same row.
+    State: string
+    /// The permissions granted, as their stable tokens, comma-separated in
+    /// a stable order. A grant of `Admin` and a grant of `Read` are not the
+    /// same event to a reviewer.
+    Permissions: string
+    /// The justification the policy demanded. Recorded because a grant
+    /// trail without the stated reason answers "who" and not "why", and
+    /// the whole point of `RequiresAcknowledgement` is that a reason was
+    /// given. Admin-authored, like `AdminMutationProposedPayload.Summary`;
+    /// empty under a policy that demands none.
+    Justification: string
+}
+
 // ─── Phase 555 — dual control for sensitive admin mutations ──────────
 //
 // Five events, one per act in the ceremony, because an operator asking
@@ -4722,6 +4772,10 @@ type AuditEvent =
     /// caller's permission entry carried no live grant record under the
     /// module's declared `GrantPolicy`.
     | UnconsentedGrantRefused of UnconsentedGrantRefusedPayload
+    /// Phase 730 — a grant on a policy-bearing module was recorded. The
+    /// success twin of `GrantPolicyRefused`, closing the asymmetry Phase
+    /// 551 shipped with: refusals were dashboardable, grants were not.
+    | GrantRecorded of GrantRecordedPayload
     /// Phase 555 — a sensitive admin mutation was captured as a pending
     /// record under dual control and did NOT apply.
     | AdminMutationProposed of AdminMutationProposedPayload
@@ -5149,6 +5203,7 @@ module AuditEvent =
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | GrantPolicyRefused _ -> "GrantPolicyRefused"
         | UnconsentedGrantRefused _ -> "UnconsentedGrantRefused"
+        | GrantRecorded _ -> "GrantRecorded"
         | AdminMutationProposed _ -> "AdminMutationProposed"
         | AdminMutationApproved _ -> "AdminMutationApproved"
         | AdminMutationRejected _ -> "AdminMutationRejected"

@@ -174,6 +174,13 @@ let private highEvents =
         // Emitted only on those grounds, never for an ordinary revocation
         // or expiry, so its rate is meaningful rather than a baseline.
         "GrantConsentVerificationDenied"
+        // Phase 730 — the success twin. High for exactly the reason
+        // `PermissionChanged` and `GrantConsentApproved` are: it is the
+        // moment authority on a governed module comes into existence. A
+        // deployment that alerts on the refusals and not on this one can
+        // see every grant that was stopped and none that succeeded, which
+        // is the wrong half of the trail to watch.
+        "GrantRecorded"
         "KnowledgeOriginalRetrievalDenied"
         "ModelArtifactTransitionDenied"
         "ModelFitGateFailed"

@@ -344,6 +344,17 @@
              could not reach, and the audit split that keeps the tamper alert
              meaningful. -->
         <Compile Include="InProcess\GrantConsentTests.fs" />
+        <!-- Phase 730 — the three gaps Phases 551 and 552 recorded against
+             themselves: the missing GrantRecorded audit twin (the trail had
+             only its refusal half), grantModuleAccess relabelling every inner
+             failure as UnbackedGrant (a dual-control QUEUED result is neither
+             unbacked nor a refusal), and AI tool dispatch reading only the
+             permission map — which is PRESENT for a pending or
+             consent-revoked grant, so the module stayed listed to the model
+             while being inert at the Remoting seam. After GrantConsentTests
+             (it composes 552's verdicts) and after the AI registry surface it
+             gates. -->
+        <Compile Include="InProcess\GrantGovernanceTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

@@ -44,6 +44,17 @@ type ModulePermission =
     | SchemaOnly
 
 module ModulePermission =
+    /// Phase 730 — stable wire token for audit rows and operator queries.
+    /// The rendering several call sites had spelled privately; hoisted so
+    /// a grant row and a tool-registry diagnostic name a permission the
+    /// same way.
+    let toToken =
+        function
+        | ModulePermission.Read -> "Read"
+        | ModulePermission.Write -> "Write"
+        | ModulePermission.Admin -> "Admin"
+        | ModulePermission.SchemaOnly -> "SchemaOnly"
+
     /// Does holding `granted` satisfy a requirement of `required`?
     /// Encodes the Read / Write / Admin hierarchy plus the
     /// Phase 30d `SchemaOnly` carve-out. `Admin` / `Write` / `Read` all
@@ -208,6 +219,21 @@ type GrantRefusal =
     /// parties. Incomparable — neither narrows the other, so the estate
     /// refuses rather than silently picking one.
     | ConflictingCounterparty of moduleName: string * declared: PartyRef * attempted: PartyRef
+    /// Phase 730 — the underlying store refused or failed, carrying its own
+    /// message verbatim. NOT a policy refusal: the policy was satisfied and
+    /// the write was still not persisted.
+    ///
+    /// This case exists because its absence was a defect. Phase 551's
+    /// `grantModuleAccess` mapped ANY inner-store `Error` onto
+    /// `UnbackedGrant`, so a storage failure — and, once Phase 555 shipped,
+    /// a dual-control QUEUED result — both reported "the written permission
+    /// entry carries no adequate grant record", which was true of neither.
+    /// An operator reading that row would look for a missing grant record
+    /// that was never missing. Phase 552's own counterparty entry point
+    /// declined to repeat the mapping and returned
+    /// `ConsentDenial.StoreUnavailable` instead; this is the same honesty
+    /// applied to the path that had it wrong.
+    | StoreUnavailable of moduleName: string * message: string
 
 /// Phase 551 — what a policy-satisfying grant write actually did.
 [<RequireQualifiedAccess>]
@@ -217,6 +243,19 @@ type GrantWriteOutcome =
     /// Recorded and awaiting the named subject's acceptance. The
     /// permission entry exists but confers nothing until then.
     | RecordedPendingConsent of subjectId: string
+    /// Phase 730 — the write satisfied the module's grant policy and was
+    /// then PARKED by the Phase 555 dual-control gate: nothing was
+    /// persisted, and a second distinct administrator must approve request
+    /// `requestId` before it applies.
+    ///
+    /// On the `Ok` side deliberately, matching
+    /// `AdminMutationWriteOutcome.QueuedForApproval`. A parked write is not
+    /// a refusal — the act was accepted into a ceremony, and the caller's
+    /// correct response is "tell the operator what to approve", not "tell
+    /// them why they were denied". Carrying the id (rather than the whole
+    /// `AdminMutationQueued`) keeps this type ahead of the dual-control
+    /// types in compile order, and the id is what an approver names.
+    | QueuedForApproval of requestId: string
 
 module GrantPolicy =
     /// Rank by strictness. Used for the narrowing-only rule and for the
@@ -369,6 +408,8 @@ module GrantRefusal =
             $"GRANT-POLICY-LOOSENING: module '{m}' declares '{GrantPolicy.toToken declared}'; '{GrantPolicy.toToken attempted}' would loosen it (narrowing-only)."
         | GrantRefusal.ConflictingCounterparty(m, declared, attempted) ->
             $"GRANT-POLICY-CONFLICTING-COUNTERPARTY: module '{m}' already requires approval from '{PartyRef.value declared}'; '{PartyRef.value attempted}' neither narrows nor equals it."
+        | GrantRefusal.StoreUnavailable(m, message) ->
+            $"GRANT-STORE-UNAVAILABLE: the grant on module '{m}' satisfied the declared policy but was not persisted: {message}"
 
     /// The stable discriminator an audit row and an operator dashboard
     /// group by.
@@ -380,6 +421,7 @@ module GrantRefusal =
         | GrantRefusal.UnbackedGrant _ -> "unbacked-grant"
         | GrantRefusal.PolicyLoosening _ -> "policy-loosening"
         | GrantRefusal.ConflictingCounterparty _ -> "conflicting-counterparty"
+        | GrantRefusal.StoreUnavailable _ -> "store-unavailable"
 
 /// Per-team, per-module **exposure** state — the tri-state behind the
 /// team-management "module exposure" control. Orthogonal to the RBAC

@@ -319,3 +319,61 @@ type AdminMutationWriteOutcome =
     /// The write was gated and is parked awaiting a second administrator.
     /// Nothing changed.
     | QueuedForApproval of AdminMutationQueued
+
+/// Phase 730 — the ONE place the "this write was parked, not applied"
+/// signal on the legacy `Result<unit, string>` channel is defined.
+///
+/// **Why a shared module rather than a string literal at each end.** The
+/// dual-control gate has to report a parked write through
+/// `IPermissionStore`'s `Result<unit, string>`, which has no room for a
+/// typed outcome, so the fact rides a prefixed message. A reader that
+/// wanted to distinguish "parked" from "storage broke" therefore had to
+/// recognise a message minted in another file — and classifying by a prose
+/// prefix matched against a renderer somewhere else is exactly the defect
+/// Phase 36.A recorded against `AIAgentEngine.isErrorToolResult`, whose
+/// comment says "update both" where a shared constant would do. Reworded
+/// either end independently and the recognition silently stops matching,
+/// with no compile error and no failing test that names the cause.
+///
+/// So the mint and the recognition are BOTH derived from `Code` here, in
+/// `Platform.Core` — which both `GrantPolicyGuard.fs` (the reader) and
+/// `AdminMutationApproval.fs` (the writer) compile after, and neither of
+/// which can see the other. Rewording the human half of the message is
+/// free; the machine half cannot drift because there is only one of it.
+[<RequireQualifiedAccess>]
+module DualControlSignal =
+
+    /// The stable, greppable discriminator. Operator runbooks and log
+    /// queries cut on this string; treat it as a wire token.
+    [<Literal>]
+    let Code = "DUAL-CONTROL-PENDING-APPROVAL"
+
+    /// Render the parked-write message. The request id is delimited by
+    /// single quotes so `tryParseRequestId` can recover it without the
+    /// surrounding prose being load-bearing.
+    let message (requestId: string) (expiresAtUtc: DateTimeOffset) =
+        $"{Code}: the write did not apply. It is queued as request '{requestId}' and requires approval by a second, distinct administrator before {expiresAtUtc:o}."
+
+    /// Recover the queued request id from a message minted by `message`.
+    /// `None` for any other error text — including an error that merely
+    /// mentions dual control — because the id is what makes the signal
+    /// actionable, and a "parked" verdict a caller cannot route to an
+    /// approver is worse than an honest "the store refused".
+    let tryParseRequestId (errorText: string) : string option =
+        if
+            String.IsNullOrEmpty errorText
+            || not (errorText.StartsWith(Code, StringComparison.Ordinal))
+        then
+            None
+        else
+            let opening = errorText.IndexOf '\''
+
+            if opening < 0 then
+                None
+            else
+                let closing = errorText.IndexOf('\'', opening + 1)
+
+                if closing <= opening + 1 then
+                    None
+                else
+                    Some(errorText.Substring(opening + 1, closing - opening - 1))

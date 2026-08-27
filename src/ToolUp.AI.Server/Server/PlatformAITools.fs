@@ -114,6 +114,25 @@ let private reconstructAccess (ctx: HttpContext) : AccessContext =
         PlatformRole = platformRole
     }
 
+/// Phase 730 — the grant / consent gate for the `_platform.*` family.
+///
+/// These tools are exempt from the Phase 36.A per-SOURCE-module filter by
+/// design: their `SourceModule` is an SDK-reserved namespace, and they
+/// apply RBAC internally, per TARGET module, at the four sites below.
+/// That exemption is exactly why the grant gate has to be repeated here.
+/// Filtering `_platform.ai` out of the tool list would be wrong (it is not
+/// a module and nobody is granted it), but the modules these tools REACH
+/// are ordinary governed ones — so without this, `_platform.list_results`
+/// would happily read a module whose grant is pending the subject's
+/// acceptance, having been admitted by a permission entry that confers
+/// nothing. The cross-module family would become the way around the very
+/// control Phases 551 and 552 shipped.
+///
+/// Built per invocation rather than per turn: a tool executor has no turn
+/// to hang it on, and the cost when nothing is declared is one failed
+/// `GetService`.
+let private grantLive (ctx: HttpContext) : string -> bool = moduleGrantGate ctx
+
 /// The caller's resolved storage-scope id — the structural tenant
 /// isolation boundary for entity / result / catalog reads (GP 4). Falls
 /// back to the user id (then `"anonymous"`) when no scope was resolved.
@@ -191,9 +210,15 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
         |> List.distinct
         |> List.sort
 
+    let isGrantLive = grantLive ctx
+
     let entries =
         allModules
-        |> List.filter (fun m -> AccessContext.canAccessModule m access)
+        // Phase 730 — enumeration is a listing, so it filters silently
+        // (nothing was attempted) exactly as the tool-registry list filter
+        // does. A module whose grant is pending or consent-revoked is not
+        // named here at all.
+        |> List.filter (fun m -> AccessContext.canAccessModule m access && isGrantLive m)
         |> List.map (fun m ->
             let perms =
                 if rbacConfigured then
@@ -232,6 +257,8 @@ let private listDataTypesDef: AIToolDefinition = {
 
 let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
     let access = reconstructAccess ctx
+    // Phase 730 — same silent-listing treatment as `_platform.list_modules`.
+    let isGrantLive = grantLive ctx
 
     match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
     | :? IDataCatalog as catalog ->
@@ -243,7 +270,8 @@ let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<
                 let! producers = catalog.GetProducers t.Id
 
                 let accessible =
-                    producers |> List.filter (fun p -> AccessContext.canAccessModule p access)
+                    producers
+                    |> List.filter (fun p -> AccessContext.canAccessModule p access && isGrantLive p)
 
                 return t, accessible
             })
@@ -669,7 +697,24 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
                 message = "Required argument 'moduleName' is missing."
             |}
     | Some(Some moduleName, dateFrom, dateTo) ->
-        if not (AccessContext.hasPermission moduleName ModulePermission.Read access) then
+        // Phase 730 — BOTH halves, and in this order. The permission check
+        // asks "may this caller read the module at all"; the grant check
+        // asks "is the authority behind that permission entry live". A
+        // pending or consent-revoked grant leaves the entry in place, so
+        // the first check alone admits it.
+        //
+        // This site is a data REACH rather than an enumeration, so the
+        // refusal goes through `guardToolGrant`, which emits the same
+        // `UnconsentedGrantRefused` row the Remoting seam does — an
+        // attempt on inert authority is exactly what that event records,
+        // and the cross-module family must not be the one path where it
+        // happens silently. The rendered error is deliberately identical
+        // to the permission refusal: the model is told it may not have
+        // this module, never which of the two gates stopped it.
+        if
+            not (AccessContext.hasPermission moduleName ModulePermission.Read access)
+            || not (guardToolGrant ctx access moduleName)
+        then
             return
                 fableSerialize {|
                     error = "PermissionDenied"
@@ -769,7 +814,24 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
                 message = "Required argument 'resultType' is missing."
             |}
     | Some(Some moduleName, Some resultType) ->
-        if not (AccessContext.hasPermission moduleName ModulePermission.Read access) then
+        // Phase 730 — BOTH halves, and in this order. The permission check
+        // asks "may this caller read the module at all"; the grant check
+        // asks "is the authority behind that permission entry live". A
+        // pending or consent-revoked grant leaves the entry in place, so
+        // the first check alone admits it.
+        //
+        // This site is a data REACH rather than an enumeration, so the
+        // refusal goes through `guardToolGrant`, which emits the same
+        // `UnconsentedGrantRefused` row the Remoting seam does — an
+        // attempt on inert authority is exactly what that event records,
+        // and the cross-module family must not be the one path where it
+        // happens silently. The rendered error is deliberately identical
+        // to the permission refusal: the model is told it may not have
+        // this module, never which of the two gates stopped it.
+        if
+            not (AccessContext.hasPermission moduleName ModulePermission.Read access)
+            || not (guardToolGrant ctx access moduleName)
+        then
             return
                 fableSerialize {|
                     error = "PermissionDenied"

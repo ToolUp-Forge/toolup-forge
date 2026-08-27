@@ -728,7 +728,27 @@ let tests =
                     }
                     |> run
 
-                Expect.isError outcome "an acknowledged grant is still parked by dual control"
+                // Phase 730 — this assertion was `Expect.isError`, and the
+                // sentence beside it ("still parked") is what it was TRYING
+                // to say. `grantModuleAccess` had no way to say it: it
+                // mapped every inner-store error onto
+                // `GrantRefusal.UnbackedGrant`, so a parked write was
+                // reported as a missing grant record — which is exactly
+                // what it was not, since the record had been written with
+                // the entry. Phase 730 gave the outcome a name, so the test
+                // can now assert the thing it means.
+                //
+                // This is a STRENGTHENING, not a relaxation: `isError`
+                // passed equally for a parked write, a storage outage and a
+                // policy refusal, and those want three different operator
+                // responses. The queued id is asserted against the queue
+                // below, so the outcome and the ceremony are pinned to each
+                // other rather than checked separately.
+                let queuedId =
+                    match outcome with
+                    | Ok(GrantWriteOutcome.QueuedForApproval requestId) -> requestId
+                    | other ->
+                        failtestf "an acknowledged grant is still parked by dual control, and must SAY so; got %A" other
 
                 Expect.isEmpty
                     (effectiveFor permissions "bob" "acme")
@@ -740,6 +760,11 @@ let tests =
                     | Error e -> failtestf "listing the queue failed: %s" e
 
                 Expect.hasLength pending 1 "the policy-satisfying grant IS queued"
+
+                Expect.equal
+                    queuedId
+                    pending[0].RequestId
+                    "and the id the caller was handed is the one an approver has to name"
 
                 match gate.Approve("acme", pending[0].RequestId, "admin-b") |> run with
                 | Ok(AdminMutationDecision.Applied _) -> ()

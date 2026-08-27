@@ -803,34 +803,36 @@ let grantWithCounterpartyApproval
 
 // ─── Dispatch-time enforcement (552.D) ───────────────────────────────
 
-/// **The dispatch control, Phase 551's extended by exactly one arm.**
+/// Phase 730 — the DECISION half of `guardDispatchWithConsent`, extracted
+/// so it can be asked without emitting anything.
 ///
-/// `RequiresCounterpartyApproval` is the only case that behaves
-/// differently from `GrantPolicyGuard.guardDispatch`, and it needs BOTH
-/// halves: a live consent verdict stamped for this request AND an
-/// `Active` grant record whose `SatisfiedPolicy` is the same declared arm.
-/// Every other case delegates unchanged, so a deployment with no
-/// counterparty policy runs the pre-552 path and this function is a single
-/// `match`.
+/// **Why this is a separate function rather than a flag.** Two callers
+/// need the same verdict for different purposes. The Remoting seam refuses
+/// a call and MUST audit it — an attempt on inert authority is exactly the
+/// row Phase 551 exists to produce. The AI tool registry (Phase 730)
+/// filters a governed module out of the list it offers the model, and must
+/// NOT audit: nothing was attempted, the model was never told the module
+/// existed, and a row per listing per turn would bury the refusals that do
+/// mean something under a stream that means nothing. That is the same
+/// list-filter-vs-boundary split Phase 36.A drew for RBAC.
 ///
-/// The refusal's `InertReason` carries the CONSENT denial code
-/// (`consent-revoked`, `consent-expired`, `consent-signature-invalid`, …)
-/// rather than Phase 551's flat `"counterparty-approval-unavailable"`.
-/// That is the difference between an operator seeing "this arm is not
-/// implemented" and seeing "this consent was withdrawn at 14:02" — and it
-/// arrives without a second audit event, because it is the same refusal
-/// with better evidence.
-let guardDispatchWithConsent
+/// What must never happen is the two answering differently — a module the
+/// filter hides but the guard would admit, or worse the reverse. So there
+/// is exactly one decision, here, and the two callers differ only in what
+/// they do with it.
+///
+/// `Ok ()` when the caller's entry on `moduleName` carries live authority;
+/// `Error inertReason` (the `GrantPolicy.inertReason` / `ConsentDenial.code`
+/// vocabulary) when it is present but inert.
+let dispatchVerdict
     (registry: GrantPolicyGuard.ModuleGrantPolicyRegistry)
     (grants: Map<string, ModuleGrantRecord>)
     (consentVerdicts: Map<string, Result<unit, ConsentDenial>>)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
-    (scopeId: string)
-    (userId: string)
     (moduleName: string)
-    : Result<unit, UnconsentedGrantRefusedPayload> =
+    : Result<unit, string> =
     if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
+        // No module declares a policy — the pre-551 path, taken without
+        // touching grants or verdicts.
         Ok()
     else
         match GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName with
@@ -850,18 +852,63 @@ let guardDispatchWithConsent
             match consentVerdict, recordAdequate with
             | Ok(), true -> Ok()
             | _ ->
-                let inertReason =
-                    match consentVerdict with
-                    | Error denial -> ConsentDenial.code denial
-                    // Consent stands; what is missing is the grant itself.
-                    // Named separately because "the counterparty agreed and
-                    // nobody wrote the grant" and "the grant exists and
-                    // consent was withdrawn" are opposite operator actions.
-                    | Ok() ->
-                        match record with
-                        | None -> "no-grant-record"
-                        | Some _ -> "evidence-below-declared-policy"
+                match consentVerdict with
+                | Error denial -> Error(ConsentDenial.code denial)
+                // Consent stands; what is missing is the grant itself.
+                // Named separately because "the counterparty agreed and
+                // nobody wrote the grant" and "the grant exists and
+                // consent was withdrawn" are opposite operator actions.
+                | Ok() ->
+                    match record with
+                    | None -> Error "no-grant-record"
+                    | Some _ -> Error "evidence-below-declared-policy"
+        | policy ->
+            // Every other arm is Phase 551's pure predicate, unchanged.
+            if GrantPolicy.isGrantLive policy (Map.tryFind moduleName grants) then
+                Ok()
+            else
+                Error(GrantPolicy.inertReason policy (Map.tryFind moduleName grants))
 
+/// **The dispatch control, Phase 551's extended by exactly one arm.**
+///
+/// `RequiresCounterpartyApproval` is the only case that behaves
+/// differently from `GrantPolicyGuard.guardDispatch`, and it needs BOTH
+/// halves: a live consent verdict stamped for this request AND an
+/// `Active` grant record whose `SatisfiedPolicy` is the same declared arm.
+/// Every other case delegates unchanged, so a deployment with no
+/// counterparty policy runs the pre-552 path and this function is a single
+/// `match`.
+///
+/// The refusal's `InertReason` carries the CONSENT denial code
+/// (`consent-revoked`, `consent-expired`, `consent-signature-invalid`, …)
+/// rather than Phase 551's flat `"counterparty-approval-unavailable"`.
+/// That is the difference between an operator seeing "this arm is not
+/// implemented" and seeing "this consent was withdrawn at 14:02" — and it
+/// arrives without a second audit event, because it is the same refusal
+/// with better evidence.
+///
+/// Phase 730 — the decision itself now lives in `dispatchVerdict` above,
+/// which the AI-side tool-list filter also runs. This function is that
+/// decision plus the audit emission; see `dispatchVerdict` for why the two
+/// callers must never be able to disagree.
+let guardDispatchWithConsent
+    (registry: GrantPolicyGuard.ModuleGrantPolicyRegistry)
+    (grants: Map<string, ModuleGrantRecord>)
+    (consentVerdicts: Map<string, Result<unit, ConsentDenial>>)
+    (auditLog: IAuditLog option)
+    (schedule: Async<unit> -> unit)
+    (scopeId: string)
+    (userId: string)
+    (moduleName: string)
+    : Result<unit, UnconsentedGrantRefusedPayload> =
+    if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
+        Ok()
+    else
+        match GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName with
+        | GrantPolicy.RequiresCounterpartyApproval _ as policy ->
+            match dispatchVerdict registry grants consentVerdicts moduleName with
+            | Ok() -> Ok()
+            | Error inertReason ->
                 let payload: UnconsentedGrantRefusedPayload = {
                     UserId = userId
                     ModuleName = moduleName

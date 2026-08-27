@@ -202,6 +202,120 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
         PlatformRole = platformRole
     }
 
+// ─── Phase 730 — the grant / consent gate on the AI path ─────────────
+//
+// Phases 551 and 552 each closed their own dispatch seam and each
+// recorded, in its Outcome, that this one was still open:
+// `ListAccessible` and `PlatformAITools` read `ToolUp.ModulePermissions`
+// and nothing else, so a grant that was PENDING the subject's acceptance,
+// or whose counterparty consent had been REVOKED, was inert at the
+// Remoting seam while its module stayed listed to the model and callable
+// by it. The permission entry is present in both cases — that is the
+// whole point of a pending grant — so a gate reading only the permission
+// map cannot see the difference.
+//
+// **The mechanism, decided rather than defaulted.** Phase 551 deviation 1
+// deferred a choice between two shapes and named THIS as the moment to
+// revisit it: put the grant records on `AccessContext`, or extend the
+// `HttpContext.Items` stamp. The stamp is taken, and the reasoning has
+// moved on from 551's:
+//
+//   * 551's argument still holds — `AccessContext` is a Core record
+//     embedded in downstream public surface, so a field would retype its
+//     constructor, ripple through roughly twenty construction sites, and
+//     redden every baseline that embeds it, for a value one seam reads.
+//
+//   * But the DECIDING argument is one 551 could not make, because 552
+//     had not shipped. Grant liveness is no longer a pure property of the
+//     subject. The counterparty arm's verdict is a store read plus a
+//     signature check, resolved per request precisely so a revocation
+//     bites at the next call (552.D). A `ModuleGrantRecord` on
+//     `AccessContext` would therefore be only HALF the answer — and the
+//     misleading half: `GrantPolicy.isGrantLive` returns `false` for the
+//     counterparty arm by construction, so a consumer reading the field
+//     and believing it would deny access that consent had legitimately
+//     granted. A field that cannot be right is worse than no field.
+//
+// So the verdicts ride the request, where they are resolved, and this
+// module reads them the same way `reconstructAccessContext` reads
+// permissions — with `createBackgroundContext` carrying both stamps
+// forward (730.E).
+
+/// Phase 730 — a per-module grant-liveness predicate for the acting
+/// request. Built ONCE per turn, closed over the stamps the middleware
+/// left, and applied at both the list filter and the dispatch re-check.
+///
+/// `true` means "the caller's authority on this module is live". The
+/// decision itself is `GrantConsentStore.dispatchVerdict` — the SAME
+/// function the audited Remoting-seam guard uses, so the list the model
+/// is offered and the boundary that would refuse it cannot disagree.
+///
+/// **Costs nothing when nothing is declared (GP 13 / GP 11).** A
+/// deployment declaring no `GrantPolicy` registers no
+/// `ModuleGrantPolicyRegistry`, so this is one failed `GetService` and a
+/// constant `true` — the pre-730 tool list, in the pre-730 order, byte
+/// for byte.
+///
+/// SDK-reserved tool sources (`_platform.*`, `ToolUp.*`) need no special
+/// case: they are not modules, so the registry resolves them to
+/// `AdminDiscretion`, for which the verdict is unconditionally `Ok`. The
+/// reserved-namespace exemption stays exactly where Phase 36.A put it.
+let moduleGrantGate (ctx: HttpContext) : string -> bool =
+    match ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
+    | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
+        not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
+        ->
+        let grants = GrantPolicyGuard.grantsFromItems ctx.Items
+        let verdicts = GrantConsentStore.consentVerdictsFromItems ctx.Items
+
+        fun moduleName ->
+            match GrantConsentStore.dispatchVerdict registry grants verdicts moduleName with
+            | Ok() -> true
+            | Error _ -> false
+    | _ -> fun _ -> true
+
+/// Phase 730 — the audited dispatch-time twin of `moduleGrantGate`.
+///
+/// The list filter above is silent by design (nothing was attempted). A
+/// tool the model names ANYWAY — because it planned around a stale list,
+/// or because a provider ignored the offered set — is an attempt on inert
+/// authority, and that is exactly the `UnconsentedGrantRefused` row Phase
+/// 551 exists to produce. Emitting it through the shipped guard rather
+/// than minting a second event type is deliberate: it is the same refusal
+/// at a different call site, and an operator asking "was inert authority
+/// reached for" should not have to union two streams to find out.
+///
+/// Best-effort audit, never blocking, exactly like the seam's: the
+/// control is the refusal, not the row.
+let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: string) : bool =
+    match ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
+    | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
+        not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
+        ->
+        let auditLog =
+            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as log -> Some log
+            | _ -> None
+
+        let scopeId =
+            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+            | true, (:? StorageScope as s) -> s.ScopeId
+            | _ -> access.UserId
+
+        let verdict =
+            GrantConsentStore.guardDispatchWithConsent
+                registry
+                (GrantPolicyGuard.grantsFromItems ctx.Items)
+                (GrantConsentStore.consentVerdictsFromItems ctx.Items)
+                auditLog
+                Async.Start
+                scopeId
+                access.UserId
+                moduleName
+
+        Result.isOk verdict
+    | _ -> true
+
 /// Phase 36.A — the machine-readable verdict every unauthorized-tool
 /// denial carries on its `AuthorizationDenied` audit row. Stable: the
 /// `/dev/auth-denials` rollup and any operator query cut on it.
@@ -431,8 +545,48 @@ type AIToolRegistry() =
     ///
     /// An unrestricted context (empty `ModulePermissions`) returns the
     /// same list `GetAll` does, in the same order (GP 11).
-    member _.ListAccessible(access: AccessContext) : RegisteredTool list =
-        tools |> List.filter (fun t -> isToolPermittedFor access t.Definition)
+    ///
+    /// **Phase 730 — this arity is the ungated one and is preserved
+    /// exactly.** It admits every tool the RBAC filter admits, taking no
+    /// view on grant policy, which is precisely its pre-730 behaviour.
+    /// Kept rather than widened with an optional parameter, because an
+    /// optional argument folds into ONE method and would delete this
+    /// token from the public-API baseline — a genuine break under the
+    /// documented Phase 175 rule (the same reasoning that gave Phase 552's
+    /// decorator two explicit constructors). Every SDK call site moves to
+    /// the two-argument overload below; a consumer calling this one keeps
+    /// what it had.
+    member this.ListAccessible(access: AccessContext) : RegisteredTool list =
+        this.ListAccessible(access, (fun _ -> true))
+
+    /// Phase 730 — the tools this caller may reach, filtered by BOTH the
+    /// Phase 36.A per-module `Read` permission and `isModuleGrantLive`,
+    /// the grant / consent gate.
+    ///
+    /// The second filter is what closes the gap Phases 551 and 552 each
+    /// recorded: a permission entry is PRESENT for a grant awaiting the
+    /// subject's acceptance, and present for one whose counterparty
+    /// consent was revoked, so the RBAC filter alone admits both. Build
+    /// the predicate with `moduleGrantGate` — it reads the request's own
+    /// stamps and shares its decision with the seam that would refuse the
+    /// call.
+    ///
+    /// Order of filters is not observable (both are pure predicates over
+    /// the same list) but is written permission-first deliberately: a tool
+    /// the caller cannot read at all should not reach a grant lookup.
+    ///
+    /// There is deliberately NO reserved-namespace short-circuit here,
+    /// although `isToolSourcePermittedFor` has one. It would be redundant
+    /// — a reserved source is not a module, so the policy registry
+    /// resolves it to `AdminDiscretion` and the verdict is unconditionally
+    /// live — and, worse, it would make this filter and the dispatch-time
+    /// `guardToolGrant` structurally different. Two gates that must agree
+    /// should share their whole decision, not most of it.
+    member _.ListAccessible(access: AccessContext, isModuleGrantLive: string -> bool) : RegisteredTool list =
+        tools
+        |> List.filter (fun t ->
+            isToolPermittedFor access t.Definition
+            && isModuleGrantLive t.Definition.SourceModule)
 
     /// Phase 709 — claim the one budget-elision Warn allowed for this
     /// tool. Returns `true` exactly once per tool name per registry;

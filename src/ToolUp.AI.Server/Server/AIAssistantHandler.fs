@@ -279,7 +279,41 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // the list in lockstep with that middleware is part of the
     // "Phase 6a extract SSE into a generic notification channel" work —
     // a typed `RequestContext` would remove this stringly-typed coupling.
-    let itemsToCopy = [ "ToolUp.StorageScope"; "ToolUp.UserId"; "ToolUp.ModulePermissions" ]
+    //
+    // **Phase 730 — this list was SHORT, and its shortness was a defect.**
+    // Phase 36.A recorded it as an out-of-scope finding: three of the six
+    // items `reconstructAccessContext` reads were dropped, so the agent
+    // loop rebuilt `Subject` from the scope-container prefix rather than
+    // carrying the one the request resolved, and `ModuleExposure` /
+    // `PlatformRole` arrived empty. Harmless for 36.A's own gate, which
+    // reads only `ModulePermissions` — but it means every authorization
+    // row the loop emits attributes a subject it inferred, and the whole
+    // point of resolving a subject once is that nothing downstream has to
+    // guess.
+    //
+    // The two grant stamps are the new arrivals and they are load-bearing
+    // for 730.D. Both are resolved PER REQUEST by the middleware — the
+    // consent verdicts especially, because 552.D's whole promise is that a
+    // revocation bites at the next call rather than the next sweep. A
+    // background context that did not carry them would leave the tool gate
+    // reading `Map.empty`, which reads as "no grant, no consent" and would
+    // therefore fail CLOSED rather than open. Safe, but wrong in the other
+    // direction: every governed module would vanish from the model's tool
+    // list even for a subject who legitimately holds it.
+    let itemsToCopy = [
+        "ToolUp.StorageScope"
+        "ToolUp.UserId"
+        "ToolUp.ModulePermissions"
+        // Phase 730 — the three Phase 36.A dropped.
+        "ToolUp.Subject"
+        "ToolUp.ModuleExposure"
+        "ToolUp.PlatformRole"
+        // Phase 730 — the Phase 551 / 552 grant + consent stamps. Named
+        // through the constants that DEFINE them, not re-spelled, so a
+        // rename moves both ends together.
+        GrantPolicyGuard.ModuleGrantsItemsKey
+        GrantConsentStore.ModuleGrantConsentsItemsKey
+    ]
 
     for key in itemsToCopy do
         match ctx.Items.TryGetValue key with
@@ -1329,7 +1363,14 @@ let aiAssistantApi
                     | :? AccessContext as ac -> ac
                     | _ -> AIToolRegistry.reconstructAccessContext ctx
 
-                return registry.ListAccessible toolAccess |> List.map _.Definition
+                // Phase 730 — grant-gated for the same reason the listing
+                // is permission-gated: enumerating the tool surface of a
+                // module whose grant is pending or consent-revoked tells
+                // the caller what they would have had, which is the fact
+                // the grant policy is withholding.
+                return
+                    registry.ListAccessible(toolAccess, AIToolRegistry.moduleGrantGate ctx)
+                    |> List.map _.Definition
             }
 
         GetTaskStatus =
