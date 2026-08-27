@@ -335,55 +335,57 @@ jobs:
   # stays generous but finite: a hang must fail loudly rather than burn
   # the 6-hour default, which is exactly how (1) was caught.
   #
-  # ── The CloudParity emulator legs are NOT armed here. Deliberate. ──
+  # ── The CloudParity emulator legs are NOT armed IN THIS JOB ─────────
   #
-  # `CloudParity` is one of the fourteen packs below, so it RUNS on every
-  # push — but all nine of its emulator legs (3 seams x 3 clouds) report
-  # `pending` here, because none of the `TOOLUP_PARITY_*` variables is
-  # set and no emulator is booted. Only its 7 always-on cases (the
-  # divergence fixture + the seam ratchets) actually gate. That posture
-  # is named here rather than left to be re-derived, because a pack that
-  # is green while measuring nothing is the failure mode this whole
+  # `CloudParity` is one of the fourteen packs below, so it RUNS here on
+  # every push — but all nine of its emulator legs (3 seams x 3 clouds)
+  # report `pending` in THIS job, because none of the `TOOLUP_PARITY_*`
+  # variables is set here and no emulator is booted. Only its 7 always-on
+  # cases (the divergence fixture + the seam ratchets) gate here. That
+  # posture is named rather than left to be re-derived, because a pack
+  # that is green while measuring nothing is the failure mode this whole
   # matrix exists to avoid.
   #
-  # Arming it is cheap and the machinery is ready: `docker` is already
-  # present on `ubuntu-latest` (the container-scheduler leg below relies
-  # on that), `compose.parity.yml` at the repo root brings the emulators
-  # up in one command, and the exact recipe is in
-  # docs/migrations/193-multi-cloud-parity-conformance-matrix.md.
+  # **The Azurite leg IS armed, in the separate `cloud-parity` job below**
+  # (Phase 733, 2026-08-27). Read that job's header for why it is separate
+  # rather than two lines added here, which is what Phase 732's recorded
+  # recipe called for — the short version is that this job's summary
+  # carries per-pack PASS/FAIL and no case COUNT, so an arming placed here
+  # could not be proven non-vacuous, and "armed but silently still
+  # pending" is precisely the trap this matrix exists to catch.
   #
-  # It is not armed because no blob leg is green yet. Phase 732's first
-  # run measured 87 cases armed, 78 passing, 16 red; the same-day
-  # AggregateException fix in the AWS Secrets Manager and GCS companions
-  # brought that to 81 passing, 6 red. Arming a red leg would land a
-  # knowingly-red gate, and a gate that is red on arrival is one people
-  # learn to step over — which costs more than the check earns. The
-  # alternative, arming a leg with its red cases excluded, trades a gate
-  # for a tick and is refused for the same reason Phase 614 refused it.
+  # State of the three legs as measured on 2026-08-27 (Phase 733), armed
+  # locally against the full `compose.parity.yml` lane:
   #
-  # The two blockers, neither a CI-setup problem and neither fixable in
-  # a workflow file:
+  #   * **Azure/Azurite — 27/27. Armed in CI.**
+  #   * **Aws/LocalStack — 36/36. Green, and the next arming candidate.**
+  #     Not taken in the same pass only to keep one unproven CI surface at
+  #     a time; it needs more than Azurite does (the `localstack-init`
+  #     bucket service, `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, and
+  #     `TOOLUP_PARITY_LOCALSTACK` + `_SECRETS` + `_SECRETS_ENDPOINT`).
+  #     Take it by adding those to the `cloud-parity` job and raising its
+  #     case floor.
+  #   * **Gcp/fake-gcs-server — 22/27. NOT armable.** All five reds are one
+  #     cause: the Google client validates a ranged download against the
+  #     object's WHOLE-OBJECT checksum and fake-gcs-server returns that
+  #     hash on a partial response, so no ranged read that returns bytes
+  #     can validate. Real GCS suppresses hash validation for ranged
+  #     requests, so this is emulator fidelity, not a companion defect —
+  #     and settling which side is at fault needs a live-account binding,
+  #     not this emulator. Do not arm it, and do not "fix" it by relaxing
+  #     the companion's checksum handling to suit the emulator.
   #
-  #   1. `DownloadRange past EOF returns Ok [||]` fails on Azure (416
-  #      InvalidRange) and AWS (416 not-satisfiable). The contract
-  #      encodes local-only behaviour those companions do not normalise.
-  #      Resolving it is a contract decision, not a bug fix. (GCS
-  #      already normalises 416 and passes since the 2026-08-27 fix.)
-  #   2. Four GCP `DownloadRange` cases fail on fake-gcs-server's
-  #      whole-object checksum being returned for partial responses —
-  #      an emulator-fidelity limit, not a companion defect.
+  # Phase 732 left two blockers here. The first is CLOSED and was not what
+  # it looked like: `DownloadRange past EOF returns Ok [||]` failed on all
+  # three clouds, which read as the contract encoding local-only behaviour
+  # the companions refused to normalise. It was not a contract
+  # disagreement at all — all three companions already mapped 416 to
+  # `Ok [||]` deliberately, and the catch clause was UNREACHABLE because
+  # the vendor exception arrives wrapped in `AggregateException`. See the
+  # decision recorded on `IBlobStorage.DownloadRange`. The second blocker
+  # is the GCP checksum limit above, now understood and scoped to one leg.
   #
-  # The `ISecretStore`-on-LocalStack leg (TOOLUP_PARITY_LOCALSTACK_SECRETS
-  # + _ENDPOINT) now scores 9/9 — the wrapped-vendor-exception defect
-  # that had it at 1/9 was fixed 2026-08-27 — so it and the Azurite leg
-  # are the arming candidates:
-  #
-  # **Arm the Azurite leg first** once (1) and the Azure half of the
-  # audit story are settled: it is the cheapest (one container, no init
-  # service, no credentials) and already scores 25/26. Two steps —
-  # `docker compose -f compose.parity.yml up -d --wait azurite` and
-  # `TOOLUP_PARITY_AZURITE: UseDevelopmentStorage=true` in the `env:`
-  # of the VerifyAll step. Do not arm a leg while it has a red case.
+  # Do not arm a leg while it has a red case.
   verify-all:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -653,6 +655,124 @@ jobs:
             echo "::error::Only ${passed} pack(s) ran; expected at least ${EXPECTED_PACKS}. A short run means the pack list shrank or VerifyAll no-opped, not that the suite got faster. Check BuildConfig.TestPacks in Build.fs before lowering EXPECTED_PACKS."
             exit 1
           fi
+
+  # ─── The armed cloud-parity leg (Phase 733) ─────────────────────────
+  #
+  # Runs the `CloudParity` pack with the **Azurite** leg armed, so the
+  # `IBlobStorage` and `IAuditSink` contract packs actually execute
+  # against a real Azure Blob implementation on every push. Until now
+  # every leg of the Phase 193 matrix was permanently `pending` in CI and
+  # the matrix gated nothing but its own 7 always-on cases.
+  #
+  # ── Why a separate job, when the recorded recipe said two lines in
+  #    `verify-all` ──
+  #
+  # Phase 732 wrote the arming recipe as "`up -d --wait azurite` plus one
+  # env var on the VerifyAll step". That is the smaller edit and it was
+  # nearly taken. Three things argued against it, and all three are about
+  # this gate being able to prove itself:
+  #
+  #   1. **`verify-all`'s summary carries no case COUNT.** It reports
+  #      per-pack PASS / FAIL, and a pack whose legs all report `pending`
+  #      reports PASS. So an arming placed there is invisible if it
+  #      fails: the leg silently returns to `pending`, the pack passes,
+  #      and CI claims to be measuring three clouds while measuring none.
+  #      That is the exact "3-pending is the failed-arming signature, not
+  #      a pass" trap `compose.parity.yml` and the Phase 193 doc both
+  #      warn about, and it is why the run below asserts a case FLOOR —
+  #      the same shape as `EXPECTED_PACKS` above and `VerifyFable`'s TAP
+  #      floor. Neither existing test gate is allowed to pass vacuously;
+  #      this one should not be either.
+  #   2. **`verify-all` has a documented memory-kill history** (the
+  #      exit-143 block above). Adding a second build and a container to
+  #      that job spends headroom that was hard-won.
+  #   3. **Attribution.** A red here means "a cloud companion diverged
+  #      from the shared contract", which is a different diagnosis from
+  #      any other failure in the fourteen-pack aggregate and deserves
+  #      its own red square.
+  #
+  # It builds ONE project rather than the solution (~1 min vs ~7), since
+  # the pack's dependency closure is Core plus the nine companions it
+  # binds. `CloudParity` still runs inside `verify-all` too, unarmed, so
+  # its always-on cases keep gating there and this job's failure modes
+  # stay disjoint from that one's.
+  cloud-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      # Only `azurite` — naming the service keeps LocalStack, fake-gcs and
+      # the two init containers out of this job entirely. `--wait` blocks
+      # on the healthcheck in `compose.parity.yml` and exits non-zero if
+      # it never goes healthy, so a boot failure fails HERE with a name on
+      # it rather than surfacing later as an armed-but-unreachable leg.
+      - name: Boot Azurite
+        run: docker compose -f compose.parity.yml up -d --wait azurite
+
+      - name: Build the CloudParity pack
+        run: dotnet build src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj -c Debug
+
+      # Invoke the built dll directly, per the Phase 731 finding that
+      # `dotnet run --project` intermittently hangs before the suite
+      # starts. The pack exits non-zero on failure, but the assertions
+      # below are the gate — read the COUNT, never the exit code.
+      - name: Run the parity pack with the Azurite leg armed
+        env:
+          TOOLUP_PARITY_AZURITE: UseDevelopmentStorage=true
+          # Measured 34 on 2026-08-27: 7 always-on cases + 27 armed Azure
+          # cases (21 IBlobStorage + 6 IAuditSink). Unarmed the pack runs
+          # 7. The floor's job is to separate those two, and to catch a
+          # whole seam leg vanishing (dropping IAuditSink would give 28).
+          # It is a LOWER bound, so ADDING a contract case never needs an
+          # edit here — only deliberately removing one does.
+          MIN_CASES: 30
+        run: |
+          set -uo pipefail
+          dotnet src/ToolUp.Cloud.Parity.Tests/bin/Debug/net10.0/ToolUp.Cloud.Parity.Tests.dll 2>&1 | tee parity-raw.log || true
+          sed 's/\x1b\[[0-9;]*m//g' parity-raw.log > parity.log
+
+          summary=$(grep -oE 'EXPECTO! [0-9]+ tests run .*errored' parity.log | tail -1 || true)
+          if [ -z "${summary}" ]; then
+            echo "::error::The parity pack printed no Expecto summary line — it did not complete. Read parity.log in this job's output."
+            exit 1
+          fi
+          echo "summary: ${summary}"
+
+          run=$(printf '%s' "${summary}" | grep -oE 'EXPECTO! [0-9]+' | grep -oE '[0-9]+')
+          failed=$(printf '%s' "${summary}" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+')
+          errored=$(printf '%s' "${summary}" | grep -oE '[0-9]+ errored' | grep -oE '[0-9]+')
+
+          if [ "${run}" -lt "${MIN_CASES}" ]; then
+            echo "::error::Only ${run} parity cases ran; expected at least ${MIN_CASES}. The Azurite leg did NOT arm — it has fallen back to reporting 'pending', which the pack counts as ignored and which would otherwise pass silently. Check that Azurite booted and that TOOLUP_PARITY_AZURITE reached the process."
+            exit 1
+          fi
+          if [ "${failed}" -ne 0 ] || [ "${errored}" -ne 0 ]; then
+            echo "::error::${failed} failed / ${errored} errored parity case(s). A red here means an IBlobStorage or IAuditSink implementation diverged from the shared contract pack — fix the companion, never the contract case."
+            exit 1
+          fi
+
+      - name: Tear down the emulator lane
+        if: always()
+        run: docker compose -f compose.parity.yml down -v
 
   # Gate 2 of 2 — the client-tier harness. Fable-transpiled F# run under
   # Node's built-in `node:test`; it is the only place the Platform.Client

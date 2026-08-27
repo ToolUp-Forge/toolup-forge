@@ -9,7 +9,10 @@
 #
 #     $env:TOOLUP_PARITY_AZURITE                       = "UseDevelopmentStorage=true"
 #     $env:TOOLUP_PARITY_LOCALSTACK                    = "http://localhost:4566"
-#     $env:TOOLUP_PARITY_FAKEGCS                       = "http://localhost:4443"
+#     # The `/storage/v1/` path is LOAD-BEARING — see the fake-gcs
+#     # service note below and the Phase 193 migration doc. Pointed at a
+#     # bare host, every GCS call 404s.
+#     $env:TOOLUP_PARITY_FAKEGCS                       = "http://localhost:4443/storage/v1/"
 #     $env:TOOLUP_PARITY_LOCALSTACK_SECRETS            = "us-east-1"
 #     $env:TOOLUP_PARITY_LOCALSTACK_SECRETS_ENDPOINT   = "http://localhost:4566"
 #

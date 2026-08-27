@@ -46,6 +46,28 @@ module AwsS3StorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
+/// AWS SDK exceptions can surface at this companion's `with` handlers
+/// wrapped in `AggregateException`, so a direct `:? AmazonS3Exception`
+/// test never fires. Measured by the armed cloud-parity run (Phase 733,
+/// 2026-08-27): the `RequestedRangeNotSatisfiable` arm of `DownloadRange`
+/// sat dead and a fully-past-EOF range returned `Error "One or more errors
+/// occurred. (The requested range is not satisfiable)"` instead of the
+/// contract's `Ok [||]`. The 404 arms were unaffected in EFFECT only
+/// because their fall-through is also an `Error` — the semantic 416 arm is
+/// the one where being unreachable changes an answer.
+///
+/// Match through the wrapper: flatten and take the single inner exception
+/// a one-Task await carries; a bare exception passes through unchanged, so
+/// an unmatched case still rethrows the original. Mirrors the pattern
+/// `ToolUp.Storage.GoogleCloudStorage` carries for the same class.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 // Returns the concrete `AmazonS3Client`. Under AWS SDK v4 `IAmazonS3`
 // carries static abstract members, so naming it as an ordinary type
 // raises FS3536 (IWSAM-as-type); the client is only ever used through
@@ -144,12 +166,15 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                     do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                     return Ok(ms.ToArray())
                 with
-                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+                | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                     return Error $"Blob not found: {toolupContainer}/{blobName}"
-                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
-                    // Past-EOF clamp per the interface contract.
+                | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
+                    // Fully past EOF → `Ok [||]` per the interface
+                    // contract. Matched through `Unwrapped` because S3's
+                    // 416 arrives wrapped; see the pattern's doc-comment
+                    // for what that cost.
                     return Ok Array.empty
-                | ex -> return Error ex.Message
+                | Unwrapped ex -> return Error ex.Message
         }
 
         member _.Delete(toolupContainer, blobName) = async {

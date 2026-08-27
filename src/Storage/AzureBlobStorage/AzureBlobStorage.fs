@@ -56,6 +56,27 @@ module AzureBlobStorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
+/// Azure SDK exceptions can surface at this companion's `with` handlers
+/// wrapped in `AggregateException`, so a direct `:? RequestFailedException`
+/// test never fires. Measured by the armed cloud-parity run (Phase 733,
+/// 2026-08-27): the `Status = 416` arm of `DownloadRange` sat dead and a
+/// fully-past-EOF range returned `Error "One or more errors occurred. …"`
+/// instead of the contract's `Ok [||]`. The 404 arms were unaffected in
+/// EFFECT only because their fall-through is also an `Error` — the
+/// semantic 416 arm is the one where being unreachable changes an answer.
+///
+/// Match through the wrapper: flatten and take the single inner exception
+/// a one-Task await carries; a bare exception passes through unchanged, so
+/// an unmatched case still rethrows the original. Mirrors the pattern
+/// `ToolUp.Storage.GoogleCloudStorage` carries for the same class.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 // ─── IBlobStorage implementation ─────────────────────────────────────
 
 /// Azure Blob Storage implementation of `IBlobStorage`. Maps ToolUp's
@@ -160,12 +181,15 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                     let! response = blob.DownloadContentAsync options |> Async.AwaitTask
                     return Ok(response.Value.Content.ToArray())
                 with
-                | :? RequestFailedException as ex when ex.Status = 404 ->
+                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                     return Error $"Blob not found: {toolupContainer}/{blobName}"
-                | :? RequestFailedException as ex when ex.Status = 416 ->
-                    // Past-EOF clamp per the interface contract.
+                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 416 ->
+                    // Fully past EOF → `Ok [||]` per the interface
+                    // contract. Matched through `Unwrapped` because
+                    // Azure's 416 arrives wrapped; see the pattern's
+                    // doc-comment for what that cost.
                     return Ok Array.empty
-                | ex -> return Error ex.Message
+                | Unwrapped ex -> return Error ex.Message
         }
 
         member _.Delete(toolupContainer, blobName) = async {
