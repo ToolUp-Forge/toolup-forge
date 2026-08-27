@@ -230,9 +230,9 @@ and AIProviderRequest = {
 }
 
 and AIProviderResponse = {
-    Messages: AIProviderMessage list
-    StopReason: StopReason
+    Content: string                     // the assistant turn's text, already concatenated
     ToolCalls: AIProviderToolCall list
+    StopReason: string                  // provider-native, passed through unnormalised
     Usage: TokenUsage option
 }
 
@@ -243,9 +243,9 @@ and AIProviderMessage = {
 }
 
 and AIProviderToolCall = {
-    ToolCallId: string
+    Id: string
     Name: string
-    Arguments: JsonValue
+    Arguments: string   // raw JSON, parsed by the tool's own executor
 }
 
 and TokenUsage = {
@@ -408,7 +408,8 @@ module SystemPromptBuilder =
 ```fsharp skip=signature
 type RegisteredTool = {
     Definition: AIToolDefinition
-    Source: ToolSource           // PlatformBuiltin | ModuleDeclared of moduleName | CompanionContributed of companionName
+    ProviderDef: AIProviderToolDef                        // the provider-facing projection
+    Execute: HttpContext -> string -> Async<string>       // request ctx -> raw JSON args -> raw JSON result
 }
 
 module AIToolRegistry =

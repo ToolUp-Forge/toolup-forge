@@ -49,11 +49,15 @@ Methods invoked exclusively at compose time MAY return `unit` synchronously rath
 Retry, backoff, and dead-letter behaviour are expressed as records (e.g. `RetryPolicy`). Callback parameters like `OnFailure: exn -> unit` or supervision-strategy objects leak framework semantics.
 
 ```fsharp skip=fragment
-// Good
+// Good — the shipped shape. Backoff is exponential:
+// min(InitialBackoff * 2^(attempt-1), MaxBackoff). MaxAttempts is
+// inclusive. DeadLetterDestination is a free-form downstream target a
+// companion interprets against its own conventions.
 type JobRetryPolicy = {
     MaxAttempts: int
-    BackoffSeconds: int list
-    DeadLetterAfter: TimeSpan option
+    InitialBackoff: TimeSpan
+    MaxBackoff: TimeSpan
+    DeadLetterDestination: string option
 }
 
 // Bad — exposes Akka-specific supervision semantics

@@ -54,10 +54,19 @@ Phase 9 makes the audit log queryable through `IAuditLog.GetAuditTrail`. Phase 9
 ```fsharp
 type IAuditSink =
     abstract Name: string
-    abstract Deliver: batch: AuditEvent list -> Async<Result<unit, string>>
+    abstract SchemaVersion: int
+    abstract Deliver: batch: AuditEnvelope list -> Async<Result<unit, string>>
 ```
 
-`Name` is the deployment-unique sink identifier — the `AuditReplicator` keys cursors by it. `Deliver` is the single delivery primitive; the sink is a stateless transport, all batching / retry / dead-letter / cursor management lives in the dispatcher.
+`Name` is the deployment-unique sink identifier — the `AuditReplicator` keys cursors by it.
+`SchemaVersion` is the wire version the sink emits, so a downstream consumer can tell one payload
+shape from another without inspecting the payload. `Deliver` is the single delivery primitive; the
+sink is a stateless transport, and all batching / retry / dead-letter / cursor management lives in
+the dispatcher.
+
+The batch element is `AuditEnvelope`, not the `AuditEvent` DU: replication carries the *stored*
+record — the event plus the scope, actor, and timestamp the log stamped on it — because a sink
+delivering a bare event would be exporting something an auditor cannot attribute.
 
 `AuditReplicator` (`Server/AuditReplicator.fs`) is the SDK-default `BackgroundService`. Constructed in `compose` only when `ServerApp.AuditSinks` is non-empty; deployments without external replication pay zero runtime cost (no DI registration, no decorator, no hosted service).
 

@@ -27,13 +27,19 @@ let private config = activeConfig ()
 // per-assembly render (each render still spins its own MetadataLoadContext).
 let private pool = lazy (resolverPool root config)
 
-let private packable = lazy (discoverPackable root config)
+let private packable = lazy (discoverPackable root)
 
+// Phase 731: an unbuilt tree is ONE fact, so it is reported once — by
+// `buildPrecondition` below. The DLL is resolved HERE, at case execution,
+// rather than snapshotted during discovery at process start, so a build
+// landing mid-run is seen. A case whose assembly is not built defers to
+// that single finding instead of restating it; the precondition case
+// itself fails, so an unbuilt tree still leaves the pack red.
 let private assemblyCase (a: PackableAssembly) = test a.Name {
-    match a.DllPath with
+    match resolveDll config a with
     | None ->
-        failtestf
-            "%s: no DLL in bin/%s/net10.0 — run `dotnet build ToolUp.Forge.sln` before the Public-API gate (the canonical VerifyAll gate builds the solution first, so every Debug DLL is present)."
+        skiptestf
+            "%s: not built in bin/%s/net10.0 — deferring to the 'the solution is built' precondition, which names the whole set once."
             a.Name
             config
     | Some dll ->
@@ -98,7 +104,98 @@ let private assemblyCases =
                     "TOOLUP_APPROVE_API names assemblies that are not in the discovered packable set — nothing would have been regenerated for them. Check the spelling, or build the solution first."
         }
 
+        // Phase 731 — THE precondition, failed once. Every per-assembly
+        // case above defers to this one when its DLL is absent, so an
+        // unbuilt tree produces a single finding naming the set rather
+        // than 52 assertion failures that read like a surface break.
+        //
+        // Scoped to the regeneration scope when one is set: under
+        // `TOOLUP_APPROVE_API=ToolUp.Platform.Core` the untargeted
+        // baselines are neither rewritten nor consulted, so requiring
+        // them built would fail a run for something the operator
+        // deliberately excluded. Unscoped — which includes every ordinary
+        // comparison run — it covers the whole discovered set.
+        test "the solution is built" {
+            let inScope =
+                match approveScope () with
+                | None -> packable.Value
+                | Some names ->
+                    packable.Value
+                    |> List.filter (fun a ->
+                        names
+                        |> Set.exists (fun n -> n.Equals(a.Name, System.StringComparison.OrdinalIgnoreCase)))
+
+            match describeUnbuilt config inScope.Length (unbuiltAssemblies config inScope) with
+            | None -> ()
+            | Some report -> failtest report
+        }
+
         yield! packable.Value |> List.map assemblyCase
+    ]
+
+// ── Phase 731: the precondition report is the load-bearing logic, and a
+//    guard whose only evidence is that it passed on a built tree has not
+//    been shown able to fire. Pin both directions and the wording that
+//    keeps it distinguishable from a surface break. ──
+let private preconditionFixtures =
+    let fake name = {
+        Name = name
+        ProjectPath = sprintf "src/%s/%s.fsproj" name name
+        ProjectDir = sprintf "src/%s" name
+    }
+
+    testList "build precondition" [
+        test "a fully built set reports nothing" {
+            Expect.isNone (describeUnbuilt "Debug" 3 []) "every assembly built must not fail the gate"
+        }
+
+        test "an unbuilt assembly is named, with the remedy and the not-a-break wording" {
+            let report =
+                Expect.wantSome
+                    (describeUnbuilt "Debug" 3 [ fake "ToolUp.RAG.StaticCorpus.Core" ])
+                    "an unbuilt assembly must fail the gate"
+
+            Expect.stringContains report "ToolUp.RAG.StaticCorpus.Core" "the unbuilt assembly must be named"
+            Expect.stringContains report "dotnet build ToolUp.Forge.sln" "the remedy must be named"
+            Expect.stringContains report "PRECONDITION" "a missing build must be named as a precondition"
+
+            Expect.isFalse
+                (report.Contains "BREAKING")
+                "an unbuilt tree is not a public-surface break and must never be reported as one"
+        }
+
+        test "a large missing set is bounded and says how much it elided" {
+            let missing = [ for i in 1..52 -> fake (sprintf "ToolUp.Companion%02d" i) ]
+
+            let report =
+                Expect.wantSome (describeUnbuilt "Debug" 52 missing) "an unbuilt tree must fail the gate"
+
+            Expect.stringContains report "52 of 52" "the count must be named"
+            Expect.stringContains report "ToolUp.Companion01" "the sample must start at the first missing assembly"
+            Expect.stringContains report "and 47 more" "the elided remainder must be counted, not silently dropped"
+
+            Expect.isFalse
+                (report.Contains "ToolUp.Companion50")
+                "the sample must be bounded — printing 52 names is the wall of text this replaces"
+        }
+
+        test "resolveDll reads the filesystem at call time, not at discovery" {
+            // The whole point of Phase 731.A: an assembly whose bin/ does
+            // not exist resolves to None NOW, and would resolve to Some
+            // the moment a build put a DLL there — no snapshot involved.
+            let absent = {
+                Name = "ToolUp.NotOnDisk"
+                ProjectPath = "src/ToolUp.NotOnDisk/ToolUp.NotOnDisk.fsproj"
+                ProjectDir = Path.Combine(Path.GetTempPath(), "toolup-731-no-such-dir")
+            }
+
+            Expect.isNone (resolveDll "Debug" absent) "an unbuilt project must resolve to None"
+
+            Expect.equal
+                (unbuiltAssemblies "Debug" [ absent ] |> List.map _.Name)
+                [ "ToolUp.NotOnDisk" ]
+                "the unbuilt filter must report exactly the assemblies with no DLL"
+        }
     ]
 
 // ── Synthetic fixtures: the comparer is the load-bearing logic; pin
@@ -237,5 +334,6 @@ let tests =
         comparerFixtures
         messageFixtures
         obsoleteSeamFixtures
+        preconditionFixtures
         assemblyCases
     ]

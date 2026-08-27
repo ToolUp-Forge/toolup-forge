@@ -19,7 +19,7 @@ IVectorStore.Search                IEmbeddingCache (LRU; SHA256 keys)
 scope-access filter (AccessContext.TeamId)
    │
    ▼
-MergeStrategy (DenseOnly | SparseOnly | DenseSparseHybrid | DenseSparseRerank)
+MergeStrategy (Interleaved | Separate) — how SCOPES combine, not which stages ran
    │
    ▼
 truncate to SnippetCharLimit
@@ -68,35 +68,38 @@ operator swaps IEmbeddingProvider  ──→  ReembeddingQueue.Enqueue scope
 
 ```fsharp
 type IVectorStore =
-    abstract Index: VectorScope -> ChunkVector -> Async<unit>
-    abstract Search: VectorScope list -> queryVec: float32[] -> topK: int -> minScore: float -> Async<VectorMatch list>
-    abstract DeleteChunk: VectorScope -> chunkId: Guid -> Async<unit>
-    abstract DeleteByScope: VectorScope -> Async<unit>
-    abstract Vacuum: VectorScope -> retainTombstones: TimeSpan -> Async<int>
-    abstract ListChunks: VectorScope -> Async<ChunkVector list>
+    // The chunk id is supplied BY THE CALLER, not minted by the store —
+    // that is what makes Upsert idempotent and re-embedding a document
+    // an overwrite rather than a duplicate.
+    abstract Upsert: scope: VectorScope * chunkId: string * vector: float32[] * chunk: TextChunk -> Async<unit>
+    abstract Search: scopes: VectorScope list * queryVec: float32[] * topK: int -> Async<VectorMatch list>
+    abstract DeleteChunk: scope: VectorScope * chunkId: string -> Async<unit>
+    abstract RestoreChunk: scope: VectorScope * chunkId: string -> Async<unit>
+    abstract DeleteByScope: scope: VectorScope -> Async<unit>
+    abstract Vacuum: scope: VectorScope * olderThan: DateTimeOffset -> Async<int>
+    abstract ListChunks: scope: VectorScope * includeDeleted: bool -> Async<(string * TextChunk) list>
     abstract ListScopes: unit -> Async<VectorScope list>
 
-and ChunkVector = {
-    Id: Guid
-    Text: string
-    Vector: float32[]
-    Metadata: Map<string, string>   // includes _embedProvider / _embedModel / _embedDim
-    Origin: ChunkOrigin
-}
-
+// A match is flat: the store returns the chunk's content and metadata
+// beside the score, never the embedding, which stays inside the store.
 and VectorMatch = {
-    Chunk: ChunkVector
+    ChunkId: string
+    Content: string
     Score: float
+    Scope: VectorScope
+    Metadata: Map<string, string>   // includes _embedProvider / _embedModel / _embedDim
 }
 
 and VectorScope =
-    | Platform               // universally readable for authenticated callers (when PlatformKnowledgeBase enabled)
-    | Deployment             // universally readable across teams; rare
+    | Platform               // cross-team global knowledge; only Platform Admins may write
+    | Deployment             // shared across every team on one deployment
     | Team of teamId: string
     | User of userId: string
-
-and ChunkOrigin = UserContent | Narrative | Note | Synthetic
 ```
+
+`DeleteChunk` is a **soft** delete — the tombstone is a `_deletedAt` metadata stamp that `Search`
+filters out, `RestoreChunk` clears, and `Vacuum` hard-removes past a retention cutoff. That is why
+deletion and vacuuming are two calls rather than one.
 
 ### Default `InMemoryVectorStore`
 
@@ -129,28 +132,32 @@ The `IVectorStore` contract is portable; the shared contract cases (deterministi
 
 ```fsharp
 type IRetrievalPipeline =
-    abstract Retrieve: RetrievalRequest -> AccessContext -> Async<VectorMatch list>
-    abstract Index: VectorScope -> TextChunk -> Async<unit>
+    abstract Retrieve: request: RetrievalRequest * ctx: AccessContext -> Async<VectorMatch list>
+    abstract Index: chunkId: string * chunk: TextChunk * scope: VectorScope -> Async<unit>
+    abstract DeleteByScope: scope: VectorScope -> Async<unit>
 
+// An excerpt — the record also carries History, AdaptiveK, ActiveModule
+// and FactClause. Construct via RetrievalRequest.create to default them.
 and RetrievalRequest = {
     Query: string
-    RequestedScopes: VectorScope list   // caller's intent
+    Scopes: VectorScope list            // caller's intent, ordered by preference
     TopK: int
-    MinScore: float
-    MergeStrategy: MergeStrategy
-    OriginFilter: ChunkOrigin list option
+    Merge: MergeStrategy
+    Filters: Map<string, string> option // AND-combined metadata equality
+    OriginFilter: Set<ChunkOrigin> option
 }
 
+// How results from SEVERAL SCOPES are combined. Dense / sparse / rerank
+// staging is pipeline configuration, not a caller-supplied strategy —
+// registering an IReranker changes the pipeline, not this request.
 and MergeStrategy =
-    | DenseOnly                  // cosine similarity only
-    | SparseOnly                 // BM25 only (term overlap)
-    | DenseSparseHybrid          // weighted combination
-    | DenseSparseRerank          // hybrid + cross-encoder reranker (when IReranker is registered)
+    | Interleaved   // re-rank across scopes by score; the most relevant chunks win
+    | Separate      // grouped by scope and labelled
 ```
 
 ### Stages per `Retrieve` call
 
-1. **Scope-access validation** — `authorisedScopes` filters `RequestedScopes` against `AccessContext.TeamId`. A mismatched `Team teamId` is dropped (not errored). `Platform` and `Deployment` scopes survive when enabled.
+1. **Scope-access validation** — `authorisedScopes` filters the request's `Scopes` against `AccessContext.TeamId`. A mismatched `Team teamId` is dropped (not errored). `Platform` and `Deployment` scopes survive when enabled.
 2. **Embedding generation** — `IEmbeddingProvider.GenerateEmbedding` produces the query vector. Goes through `CachingEmbeddingProvider` decorator (LRU, keyed by SHA256 of text — raw query never lands in cache key).
 3. **Dense search** — `IVectorStore.Search` against the authorised scopes, top-K with `MinScore` floor.
 4. **Sparse search** (if `MergeStrategy` includes it) — BM25 against the same scopes, top-K. Tokenisation is pluggable via `ISparseAnalyzer` — the shipped default is Unicode word runs, lower-cased, and a language companion adds stemming / stop-word removal / CJK segmentation. See [Sparse analyzers](../companions/sparse-analyzers.md).
@@ -331,8 +338,10 @@ The `IRetrievalTracer` interface:
 
 ```fsharp
 type IRetrievalTracer =
-    abstract Trace: RetrievalTrace -> AccessContext -> Async<unit>
-    abstract Miss: scope: VectorScope -> queryHash: string -> Async<unit>
+    abstract Trace: trace: RetrievalTrace * ctx: AccessContext -> Async<unit>
+    // A miss carries its own record — the threshold and what sat under
+    // it — because a trace of an empty result set cannot say why.
+    abstract Miss: miss: RetrievalMiss * ctx: AccessContext -> Async<unit>
 
 and RetrievalTrace = {
     QueryHash: string            // SHA256; never plaintext
@@ -340,14 +349,27 @@ and RetrievalTrace = {
     RequestedScopes: VectorScope list
     PermittedScopes: VectorScope list
     TopK: int
+    AdaptiveK: bool
     CandidatePoolSize: int
     TopScore: float
-    Dense: bool
-    Sparse: bool
-    Reranked: bool
-    LatencyMs: int
+    DenseUsed: bool
+    SparseUsed: bool
+    RerankerName: string option  // None when no reranker ran
+    LatencyMs: int64
     Stages: string list
+    StageTimings: (string * float) list
     ResultCount: int
+    RewriteDecision: string option
+    RewrittenQueryHash: string option
+}
+
+and RetrievalMiss = {
+    QueryHash: string
+    QueryLength: int
+    Scopes: VectorScope list
+    MatchesAboveMinScore: int
+    MinScoreThreshold: float
+    TopScore: float
 }
 ```
 

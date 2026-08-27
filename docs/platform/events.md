@@ -7,25 +7,28 @@ The Platform ships append-only event storage with full audit-trail semantics, pl
 The fundamental abstraction:
 
 ```fsharp
-type Event = {
-    EventId: Guid
+type ModuleEvent = {
+    Id: Guid
+    OccurredAt: DateTime
     SourceModule: string
     EventType: string
     ScopeId: string
-    UserId: string option
-    CorrelationId: Guid option
-    Timestamp: DateTime
     Payload: string  // JSON, opaque to the store
 }
 
 type IEventStore =
-    abstract Write: Event -> Async<unit>
-    abstract ReadByType: SourceModule: string -> EventType: string -> Async<Event list>
-    abstract ReadByCorrelation: CorrelationId: Guid -> Async<Event list>
-    abstract ReadByScope: ScopeId: string -> Async<Event list>
+    abstract Write: event: ModuleEvent -> Async<unit>
+    // Every read is scope-first, so a caller cannot query across tenants
+    // by accident (GP 4).
+    abstract ReadAll: scopeId: string -> Async<ModuleEvent list>
+    abstract ReadByType: scopeId: string * eventType: string -> Async<ModuleEvent list>
+    abstract ReadBySource: scopeId: string * sourceModule: string -> Async<ModuleEvent list>
+    abstract ListScopes: unit -> Async<string list>
 ```
 
-Events are immutable: there's no `Update` or `Delete`. The store is the durable record of what happened, in order.
+Events are immutable: there is no `Update` and no general `Delete`. The store is the durable record
+of what happened, in order. The one erasure path is `Erase`, which exists for GDPR subject-erasure
+and is policy-gated rather than a general mutation seam — see [`data-subject-requests.md`](data-subject-requests.md).
 
 ### Shipped implementations
 

@@ -153,16 +153,16 @@ The lock is in-process. For multi-instance deployments, a distributed lock (Redi
 
 ```fsharp
 type RecurrenceRule = {
-    Frequency: Frequency
+    Frequency: RecurrenceFrequency
     Interval: int
-    ByDayOfWeek: DayOfWeek list
-    ByDayOfMonth: int list
+    ByWeekday: DayOfWeek list
+    Until: DateTimeOffset option
     Count: int option
-    Until: DateTime option
 }
-
-and Frequency = Daily | Weekly | Monthly | Yearly
 ```
+
+There is no `ByDayOfMonth`: monthly recurrence repeats on the start date's day-of-month, and the
+day-of-month *set* RFC 5545 allows is one of the parts this simplification drops.
 
 `RecurrenceExpander.expand` is pure:
 

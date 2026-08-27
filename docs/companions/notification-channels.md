@@ -192,14 +192,14 @@ Duplicate-`Kind` sink registration is rejected at compose time. If you want fall
 
 ```fsharp
 type INotificationAddressBook =
-    abstract Resolve: scopeId: string -> userId: string -> Async<ContactAddresses>
-
-and ContactAddresses = {
-    EmailAddress: EmailAddress option
-    PhoneNumber: PhoneNumber option
-    PushTokens: PushToken list
-}
+    abstract ResolveEmail: userId: string * scopeId: string -> Async<EmailAddress option>
+    abstract ResolvePhone: userId: string * scopeId: string -> Async<PhoneNumber option>
+    abstract ResolvePushTokens: userId: string * scopeId: string -> Async<PushToken list>
 ```
+
+One method per channel rather than one call returning a bundle: a dispatch only ever needs the
+address for the kind it is delivering, so a sink that sends SMS never causes an email lookup — and an
+implementation backed by an external directory can answer the cheap question cheaply.
 
 Default `BlobBackedNotificationAddressBook` reads from `_platform/contacts/{scopeId}/{userId}.json`. Manually populated by the operator or via your app's profile-management UI.
 
