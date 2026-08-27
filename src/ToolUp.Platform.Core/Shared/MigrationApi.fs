@@ -31,7 +31,7 @@ type MigrationDataTypeInfo = {
     /// `None` when the registered migrator set resolves a chain from
     /// every version below `CurrentVersion`; `Some reason` when it
     /// does not, in which case the runner refuses to start a pass for
-    /// this data type and records `MigrationBlocked`.
+    /// this data type and records `MigrationChainBlocked`.
     ChainProblem: string option
 }
 

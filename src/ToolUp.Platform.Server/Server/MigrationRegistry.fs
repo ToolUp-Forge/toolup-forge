@@ -19,7 +19,7 @@ open ToolUp.Platform.FileProcessor
 //   * **Structural** (a migrator that does not advance; two migrators
 //     reading the same version) — the set itself is unusable at any
 //     version. The runner refuses to start a pass and records
-//     `MigrationBlocked`, because guessing which of two forward paths
+//     `MigrationChainBlocked`, because guessing which of two forward paths
 //     the author meant is not a decision a framework gets to make.
 //   * **Per-object** (no migrator reads the version THIS object sits
 //     at) — the set may be perfectly good for every other object in
