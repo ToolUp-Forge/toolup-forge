@@ -609,7 +609,7 @@ jobs:
           # protection the floor exists to give. It is a LOWER bound, so
           # ADDING a pack never needs an edit here; only removing one
           # deliberately does.
-          EXPECTED_PACKS: 14
+          EXPECTED_PACKS: 19
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded
