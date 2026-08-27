@@ -42,11 +42,13 @@ module PreviewSeam = KnowledgeBase.ServerOriginalPreviewSeam
 //      storage fault, is the one outcome nobody asked for.
 //   4. **Unset is unchanged.** No seam composed ⇒ `GetOriginalDelivery`
 //      is `Inline` carrying exactly `GetOriginalDocument`'s bytes.
-//   5. **Signed delivery does not read the original.** The Phase 200
-//      seam had to download the whole thing just to prove it existed;
-//      `ResolveMetadata` is why this one does not. Pinned by counting
-//      `Download` calls, since a byte-light path that quietly downloads
-//      looks identical from the outside.
+//   5. **Signed delivery does not read the original.** Pinned by
+//      counting `Download` calls, since a byte-light path that quietly
+//      downloads looks identical from the outside. This holds for BOTH
+//      signed seams: the blob-backed one has gone through
+//      `ResolveMetadata` since Phase 108, and the Phase 200
+//      deployment-signer one since the tidy-drain that closed the
+//      limitation its own doc-comment described.
 
 let private noopLogger =
     { new ILogger with
@@ -373,6 +375,105 @@ let private metadataTests =
         }
     ]
 
+// ─── The Phase 200 deployment-signer seam, now byte-light too ────────
+//
+// `SignedUrlOriginalPreviewSeam` takes an `IPreviewUrlSigner` from the
+// deployment rather than minting through the backend. Phase 200 shipped
+// it against `Resolve` because `ResolveMetadata` did not exist yet, and
+// recorded the resulting full-download as a known limitation. Phase 108
+// added the member and adopted it in the blob-backed seam only, so the
+// limitation outlived the thing that fixed it — on the one seam whose
+// doc-comment still described it. These cases pin that it is closed.
+
+/// Records `Sign` calls and answers with a fixed URL, so a test can
+/// assert both the URL AND that exactly one mint happened.
+type private RecordingPreviewSigner() =
+    let calls = ConcurrentQueue<string * string * TimeSpan>()
+
+    member _.Signs = calls |> List.ofSeq
+
+    interface PreviewSeam.IPreviewUrlSigner with
+        member _.Sign(doc, container, ttl) = async {
+            calls.Enqueue(doc.Id, container, ttl)
+            return Ok $"https://signer.example/{doc.Id}?sig=xyz"
+        }
+
+let private deploymentSignerSeamTests =
+    testList "Phase 200 — SignedUrlOriginalPreviewSeam (deployment signer)" [
+        testCaseAsync "delivers a signed URL with viewer metadata, reading no bytes"
+        <| async {
+            // The whole point of the mode: for a 200 MB PDF the server
+            // must not download 200 MB to learn its content type. The
+            // Download count is the assertion — the returned target
+            // looks identical either way.
+            let counting = CountingBlobStorage(InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let! doc = seedUpload storage "team-a"
+            let signer = RecordingPreviewSigner()
+
+            let seam = PreviewSeam.createSignedUrl (createDefault ()) signer options
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+
+            match result with
+            | Ok target ->
+                match target.Content with
+                | PreviewContent.SignedUrl(url, expiresAt) ->
+                    Expect.stringContains url "doc-1" "URL names the document"
+                    Expect.equal expiresAt (fixedNow.Add options.Ttl) "expiry is now + the configured TTL"
+                | other -> failtest $"expected SignedUrl delivery, got %A{other}"
+
+                Expect.equal target.ContentType "application/pdf" "viewer-picking metadata survives byte-light delivery"
+                Expect.equal target.SizeBytes 9L "size survives byte-light delivery"
+            | Error e -> failtest $"expected Ok, got %A{e}"
+
+            Expect.equal counting.Downloads 0 "the deployment-signer seam must not read the original server-side"
+
+            match signer.Signs with
+            | [ (docId, container, ttl) ] ->
+                Expect.equal docId "doc-1" "signed for the previewed document"
+                Expect.equal container "team-a" "signed within the caller's scope container"
+                Expect.equal ttl options.Ttl "the composed TTL is the one handed to the signer"
+            | other -> failtest $"expected exactly one sign, got %A{other}"
+        }
+
+        testCaseAsync "a source kind with no original still refuses NoOriginalAvailable, and never mints"
+        <| async {
+            // `ResolveMetadata`'s contract is that presence agrees with
+            // `Resolve` exactly. If it did not, this seam would hand out
+            // a bearer URL to something `Resolve` calls absent — so the
+            // mint count, not just the refusal, is what is pinned.
+            let counting = CountingBlobStorage(InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+
+            let doc =
+                mkDoc
+                    "doc-narr"
+                    "narrative.md"
+                    "md"
+                    (FromNarrative {
+                        ModuleId = "M"
+                        PageRoute = Some "/m"
+                        SettingsKey = "k"
+                        SettingsDisplay = []
+                        GeneratedAt = fixedNow
+                    })
+
+            do! saveIndex storage "team-a" [ doc ]
+            let signer = RecordingPreviewSigner()
+
+            let seam = PreviewSeam.createSignedUrl (createDefault ()) signer options
+
+            let! result = seam.Preview(storage, "team-a", doc, None)
+
+            match result with
+            | Error NoOriginalAvailable -> ()
+            | other -> failtest $"expected NoOriginalAvailable, got %A{other}"
+
+            Expect.isEmpty signer.Signs "no original ⇒ no bearer URL was minted"
+        }
+    ]
+
 // ─── The seam: sign, fall back, or fail ──────────────────────────────
 
 let private seamTests =
@@ -588,4 +689,10 @@ let private handlerTests =
     ]
 
 let tests =
-    testList "KnowledgeBase signed original URLs (Phase 108)" [ probeTests; metadataTests; seamTests; handlerTests ]
+    testList "KnowledgeBase signed original URLs (Phase 108)" [
+        probeTests
+        metadataTests
+        seamTests
+        deploymentSignerSeamTests
+        handlerTests
+    ]

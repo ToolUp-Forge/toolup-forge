@@ -112,11 +112,25 @@ type DefaultOriginalPreviewSeam(resolver: IOriginalSourceResolver) =
 ///
 /// The resolver still runs — it is what establishes that the document
 /// *has* an original and what its content type and size are, and it is
-/// the single place the per-`KnowledgeSource` branching lives. So this
-/// mode makes the **response** byte-light, not the server-side read; a
-/// metadata-only resolution path would mean widening
-/// `IOriginalSourceResolver`, which is a larger change than this seam
-/// should carry (tracked as a tidy-up, not a silent compromise).
+/// the single place the per-`KnowledgeSource` branching lives.
+///
+/// **Byte-light on BOTH sides.** Resolution goes through
+/// `ResolveMetadata`, so establishing existence costs a properties read
+/// rather than a full download. Phase 200 shipped this type against
+/// `Resolve` and recorded the cost as a known limitation, because the
+/// metadata path did not exist yet: for a 200 MB PDF served by signed
+/// URL, the server downloaded all 200 MB purely to learn the content
+/// type and size — the exact cost the delivery mode exists to avoid.
+/// Phase 108 added `ResolveMetadata` and adopted it in
+/// `BlobSignedUrlOriginalPreviewSeam` below; this type kept the old
+/// path, so the limitation survived on the one seam whose doc-comment
+/// still described it. It no longer does.
+///
+/// `ResolveMetadata`'s contract is that presence agrees with `Resolve`
+/// exactly, so the `NoOriginalAvailable` branch is unchanged — including
+/// for a custom resolver that fills the member with
+/// `OriginalSourceResolver.locationViaResolve`, which still downloads
+/// and is merely honest that it is not cheap.
 type SignedUrlOriginalPreviewSeam
     (resolver: IOriginalSourceResolver, signer: IPreviewUrlSigner, options: PreviewSignedUrlOptions) =
 
@@ -129,11 +143,11 @@ type SignedUrlOriginalPreviewSeam
     interface IOriginalPreviewSeam with
         member _.Preview(storage, container, doc, locator) = async {
             try
-                let! resolved = resolver.Resolve(storage, container, doc)
+                let! located = resolver.ResolveMetadata(storage, container, doc)
 
-                match resolved with
+                match located with
                 | None -> return Error NoOriginalAvailable
-                | Some original ->
+                | Some location ->
                     let! signed = signer.Sign(doc, container, options.Ttl)
 
                     match signed with
@@ -141,12 +155,27 @@ type SignedUrlOriginalPreviewSeam
                     | Ok url ->
                         let expiresAt = options.Now().Add options.Ttl
 
+                        // `PreviewTarget.withSignedUrl` reads only the
+                        // metadata fields off its `original` and drops
+                        // `Content`, so the empty array is never
+                        // observable — the same construction
+                        // `BlobSignedUrlOriginalPreviewSeam` makes, and
+                        // for the same reason: going through the smart
+                        // constructor is what keeps the top-level
+                        // metadata and the delivery mode from drifting.
+                        let metadataOnly: OriginalDocument = {
+                            FileName = location.FileName
+                            ContentType = location.ContentType
+                            SizeBytes = location.SizeBytes
+                            Content = Array.empty
+                        }
+
                         return
                             Ok(
                                 PreviewTarget.withSignedUrl
                                     doc.Id
                                     (PreviewAnchor.ofLocator locator)
-                                    original
+                                    metadataOnly
                                     url
                                     expiresAt
                             )
