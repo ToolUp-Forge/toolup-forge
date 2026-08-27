@@ -8,9 +8,10 @@ ToolUp.AssetStore.AssetApi.routeBuilder(System.String, System.String) : System.S
 ToolUp.AssetStore.AssetApi.routeBuilderPrefix : System.String (literal)
 ToolUp.AssetStore.AssetCompose (class)
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp (class)
-ToolUp.AssetStore.AssetCompose+AssetStoreServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AssetStore.AssetStoreOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IDerivativeRenderer], ToolUp.AssetStore.DerivativeProfileRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IAssetStore], ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions])
+ToolUp.AssetStore.AssetCompose+AssetStoreServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AssetStore.AssetStoreOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IDerivativeRenderer], ToolUp.AssetStore.DerivativeProfileRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IAssetStore], ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions])
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.AsyncDerivation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions] { get }
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.Base : ToolUp.Platform.ServerApp { get }
+ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.DerivativeDlq : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions] { get }
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.MimeRenderers : ToolUp.AssetStore.MimeRendererRegistry { get }
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.Options : ToolUp.AssetStore.AssetStoreOptions { get }
 ToolUp.AssetStore.AssetCompose+AssetStoreServerApp.Profiles : ToolUp.AssetStore.DerivativeProfileRegistry { get }
@@ -25,6 +26,7 @@ ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withAssetStore(ToolUp.A
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withAsyncDerivation(ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions, ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
+ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withDerivativeDlq(ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions, ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withDerivativeProfile(ToolUp.AssetStore.DerivativeProfileId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AssetStore.DerivativeSpec], ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withDerivativeProfileEntries(ToolUp.AssetStore.DerivativeProfileId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AssetStore.ProfileEntry], ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
 ToolUp.AssetStore.AssetCompose+AssetStoreServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.AssetStore.AssetCompose+AssetStoreServerApp) : ToolUp.AssetStore.AssetCompose+AssetStoreServerApp
@@ -40,6 +42,14 @@ ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions..ctor(ToolUp.Platform.JobR
 ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions.RetryPolicy : ToolUp.Platform.JobRetryPolicy { get }
 ToolUp.AssetStore.AssetCompose+AsyncDerivationOptionsModule (class)
 ToolUp.AssetStore.AssetCompose+AsyncDerivationOptionsModule.defaults : ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions { get }
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions (class)
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRetryPolicy], System.Boolean, System.Boolean, System.Boolean)
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions.EmitMetrics : System.Boolean { get }
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions.NotifyOnFailure : System.Boolean { get }
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions.RecordDeadLetters : System.Boolean { get }
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions.RetryPolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRetryPolicy] { get }
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptionsModule (class)
+ToolUp.AssetStore.AssetCompose+DerivativeDlqOptionsModule.defaults : ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions { get }
 ToolUp.AssetStore.AssetDeleteError (class)
 ToolUp.AssetStore.AssetDeleteError.AssetNotFound : ToolUp.AssetStore.AssetDeleteError { get }
 ToolUp.AssetStore.AssetDeleteError.IsAssetNotFound : System.Boolean { get }
@@ -173,12 +183,33 @@ ToolUp.AssetStore.DerivationMode.Tag : System.Int32 { get }
 ToolUp.AssetStore.DerivationMode+Tags (class)
 ToolUp.AssetStore.DerivationMode+Tags.AsyncJob : System.Int32 (literal)
 ToolUp.AssetStore.DerivationMode+Tags.Sync : System.Int32 (literal)
+ToolUp.AssetStore.DerivativeDeadLetterRecord (class)
+ToolUp.AssetStore.DerivativeDeadLetterRecord..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.Int32, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AssetStore.DerivativeDeadLetterRecord.AssetId : System.String { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.Attempts : System.Int32 { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.ContentHash : System.String { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.DerivativeName : System.String { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.Destination : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.Error : System.String { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.FailedAt : System.DateTimeOffset { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.ProfileId : System.String { get }
+ToolUp.AssetStore.DerivativeDeadLetterRecord.ScopeContainer : System.String { get }
+ToolUp.AssetStore.DerivativeFailedNotification (class)
+ToolUp.AssetStore.DerivativeFailedNotification..ctor(System.String, System.String, System.String, System.String, System.Int32, System.DateTimeOffset, System.Boolean)
+ToolUp.AssetStore.DerivativeFailedNotification.AssetId : System.String { get }
+ToolUp.AssetStore.DerivativeFailedNotification.Attempts : System.Int32 { get }
+ToolUp.AssetStore.DerivativeFailedNotification.ContentHash : System.String { get }
+ToolUp.AssetStore.DerivativeFailedNotification.DeadLettered : System.Boolean { get }
+ToolUp.AssetStore.DerivativeFailedNotification.DerivativeName : System.String { get }
+ToolUp.AssetStore.DerivativeFailedNotification.Error : System.String { get }
+ToolUp.AssetStore.DerivativeFailedNotification.FailedAt : System.DateTimeOffset { get }
 ToolUp.AssetStore.DerivativeJobCoordinator (class)
 ToolUp.AssetStore.DerivativeJobCoordinator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IJobScheduler, ToolUp.Platform.JobRetryPolicy, ToolUp.Platform.ILogger)
 ToolUp.AssetStore.DerivativeJobCoordinator.EnsureQueued(System.String, ToolUp.AssetStore.AssetRecord, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AssetStore.DerivativeStatus]
 ToolUp.AssetStore.DerivativeJobCoordinator.IdempotencyTtl : System.TimeSpan { get; set }
 ToolUp.AssetStore.DerivativeJobHandler (class)
 ToolUp.AssetStore.DerivativeJobHandler..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AssetStore.DerivativeProfileRegistry, ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger, System.Int32)
+ToolUp.AssetStore.DerivativeJobHandler..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AssetStore.DerivativeProfileRegistry, ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger, System.Int32, ToolUp.AssetStore.DerivativeObservability)
 ToolUp.AssetStore.DerivativeJobPayload (class)
 ToolUp.AssetStore.DerivativeJobPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.AssetStore.DerivativeJobPayload.AssetId : System.String { get }
@@ -188,9 +219,22 @@ ToolUp.AssetStore.DerivativeJobPayload.InputMime : System.String { get }
 ToolUp.AssetStore.DerivativeJobPayload.ProfileId : System.String { get }
 ToolUp.AssetStore.DerivativeJobPayload.ScopeContainer : System.String { get }
 ToolUp.AssetStore.DerivativeJobs (class)
+ToolUp.AssetStore.DerivativeJobs.DerivativeFailedNotificationKey : System.String (literal)
 ToolUp.AssetStore.DerivativeJobs.DerivativeReadyNotificationKey : System.String (literal)
+ToolUp.AssetStore.DerivativeJobs.FailedMetric : System.String (literal)
 ToolUp.AssetStore.DerivativeJobs.HandlerName : System.String (literal)
+ToolUp.AssetStore.DerivativeJobs.RetryMetric : System.String (literal)
+ToolUp.AssetStore.DerivativeJobs.deadLetterKey(System.String, System.String) : System.String
+ToolUp.AssetStore.DerivativeJobs.readDeadLetter(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.DerivativeDeadLetterRecord]]
 ToolUp.AssetStore.DerivativeJobs.statusKey(System.String, System.String) : System.String
+ToolUp.AssetStore.DerivativeObservability (class)
+ToolUp.AssetStore.DerivativeObservability..ctor(System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AssetStore.DerivativeObservability.DeadLetterDestination : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AssetStore.DerivativeObservability.Metrics : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink] { get }
+ToolUp.AssetStore.DerivativeObservability.NotifyOnFailure : System.Boolean { get }
+ToolUp.AssetStore.DerivativeObservability.RecordDeadLetters : System.Boolean { get }
+ToolUp.AssetStore.DerivativeObservabilityModule (class)
+ToolUp.AssetStore.DerivativeObservabilityModule.disabled : ToolUp.AssetStore.DerivativeObservability { get }
 ToolUp.AssetStore.DerivativeProfileId (class)
 ToolUp.AssetStore.DerivativeProfileId.Item : System.String { get }
 ToolUp.AssetStore.DerivativeProfileId.Tag : System.Int32 { get }

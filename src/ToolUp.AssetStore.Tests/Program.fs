@@ -8,7 +8,7 @@ open System.Reflection
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
-    testList "ToolUp.AssetStore.Tests" [ DerivativePipelineTests.tests ]
+    testList "ToolUp.AssetStore.Tests" [ DerivativePipelineTests.tests; DerivativeDlqTests.tests ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:

@@ -86,6 +86,13 @@ let config = {
             // regression could land green. No env gating; the fixtures
             // are built in-process.
             TestPack.create "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj"
+            // Phase 127 / 207 — the AssetStore derivative pipeline: the
+            // sync + async job-backed paths, and the opt-in dead-letter
+            // / retry-observability surface with its default-off twin.
+            // Hermetic (in-memory blob storage, manual-pump scheduler);
+            // no env gating, no SkiaSharp native needed — the pack's
+            // renderers are doubles.
+            TestPack.create "AssetStore" "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj"
         ]
 }
 
