@@ -233,7 +233,7 @@ type MigrationRunner
 
             let blocked = {
                 baseline with
-                    State = MigrationBlocked reason
+                    State = MigrationChainBlocked reason
                     StartedAt = Some startedAt
                     CompletedAt = Some DateTime.UtcNow
             }

@@ -3466,6 +3466,18 @@ ToolUp.Platform.DataIngestionMode.Tag : System.Int32 { get }
 ToolUp.Platform.DataIngestionMode+Tags (class)
 ToolUp.Platform.DataIngestionMode+Tags.EnabledDataIngestion : System.Int32 (literal)
 ToolUp.Platform.DataIngestionMode+Tags.NoDataIngestion : System.Int32 (literal)
+ToolUp.Platform.DataMigrationMode (class)
+ToolUp.Platform.DataMigrationMode.EnabledDataMigrations : ToolUp.Platform.DataMigrationMode { get }
+ToolUp.Platform.DataMigrationMode.IsEnabledDataMigrations : System.Boolean { get }
+ToolUp.Platform.DataMigrationMode.IsManualDataMigrations : System.Boolean { get }
+ToolUp.Platform.DataMigrationMode.IsNoDataMigrations : System.Boolean { get }
+ToolUp.Platform.DataMigrationMode.ManualDataMigrations : ToolUp.Platform.DataMigrationMode { get }
+ToolUp.Platform.DataMigrationMode.NoDataMigrations : ToolUp.Platform.DataMigrationMode { get }
+ToolUp.Platform.DataMigrationMode.Tag : System.Int32 { get }
+ToolUp.Platform.DataMigrationMode+Tags (class)
+ToolUp.Platform.DataMigrationMode+Tags.EnabledDataMigrations : System.Int32 (literal)
+ToolUp.Platform.DataMigrationMode+Tags.ManualDataMigrations : System.Int32 (literal)
+ToolUp.Platform.DataMigrationMode+Tags.NoDataMigrations : System.Int32 (literal)
 ToolUp.Platform.DataObject (class)
 ToolUp.Platform.DataObject..ctor(System.String, System.Int32, System.DateTime, System.String, System.String, System.String, System.String, ToolUp.Platform.VersioningPolicy, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.DataObject.ContentHash : System.String { get }
@@ -5332,11 +5344,17 @@ ToolUp.Platform.FileProcessor+CsvHeaders.containsAll(Microsoft.FSharp.Collection
 ToolUp.Platform.FileProcessor+CsvHeaders.containsAny(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : System.Boolean
 ToolUp.Platform.FileProcessor+CsvHeaders.parse(System.String) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Platform.FileProcessor+DataType (class)
-ToolUp.Platform.FileProcessor+DataType..ctor(DataManagementTypes+DataTypeInfo, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry]]])
+ToolUp.Platform.FileProcessor+DataType..ctor(DataManagementTypes+DataTypeInfo, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry]]], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataMigrator])
 ToolUp.Platform.FileProcessor+DataType.Detect : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]] { get }
 ToolUp.Platform.FileProcessor+DataType.Id : System.String { get }
 ToolUp.Platform.FileProcessor+DataType.Info : DataManagementTypes+DataTypeInfo { get }
+ToolUp.Platform.FileProcessor+DataType.Migrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataMigrator] { get }
 ToolUp.Platform.FileProcessor+DataType.Process : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry]]] { get }
+ToolUp.Platform.FileProcessor+DataType.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.FileProcessor+DataTypes (class)
+ToolUp.Platform.FileProcessor+DataTypes.initialSchemaVersion : System.Int32 (literal)
+ToolUp.Platform.FileProcessor+DataTypes.withMigrations(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataMigrator], ToolUp.Platform.FileProcessor+DataType) : ToolUp.Platform.FileProcessor+DataType
+ToolUp.Platform.FileProcessor+DataTypes.withSchemaVersion(System.Int32, ToolUp.Platform.FileProcessor+DataType) : ToolUp.Platform.FileProcessor+DataType
 ToolUp.Platform.FileReprocessedPayload (class)
 ToolUp.Platform.FileReprocessedPayload..ctor(System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.FileReprocessedPayload.DataType : System.String { get }
@@ -5943,6 +5961,17 @@ ToolUp.Platform.IDataIngestionApi.ListDataSources : Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.IDataIngestionApi.ListRecentRuns : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IngestionRun]]] { get }
 ToolUp.Platform.IDataIngestionApi.SaveDataSource : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceConfig, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IDataIngestionApi.TriggerRefresh : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }
+ToolUp.Platform.IDataMigrationApi (class)
+ToolUp.Platform.IDataMigrationApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationStatus, System.String]]])
+ToolUp.Platform.IDataMigrationApi.ListAllStatuses : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]] { get }
+ToolUp.Platform.IDataMigrationApi.ListDataTypes : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo]]] { get }
+ToolUp.Platform.IDataMigrationApi.ListStatuses : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]] { get }
+ToolUp.Platform.IDataMigrationApi.TriggerMigration : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationStatus, System.String]]] { get }
+ToolUp.Platform.IDataMigrator (interface)
+ToolUp.Platform.IDataMigrator.DataTypeId : System.String { get }
+ToolUp.Platform.IDataMigrator.FromVersion : System.Int32 { get }
+ToolUp.Platform.IDataMigrator.Migrate(System.Object) : Microsoft.FSharp.Control.FSharpAsync`1[System.Object]
+ToolUp.Platform.IDataMigrator.ToVersion : System.Int32 { get }
 ToolUp.Platform.IDeployRecordSealer (interface)
 ToolUp.Platform.IDeployRecordSealer.Scheme() : System.String
 ToolUp.Platform.IDeployRecordSealer.Seal(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployRecordSeal, System.String]]
@@ -6880,6 +6909,40 @@ ToolUp.Platform.MetricsSinkConfig.MaxSeriesPerMetric : System.Int32 { get }
 ToolUp.Platform.MetricsSinkConfig.PerMetricMaxSeries : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32] { get }
 ToolUp.Platform.MetricsSinkConfigModule (class)
 ToolUp.Platform.MetricsSinkConfigModule.defaults : ToolUp.Platform.MetricsSinkConfig { get }
+ToolUp.Platform.MigrationChainError (class)
+ToolUp.Platform.MigrationChainError.IsAmbiguousMigrationStep : System.Boolean { get }
+ToolUp.Platform.MigrationChainError.IsChainOvershootsTarget : System.Boolean { get }
+ToolUp.Platform.MigrationChainError.IsNoMigrationPath : System.Boolean { get }
+ToolUp.Platform.MigrationChainError.IsNonAdvancingMigrator : System.Boolean { get }
+ToolUp.Platform.MigrationChainError.Tag : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+AmbiguousMigrationStep (class)
+ToolUp.Platform.MigrationChainError+AmbiguousMigrationStep.atVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+AmbiguousMigrationStep.candidates : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+AmbiguousMigrationStep.dataTypeId : System.String { get }
+ToolUp.Platform.MigrationChainError+ChainOvershootsTarget (class)
+ToolUp.Platform.MigrationChainError+ChainOvershootsTarget.dataTypeId : System.String { get }
+ToolUp.Platform.MigrationChainError+ChainOvershootsTarget.reachedVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+ChainOvershootsTarget.targetVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+NoMigrationPath (class)
+ToolUp.Platform.MigrationChainError+NoMigrationPath.atVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+NoMigrationPath.dataTypeId : System.String { get }
+ToolUp.Platform.MigrationChainError+NonAdvancingMigrator (class)
+ToolUp.Platform.MigrationChainError+NonAdvancingMigrator.dataTypeId : System.String { get }
+ToolUp.Platform.MigrationChainError+NonAdvancingMigrator.fromVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+NonAdvancingMigrator.toVersion : System.Int32 { get }
+ToolUp.Platform.MigrationChainError+Tags (class)
+ToolUp.Platform.MigrationChainError+Tags.AmbiguousMigrationStep : System.Int32 (literal)
+ToolUp.Platform.MigrationChainError+Tags.ChainOvershootsTarget : System.Int32 (literal)
+ToolUp.Platform.MigrationChainError+Tags.NoMigrationPath : System.Int32 (literal)
+ToolUp.Platform.MigrationChainError+Tags.NonAdvancingMigrator : System.Int32 (literal)
+ToolUp.Platform.MigrationChainErrorModule (class)
+ToolUp.Platform.MigrationChainErrorModule.describe(ToolUp.Platform.MigrationChainError) : System.String
+ToolUp.Platform.MigrationDataTypeInfo (class)
+ToolUp.Platform.MigrationDataTypeInfo..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.MigrationDataTypeInfo.ChainProblem : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.MigrationDataTypeInfo.CurrentVersion : System.Int32 { get }
+ToolUp.Platform.MigrationDataTypeInfo.DataTypeId : System.String { get }
+ToolUp.Platform.MigrationDataTypeInfo.DisplayName : System.String { get }
 ToolUp.Platform.MigrationError (class)
 ToolUp.Platform.MigrationError.IsInfrastructureFailed : System.Boolean { get }
 ToolUp.Platform.MigrationError.IsNotEligible : System.Boolean { get }
@@ -6897,6 +6960,29 @@ ToolUp.Platform.MigrationError+Tags (class)
 ToolUp.Platform.MigrationError+Tags.InfrastructureFailed : System.Int32 (literal)
 ToolUp.Platform.MigrationError+Tags.NotEligible : System.Int32 (literal)
 ToolUp.Platform.MigrationError+Tags.PartialFailure : System.Int32 (literal)
+ToolUp.Platform.MigrationEvents (class)
+ToolUp.Platform.MigrationEvents.MigrationFailedEventType : System.String (literal)
+ToolUp.Platform.MigrationEvents.SourceModule : System.String (literal)
+ToolUp.Platform.MigrationFailedEvent (class)
+ToolUp.Platform.MigrationFailedEvent..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.String)
+ToolUp.Platform.MigrationFailedEvent.AtVersion : System.Int32 { get }
+ToolUp.Platform.MigrationFailedEvent.DataTypeId : System.String { get }
+ToolUp.Platform.MigrationFailedEvent.Error : System.String { get }
+ToolUp.Platform.MigrationFailedEvent.ObjectId : System.String { get }
+ToolUp.Platform.MigrationFailedEvent.TargetVersion : System.Int32 { get }
+ToolUp.Platform.MigrationFailedEvent.TeamId : System.String { get }
+ToolUp.Platform.MigrationFailure (class)
+ToolUp.Platform.MigrationFailure..ctor(System.String, System.Int32, System.String, System.DateTime)
+ToolUp.Platform.MigrationFailure.AtVersion : System.Int32 { get }
+ToolUp.Platform.MigrationFailure.Error : System.String { get }
+ToolUp.Platform.MigrationFailure.ObjectId : System.String { get }
+ToolUp.Platform.MigrationFailure.OccurredAt : System.DateTime { get }
+ToolUp.Platform.MigrationMetadata (class)
+ToolUp.Platform.MigrationMetadata.InitialVersion : System.Int32 (literal)
+ToolUp.Platform.MigrationMetadata.MigrationPrincipal : System.String (literal)
+ToolUp.Platform.MigrationMetadata.SchemaVersionKey : System.String (literal)
+ToolUp.Platform.MigrationMetadata.readVersion(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : System.Int32
+ToolUp.Platform.MigrationMetadata.stampVersion(System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
 ToolUp.Platform.MigrationOutcome (class)
 ToolUp.Platform.MigrationOutcome..ctor(System.String, System.Int32, System.Int32, System.Int32, System.Int32)
 ToolUp.Platform.MigrationOutcome.AppliedMigrations : System.Int32 { get }
@@ -6904,6 +6990,42 @@ ToolUp.Platform.MigrationOutcome.FromVersion : System.Int32 { get }
 ToolUp.Platform.MigrationOutcome.InstancesMigrated : System.Int32 { get }
 ToolUp.Platform.MigrationOutcome.SchemaId : System.String { get }
 ToolUp.Platform.MigrationOutcome.ToVersion : System.Int32 { get }
+ToolUp.Platform.MigrationRunState (class)
+ToolUp.Platform.MigrationRunState.IsMigrationChainBlocked : System.Boolean { get }
+ToolUp.Platform.MigrationRunState.IsMigrationComplete : System.Boolean { get }
+ToolUp.Platform.MigrationRunState.IsMigrationCompleteWithFailures : System.Boolean { get }
+ToolUp.Platform.MigrationRunState.IsMigrationIdle : System.Boolean { get }
+ToolUp.Platform.MigrationRunState.IsMigrationInProgress : System.Boolean { get }
+ToolUp.Platform.MigrationRunState.MigrationComplete : ToolUp.Platform.MigrationRunState { get }
+ToolUp.Platform.MigrationRunState.MigrationCompleteWithFailures : ToolUp.Platform.MigrationRunState { get }
+ToolUp.Platform.MigrationRunState.MigrationIdle : ToolUp.Platform.MigrationRunState { get }
+ToolUp.Platform.MigrationRunState.MigrationInProgress : ToolUp.Platform.MigrationRunState { get }
+ToolUp.Platform.MigrationRunState.Tag : System.Int32 { get }
+ToolUp.Platform.MigrationRunState+MigrationChainBlocked (class)
+ToolUp.Platform.MigrationRunState+MigrationChainBlocked.reason : System.String { get }
+ToolUp.Platform.MigrationRunState+Tags (class)
+ToolUp.Platform.MigrationRunState+Tags.MigrationChainBlocked : System.Int32 (literal)
+ToolUp.Platform.MigrationRunState+Tags.MigrationComplete : System.Int32 (literal)
+ToolUp.Platform.MigrationRunState+Tags.MigrationCompleteWithFailures : System.Int32 (literal)
+ToolUp.Platform.MigrationRunState+Tags.MigrationIdle : System.Int32 (literal)
+ToolUp.Platform.MigrationRunState+Tags.MigrationInProgress : System.Int32 (literal)
+ToolUp.Platform.MigrationStatus (class)
+ToolUp.Platform.MigrationStatus..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, ToolUp.Platform.MigrationRunState, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationFailure])
+ToolUp.Platform.MigrationStatus.AlreadyCurrentObjects : System.Int32 { get }
+ToolUp.Platform.MigrationStatus.CompletedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.MigrationStatus.DataTypeId : System.String { get }
+ToolUp.Platform.MigrationStatus.FailedObjects : System.Int32 { get }
+ToolUp.Platform.MigrationStatus.Failures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationFailure] { get }
+ToolUp.Platform.MigrationStatus.MigratedObjects : System.Int32 { get }
+ToolUp.Platform.MigrationStatus.StartedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.MigrationStatus.State : ToolUp.Platform.MigrationRunState { get }
+ToolUp.Platform.MigrationStatus.TargetVersion : System.Int32 { get }
+ToolUp.Platform.MigrationStatus.TeamId : System.String { get }
+ToolUp.Platform.MigrationStatus.TotalObjects : System.Int32 { get }
+ToolUp.Platform.MigrationStatusModule (class)
+ToolUp.Platform.MigrationStatusModule.idle(System.String, System.String, System.Int32) : ToolUp.Platform.MigrationStatus
+ToolUp.Platform.MigrationStatusModule.maxRetainedFailures : System.Int32 (literal)
+ToolUp.Platform.MigrationStatusModule.outstanding(ToolUp.Platform.MigrationStatus) : System.Int32
 ToolUp.Platform.MigrationSummary (class)
 ToolUp.Platform.MigrationSummary..ctor(System.Int32, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.MigrationSummary.BytesMigrated : System.Int64 { get }
@@ -9434,7 +9556,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralShareTokenKey : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
@@ -9473,6 +9595,7 @@ ToolUp.Platform.ServerConfig.ConsentStateStore : ToolUp.Platform.ConsentStateSto
 ToolUp.Platform.ServerConfig.ConversationStore : ToolUp.Platform.ConversationStoreMode { get }
 ToolUp.Platform.ServerConfig.Cors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig] { get }
 ToolUp.Platform.ServerConfig.DataIngestion : ToolUp.Platform.DataIngestionMode { get }
+ToolUp.Platform.ServerConfig.DataMigrations : ToolUp.Platform.DataMigrationMode { get }
 ToolUp.Platform.ServerConfig.DataSubjectRequests : ToolUp.Platform.DataSubjectRequestMode { get }
 ToolUp.Platform.ServerConfig.Datasets : ToolUp.Platform.DatasetStoreMode { get }
 ToolUp.Platform.ServerConfig.DeclaredDataSchemas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }

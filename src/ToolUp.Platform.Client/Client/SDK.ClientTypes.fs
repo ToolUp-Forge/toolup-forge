@@ -1062,6 +1062,32 @@ type DataIngestionAdminMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalDataIngestionAdmin of ErasedModule
 
+/// Branding for the data-migration admin module (Phase 10a).
+type MigrationAdminConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the built-in data-migration admin (Phase 10a). The module
+/// shows, per data type, the schema version the owning module declares
+/// and the caller's own scope's progress towards it — "Migrating Media
+/// Optimisation V2→V3: 47/120 objects" — gives Owner / Admin a manual
+/// trigger, and lists the per-object failures a pass left behind.
+///
+/// Defaults to `NoMigrationAdmin` because the substrate itself is
+/// opt-in: a deployment on `ServerConfig.DataMigrations =
+/// NoDataMigrations` mounts no route for this module to call, so a
+/// sidebar entry would be a dead end rather than a feature (GP 11 /
+/// GP 13). Turn it on alongside `EnabledDataMigrations` or
+/// `ManualDataMigrations` — and under `ManualDataMigrations` this
+/// module is the only way a pass ever starts.
+type MigrationAdminMode =
+    /// No data-migration admin module in the sidebar (default).
+    | NoMigrationAdmin
+    /// SDK built-in data-migration admin.
+    | DefaultMigrationAdmin
+    /// SDK built-in with custom name/icon.
+    | ConfiguredMigrationAdmin of MigrationAdminConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalMigrationAdmin of ErasedModule
+
 /// Branding for the data-subject-request admin module (Phase 9h).
 type DataSubjectRequestAdminConfig = { Name: string; Icon: ReactElement }
 
@@ -1659,6 +1685,12 @@ type ClientConfig = {
     /// list otherwise. Per-Kind credential forms are contributed by
     /// connector companion packages.
     DataIngestionAdmin: DataIngestionAdminMode
+    /// Controls the data-migration admin (Phase 10a). Default
+    /// `NoMigrationAdmin` — the substrate is opt-in server-side, so a
+    /// sidebar entry with no route behind it would be a dead end.
+    /// Pair with `ServerConfig.DataMigrations = EnabledDataMigrations`
+    /// or `ManualDataMigrations`.
+    MigrationAdmin: MigrationAdminMode
     /// Controls the data-subject-request admin (Phase 9h — GDPR Article
     /// 15 export + Article 17 erasure). Default `NoDataSubjectRequestAdmin`
     /// — apps without GDPR / CCPA / DPDPA exposure pay nothing. Pair with
@@ -1975,6 +2007,9 @@ module ClientConfig =
         // Opt-in parameterized landing; off by default (GP 13).
         NoActiveTeamLanding = None
         DataIngestionAdmin = DefaultDataIngestionAdmin
+        // Phase 10a — off by default; the server substrate it calls is
+        // itself opt-in (GP 11 / GP 13).
+        MigrationAdmin = NoMigrationAdmin
         DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre
         AuthUI = NoAuthUI

@@ -240,6 +240,11 @@
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
         <Compile Include="InProcess\DataObjectStoreTests.fs" />
+        <!-- Phase 10a — module data-migration framework: chain
+             resolution, the registry union, the status-blob layout, the
+             payload-coercion rule, and the runner's idempotency +
+             per-object failure policy. -->
+        <Compile Include="InProcess\DataMigrationTests.fs" />
         <!-- Phase 173 — ingestion-status store contract + Data Manager
              observer transitions. -->
         <Compile Include="InProcess\IngestionStatusTests.fs" />

@@ -172,7 +172,7 @@ type MigrationRunState =
     | MigrationCompleteWithFailures
     /// The pass could not start: the registered migrator set does not
     /// form a usable chain for this data type. No object was touched.
-    | MigrationBlocked of reason: string
+    | MigrationChainBlocked of reason: string
 
 /// Per-team, per-data-type migration progress. Persisted as
 /// `_platform/migrations/{teamId}/{dataTypeId}.json` and read by the
