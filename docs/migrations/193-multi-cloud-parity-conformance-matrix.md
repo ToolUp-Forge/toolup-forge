@@ -243,12 +243,26 @@ and GCP `DownloadRange past EOF` both green. An unmatched wrapped exception stil
 original `AggregateException`, so nothing that used to escape is now swallowed.
 
 **Phase 733 carried the same pattern into `AzureBlobStorage` and `AwsS3Storage`, scoped to their
-`DownloadRange` handlers** — the arms its parity cases actually measure. Their remaining handlers
-(`Download`, `Delete`, `Exists`, `GetMetadata`, `currentETag`, and the conditional-write seam) still
-type-test directly. Two of those are worth a look in the broader sweep rather than being assumed
-benign: the conditional-write seam distinguishes `ETagMismatch` from `ConditionalWriteFailure` on a
-`PreconditionFailed` type test, which is an arm whose reachability changes an answer — the same
-shape as `416` — and no parity case covers it. **The audit sinks are untouched by this sweep.**
+`DownloadRange` handlers** — the arms its parity cases actually measure. **The broader sweep is
+Phase 734, done the same day (2026-08-27):** every remaining direct vendor-exception type test
+over an async await in the estate's companions now matches through `(|Unwrapped|)` — the rest of
+`AwsS3Storage` (`Download`, `Exists`, `GetMetadata`, `currentETag`, and the conditional-write seam
+733 flagged, whose `PreconditionFailed` test distinguishes `ETagMismatch` from
+`ConditionalWriteFailure` — an arm whose reachability changes an answer, uncovered by any parity
+case) + its encryption-at-rest validator, the rest of `AzureBlobStorage` (same seam),
+`AzureKeyVaultSecretStore` (whose `GetSecret` 404 handler had no catch-all, so a wrapped 404
+escaped raw), the three `IBlobEncryptionKeyResolver` companions (AWS KMS / Azure Key Vault / GCP
+KMS — the KeyNotFound / KeyDestroyed crypto-shred classification), the SMTP and WebPush
+notification sinks (vendor classification over non-generic `do! Task` awaits), the GA4 live
+transport (no catch-alls — a wrapped exception escaped raw), and the `DbException` sites in
+`ConnectorSupport.classify` + the Sql/Snowflake/Synapse connectors. Audited and deliberately
+unchanged: `GcpSecretManager` + `VaultSecretStore` (pure BCL `HttpClient`, status-code branching,
+no vendor exception types), **the audit sinks** (same — no vendor type tests), `LdapConnection`
+(its vendor branch and catch-all produce identical results, and the discriminating
+`ErrorCode = 49` test runs synchronously inside `Task.Run`), and the Voice providers (every
+branch yields the same `Transient` classification). Re-measured armed after the sweep: two runs,
+94 cases — 90/2/4 and 89/2/5 — the only red being the GCP `DownloadRange` emulator-hash cluster
+below plus one flaky GCP `GetMetadata` DateTime parse (pre-existing, tracked separately).
 
 ### The GCP blob rows — 16/20 (14/20 before the `AggregateException` fix)
 

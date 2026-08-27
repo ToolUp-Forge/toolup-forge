@@ -53,6 +53,21 @@ module Errors =
     /// can recognise a schema-shaped failure return `SchemaMismatch`
     /// themselves rather than routing it through here.
     let classify (context: string) (ex: exn) : IngestionError =
+        // Vendor / driver exceptions can arrive here wrapped in
+        // `AggregateException` (the class the first armed cloud-parity
+        // run proved live in the AWS companions, 2026-08-27), which
+        // would degrade every type test below to `UnexpectedFailure` —
+        // so unwrap first: flatten and take the single inner exception
+        // a one-Task await carries; a bare exception passes through
+        // unchanged.
+        let ex =
+            match ex with
+            | :? AggregateException as aggregate ->
+                match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+                | Some inner -> inner
+                | None -> ex
+            | _ -> ex
+
         let message = $"%s{context}: %s{ex.Message}"
 
         match ex with

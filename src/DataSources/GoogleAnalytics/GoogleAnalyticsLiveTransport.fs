@@ -167,6 +167,26 @@ let private renderReport (property: string) (response: RunReportResponse) : byte
     writer.Flush()
     stream.ToArray()
 
+// ─── Exception unwrapping ────────────────────────────────────────────
+
+/// Vendor SDK exceptions can surface at this transport's `with`
+/// handlers wrapped in `AggregateException`, so a direct
+/// `:? GoogleApiException` / `:? RpcException` /
+/// `:? TokenResponseException` type test never fires — the class the
+/// first armed cloud-parity run (2026-08-27) proved live in the GCS
+/// companion, whose SDK family this transport shares. None of the
+/// handlers below has a catch-all, so a wrapped exception would escape
+/// raw instead of mapping to a typed `IngestionError`. Match through
+/// the wrapper: flatten and take the single inner exception a one-Task
+/// await carries; a bare exception passes through unchanged.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 // ─── Construction ────────────────────────────────────────────────────
 
 /// Build the live transport.
@@ -207,7 +227,7 @@ let create (applicationName: string) : GoogleAnalyticsTransport = {
                 else
                     return Ok credential.Token.AccessToken
             with
-            | :? TokenResponseException as ex ->
+            | Unwrapped(:? TokenResponseException as ex) ->
                 // `invalid_grant` here means the user revoked the
                 // grant, changed their password, or the token aged
                 // out of an unverified app's seven-day window. All
@@ -218,7 +238,7 @@ let create (applicationName: string) : GoogleAnalyticsTransport = {
                             sprintf "Google rejected the refresh token (%s) — reconnect the data source" ex.Message
                         )
                     )
-            | :? HttpRequestException as ex -> return Error(SourceUnreachable ex.Message)
+            | Unwrapped(:? HttpRequestException as ex) -> return Error(SourceUnreachable ex.Message)
         }
 
     ListProperties =
@@ -257,8 +277,8 @@ let create (applicationName: string) : GoogleAnalyticsTransport = {
 
                 return Ok(List.ofSeq acc)
             with
-            | :? GoogleApiException as ex -> return Error(fromApi ex)
-            | :? HttpRequestException as ex -> return Error(SourceUnreachable ex.Message)
+            | Unwrapped(:? GoogleApiException as ex) -> return Error(fromApi ex)
+            | Unwrapped(:? HttpRequestException as ex) -> return Error(SourceUnreachable ex.Message)
         }
 
     RunReport =
@@ -283,7 +303,7 @@ let create (applicationName: string) : GoogleAnalyticsTransport = {
                     let! response = client.RunReportAsync request |> Async.AwaitTask
                     return Ok(renderReport request.Property response)
                 with
-                | :? RpcException as ex -> return Error(fromRpc ex)
-                | :? HttpRequestException as ex -> return Error(SourceUnreachable ex.Message)
+                | Unwrapped(:? RpcException as ex) -> return Error(fromRpc ex)
+                | Unwrapped(:? HttpRequestException as ex) -> return Error(SourceUnreachable ex.Message)
         }
 }

@@ -44,6 +44,20 @@ let private buildClient (config: AwsS3StorageConfig) : AmazonS3Client =
 
     new AmazonS3Client(clientConfig)
 
+/// AWS SDK exceptions can arrive at the `with` handler below wrapped in
+/// `AggregateException` (the class the first armed cloud-parity run
+/// proved live in the AWS Secrets Manager companion, 2026-08-27), which
+/// would route every vendor-classified verdict into the generic error
+/// arm. Match through the wrapper; a bare exception passes through
+/// unchanged.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 type private Impl(config: AwsS3StorageConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -79,22 +93,22 @@ type private Impl(config: AwsS3StorageConfig, ?timeout: TimeSpan) =
                              at the bucket level, or wrap the IBlobStorage with \
                              EncryptedBlobStorage via ServerApp.withEncryptedBlobStorage."
             with
-            | :? AmazonS3Exception as ex when ex.ErrorCode = "ServerSideEncryptionConfigurationNotFoundError" ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "ServerSideEncryptionConfigurationNotFoundError" ->
                 return
                     Warning
                         "S3 bucket has no server-side encryption configuration. \
                          Enable bucket encryption at the bucket level or use \
                          EncryptedBlobStorage."
-            | :? AmazonS3Exception as ex when ex.ErrorCode = "NoSuchBucket" ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "NoSuchBucket" ->
                 return Error(sprintf "S3 bucket %s does not exist" config.BucketName)
-            | :? AmazonS3Exception as ex when ex.ErrorCode = "AccessDenied" ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "AccessDenied" ->
                 return
                     Error(
                         sprintf
                             "S3 GetBucketEncryption denied on %s — the IAM principal needs s3:GetEncryptionConfiguration"
                             config.BucketName
                     )
-            | ex -> return Error(sprintf "S3 GetBucketEncryption failed: %s" ex.Message)
+            | Unwrapped ex -> return Error(sprintf "S3 GetBucketEncryption failed: %s" ex.Message)
         }
 
 /// Construct an encryption-at-rest validator from an

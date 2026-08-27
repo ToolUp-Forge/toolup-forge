@@ -107,8 +107,8 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             let! response = client.GetObjectMetadataAsync req |> Async.AwaitTask
             return Ok(Some response.ETag)
         with
-        | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound -> return Ok None
-        | ex -> return Error ex.Message
+        | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound -> return Ok None
+        | Unwrapped ex -> return Error ex.Message
     }
 
     interface IBlobStorage with
@@ -128,7 +128,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.InputStream <- new MemoryStream(content)
                 let! _ = client.PutObjectAsync req |> Async.AwaitTask
                 return Ok $"s3://{config.BucketName}/{req.Key}"
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -142,9 +142,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                 return Ok(ms.ToArray())
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -187,7 +187,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.Key <- blobKey toolupContainer blobName
                 let! _ = client.DeleteObjectAsync req |> Async.AwaitTask
                 return Ok()
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -231,7 +231,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! _ = client.GetObjectMetadataAsync req |> Async.AwaitTask
                 return true
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound -> return false
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound -> return false
             | _ -> return false
         }
 
@@ -255,9 +255,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                         ContentType = contentType
                     }
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -289,9 +289,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
                 return Ok(ms.ToArray(), response.ETag)
             with
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -310,7 +310,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! response = client.PutObjectAsync req |> Async.AwaitTask
                 return Ok response.ETag
             with
-            | :? AmazonS3Exception as ex when
+            | Unwrapped(:? AmazonS3Exception as ex) when
                 ex.StatusCode = HttpStatusCode.PreconditionFailed
                 || ex.StatusCode = HttpStatusCode.Conflict
                 ->
@@ -318,11 +318,11 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 | Ok current -> return Error(ETagMismatch current)
                 | Error msg ->
                     return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
-            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+            | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 // `If-Match` against an absent key — the blob the caller
                 // expected is gone.
                 return Error(ETagMismatch None)
-            | ex -> return Error(ConditionalWriteFailure ex.Message)
+            | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -348,7 +348,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 req.Expires <- DateTime.UtcNow.Add ttl
                 let! url = client.GetPreSignedURLAsync req |> Async.AwaitTask
                 return Ok url
-            with ex ->
+            with Unwrapped ex ->
                 return Error(SignedUrlRefusal.SigningFailed ex.Message)
         }
 
