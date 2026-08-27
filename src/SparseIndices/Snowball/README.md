@@ -24,7 +24,7 @@ This companion makes the lexical leg agree with the language.
 
 ## Compose
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.SparseIndices.Snowball
 
 let app =
@@ -35,7 +35,7 @@ let app =
 Constructing the index directly (tests, evaluation harnesses, a bespoke
 composition root):
 
-```fsharp
+```fsharp skip=fragment
 let index =
     new InMemoryBM25Index(storage, logger, analyzer = SnowballAnalyzer.english ())
 ```
@@ -49,7 +49,7 @@ SnowballAnalyzer.forLanguage StopWords.French
 
 Full control:
 
-```fsharp
+```fsharp skip=fragment
 SnowballAnalyzer.create {
     Language = StopWords.German
     Stemming = CustomStemmer("cistem-1", MyGermanStemmer.stem)

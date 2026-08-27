@@ -6,7 +6,7 @@ connection. Covers both provisioned clusters and Redshift Serverless workgroups.
 Production-ready. Stateless between calls (portability rule 4): the client is rebuilt per call from
 credentials resolved through the `ISecretStore` thunk, or from the AWS default credential chain.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.Redshift
 
 let source = RedshiftDataSource.create secretStore

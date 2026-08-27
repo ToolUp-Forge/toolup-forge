@@ -20,7 +20,7 @@ The package depends on `Azure.Data.Tables` (Microsoft-shipped SDK) — no other 
 
 ## Usage
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.RateLimit.AzureTableStorage
 
@@ -38,9 +38,12 @@ ServerApp.empty
             RouteLimit.perIpPerMinute "/api/export/" 10
         ]
 }
-|> ServerApp.withServiceConfig (fun services ->
-    let logger = ConsoleLogger.create ()
-    services.AddSingleton<IRateLimitStore>(AzureTableRateLimitStore.create options logger))
+|> ServerApp.withExtensions
+    { ComposeExtensions.empty with
+        ServiceConfig =
+            Some(fun services ->
+                let logger = ConsoleLogger.create ()
+                services.AddSingleton<IRateLimitStore>(AzureTableRateLimitStore.create options logger)) }
 |> ServerApp.run
 ```
 

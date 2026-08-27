@@ -134,7 +134,7 @@ Clock-skew tolerance is 60 seconds (second-precision, the JWT standard's lower b
 
 The JSON-RPC host rebuilds the `PeerCallContext` from the **validated `PeerPrincipal`**, never from the self-asserted wire payload:
 
-```fsharp
+```fsharp skip=fragment
 let trustedContext = {
     payload.Context with
         Peer = principal.Caller     // from the verified token, not the body

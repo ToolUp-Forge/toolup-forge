@@ -16,7 +16,7 @@ Substrate dependencies arrive through composition, never read directly (companio
 
 Wrap a base `ServerApp` with `PasskeyServerApp` (the `PasskeyCompose` companion root, mirroring `PeerServerApp`) and run it. At `run`, the companion folds itself into the base app in one pass: it sets the app `IAuthProvider`, registers the preflight validator, mounts the ceremony routes, and registers the `PasskeyRuntime` DI singleton (the Fido2 verifier plus the credential / challenge stores) over the resolved `IBlobStorage`.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Server
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyCompose
@@ -28,7 +28,7 @@ let config =
 
 [<EntryPoint>]
 let main _ =
-    ServerApp.create ()
+    ServerApp.empty
     |> ServerApp.withConfig { ServerConfig.defaults with Port = 5000 }
     |> ServerApp.withStorage (LocalFileStorage "data")   // any IBlobStorage
     |> PasskeyCompose.create config

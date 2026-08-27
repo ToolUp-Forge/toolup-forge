@@ -13,7 +13,7 @@ An `ITranscriptionProvider` (from `ToolUp.Voice.Core`) over OpenAI's Whisper
 
 ## Compose
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Voice
 
 let provider = WhisperTranscriptionProvider.create secretStore

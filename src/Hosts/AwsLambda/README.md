@@ -20,14 +20,14 @@ The consumer's `.fsproj` targets `net10.0` and produces a self-contained Lambda 
 
 ### 1. Compose the SDK against the serverless shape
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 
 let serverHost: IServerHost =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Anonymous
+            Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
             Webhooks = NoWebhooks
@@ -39,14 +39,14 @@ let serverHost: IServerHost =
     |> ServerApp.addModule (myModule.register ())
     // Lambda drives `Invoke` per request; do NOT call
     // `ServerApp.run` (which would call `RunBlocking`).
-    |> ServerApp.composeOnly
+    |> composeWithoutRunning
 ```
 
-`composeOnly` is the low-level entry point that returns the `IServerHost` without calling `RunBlocking()`. (If not yet available in your SDK version, the same shape is reachable by calling `ToolUp.Platform.Server.compose` directly with the positional argument list.)
+`composeWithoutRunning` is **your own** one-liner, not an SDK member: `ServerApp` ships no compose-only entry point, because `ServerApp.run` composes and then calls `RunBlocking()`. Write it over `ToolUp.Platform.Server.compose`, passing the positional argument list, and return the `IServerHost` without starting the blocking host.
 
 ### 2. Start the host once at cold-start
 
-```fsharp
+```fsharp skip=fragment
 do serverHost.Host.StartAsync(System.Threading.CancellationToken.None).Wait()
 ```
 
@@ -58,7 +58,7 @@ Pick the bridge matching the integration's payload format. Most new deployments 
 
 #### HTTP API v2 / Lambda Function URLs (recommended)
 
-```fsharp
+```fsharp skip=fragment
 open Amazon.Lambda.Core
 open Amazon.Lambda.APIGatewayEvents
 open Amazon.Lambda.RuntimeSupport
@@ -80,14 +80,14 @@ let main _ =
 
 #### REST API v1
 
-```fsharp
+```fsharp skip=fragment
 let handler (req: APIGatewayProxyRequest) (_ctx: ILambdaContext) =
     AwsLambdaHost.bridgeV1 (serverHost, req)
 ```
 
 #### Application Load Balancer
 
-```fsharp
+```fsharp skip=fragment
 let handler (req: ApplicationLoadBalancerRequest) (_ctx: ILambdaContext) =
     AwsLambdaHost.bridgeAlb (serverHost, req)
 ```

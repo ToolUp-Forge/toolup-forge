@@ -22,7 +22,7 @@ The in-memory store, the assign-and-log-once service, and dev sinks live in
 
 ## Example
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Experiments
 
 let exp = { Id = "checkout-cta"; Status = Running

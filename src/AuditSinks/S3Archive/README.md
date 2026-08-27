@@ -20,7 +20,7 @@ This is the **no-paid-deps default** of the three reference companions Phase 9g 
 
 3. Construct the sink in the composition root and register it via `ServerApp.withAuditSink`:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.S3Archive
 
    let auditSink =
@@ -81,7 +81,7 @@ The Phase 9c half 2 distributed companion (planned, gated on multi-node testing 
 
 Wire `LocalFileStorage` instead of `AwsS3Storage` for dev:
 
-```fsharp
+```fsharp skip=fragment
 let blobStorage = LocalFileStorage "/var/lib/myapp/storage" :> IBlobStorage
 
 let auditSink =

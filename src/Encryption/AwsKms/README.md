@@ -23,7 +23,7 @@ let resolver = AwsKmsKeyResolver.create kms "arn:aws:kms:eu-west-2:...:key/<cmk>
 
 Per-scope CMKs (multi-tenant key custody):
 
-```fsharp
+```fsharp skip=fragment
 let resolver = AwsKmsKeyResolver.createPerScope kms (fun scope -> cmkArnFor scope.ScopeId)
 ```
 

@@ -68,7 +68,7 @@ In your client `.fsproj`:
 
 In your server's composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Forms.FormsCompose
 
 let bugReportSchema = FormSchema.create "bug-report" "Bug report" [
@@ -95,7 +95,7 @@ let severityGuard : WorkflowGuard = fun (submission, _ctx) -> async {
 }
 
 let config = { ServerConfig.defaults with
-                 Port = 5000; Mode = Team
+                 Port = 5000; Surfaces = Surfaces.team
                  EntityStore = EnabledEntityStore }   // REQUIRED — Forms rides on Phase 19
 
 [<EntryPoint>]
@@ -115,7 +115,7 @@ The Forms API is mounted at `/api/IFormApi/*` once `FormsServerApp.run` boots. C
 
 Custom predicates ride a server-side registry keyed by name (closures don't cross Fable serialization, so the Shared layer carries names only).
 
-```fsharp
+```fsharp skip=fragment
 let isStaffEmail : CustomValidator = fun raw ->
     if raw.EndsWith "@example.com" then Ok ()
     else Error "Email must be on the example.com domain."
@@ -133,7 +133,7 @@ let isStaffEmail : CustomValidator = fun raw ->
 
 Same name-keyed pattern as custom validators. Guards veto transitions; actions run after persistence (best-effort, failures logged not rolled back).
 
-```fsharp
+```fsharp skip=fragment
 let notifyApprover : WorkflowAction = fun (submission, _ctx) -> async {
     // ...send email / SMS / push notification...
     do! someTransactionalSink.Send (...)

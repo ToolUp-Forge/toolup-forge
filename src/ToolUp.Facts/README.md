@@ -45,7 +45,7 @@ module), not substrate itself.
 
 ## How to use
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Facts
 
 let store = BlobFactStore.create blobStorage eventStore

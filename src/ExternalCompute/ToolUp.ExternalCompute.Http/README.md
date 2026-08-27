@@ -15,7 +15,7 @@ cancel requests.
 
 ## Composing it
 
-```fsharp
+```fsharp skip=fragment
 open System.Net.Http
 open ToolUp.Platform
 open ToolUp.Platform.ExternalCompute.Http

@@ -24,7 +24,7 @@ let resolver = GoogleCloudKmsKeyResolver.create client keyName
 
 Per-scope KEKs (multi-tenant key custody):
 
-```fsharp
+```fsharp skip=fragment
 let resolver =
     GoogleCloudKmsKeyResolver.createPerScope client (fun scope -> keyNameFor scope.ScopeId)
 ```

@@ -25,7 +25,7 @@ bindings:
 
 `GetSecret name` resolves the `latest` version (the canonical alias for the highest-numbered enabled version). Callers that need a pinned version pass `name@versionId`:
 
-```fsharp
+```fsharp skip=fragment
 // Latest version (default)
 let! current = secretStore.GetSecret("_platform", "db-password")
 

@@ -18,7 +18,7 @@ This companion is functionally identical to `ToolUp.AuditSinks.S3Archive` — bo
 
 2. Construct the sink in the composition root and register it via `ServerApp.withAuditSink`:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.GcsArchive
 
    let auditSink =
@@ -85,7 +85,7 @@ Same as S3Archive: the replicator's bounded channel and per-scope semaphores are
 
 Wire `LocalFileStorage` instead of `GoogleCloudStorage` for dev:
 
-```fsharp
+```fsharp skip=fragment
 let blobStorage = LocalFileStorage "/var/lib/myapp/storage" :> IBlobStorage
 
 let auditSink =

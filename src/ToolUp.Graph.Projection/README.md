@@ -46,12 +46,12 @@ shared by both the sync and rebuild paths so they never drift.
 
 ## Composition
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Graph.Projection
 
 let app =
-    ServerApp.create "my-app"
-    |> ServerApp.withEntityStore
+    ServerApp.empty
+    |> ServerApp.withConfig { ServerConfig.defaults with EntityStore = EnabledEntityStore }
     |> ServerApp.withEntity bookRegistration
     |> ServerApp.withEntity authorRegistration
     |> ServerApp.withEntityGraphProjection   // opt in (requires an IGraphStore)

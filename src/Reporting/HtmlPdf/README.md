@@ -12,7 +12,7 @@ header/footer bands all behave as the CSS says.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Reporting
 open ToolUp.Reporting.HtmlPdf
 

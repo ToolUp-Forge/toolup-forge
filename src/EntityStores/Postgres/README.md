@@ -62,7 +62,7 @@ Resolve the connection string from `ISecretStore` (never read env vars in the
 companion), build an `NpgsqlDataSource`, and register the store + its ops
 surface:
 
-```fsharp
+```fsharp skip=fragment
 let connString = // resolved from ISecretStore
 let dataSource = NpgsqlDataSource.Create connString
 let store = PostgresEntityStore.create dataSource registry   // IEntityStore

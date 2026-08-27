@@ -41,7 +41,7 @@ refresh token and handed back verbatim), but **GitHub Apps are the supported tar
 
 ## Wiring
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.DataSources.GitHubAppFlow
 

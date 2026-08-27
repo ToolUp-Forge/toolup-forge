@@ -66,7 +66,7 @@ let register () : ErasedModule =
         Init = init
         Update = update
         Name = "Hello World"
-        Icon = "/svg/chart.svg"
+        Icon = Icon.ofUrl "/svg/chart.svg"
     }
     |> ClientModule.withView view
     |> ClientModule.register
@@ -145,7 +145,7 @@ let registerSalesAnalysis () : ErasedModule =
         Init = ClientModule.withUnitInit init
         Update = update
         Name = "Sales Analysis"
-        Icon = "/svg/sales.svg"
+        Icon = Icon.ofUrl "/svg/sales.svg"
     }
     |> ClientModule.withView view
     |> ClientModule.withVisibility Visibility.visibleToAuthenticated
@@ -179,7 +179,7 @@ let registerSalesAnalysis () : ErasedModule =
         Init = init
         Update = update
         Name = "Sales Analysis"
-        Icon = "/svg/sales.svg"
+        Icon = Icon.ofUrl "/svg/sales.svg"
     }
     |> ClientModule.withPages [
         { Route = "/dataset";  Label = "Dataset"; View = datasetView }

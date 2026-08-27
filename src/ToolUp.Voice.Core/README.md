@@ -15,7 +15,7 @@ The family is four packages, each opt-in and composed independently:
 
 ## The abstraction
 
-```fsharp
+```fsharp skip=fragment
 type ITranscriptionProvider =
     abstract ProviderId: string
     abstract SupportsStreaming: bool
@@ -32,7 +32,7 @@ stateless between `Transcribe` calls — the six portability rules (GP 12) are a
 `Transcript.plainText` is the "just give me the words" projection for dropping recognised
 text straight into an input:
 
-```fsharp
+```fsharp skip=fragment
 let words = Transcript.plainText transcript
 ```
 
@@ -42,7 +42,7 @@ Both server providers read their API key from `ISecretStore` in the `_platform` 
 exactly the pattern the Claude / OpenAI / Gemini AI providers use — so a rotated key flows
 through without reconstruction and no credential is ever read from an env var directly.
 
-```fsharp
+```fsharp skip=fragment
 // Azure AI Speech — key at _platform / "azure-speech-key" (+ region)
 let provider = AzureSpeechTranscriptionProvider.create secretStore
 
@@ -67,7 +67,7 @@ Mode resolves to **local if available**, unless the config forces remote. See
 An opt-in mic can be wired into the AI chat prompt box with one line (default off, zero
 visual change when unset) via the `ToolUp.AI.Client` prompt-accessory registration seam:
 
-```fsharp
+```fsharp skip=fragment
 ToolUp.Voice.Client.VoiceInput.registerPromptMic VoiceCaptureMode.Auto
 ```
 

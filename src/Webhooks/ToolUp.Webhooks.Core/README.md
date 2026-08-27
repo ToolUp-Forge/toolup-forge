@@ -25,7 +25,7 @@ The ASP.NET Core / Giraffe route + registry + in-memory dedup store live in
 
 ## Example
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Webhooks
 
 let result =

@@ -13,7 +13,7 @@ operator-declared keys; the SDK never auto-populates PII.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open System.Net.Http
 open ToolUp.TelemetrySinks.Ga4
 

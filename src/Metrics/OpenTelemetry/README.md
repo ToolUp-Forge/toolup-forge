@@ -23,7 +23,7 @@ This companion does NOT take a NuGet dependency on the OpenTelemetry SDK. The in
 
 2. In your composition root, register the sink alongside the in-process default:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.Metrics
    open ToolUp.Platform.Metrics.OpenTelemetry
 

@@ -17,7 +17,7 @@ consume it; hinted numbers and dates render as formatted text per the hint.
 that cell, with no template-side markup. This is the mode for workbooks whose layout was
 authored visually in a spreadsheet application:
 
-```fsharp
+```fsharp skip=fragment
 let values =
     Map [
         "Sheet1!B7", NumberValue 41250.0

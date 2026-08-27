@@ -85,7 +85,7 @@ module owns the input size) — are both bounded by substrate that already exist
 
 ## Enabling it
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Algorithms
 open ToolUp.Algorithms.AlgorithmsCompose
 
@@ -106,7 +106,7 @@ Composing without providers is legal and useful during bring-up: you get an empt
 
 A provider implements whichever fitter interfaces it can serve and assembles them:
 
-```fsharp
+```fsharp skip=fragment
 let provider =
     AlgorithmProviderParts.create "acme" "1.0.0"
     |> AlgorithmProviderParts.withDescriptive (AcmeDescriptiveStats())

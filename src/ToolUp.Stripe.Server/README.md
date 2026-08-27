@@ -7,7 +7,7 @@ and `Checkout.createSession` wrappers.
 
 ## Planned surface
 
-```fsharp
+```fsharp skip=signature
 type StripeConfig =
     { WebhookSecret: string
       ApiKey: string }

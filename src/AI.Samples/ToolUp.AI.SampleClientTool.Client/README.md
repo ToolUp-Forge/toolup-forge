@@ -32,7 +32,7 @@ Follow these four steps to write your own. The sample is the smallest possible r
 
 ### 1. Define the wire-format records (Core tier — Fable + .NET shared)
 
-```fsharp
+```fsharp skip=fragment
 // SampleToolTypes.fs
 namespace MyCompany.AITool
 
@@ -50,7 +50,7 @@ Both server and client reference this Core project so the wire shape is exactly 
 
 ### 2. Register the tool with `AIServerApp` (Server tier)
 
-```fsharp
+```fsharp skip=fragment
 // Compose.fs (server side)
 open ToolUp.AI
 open MyCompany.AITool
@@ -78,9 +78,9 @@ For production deployments add `registerWithPolicy` that folds an `IClientToolAu
 
 ### 3. Implement the browser-side handler (Client tier — Fable)
 
-```fsharp
+```fsharp skip=fragment
 // SampleHandler.fs
-module MyCompany.AITool.Client.MyHandler
+module MyCompany.AITool.Browser.MyHandler
 
 open Fable.SimpleJson
 open ToolUp.AI.Client
@@ -101,7 +101,7 @@ The tuple input form (`ClientToolContext * string`) is non-negotiable — Fable 
 ### 4. Compose
 
 Server side:
-```fsharp
+```fsharp skip=fragment
 AIServerApp.create factory configStore
 |> AIServerApp.withConfig config
 |> MyCompany.AITool.Server.Compose.register
@@ -109,15 +109,15 @@ AIServerApp.create factory configStore
 ```
 
 Client side (in your shell's boot sequence, before `AIClientConfig.run`):
-```fsharp
-MyCompany.AITool.Client.MyHandler.install ()
+```fsharp skip=fragment
+MyCompany.AITool.Browser.MyHandler.install ()
 ```
 
 ## Validate against the SDK contract packs
 
 Bind both Phase 46 packs to your authorizer + handler in your companion's test project:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Tests.Contracts
 
 let authorizerTests =

@@ -19,7 +19,7 @@ Licensed under Apache-2.0. Npgsql is the only vendor dependency, and it stays in
 
 ## Composition
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG.VectorStores.Pgvector
 
 let options = { PgvectorOptions.forDimensions 1536 with Table = "toolup_rag_chunks" }
@@ -30,7 +30,7 @@ The connection string comes from the deployment (`ISecretStore` / configuration)
 
 Register the readiness probe alongside it:
 
-```fsharp
+```fsharp skip=fragment
 Health.create store
 ```
 
@@ -80,7 +80,7 @@ The `deleted_at` column is the tombstone (Phase 14h soft-delete contract): `Dele
 
 The default is `NoAnnIndex` — exact cosine scan, perfect recall, and fast enough below a few hundred thousand rows (GP 11: the default is the conservative behaviour). Opt in when the corpus warrants it:
 
-```fsharp
+```fsharp skip=fragment
 let options = {
     PgvectorOptions.forDimensions 1536 with
         AnnIndex = HnswAnnIndex(16, 64)

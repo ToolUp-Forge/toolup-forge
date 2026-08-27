@@ -105,7 +105,7 @@ Single-page modules — the default — register a `View: 'Model -> ('Msg -> uni
 
 Multi-page modules opt in with `ClientModule.withPages`, declaring one view per page keyed by `PageConfig.Route`. Each page view returns a `PageContent` value directly — picking its own layout shape:
 
-```fsharp
+```fsharp skip=fragment
 type PageContent =
     | SplitPanel of left: ReactElement * right: ReactElement   // narrow left + wide right (legacy shape)
     | Stacked of sections: ReactElement list                   // top-down flow (selection + summary + preview)
@@ -122,7 +122,7 @@ The shell emits one sidebar entry per `PageConfig` for multi-page modules (compo
 
 The server `Server.fs` is a thin composition root. It builds one `ServerModule` record per module and assembles them into an `ServerApp` pipeline:
 
-```fsharp
+```fsharp skip=fragment
 let skuAnalysisModule =
     ServerModule.create "SkuAnalysis"
     |> ServerModule.withGuardedApi skuAnalysisApi

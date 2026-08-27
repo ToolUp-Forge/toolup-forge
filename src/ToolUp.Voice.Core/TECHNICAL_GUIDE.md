@@ -69,7 +69,7 @@ row; **nothing registered → nothing renders**, so the AI chat prompt box is by
 unchanged for a deployment that does not opt in (GP 13). `ToolUp.Voice.Client` registers its
 mic with one call:
 
-```fsharp
+```fsharp skip=fragment
 ToolUp.Voice.Client.VoiceInput.registerPromptMic VoiceCaptureMode.Auto
 ```
 

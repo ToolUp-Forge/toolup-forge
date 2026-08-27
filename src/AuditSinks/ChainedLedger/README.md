@@ -24,7 +24,7 @@ Stated plainly, because a reader who believes the chain alone is sufficient is w
 
 2. Construct the sink and register it. The unsigned form needs no key material at all:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.ChainedLedger
 
    let settings = {
@@ -38,7 +38,7 @@ Stated plainly, because a reader who believes the chain alone is sufficient is w
 
 3. To sign the head, implement `ILedgerHeadSigner` against whatever signing substrate the deployment runs, and use `createSigned`:
 
-   ```fsharp
+   ```fsharp skip=fragment
    let sink = createSigned "ledger-prod" settings blobStorage signer
    ```
 
@@ -46,7 +46,7 @@ A deployment that never constructs the sink is byte-for-byte unchanged (GP 11 / 
 
 ## Verifying a ledger
 
-```fsharp
+```fsharp skip=fragment
 match! verify settings blobStorage (Some verifier) with
 | Ok(LedgerVerified(count, headDigest, signature)) -> // intact and trusted
 | Ok(LedgerHeadUntrusted(count, headDigest, signature)) -> // records consistent, head not proven

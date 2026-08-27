@@ -25,14 +25,14 @@ let resolver = AzureKeyVaultKeyResolver.create credential kekId
 
 Per-scope KEKs (multi-tenant key custody):
 
-```fsharp
+```fsharp skip=fragment
 let resolver =
     AzureKeyVaultKeyResolver.createPerScope credential (fun scope -> kekUriFor scope.ScopeId)
 ```
 
 Managed-HSM AES KEK (AES-key-wrap instead of RSA-OAEP):
 
-```fsharp
+```fsharp skip=fragment
 open Azure.Security.KeyVault.Keys.Cryptography
 
 let resolver =

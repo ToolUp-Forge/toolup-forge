@@ -11,7 +11,7 @@ Client-side Microsoft Entra External ID sign-in UI for `ToolUp.Platform`. A thin
 
 Wired into a deployment as a `CustomAuthUI` provider:
 
-```fsharp
+```fsharp skip=fragment
 ClientConfig.AuthUI = CustomAuthUI {
     Wrap =
         EntraExternalIdAuthUI.wrap

@@ -31,7 +31,7 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
 
 3. Wire via `withAssetStore` on the composition pipeline:
 
-   ```fsharp
+   ```fsharp skip=fragment
    ServerApp.empty
    |> ServerApp.withConfig config
    |> ServerApp.withStorage blobStorage
@@ -62,7 +62,7 @@ Windows + macOS dev environments pull the native assets transitively — no extr
 
 **Arbitrary-MIME profile entries.** A profile is now a list of `ProfileEntry` — the image specs you already register (`ImageDerivative`, what `withDerivativeProfile` produces) and `GeneralDerivative` entries declaring accepted input MIME(s), output MIME, a cache file extension, and a renderer key resolved against the deployment's `MimeRendererRegistry`:
 
-```fsharp
+```fsharp skip=fragment
 AssetStoreServerApp.create ()
 |> AssetStoreServerApp.withDerivativeProfileEntries (DerivativeProfileId "media") [
     GeneralDerivative {

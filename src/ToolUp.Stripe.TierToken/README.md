@@ -8,7 +8,7 @@ encoded with base64-url (no padding).
 
 ## Surface
 
-```fsharp
+```fsharp skip=signature
 type Tier = Anonymous | Free | Personal | Teacher
 
 module Tier =

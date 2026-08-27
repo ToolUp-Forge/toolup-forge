@@ -33,7 +33,7 @@ model (GP 12 rule 1).
 
 ## Quick start — import, redline, emit
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.OpenXml
 
 // 1. Import: typed structural model + honest residue report.
@@ -134,7 +134,7 @@ back on import, without post-processing the finished bytes through a second OPC
 pass. `Emit.toBytesWith` / `Import`'s `CustomParts` fold this into the single
 emit / import pass:
 
-```fsharp
+```fsharp skip=fragment
 let part = {
     PartUri = "/myapp/tree.xml"                           // honoured verbatim
     ContentType = "application/vnd.myapp.doc-tree+xml"

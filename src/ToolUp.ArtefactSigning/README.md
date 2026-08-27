@@ -19,7 +19,7 @@ nothing runs until you construct a signer.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.ArtefactSigning
 
 // Compose against the SDK's ISecretStore + IAuditLog (already present in
@@ -40,7 +40,7 @@ match! signer.Sign auditPackBytes with
 Mount the anonymous route so verifying parties can fetch the public key
 (serves rotated-out keys too, for archival verification):
 
-```fsharp
+```fsharp skip=fragment
 let app = choose [ SigningKeyHandler.routes; ...existing routes... ]
 // GET /_platform/signing-key/{keyId}  ->  { keyId, alg, algorithm, pem, jwk }
 ```
@@ -71,7 +71,7 @@ Everything above signs bytes, which is the right shape for a publish
 pipeline. An **application** signing its own payloads needs three further
 facts on each signature, and `IApplicationSigner` carries them:
 
-```fsharp
+```fsharp skip=fragment
 let provider = ApplicationSigning.inProcess secrets audit "app-signing-v1" EcdsaP256 "system"
 let! signer  = ApplicationSigning.createActivated "system" provider
 ApplicationSigning.registerProvider services provider |> ignore   // DI, opt-in

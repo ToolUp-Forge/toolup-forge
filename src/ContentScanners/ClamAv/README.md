@@ -12,7 +12,7 @@ vendor-shaped reaches `ToolUp.Platform.*` (GP 1).
 
 ## Composing it
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.Platform.ContentScanners.ClamAv
 
@@ -34,7 +34,7 @@ A `ScanRejected` verdict is always a refusal, and no policy softens it.
 
 Tuning beyond the defaults (port `3310`, 64 KiB frames, a 30s ceiling):
 
-```fsharp
+```fsharp skip=fragment
 let scanner =
     ClamAvOptions.create "clamav.internal"
     |> ClamAvOptions.withPort 3310
@@ -49,7 +49,7 @@ let scanner =
 (`Unhealthy` — take the replica out of rotation) and costs a fail-open deployment only a control
 (`Degraded`, with the message saying out loud that uploads are being admitted unscanned).
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.withHealthCheck (ClamAvHealthCheck(scanner, policy) :> IHealthCheck) app
 ```
 

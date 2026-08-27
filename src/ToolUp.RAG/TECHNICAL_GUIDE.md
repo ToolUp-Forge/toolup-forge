@@ -187,7 +187,7 @@ no pipeline change.
 HNSW is opt-in (GP 13): a deployment that stays under 50k pulls none
 of the `HNSW.Net` weight. Compose it before `composeWithRAG`:
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create factory configStore
 |> RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)
 |> RAGServerApp.run
@@ -329,7 +329,7 @@ The `pipelineRef` pattern is deliberate: the system-prompt builder is constructe
 
 `RAGServerApp` is the record-based counterpart to `composeWithRAG`. It wraps an `AIServerApp` in an `AI` field and carries the embedding provider alongside:
 
-```fsharp
+```fsharp skip=fragment
 type RAGServerApp = {
     AI: AIServerApp
     EmbeddingProvider: IEmbeddingProvider option
@@ -394,9 +394,14 @@ type IImageEmbedder =
 let ImageRegionDataTypeId = "ImageRegion"
 
 module ImageEmbeddingMetadata =
-    [<Literal>] let ProviderKey   = "_imageProvider"
-    [<Literal>] let ModelKey      = "_imageModel"
-    [<Literal>] let DimensionsKey = "_imageDim"
+    [<Literal>]
+    let ProviderKey = "_imageProvider"
+
+    [<Literal>]
+    let ModelKey = "_imageModel"
+
+    [<Literal>]
+    let DimensionsKey = "_imageDim"
 ```
 
 Image vectors live in a different vector space than text vectors — typically a CLIP-style shared text/image modality. **Dimension-isolation routing requirement:** an image-aware ingestion path must not write image vectors into the same `IVectorStore` namespace as text vectors. The supported route is to maintain a separate scope (or a separate `IVectorStore` registration) for `dataTypeId = ImageRegionDataTypeId`, and to stamp `ImageEmbeddingMetadata.{ProviderKey, ModelKey, DimensionsKey}` rather than `EmbeddingVersion`'s text-side keys (`_embedProvider` / `_embedModel` / `_embedDim`). No default `IImageEmbedder` is registered: there is no honest no-op for image vectors, so consumers null-check the DI lookup and skip image-region work when nothing is wired.
@@ -427,7 +432,7 @@ The trace is built from a `RetrievalTrace` record held on the stack across the p
 
 `hashQuery` (in `RetrievalTracers.fs`) is the only path that reads the raw query string for tracing purposes:
 
-```fsharp
+```fsharp skip=fragment
 let hashQuery (input: string) =
     let bytes = Encoding.UTF8.GetBytes(input ?? "")
     use sha = SHA256.Create()

@@ -28,7 +28,7 @@ No `Octokit` / vendor SDK dependency — BCL `HttpClient` + `System.Text.Json` o
 
 ## Server: validate inbound tokens
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.AuthProviders
 open ToolUp.AuthProviders.GitHubAuthConfig
@@ -41,7 +41,7 @@ let authProvider =
             FetchPrimaryEmail = true }   // second call to /user/emails when public email is absent
 
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with Mode = Authenticated }
+|> ServerApp.withConfig { ServerConfig.defaults with Surfaces = Surfaces.individual }
 |> ServerApp.withAuth authProvider
 |> ServerApp.run
 ```
@@ -77,7 +77,7 @@ The sign-in button redirects to `buildAuthorizeUrl`; your callback route calls
 on every request. The CSRF `state` round-trip, the callback route, and session
 issuance are the consumer's to wire.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders.GitHubOAuth
 
 let oauth = GitHubOAuthAppConfig.create "your-client-id" [ "read:user"; "user:email"; "read:org" ]

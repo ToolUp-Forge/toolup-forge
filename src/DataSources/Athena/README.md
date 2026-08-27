@@ -6,7 +6,7 @@ addressed through a Glue data catalogue.
 Production-ready. Stateless between calls (portability rule 4): the client is rebuilt per call from
 credentials resolved through the `ISecretStore` thunk, or from the AWS default credential chain.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.Athena
 
 // A JSON access-key blob per source out of ISecretStore; a source

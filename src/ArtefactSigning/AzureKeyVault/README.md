@@ -14,7 +14,7 @@ reaches the `ToolUp.ArtefactSigning` substrate. Server-only companion.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open Azure.Identity
 open ToolUp.ArtefactSigning.AzureKeyVault
 

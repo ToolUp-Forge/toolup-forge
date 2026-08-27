@@ -90,7 +90,7 @@ nested membership is expanded before mapping.
 
 ## Wiring
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders
 
 // From the environment (returns None unless TOOLUP_LDAP_AUTH is set).
@@ -106,7 +106,7 @@ LdapConfigValidator.tryFromEnv ()        |> Option.iter (ServerApp.withConfigVal
 For a deployment mixing AD-resident staff with OIDC-federated contractors, chain the providers —
 OIDC first, LDAP second for a user the OIDC store does not know:
 
-```fsharp
+```fsharp skip=fragment
 let provider = LdapAuthProvider.withFallback oidcProvider ldapProvider
 // or an arbitrary chain: LdapAuthProvider.chain [ oidc; ldap ]
 ```

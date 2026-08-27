@@ -22,16 +22,20 @@ AWS cloud umbrella for the ToolUp Platform SDK (Phase 16c). One `<PackageReferen
 
 2. Wire the per-companion components in your composition root as you would each individually — the umbrella does NOT introduce a new abstraction layer. A consumer dropping the umbrella and adding the five inner packages by hand gets byte-identical behaviour.
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform
    open ToolUp.Platform.BlobStorage
+   open ToolUp.Platform.Metrics
+   open ToolUp.Platform.Metrics.OpenTelemetry
    open ToolUp.Platform.AuditSinks.S3Archive
+   open ToolUp.Storage
+   open ToolUp.Secrets
    open OpenTelemetry
    open OpenTelemetry.Metrics
 
    // Storage + secrets
-   let blobStorage = AwsS3Storage.create config :> IBlobStorage
-   let secretStore = AwsSecretsManagerSecretStore.create config :> ISecretStore
+   let blobStorage = AwsS3Storage.create storageConfig
+   let secretStore = AwsSecretsManager.create secretsConfig
 
    // Audit archive
    let auditSink =
@@ -60,7 +64,9 @@ AWS cloud umbrella for the ToolUp Platform SDK (Phase 16c). One `<PackageReferen
    ServerApp.empty
    |> ServerApp.withConfig config
    |> ServerApp.withStorage blobStorage
-   |> ServerApp.withSecretStore secretStore
+   |> ServerApp.withExtensions
+       { ComposeExtensions.empty with
+           ServiceConfig = Some(fun s -> s.AddSingleton<ISecretStore>(secretStore)) }
    |> ServerApp.withAuditSink auditSink
    |> ServerApp.withMetricsSink (OtelMetricsSink.create StandardMetrics.registrations logger)
    |> ServerApp.run

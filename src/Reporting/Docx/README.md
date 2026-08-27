@@ -13,7 +13,7 @@ fills as native tracked changes later.
 
 ## Usage
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Reporting
 
 // At composition time (consumer side):

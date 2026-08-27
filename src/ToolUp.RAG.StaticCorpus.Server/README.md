@@ -3,7 +3,7 @@
 The runtime half of static-corpus retrieval: an `IRetrievalPipeline` over a
 build-time-precomputed `.scidx` embedding index.
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create factory providerProfile embedder
 |> RAGServerApp.withRetrievalPipeline (
     StaticCorpusRetrievalPipeline.loadFromFile embedder "docs.scidx")

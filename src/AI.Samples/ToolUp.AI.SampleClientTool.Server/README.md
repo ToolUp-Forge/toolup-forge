@@ -12,7 +12,7 @@ Apache-2.0 reference companion — server-side compose for the sample client-res
 
 ## Wiring
 
-```fsharp
+```fsharp skip=fragment
 AIServerApp.create factory configStore
 |> AIServerApp.withConfig config
 |> ToolUp.AI.SampleClientTool.Server.Compose.register
@@ -21,7 +21,7 @@ AIServerApp.create factory configStore
 
 Or with an authorizer:
 
-```fsharp
+```fsharp skip=fragment
 AIServerApp.create factory configStore
 |> AIServerApp.withConfig config
 |> ToolUp.AI.SampleClientTool.Server.Compose.registerWithPolicy myAuthorizer

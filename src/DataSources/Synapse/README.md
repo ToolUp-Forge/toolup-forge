@@ -9,7 +9,7 @@ it and disposes it (SqlClient pools underneath), and the credential is re-read t
 `ISecretStore` thunk on **every** call, so a rotated password or a re-minted AAD token takes effect
 without reconstructing the connector.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.Synapse
 
 // SQL login or a supplied AAD token, out of ISecretStore.

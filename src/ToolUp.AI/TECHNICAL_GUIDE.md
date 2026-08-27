@@ -154,7 +154,7 @@ The flags exist and are declared by every provider implementation, but the SDK's
 
 `AIProviderMessage.Parts: AIContentPart list` carries the multipart payload. Plain-text turns leave it `[]` and continue to use `Content: string` — providers serialise to the vendor's legacy string shape, every existing call site is byte-for-byte unchanged. Multipart turns populate `Parts`; providers iterate it and emit the vendor-native content-block array (Anthropic `content: [{type: "text", ...}, {type: "image", source: {...}}]`; OpenAI Chat Completions `content: [{type: "text", text: ...}, {type: "image_url", image_url: {...}}]`).
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.AI
 
 // Build a multipart user message — text + one image.
@@ -176,7 +176,7 @@ let multipart =
 
 **Capability rejection is synchronous.** Both Claude and OpenAI provider companions short-circuit on `AIProviderMessage.isMultimodal` against a per-vendor vision-capable model classifier; non-vision models return `AIProviderError.UnsupportedCapability("vision", ...)` without a network round-trip:
 
-```fsharp
+```fsharp skip=fragment
 match! provider.SendMessage(msgs, tools, systemPrompt, onStream, retryPolicy) with
 | Ok response -> ...
 | Error (UnsupportedCapability("vision", detail)) ->
@@ -189,7 +189,7 @@ match! provider.SendMessage(msgs, tools, systemPrompt, onStream, retryPolicy) wi
 
 **PII / payload-size redaction in audit + latency events.** Image bytes are PII-sensitive (faces, locations, sensitive documents) and large (typical mobile receipt: 1–5 MB base64). Never log them. The Core helpers `AIContentPart.redactedSummary` and `AIProviderMessage.redactedSummary` return a metadata-only string:
 
-```fsharp
+```fsharp skip=fragment
 let summary = AIProviderMessage.redactedSummary multipart
 // → "What's on this receipt? [image: 482133 bytes, type=image/jpeg]"
 ```
@@ -204,7 +204,7 @@ Use the helpers wherever an `AIProviderMessage` reaches an audit, latency, or tr
 
 `AIAssistantUI` currently subscribes to SSE regardless of provider capability. When `Streaming = false`, the server ignores `onStream` and the non-streaming path delivers a single complete response — the UI streaming subscription is idle but harmless. To avoid the idle connection:
 
-```fsharp
+```fsharp skip=fragment
 // Server — composeWithAI caller decides whether to register the SSE endpoint
 if provider.Capabilities.Streaming then
     // register /api/ai/events
@@ -220,7 +220,7 @@ The streaming SSE endpoint and the underlying `SSEConnectionManager` remain usef
 
 `ToolUse = false` means the provider will never emit a `tool_use` stop reason. The agent loop currently checks `response.ToolCalls.IsEmpty` per turn, so a provider without tool-use support runs naturally — the empty list exits the loop on the first turn. The flag is informational for the UI ("Available tools" pane should hide when `ToolUse = false` to avoid raising expectations):
 
-```fsharp
+```fsharp skip=fragment
 // AIAssistantUI.fs — conditionally render the tool list
 if provider.Capabilities.ToolUse && not model.AvailableTools.IsEmpty then
     renderToolList model.AvailableTools
@@ -266,7 +266,7 @@ composeWithAI(..., moduleContexts)  │ PromptContext =                │
 
 **`activeModuleContext`** — injects the active module's `ModuleAIContext.SystemPrompt`:
 
-```fsharp
+```fsharp skip=fragment
 let activeModuleContext: SystemPromptBuilder =
     fun ctx -> async {
         match ctx.ActiveModule with
@@ -282,7 +282,7 @@ Empty strings are dropped by `compose`, so a client chatting from a non-module v
 
 **`compose [b1; b2; ...]`** — parallel-resolves the builders, filters empty results, joins with `"\n\n"`:
 
-```fsharp
+```fsharp skip=fragment
 let compose builders : SystemPromptBuilder =
     fun ctx -> async {
         let! parts = builders |> List.map (fun b -> b ctx) |> Async.Parallel
@@ -294,7 +294,7 @@ Parallel resolution matters when a builder makes a network call (team profile fr
 
 ### Team-private context pattern
 
-```fsharp
+```fsharp skip=fragment
 let teamAwarePrompt (platformPrefix: string) (teamStore: TeamStore) : SystemPromptBuilder =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic platformPrefix
@@ -330,7 +330,7 @@ Two opt-in sub-companions let the in-app AI assistant author charts and grids in
 - `ToolUp.AICookbooks.AgChart` — `AgChartAICookbook.systemPromptBuilder : ILogger option -> SystemPromptBuilder`. Reads the Community `COOKBOOK.md`, extracts its `## Critical constraints` + `## The shortest possible chart` sections (header-keyed parse), and prepends them under `# Authoring AG Charts and Grids in F#`.
 - `ToolUp.AICookbooks.AgGridEnterprise` — `AgGridEnterpriseAICookbook.systemPromptBuilder : ILogger option -> SystemPromptBuilder`. Same shape, reading the Enterprise `COOKBOOK.md`; adds the Enterprise series + grid features.
 
-```fsharp
+```fsharp skip=fragment
 // In the deployment composition root, alongside the other prompt builders:
 let promptBuilders logger = [
     SystemPromptBuilder.fromStatic platformPrefix
@@ -382,7 +382,7 @@ All six register `Location = ServerResident`, `Surface = Both`, `SourceModule = 
 
 Modules declare tools via `AIToolDefinition` (in core, `src/ToolUp.Platform.Core/Shared/Types/ModuleAITypes.fs`). The declaration has no execution logic:
 
-```fsharp
+```fsharp skip=fragment
 // In MediaOptimisation/Server.fs
 let tools: AIToolDefinition list = [
     {
@@ -393,6 +393,8 @@ let tools: AIToolDefinition list = [
         ]
         SourceModule = "MediaOptimisation"
         EmitsActions = None
+        Location = ServerResident
+        Surface = Both
     }
     // ...
 ]
@@ -400,7 +402,7 @@ let tools: AIToolDefinition list = [
 
 The application supplies the executor in `AITools.fs`:
 
-```fsharp
+```fsharp skip=fragment
 let allTools: RegisteredTool list = [
     createTool
         MediaOptimisation.Server.loadDataTool
@@ -473,7 +475,7 @@ Every AI tool runs server-side and returns a JSON string to the agent loop. That
 
 Server-side (`Modules/MediaOptimisation/Server.fs` — the declaration):
 
-```fsharp
+```fsharp skip=fragment
 {
     Name = "media_optimisation.apply_optimised_budget"
     Description = "Run budget optimisation AND apply the result to the Media Optimisation module in-place."
@@ -487,12 +489,14 @@ Server-side (`Modules/MediaOptimisation/Server.fs` — the declaration):
             PayloadSchema = None
         }
     ]
+    Location = ServerResident
+    Surface = Both
 }
 ```
 
 Server-side (`ToolUpApp-Server/AITools.fs` — the executor):
 
-```fsharp
+```fsharp skip=fragment
 let private executeMediaOptApplyBudget ctx argsJson = async {
     // (same argument parsing + optimisation as media_optimisation.run)
     let result = MediaOptimisation.Server.optimiseCurvesRoutine request
@@ -507,7 +511,7 @@ let private executeMediaOptApplyBudget ctx argsJson = async {
 
 Client-side (`Modules/MediaOptimisation/ClientView.fs` — the decoder):
 
-```fsharp
+```fsharp skip=fragment
 let private decodeAction: string * string -> Msg option =
     fun (actionKey, payloadJson) ->
         match actionKey with
@@ -538,7 +542,7 @@ A new client-resident companion must clear two SDK conformance bars before it is
 
 Both packs are fixture-style — bind by handing over the authorizer + the two anchor tool names (one the policy allows, one it denies) + a simulator function. The pack owns the rest (scripted provider, registry, dispatch registry, `IEventStore`, `HttpContext`). Bind from your companion's test project:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
 
@@ -596,7 +600,7 @@ The residual risk is confined to a single client coaxing the model into offering
 
 Deployments that want defence-in-depth — a surface the server can corroborate rather than trust — set the mode on `AIAssistantServerConfig`:
 
-```fsharp
+```fsharp skip=fragment
 type AISurfaceDerivationMode =
     | TrustClient                        // default — trust AIMessageRequest.Surface
     | DeriveFromCookie of signingKey: byte[]
@@ -696,7 +700,7 @@ A `Dropped=true` entry means a publish targeted a scopeId nobody is listening on
 
 Wraps core `Server.compose` via the `ComposeExtensions` hook:
 
-```fsharp
+```fsharp skip=fragment
 type ComposeExtensions = {
     Handlers: HttpHandler list
     ServiceConfig: (IServiceCollection -> IServiceCollection) option
@@ -718,18 +722,19 @@ Core `compose` knows nothing about AI. It sees `ComposeExtensions` as an opaque 
 
 `AIServerApp` is the record-based counterpart to `composeWithAI`. It wraps a core `ServerApp` record in a `Base` field and carries the AI-specific fields alongside:
 
-```fsharp
+```fsharp skip=fragment
 type AIServerApp = {
     Base: ServerApp
-    AIProviderFactory: IAIProviderFactory option
-    AIConfigStore: IUserAIConfigStore option
-    AITools: RegisteredTool list
+    AIProviderFactory: IAIProviderFactory
+    ProviderProfile: IProviderProfile
+    PlatformKeyStore: IPlatformAIKeyStore option
+    PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
 }
 ```
 
-`AIServerApp.run` flattens the inner `ServerApp` (modules → handlers / dataTypes / configSchemas) and calls `composeWithAI` with the collected state. It fails loudly if `AIProviderFactory` or `AIConfigStore` is missing — AI needs both, and the core `ServerApp` can't reasonably default them.
+`AIServerApp.run` flattens the inner `ServerApp` (modules → handlers / dataTypes / configSchemas) and calls `composeWithAI` with the collected state. `AIProviderFactory` and `ProviderProfile` are required rather than optional — AI needs both, and the core `ServerApp` can't reasonably default them.
 
 Apps that want RAG layer `RAGServerApp` on top of `AIServerApp`; see `src/ToolUp.RAG/README.md`. Apps without AI use `ServerApp.run` directly and never touch this companion.
 
@@ -739,7 +744,7 @@ Apps that want RAG layer `RAGServerApp` on top of `AIServerApp`; see `src/ToolUp
 
 ### What the wrapper does
 
-```fsharp
+```fsharp skip=signature
 AIClientConfig.withAIAssistant
     (mode: AIAssistantMode)
     (config: ClientConfig)
@@ -757,17 +762,15 @@ Under the hood, `withAIAssistant`:
 
 ### What the app does
 
-```fsharp
+```fsharp skip=fragment
 open Elmish
 open Elmish.React
 open ToolUp.Platform
 
-AIClientConfig.withAIAssistant aiMode config modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+AIClientConfig.run aiMode config modules
 ```
 
-Apps without AI skip `AIClientConfig` entirely and call `Client.run config modules`. Stripping `ToolUp.AI.Client.props` from the app fsproj + the `withAIAssistant` call in `Client.fs` produces a clean build with zero AI surface — this is the Phase 1b acceptance criterion and is verified by a temp-edit-and-revert smoke test on every release of this extraction.
+Apps without AI skip `AIClientConfig` entirely and call `Client.run config modules`. Stripping `ToolUp.AI.Client.props` from the app fsproj + the `AIClientConfig.run` call in `Client.fs` produces a clean build with zero AI surface — this is the Phase 1b acceptance criterion and is verified by a temp-edit-and-revert smoke test on every release of this extraction.
 
 ### Active-module plumbing
 
@@ -777,7 +780,7 @@ The outer view reads `Client.activeModuleName model.Shell` and passes it to `sid
 
 `Client/SidePanelExtensions.fs` exposes a tiny per-tab registry of `unit -> ReactElement` thunks that companion packages call from a module-load `do` block to add a button to the AI side-panel toolbar. `ConversationPanel` reads the list on each render and lays the thunks out alongside the built-in `✕ Cancel` button when the AI is streaming. The registered components decide their own visibility — a pause-style button, for example, can return `Html.none` once its companion's status flips to a paused phase so the toolbar doesn't carry an inert button while a floating banner is up.
 
-```fsharp
+```fsharp skip=fragment
 // In a companion's module that's already in the import graph:
 do ToolUp.AI.Client.SidePanelExtensions.registerStreamingAction (fun () -> MyButton())
 ```

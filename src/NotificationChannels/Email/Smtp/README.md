@@ -23,7 +23,7 @@ Two paths:
    ```
 
 2. **Explicit construction** in your composition root:
-   ```fsharp
+   ```fsharp skip=fragment
    let addressBook = NotificationAddressBook.BlobBackedNotificationAddressBook(blobStorage, Some logger) :> INotificationAddressBook
    let settings: SmtpSettings = {
        Host = "smtp.example.com"

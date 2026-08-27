@@ -79,7 +79,7 @@ A separate, single-blob piece of team-curated content the AI assistant sees on *
 
 `src/ToolUpApp-Server/Server.fs` — register the API, the observer, and (opt-in) the standing-context builder:
 
-```fsharp
+```fsharp skip=fragment
 let kbModule =
     ServerModule.create "KnowledgeBase"
     |> ServerModule.withGuardedApi (KnowledgeBase.Server.knowledgeApi (* deps *))
@@ -101,7 +101,7 @@ let aiAssistantConfig = {
 
 `src/ToolUpApp-Client/Client.fs` — register the module + narrative handler:
 
-```fsharp
+```fsharp skip=fragment
 let config, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase config modules
 
@@ -116,7 +116,7 @@ To remove the knowledge base from a deployment: strip the two props imports + th
 
 `KnowledgeBaseMode` (Phase 1e) is a four-case override mode parallel to `DataManagerMode`. It lets a deployment substitute a custom KB module — a Confluence sync, a Notion sync, custom dedup rules, a custom permission model — while leaving the props imports and the project reference in place.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
 open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 

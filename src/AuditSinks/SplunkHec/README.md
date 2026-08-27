@@ -10,7 +10,7 @@ Phase 9g `IAuditSink` companion. POSTs every audit batch to a Splunk HTTP Event 
 
 3. Store the token in `ISecretStore` under the `_platform` scope:
 
-   ```fsharp
+   ```fsharp skip=fragment
    do! secretStore.SetSecret("_platform", "splunk_hec_token", "abc123-def456-...")
    ```
 
@@ -18,7 +18,7 @@ Phase 9g `IAuditSink` companion. POSTs every audit batch to a Splunk HTTP Event 
 
 4. Construct the sink and register:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.SplunkHec
    open System.Net.Http
 

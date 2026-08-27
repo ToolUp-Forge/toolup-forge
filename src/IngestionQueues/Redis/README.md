@@ -15,7 +15,7 @@ Licensed under Apache-2.0. `StackExchange.Redis` is the only vendor dependency, 
 
 ## Composition
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG.IngestionQueues.Redis
 
 // Simplest form — the companion connects and owns the multiplexer.
@@ -36,7 +36,7 @@ The connection string comes from the deployment (`ISecretStore` / configuration)
 
 Register the health probe alongside it:
 
-```fsharp
+```fsharp skip=fragment
 Health.create multiplexer
 ```
 

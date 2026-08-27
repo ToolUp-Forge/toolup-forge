@@ -8,7 +8,7 @@ Part of the ToolUp Platform SDK — see [github.com/ToolUp-Forge/toolup-forge](h
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open OpenAIEmbeddingProvider
 
 // Default provider: text-embedding-3-small, 1536 dims, with the
@@ -51,7 +51,7 @@ When transient retries exhaust `MaxAttempts`, the call raises `EmbeddingProvider
 
 Off by default. Opt in with `withEmbedderCircuitBreaker`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.IEmbeddingProvider
 
 let embedder =
@@ -68,7 +68,7 @@ The breaker trips OPEN after `FailureThreshold` consecutive failed calls and fas
 
 Wire an `IMetricsSink` to emit per-call latency as the histogram `embedder.openai.latency_ms`, tagged `model` and `outcome` (`success` / `failure` / `timeout` / `network_error`):
 
-```fsharp
+```fsharp skip=fragment
 let embedder =
     OpenAIEmbeddingOptions.defaults
     |> withEmbedderMetrics metricsSink
@@ -79,7 +79,7 @@ let embedder =
 
 The presence-only validator / health check confirm the secret resolves to a non-empty value — cheap, but they cannot tell a valid key from a revoked-but-non-empty one. The **live** variants issue one real `embeddings.create` (a single ~1-token input) to catch revoked / wrong keys and model-access mismatches:
 
-```fsharp
+```fsharp skip=fragment
 // Preflight: WARNS (does not abort the deploy) on a revoked key — a key
 // can be rotated in without a restart. Only an absent secret is a hard Error.
 let liveValidator = createLiveValidator secretStore

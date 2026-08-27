@@ -15,7 +15,7 @@ per-hypothesis confidence and word-offset timing.
 
 ## Compose
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Voice
 
 let provider = AzureSpeechTranscriptionProvider.create secretStore

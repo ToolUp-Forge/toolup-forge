@@ -20,7 +20,7 @@ The package depends on `StackExchange.Redis`, the .NET community-canonical Redis
 
 ## Usage
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.RateLimit.Redis
 
@@ -42,9 +42,12 @@ ServerApp.empty
               OnExceeded = Return429 }
         ]
 }
-|> ServerApp.withServiceConfig (fun services ->
-    let logger = ConsoleLogger.create ()
-    services.AddSingleton<IRateLimitStore>(RedisRateLimitStore.create options logger))
+|> ServerApp.withExtensions
+    { ComposeExtensions.empty with
+        ServiceConfig =
+            Some(fun services ->
+                let logger = ConsoleLogger.create ()
+                services.AddSingleton<IRateLimitStore>(RedisRateLimitStore.create options logger)) }
 |> ServerApp.run
 ```
 

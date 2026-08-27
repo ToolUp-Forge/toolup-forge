@@ -6,7 +6,7 @@ The companion is the substrate's **reference implementation** — the canonical 
 
 Wire it alongside the other substrate defaults:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.ContainerSchedulers.DockerLocal
 

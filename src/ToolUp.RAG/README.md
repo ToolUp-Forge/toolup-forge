@@ -81,7 +81,7 @@ Deployments that use OpenAI embeddings swap `LocalEmbeddingProvider` for `OpenAI
 
 In the server entry point:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.Platform.Server
 open ToolUp.AI
@@ -98,21 +98,14 @@ let embeddingProvider = LocalEmbeddingProvider.create ()
 // via ServerModule.withVectorisation — the handlers flow through to
 // ServerApp.addModules. There is no separate `vectorisationHandlers` arg.
 
-RAGServerApp.empty
-|> RAGServerApp.withAI (
-    AIServerApp.empty
-    |> AIServerApp.withBase (
-        ServerApp.empty
-        |> ServerApp.withConfig config
-        |> ServerApp.withAuth authProvider
-        |> ServerApp.withLogger (Some logger)
-        |> ServerApp.withStorage (Some blobStorage)
-        |> ServerApp.addModules modules)
-    |> AIServerApp.withAIFactory aiProviderFactory
-    |> AIServerApp.withAIConfigStore aiConfigStore
-    |> AIServerApp.withAITools AITools.allTools
-    |> AIServerApp.withModuleAIContexts moduleAIContexts)
-|> RAGServerApp.withEmbeddingProvider embeddingProvider
+RAGServerApp.createFrom aiProviderFactory providerProfile embeddingProvider (
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withAuth authProvider
+    |> ServerApp.withLogger logger
+    |> ServerApp.withStorage blobStorage
+    |> ServerApp.addModules modules)
+|> RAGServerApp.withModuleAIContexts moduleAIContexts
 |> RAGServerApp.run
 ```
 
@@ -122,10 +115,8 @@ Deployments that don't want RAG use `AIServerApp.run` directly (no `RAGServerApp
 
 `RAGServerApp` exposes per-deployment knobs that tune retrieval behaviour without touching code. Compose them onto the pipeline before `run`:
 
-```fsharp
-RAGServerApp.empty
-|> RAGServerApp.withAI aiServerApp
-|> RAGServerApp.withEmbeddingProvider embedder
+```fsharp skip=fragment
+RAGServerApp.create aiProviderFactory providerProfile embedder
 // — Throughput (Phase 14n) —
 |> RAGServerApp.withIngestionConcurrency 16          // documents in flight per slot
 |> RAGServerApp.withIngestionQueueCapacity 10000     // bounded queue (`429 + Retry-After` on overflow)
@@ -224,7 +215,7 @@ With `AIConfig = None` (the default on `AIServerApp.empty`), `RAGServerApp.run` 
 
 Deployments that want custom prompt composition supply their own `aiConfig` and compose `withRetrieval` explicitly:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.RAG.RAGPromptBuilder
 
@@ -244,7 +235,7 @@ The `ToolUp.RAG.Chunking` module is the canonical way to slice content before ha
 
 **Two entry points:**
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.RAG.Chunking
 
 // Prose: token-budgeted, sentence-aware, overlap-preserving.
@@ -304,7 +295,7 @@ The reembedding service drains a `ReembeddingQueue` (unbounded `Channel<VectorSc
 
 > **Production deployments must enable `JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) *and* `RAGServerApp.withVacuumSchedule` for memory to stabilise.** With the schedule set but no scheduler, the sweep can never fire; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call. The `VacuumScheduleValidator` warns at startup in both cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel).
 
-```fsharp
+```fsharp skip=fragment
 RAGServerApp.create factory providerProfile embedder
 |> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
 |> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
@@ -318,13 +309,13 @@ Deployments that want a bespoke cadence use `withVacuumScheduleCron "<5-field cr
 
 Modules declare handlers — nothing in `ToolUp.RAG` names a module.
 
-```fsharp
+```fsharp skip=fragment
 // In SkuAnalysis/Server.fs
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.VectorKnowledgeTypes
 
 let salesVectorisation: VectorisationHandler = {
-    DataTypeId = SkuAnalysis.SharedTypes.DataTypeConstants.SalesData
+    DataTypeId = salesDataTypeId          // your module's own constant
     Vectorise = fun processed ->
         match processed with
         | :? SalesSummary as s ->
@@ -343,7 +334,7 @@ let salesVectorisation: VectorisationHandler = {
 
 The app attaches each module's vectorisation handler(s) via `ServerModule.withVectorisation` when assembling the module list. Modules that don't vectorise simply don't call the helper:
 
-```fsharp
+```fsharp skip=fragment
 let skuAnalysisModule =
     ServerModule.create "SkuAnalysis"
     |> ServerModule.withGuardedApi skuAnalysisApi
@@ -403,7 +394,7 @@ The `InMemoryVectorStore` source is the reference implementation for the contrac
 
 The plaintext query never leaves request memory. Admin UIs and replay tooling read traces by `QueryHash`. To opt out, register a `NoOpRetrievalTracer` ahead of `RAGServerApp.run`:
 
-```fsharp
+```fsharp skip=fragment
 services.AddSingleton<IRetrievalTracer>(ToolUp.RAG.RetrievalTracers.createNoOp ())
 ```
 

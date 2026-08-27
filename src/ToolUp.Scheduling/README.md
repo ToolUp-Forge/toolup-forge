@@ -43,13 +43,13 @@ In your client `.fsproj` (only if you'll use the planned Feliz components):
 
 In your server's composition root:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Scheduling.SchedulingCompose
 
 let config = {
     ServerConfig.defaults with
         Port = 5000
-        Mode = Team
+        Surfaces = Surfaces.team
         EntityStore = EnabledEntityStore   // REQUIRED — scheduling rides on Phase 19
 }
 
@@ -78,7 +78,7 @@ Apps without `ServerConfig.EntityStore = EnabledEntityStore` get a runtime null 
 
 `BookableResource.ResourceType` is a free-form string (`"Person"`, `"Room"`, `"Equipment"`, or your domain's term). The SDK never names a resource type — that's the deployment's choice. The same `IBookingScheduler` instance handles every resource type the deployment uses.
 
-```fsharp
+```fsharp skip=fragment
 let alice : BookableResource = {
     Id = "alice@team"
     Type = "BookableResource"

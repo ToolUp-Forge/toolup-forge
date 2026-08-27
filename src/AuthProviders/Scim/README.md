@@ -31,7 +31,7 @@ Giraffe, all of which arrive transitively through `ToolUp.Platform.Server` (GP 1
 
 ## Composing it
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.AuthProviders.ScimHandler
 open ToolUp.AuthProviders.ScimRoutes
@@ -58,7 +58,7 @@ it takes effect immediately with no restart — the same convention the audit si
 use. By default it looks under scope `team-{teamId}`, key `SCIM_BEARER_TOKEN`;
 `ScimConfig.withSecret` moves it.
 
-```fsharp
+```fsharp skip=fragment
 do! secrets.SetSecret("team-acme-engineering", "SCIM_BEARER_TOKEN", generatedToken) |> Async.Ignore
 ```
 
@@ -84,7 +84,7 @@ long-lived credential that can add and remove members of a team, so treat it as 
 Declared as data, so the join key between the IdP's directory and platform
 membership is visible in the composition rather than buried in a handler:
 
-```fsharp
+```fsharp skip=fragment
 let mapping =
     { ScimAttributeMapping.defaults with
         Identity = FromPrimaryEmail

@@ -32,7 +32,7 @@ works; the invitation email is silently skipped.
 
 `Server.fs` composition:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AuthProviders
 
 ServerApp.empty
@@ -51,7 +51,7 @@ because no sender mailbox is configured.
 To enable invitation emails, use `create` with an explicit config or
 `fromEnv` with `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` set:
 
-```fsharp
+```fsharp skip=fragment
 |> ServerApp.withUserDirectory (
     EntraDirectory.create {
         EntraDirectoryConfig.defaults with
@@ -76,7 +76,7 @@ for the lifetime of the session.
 
 National-cloud deployments override the endpoint:
 
-```fsharp
+```fsharp skip=fragment
 EntraDirectory.create { GraphEndpoint = "https://graph.microsoft.us" }
 ```
 

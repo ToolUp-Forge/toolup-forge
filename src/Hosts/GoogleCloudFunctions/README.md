@@ -21,14 +21,14 @@ The consumer's `.fsproj` targets `net10.0` and produces a deployable GCF artefac
 
 ### 1. Compose the SDK against the serverless shape
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 
 let serverHost: IServerHost =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Anonymous
+            Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
             Webhooks = NoWebhooks
@@ -40,14 +40,14 @@ let serverHost: IServerHost =
     |> ServerApp.addModule (myModule.register ())
     // The Functions Framework drives `Invoke` per request; do NOT call
     // `ServerApp.run` (which would call `RunBlocking`).
-    |> ServerApp.composeOnly
+    |> composeWithoutRunning
 ```
 
-`composeOnly` is the low-level entry point that returns the `IServerHost` without calling `RunBlocking()`. (If not yet available in your SDK version, the same shape is reachable by calling `ToolUp.Platform.Server.compose` directly with the positional argument list.)
+`composeWithoutRunning` is **your own** one-liner, not an SDK member: `ServerApp` ships no compose-only entry point, because `ServerApp.run` composes and then calls `RunBlocking()`. Write it over `ToolUp.Platform.Server.compose`, passing the positional argument list, and return the `IServerHost` without starting the blocking host.
 
 ### 2. Register `IServerHost` in the Functions Framework host
 
-```fsharp
+```fsharp skip=fragment
 open Google.Cloud.Functions.Hosting
 open Microsoft.Extensions.DependencyInjection
 
@@ -59,7 +59,7 @@ type Startup() =
 
 Start the SDK host once at cold-start so any non-Kestrel `IHostedService` registrations fire. Under `ServerlessHost = ServerlessHost` every `IHostedService` is gated off, but ASP.NET Core's internal services (logger factory, config root, options) still need `StartAsync` to run.
 
-```fsharp
+```fsharp skip=fragment
 do serverHost.Host.StartAsync(System.Threading.CancellationToken.None).Wait()
 ```
 
@@ -67,7 +67,7 @@ do serverHost.Host.StartAsync(System.Threading.CancellationToken.None).Wait()
 
 The adapter ships a default `IHttpFunction` that forwards every invocation to `IServerHost.Invoke`. Subclass it in your project so the Functions Framework can auto-discover it (single-`IHttpFunction`-in-assembly auto-detection), and attach your `Startup`:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Hosts.GoogleCloudFunctions
 
 [<FunctionsStartup(typeof<Startup>)>]
@@ -81,7 +81,7 @@ The framework resolves the constructor argument from DI; the `Startup` above reg
 
 Useful when you need additional per-invocation logic (request-scoped logging, custom auth pre-checks) before forwarding to the SDK pipeline.
 
-```fsharp
+```fsharp skip=fragment
 open Google.Cloud.Functions.Framework
 open ToolUp.Hosts.GoogleCloudFunctions
 

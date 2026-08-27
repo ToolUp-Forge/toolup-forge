@@ -16,13 +16,18 @@ Nothing auto-injects this. `ToolUp.AI` carries no dependency on the UI bindings 
 
 ## Enabling
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AI
 
 let chartGuidance = AgChartAICookbook.systemPromptBuilder (Some logger)
 
-AIServerApp.empty
-|> AIServerApp.withSystemPromptBuilder chartGuidance
+AIServerApp.create aiProviderFactory providerProfile
+|> AIServerApp.withAIConfig {
+    Branding = branding
+    SystemPrompt = Some chartGuidance
+    MaxHistoryMessages = None
+    AISurfaceDerivation = TrustClient
+}
 |> AIServerApp.run
 ```
 

@@ -18,13 +18,13 @@ default — so wiring it never changes a flag a deployment already manages in-pr
 
 ## Usage
 
-```fsharp
+```fsharp skip=fragment
 open OpenFeature
 open ToolUp.FeatureFlagProviders.OpenFeature
 open ToolUp.Platform.FlagEvaluator
 
 // 1. Register your OpenFeature provider however your vendor documents it:
-do! Api.Instance.SetProviderAsync(myVendorProvider)
+//    (OpenFeature's own static Api registration — see your vendor's docs)
 
 // 2. Build the evaluator with the OpenFeature source:
 let evaluator =
@@ -44,7 +44,7 @@ The companion also ships an `IHealthCheck` and an `IConfigValidator`, both keyed
 process-wide `Api.Instance` provider metadata — the only readiness signal the OpenFeature
 .NET surface exposes publicly. Register them alongside the source:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.FeatureFlagProviders.OpenFeature
 
 app

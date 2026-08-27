@@ -25,7 +25,7 @@ against the requested gates (plan D10).
 
 ## Usage
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.ModelProviders.Reference
 
 // Register the provider, then enable the envelope:

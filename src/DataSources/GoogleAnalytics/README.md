@@ -20,7 +20,7 @@ Fable-compiled tier.
 
 ## What you get
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources
 
 // The connector.
@@ -44,7 +44,7 @@ let oauthFlow =
 
 Register both as singletons on the server:
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.withExtensions {
     ComposeExtensions.empty with
         ServiceConfig =
@@ -57,7 +57,7 @@ ServerApp.withExtensions {
 
 and the credential form on the client:
 
-```fsharp
+```fsharp skip=fragment
 Handlers = {
     ClientHandlerRegistry.empty with
         DataSourceCredentialHandlers = [
@@ -169,7 +169,7 @@ carrying credentials — correctly, since it is persisted as an ordinary config 
 So the credential form takes the persistence path as a parameter. Point it at whatever endpoint
 your deployment already uses for bring-your-own-key settings, ending in two `SetSecret` calls:
 
-```fsharp
+```fsharp skip=fragment
 // Server side, behind your own authenticated endpoint:
 do! secretStore.SetSecret(scopeId, $"google-analytics-client-id-{dataSourceId}", clientId)     |> Async.Ignore
 do! secretStore.SetSecret(scopeId, $"google-analytics-client-secret-{dataSourceId}", secret)   |> Async.Ignore

@@ -36,7 +36,7 @@ choice) and pass the paths to `create`.
 
 ## Wiring
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Rerankers.Local
 
 let reranker =
@@ -53,7 +53,7 @@ RAGServerApp.create factory configStore
 Optionally register the readiness probe so `/dev/inspect` shows the
 reranker and an operator notices if the mounted model later vanishes:
 
-```fsharp
+```fsharp skip=fragment
 LocalRerankerHealth.create modelPath vocabPath   // : IHealthCheck
 ```
 

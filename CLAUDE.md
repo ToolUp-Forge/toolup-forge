@@ -187,7 +187,7 @@ Plus `.fsproj` + `.Client.props` (MSBuild props injecting client files into the 
 
 **Canonical sample**: `samples/HelloWorld/HelloWorld.Module/` shows the absolute minimum.
 
-```fsharp
+```fsharp skip=fragment
 // SharedTypes.fs
 module HelloWorld.SharedTypes
 type HelloApi = { DoThing: string -> Async<string> }
@@ -217,7 +217,7 @@ let register () : ErasedModule =
         Init = init
         Update = update
         Name = "Hello World"
-        Icon = "/svg/chart.svg"
+        Icon = Icon.ofUrl "/svg/chart.svg"
     }
     |> ClientModule.withView view
     |> ClientModule.register
@@ -519,7 +519,7 @@ touches public surface:
 
 **Never write `map[key] arg1 arg2` on a single line.** F# treats `map[key]` (no space) as an indexer and `map [key]` (with space) as a list-application. Fantomas can insert a space in the no-space form, breaking compilation. Extract the indexer read to its own line:
 
-```fsharp
+```fsharp skip=fragment
 let pageView = map[route]
 pageView currentState dispatchMsg
 ```

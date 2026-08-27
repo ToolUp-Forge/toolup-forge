@@ -15,7 +15,7 @@ the in-memory experiment store, dev exposure sinks, and the assign-and-log-once 
 
 ## Example
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Experiments
 open ToolUp.Experiments.Server
 

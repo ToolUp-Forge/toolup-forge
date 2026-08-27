@@ -12,7 +12,7 @@ No vendor SDK and no third-party syslog library: BCL sockets (`UdpClient` / `Tcp
 
 2. Store the collector endpoint in `ISecretStore` under the `_platform` scope, in `host:port` form:
 
-   ```fsharp
+   ```fsharp skip=fragment
    do! secretStore.SetSecret("_platform", "cef_syslog_endpoint", "siem.example.com:514")
    ```
 
@@ -23,7 +23,7 @@ No vendor SDK and no third-party syslog library: BCL sockets (`UdpClient` / `Tcp
 
 4. Construct the sink and register it:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.Cef
    open ToolUp.Platform.AuditSinks.CefSyslog
 

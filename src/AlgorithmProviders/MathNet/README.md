@@ -6,7 +6,7 @@ Implements all four curated fitters — `IRegressionFitter`, `IDescriptiveStats`
 
 ## Composing it
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.Algorithms
 open ToolUp.AlgorithmProviders

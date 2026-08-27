@@ -6,7 +6,7 @@ Production-ready. Stateless between calls (portability rule 4): every method ope
 it and disposes it, and the credential is re-read through the `ISecretStore` thunk on **every** call,
 so rotating a password or key takes effect without reconstructing the connector.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.Snowflake
 
 // Password, or an inline PEM for key-pair auth, out of ISecretStore.

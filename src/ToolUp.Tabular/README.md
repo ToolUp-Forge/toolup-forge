@@ -25,7 +25,7 @@ act on without reopening the file.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Tabular
 
 let schema =
@@ -57,7 +57,7 @@ let result = TabularReader.readCsvBytes schema CsvReadOptions.defaults uploadedB
 
 For XLSX the call is symmetric — same schema, same result shape:
 
-```fsharp
+```fsharp skip=fragment
 let result = TabularReader.readXlsxBytes schema XlsxReadOptions.defaults uploadedBytes
 ```
 
@@ -66,7 +66,7 @@ let result = TabularReader.readXlsxBytes schema XlsxReadOptions.defaults uploade
 Rows come back as `Map<string, TabularValue>` by default. The binder seam maps them
 onto domain records without re-parsing — cells arrive already typed:
 
-```fsharp
+```fsharp skip=fragment
 type Product = { Sku: string; Price: decimal }
 
 let bindProduct (row: Map<string, TabularValue>) : Result<Product, CellError list> =
@@ -122,7 +122,7 @@ error report) — never the file's full raw cell grid:
 Consumers that must not hold even the bound rows in memory use the streaming
 surface and fold per-row outcomes themselves:
 
-```fsharp
+```fsharp skip=fragment
 TabularReader.streamCsv schema CsvReadOptions.defaults stream
 |> Seq.iter (function
     | RowOutcome.Bound(rowIndex, row) -> ingest rowIndex row

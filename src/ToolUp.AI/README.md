@@ -107,7 +107,7 @@ Client project (`ToolupApp-Client.fsproj`) — add the companion's client props 
 
 In the server entry point:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
@@ -115,43 +115,38 @@ open ToolUp.AI.AICompose
 let secretStore  = FileSecretStore.FileSecretStore() :> ISecretStore
 let blobStorage  = LocalFileStorage.LocalFileStorage("data") :> IBlobStorage
 let logger       = ConsoleLogger.ConsoleLogger()
-let aiConfigStore =
-    DefaultUserAIConfigStore.create blobStorage secretStore :> IUserAIConfigStore
-
 // BYOK-capable factory — registers one builder per provider.
-// Each builder reads the API key from the per-user config store
-// (falling back to the `_platform` scope secret store for the
+// Each builder reads the API key from the platform IProviderProfile
+// store (falling back to the `_platform` scope secret store for the
 // platform-default provider).
 let aiProviderFactory =
     DefaultAIProviderFactory.create
-        [ ClaudeAIProvider.builder; OpenAIProvider.builder ]
-        aiConfigStore
+        [ claudeBuilder; openAiBuilder ]
+        providerProfile          // IProviderProfile
         secretStore
-        PlatformOnly // or AllowUserProviders for full BYOK
+        PlatformOnly             // AIFallbackPolicy
+        platformProviders
+        None                     // IPlatformAIKeyStore option
 
-AIServerApp.empty
-|> AIServerApp.withBase (
+AIServerApp.createFrom aiProviderFactory providerProfile (
     ServerApp.empty
     |> ServerApp.withConfig config
-    |> ServerApp.withAuth None              // None = HeaderAuthProvider (dev)
-    |> ServerApp.withLogger (Some logger)
-    |> ServerApp.withStorage (Some blobStorage)
+    |> ServerApp.withAuth authProvider
+    |> ServerApp.withLogger logger
+    |> ServerApp.withStorage blobStorage
     |> ServerApp.addModules modules)        // each module as a ServerModule
-|> AIServerApp.withAIFactory aiProviderFactory
-|> AIServerApp.withAIConfigStore aiConfigStore
-|> AIServerApp.withAITools AITools.allTools
 |> AIServerApp.run
 ```
 
 Deployments that don't want AI use `ServerApp.run` directly (no `AIServerApp` wrapper). The factory indirection is what lets users configure per-user BYOK providers via the AI Settings UI without changing server wiring.
 
-`AIServerApp.run` fails loudly if `AIProviderFactory` or `AIConfigStore` is missing — the wrapper exists precisely because AI needs both and the core `ServerApp` cannot reasonably default them.
+`AIProviderFactory` and `ProviderProfile` are constructor parameters of `AIServerApp.create` / `createFrom` rather than optional fields — the wrapper exists precisely because AI needs both and the core `ServerApp` cannot reasonably default them.
 
 ### 3. Wire the client wrapper
 
 In the client entry point, wrap the shell Program with `AIClientConfig.withAIAssistant`:
 
-```fsharp
+```fsharp skip=fragment
 open Elmish
 open Elmish.React
 open ToolUp.Platform
@@ -159,16 +154,14 @@ open ToolUp.Platform
 let aiMode =
     ConfiguredAIAssistant {
         Name = "Claude"
-        Icon = "/svg/claude.svg"
+        Icon = Icon.ofUrl "/svg/claude.svg"
         ShowSidePanel = true
     }
 
 let config = { ClientConfig.defaults with (* ... *) }
 let modules = [ (* module registrations *) ]
 
-AIClientConfig.withAIAssistant aiMode config modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+AIClientConfig.run aiMode config modules
 ```
 
 Apps without AI drop the `ToolUp.AI.Client.props` import (step 1) and call `Client.run config modules` instead — zero AI surface, zero AI types leaked into shell state.
@@ -211,7 +204,7 @@ let aiContext : ModuleAIContext = {
 
 The app collects them:
 
-```fsharp
+```fsharp skip=fragment
 let moduleAIContexts = [
     NBDDirichlet.Server.aiContext
     MediaOptimisation.Server.aiContext
@@ -219,11 +212,7 @@ let moduleAIContexts = [
     // PriceElasticity, SOVSM skip — no domain prompt needed
 ]
 
-AIServerApp.empty
-|> AIServerApp.withBase serverApp
-|> AIServerApp.withAIFactory aiProviderFactory
-|> AIServerApp.withAIConfigStore aiConfigStore
-|> AIServerApp.withAITools AITools.allTools
+AIServerApp.createFrom aiProviderFactory providerProfile serverApp
 |> AIServerApp.withModuleAIContexts moduleAIContexts
 |> AIServerApp.run
 ```
@@ -234,7 +223,7 @@ When the user chats from the NBDDirichlet view, the client attaches `ActiveModul
 
 For `Team` mode deployments, team-specific context is loaded per request:
 
-```fsharp
+```fsharp skip=fragment
 let teamAwarePrompt =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic "You are ToolUp, an analytics assistant..."
@@ -253,11 +242,7 @@ let aiConfig = Some {
     SystemPrompt = Some teamAwarePrompt
 }
 
-AIServerApp.empty
-|> AIServerApp.withBase serverApp
-|> AIServerApp.withAIFactory aiProviderFactory
-|> AIServerApp.withAIConfigStore aiConfigStore
-|> AIServerApp.withAITools AITools.allTools
+AIServerApp.createFrom aiProviderFactory providerProfile serverApp
 |> AIServerApp.withAIConfig aiConfig
 |> AIServerApp.withModuleAIContexts moduleAIContexts
 |> AIServerApp.run
@@ -277,7 +262,7 @@ Follow the pattern in [`src/AIProviders/Claude/`](../AIProviders/Claude/) and [`
 2. Expose a factory function, `createWithApiKeyAndModel (apiKey: string) (model: string) : IAIProvider`, that builds a provider instance from a resolved key + model.
 3. Export an `AIProviderDescriptor` (provider id, display name, default model, capability hints) and pair it with the factory in an `AIProviderBuilder`:
 
-   ```fsharp
+   ```fsharp skip=fragment
    let descriptor: AIProviderDescriptor = { (* provider id, name, defaults *) }
    let builder: AIProviderBuilder = {
        Descriptor = descriptor

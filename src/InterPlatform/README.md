@@ -52,14 +52,14 @@ The companion is a *consumer* of substrate (`IBlobStorage` for the directory + j
 
 The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in). Compose with `PeerServerApp` (the [`PeerCompose`](Server/PeerCompose.fs) companion root), which wraps a base `ServerApp` and adds peer-specific `with*` helpers:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 
 let config = {
     ServerConfig.defaults with
         Port = 5000
-        Mode = Team
+        Surfaces = Surfaces.team
         PeerSubstrate = EnabledPeerSubstrate
         // Required ONLY for long-running contract methods; immediate-only
         // contracts need no scheduler:
@@ -92,7 +92,7 @@ When `PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to `ServerApp.run a
 
 `JwtPeerAuthProvider` reads a peer's symmetric HS256 signing key from `ISecretStore` on **every** issue / validate, at scope `_platform`, key `peers/{peerId}/signing-key` (rotation flows through immediately). Seed each trusted peer's key out of band before the first call:
 
-```fsharp
+```fsharp skip=fragment
 secrets.SetSecret("_platform", "peers/buyer/signing-key", sharedKey) |> Async.RunSynchronously |> ignore
 ```
 
@@ -108,7 +108,7 @@ A composition that trips this logs one `peer-auth-posture:` `Warn` at startup (P
 
 A contract is a **record whose fields are functions**. Declare it once, shared by both peers:
 
-```fsharp
+```fsharp skip=fragment
 type DirectoryContract = {
     GetCapabilities: unit -> Async<string list>            // immediate
     BuildReport: ReportRequest -> Async<PeerJobHandle<Report>>   // long-running
@@ -119,7 +119,7 @@ type DirectoryContract = {
 
 **Receiver side** — supply an implementation value and host it:
 
-```fsharp
+```fsharp skip=fragment
 let directoryImpl : DirectoryContract = {
     GetCapabilities = fun () -> async { return [ "directory.list"; "directory.lookup" ] }
     BuildReport = fun req -> async { return reportJobHandle req }
@@ -133,10 +133,12 @@ Register it with `PeerServerApp.withContract`. Immediate-only contracts ignore t
 
 **Caller side** — build a typed proxy and call it like a local API:
 
-```fsharp
+```fsharp skip=fragment
+let seller: TargetPeer = { Peer = sellerId; BaseUrl = "https://seller.example" }
+
 let proxy = JsonRpcPeerClient.create<DirectoryContract> {
     Client = httpPeerClient
-    Target = { Peer = sellerId; BaseUrl = "https://seller.example" }
+    Target = seller
     Caller = buyerId
     User = Anonymous
     Version = v1
@@ -159,12 +161,14 @@ A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationExcept
 
 So a handler that continues an inbound cascade by building another `create` proxy silently discards the inbound route, hop budget, and correlation id: loop detection and hop limits stop spanning the cascade, and the cross-hop audit correlation is lost. **Continuing an inbound cascade uses `forward` instead:**
 
-```fsharp
+```fsharp skip=fragment
 // Inside a handler for an inbound peer call, `inbound` is the
 // PeerCallContext this deployment is currently serving.
+let next: TargetPeer = { Peer = nextPeerId; BaseUrl = "https://next.example" }
+
 let onward = JsonRpcPeerClient.forward<DirectoryContract> inbound {
     Client = httpPeerClient
-    Target = { Peer = nextPeerId; BaseUrl = "https://next.example" }
+    Target = next
     Caller = thisPeerId        // the forwarding deployment
     User = Anonymous
     Version = v1
@@ -210,7 +214,7 @@ Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route en
 
 A **clean-room contract** answers an approved query against sensitive data with privacy-preserving outputs only — cohort counts at or above a k-anonymity floor, small cells suppressed, output shape constrained — never row-level data. `ICleanRoomBroker` ships that mechanism; `PeerServerApp.withCleanRoomTemplate` is what makes it *run*:
 
-```fsharp
+```fsharp skip=fragment
 let reachTemplate: CleanRoomTemplate = {
     TemplateId = "reach"
     AllowedMethods = Set.ofList [ "EstimateReach"; "Histogram" ]
@@ -239,7 +243,7 @@ Composing a template for a contract id this deployment does not host **refuses t
 
 The floor decides about **one** answer. Cohort floors do not compose — differencing two in-floor cohorts that overlap in all but one record recovers that record, and no per-query check can see it because *each query passed*. `PeerServerApp.withPrivacyBudget` bounds the series:
 
-```fsharp
+```fsharp skip=fragment
 app
 |> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
 |> PeerServerApp.withPrivacyBudget (
@@ -262,7 +266,7 @@ The substrate records one `PeerCallCompleted` audit row per inbound call, keyed 
 
 **Receiver side** — opt in when composing:
 
-```fsharp
+```fsharp skip=fragment
 PeerServerApp.create ()
 |> PeerServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
 |> PeerServerApp.withContract directoryHost
@@ -272,10 +276,12 @@ PeerServerApp.create ()
 
 **Caller side** — build a typed `IPeerAuditApi` proxy and query:
 
-```fsharp
+```fsharp skip=fragment
+let auditTarget: TargetPeer = { Peer = sellerId; BaseUrl = "https://seller.example" }
+
 let audit = JsonRpcPeerClient.create<IPeerAuditApi> {
     Client = httpPeerClient
-    Target = { Peer = sellerId; BaseUrl = "https://seller.example" }
+    Target = auditTarget
     Caller = buyerId
     User = Anonymous
     Version = PeerAudit.v1
@@ -294,7 +300,7 @@ The foundation handshake (`IPeerHandshake.Negotiate`) resolves the single highes
 
 **Receiver side** — declare a method lifecycle profile and compose it:
 
-```fsharp
+```fsharp skip=fragment
 let v1, v2, v3 = { Major = 1; Minor = 0 }, { Major = 2; Minor = 0 }, { Major = 3; Minor = 0 }
 
 // Reflection auto-populates every method as Active at every version;
@@ -313,7 +319,7 @@ PeerServerApp.create ()
 
 **Caller side** — negotiate a method through the handshake:
 
-```fsharp
+```fsharp skip=fragment
 match! handshake.NegotiateMethod(target, "directory", "GetCapabilities") with
 | Ok res ->
     match res.Status with
@@ -335,7 +341,7 @@ A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: it
 - **TrustPosture** — what the composition wires by construction: fail-closed HS256 bearer JWTs with per-call key reads, whether inbound audiences are bound to the local peer id (exactly when `withLocalPeer` is declared), trust-anchor delegation verification, the freshness-window replay stance, and the deployment-managed transport stance.
 - **Budgets** — the cascade guard shape (per-call hop budget + route loop detection) and whether long-running dispatch is available.
 
-```fsharp
+```fsharp skip=fragment
 let app =
     PeerServerApp.create ()
     |> PeerServerApp.withConfig config
@@ -354,7 +360,7 @@ The export is **deterministic and hash-stamped**: every list is sorted before se
 
 A deployment that consumes a peer contract no counterparty serves — at an incompatible version, or under a trust posture the counterparty never declared — used to discover it at call time. You cannot introspect another organisation's deployment, so the preflight validates against the label each counterparty **published**: pin its `PeerSurface` export and the composition's federation edges are checked before traffic.
 
-```fsharp
+```fsharp skip=fragment
 // The counterparty's published export, verified against the stamp agreed out of band.
 let sellerPin =
     FederationPin.ofExportJson "seller-ssp" "peers/seller-ssp.surface.json" agreedHash DateTimeOffset.UtcNow document

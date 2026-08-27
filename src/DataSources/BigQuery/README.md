@@ -7,7 +7,7 @@ credential resolved through the `ISecretStore` thunk, so rotating a service-acco
 without reconstructing the connector. BigQuery clients are cheap; pooling would be a
 profiling-driven follow-up, not a correctness concern.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.BigQuery
 
 // Service-account JSON out of ISecretStore, per source.

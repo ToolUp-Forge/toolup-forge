@@ -17,7 +17,7 @@ out-of-window delivery is rejected before any handler runs.
 
 ## Example
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Webhooks
 open ToolUp.Webhooks.Server
 

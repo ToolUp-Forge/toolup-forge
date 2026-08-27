@@ -36,10 +36,10 @@ and is policy-gated rather than a general mutation seam — see [`data-subject-r
 - **`PersistentEventStore`** — blob-backed. Writes append-only JSON to `_platform/events/{scopeId}/{yyyy-mm-dd}/{hh-mm-ss-fffffff}-{eventId}.json`. Optional `EventRetentionPolicy`:
 
   ```fsharp
-  type EventRetentionPolicy =
-      | NoRetention
-      | MaxAge of TimeSpan
-      | MaxCountPerScope of int
+  type EventRetentionPolicy = {
+      MaxAge: TimeSpan option
+      MaxCountPerScope: int option
+  }
   ```
 
   A background job (when `JobScheduler` is enabled) runs the retention policy nightly. Without the scheduler, retention is on-write only — over-quota events accumulate until the next write-time check.

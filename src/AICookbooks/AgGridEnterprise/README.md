@@ -14,13 +14,18 @@ Nothing auto-injects this, and it does not imply an AG Grid Enterprise licence. 
 
 ## Enabling
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.AI
 
 let enterpriseGuidance = AgGridEnterpriseAICookbook.systemPromptBuilder (Some logger)
 
-AIServerApp.empty
-|> AIServerApp.withSystemPromptBuilder enterpriseGuidance
+AIServerApp.create aiProviderFactory providerProfile
+|> AIServerApp.withAIConfig {
+    Branding = branding
+    SystemPrompt = Some enterpriseGuidance
+    MaxHistoryMessages = None
+    AISurfaceDerivation = TrustClient
+}
 |> AIServerApp.run
 ```
 

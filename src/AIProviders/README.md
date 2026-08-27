@@ -23,7 +23,7 @@ AI vendors enforce tier-scoped RPM and TPM ceilings — Anthropic per-organisati
 
 Each tier-quota the provider consumes is declared once via `ServerApp.withRateLimitDescriptor`:
 
-```fsharp
+```fsharp skip=fragment
 let claudeRateLimit: RateLimitDescriptor = {
     // String label — must match `RateLimitKey.Provider` at the call site.
     Provider = "anthropic-claude"
@@ -51,7 +51,7 @@ Models with materially different RPM (Opus vs. Haiku vs. Sonnet) use distinct `P
 
 Inside the provider's `SendMessage` (and `SendMessageStreaming`), call `Wait` before the HTTP send. The signature is `Wait: RateLimitKey -> Async<RateLimitDecision>`; the limiter holds the call inside `Wait` until the short window opens up (silent `Proceed` / `DelayedBy waited`) or returns `Refused reason` if a declared long-window quota is exhausted.
 
-```fsharp
+```fsharp skip=fragment
 type MyVendorProvider(apiKey, model, httpClient: HttpClient, rateLimiter: IRateLimiter) =
 
     let rateLimitKey (scopeId: string) : RateLimitKey = {
@@ -68,7 +68,7 @@ type MyVendorProvider(apiKey, model, httpClient: HttpClient, rateLimiter: IRateL
             // request hit the wire and 429-bounce.
             match! rateLimiter.Wait(rateLimitKey req.ScopeId) with
             | Refused reason ->
-                return AIProviderResponse.error (sprintf "Rate-limit refused: %s" reason)
+                return Error(TransientServer(429, sprintf "Rate-limit refused: %s" reason))
             | Proceed
             | DelayedBy _ ->
                 let wire = translateRequest req
@@ -83,7 +83,7 @@ type MyVendorProvider(apiKey, model, httpClient: HttpClient, rateLimiter: IRateL
 
 The factory wires it in at compose time. Builders take `IRateLimiter` as a constructor parameter, the same way they take `ISecretStore`:
 
-```fsharp
+```fsharp skip=fragment
 let builder: AIProviderBuilder = {
     Descriptor = descriptor
     Build = fun apiKey model -> MyVendorProvider(apiKey, model, sharedHttpClient, rateLimiter) :> IAIProvider

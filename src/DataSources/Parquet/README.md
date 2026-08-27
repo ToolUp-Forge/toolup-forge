@@ -6,7 +6,7 @@ the `IDatasetCodec` seam. Compose it and dataset vintages are stored as
 external compute worker (Python, R, anything with a Parquet reader) parses the
 content blob directly, with no ToolUp code.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.DataSources.Parquet
 

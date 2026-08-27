@@ -19,14 +19,14 @@ The consumer's `.fsproj` should target `net10.0` and use the Functions Worker SD
 
 ### 1. Compose the SDK against the serverless shape
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 
 let serverHost: IServerHost =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            Mode = Anonymous
+            Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
             Webhooks = NoWebhooks
@@ -38,14 +38,14 @@ let serverHost: IServerHost =
     |> ServerApp.addModule (myModule.register ())
     // The Functions worker drives `Invoke` per request; do NOT call
     // `ServerApp.run` (which would call `RunBlocking`).
-    |> ServerApp.composeOnly
+    |> composeWithoutRunning
 ```
 
-`composeOnly` is the low-level entry point that returns the `IServerHost` without calling `RunBlocking()`. (If not yet available in your SDK version, the same shape is reachable by calling `ToolUp.Platform.Server.compose` directly with the positional argument list.)
+`composeWithoutRunning` is **your own** one-liner, not an SDK member: `ServerApp` ships no compose-only entry point, because `ServerApp.run` composes and then calls `RunBlocking()`. Write it over `ToolUp.Platform.Server.compose`, passing the positional argument list, and return the `IServerHost` without starting the blocking host.
 
 ### 2. Register `IServerHost` in the Functions Worker host
 
-```fsharp
+```fsharp skip=fragment
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 

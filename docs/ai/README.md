@@ -74,7 +74,7 @@ open ToolUp.AI.Client
 let aiMode =
     ConfiguredAIAssistant {
         Name = "Aria"
-        Icon = "/svg/spark.svg"
+        Icon = Icon.ofUrl "/svg/spark.svg"
         ShowSidePanel = true
     }
 

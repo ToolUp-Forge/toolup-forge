@@ -48,7 +48,7 @@ not install the extension.
 
 ## Compose
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Graph
 open ToolUp.Graph.AGE
 
@@ -91,7 +91,7 @@ constrain on `_scope`, and arbitrary `Query` Cypher has a `_scope` guard
 rewritten into its node patterns (a pattern the guard cannot safely rewrite is
 *refused*, never run unscoped).
 
-```fsharp
+```fsharp skip=fragment
 // Single-graph posture:
 let graph =
     AgeGraphStore.connectWith (AgeGraphStoreConfig.propertyPartition "graph") connectionString
@@ -109,7 +109,7 @@ affordance (`AgeSharedTransaction`) a consumer reaches for explicitly, on a
 connection + transaction it already opened (typically the same `NpgsqlDataSource`
 that backs its `IEntityStore`, wired via `AgeGraphStore.ofDataSource`).
 
-```fsharp
+```fsharp skip=fragment
 use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
 use tx = conn.BeginTransaction()
 

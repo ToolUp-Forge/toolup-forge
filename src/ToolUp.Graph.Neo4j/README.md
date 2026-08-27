@@ -28,7 +28,7 @@ consumer's infrastructure.
 
 ## Compose
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Graph
 open ToolUp.Graph.Neo4j
 
@@ -70,7 +70,7 @@ guard rewritten into its node patterns (a pattern the guard cannot safely
 rewrite is *refused*, never run unscoped). Prefer `MultiDatabase` on any server
 that supports it.
 
-```fsharp
+```fsharp skip=fragment
 // Community / single-database posture:
 let graph =
     Neo4jGraphStore.connectWith

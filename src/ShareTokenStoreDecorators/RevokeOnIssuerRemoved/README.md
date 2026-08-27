@@ -20,7 +20,7 @@ unchanged.
 
 ## Wiring
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.ShareTokenStoreDecorators
 
 app

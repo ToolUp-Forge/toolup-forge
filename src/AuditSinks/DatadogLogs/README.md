@@ -10,7 +10,7 @@ Phase 9g `IAuditSink` companion. POSTs every audit batch to Datadog's `/api/v2/l
 
 3. Store it in `ISecretStore` under the `_platform` scope:
 
-   ```fsharp
+   ```fsharp skip=fragment
    do! secretStore.SetSecret("_platform", "datadog_api_key", "abc123...")
    ```
 
@@ -18,7 +18,7 @@ Phase 9g `IAuditSink` companion. POSTs every audit batch to Datadog's `/api/v2/l
 
 4. Construct + register:
 
-   ```fsharp
+   ```fsharp skip=fragment
    open ToolUp.Platform.AuditSinks.DatadogLogs
    open System.Net.Http
 

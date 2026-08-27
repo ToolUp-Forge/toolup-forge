@@ -8,7 +8,7 @@ Production-ready. Stateless between calls (portability rule 4): every method ope
 it and disposes it, and the password is re-read through the `ISecretStore` thunk on **every** call, so
 rotating it takes effect without reconstructing the connector.
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.DataSources.Sql
 
 // One registration serves every backend; the `backend` key routes.

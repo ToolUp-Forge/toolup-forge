@@ -20,7 +20,7 @@ work with, with no dictionary, no model and no native binary.
 <PackageReference Include="ToolUp.SparseIndices.Cjk" Version="..." />
 ```
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.SparseIndices.Cjk
 
 let app =

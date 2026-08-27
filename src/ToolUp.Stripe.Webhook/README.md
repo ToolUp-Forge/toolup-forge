@@ -6,7 +6,7 @@ wiring is in the sibling `ToolUp.Stripe.Server` package.
 
 ## Surface (v0.1.0-alpha)
 
-```fsharp
+```fsharp skip=signature
 type VerifiedEvent =
     { Body: string
       Timestamp: int64 }

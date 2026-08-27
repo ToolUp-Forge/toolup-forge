@@ -12,7 +12,7 @@ a concrete consumer demands interaction.
 
 ## Quick start
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Client.ModelViewer
 
 ModelViewer.viewer "/assets/turbine.glb" "Wind turbine assembly, rotatable" [
@@ -90,7 +90,7 @@ any static route. Two operational notes:
   blob worker is blocked). Register the first-party `BlobWorkerCspContributor`
   on the server composition to widen the policy to `worker-src 'self' blob:`:
 
-  ```fsharp
+  ```fsharp skip=fragment
   app |> ServerApp.withCspContributor (BlobWorkerCspContributor())
   ```
 

@@ -22,7 +22,7 @@ The API key comes from `ISecretStore`:
 
 Or in F# directly:
 
-```fsharp
+```fsharp skip=fragment
 let sendGridSink =
     SendGridNotificationSink.fromEnv addressBook secretStore (Some logger)
 

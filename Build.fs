@@ -541,6 +541,54 @@ let main args =
     let docSnippetRoots = [ "docs"; "src/ToolUp.Platform/technical-guide" ]
     let docSnippetExcludedTrees = [ "docs/migrations"; "docs/design" ]
 
+    // ── Phase 669: the PACKED teaching surfaces, and the contributor
+    //    guide ────────────────────────────────────────────────────────
+    //
+    // `docs/**` is the site. It is not the whole of what a consumer
+    // reads, and for a companion package it is frequently not what they
+    // read FIRST. `Directory.Build.props` auto-includes every
+    // `src/**/README.md` into its own nupkg, so a companion's README
+    // ships INSIDE the artefact and is the page a consumer lands on from
+    // nuget.org — the first, and for most of the long-tail companions the
+    // only, teaching surface they will ever see. It was the one teaching
+    // surface with no ratchet at all, which is exactly where the Phase
+    // 660 burn-down found the same drift classes it had just cleared out
+    // of `docs/**` sitting untouched.
+    //
+    // Three name-scoped additions rather than a `src` tree root, because
+    // `src/**` is source, not documentation: a bare tree root would sweep
+    // in 72 CHANGELOGs, ten LICENSEs and a `node_modules` tree, none of
+    // which is teaching material and the last of which is not even ours.
+    //
+    //   `src/**/README.md`          — packed into the nupkg; see above.
+    //   `src/**/TECHNICAL_GUIDE.md` — the per-package deep-dive the
+    //                                 README links to. Same audience, same
+    //                                 packing convention, and the largest
+    //                                 single block counts in the estate
+    //                                 (`ToolUp.AI` alone teaches 22).
+    //   `CLAUDE.md`                 — the CONTRIBUTOR guide. A different
+    //                                 audience from the other two, and
+    //                                 deliberately in scope anyway: its
+    //                                 module sample is the canonical
+    //                                 four-file shape every consumer
+    //                                 module is copied from, and it taught
+    //                                 `Icon = "/svg/chart.svg"` against a
+    //                                 `ReactElement` field for as long as
+    //                                 that field has been typed. A guide
+    //                                 that mis-teaches the shape is not
+    //                                 less costly for addressing a
+    //                                 contributor; it is more.
+    //
+    // `bin` / `obj` / `node_modules` are pruned by name during the walk.
+    // The first two are build output (a packed README is copied into
+    // `bin/` on its way into the nupkg, so an unpruned walk double-counts
+    // every one of them); the third is vendored third-party content whose
+    // prose is not ours to hold to our surface.
+    let docSnippetSrcRoot = "src"
+    let docSnippetSrcFileNames = set [ "README.md"; "TECHNICAL_GUIDE.md" ]
+    let docSnippetPrunedDirs = set [ "bin"; "obj"; "node_modules" ]
+    let docSnippetLooseFiles = [ "CLAUDE.md" ]
+
     // The closed escape set. Each reason is a claim about the block's
     // SHAPE that a reviewer can check by reading it:
     //   signature   — an `.fsi`-shaped API listing (`module M = val f: …`).
@@ -832,19 +880,56 @@ let main args =
 
         let toSlash (s: string) = s.Replace('\\', '/')
 
-        let docFiles =
-            docSnippetRoots
-            |> List.collect (fun root ->
-                let full = Path.Combine(repoRoot, root)
+        // Phase 669 — the name-scoped walk over `src/**`. Recursive by
+        // hand rather than `SearchOption.AllDirectories` so `bin` / `obj`
+        // / `node_modules` are PRUNED rather than enumerated and
+        // discarded: an unpruned walk of `src` visits a full
+        // `node_modules` tree on every run, and a packed README is copied
+        // into `bin/` on its way to the nupkg, so the same file would be
+        // counted twice under two different paths.
+        let rec walkNamed (dir: string) =
+            let here =
+                Directory.EnumerateFiles dir
+                |> Seq.filter (fun f -> docSnippetSrcFileNames.Contains(Path.GetFileName f))
+                |> List.ofSeq
 
-                if Directory.Exists full then
-                    Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories)
-                    |> List.ofSeq
-                else
-                    [])
+            let below =
+                Directory.EnumerateDirectories dir
+                |> Seq.filter (fun d -> not (docSnippetPrunedDirs.Contains(Path.GetFileName d)))
+                |> Seq.collect walkNamed
+                |> List.ofSeq
+
+            here @ below
+
+        let docFiles =
+            [
+                yield!
+                    docSnippetRoots
+                    |> List.collect (fun root ->
+                        let full = Path.Combine(repoRoot, root)
+
+                        if Directory.Exists full then
+                            Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories)
+                            |> List.ofSeq
+                        else
+                            [])
+
+                let srcFull = Path.Combine(repoRoot, docSnippetSrcRoot)
+
+                if Directory.Exists srcFull then
+                    yield! walkNamed srcFull
+
+                yield!
+                    docSnippetLooseFiles
+                    |> List.map (fun f -> Path.Combine(repoRoot, f))
+                    |> List.filter File.Exists
+            ]
             |> List.map (fun f -> f, toSlash (Path.GetRelativePath(repoRoot, f)))
             |> List.filter (fun (_, rel) ->
                 docSnippetExcludedTrees |> List.forall (fun t -> not (rel.StartsWith(t + "/"))))
+            // A file reachable from two roots (a `README.md` inside the
+            // technical-guide tree) is one page, not two.
+            |> List.distinctBy snd
             |> List.sortBy snd
 
         // A fence opens with >= 3 backticks plus an info string, and
@@ -874,7 +959,46 @@ let main args =
                         j <- j + 1
 
                     ordinal <- ordinal + 1
-                    let body = [ for k in i + 1 .. j - 1 -> lines[k] ]
+                    let raw = [ for k in i + 1 .. j - 1 -> lines[k] ]
+
+                    // Phase 669 — strip the block's COMMON leading indent.
+                    //
+                    // A fence nested inside a Markdown list is indented to
+                    // sit under its list item; that indentation is a
+                    // MARKDOWN artifact and carries no F# meaning, but it
+                    // reaches the compiler as offside structure and every
+                    // such block fails to parse. It is not drift and no
+                    // skip reason describes it honestly — the block is a
+                    // complete, correct program that the extractor handed
+                    // over misaligned.
+                    //
+                    // COMMON indent, not per-line: the block's own internal
+                    // structure is exactly what must survive. Blank lines
+                    // are excluded from the measurement (a trailing empty
+                    // line would otherwise pin it at 0 and change nothing).
+                    // Unindented blocks — every block in `docs/**` — measure
+                    // 0 and are returned untouched.
+                    //
+                    // The one cost: a compiler error's COLUMN is now the
+                    // dedented column, while its file and LINE — the parts
+                    // the `#line` directive carries and the parts a reader
+                    // navigates by — stay exact.
+                    let indent =
+                        match raw |> List.filter (fun l -> l.Trim() <> "") with
+                        | [] -> 0
+                        | content -> content |> List.map (fun l -> l.Length - l.TrimStart(' ').Length) |> List.min
+
+                    let body =
+                        if indent = 0 then
+                            raw
+                        else
+                            raw
+                            |> List.map (fun l ->
+                                if l.Length >= indent then
+                                    l.Substring indent
+                                else
+                                    l.TrimStart(' '))
+
                     // rel, ordinal, first content line, closing-fence line, info, body
                     acc.Add(rel, ordinal, i + 2, j, info, body)
                     i <- j + 1
@@ -964,6 +1088,35 @@ let main args =
             let i = max (bare.LastIndexOf '.') (bare.LastIndexOf '+')
             if i >= 0 then bare.Substring(i + 1) else bare
 
+        // Phase 669 — a container the RENDERER could not read is NOT
+        // COMPARABLE, and must never be rendered as "this type has no
+        // members".
+        //
+        // `PublicApiApproval` writes `<full>  # <members unavailable:
+        // FileNotFoundException>` when reflection cannot load an
+        // assembly's dependencies to enumerate its members. That line is
+        // not a member line, so an unguarded reader below sees a
+        // container with an EMPTY member list — and every doc that names
+        // one of its members becomes a finding whose remedy is to delete
+        // a perfectly correct sentence. Phase 669's walk hit exactly that
+        // on ten findings across `AwsLambdaHost`, the three
+        // `*KmsKeyResolver`s and the KMS artefact signers, all of which
+        // exist in source and are spelled right in the docs.
+        //
+        // Same posture the estate takes everywhere else: "I cannot read
+        // this" is reported as unknown, never as wrong. Dropping the
+        // container entirely puts its members in the lint's OUTSIDE
+        // bucket, where an unresolvable name already lives.
+        let unreadableTypes =
+            if Directory.Exists apiBaselineDir then
+                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
+                |> Seq.collect File.ReadAllLines
+                |> Seq.choose (rxGroups @"^(\S+)\s+# <members unavailable")
+                |> Seq.map (fun groups -> groups[1])
+                |> Set.ofSeq
+            else
+                Set.empty
+
         // (full name, [member name, rendered member line]). Nested types
         // keep their `+`, so the DU-case reader below finds `T+Case`.
         let realTypes =
@@ -976,6 +1129,7 @@ let main args =
 
                     lines
                     |> Array.choose (rxGroups @"^(\S+) \((?:class|interface|struct|enum|delegate)\)$")
+                    |> Array.filter (fun groups -> not (unreadableTypes.Contains groups[1]))
                     |> Array.map (fun groups ->
                         let full = groups[1]
                         let prefix = full + "."
@@ -1265,6 +1419,11 @@ let main args =
         // members a doc may name on it, which is a union rather than a
         // choice — over-accepting only ever passes a doc, and the subset
         // direction stays sound.
+        // Phase 669 — member names by full type name, so a container can
+        // fold in the cases of a DU nested inside it (see `surfaceContainers`).
+        let membersByFull =
+            realTypes |> List.map (fun (full, ms) -> full, ms |> List.map fst) |> Map.ofList
+
         let nestedByParent =
             realFullNames
             |> Seq.choose (fun f ->
@@ -1357,10 +1516,43 @@ let main args =
                 // rather than tidy: without it every generic function in
                 // the surface reads as absent, which is a false positive on
                 // exactly the composition helpers the docs teach most.
+                //
+                // Phase 669 — and the GRANDCHILDREN, because an F# DU
+                // declared inside a module is reached THROUGH the module.
+                // `StopWords.German` is how the language resolves a case of
+                // the `Language` DU declared in `module StopWords`, and it
+                // is how the compiling block on the same page spells it —
+                // but the case renders as `StopWords+Language+German`, two
+                // levels down, so a children-only fold reported a correct
+                // line as naming a member the surface does not have.
                 let members =
                     usable
                     |> List.collect (fun (full, ms) ->
-                        (ms |> List.map fst) @ (nestedByParent.TryFind full |> Option.defaultValue []))
+                        let children = nestedByParent.TryFind full |> Option.defaultValue []
+
+                        // Phase 669 — the CASES of a DU nested in this
+                        // container are reached through the container.
+                        // `StopWords.German` is how F# resolves a case of
+                        // the `Language` DU declared in `module StopWords`,
+                        // and how the compiling block on the same page
+                        // spells it — but the case renders as a property of
+                        // `StopWords+Language`, one level down, so a
+                        // children-only fold reported a correct line as
+                        // naming a member the surface does not have.
+                        //
+                        // Narrowed to DU CASES rather than every nested
+                        // member, by the `IsXxx` companion property the F#
+                        // compiler emits for each case. Folding a nested
+                        // record's FIELDS into its parent would widen the
+                        // accepted set for no rule the language has.
+                        let nestedDuCases =
+                            children
+                            |> List.collect (fun c ->
+                                match membersByFull.TryFind(full + "+" + c) with
+                                | None -> []
+                                | Some names -> names |> List.filter (fun n -> names |> List.contains ("Is" + n)))
+
+                        (ms |> List.map fst) @ children @ nestedDuCases)
                     |> List.map (fun m -> m.Split('`')[0])
                     |> Set.ofList
 
@@ -1439,20 +1631,37 @@ let main args =
         // Arm 1 — dotted, capitalized identifiers. The anchor is the first
         // segment the surface owns, and every segment before it must be
         // capitalized (so a lowercase value's property can never anchor).
+        // Phase 669 — anchor at the RIGHTMOST container in the chain, not
+        // the leftmost.
+        //
+        // A fully-qualified reference is namespace segments followed by a
+        // container followed by a member: in
+        // `ToolUp.Voice.Client.VoiceInput.registerPromptMic` the container
+        // is `VoiceInput` and everything before it is qualification.
+        // Scanning left-to-right stopped at `Client` — a real container in
+        // a different package — and then reported the NAMESPACE segment
+        // `VoiceInput` as a member `Client` does not have, on three pages
+        // whose prose was correct as written. Rightmost-first reads the
+        // chain the way F# does.
+        //
+        // The leading guard is unchanged and still load-bearing: a chain
+        // whose first segment is lower-case is a local value being
+        // dereferenced, not a container path, and must never anchor.
         let anchorOf (chain: string) =
             let segs = chain.Split('.')
 
-            let rec go i =
-                if i >= segs.Length - 1 then
-                    None
-                elif not (System.Char.IsUpper(segs[i].[0])) then
-                    None
-                elif ownedContainerNames.Contains segs[i] then
-                    Some(segs[i], segs[i + 1])
-                else
-                    go (i + 1)
+            if segs.Length < 2 || not (System.Char.IsUpper(segs[0].[0])) then
+                None
+            else
+                let rec go i =
+                    if i < 0 then
+                        None
+                    elif ownedContainerNames.Contains segs[i] then
+                        Some(segs[i], segs[i + 1])
+                    else
+                        go (i - 1)
 
-            go 0
+                go (segs.Length - 2)
 
         // Arm 2 — one brace region is one record construction.
         let labelRx =
@@ -1668,29 +1877,52 @@ let main args =
             "open DataManagementTypes"
         ]
 
+        // The per-package opens, named once. Phase 669 brought the packed
+        // `src/**/README.md` + `TECHNICAL_GUIDE.md` into the walk, and a
+        // companion's own README is read in the context of its package for
+        // exactly the reason `docs/ai/` is: the page is ABOUT that package,
+        // so its blocks assume it without a ceremonial `open` a reader would
+        // then copy. Sharing the lists keeps the two entry points from
+        // drifting into two different ideas of what "the AI context" is.
+        let aiOpens = [
+            "open ToolUp.AI"
+            "open ToolUp.AI.AICompose"
+            "open ToolUp.Platform.AI"
+            "open ToolUp.AI.Wire"
+        ]
+
+        let ragOpens = [ "open ToolUp.RAG"; "open ToolUp.RAG.RAGCompose" ]
+        let kbOpens = [ "open ToolUp.KnowledgeBase"; "open SharedTypes" ]
+
+        let formsOpens = [
+            "open ToolUp.Forms"
+            "open ToolUp.Forms.FormSchema"
+            "open ToolUp.Forms.FormSubmission"
+            "open ToolUp.Forms.AggregationTypes"
+        ]
+
+        let schedulingOpens = [
+            "open ToolUp.Scheduling"
+            "open ToolUp.Scheduling.SchedulingTypes"
+            "open ToolUp.Scheduling.SchedulingCompose"
+        ]
+
         let docSnippetTreePreamble = [
-            "docs/ai/",
-            [
-                "open ToolUp.AI"
-                "open ToolUp.AI.AICompose"
-                "open ToolUp.Platform.AI"
-                "open ToolUp.AI.Wire"
-            ]
-            "docs/rag/", [ "open ToolUp.RAG"; "open ToolUp.RAG.RAGCompose" ]
-            "docs/knowledge-base/", [ "open ToolUp.KnowledgeBase"; "open SharedTypes" ]
-            "docs/forms/",
-            [
-                "open ToolUp.Forms"
-                "open ToolUp.Forms.FormSchema"
-                "open ToolUp.Forms.FormSubmission"
-                "open ToolUp.Forms.AggregationTypes"
-            ]
-            "docs/scheduling/",
-            [
-                "open ToolUp.Scheduling"
-                "open ToolUp.Scheduling.SchedulingTypes"
-                "open ToolUp.Scheduling.SchedulingCompose"
-            ]
+            "docs/ai/", aiOpens
+            "docs/rag/", ragOpens
+            "docs/knowledge-base/", kbOpens
+            "docs/forms/", formsOpens
+            "docs/scheduling/", schedulingOpens
+            // Phase 669 — the packed teaching surfaces, same lists.
+            "src/ToolUp.AI/", aiOpens
+            "src/AI.Samples/", aiOpens
+            "src/AIProviders/", aiOpens
+            "src/AICookbooks/", aiOpens
+            "src/ToolUp.RAG/", ragOpens
+            "src/ToolUp.RAG.StaticCorpus.Server/", ragOpens
+            "src/ToolUp.KnowledgeBase/", kbOpens
+            "src/ToolUp.Forms/", formsOpens
+            "src/ToolUp.Scheduling/", schedulingOpens
         ]
 
         let preambleFor (rel: string) =

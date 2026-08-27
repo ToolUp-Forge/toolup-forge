@@ -15,11 +15,11 @@ Two reasons it doesn't live in `ToolUp.Platform`:
 
 ## Activation
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Reporting
 
 ServerApp.empty
-|> ServerApp.addModules [ /* your modules */ ]
+|> ServerApp.addModules [ (* your modules *) ]
 |> ReportingServerApp.run
 ```
 
