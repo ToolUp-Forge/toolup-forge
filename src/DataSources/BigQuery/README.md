@@ -1,68 +1,130 @@
-# BigQuery connector (Phase 10 — implementation deferred)
+# ToolUp.DataSources.BigQuery
 
-This directory is reserved for the BigQuery connector — the first concrete `IDataSource` implementation that the SDK's data-ingestion substrate will host. The substrate itself (interfaces, in-memory connector, orchestrator, scheduled-ingestion handler, admin API) shipped under `Phase 10 (1/4)..(4/4)`. The actual BigQuery integration is the implementation phase that follows.
+An `IDataSource` companion for **Google BigQuery**, over `Google.Cloud.BigQuery.V2`.
 
-## Why this is a placeholder, not a stub `.fsproj`
+Production-ready. Stateless between calls (portability rule 4): a client is built per call from the
+credential resolved through the `ISecretStore` thunk, so rotating a service-account key takes effect
+without reconstructing the connector. BigQuery clients are cheap; pooling would be a
+profiling-driven follow-up, not a correctness concern.
 
-Same rationale as `src/JobScheduler/Akka/README.md`. An empty F# project listed in both solutions would be misleading clutter:
+```fsharp
+open ToolUp.DataSources.BigQuery
 
-- It compiles to nothing useful (no working integration).
-- Its `paket.references` would advertise `Google.Cloud.BigQuery.V2` dependencies that aren't actually exercised against a live BigQuery dataset, polluting the dependency graph.
-- New SDK contributors would see "BigQuery support exists" in the solution view and assume cloud ingestion works.
+// Service-account JSON out of ISecretStore, per source.
+let source = BigQueryDataSource.create secretStore
 
-A README placeholder records the design intent. When the implementation lands, this README becomes the design rationale embedded in the companion's actual source.
-
-## Planned file layout
-
-Mirrors `src/AIProviders/Claude/` (the structural template for an external-cloud connector):
-
-```
-src/DataSources/BigQuery/
-├── BigQueryDataSource.fsproj           Meta-project (no DLL output)
-├── paket.references                    FSharp.Core, Google.Cloud.BigQuery.V2,
-│                                       Google.Apis.Auth (for service-account creds)
-├── BigQueryDataSource.Server.props     Injects BigQueryDataSource.fs into
-│                                       _ToolUpPlatformServerSources
-├── BigQueryDataSource.fs               IDataSource implementation
-└── README.md                           This file (replaced with usage notes when impl lands)
+// Or application-default credentials — workload identity on GKE, the
+// GCE metadata server, GOOGLE_APPLICATION_CREDENTIALS. Every source
+// wired to this instance sets `use_default_credentials = true`.
+let source = BigQueryDataSource.createWithDefaultCredentials ()
 ```
 
-The consuming `ToolupApp-Server.fsproj` will add a `<ProjectReference>` to this companion and import the `.Server.props` — same pattern used today by `src/AIProviders/Claude/ClaudeAIProvider.Server.props` and `src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.Server.props`.
+`Kind` is `"BigQuery"`.
 
-## Credential storage convention
+## `ConnectionScope` keys
 
-BigQuery service-account credentials are JSON blobs (the contents of a downloaded `service-account.json` file from GCP IAM). The connector reads them through the SDK's `ISecretStore`:
-
-- **Scope:** the team's storage scope (`team-{teamId}` in Team / MultiTeam mode, `user-{userId}` in Individual mode).
-- **Key:** `bigquery_service_account_json` (or whatever `DataSourceConfig.CredentialKey` names — admin chooses).
-- **Value:** the full JSON blob, stored encrypted at rest via `EncryptedSecretStore` when `TOOLUP_SECRETS_MASTER_KEY` is configured.
-
-The orchestrator pre-resolves the credential and hands it to the connector via `DataSourceCallContext.Credential`. The connector parses the JSON, builds a `GoogleCredential`, and constructs a `BigQueryClient` per call (clients are cheap; reuse is a follow-up optimisation if profiling shows pressure).
-
-## What gates the actual implementation
-
-Before this directory can contain working code, the implementation session must have:
-
-1. **A real Google Cloud project + service account.** Service-account JSON file with `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` at minimum. A test dataset with at least one populated table to verify the round-trip.
-2. **`Google.Cloud.BigQuery.V2` package compatibility verified.** The SDK targets `net10.0`; some older Google Cloud .NET packages may lag behind. A trivial `Connect → Query` smoke test against the real dataset is the load-bearing prerequisite.
-3. **`IDataSourceContract` pack passes.** The connector must bind to and pass `src/ToolUp.Platform.Tests/Contracts/IDataSourceContract.fs` — the same pack the in-memory connector passes today. Connector-specific behaviour (BigQuery dialect SQL parsing, `INFORMATION_SCHEMA.COLUMNS` for `GetSchema`) is tested separately in env-gated integration tests, mirroring `AzureBlobStorageTests.fs` / `AwsS3StorageTests.fs` / `GoogleCloudStorageTests.fs` which only run when their respective bucket / connection-string env vars are set.
-4. **Cost-control documentation.** BigQuery bills per byte scanned. The connector docs should warn about full-table scans on large datasets and recommend `LIMIT` clauses for testing.
-
-## What lives where today
-
-| Concern | File | Status |
+| Key | Required | Meaning |
 |---|---|---|
-| `IDataSource` interface contract | `src/ToolUp.Platform/Server/IDataSource.fs` | Shipped (Phase 10 (1/4)) |
-| `DataSourceConfig` shape (incl. `Kind`, `CredentialKey`) | `src/ToolUp.Platform/Shared/DataIngestionTypes.fs` | Shipped |
-| `IDataSourceContract` test pack | `src/ToolUp.Platform.Tests/Contracts/IDataSourceContract.fs` | Shipped (7 tests) |
-| In-process orchestrator | `src/ToolUp.Platform/Server/DataIngestor.fs` | Shipped (binds connectors by `Kind`, resolves credentials, writes through `IDataObjectStore` with `Versioned`) |
-| Scheduled-ingestion job handler | `src/ToolUp.Platform/Server/DataIngestionJobHandler.fs` | Shipped (registered against `IJobScheduler` at compose time) |
-| ToolUp.Remoting admin API | `src/ToolUp.Platform/Server/DataIngestionApiHandler.fs` | Shipped (Owner/Admin write gate, Manual-trigger schedule) |
-| In-memory test connector | `src/ToolUp.Platform/Server/InMemoryDataSource.fs` | Shipped (Kind = "InMemory"; serves the test pack + dev harness) |
-| BigQuery connector | This directory | **Deferred** — needs GCP credentials |
-| Redshift / Athena / Synapse connectors | Reserved at `src/DataSources/<Name>/` (not yet created) | **Deferred** — same dependency on real cloud accounts |
-| Admin UI module | A future `src/ToolUp.Platform/Client/DataIngestionUI.fs` | **Deferred** — pairs with the shipped `IDataIngestionApi` ToolUp.Remoting surface |
+| `project_id` | yes | The project queries are **billed to**. Not necessarily the project owning the data — a cross-project read bills the querying project. |
+| `dataset_id` | yes | Dataset that `ListTables` / `GetSchema` enumerate, and that unqualified table names in `Query` resolve against. |
+| `location` | no | Dataset location (`EU`, `us-central1`). Omitted lets the service infer it, which **fails on a location mismatch** — set it explicitly for a non-US dataset. |
+| `maximum_bytes_billed` | no | Hard ceiling on bytes scanned per query. Must be a positive integer. |
+| `use_legacy_sql` | no | Interpret `sql` as Legacy SQL. Defaults to `false` (Standard SQL). |
+| `use_default_credentials` | no | Use application-default credentials instead of a stored service-account blob. Defaults to `false`. |
 
-## Don't ship working BigQuery code without testing it
+## Credentials
 
-The interface contract is strict (`IDataSource` returns `Result<_, IngestionError>` for every method). Connector-specific bugs surface only against real datasets — credential rotation under load, `INFORMATION_SCHEMA` introspection across legacy / Standard SQL, BigQuery's quotas, query-cost surprises. Silently shipping a BigQuery connector that has never run against a real dataset would be the worst kind of code: looks correct, fails on first real ingestion. This README is the contract that says "interface is ready; integration is the next session's work."
+The credential is the **full contents of a downloaded service-account JSON key**. The connector reads
+`DataSourceCallContext.Credential` first (the shipped `DataIngestor` pre-resolves it) and falls back
+to `ISecretStore.GetSecret(ctx.ScopeId, ctx.Config.CredentialKey)`.
+
+- **Scope:** the team's storage scope — `team-{teamId}` in Team / MultiTeam mode, `user-{userId}` in
+  Individual mode.
+- **Key:** whatever `DataSourceConfig.CredentialKey` names.
+- **Value:** the whole JSON blob, encrypted at rest via `EncryptedSecretStore` where the deployment
+  has a master key configured.
+- **Minimum IAM:** `roles/bigquery.dataViewer` on the dataset plus `roles/bigquery.jobUser` on the
+  billing project. Ingestion is read-only; nothing here needs write or DDL rights.
+
+A blob that is not valid service-account JSON fails as **`SchemaMismatch` naming the credential key**,
+not as an authentication error. That distinction is the difference between a two-minute fix and an
+afternoon.
+
+## Cost control — read this one
+
+**BigQuery bills per byte SCANNED, and `SELECT *` on a partitioned fact table is the classic way to
+spend a lot of money by accident.** The connector surfaces the lever rather than hiding it:
+
+- Set **`maximum_bytes_billed`** on every source. A query whose dry-run estimate exceeds it is
+  **refused by the service** rather than billed. The connector refuses a zero, negative or
+  unparseable value at configuration time, because a mistyped ceiling silently becoming "no ceiling"
+  is exactly the failure this key exists to prevent.
+- Prefer explicit column lists and a `WHERE` clause on the partition column. BigQuery does not charge
+  less for a `LIMIT`.
+- `Connect` is a single dataset-metadata fetch — it scans nothing, so an admin UI's "Test connection"
+  button costs nothing.
+
+## Queries and output
+
+`sql` is BigQuery Standard SQL (or Legacy SQL under `use_legacy_sql`). The configured dataset is set
+as the query's default dataset, so unqualified table names resolve against it.
+
+Results are **RFC 4180 CSV**: a header row of column names taken from the result schema, `\r\n`
+terminated, UTF-8 with no BOM. Values render invariant-culture, `DateTime` as ISO-8601 round-trip,
+`byte[]` as base64, `NULL` as the empty field.
+
+## Schema mapping — BigQuery type → `ColumnType`
+
+`ColumnInfo.DataType` carries the **raw** BigQuery type name; `BigQueryDataSource.toColumnType`
+projects it down to the SDK's coarse four-case `ColumnType` for consumers that need to reason
+uniformly.
+
+| BigQuery | `ColumnType` |
+|---|---|
+| `BOOL` / `BOOLEAN` | `BooleanColumn` |
+| `INT64` / `FLOAT64` / `NUMERIC` / `BIGNUMERIC` | `NumberColumn` |
+| `DATE` / `DATETIME` / `TIME` / `TIMESTAMP` | `DateColumn` |
+| `STRING` / `BYTES` / `JSON` / `GEOGRAPHY` / `INTERVAL` | `StringColumn` |
+| `RECORD` / `STRUCT` / `ARRAY` | `StringColumn` |
+
+`INTERVAL` is structured rather than a point in time, so it renders as text and classifies as
+`StringColumn` — the one entry above a reader is likely to expect elsewhere.
+
+**Nullability follows the field MODE:** only `REQUIRED` is not nullable. `REPEATED` reads nullable
+(elements may be absent), and an absent mode — which the API omits for a plain nullable field — reads
+nullable too.
+
+## Gotchas
+
+- **A location mismatch is the most common first failure.** If the dataset is not in the US multi-
+  region and `location` is unset, the job is created in the wrong location and fails with a message
+  about the dataset not being found.
+- **Nested and repeated fields flatten to text.** A `RECORD` column renders as its JSON in the CSV.
+  Deployments that want columnar nested data should `UNNEST` in the query.
+- **Cancellation rides the ambient `Async` cancellation token.** `DataSourceCallContext` carries no
+  token field, so the connector reads `Async.CancellationToken` and passes it into the query
+  execution.
+
+## Testing
+
+The always-on arm of `src/ToolUp.DataSources.Tests` covers configuration parsing (including every
+`maximum_bytes_billed` refusal), the type map, mode-based nullability, and the credential failure
+modes — no GCP account needed.
+
+The remote arm binds `RemoteDataSourceContract` against a real dataset when these are set. It is
+**read-only** and its default sample query carries a `LIMIT` and a byte ceiling:
+
+| Variable | Required |
+|---|---|
+| `TOOLUP_BIGQUERY_PROJECT_ID` | yes |
+| `TOOLUP_BIGQUERY_DATASET_ID` | yes |
+| `TOOLUP_BIGQUERY_TABLE` | yes |
+| `TOOLUP_BIGQUERY_CREDENTIAL_JSON` | yes |
+| `TOOLUP_BIGQUERY_LOCATION` | no |
+| `TOOLUP_BIGQUERY_MAX_BYTES` | no (defaults to 1 GB) |
+| `TOOLUP_BIGQUERY_SAMPLE_SQL` | no |
+| `TOOLUP_BIGQUERY_ISOLATED_DATASET` | no |
+
+With them unset the arm reports one `Pending` case naming what it wanted — a fresh checkout is clean,
+and a CI job that was supposed to have credentials shows "skipped" rather than a green that proves
+nothing.

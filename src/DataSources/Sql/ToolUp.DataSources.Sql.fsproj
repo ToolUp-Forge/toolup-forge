@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.Sql</PackageId>
+    <AssemblyName>ToolUp.DataSources.Sql</AssemblyName>
+    <Description>Operational-database IDataSource companion for ToolUp.Platform: one connector spanning PostgreSQL, MySQL/MariaDB, SQL Server (and Azure SQL), SQLite, Oracle and ClickHouse, selected per data source by the ConnectionScope 'backend' key. Catalogue introspection via information_schema / ALL_TAB_COLUMNS / pragma_table_info; query results returned as RFC 4180 CSV; passwords resolved per call through ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;data-source;ingestion;sql;postgres;mysql;sqlserver;sqlite;oracle;clickhouse;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="SqlDialect.fs" />
+    <Compile Include="SqlDataSource.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\Common\ToolUp.DataSources.Common.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <!-- One ADO provider per supported backend. These are the whole
+         vendor surface of this companion (GP 1) — nothing here reaches
+         ToolUp.Platform.*. A deployment that uses one backend still
+         restores all six assemblies; they are lazily loaded, so the
+         unused ones cost disk, not startup. -->
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="MySqlConnector" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <PackageReference Include="ClickHouse.Client" />
+  </ItemGroup>
+</Project>

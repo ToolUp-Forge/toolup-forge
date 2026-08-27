@@ -429,5 +429,34 @@
     <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpSdkVersion)" />
+
+    <!-- ═══ Phase 10c — cloud data-source connectors ═══════════════
+         Vendor pins for the `IDataSource` companions under
+         `src/DataSources/`. Every one is isolated to its own companion
+         package (GP 1) — none reaches ToolUp.Platform.*. All verified
+         to restore and compile on net10.0 at these versions.
+    -->
+    <!-- ToolUp.DataSources.Sql — one ADO provider per supported
+         backend. Npgsql is pinned ABOVE (9.0.3, for the Timescale
+         time-series store) and deliberately shared rather than
+         re-pinned: two versions of one provider in one graph is a
+         restore conflict waiting to happen. -->
+    <PackageVersion Include="MySqlConnector" Version="2.6.2" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
+    <PackageVersion Include="ClickHouse.Client" Version="7.14.0" />
+    <!-- ToolUp.DataSources.BigQuery. Google.Apis.Auth (1.73) is already
+         pinned above for the GCS storage companion and is what parses
+         the service-account JSON. -->
+    <PackageVersion Include="Google.Cloud.BigQuery.V2" Version="3.12.0" />
+    <!-- ToolUp.DataSources.{Athena,Redshift}. Both track the
+         AWSSDK.Core 4.0.7.1 floor pinned at the head of this file —
+         bump them with Core, never independently. -->
+    <PackageVersion Include="AWSSDK.Athena" Version="4.0.100.11" />
+    <PackageVersion Include="AWSSDK.RedshiftDataAPIService" Version="4.0.102.5" />
+    <!-- ToolUp.DataSources.Snowflake — Snowflake's own ADO.NET
+         provider; Apache-2.0. -->
+    <PackageVersion Include="Snowflake.Data" Version="6.0.0" />
   </ItemGroup>
 </Project>
