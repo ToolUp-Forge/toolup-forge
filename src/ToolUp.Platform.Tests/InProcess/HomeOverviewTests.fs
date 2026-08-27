@@ -58,6 +58,8 @@ let private mkType (id: string) (displayName: string) : DataType = {
         Schema = None
     }
     Id = id
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
     Detect = fun _ -> async { return false }
     Process = stubProcess
 }

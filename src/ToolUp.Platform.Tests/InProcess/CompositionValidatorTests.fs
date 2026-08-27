@@ -174,6 +174,8 @@ let tests =
                     Schema = None
                 }
                 Id = id
+                SchemaVersion = DataTypes.initialSchemaVersion
+                Migrations = []
                 Detect = fun _ -> async { return false }
                 Process = fun _ -> async { return failwith "stub Process never called" }
             }

@@ -254,6 +254,75 @@ let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
         |> ignore
 
+/// Phase 10a — register the module data-migration substrate when
+/// `ServerConfig.DataMigrations` opts in. `NoDataMigrations` (the
+/// default) registers nothing at all: no registry, no status store, no
+/// runner, no hosted service — and `BuildRouteHandlers` mounts no
+/// `IDataMigrationApi` route, so a deployment that never evolved a
+/// persisted shape pays nothing (GP 13) and behaves byte-for-byte as
+/// it did before this substrate existed (GP 11).
+///
+/// `EnabledDataMigrations` additionally registers the startup sweep,
+/// gated on the process-profile matrix like every other background
+/// subsystem. `ManualDataMigrations` registers everything except the
+/// sweep, leaving the admin module's trigger as the only way a pass
+/// starts.
+///
+/// The registry unions the migrators declared on each registered
+/// `DataType` with any `IDataMigrator` singletons companion packages
+/// registered in DI — resolved through a factory so that DI
+/// registration order does not matter (the same lazy shape
+/// `registerDataIngestion` uses for `IDataSource` connectors).
+let registerDataMigrations
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (dataTypes: DataType list)
+    (dataObjectStore: IDataObjectStore)
+    (resolvedBlobStorage: IBlobStorage)
+    (eventStore: IEventStore)
+    (resolvedLogger: ILogger)
+    : unit =
+    match config.DataMigrations with
+    | NoDataMigrations -> ()
+    | EnabledDataMigrations
+    | ManualDataMigrations ->
+        services.AddSingleton<MigrationRegistry>(fun sp ->
+            let injected =
+                sp.GetServices(typeof<IDataMigrator>) |> Seq.cast<IDataMigrator> |> List.ofSeq
+
+            MigrationRegistry(dataTypes, injected))
+        |> ignore
+
+        services.AddSingleton<IMigrationStatusStore>(MigrationStatusStore.create resolvedBlobStorage)
+        |> ignore
+
+        services.AddSingleton<MigrationRunner>(fun sp ->
+            MigrationRunner(
+                sp.GetRequiredService<MigrationRegistry>(),
+                sp.GetRequiredService<IMigrationStatusStore>(),
+                dataObjectStore,
+                eventStore,
+                resolvedLogger
+            ))
+        |> ignore
+
+        if
+            config.DataMigrations = EnabledDataMigrations
+            && ProcessProfileGate.shouldRegisterBackgroundService config DataMigrationSweepSubsystem
+        then
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                // `ITeamStore` is optional: modes with no team concept
+                // register none, and the sweep then logs that it has no
+                // scope set rather than failing to construct.
+                let teamStore =
+                    match sp.GetService(typeof<TeamManagement.ITeamStore>) with
+                    | :? TeamManagement.ITeamStore as ts -> Some ts
+                    | _ -> None
+
+                new MigrationRunnerService(sp.GetRequiredService<MigrationRunner>(), teamStore, resolvedLogger)
+                :> Microsoft.Extensions.Hosting.IHostedService)
+            |> ignore
+
 /// Phase 552 — register the consented-grant registry when
 /// `ServerConfig.GrantConsent` selects a backend. `BlobGrantConsent`
 /// registers the blob-backed default over the composed `IBlobStorage`

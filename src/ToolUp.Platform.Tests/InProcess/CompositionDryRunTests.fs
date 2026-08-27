@@ -26,6 +26,8 @@ let private stubDataType (id: string) : DataType = {
         Schema = None
     }
     Id = id
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
     Detect = fun _ -> async { return false }
     Process = fun _ -> async { return failwith "stub DataType.Process is never called by a dry run" }
 }

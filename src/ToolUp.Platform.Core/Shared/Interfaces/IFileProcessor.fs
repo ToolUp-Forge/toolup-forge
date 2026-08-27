@@ -29,7 +29,46 @@ type DataType = {
     /// Returns: `ProcessedData` (TypeName + JSON payload) plus a
     /// `ProcessedFileEntry` with summary info for client display.
     Process: string * string -> Async<ProcessedData * ProcessedFileEntry>
+    /// Phase 10a — the schema version this module currently reads and
+    /// writes for this data type. Monotonic and module-owned. Set to
+    /// `DataTypes.initialSchemaVersion` (1) unless the module has
+    /// shipped a schema evolution; every stored object without an
+    /// explicit stamp is read as version 1, so a module that never
+    /// bumps this behaves exactly as it did before the field existed
+    /// (GP 11).
+    SchemaVersion: SchemaVersion
+    /// Phase 10a — forward migrators this module ships for this data
+    /// type, one per version step. `[]` for a module that has never
+    /// evolved its shape. The registry chains them to upgrade an
+    /// object at any older version up to `SchemaVersion`; a gap or a
+    /// fork in the chain is refused at registration rather than
+    /// discovered mid-pass.
+    Migrations: IDataMigrator list
 }
+
+/// Constants + helpers for the Phase 10a schema-evolution fields on
+/// `DataType`. A module that has not evolved its shape writes
+/// `SchemaVersion = DataTypes.initialSchemaVersion` and
+/// `Migrations = []`; `DataTypes.unversioned` is the same pair as a
+/// single value for registration sites that would otherwise repeat it.
+module DataTypes =
+
+    /// The version every data type starts at, and the version an
+    /// unstamped stored object is read as.
+    [<Literal>]
+    let initialSchemaVersion: SchemaVersion = 1
+
+    /// Set a data type's declared schema version.
+    let withSchemaVersion (version: SchemaVersion) (dataType: DataType) : DataType = {
+        dataType with
+            SchemaVersion = version
+    }
+
+    /// Attach the module's forward migrators to a data type.
+    let withMigrations (migrations: IDataMigrator list) (dataType: DataType) : DataType = {
+        dataType with
+            Migrations = migrations
+    }
 
 // ─── CSV detection helpers ────────────────────────────────────────
 

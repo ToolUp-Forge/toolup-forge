@@ -31,6 +31,8 @@ let private mkDataType (processCount: int ref) : DataType = {
         Schema = None
     }
     Id = TestTypeId
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
     Detect = fun contents -> async { return contents.Contains "header_x" }
     Process =
         fun (fileName, contents) -> async {

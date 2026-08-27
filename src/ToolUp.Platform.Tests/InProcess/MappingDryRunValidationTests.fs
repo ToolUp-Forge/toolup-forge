@@ -115,6 +115,8 @@ let tests =
                         Schema = Some(schema [ col "Region" StringColumn true; col "Revenue" NumberColumn true ])
                     }
                     Id = "SalesData"
+                    SchemaVersion = DataTypes.initialSchemaVersion
+                    Migrations = []
                     Detect = fun _ -> async { return false }
                     Process =
                         fun _ ->
