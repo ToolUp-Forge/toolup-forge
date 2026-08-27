@@ -784,6 +784,459 @@ let private inHandlerGates =
         }
     ]
 
+// ─── Phase 554 — the grant-authority facet ────────────────────────────
+//
+// The facet answers a question one level up from the two projections
+// above: not "who reaches this component" but **who can hand out access
+// to it, by which path, and what must be true first**.
+//
+// Two properties are asserted here and they are different in kind. The
+// DERIVATION cases pin what the facet says about a fixture composition —
+// ordinary manifest assertions. The DRIFT GUARD (554.C) asserts the
+// facet is COMPLETE: it reflects over the real `IPermissionStore` and the
+// real grant entry points and fails on a member the write-path table does
+// not classify. That is the case that keeps the facet honest, because the
+// only way a meta-authority manifest can be dangerous is by
+// under-reporting who can grant — and a table nobody checks drifts
+// silently in exactly that direction.
+
+let private ledgerParty = PartyRef.create "acme-dpo"
+
+/// Four modules spanning every `GrantPolicy` arm: one that declares
+/// nothing (so it must be absent from the facet entirely), and one for
+/// each declared arm.
+let private policyBearingModules () : ServerModule list = [
+    // Declares nothing — `AdminDiscretion` is the default.
+    ServerModule.create "Reporting"
+    |> ServerModule.withComponentId "reporting-service"
+
+    ServerModule.create "Ledger"
+    |> ServerModule.withComponentId "ledger-service"
+    |> ServerModule.withGrantPolicy GrantPolicy.RequiresAcknowledgement
+
+    // No explicit ComponentId — the entry must fall back to the
+    // Name-derived identity, exactly as the exposed surface does.
+    ServerModule.create "Payroll"
+    |> ServerModule.withGrantPolicy GrantPolicy.RequiresSubjectConsent
+
+    ServerModule.create "ClinicalTrial"
+    |> ServerModule.withComponentId "trial-service"
+    |> ServerModule.withGrantPolicy (GrantPolicy.RequiresCounterpartyApproval ledgerParty)
+]
+
+let private authority = GrantAuthoritySurface.ofModules (policyBearingModules ())
+
+let private authorityEntry (moduleName: string) =
+    match GrantAuthoritySurface.entryFor moduleName authority with
+    | Some entry -> entry
+    | None -> failwithf "the facet carries no entry for '%s'" moduleName
+
+let private grantAuthorityDerivation =
+    testList "grant-authority facet — derivation (554.A)" [
+
+        test "only modules that DECLARED a policy appear, in module-name order" {
+            // Asserting the whole list rather than a containment: an extra
+            // entry — most importantly an `AdminDiscretion` module quietly
+            // rostered as "an administrator may grant it" — fails here.
+            Expect.equal
+                (authority.Authority
+                 |> List.map (fun e ->
+                     e.AuthorityModule, ComponentId.value e.AuthorityComponent, GrantPolicy.toToken e.AuthorityPolicy))
+                [
+                    "ClinicalTrial", "module:trial-service", "requires-counterparty-approval:acme-dpo"
+                    "Ledger", "module:ledger-service", "requires-acknowledgement"
+                    "Payroll", "module:Payroll", "requires-subject-consent"
+                ]
+                "three declared arms, name-ordered, with the declaring module's own component identity"
+
+            Expect.isNone
+                (GrantAuthoritySurface.entryFor "Reporting" authority)
+                "a module that declared nothing has declared nothing — it is not rostered as a non-declaration"
+        }
+
+        test "the facet is derived from the registration, not from a table naming modules" {
+            // The GP 9 property, asserted directly: a module invented here
+            // and named nowhere in the SDK surfaces with its policy.
+            let invented =
+                ServerModule.create "SomethingNobodyNamed"
+                |> ServerModule.withGrantPolicy GrantPolicy.RequiresAcknowledgement
+
+            let derived = GrantAuthoritySurface.ofModules [ invented ]
+
+            Expect.equal
+                (derived.Authority |> List.map _.AuthorityModule)
+                [ "SomethingNobodyNamed" ]
+                "no code in AuthorizationSurface.fs names this module, and it is in the facet"
+        }
+
+        test "a counterparty module names its party, its principals, and its only open paths" {
+            // The acceptance sentence, asserted as data: this is what a
+            // counterparty inspects instead of trusting prose.
+            let entry = authorityEntry "ClinicalTrial"
+
+            Expect.equal
+                entry.AuthorityPolicy
+                (GrantPolicy.RequiresCounterpartyApproval ledgerParty)
+                "the declared policy names the party"
+
+            Expect.equal
+                entry.AuthorityPrincipals
+                [ PlatformAdminPrincipal; ServiceAccountPrincipal; CounterpartyPrincipal ]
+                "no path reaches this module without the named counterparty being part of the write"
+
+            Expect.equal
+                entry.AuthorityOpenPaths
+                [
+                    "GrantConsentStore.grantWithCounterpartyApproval"
+                    "IPermissionStore.SetTeamPermissions"
+                ]
+                "and those are the only two paths still open against it"
+
+            Expect.equal
+                (GrantAuthoritySurface.counterpartyModules authority)
+                [ "ClinicalTrial", ledgerParty ]
+                "the counterparty's own query finds exactly its module"
+        }
+
+        test "a subject-consent module puts the GRANTEE in the authority chain" {
+            // The finding a review is most likely to miss: under this arm
+            // the grant is written PENDING and the grantee's own
+            // acceptance is what confers authority, so the subject is a
+            // grant-writing principal and not merely a beneficiary.
+            let entry = authorityEntry "Payroll"
+
+            Expect.contains
+                entry.AuthorityPrincipals
+                GranteeSubjectPrincipal
+                "the acceptance path is open, so the grantee completes the authority"
+
+            Expect.contains entry.AuthorityOpenPaths "PermissionGrants.acceptGrant" "and it is named"
+
+            Expect.isFalse
+                ((authorityEntry "Ledger").AuthorityPrincipals
+                 |> List.contains GranteeSubjectPrincipal)
+                "under acknowledgement there is nothing for the grantee to accept, so they are not in the chain"
+        }
+
+        test "the evidence-free write paths are closed against every declared arm" {
+            // `SetMemberPermissions` and `SetTeamDefaults` have nowhere to
+            // carry an acknowledgement, which is why Phase 551 refuses
+            // them by construction. The facet must say so rather than
+            // listing them as available.
+            for entry in authority.Authority do
+                Expect.isFalse
+                    (entry.AuthorityOpenPaths
+                     |> List.contains "IPermissionStore.SetMemberPermissions")
+                    (sprintf "%s: the legacy per-member write cannot carry evidence" entry.AuthorityModule)
+
+                Expect.isFalse
+                    (entry.AuthorityOpenPaths |> List.contains "IPermissionStore.SetTeamDefaults")
+                    (sprintf "%s: a team default has no subject to record against" entry.AuthorityModule)
+
+                Expect.isFalse
+                    (entry.AuthorityOpenPaths |> List.contains "IPermissionStore.SetModuleExposure")
+                    (sprintf "%s: exposure is visibility, never authority" entry.AuthorityModule)
+
+                Expect.isNonEmpty
+                    entry.AuthorityPreconditions
+                    (sprintf "%s: every open path states what it demands" entry.AuthorityModule)
+        }
+
+        test "an undeclared module reports the ADMIN classes, never the empty set" {
+            // The one misreading a meta-authority manifest must not
+            // produce: "no entry" means nothing was narrowed, not that
+            // nobody can grant.
+            let principals = GrantAuthoritySurface.principalsOf "Reporting" authority
+
+            Expect.isNonEmpty principals "an undeclared module is grantable by the ordinary admin classes"
+
+            Expect.contains principals PlatformAdminPrincipal "including the broadest one"
+
+            Expect.isFalse
+                (principals |> List.contains CounterpartyPrincipal)
+                "but not by a counterparty — no module named one"
+        }
+    ]
+
+// ── the drift guard (554.C) ───────────────────────────────────────────
+
+/// The two surfaces the guard reflects over, resolved from the shipped
+/// assembly rather than named as strings, so a rename is a compile error
+/// or a loud failure rather than a silently-empty check.
+let private permissionStoreType =
+    typeof<ToolUp.Platform.PermissionStore.IPermissionStore>
+
+let private moduleTypeNamed (name: string) =
+    permissionStoreType.Assembly.GetTypes()
+    |> Array.tryFind (fun t -> t.Name = name && t.IsAbstract && t.IsSealed)
+
+/// Public, declared, non-property members of a type — the shape both an
+/// F# interface's abstract members and an F# module's functions take.
+let private publicMembersOf (t: Type) =
+    t.GetMethods(
+        Reflection.BindingFlags.Public
+        ||| Reflection.BindingFlags.Static
+        ||| Reflection.BindingFlags.Instance
+        ||| Reflection.BindingFlags.DeclaredOnly
+    )
+    |> Array.filter (fun m -> not m.IsSpecialName)
+    |> Array.map _.Name
+    |> Array.distinct
+    |> Array.sort
+    |> List.ofArray
+
+let private pathsOnSurface (surfaceName: string) =
+    GrantAuthoritySurface.platformWritePaths
+    |> List.filter (fun p -> p.PathSurface = surfaceName)
+    |> List.map _.PathMember
+    |> List.sort
+
+let private grantAuthorityDriftGuard =
+    testList "grant-authority facet — drift guard (554.C)" [
+
+        test "every mutating IPermissionStore member is classified by the write-path table" {
+            // The completeness half. `Get`-prefixed members are reads;
+            // EVERYTHING ELSE must be classified — not merely everything
+            // named `Set*`, so a member arriving under any other verb
+            // fails here rather than being missed by a name heuristic.
+            let members = publicMembersOf permissionStoreType
+
+            let reads =
+                members |> List.filter (fun m -> m.StartsWith("Get", StringComparison.Ordinal))
+
+            let mutators = members |> List.filter (fun m -> not (List.contains m reads))
+
+            Expect.isNonEmpty members "the reflection found the interface — an empty member list would pass vacuously"
+
+            Expect.equal
+                mutators
+                (pathsOnSurface "IPermissionStore")
+                "every member that is not a read is classified in AuthorizationSurface's write-path table, and the table names no member that does not exist"
+
+            Expect.equal
+                (List.length members)
+                (List.length reads + List.length mutators)
+                "the partition is total — a member is a read or it is classified"
+        }
+
+        test "every grant entry point is classified by the write-path table" {
+            // The half with the cheap falsifier: adding a public function
+            // to `PermissionGrants` is exactly what "an unenumerated grant
+            // path" looks like, and it fails here by name.
+            let permissionGrants = moduleTypeNamed "PermissionGrants"
+
+            Expect.isSome
+                permissionGrants
+                "the PermissionGrants module was found — a rename must fail loudly, not silently pass"
+
+            let members = publicMembersOf permissionGrants.Value
+
+            Expect.isNonEmpty members "the reflection found its functions"
+
+            Expect.equal
+                members
+                (pathsOnSurface "PermissionGrants")
+                "every public grant entry point is classified, and the table names no function that does not exist"
+        }
+
+        test "the counterparty entry point the table names is a real function" {
+            // `GrantConsentStore` is a large module whose members are
+            // mostly not write paths, so it is not swept wholesale. What
+            // is checked is the other direction — the row the table
+            // carries names something that exists.
+            let consentModule = moduleTypeNamed "GrantConsentStore"
+
+            Expect.isSome consentModule "the GrantConsentStore module was found"
+
+            let members = publicMembersOf consentModule.Value
+
+            for named in pathsOnSurface "GrantConsentStore" do
+                Expect.contains members named "the table names a function this module actually declares"
+        }
+
+        test "every classified path is usable as a manifest entry" {
+            // A row that named no principal, proved nothing, or explained
+            // nothing would pass the completeness checks above and still
+            // be useless — worse, a row with no principals would silently
+            // shrink the principal set of every module it stays open on.
+            for path in GrantAuthoritySurface.platformWritePaths do
+                let identity = GrantWritePath.identity path
+
+                Expect.isNonEmpty path.PathPrincipals (sprintf "%s names the principal classes that reach it" identity)
+
+                Expect.isNonEmpty path.PathSatisfies (sprintf "%s says what it can prove" identity)
+
+                Expect.isFalse
+                    (String.IsNullOrWhiteSpace path.PathDemands)
+                    (sprintf "%s states what it demands, in a line a reviewer can read" identity)
+
+                for principal in path.PathPrincipals do
+                    Expect.contains
+                        GrantPrincipalClass.all
+                        principal
+                        (sprintf "%s names a principal class the vocabulary knows" identity)
+
+            Expect.equal
+                (GrantAuthoritySurface.platformWritePaths
+                 |> List.map GrantWritePath.identity
+                 |> List.distinct
+                 |> List.length)
+                (List.length GrantAuthoritySurface.platformWritePaths)
+                "path identities are unique — two rows for one path would double-count its principals"
+        }
+
+        test "every module declaring a non-default policy appears in the facet" {
+            // The other completeness axis: the facet must never drop a
+            // declaration. Quantified over every arm rather than over the
+            // fixture, so a new `GrantPolicy` case that the derivation
+            // filtered away would fail here.
+            let arms = [
+                GrantPolicy.RequiresAcknowledgement
+                GrantPolicy.RequiresSubjectConsent
+                GrantPolicy.RequiresCounterpartyApproval(PartyRef.create "some-party")
+            ]
+
+            for arm in arms do
+                let name = "Module-" + GrantPolicy.toToken arm
+
+                let derived =
+                    GrantAuthoritySurface.ofModules [ ServerModule.create name |> ServerModule.withGrantPolicy arm ]
+
+                match GrantAuthoritySurface.entryFor name derived with
+                | None -> failtestf "the facet dropped a module declaring '%s'" (GrantPolicy.toToken arm)
+                | Some entry ->
+                    Expect.isNonEmpty
+                        entry.AuthorityPrincipals
+                        (sprintf "'%s' names at least one principal able to write a grant" (GrantPolicy.toToken arm))
+
+                    Expect.isNonEmpty
+                        entry.AuthorityOpenPaths
+                        (sprintf "'%s' names at least one path still open" (GrantPolicy.toToken arm))
+        }
+    ]
+
+// ── determinism + wire projection (554.B) ─────────────────────────────
+
+let private grantAuthorityProjection =
+    testList "grant-authority facet — deterministic projection (554.B)" [
+
+        test "the derivation is repeatable and independent of registration order" {
+            Expect.equal
+                (GrantAuthoritySurface.ofModules (policyBearingModules ()))
+                (GrantAuthoritySurface.ofModules (policyBearingModules ()))
+                "deriving twice from the same registrations yields the same value"
+
+            Expect.equal
+                (GrantAuthoritySurface.ofModules (policyBearingModules () |> List.rev))
+                authority
+                "a composition that registered the same modules in a different order derives the same facet"
+        }
+
+        test "the rendered artifact is byte-stable and carries no clock" {
+            let once = GrantAuthoritySurface.render authority
+
+            let twice =
+                GrantAuthoritySurface.render (GrantAuthoritySurface.ofModules (policyBearingModules ()))
+
+            Expect.equal twice once "two runs over the same composition produce identical text"
+
+            Expect.equal
+                (GrantAuthoritySurface.render (GrantAuthoritySurface.ofModules (policyBearingModules () |> List.rev)))
+                once
+                "…and so does a run over a differently-ordered registration"
+
+            Expect.isFalse
+                (Text.RegularExpressions.Regex.IsMatch(once, @"\d{4}-\d{2}-\d{2}"))
+                "the artifact is a review document, not a log line — a date in it would diff on every run"
+
+            Expect.stringContains
+                once
+                "ClinicalTrial [requires-counterparty-approval:acme-dpo]"
+                "the headline names the module and its declared policy"
+
+            Expect.stringContains
+                once
+                "    via GrantConsentStore.grantWithCounterpartyApproval"
+                "and the paths are named under it"
+        }
+
+        test "an empty composition renders the honest empty artifact" {
+            Expect.equal
+                (GrantAuthoritySurface.ofModules [])
+                GrantAuthoritySurface.empty
+                "nothing composed, nothing declared"
+
+            Expect.equal
+                (GrantAuthoritySurface.ofModules [ ServerModule.create "Quiet" ])
+                GrantAuthoritySurface.empty
+                "a module that declares no policy contributes no entry"
+
+            Expect.equal
+                (GrantAuthoritySurface.render GrantAuthoritySurface.empty)
+                "(no module declares a grant policy)"
+                "and the artifact says so rather than being blank"
+        }
+
+        test "the wire projection round-trips exactly" {
+            Expect.equal
+                (GrantAuthoritySurface.ofWire (GrantAuthoritySurface.toWire authority))
+                authority
+                "persisting and reading back is the identity"
+
+            Expect.equal
+                (GrantAuthoritySurface.toWire authority |> List.map _.AuthorityModuleName)
+                [ "ClinicalTrial"; "Ledger"; "Payroll" ]
+                "the persisted order is the derived order"
+        }
+
+        test "reading a persisted facet back is FAIL-CLOSED on both axes" {
+            // A baseline written by a newer deployment must read back as
+            // more constrained than it may be, never as less — the same
+            // posture `AccessClassification.ofLabel` takes one projection
+            // up.
+            let foreign = {
+                AuthorityModuleName = "FromTheFuture"
+                AuthorityComponentIdentity = "module:FromTheFuture"
+                AuthorityPolicyToken = "requires-something-this-node-has-never-heard-of"
+                AuthorityPrincipalLabels = [ "quartermaster" ]
+                AuthorityPathIdentities = []
+                AuthorityPreconditionLines = []
+            }
+
+            let read = GrantAuthoritySurface.ofWire [ foreign ]
+            let entry = List.exactlyOne read.Authority
+
+            Expect.notEqual
+                entry.AuthorityPolicy
+                GrantPolicy.AdminDiscretion
+                "an unreadable policy token never reads back as 'anyone with admin may grant this'"
+
+            Expect.equal
+                entry.AuthorityPolicy
+                GrantPolicy.strictestConstructible
+                "it reads as the strictest arm this node can construct"
+
+            Expect.equal
+                entry.AuthorityPrincipals
+                [ PlatformAdminPrincipal ]
+                "and an unreadable principal label reads as the BROADEST class — a manifest of authority may overstate who can grant, never understate it"
+        }
+
+        test "deriving the facet contributes no DI registration and no runtime weight" {
+            let services = ServiceCollection()
+            let before = services.Count
+
+            let derived = GrantAuthoritySurface.ofModules (policyBearingModules ())
+
+            Expect.isNonEmpty derived.Authority "the facet is genuinely derived"
+
+            Expect.equal
+                services.Count
+                before
+                "there is no serviceRegistration closure in this facet at all — a deployment that never reads it composes byte-for-byte what it did before (GP 13)"
+        }
+    ]
+
 let tests =
     testList "AuthorizationSurface" [
         derivation
@@ -794,4 +1247,7 @@ let tests =
         wire
         zeroFootprint
         inHandlerGates
+        grantAuthorityDerivation
+        grantAuthorityDriftGuard
+        grantAuthorityProjection
     ]

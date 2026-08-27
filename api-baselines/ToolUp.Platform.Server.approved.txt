@@ -3655,6 +3655,37 @@ ToolUp.Platform.GateVerdict.Name : System.String { get }
 ToolUp.Platform.GateVerdict.Observed : System.Double { get }
 ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
+ToolUp.Platform.GrantAuthorityEntry (class)
+ToolUp.Platform.GrantAuthorityEntry..ctor(System.String, ToolUp.Platform.ComponentId, ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.GrantAuthorityEntry.AuthorityComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.GrantAuthorityEntry.AuthorityModule : System.String { get }
+ToolUp.Platform.GrantAuthorityEntry.AuthorityOpenPaths : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GrantAuthorityEntry.AuthorityPolicy : ToolUp.Platform.GrantPolicy { get }
+ToolUp.Platform.GrantAuthorityEntry.AuthorityPreconditions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GrantAuthorityEntry.AuthorityPrincipals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass] { get }
+ToolUp.Platform.GrantAuthoritySurface (class)
+ToolUp.Platform.GrantAuthoritySurface..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantAuthorityEntry])
+ToolUp.Platform.GrantAuthoritySurface.Authority : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantAuthorityEntry] { get }
+ToolUp.Platform.GrantAuthoritySurfaceModule (class)
+ToolUp.Platform.GrantAuthoritySurfaceModule.counterpartyModules(ToolUp.Platform.GrantAuthoritySurface) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PartyRef]]
+ToolUp.Platform.GrantAuthoritySurfaceModule.describe(ToolUp.Platform.GrantAuthorityEntry) : System.String
+ToolUp.Platform.GrantAuthoritySurfaceModule.empty : ToolUp.Platform.GrantAuthoritySurface { get }
+ToolUp.Platform.GrantAuthoritySurfaceModule.entryFor(System.String, ToolUp.Platform.GrantAuthoritySurface) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthorityEntry]
+ToolUp.Platform.GrantAuthoritySurfaceModule.ofModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : ToolUp.Platform.GrantAuthoritySurface
+ToolUp.Platform.GrantAuthoritySurfaceModule.ofModulesWith(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerModule, ToolUp.Platform.ComponentId], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantWritePath], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : ToolUp.Platform.GrantAuthoritySurface
+ToolUp.Platform.GrantAuthoritySurfaceModule.ofWire(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantAuthorityWireEntry]) : ToolUp.Platform.GrantAuthoritySurface
+ToolUp.Platform.GrantAuthoritySurfaceModule.platformWritePaths : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantWritePath] { get }
+ToolUp.Platform.GrantAuthoritySurfaceModule.principalsOf(System.String, ToolUp.Platform.GrantAuthoritySurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass]
+ToolUp.Platform.GrantAuthoritySurfaceModule.render(ToolUp.Platform.GrantAuthoritySurface) : System.String
+ToolUp.Platform.GrantAuthoritySurfaceModule.toWire(ToolUp.Platform.GrantAuthoritySurface) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantAuthorityWireEntry]
+ToolUp.Platform.GrantAuthorityWireEntry (class)
+ToolUp.Platform.GrantAuthorityWireEntry..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityComponentIdentity : System.String { get }
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityModuleName : System.String { get }
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityPathIdentities : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityPolicyToken : System.String { get }
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityPreconditionLines : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GrantAuthorityWireEntry.AuthorityPrincipalLabels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.GrantConsentStore (class)
 ToolUp.Platform.GrantConsentStore.ModuleGrantConsentsItemsKey : System.String (literal)
 ToolUp.Platform.GrantConsentStore.consentVerdictsFromItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]]
@@ -3798,8 +3829,63 @@ ToolUp.Platform.GrantPolicyGuard+ModuleGrantRequest.TeamId : System.String { get
 ToolUp.Platform.GrantPolicyGuard+PermissionGrants (class)
 ToolUp.Platform.GrantPolicyGuard+PermissionGrants.acceptGrant(ToolUp.Platform.PermissionStore+IPermissionStore, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.GrantPolicyGuard+PermissionGrants.grantModuleAccess(ToolUp.Platform.PermissionStore+IPermissionStore, ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.GrantPolicyGuard+ModuleGrantRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantWriteOutcome, ToolUp.Platform.GrantRefusal]]
+ToolUp.Platform.GrantPolicySatisfaction (class)
+ToolUp.Platform.GrantPolicySatisfaction.IsSatisfiedByAdminDiscretion : System.Boolean { get }
+ToolUp.Platform.GrantPolicySatisfaction.IsSatisfiedByCounterpartyConsent : System.Boolean { get }
+ToolUp.Platform.GrantPolicySatisfaction.IsSatisfiedByDeclaredEvidence : System.Boolean { get }
+ToolUp.Platform.GrantPolicySatisfaction.IsSatisfiedByRecordedConsent : System.Boolean { get }
+ToolUp.Platform.GrantPolicySatisfaction.IsSatisfiesNoGrantPolicy : System.Boolean { get }
+ToolUp.Platform.GrantPolicySatisfaction.SatisfiedByAdminDiscretion : ToolUp.Platform.GrantPolicySatisfaction { get }
+ToolUp.Platform.GrantPolicySatisfaction.SatisfiedByCounterpartyConsent : ToolUp.Platform.GrantPolicySatisfaction { get }
+ToolUp.Platform.GrantPolicySatisfaction.SatisfiedByDeclaredEvidence : ToolUp.Platform.GrantPolicySatisfaction { get }
+ToolUp.Platform.GrantPolicySatisfaction.SatisfiedByRecordedConsent : ToolUp.Platform.GrantPolicySatisfaction { get }
+ToolUp.Platform.GrantPolicySatisfaction.SatisfiesNoGrantPolicy : ToolUp.Platform.GrantPolicySatisfaction { get }
+ToolUp.Platform.GrantPolicySatisfaction.Tag : System.Int32 { get }
+ToolUp.Platform.GrantPolicySatisfaction+Tags (class)
+ToolUp.Platform.GrantPolicySatisfaction+Tags.SatisfiedByAdminDiscretion : System.Int32 (literal)
+ToolUp.Platform.GrantPolicySatisfaction+Tags.SatisfiedByCounterpartyConsent : System.Int32 (literal)
+ToolUp.Platform.GrantPolicySatisfaction+Tags.SatisfiedByDeclaredEvidence : System.Int32 (literal)
+ToolUp.Platform.GrantPolicySatisfaction+Tags.SatisfiedByRecordedConsent : System.Int32 (literal)
+ToolUp.Platform.GrantPolicySatisfaction+Tags.SatisfiesNoGrantPolicy : System.Int32 (literal)
+ToolUp.Platform.GrantPolicySatisfactionModule (class)
+ToolUp.Platform.GrantPolicySatisfactionModule.admits(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantPolicySatisfaction) : System.Boolean
+ToolUp.Platform.GrantPolicySatisfactionModule.label(ToolUp.Platform.GrantPolicySatisfaction) : System.String
 ToolUp.Platform.GrantPremiumApiHandler (class)
 ToolUp.Platform.GrantPremiumApiHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.GrantPrincipalClass (class)
+ToolUp.Platform.GrantPrincipalClass.CounterpartyPrincipal : ToolUp.Platform.GrantPrincipalClass { get }
+ToolUp.Platform.GrantPrincipalClass.GranteeSubjectPrincipal : ToolUp.Platform.GrantPrincipalClass { get }
+ToolUp.Platform.GrantPrincipalClass.IsCounterpartyPrincipal : System.Boolean { get }
+ToolUp.Platform.GrantPrincipalClass.IsGranteeSubjectPrincipal : System.Boolean { get }
+ToolUp.Platform.GrantPrincipalClass.IsPlatformAdminPrincipal : System.Boolean { get }
+ToolUp.Platform.GrantPrincipalClass.IsServiceAccountPrincipal : System.Boolean { get }
+ToolUp.Platform.GrantPrincipalClass.IsTeamOwnerPrincipal : System.Boolean { get }
+ToolUp.Platform.GrantPrincipalClass.PlatformAdminPrincipal : ToolUp.Platform.GrantPrincipalClass { get }
+ToolUp.Platform.GrantPrincipalClass.ServiceAccountPrincipal : ToolUp.Platform.GrantPrincipalClass { get }
+ToolUp.Platform.GrantPrincipalClass.Tag : System.Int32 { get }
+ToolUp.Platform.GrantPrincipalClass.TeamOwnerPrincipal : ToolUp.Platform.GrantPrincipalClass { get }
+ToolUp.Platform.GrantPrincipalClass+Tags (class)
+ToolUp.Platform.GrantPrincipalClass+Tags.CounterpartyPrincipal : System.Int32 (literal)
+ToolUp.Platform.GrantPrincipalClass+Tags.GranteeSubjectPrincipal : System.Int32 (literal)
+ToolUp.Platform.GrantPrincipalClass+Tags.PlatformAdminPrincipal : System.Int32 (literal)
+ToolUp.Platform.GrantPrincipalClass+Tags.ServiceAccountPrincipal : System.Int32 (literal)
+ToolUp.Platform.GrantPrincipalClass+Tags.TeamOwnerPrincipal : System.Int32 (literal)
+ToolUp.Platform.GrantPrincipalClassModule (class)
+ToolUp.Platform.GrantPrincipalClassModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass] { get }
+ToolUp.Platform.GrantPrincipalClassModule.label(ToolUp.Platform.GrantPrincipalClass) : System.String
+ToolUp.Platform.GrantPrincipalClassModule.ofLabel(System.String) : ToolUp.Platform.GrantPrincipalClass
+ToolUp.Platform.GrantPrincipalClassModule.ordered(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass]
+ToolUp.Platform.GrantPrincipalClassModule.rank(ToolUp.Platform.GrantPrincipalClass) : System.Int32
+ToolUp.Platform.GrantWritePath (class)
+ToolUp.Platform.GrantWritePath..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPolicySatisfaction], System.String)
+ToolUp.Platform.GrantWritePath.PathDemands : System.String { get }
+ToolUp.Platform.GrantWritePath.PathMember : System.String { get }
+ToolUp.Platform.GrantWritePath.PathPrincipals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass] { get }
+ToolUp.Platform.GrantWritePath.PathSatisfies : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPolicySatisfaction] { get }
+ToolUp.Platform.GrantWritePath.PathSurface : System.String { get }
+ToolUp.Platform.GrantWritePathModule (class)
+ToolUp.Platform.GrantWritePathModule.identity(ToolUp.Platform.GrantWritePath) : System.String
+ToolUp.Platform.GrantWritePathModule.isOpenUnder(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantWritePath) : System.Boolean
 ToolUp.Platform.GroundingContinuity (class)
 ToolUp.Platform.GroundingContinuity.verify(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
 ToolUp.Platform.GroundingContinuity.verifyAgainst(ToolUp.Platform.GroundingEnvelope, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict

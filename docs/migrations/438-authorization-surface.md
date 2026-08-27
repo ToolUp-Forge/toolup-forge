@@ -67,6 +67,13 @@ $env:TOOLUP_APPROVE_COMPOSITION = $null
 
 "Weaker" is defined once, on two axes that move in **opposite** directions: an *admit* set (`subject:<Kind>`) is weaker when it grows; a *demand* set (`role:` / `claim:` / `tenant` / `permission:`) is weaker when it shrinks. A swapped requirement — neither subset nor superset — counts as weakened, deliberately: it is not provably at least as strong as what it replaced.
 
+## The facets beside it
+
+The manifest has grown two sibling projections rather than fields — the rule this file records above, that growing a shipped F# record breaks its constructor. All three join on `ComponentId`.
+
+* **Outbound authority (Phase 688)** — what each component *reaches*: `SeamAuthoritySurface`, in [`688-seam-authority-grants.md`](688-seam-authority-grants.md).
+* **Grant authority (Phase 554)** — *who can hand out access to a module, by which path, and what must be true first*: `GrantAuthoritySurface`, in [`554-grant-authority-facet.md`](554-grant-authority-facet.md). Per module carrying a Phase 551 `GrantPolicy`: the policy, the principal classes that can still write a grant against it, the write paths still open, and what each demands — plus the counterparty review workflow ("what to check before signing"). Static composition truth; live consent state is deliberately not folded in.
+
 ## Consumer action
 
 None required. To adopt: derive the surface where you already build the composition manifest, and — if you want the gate — persist `AuthorizationSurface.toWire` beside your other baselines and compare through `diff`. `ofWire` round-trips exactly, and an unrecognised persisted classification reads back as `InheritedDefaultDeny` (never as a fabricated headline finding, never as a claimed gate).
