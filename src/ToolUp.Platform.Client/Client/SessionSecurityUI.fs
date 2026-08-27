@@ -30,7 +30,7 @@ open ToolUp.Platform
 // that simply vanishes is indistinguishable from a request that failed
 // and a list that reloaded.
 //
-// **Gating.** `NavRole.Authenticated`-equivalent visibility
+// **Gating.** Authenticated-caller visibility
 // (`Visibility.visibleToAuthenticated`) — this is a personal page, not an
 // admin one, so every signed-in caller sees their own. The team-admin
 // force-revoke (`ISessionApi.RevokeAllForUser`) is deliberately NOT

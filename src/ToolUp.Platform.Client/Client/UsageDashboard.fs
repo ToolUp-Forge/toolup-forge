@@ -47,7 +47,7 @@ type Msg =
 
 // ─── API proxy ───────────────────────────────────────────────────
 
-// Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + SDK.Client.fs installRequestGuard.
+// Header freshness is the CsrfClient request-guard's job — see `UserSession.withRequestHeaders` + `CsrfClient.installRequestGuard`.
 let private usageApi: IUsageQueryApi =
     Api.makeProxy<IUsageQueryApi> (
         routeBuilder = UsageQueryApi.routeBuilder,

@@ -323,7 +323,7 @@ type ErasedModule = {
     /// invokes this for every registered module before rendering;
     /// modules returning `false` for the current `SubjectKind` are
     /// hidden, structurally replacing the deployment-wide blanket-hide
-    /// behaviour Phase 55 introduced via `PlatformApiHandler.fs:497`.
+    /// behaviour Phase 55 introduced in `PlatformApiHandler`.
     ///
     /// Default `fun _ -> true` — visible to every subject kind. The
     /// pre-B.3 sidebar shape (every module visible regardless of
@@ -1043,7 +1043,7 @@ type DataIngestionAdminConfig = { Name: string; Icon: ReactElement }
 /// `NeedsReauthorization`), and routes Connect / Disconnect actions
 /// through `IDataIngestionApi.BeginOAuth` / `Disconnect`. Per-Kind
 /// credential forms are contributed by connector companions via
-/// `DataSourceCredentialUIRegistry.register` at module load time.
+/// `DataSourceCredentialUIRegistry.setHandlers` at module load time.
 ///
 /// Auto-injected in any non-Anonymous mode unless `NoDataIngestionAdmin`
 /// — Anonymous deployments have no role concept and exposing data-
@@ -1374,7 +1374,7 @@ type ClientHandlerRegistry = {
     /// a "Sign out" affordance in the page header that calls it.
     /// `None` (default) leaves the header without a sign-out button —
     /// suitable for `NoAuthUI` deployments and for consumers that ship
-    /// their own header chrome via `ClientConfig.HeaderAction` /
+    /// their own header chrome via `ExtraChrome.HeaderAction` /
     /// `ExtraChrome`.
     ///
     /// The thunk fires unmodified — no SDK-side confirmation modal — so
@@ -1953,7 +1953,7 @@ module ClientConfig =
     /// `ClientHandlerRegistry`. Promotes `Handlers` from the silently-
     /// empty default on `ClientConfig.defaults` to a required
     /// positional parameter, so a deployment that forgets to wire
-    /// (e.g.) `OidcClient.handler` fails to compile rather than
+    /// (e.g.) `OidcRegister.handler` fails to compile rather than
     /// failing with a runtime "no handler registered" on the first
     /// sign-in attempt. Consumers with no companion handlers pass
     /// `ClientHandlerRegistry.empty` explicitly — the no-op stays

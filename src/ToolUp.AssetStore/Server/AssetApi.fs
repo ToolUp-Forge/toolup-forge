@@ -8,7 +8,7 @@ open ToolUp.Platform // 0.5.0 — forge-native auth attributes
 /// Fable.Remoting contract for the asset-store API. The
 /// multipart upload endpoint (`/api/assets/upload`) is the
 /// canonical path for browser file uploads — see
-/// `AssetUploadHandler.uploadEndpoint` — because raw
+/// `AssetUploadHandler.uploadHandler` — because raw
 /// `byte[]`-in-Remoting is awkward for the React/Feliz side
 /// (one chunked-encoded request beats serialising the payload
 /// twice through the converter set). The Remoting API below covers

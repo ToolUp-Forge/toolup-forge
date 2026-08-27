@@ -18,7 +18,7 @@ open ToolUp.Platform.SecondaryIndex
 //   `jobs/{scopeId}/_idempotency/{sha256(key)}/{jobId:N}.ref` — payload = (jobId, createdAt) JSON
 //   `jobs/{scopeId}/_next-run/{yyyyMMddHHmm}/{jobId:N}.ref`   — empty payload
 //
-// Mirrors the `webhooks/` layout (see `WebhookRegistry.fs:10-21`) so
+// Mirrors the `webhooks/` layout (see `WebhookRegistry.fs`) so
 // operators see one consistent shape across `_platform/` subsystems
 // (`audit/`, `events/`, `webhooks/`, `jobs/`, `lineage/`).
 //

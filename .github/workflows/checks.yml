@@ -795,6 +795,42 @@ jobs:
       - name: Compile every in-scope documentation snippet (VerifyDocSnippets)
         run: dotnet run --project Build.fsproj -- VerifyDocSnippets
 
+  # ─── The source-comment citation gate ──────────────────────────────
+  #
+  # The job above gates DOCS. This one gates the citations inside
+  # `src/**/*.fs` comments, which no gate could see: a comment naming an
+  # API that does not exist compiles perfectly and is read with more
+  # trust than a doc page, because it ships inside the code it describes.
+  #
+  # It shares the docs job's shape (and its empty-local-feed workaround)
+  # but not its work — it compiles nothing. It reads the committed
+  # `api-baselines/` text, the tree's own declarations and its `open`s,
+  # so it is fast and cannot be quietened by a stale `bin/`.
+  source-citations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Resolve every comment-cited API name (VerifySourceCitations)
+        run: dotnet run --project Build.fsproj -- VerifySourceCitations
+
   # ─── The template-content gate ─────────────────────────────────────
   #
   # Compiles the `dotnet new` scaffolds under `templates/`. Same class as

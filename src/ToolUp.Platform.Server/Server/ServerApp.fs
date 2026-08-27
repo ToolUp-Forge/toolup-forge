@@ -758,7 +758,7 @@ type ServerApp = {
     /// carried forward from Phase 3d. Distributed deployments wanting
     /// multi-instance correctness on the pending-by-email flow swap in
     /// `BlobPendingInviteStore` (lands once Phase 9c half-2's
-    /// `IBlobStorage.UploadWithETag` surface ships); an optional
+    /// `IConditionalBlobStorage.UploadWithETag` surface ships); an optional
     /// `RedisPendingInviteCache` decorator may also bind here for
     /// cross-process cache invalidation under high read load. The
     /// interface is registered unconditionally so the team-invitation
@@ -827,7 +827,7 @@ type ServerApp = {
     /// 0.5.7 — optional directory-lookup substrate. When `Some`,
     /// `compose` registers the impl as the `IUserDirectory` DI
     /// singleton so `UserDirectoryApiHandler` can resolve it
-    /// per-request and the SDK's `Forms.Input.userTypeahead` typeahead
+    /// per-request and the SDK's `UserDirectoryTypeahead.userTypeahead` typeahead
     /// returns matching directory entries. `None` (default) leaves the
     /// substrate unregistered — the handler short-circuits every
     /// `SearchUsers` call to `Ok []` and the typeahead UI degrades to
@@ -1338,7 +1338,7 @@ module ServerApp =
     /// Phase 9h — register a data-subject-request exporter. Each
     /// per-store implementation (`EventStoreErasureHandler.exporter`,
     /// `DataObjectStoreErasureHandler.exporter`,
-    /// `LineageStoreErasureHandler.exporter`, etc.) contributes one
+    /// `ConversationExporter.exporter`, etc.) contributes one
     /// `ExportSegment` per `RequestExport` call; the orchestrator
     /// concatenates segments alphabetically by exporter `Name` for
     /// deterministic byte output. Apps that don't opt into
@@ -1397,7 +1397,7 @@ module ServerApp =
     /// Phase 9m — register a companion-contributed startup config
     /// validator. Each companion exposes its `IConfigValidator`
     /// instance via a small constructor (`OidcAuthValidator.tryFromEnv`,
-    /// `RedisNotificationChannelValidator.create multiplexer`,
+    /// `RedisValidator.create multiplexer`,
     /// `SmtpNotificationSinkValidator.fromEnv`, etc.) — the consumer
     /// wires it into `ServerApp` so the SDK aggregator can run it at
     /// end-of-compose, before HTTP binds. Validators that return
@@ -1586,7 +1586,7 @@ module ServerApp =
     /// `ServerConfig.EntityGraphProjection = EnabledEntityGraphProjection`,
     /// the flag the `ToolUp.Graph.Projection` bridge's
     /// `EntityGraphProjectionCompose.wire` reads to decide whether to run.
-    /// Requires `withEntityStore` + an `IGraphStore` (the in-memory default
+    /// Requires `ServerConfig.EntityStore = EnabledEntityStore` + an `IGraphStore` (the default
     /// suffices). Like a graph *engine* companion, the concrete bridge lives
     /// in its own package and is wired by the deployment (it references
     /// `IEntityStore`, so the SDK cannot reference it back without a cycle);
@@ -1634,7 +1634,7 @@ module ServerApp =
     /// wanting multi-instance correctness on the pending-by-email flow
     /// call `withPendingInviteStore (BlobPendingInviteStore.create ...)`
     /// once that companion ships (depends on forge Phase 9c half-2's
-    /// `IBlobStorage.UploadWithETag` substrate). Calling this multiple
+    /// `IConditionalBlobStorage.UploadWithETag` substrate). Calling this multiple
     /// times keeps the last store.
     let withPendingInviteStore (store: IPendingInviteStore) (app: ServerApp) : ServerApp = {
         app with
@@ -1785,7 +1785,7 @@ module ServerApp =
     }
 
     /// Phase 599 — opt into the entity-write outbox. Default: off.
-    /// When enabled (requires `withEntityStore` /
+    /// When enabled (requires
     /// `EntityStore = EnabledEntityStore`),
     /// `OutboxEntityStore.SaveWithEvents` durably couples an entity
     /// save to the `IEventStore` events it implies: a write-ahead

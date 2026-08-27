@@ -15,7 +15,7 @@ open ToolUp.Platform
 // Implements `IUserDirectory` against Microsoft Graph:
 //
 //   * `SearchUsers` → `GET /users?$filter=startswith(displayName,'q') …`
-//     Requires `User.ReadBasic.All` (or `User.Read.All`) application
+//     Requires `User.ReadBasic.All` (or `"User.Read.All"`) application
 //     permission. Powers the SDK's invitation-form typeahead.
 //
 //   * `ResolveUsers` → `POST /directoryObjects/getByIds`
@@ -317,8 +317,8 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
         member _.ResolveUsers(ids: string list) = async {
             // Reverse lookup via per-id Graph `GET /users/{id}` — NOT
             // `directoryObjects/getByIds`. With an *app-only* token (a
-            // managed identity), `getByIds` requires `Directory.Read.All`
-            // / `User.Read.All`, whereas the single-user read resolves
+            // managed identity), `getByIds` requires `"Directory.Read.All"`
+            // / `"User.Read.All"`, whereas the single-user read resolves
             // with the same `User.ReadBasic.All` that `SearchUsers`
             // already needs. Using `getByIds` therefore silently 403s
             // under the minimal permission and degrades every admin /

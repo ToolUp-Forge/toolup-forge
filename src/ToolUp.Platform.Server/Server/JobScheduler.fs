@@ -149,7 +149,7 @@ type JobExternalHandleMissingPayload = {
 // ─── Lifecycle event payloads ────────────────────────────────────
 //
 // Persisted to `IEventStore` under `SourceModule = "_platform.jobs"`.
-// `FableConverters` (mirrors `AuditLog.fs:34-43` and Webhook
+// `FableConverters` (mirrors `AuditLog.fs` and Webhook
 // dispatcher) so the admin-UI can deserialise via `Fable.SimpleJson`
 // without an extra converter.
 
@@ -289,7 +289,7 @@ module private Json =
 // but a deployment that composes a store-backed lock now gets the same
 // exclusion ACROSS instances for free — the seam is the whole point.
 // Distributed *schedulers* still additionally rely on
-// `IBlobStorage.UploadIfMatch` / their own leasing for due-job selection;
+// `IConditionalBlobStorage.UploadWithETag` / their own leasing for due-job selection;
 // this lock covers the dispatch critical section, not tick election.
 //
 // **External hand-off (Phase 319).** A handler may return

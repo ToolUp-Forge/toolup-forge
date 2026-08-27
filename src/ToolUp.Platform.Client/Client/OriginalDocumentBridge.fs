@@ -25,7 +25,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // renders exactly as it did before this release (GP 11 / GP 13).
 //
 // Sanctioned mutable global — same precedent as `NarrativeCommit`,
-// `NavigationRequest`, `NotificationClient.handlers`. Per-tab singleton
+// `NavigationRequest`, `NotificationClient.state`. Per-tab singleton
 // with effectively-final lifetime: a single registration at startup,
 // read on every render of the Sources panel.
 

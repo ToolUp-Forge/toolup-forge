@@ -81,7 +81,7 @@ let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateT
 
 // ─── Serialisation ───────────────────────────────────────────────
 //
-// `FableConverters` mirrors `AuditLog.fs:34-43`. The options
+// `FableConverters` mirrors `AuditLog.fs`. The options
 // instance is reused across calls — STJ's JsonSerializerOptions is
 // thread-safe once it has been used for a serialise call (it
 // freezes on first use).

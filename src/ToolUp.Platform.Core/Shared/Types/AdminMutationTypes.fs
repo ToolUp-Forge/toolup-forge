@@ -89,7 +89,7 @@ type DualControlSettings = {
     /// proposal whose context nobody remembers, and a stale proposal
     /// carries a mutation computed against a document that has since
     /// moved. A non-positive value is read as the default rather than as
-    /// "never expires" — see `DualControlSettings.ttl`.
+    /// "never expires" — see `DualControlSettings.ttlMinutes`.
     PendingTtlMinutes: int
 }
 

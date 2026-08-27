@@ -63,7 +63,7 @@ let private ensureReadAllowed (ctx: HttpContext) (accessContext: AccessContext) 
 }
 
 /// Resolve the caller's effective scope. Same idiom as
-/// `WebhookApiHandler.scopeId` / `ConfigHandler` — uses the resolved
+/// `WebhookApiHandler` and `ConfigHandler` — uses the resolved
 /// `StorageScope` from `AccessContext` and falls back to the user id
 /// for non-team modes.
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =

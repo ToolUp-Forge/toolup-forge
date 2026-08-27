@@ -67,7 +67,7 @@ type Msg =
 // ─── API proxy ───────────────────────────────────────────────────────
 
 // Header freshness is the CsrfClient request-guard's job — see
-// WebhookAdminUI.fs:73. `IPlatformTenantApi` resolves under the reserved
+// `WebhookAdminUI`. `IPlatformTenantApi` resolves under the reserved
 // `/api/_platform/tenants/` prefix, so the proxy carries its own route
 // builder rather than the default `/api/{type}/{method}`.
 let private tenantApi: IPlatformTenantApi =

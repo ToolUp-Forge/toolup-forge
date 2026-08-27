@@ -11,7 +11,7 @@ open Giraffe
 // Per-task `CancellationTokenSource` so the user can stop a
 // running agent loop mid-stream. Lifecycle:
 //
-//   1. `AIAssistantHandler.SubmitMessage` calls `Register taskId`
+//   1. `AIAssistantApi.SubmitMessage` calls `Register taskId`
 //      before kicking off the background agent loop. Receives a
 //      `CancellationToken` to thread into `runAgentLoop`.
 //   2. `runAgentLoop` checks `token.IsCancellationRequested` at

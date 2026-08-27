@@ -22,7 +22,7 @@ namespace ToolUp.Platform
 /// Resolves the active locale for a request / render frame. The
 /// argument is a `Map<string, string>` of resolved platform-level
 /// config (locale candidates live under
-/// `ConfigKeys.PlatformLocaleKey`); the `AccessContext` carries
+/// the platform locale config keys); the `AccessContext` carries
 /// user / team identity; the `acceptLanguage` argument is the
 /// browser's `Accept-Language` header verbatim. Implementations
 /// pick whichever signal best fits the deployment's locale model.

@@ -18,7 +18,7 @@ open ToolUp.Platform
 // stores. This API is read-only; quota policy edits live in
 // `IConfigStore` against the `_platform.usage` schema, not here.
 //
-// All methods are scoped server-side from `AccessContext.ScopeId`.
+// All methods are scoped server-side from the resolved `AccessContext`.
 // Callers cannot pass an arbitrary scope — Fable.Remoting clients
 // MUST surface their own resolved scope through the auth header
 // only. The handler at `Server/UsageQueryApi.fs` overrides any
@@ -44,7 +44,7 @@ type UsageAggregateRow = { Bucket: string; Quantity: decimal }
 type IUsageQueryApi = {
     /// Filtered record query. Caller supplies optional resource kind
     /// + date range; the handler scopes to the caller's resolved
-    /// `AccessContext.ScopeId`.
+    /// `AccessContext`.
     [<RequiresClaim "scope">]
     Query: string option * UsageDateRange option -> Async<UsageRecord list>
 
