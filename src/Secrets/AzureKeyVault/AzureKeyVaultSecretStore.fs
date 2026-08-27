@@ -104,6 +104,26 @@ module private Naming =
         else
             None
 
+// ─── Exception unwrapping ────────────────────────────────────────────
+
+/// Vendor SDK exceptions can surface at this companion's `with`
+/// handlers wrapped in `AggregateException`, so a direct
+/// `:? RequestFailedException` type test never fires — the class the
+/// first armed cloud-parity run (2026-08-27) proved live in the AWS
+/// Secrets Manager companion. The `GetSecret` 404 handler below has no
+/// catch-all, so a wrapped 404 would escape as a raw exception rather
+/// than returning `None`. Match through the wrapper: flatten and take
+/// the single inner exception a one-Task await carries; a bare
+/// exception passes through unchanged, so an unmatched case still
+/// rethrows the original.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 // ─── ISecretStore implementation ─────────────────────────────────────
 
 /// Azure Key Vault implementation of `ISecretStore`. One `SecretClient`
@@ -133,7 +153,7 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
             try
                 let! response = client.GetSecretAsync name |> Async.AwaitTask
                 return Some response.Value.Value
-            with :? RequestFailedException as ex when ex.Status = 404 ->
+            with Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return None
         }
 
@@ -143,7 +163,7 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
             try
                 let! _ = client.SetSecretAsync(name, value) |> Async.AwaitTask
                 return Ok()
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -161,8 +181,8 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
                 let! _ = op.WaitForCompletionAsync().AsTask() |> Async.AwaitTask
                 return Ok()
             with
-            | :? RequestFailedException as ex when ex.Status = 404 -> return Ok()
-            | ex -> return Error ex.Message
+            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 -> return Ok()
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.ListKeys(scopeId) = async {
