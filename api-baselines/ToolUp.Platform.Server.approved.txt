@@ -4975,6 +4975,7 @@ ToolUp.Platform.InMemoryPresenceTracker (class)
 ToolUp.Platform.InMemoryPresenceTracker..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryRateLimitStore (class)
 ToolUp.Platform.InMemoryRateLimitStore.create() : ToolUp.Platform.IRateLimitStore
+ToolUp.Platform.InMemoryRateLimitStore.createWithClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]) : ToolUp.Platform.IRateLimitStore
 ToolUp.Platform.InMemoryTimeSeriesStore (class)
 ToolUp.Platform.InMemoryTimeSeriesStore..ctor()
 ToolUp.Platform.InMemoryTimeSeriesStoreModule (class)

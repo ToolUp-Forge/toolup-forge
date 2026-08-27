@@ -34,6 +34,32 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
     let key () =
         IpAddressKey(sprintf "test-%s" (Guid.NewGuid().ToString("N")))
 
+    /// Wait until we are comfortably early inside a calendar second.
+    ///
+    /// The `PerSecond` case below asserts across a REAL boundary,
+    /// because that is the only form every implementation can be held
+    /// to — an external store (Redis, Azure Table) has no clock this
+    /// pack can inject. But "two calls in the same second" is only true
+    /// if both land the same side of a boundary, and starting at a
+    /// random phase within the second means sometimes they do not: the
+    /// case then fails on `countBefore = 1`, for a reason that has
+    /// nothing to do with the store. That is the intermittent red seen
+    /// once in a full 4,273-case run against a store that passed 5/5 in
+    /// isolation. Starting early in a second gives the two increments
+    /// most of a second of headroom, which removes the race without
+    /// weakening the assertion — the counts stay exact.
+    ///
+    /// The in-memory default is additionally pinned with a supplied
+    /// clock (`InMemoryRateLimitStore.createWithClock`), where the
+    /// boundary is not raced at all; this keeps the cross-implementation
+    /// bar honest for the stores that cannot be driven that way.
+    let alignToFreshSecond () = async {
+        let msIntoSecond = DateTimeOffset.UtcNow.Millisecond
+
+        if msIntoSecond > 250 then
+            do! Async.Sleep(1000 - msIntoSecond + 20)
+    }
+
     testList $"{name} — IRateLimitStore contract" [
         testCaseAsync "GetCurrent on a fresh key returns 0"
         <| async {
@@ -161,6 +187,10 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
         <| async {
             let store = factory ()
             let k = key ()
+
+            // Start early in a second so the two calls below cannot
+            // straddle a boundary — see `alignToFreshSecond`.
+            do! alignToFreshSecond ()
 
             // Two calls in the same second.
             let! _ = store.IncrementAndCheck(k, PerSecond, threshold = 5)
