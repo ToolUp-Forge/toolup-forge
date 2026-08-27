@@ -550,6 +550,10 @@ let private registeredTests =
         OidcSignInContractTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
+        // Phase 10f — Google Analytics 4 connector: IDataSource +
+        // IOAuthCredentialFlow contract re-binds over a faked network,
+        // query interpretation, schema catalogue, env-gated live arm.
+        GoogleAnalyticsTests.tests
         LdapAuthProviderTests.tests
         // Phase 530 — SCIM 2.0 provisioning: recorded Entra ID + Okta
         // sequences (create → assign group → change role → deactivate)
