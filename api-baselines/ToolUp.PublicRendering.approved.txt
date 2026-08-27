@@ -131,8 +131,15 @@ ToolUp.PublicRendering.ContentBody+Tags.Html : System.Int32 (literal)
 ToolUp.PublicRendering.ContentBody+Tags.Markdown : System.Int32 (literal)
 ToolUp.PublicRendering.ContentBody+Tags.Narrative : System.Int32 (literal)
 ToolUp.PublicRendering.ContentPreview (class)
+ToolUp.PublicRendering.ContentPreview.canMintPreviewLink(ToolUp.Platform.AccessContext) : System.Boolean
+ToolUp.PublicRendering.ContentPreview.canMintPreviewLinkWithGuard(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.PublicRendering.ContentPreview.issuePreviewToken(ToolUp.Platform.IShareTokenStore, System.String, System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.ShareTokenError]]
+ToolUp.PublicRendering.ContentPreview.mintGuard : System.String (literal)
+ToolUp.PublicRendering.ContentPreview.mintPreviewLink(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], System.String, ToolUp.Platform.AccessContext, ToolUp.PublicRendering.MintPreviewLinkRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PreviewLink, ToolUp.PublicRendering.PreviewLinkDecline]]
+ToolUp.PublicRendering.ContentPreview.mintPreviewLinkForRequest(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AccessContext, ToolUp.PublicRendering.MintPreviewLinkRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PreviewLink, ToolUp.PublicRendering.PreviewLinkDecline]]
+ToolUp.PublicRendering.ContentPreview.mintPreviewLinkWithGuard(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], System.String, ToolUp.Platform.AccessContext, ToolUp.PublicRendering.MintPreviewLinkRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PreviewLink, ToolUp.PublicRendering.PreviewLinkDecline]]
 ToolUp.PublicRendering.ContentPreview.previewHandler(ToolUp.PublicRendering.IPublicContentApi, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.PublicRendering.LayoutName, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, Giraffe.ViewEngine.HtmlElements+XmlNode]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.PublicRendering.ContentPreview.previewPath(System.String) : System.String
 ToolUp.PublicRendering.ContentPreview.resourceKind : System.String (literal)
 ToolUp.PublicRendering.ContentSource (class)
 ToolUp.PublicRendering.ContentSource.create(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.Slug, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.ContentBody]]]]) : ToolUp.PublicRendering.IContentSource
@@ -317,6 +324,17 @@ ToolUp.PublicRendering.MarkdownContentLoader.GetPage(System.String) : Microsoft.
 ToolUp.PublicRendering.MarkdownContentLoader.ListPages(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]
 ToolUp.PublicRendering.MarkdownContentLoader.Redirects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Redirect] { get }
 ToolUp.PublicRendering.MarkdownContentLoader.Reload() : System.Void
+ToolUp.PublicRendering.MintPreviewLinkRequest (class)
+ToolUp.PublicRendering.MintPreviewLinkRequest..ctor(System.String, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.PublicRendering.MintPreviewLinkRequest.AttributedHandle : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.PublicRendering.MintPreviewLinkRequest.Slug : System.String { get }
+ToolUp.PublicRendering.MintPreviewLinkRequest.Ttl : System.TimeSpan { get }
+ToolUp.PublicRendering.MintPreviewLinkRequestModule (class)
+ToolUp.PublicRendering.MintPreviewLinkRequestModule.DefaultTtl : System.TimeSpan { get }
+ToolUp.PublicRendering.MintPreviewLinkRequestModule.MaxTtl : System.TimeSpan { get }
+ToolUp.PublicRendering.MintPreviewLinkRequestModule.forSlug(System.String) : ToolUp.PublicRendering.MintPreviewLinkRequest
+ToolUp.PublicRendering.MintPreviewLinkRequestModule.withAttribution(System.String, ToolUp.PublicRendering.MintPreviewLinkRequest) : ToolUp.PublicRendering.MintPreviewLinkRequest
+ToolUp.PublicRendering.MintPreviewLinkRequestModule.withTtl(System.TimeSpan, ToolUp.PublicRendering.MintPreviewLinkRequest) : ToolUp.PublicRendering.MintPreviewLinkRequest
 ToolUp.PublicRendering.MultiSiteConfigValidator (class)
 ToolUp.PublicRendering.MultiSiteConfigValidator..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicSiteDef], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.PublicRendering.LayoutName, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, Giraffe.ViewEngine.HtmlElements+XmlNode]], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.PublicRendering.NarrativeCharts (class)
@@ -537,6 +555,32 @@ ToolUp.PublicRendering.PageSlice`1.Page : System.Int32 { get }
 ToolUp.PublicRendering.PageSlice`1.PageCount : System.Int32 { get }
 ToolUp.PublicRendering.Pagination (class)
 ToolUp.PublicRendering.Pagination.paginate`1(System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[a]) : ToolUp.PublicRendering.PageSlice`1[a]
+ToolUp.PublicRendering.PreviewLink (class)
+ToolUp.PublicRendering.PreviewLink..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.PublicRendering.PreviewLink.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.PublicRendering.PreviewLink.IssuedBy : System.String { get }
+ToolUp.PublicRendering.PreviewLink.Path : System.String { get }
+ToolUp.PublicRendering.PreviewLink.Slug : System.String { get }
+ToolUp.PublicRendering.PreviewLink.Token : System.String { get }
+ToolUp.PublicRendering.PreviewLink.TokenId : System.String { get }
+ToolUp.PublicRendering.PreviewLink.Url : System.String { get }
+ToolUp.PublicRendering.PreviewLinkDecline (class)
+ToolUp.PublicRendering.PreviewLinkDecline.IsInvalidRequest : System.Boolean { get }
+ToolUp.PublicRendering.PreviewLinkDecline.IsMintFailed : System.Boolean { get }
+ToolUp.PublicRendering.PreviewLinkDecline.IsPreviewsNotEnabled : System.Boolean { get }
+ToolUp.PublicRendering.PreviewLinkDecline.IsUnauthorised : System.Boolean { get }
+ToolUp.PublicRendering.PreviewLinkDecline.PreviewsNotEnabled : ToolUp.PublicRendering.PreviewLinkDecline { get }
+ToolUp.PublicRendering.PreviewLinkDecline.Tag : System.Int32 { get }
+ToolUp.PublicRendering.PreviewLinkDecline.Unauthorised : ToolUp.PublicRendering.PreviewLinkDecline { get }
+ToolUp.PublicRendering.PreviewLinkDecline+InvalidRequest (class)
+ToolUp.PublicRendering.PreviewLinkDecline+InvalidRequest.reason : System.String { get }
+ToolUp.PublicRendering.PreviewLinkDecline+MintFailed (class)
+ToolUp.PublicRendering.PreviewLinkDecline+MintFailed.error : ToolUp.Platform.ShareTokenError { get }
+ToolUp.PublicRendering.PreviewLinkDecline+Tags (class)
+ToolUp.PublicRendering.PreviewLinkDecline+Tags.InvalidRequest : System.Int32 (literal)
+ToolUp.PublicRendering.PreviewLinkDecline+Tags.MintFailed : System.Int32 (literal)
+ToolUp.PublicRendering.PreviewLinkDecline+Tags.PreviewsNotEnabled : System.Int32 (literal)
+ToolUp.PublicRendering.PreviewLinkDecline+Tags.Unauthorised : System.Int32 (literal)
 ToolUp.PublicRendering.PublicContentApi (class)
 ToolUp.PublicRendering.PublicContentApi.defaultListPagesPublic(ToolUp.PublicRendering.IPublicContentApi, System.DateTimeOffset, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]]
 ToolUp.PublicRendering.PublicContentApi.gateAt(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage]
