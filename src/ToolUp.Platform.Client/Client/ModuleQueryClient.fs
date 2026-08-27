@@ -143,7 +143,7 @@ let inline ask<'TRequest, 'TResponse>
 ///   re-thrown (portability rule 3).
 type ClientModuleQueryBus(registry: Map<string, Map<string, ModuleQueryHandler>>) =
 
-    // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + SDK.Client.fs installRequestGuard.
+    // Header freshness is the CsrfClient request-guard's job — see `UserSession.withRequestHeaders` + `CsrfClient.installRequestGuard`.
     // Constructed once per ClientModuleQueryBus instance (the bus itself is a singleton in the composition root).
     let remoteApi: IModuleQueryBusApi =
         Api.makeProxy<IModuleQueryBusApi> (customOptions = UserSession.withRequestHeaders)

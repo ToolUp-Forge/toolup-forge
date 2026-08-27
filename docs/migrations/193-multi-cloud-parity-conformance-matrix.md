@@ -106,29 +106,31 @@ LocalStack outside compose means creating the bucket yourself, or every S3 asser
 Honest per-cell coverage, because a matrix that implies coverage it does not have is worse than one
 that does not exist:
 
-**Measured 2026-08-27 (Phase 732)** — the first actual run of this matrix. Cell format is
-*passing / armed*:
+**Measured 2026-08-27, after the `AggregateException` fix below** — the first run (Phase 732, same
+day) scored 78/87 with 16 red; fixing the wrapped-vendor-exception class in the AWS Secrets Manager
+and GCS companions closed 10 of them. Cell format is *passing / armed*:
 
 | Seam | Azure / Azurite | AWS / LocalStack | GCP / fake-gcs-server |
 |---|---|---|---|
-| `IBlobStorage` | ⚠️ 19/20 | ⚠️ 19/20 | ⚠️ 14/20 |
+| `IBlobStorage` | ⚠️ 19/20 | ⚠️ 19/20 | ⚠️ 16/20 |
 | `IAuditSink` | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
-| `ISecretStore` | ⛔ no emulator exists | ❌ 1/9 | ⛔ no emulator exists |
+| `ISecretStore` | ⛔ no emulator exists | ✅ 9/9 | ⛔ no emulator exists |
 
-**87 cases armed, 78 passing, 16 red, 2 permanently skipped** (the two `ISecretStore` cells with no
+**87 cases armed, 81 passing, 6 red, 2 permanently skipped** (the two `ISecretStore` cells with no
 emulator in existence), plus the 7 always-on cases that need no emulator — 94 run in total, against
 **7 run and 9 skipped** on an unarmed checkout.
 
-The three red clusters are each a genuine finding, not harness noise, and all three were invisible
-until the lane could be run. They are described in full below; none is a defect in this harness or
-in `compose.parity.yml`:
+The two remaining red clusters are each a genuine finding, not harness noise; neither is a defect
+in this harness or in `compose.parity.yml`:
 
-1. **`DownloadRange past EOF` fails on all three clouds** — the contract encodes local-only
-   behaviour (§ *The one finding that is unanimous*).
-2. **`ISecretStore` on AWS is 1/9** — a shipped-companion exception-handling defect that makes the
-   AWS Secrets Manager companion unable to create a new secret at all (§ *The AWS secrets rows*).
-3. **GCP `DownloadRange` × 5 + `Delete` idempotency** — one emulator-fidelity limit and one
-   instance of the same exception-handling defect class (§ *The GCP blob rows*).
+1. **`DownloadRange past EOF` fails on Azure and AWS** — the contract encodes local-only
+   behaviour (§ *The one finding that is unanimous*). GCP's instance of the same case now passes,
+   because its 416 handler was itself a victim of the `AggregateException` class and fires again.
+2. **GCP `DownloadRange` × 4** — an emulator-fidelity limit (§ *The GCP blob rows*).
+
+A third cluster — **the wrapped-vendor-exception class** that had `ISecretStore` on AWS at 1/9 and
+broke GCP `Delete` idempotency — was fixed on 2026-08-27, the same day the first run surfaced it
+(§ *The AWS secrets rows*, § *The GCP blob rows*).
 
 The `IAuditSink` row rides on the blob row: the three archive sinks each take an `IBlobStorage`
 (`create name settings blobStorage`), so each cloud's sink binds over that same cloud's
@@ -138,27 +140,29 @@ it is, notably, the one row that is green on every cloud.
 ### The one finding that is unanimous — `DownloadRange past EOF`
 
 `IBlobStorageContract` asserts that a range read starting at or beyond the blob's size returns
-`Ok [||]`. **All three clouds fail it, identically**, and the local in-memory double passes it:
+`Ok [||]`. **All three clouds failed it on the first run**, and the local in-memory double passes
+it:
 
 | Cloud | What actually happens |
 |---|---|
 | Azure / Azurite | HTTP 416, `ErrorCode: InvalidRange` |
 | AWS / LocalStack | HTTP 416, *"The requested range is not satisfiable"* |
-| GCP / fake-gcs-server | request fails rather than returning an empty array |
+| GCP / fake-gcs-server | HTTP 416, but the companion's handler maps it to `Ok [||]` — dead until the `AggregateException` fix, **passing since 2026-08-27** |
 
 This is the matrix doing precisely the job it was built for. The contract was written against
 `LocalFileStorage` / `InMemoryBlobStorage`, where reading past the end yields an empty array; no
 real object store behaves that way, because HTTP 416 is what the underlying protocol specifies. So
-a consumer that range-reads at EOF gets `Ok [||]` in dev and an exception in **every** cloud in
-production.
+a consumer that range-reads at EOF gets `Ok [||]` in dev and an exception in Azure and AWS in
+production. (GCS already carried the 416→`Ok [||]` mapping and now honours the contract — see the
+table row — which tilts the decision below, since one shipped companion already normalises.)
 
-Resolving it is a deliberate contract decision rather than a bug fix, which is why Phase 732 records
-it instead of patching it: either the contract relaxes to accept 416-as-empty and the three
-companions normalise it, or the contract keeps `Ok [||]` and all three companions clamp the range
+Resolving the Azure/AWS legs is a deliberate contract decision rather than a bug fix, which is why
+Phase 732 records it instead of patching it: either the contract relaxes to accept 416-as-empty and
+the companions normalise it, or the contract keeps `Ok [||]` and the companions clamp the range
 before issuing the request. Both are defensible; both change shipped runtime behaviour and need
 their own phase.
 
-### The AWS secrets rows — a dead write path, found on the first run
+### The AWS secrets rows — a dead write path, found on the first run, FIXED 2026-08-27
 
 `ISecretStore` on LocalStack scores **1/9**. The emulator is not the problem: a direct
 `aws secretsmanager` probe against the same container does `create-secret`, `get-secret-value`,
@@ -190,21 +194,35 @@ one case that has a catch-all: `DeleteSecret is idempotent on missing keys` retu
 **The same class affects `ToolUp.Storage.GoogleCloudStorage`**, whose `Delete` carries
 `| :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()` and
 falls through to its catch-all for exactly the same reason. So this is a pattern across the cloud
-companions, not a single slip — which is why it deserves a phase that sweeps every
-`with :? <VendorException>` in `src/Storage/**` and `src/Secrets/**` rather than a spot fix.
-`ToolUp.Storage.AzureBlobStorage` is **not** affected: its equivalent cases pass.
+companions, not a single slip. `ToolUp.Storage.AzureBlobStorage` is **not** affected: its
+equivalent cases pass.
 
-### The GCP blob rows — 14/20
+**Fixed 2026-08-27.** Both companions gained a private `(|Unwrapped|)` active pattern (flatten the
+`AggregateException`, take the single inner exception a one-Task await carries; a bare exception
+passes through unchanged) and every vendor-typed catch site — plus the generic
+`ex -> Error ex.Message` handlers, whose messages were the "One or more errors occurred" symptom —
+now matches through it. Re-measured armed: `ISecretStore` on AWS **9/9**, GCP `Delete` idempotency
+and GCP `DownloadRange past EOF` both green. An unmatched wrapped exception still rethrows the
+original `AggregateException`, so nothing that used to escape is now swallowed. The other cloud
+companion families (`AwsS3Storage`, the audit sinks) showed no red of this class in the armed run,
+but carry the same direct-type-test shape where their vendor SDKs happen not to wrap today — a
+broader sweep remains open.
 
-Six red, in two groups:
+### The GCP blob rows — 16/20 (14/20 before the `AggregateException` fix)
 
-- **`DownloadRange` × 5 — emulator fidelity, not a companion defect.** Each fails with
+Four red, one group:
+
+- **`DownloadRange` × 4 — emulator fidelity, not a companion defect.** Each fails with
   `Incorrect hash: expected 'wcrr5Q==' (base64), was 'AiwhMQ=='`. The Google client validates the
   downloaded bytes against the object's stored **whole-object** checksum; fake-gcs-server returns
-  that whole-object hash on a *partial* response, so validation cannot succeed on any ranged read.
-  Real GCS suppresses hash validation for ranged requests. Confirming which side is at fault needs
-  the live-account binding, not this emulator — recorded here as a known emulator limit.
-- **`Delete is idempotent on missing blobs` — the `AggregateException` class above.**
+  that whole-object hash on a *partial* response, so validation cannot succeed on any ranged read
+  that returns bytes. Real GCS suppresses hash validation for ranged requests. Confirming which
+  side is at fault needs the live-account binding, not this emulator — recorded here as a known
+  emulator limit.
+
+Two of the first run's six red were the `AggregateException` class above, **fixed 2026-08-27**:
+`Delete is idempotent on missing blobs`, and `DownloadRange past EOF` (its 416 handler could not
+fire through the wrapper; past-EOF returns no bytes, so the hash limit does not bite it).
 
 ### The GCP blob gap — the finding this phase was written to catch, now CLOSED
 
@@ -294,9 +312,11 @@ sequenced by default per the Phase 617 Expecto/console deadlock rule. Verified u
 732, which is the baseline the armed run below is measured against.
 
 Armed per the invocation at the top of this document: **94 run — 78 passed, 2 ignored, 15 failed,
-13 errored** on first measurement, improving to the **78 / 2 / 9 / 7** recorded in the coverage
-table once the two lane defects (the LocalStack Pro tag; the `/storage/v1/` endpoint shape) were
-corrected. The remaining 16 are the three finding clusters above.
+13 errored** on first measurement, improving to **78 / 2 / 9 / 7** once the two lane defects (the
+LocalStack Pro tag; the `/storage/v1/` endpoint shape) were corrected, and to the
+**88 passed / 2 ignored / 6 failed / 0 errored** recorded in the coverage table once the
+`AggregateException` class was fixed the same day. The remaining 6 are the two finding clusters
+above.
 
 **Read the case COUNT, never the exit code, and never the word "pending".** A run that reports the
 ungated `7 passed, 9 ignored` under an environment you believe is armed has **failed to arm** — it

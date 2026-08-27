@@ -28,7 +28,7 @@ open ToolUp.Platform.EntityQueryTypes
 // indexes directly.
 //
 // `Gt`/`Gte`/`Lt`/`Lte` are handled by enumerating the field's full
-// index space (via `BlobIndex.AllKeys`) and filtering the keys by
+// index space and filtering the keys by
 // string ordering. Same caveat — large scopes are slow on
 // range-style predicates. A future commit may add range-aware
 // indexes; v1 trades query cost for implementation simplicity.

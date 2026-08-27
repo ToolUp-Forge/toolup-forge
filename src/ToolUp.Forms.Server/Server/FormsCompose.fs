@@ -484,7 +484,7 @@ module FormsServerApp =
     /// route handlers, and the anonymous-route prefix) onto the inner
     /// `ServerApp`, returning the composed result without driving it.
     /// `FormsServerApp.run` calls this and then `ServerApp.run`; the
-    /// future `ServerApp.withForms` builder calls it without invoking
+    /// future ServerApp.withForms builder calls it without invoking
     /// `ServerApp.run`, so the same Forms contributions can stack with
     /// AI / RAG contributions onto one composition root (Phase 1h goal).
     ///
@@ -520,7 +520,7 @@ module FormsServerApp =
             |> ServerApp.withMetricRegistrations ActionLedgerMetrics.registrations
             |> ServerApp.withMetricRegistrations FormStore.metricRegistrations
             // Phase 66 Stream B.6 — register the synthetic
-            // `Forms.PublicSubmit` surface module so the two
+            // `"Forms.PublicSubmit"` surface module so the two
             // `/api/public/forms/*` routes declare
             // `SurfaceRequirement.claimBearerOnly`. See the module
             // preamble for the rationale (companion-owned per-route

@@ -5327,7 +5327,7 @@ type AuditEnvelope = {
     /// `IEventStore` scope under which the event was persisted.
     /// Preserved so sinks that tag-route by tenant can read it
     /// directly rather than re-derive via per-payload introspection
-    /// (the legacy `DatadogLogsAuditSink.extractScopeId` pattern).
+    /// (the legacy DatadogLogsAuditSink.extractScopeId pattern).
     ScopeId: string
 }
 

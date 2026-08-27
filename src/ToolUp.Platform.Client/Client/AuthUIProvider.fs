@@ -47,7 +47,7 @@ module AuthUIProvider =
     let setHandlers (entries: (string * AuthUIHandler) list) : unit = handlers <- entries |> Map.ofList
 
     /// Snapshot of the cached map — used by `Client.run` validators
-    /// and `ClientRequestSeam.snapshot` to surface what's wired.
+    /// to surface what is wired.
     let snapshot () : (string * AuthUIHandler) list = handlers |> Map.toList
 
     /// Wrap `shell` with the sign-in handler that matches `authUI`.

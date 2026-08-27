@@ -453,7 +453,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                         // Most recent terminal outcome — sort by
                         // `OccurredAt` because `IEventStore.ReadBySource`
                         // does not guarantee order (its own docstring,
-                        // `SDK.Shared.fs:50–51`).
+                        // `IEventStore` in `SDK.Shared.fs`).
                         let latest =
                             projected
                             |> List.sortByDescending (fun (occurredAt, _, _) -> occurredAt)

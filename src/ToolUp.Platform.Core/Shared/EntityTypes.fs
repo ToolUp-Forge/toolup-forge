@@ -68,7 +68,7 @@ type EntityError =
     /// — typically indicates a stale read-modify-write race. The
     /// caller refreshes and retries.
     | VersionConflict of entityType: string * entityId: EntityId * expected: int * actual: int
-    /// The entity type wasn't registered via `ServerApp.withEntities`.
+    /// The entity type wasn't registered via `ServerApp.withEntity`.
     | UnknownEntityType of entityType: string
     /// Predicate or `FindByIndex` referenced an index that wasn't
     /// declared for this entity type. Surface includes the index
@@ -235,7 +235,7 @@ type Relationship = {
 
 /// Registration of an entity type with the store. Built via
 /// `EntityRegistration.create<'T> typeName |> withIndex ...`. The
-/// resulting record is passed to `ServerApp.withEntities` at compose
+/// resulting record is passed to `ServerApp.withEntity` at compose
 /// time. `EntityType` matches the `Type` field on instances of `'T`.
 type EntityRegistration<'T> = {
     EntityType: string

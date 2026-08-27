@@ -60,7 +60,7 @@ type IJobStore =
     /// write through `Get` then `Update` to avoid clobbering a
     /// concurrent scheduler tick — the in-process default takes a
     /// per-job `lock`, distributed implementations rely on
-    /// `IBlobStorage.UploadIfMatch` (Phase 9c follow-up).
+    /// `IConditionalBlobStorage.UploadWithETag` (Phase 9c follow-up).
     abstract Update: definition: JobDefinition -> Async<unit>
 
     /// Idempotency lookup — returns the existing `JobId` if any job

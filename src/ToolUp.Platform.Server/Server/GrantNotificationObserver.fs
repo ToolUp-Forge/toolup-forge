@@ -90,7 +90,7 @@ open ToolUp.Platform.PermissionStore
 
 /// The `CustomNotification` key every grant notice travels under.
 /// **Part of the public wire contract** — an admin console subscribes by
-/// literal string match, exactly as `Narrative.Published` is subscribed
+/// literal string match, exactly as `"Narrative.Published"` is subscribed
 /// to. Scope-private (published on the granting team's own topic), so it
 /// is not one of the reserved cross-scope kinds enumerated in the
 /// technical guide's notification chapter.

@@ -14,7 +14,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // handler invoke a RAG-supplied normaliser without taking a build
 // dependency on RAG.
 //
-// **Resolution model.** `RAGCompose.serviceConfig` registers a
+// **Resolution model.** `RAGCompose.ragServiceConfig` registers a
 // concrete `ICitationNormaliser` (closing over the active
 // `RagCitationPolicy`) when RAG composes. Non-RAG deployments leave
 // the DI slot empty; `AIAssistantHandler` resolves `null`, skips

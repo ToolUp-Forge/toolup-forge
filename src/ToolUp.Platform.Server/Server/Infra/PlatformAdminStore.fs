@@ -34,7 +34,7 @@ open ToolUp.Platform.BlobStorage
 // composes a store-backed lock and passes it here gets the same
 // serialisation across instances, which is what lifts the
 // single-instance restriction. A CAS-based blob update
-// (`IBlobStorage.UploadIfMatch`) is the complementary defence — the lock
+// (`IConditionalBlobStorage.UploadWithETag`) is the complementary defence — the lock
 // serialises intent, the ETag refuses a lost update even if the lease
 // lapsed — and remains the Phase 9c follow-on.
 //

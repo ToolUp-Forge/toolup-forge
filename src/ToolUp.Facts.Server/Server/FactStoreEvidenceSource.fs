@@ -10,7 +10,7 @@ open ToolUp.Platform
 // The concrete adapter that fills the Platform-side `IFactEvidenceSource`
 // seam (Phase 524) from an `IFactStore` — the forge pattern: the interface
 // lives in `ToolUp.Platform.Server`, the implementation in the companion.
-// Composing it lets `IProvenanceGraph.createWithFacts` walk real fact
+// Composing it lets `ProvenanceGraph.createWithFacts` walk real fact
 // nodes (evidence + input data objects + supersession) without
 // `ToolUp.Platform.Server` ever depending on the `ToolUp.Facts` companion.
 

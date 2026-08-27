@@ -144,7 +144,7 @@ let private formatInventory (docs: KnowledgeDocument list) : string =
 /// and the most recently uploaded document. Cached per-scope with a 30-second
 /// TTL so prompt building doesn't hit blob storage on every turn.
 ///
-/// Pairs with the RAG-awareness preamble in `RAGCompose.ragAwarePreamble`:
+/// Pairs with the RAG-awareness preamble RAG composition contributes:
 /// the preamble tells the model what the KB is and that it's been searched;
 /// this builder tells the model how much is in there. Together they prevent
 /// the model from guessing the corpus is empty when it isn't, or claiming

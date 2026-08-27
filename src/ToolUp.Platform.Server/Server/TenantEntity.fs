@@ -64,7 +64,7 @@ type TenantStatus =
 
 module TenantStatus =
     /// String form for index segments + audit. Stable across schema
-    /// bumps; do not rename without bumping `Tenant.SchemaVersion`.
+    /// bumps; do not rename without bumping `Tenant.Version`.
     let toString =
         function
         | Active -> "Active"

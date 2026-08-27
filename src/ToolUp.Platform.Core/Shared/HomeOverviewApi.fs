@@ -14,8 +14,8 @@ open System
 // provider/model, and a light deployment-context strip.
 //
 // **Scope-correct by construction (GP 4).** Every count is read for
-// `AccessContext.ScopeId` only; the caller cannot pass an arbitrary
-// scope. Another tenant's objects are structurally unreachable.
+// the scope resolved from `AccessContext` only; the caller cannot pass
+// an arbitrary one. Another tenant's objects are structurally unreachable.
 //
 // **Opt-in, zero-cost when unused (GP 13).** The route is mounted only
 // when a deployment opts the Home module in; the `ActiveAi` field is
@@ -119,7 +119,7 @@ type PinRequest = {
 }
 
 /// Fable.Remoting surface for the Home/Overview landing module.
-/// Scoped server-side from `AccessContext.ScopeId`; requires a
+/// Scoped server-side from the caller's resolved `AccessContext`; requires a
 /// resolved scope (no anonymous access — an Anonymous caller has no
 /// scope to summarise).
 type IHomeOverviewApi = {

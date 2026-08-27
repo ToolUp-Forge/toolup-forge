@@ -250,7 +250,7 @@ type QuotaGatedAIProvider(inner: IAIProvider, scopeId: string, quotaPolicy: ITea
 // caller-driven. The `currentInFlight` parameter is the policy
 // caller's responsibility to compute; the SDK default decorator
 // passes `0` because reliably tracking in-flight without an
-// `IJobStore.ListRunningRuns` query would require a Phase 9c-grade
+// IJobStore.ListRunningRuns query would require a Phase 9c-grade
 // per-scope counter tied to job-completion events. Deployments
 // needing tight gating supply their own decorator that consults
 // `IJobStore` directly. The interface is the portable contract.

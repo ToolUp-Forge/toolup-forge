@@ -10,8 +10,8 @@ open ToolUp.Reporting.RendererRegistry
 //
 // Builds an `IReportApi` instance scoped to a particular caller
 // (scopeId resolved upstream). The returned record satisfies the
-// Fable.Remoting contract — consumers wire it via the standard
-// `ServerApp.withFableRemotingApi` shape (consumer-side wiring not
+// Fable.Remoting contract — consumers wire it through their own module's
+// remoting route registration (consumer-side wiring not
 // shown here; the handler factory is the SDK's surface).
 //
 // Render routing:

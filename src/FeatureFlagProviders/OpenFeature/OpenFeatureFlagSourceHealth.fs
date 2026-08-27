@@ -10,14 +10,14 @@ open ToolUp.Platform.HealthChecks
 // ─── Phase 239 — OpenFeature flag-source readiness probe ─────────────
 //
 // The companion resolves through the process-wide OpenFeature
-// `Api.Instance` (the deployment registers its vendor provider via
-// `Api.Instance.SetProviderAsync(...)`, not through our `create`). The
+// `OpenFeature.Api.Instance` (the deployment registers its vendor provider via
+// `OpenFeature.Api.Instance.SetProviderAsync(...)`, not through our `create`). The
 // only readiness signal the OpenFeature .NET 2.3.0 surface exposes
 // publicly is the *registered provider's metadata* — `FeatureProvider`
 // has no public status getter (status is event-driven internally), so
-// the probe keys off `Api.Instance.GetProviderMetadata()`.
+// the probe keys off `OpenFeature.Api.Instance.GetProviderMetadata()`.
 //
-// Before any `SetProviderAsync`, `Api.Instance` is the built-in **No-op
+// Before any `SetProviderAsync`, `OpenFeature.Api.Instance` is the built-in **No-op
 // provider** (metadata name `"No-op Provider"`), under which every
 // `Resolve` returns an `ErrorType` and the companion defers to the
 // ToolUp declared default. A deployment that composed this companion but
@@ -36,7 +36,7 @@ let private NoOpProviderName = "No-op Provider"
 /// Companion-contributed `IHealthCheck` for the OpenFeature flag source.
 /// Construct via `Health.create ()` and register through
 /// `ServerApp.withHealthCheck`. Reads the process-wide
-/// `Api.Instance` provider — the same one `OpenFeatureFlagSource`
+/// `OpenFeature.Api.Instance` provider — the same one `OpenFeatureFlagSource`
 /// resolves through — so the probe reflects the adapter's actual backend.
 type OpenFeatureFlagSourceHealth() =
     interface IHealthCheck with
@@ -61,6 +61,6 @@ type OpenFeatureFlagSourceHealth() =
         }
 
 /// Create the probe. Takes no arguments — the OpenFeature provider lives
-/// on the process-wide `Api.Instance`, registered by the deployment.
+/// on the process-wide `OpenFeature.Api.Instance`, registered by the deployment.
 let create () : IHealthCheck =
     OpenFeatureFlagSourceHealth() :> IHealthCheck

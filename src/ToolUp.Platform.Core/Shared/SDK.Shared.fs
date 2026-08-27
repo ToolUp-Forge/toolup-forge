@@ -204,7 +204,7 @@ type EventStoreMode =
     /// `_platform/events/{scopeId}/`. Uses whatever `IBlobStorage`
     /// implementation is registered (local disk, Azure, S3, GCS).
     /// The retention policy governs when old events are pruned; prune
-    /// is NOT automatic — apps call `PersistentEventStore.pruneScope`
+    /// is NOT automatic — apps prune the scope's stored events
     /// from a scheduled job or startup routine.
     | PersistentBlobBacked of EventRetentionPolicy
 
@@ -800,7 +800,7 @@ type MetricsEndpointMode =
 /// `IPeerAuthProvider` resolved in DI, no peer audit emission wired.
 /// Zero cost when not enabled (GP 13). Enable with
 /// `EnabledPeerSubstrate` to activate the substrate; contracts are
-/// hosted via `PeerCompose.compose` and the JSON-RPC 2.0 host.
+/// hosted via `PeerServerApp.run` and the JSON-RPC 2.0 host.
 ///
 /// Distinct from `PeerRoutePrefixes` (the simpler shared-bearer
 /// peer-call middleware) — the two coexist on different route
@@ -823,7 +823,7 @@ type PeerSubstrateMode =
     /// and handshake lifecycle events emitted via `IEventStore` under
     /// `SourceModule = "_platform.peer"`. Contracts are authored as
     /// `IPlatformPeer`-shaped records and hosted through
-    /// `PeerCompose.compose`.
+    /// `PeerServerApp.run`.
     | EnabledPeerSubstrate
 
 /// Phase 520 — selects whether a bitemporal fact store (the `ToolUp.Facts`
@@ -1046,7 +1046,7 @@ type NotificationMode =
     /// Phase 58 — like `NoNotifications` but emits a bundle-constant
     /// signal to the client that the absence is deliberate. The
     /// client's `NotificationClient` reads
-    /// `BundleConstants.NotificationsDisabledExplicitly` and skips
+    /// that bundle constant and skips
     /// EventSource instantiation entirely (no 404 retry loop, no
     /// console warnings). Use this mode in serverless / public-utility
     /// deployments where SSE is fundamentally inappropriate and the
@@ -3253,7 +3253,7 @@ type ServerConfig = {
 
     /// Phase 5f — who may call `TeamApi.CreateTeam` on a `Team`
     /// / `MultiTeam` deployment. Default `PlatformAdminOnly`
-    /// gates team creation on `IPlatformAdminStore.IsAdmin` so
+    /// gates team creation on `IPlatformAdminStore.IsPlatformAdmin` so
     /// closed-roster deployments don't have to remember to add
     /// the check. Set
     /// `{ ServerConfig.defaults with TeamCreationPolicy = AnyAuthenticatedUser }`

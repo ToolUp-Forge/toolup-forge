@@ -18,8 +18,8 @@ open System
 /// signal).
 ///
 /// **Default implementation** — `Ed25519ArtifactVerifier` (BCL crypto,
-/// no paid deps per GP 2). Edge instances install it via
-/// `ServerApp.withArtifactVerifier` (or accept the default registered
+/// no paid deps per GP 2). Edge instances install it by registering
+/// an `IArtifactVerifier` DI singleton (or accept the default registered
 /// in `SDK.Server.fs`).
 ///
 /// **Six portability rules (GP 12).**

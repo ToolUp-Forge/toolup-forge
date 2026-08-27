@@ -253,7 +253,7 @@ let private invalidationTests =
 // ─── Phase 21c follow-up — GetAggregations-shaped wiring tests ──────
 //
 // Exercise the `readThrough` + `IAnalyserCache` chain through the
-// same call shape `FormApiHandler.GetAggregations` uses: one cache
+// same call shape `IFormApi.GetAggregations` uses: one cache
 // key per `(schemaId, analyserName, schemaVersion)`, value is the
 // per-field `AnalyserOutput list`, invalidation on `Submit` clears
 // the entry. The full GetAggregations handler integration test

@@ -42,7 +42,7 @@ let handler: string * AuthUIHandler = "oidc", oidcHandler
 /// Sign-out clears `localStorage[toolup-auth-token]`, the JWT cookie,
 /// the OIDC refresh token, and any pending PKCE state, then triggers
 /// the OIDC provider's end-session flow. If you want a confirmation
-/// modal, wire your own button in `ClientConfig.HeaderAction` and call
+/// modal, wire your own button in `ExtraChrome.HeaderAction` and call
 /// `OidcClient.signOut cfg |> Async.StartImmediate` from your handler
 /// instead of registering this default.
 ///

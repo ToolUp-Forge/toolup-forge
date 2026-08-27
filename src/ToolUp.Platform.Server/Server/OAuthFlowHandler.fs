@@ -84,7 +84,7 @@ let private redirectUriFor (ctx: HttpContext) (flowName: string) : string =
 
 /// Resolve `AccessContext` from DI; fall back to `HttpContext.Items`
 /// for tests bypassing the standard middleware. Mirrors the pattern
-/// in `DataIngestionApiHandler.fs:46-62`.
+/// in `DataIngestionApiHandler.fs`.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
@@ -138,7 +138,7 @@ let private ensureOwnerAdmin (ctx: HttpContext) (accessContext: AccessContext) :
 }
 
 /// Map a typed `OAuthError` to an HTTP status code. Matches the
-/// substrate-handler comment block in `IOAuthCredentialFlow.fs:127`.
+/// substrate-handler comment block in `IOAuthCredentialFlow.fs`.
 let private httpStatusForOAuthError (err: OAuthError) : int =
     match err with
     | StateMismatch _ -> 400

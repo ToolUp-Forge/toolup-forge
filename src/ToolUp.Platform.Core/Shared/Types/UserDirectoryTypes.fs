@@ -59,7 +59,7 @@ namespace ToolUp.Platform
 /// - `UserId` is the directory provider's stable identifier — for
 ///   Microsoft Entra this is the user's `oid` (object id), which
 ///   matches the `oid` claim in the access token the SDK consumes via
-///   `OidcAuthProvider.PreferOidWhenPresent`. Other providers map to
+///   `AuthConfig.PreferOidWhenPresent`. Other providers map to
 ///   whatever stable identifier their JWT issues. Always populated;
 ///   used as the React key.
 /// - `DisplayName` is the human-readable name (Graph `displayName` for

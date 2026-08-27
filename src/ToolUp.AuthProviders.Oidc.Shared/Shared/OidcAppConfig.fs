@@ -17,7 +17,7 @@ open ToolUp.Platform
 //   * Client built an `OidcUIConfig` (in `ToolUp.Platform`) and
 //     passed it to `OidcAuthUI`.
 //   * Server built an `OidcAuthProviderConfig` and passed it to
-//     `OidcAuthProvider.create`.
+//     the Oidc auth-provider factory.
 //   * Consumers manually kept the two in agreement (issuer must
 //     match exactly; audience must match the client's expected
 //     access-token `aud`; ClientId must match across).

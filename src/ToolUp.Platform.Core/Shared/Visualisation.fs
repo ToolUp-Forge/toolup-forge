@@ -48,7 +48,7 @@ module PlatformDefaults =
             trimmed
 
     /// Parse a `_platform` config map (raw JSON-per-field, the same
-    /// shape `IConfigStore.GetValues` returns and the shell hands to
+    /// shape `IConfigStore.GetRaw` returns and the shell hands to
     /// `ClientModuleContext.PlatformConfig`) into a typed
     /// `PlatformDefaults`. Falls back to `defaults` for any missing
     /// or malformed field — never throws. Compiles for both server

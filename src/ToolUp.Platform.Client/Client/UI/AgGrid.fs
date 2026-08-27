@@ -265,7 +265,7 @@ module IFilterModelEntry =
 // collisions (e.g. `"SalesAnalysis.skuList"`).
 //
 // Sanctioned mutable global — same precedent as
-// `NotificationClient.handlers` / `ClientToolRuntime.registry`.
+// `NotificationClient.state` / `ClientToolRuntime.registry`.
 
 module GridApiRegistry =
     open System.Collections.Generic

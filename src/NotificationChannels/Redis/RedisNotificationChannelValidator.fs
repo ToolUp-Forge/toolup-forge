@@ -18,7 +18,7 @@ open ToolUp.Platform.ConfigValidation
 // `RedisNotificationChannel.Server.props` and reads
 // `TOOLUP_NOTIFICATION_CHANNEL=redis` constructs the multiplexer
 // alongside the channel; the deployment composition root passes the
-// same multiplexer to `RedisNotificationChannelValidator.create` so
+// same multiplexer to `RedisValidator.create` so
 // the validator and the channel share one TCP connection.
 
 type private Impl(multiplexer: IConnectionMultiplexer) =
