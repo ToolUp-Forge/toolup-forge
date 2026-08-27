@@ -1,0 +1,58 @@
+== parts ==
+/word/document.xml application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
+/word/styles.xml application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml
+== /word/document.xml ==
+w:document
+  w:body
+    w:p
+      w:pPr
+        w:pStyle w:val="Heading1"
+      w:r
+        w:t xml:space="preserve" "Tracked changes"
+    w:p
+      w:r
+        w:t xml:space="preserve" "The original text "
+      w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="1"
+        w:r
+          w:t xml:space="preserve" "with an insertion"
+    w:p
+      w:r
+        w:t xml:space="preserve" "Kept "
+      w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="2"
+        w:r
+          w:delText xml:space="preserve" "removed"
+      w:r
+        w:t xml:space="preserve" " kept"
+    w:p
+      w:pPr
+        w:rPr
+          w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="3"
+          w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="102"
+      w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="4"
+        w:r
+          w:t xml:space="preserve" "A wholly new paragraph."
+    w:p
+      w:pPr
+        w:rPr
+          w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="5"
+          w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="104"
+      w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="6"
+        w:r
+          w:delText xml:space="preserve" "This paragraph is struck out."
+    w:sectPr
+      w:pgSz w:h="16838" w:w="11906"
+      w:pgMar w:bottom="1440" w:left="1440" w:right="1440" w:top="1440"
+== /word/styles.xml ==
+w:styles
+  w:style w:default="true" w:styleId="Normal" w:type="paragraph"
+    w:name w:val="Normal"
+  w:style w:styleId="Heading1" w:type="paragraph"
+    w:name w:val="heading 1"
+    w:basedOn w:val="Normal"
+  w:style w:styleId="Heading2" w:type="paragraph"
+    w:name w:val="heading 2"
+    w:basedOn w:val="Normal"
+  w:style w:styleId="Emphasis" w:type="character"
+    w:name w:val="Emphasis"
+    w:rPr
+      w:i
