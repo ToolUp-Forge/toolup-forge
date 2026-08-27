@@ -22,7 +22,7 @@ open ToolUp.Remoting.Server
 //   * first-argument parsing from the request body.
 //
 // The wire-divergent live-path migration (AIAssistantHandler SSE →
-// typed stream) + the Fable `Cmd.OfRemoting.callStreaming` client helper
+// typed stream) + the Fable Cmd.OfRemoting.callStreaming client helper
 // remain consumer-trigger-gated (Phase 69c.tail A/B/C/D/E); these tests
 // harden the substrate those tasks build on.
 

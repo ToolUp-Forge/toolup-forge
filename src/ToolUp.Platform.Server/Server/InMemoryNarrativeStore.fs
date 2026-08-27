@@ -13,7 +13,7 @@ open ToolUp.Platform.Narrative
 /// `Publish`).
 ///
 /// Distributed deployments swap this for a Redis/Postgres/blob
-/// implementation via `ServerApp.withNarrativeStore`; the interface
+/// implementation registered as the `INarrativeStore` singleton; the interface
 /// contract is identical (GP 12).
 type InMemoryNarrativeStore(policy: NarrativeRetentionPolicy) =
     // scopeId -> ring-buffer-ish list, newest first. Written through a

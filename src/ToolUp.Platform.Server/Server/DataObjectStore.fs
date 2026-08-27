@@ -62,8 +62,8 @@ let private contentBlobName (hash: string) = $"objects/_content/{hash}.data"
 
 // ─── Hashing ────────────────────────────────────────────────────
 //
-// SHA-256-hex helper — duplicated from `CachingEmbeddingProvider.fs:11–19`
-// and `RetrievalTracers.fs:19–33`. A future cleanup pass should extract
+// SHA-256-hex helper — duplicated from `CachingEmbeddingProvider.fs`
+// and `RetrievalTracers.fs`. A future cleanup pass should extract
 // this to `Server/HashHelpers.fs`; see Phase 7 commit history for the
 // rationale (the helper is .NET-only — `System.Security.Cryptography` is
 // not Fable-compatible — so it belongs in a Server-side shared module
@@ -81,7 +81,7 @@ let private sha256Hex (content: byte[]) : string =
 
 // ─── JSON serialisation ──────────────────────────────────────────
 //
-// Match `ConfigStore.fs:16–26` / `TeamManagement.fs` — STJ +
+// Match `ConfigStore.fs` / `TeamManagement.fs` — STJ +
 // `FableConverters`. The DataObject record carries a
 // `Map<string, string>` and a `VersioningPolicy` DU; FableConverters
 // round-trips both losslessly.

@@ -29,7 +29,7 @@ open System
 /// `[<RequireQualifiedAccess>]` because `JobResult` (Phase 9b) shares
 /// `TransientFailure` / `PermanentFailure` case names; without
 /// qualification, type inference resolves to whichever DU was most
-/// recently declared and breaks `JobScheduler.runDelivery`.
+/// recently declared and breaks `TransactionalDispatcher.runDelivery`.
 [<RequireQualifiedAccess>]
 type SinkResult =
     | Delivered of vendorMessageId: string option

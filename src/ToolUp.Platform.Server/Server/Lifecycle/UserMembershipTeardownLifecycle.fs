@@ -34,7 +34,7 @@ open ToolUp.Platform.TeamManagement
 //
 // **Audit.** One `MemberRemoved` per stripped team (the existing
 // audit case the team API emits), recorded against the team's scope —
-// same shape as `PlatformApiHandler.RemoveTeamMember`, with the
+// same shape as `TeamApi.RemoveTeamMember`, with the
 // offboard's actor as `UserId`. Emitted here (not in the store)
 // because the actor's identity lives in the lifecycle call, mirroring
 // the handler-emits-audit convention (Phase 9).

@@ -428,7 +428,7 @@ module Client =
         /// semantics, route guard included), never around it.
         | CommandPaletteSelected of sidebarId: string
 
-    // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + installRequestGuard below.
+    // Header freshness is the CsrfClient request-guard's job — see `UserSession.withRequestHeaders` + `installRequestSeam` below.
     // Proxies are constructed at module load; identity + CSRF headers are read live per request by the send-time guard.
 
     /// Server-side Fable.Remoting proxy for the team API. Used to
@@ -676,7 +676,7 @@ module Client =
     /// `Msg`, so it can't otherwise reach the shell.
     ///
     /// Sanctioned mutable: initialisation-time set, read after. Mirrors
-    /// `UserSession.currentSubjectKind` and `NotificationClient.handlers`
+    /// `UserSession.session` and `NotificationClient.state`
     /// — documented in the platform README's "No new side effects"
     /// exceptions list.
     ///
@@ -783,7 +783,7 @@ module Client =
     /// Phase 245 — the `OnAccessibleModulesChanged` callback handed to
     /// modules. Only meaningful where exposure applies (a `Team`-shaped
     /// surface), so it mirrors `buildOnTeamSwitched`'s gate; `None`
-    /// otherwise. A successful `PermissionsAdminUI.SetModuleExposure`
+    /// otherwise. A successful `PermissionApi.SetModuleExposure`
     /// invokes it to re-fetch the shell's accessible-modules list.
     let private buildOnAccessibleModulesChanged (config: ClientConfig) : (unit -> unit) option =
         if ClientConfig.hasTeamScope config then
@@ -2886,7 +2886,7 @@ module Client =
         // hand-roll a header-mounted sign-out button. Consumers
         // wanting bespoke UX (confirmation modal, profile dropdown,
         // etc.) leave `SignOutHandler = None` and continue to mount
-        // their own affordance via `ClientConfig.HeaderAction` /
+        // their own affordance via `ExtraChrome.HeaderAction` /
         // `ExtraChrome` — wiring both is harmless but renders two.
         let signOutAction =
             match config.Handlers.SignOutHandler with
@@ -3195,7 +3195,7 @@ module Client =
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
     /// / `NoAuthUI` pass through unchanged; other subject kinds
     /// delegate to a companion (OidcClient, ClerkUI) that has called
-    /// `AuthUIProvider.register` at load time.
+    /// `AuthUIProvider.setHandlers` at load time.
     ///
     /// Public from Phase 3b.B so outer composers (`AIClientConfig.withSidePanel`
     /// + custom composition roots that build their own Elmish program over
@@ -3967,7 +3967,7 @@ module Client =
     ///
     /// Also called by `boot` below — idempotent via
     /// `UserSession.configure` being a plain mutable set + the
-    /// `CsrfClient.guardInstalled` sentinel.
+    /// guard-installed sentinel `CsrfClient` keeps internally.
     let installRequestSeam (config: ClientConfig) : unit =
         // Phase 66 Stream B.8 — derive the boot-time `SubjectKind`
         // from declared surfaces. `installRequestSeam` runs before the

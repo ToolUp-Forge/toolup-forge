@@ -7,7 +7,7 @@ open ToolUp.Platform.ConfigValidation
 // ─── Phase 5f — TeamCreationPolicy wedge detector ────────────────────
 //
 // `TeamCreationPolicy = PlatformAdminOnly` (the default since Phase
-// 5f) gates `TeamApi.CreateTeam` on `IPlatformAdminStore.IsAdmin`. A
+// 5f) gates `TeamApi.CreateTeam` on `IPlatformAdminStore.IsPlatformAdmin`. A
 // `Team` / `MultiTeam` deployment without any Platform Admin AND
 // without `TOOLUP_INITIAL_PLATFORM_ADMIN` set is wedged: no one will
 // ever pass the gate, and the bootstrap-admin path that would seed

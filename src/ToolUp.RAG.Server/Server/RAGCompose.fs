@@ -1516,7 +1516,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 .AddSingleton<ITableExtractor>(tableExtractor)
                 .AddSingleton<IRagTelemetry>(telemetry)
                 // Phase 173 — register the SAME store instance the hook +
-                // observer write through, so `FileManagement.ListFiles`
+                // observer write through, so `FileManagementApi.ListFiles`
                 // resolves it and joins status onto the file-list read.
                 .AddSingleton<IIngestionStatusStore>(ingestionStatusStore)
 
@@ -2360,7 +2360,7 @@ module RAGServerApp =
     /// per-handler extraction wiring lifted to a shared shape.
     ///
     /// Containers are enumerated by the consumer (typically
-    /// `ITeamStore.ListAll` plus the well-known `_platform` /
+    /// `ITeamStore.ListTeams` plus the well-known `_platform` /
     /// `_deployment` containers) because the SDK has no scope-enumeration
     /// seam. Empty (default) ⇒ no sweep and no hosted service (GP 11 /
     /// GP 13).

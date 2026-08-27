@@ -35,7 +35,7 @@ module internal Timer =
 #endif
 
 /// Default `Async.Start` shape used by `Cmd.OfAsync`. The upstream
-/// `Cmd.OfAsyncWith` family parameterised this; ToolUp consumers always use
+/// Cmd.OfAsyncWith family parameterised this; ToolUp consumers always use
 /// the default, so the parameterised family is dropped and this stays
 /// internal.
 module internal AsyncHelpers =

@@ -22,7 +22,7 @@ let private log = Logger.forCategory "ai.tool"
 // matching executor.
 //
 // Sanctioned mutable global — same precedent as
-// `NotificationClient.handlers` (per-tab singleton with an
+// `NotificationClient.state` (per-tab singleton with an
 // effectively-final lifetime). Dictionary instead of `Map` for
 // O(1) lookup at SSE-event rate.
 

@@ -76,7 +76,7 @@ let private throwOnError (op: string) (result: Result<'a, string>) : 'a =
 /// `List` round-trip plus a `Download` per entry. For the dev-deployment
 /// volumes this targets (capped at `policy.MaxPerScope` per scope), the
 /// simplicity wins; high-volume deployments should swap in a
-/// secondary-indexed implementation via `ServerApp.withNarrativeStore`.
+/// secondary-indexed `INarrativeStore` singleton.
 ///
 /// `policy.MaxAge`, when set, evicts entries whose `PublishedAt` is
 /// older than `now - MaxAge` (lazy sweep on every `Publish`). Eviction

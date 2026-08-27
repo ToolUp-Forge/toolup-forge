@@ -21,7 +21,7 @@ open Feliz
 // companion registers its mic here via a one-line opt-in.
 //
 // Sanctioned mutable global — same precedent as `FastPathBridge.resolver`,
-// `ClientToolRuntime.registry`, and `NotificationClient.handlers`.
+// `ClientToolRuntime.registry`, and `NotificationClient.state`.
 
 /// Everything a registered accessory needs to read and drive the chat
 /// input without owning its `React.useState`. The input text lives in

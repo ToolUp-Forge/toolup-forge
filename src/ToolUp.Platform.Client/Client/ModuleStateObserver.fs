@@ -17,7 +17,7 @@ let private log = Logger.forCategory "client.module-state"
 // — any companion can plug in.
 //
 // Sanctioned mutable global — same precedent as
-// `NotificationClient.handlers`. Per-tab singleton with effectively
+// `NotificationClient.state`. Per-tab singleton with effectively
 // final lifetime; subscribers register at Client startup and never
 // unsubscribe.
 //

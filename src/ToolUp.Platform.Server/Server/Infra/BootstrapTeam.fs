@@ -63,7 +63,7 @@ let private trimOrNone (value: string) =
 ///   1. `TOOLUP_INITIAL_TEAM_NAME` — required. Empty / unset =>
 ///      no-op (the operator hasn't asked for a bootstrap team).
 ///   2. `TOOLUP_INITIAL_TEAM_ID` — optional. Auto-generated 8-char
-///      hex when unset, matching `PlatformApiHandler.CreateTeam`'s
+///      hex when unset, matching `TeamApi.CreateTeam`'s
 ///      id-minting rule.
 ///   3. `TOOLUP_INITIAL_PLATFORM_ADMIN` — required when team-name
 ///      is set. The user who becomes Owner. Preflight

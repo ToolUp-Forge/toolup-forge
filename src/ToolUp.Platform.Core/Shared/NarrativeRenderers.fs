@@ -5,7 +5,7 @@
 /// the box — markdown, plaintext, HTML — each wrapping the matching
 /// pure renderer module. Deployments wanting extra formats register
 /// additional renderers via the SDK's renderer-registry hook (a future
-/// `ServerApp.withNarrativeRenderer`); the lookup helpers below are the
+/// ServerApp.withNarrativeRenderer); the lookup helpers below are the
 /// shape that hook will key into.
 module ToolUp.Platform.Narrative.NarrativeRenderers
 

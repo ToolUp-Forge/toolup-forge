@@ -14,7 +14,7 @@ open ToolUp.Platform.ConfigValidation
 // silent-misconfiguration case at startup rather than at first flag
 // evaluation: a deployment composed the OpenFeature source into its
 // `FlagEvaluator` but never registered an external provider via
-// `Api.Instance.SetProviderAsync(...)`, so `Api.Instance` is still the
+// `OpenFeature.Api.Instance.SetProviderAsync(...)`, so `OpenFeature.Api.Instance` is still the
 // built-in No-op provider and every external resolution defers to the
 // ToolUp declared default — the companion is inert.
 //
@@ -23,7 +23,7 @@ open ToolUp.Platform.ConfigValidation
 // (GP 11 / GP 13 — composing the companion stays byte-for-byte safe). An
 // actual exception reading the provider metadata is a genuinely broken
 // OpenFeature runtime state and aborts startup (`Error`), matching the
-// companion-validator precedent (`RedisNotificationChannelValidator`).
+// companion-validator precedent (`RedisValidator`).
 
 [<Literal>]
 let private NoOpProviderName = "No-op Provider"
@@ -50,6 +50,6 @@ type private Impl() =
         }
 
 /// Create the validator. Takes no arguments — the OpenFeature provider
-/// lives on the process-wide `Api.Instance`, registered by the
+/// lives on the process-wide `OpenFeature.Api.Instance`, registered by the
 /// deployment. Register through `ServerApp.withConfigValidator`.
 let create () : IConfigValidator = Impl() :> IConfigValidator

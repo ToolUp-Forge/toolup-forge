@@ -12,9 +12,9 @@ open ToolUp.Remoting.Client
 /// Phase 69b.E `CategorisedErrorResult` shape. When the server returns
 /// `Errors.PropagateCategorised(category, error)`, the response body is
 /// `{ error, ignored, handled, category, __schema_version }`. The forge
-/// SDK's `RemotingInterceptors.bridge` parses this on the client side
-/// and raises this typed exception so downstream `ofError` handlers can
-/// pattern-match on the category without parsing message text.
+/// SDK's `RemotingInterceptors` categorised-error interceptor parses this
+/// on the client side and raises this typed exception so `ofError` handlers
+/// can pattern-match on the category without parsing message text.
 [<RequireQualifiedAccess>]
 type ErrorCategory =
     | User

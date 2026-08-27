@@ -22,7 +22,7 @@ module RequestContext =
     /// than scattered through Core. Callers MUST treat the inner
     /// value as opaque — the wrapper's `obj` payload is reserved for
     /// the matching tier's `ofX` constructor (e.g.
-    /// `Server.Auth.RequestContext.ofHttpContext` boxes an
+    /// `RequestContextBuilder.ofHttpContext` boxes an
     /// `HttpContext`); other server tiers may box other shapes.
     let inline value (RequestContext o) = o
 

@@ -875,6 +875,382 @@ let main args =
     let docFragmentMinRecordLabels = 3
     let docFragmentMinRecordMatches = 3
 
+    // ---- The api-baseline surface universe, shared by both citation gates ----
+    //
+    // Phase 670 hoisted this out of `VerifyDocSnippets`. Phases 668, 669 and
+    // 672 each read the committed `api-baselines/` text to answer a different
+    // question about the same universe, and `VerifySourceCitations` below
+    // asks a fourth about SOURCE comments rather than doc blocks. Four
+    // readers of one rendering is the point: a second parser would be a
+    // second idea of what the surface is, and the two would diverge exactly
+    // where a rename made the answer matter.
+    //
+    // The read stays LAZY. A `Pack` or `Format` run must not pay for a
+    // directory walk it never consults, and the value is identical across
+    // targets within a process.
+    let rxMatches (pattern: string) (input: string) =
+        System.Text.RegularExpressions.Regex.Matches(input, pattern)
+        |> Seq.map (fun m -> m.Value)
+        |> List.ofSeq
+
+    let rxGroups (pattern: string) (input: string) =
+        let m = System.Text.RegularExpressions.Regex.Match(input, pattern)
+
+        if m.Success then
+            Some [ for g in m.Groups -> g.Value ]
+        else
+            None
+
+    let simpleNameOf (s: string) =
+        let bare = s.Split('`')[0]
+        let i = max (bare.LastIndexOf '.') (bare.LastIndexOf '+')
+        if i >= 0 then bare.Substring(i + 1) else bare
+
+    let readApiSurface (repoRoot: string) =
+        // ---- Phase 668: the public surface, read from api-baselines ----
+        let apiBaselineDir = Path.Combine(repoRoot, "api-baselines")
+
+
+        // Phase 669 — a container the RENDERER could not read is NOT
+        // COMPARABLE, and must never be rendered as "this type has no
+        // members".
+        //
+        // `PublicApiApproval` writes `<full>  # <members unavailable:
+        // FileNotFoundException>` when reflection cannot load an
+        // assembly's dependencies to enumerate its members. That line is
+        // not a member line, so an unguarded reader below sees a
+        // container with an EMPTY member list — and every doc that names
+        // one of its members becomes a finding whose remedy is to delete
+        // a perfectly correct sentence. Phase 669's walk hit exactly that
+        // on ten findings across `AwsLambdaHost`, the three
+        // `*KmsKeyResolver`s and the KMS artefact signers, all of which
+        // exist in source and are spelled right in the docs.
+        //
+        // Same posture the estate takes everywhere else: "I cannot read
+        // this" is reported as unknown, never as wrong. Dropping the
+        // container entirely puts its members in the lint's OUTSIDE
+        // bucket, where an unresolvable name already lives.
+        let unreadableTypes =
+            if Directory.Exists apiBaselineDir then
+                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
+                |> Seq.collect File.ReadAllLines
+                |> Seq.choose (rxGroups @"^(\S+)\s+# <members unavailable")
+                |> Seq.map (fun groups -> groups[1])
+                |> Set.ofSeq
+            else
+                Set.empty
+
+        // (full name, [member name, rendered member line]). Nested types
+        // keep their `+`, so the DU-case reader below finds `T+Case`.
+        let realTypes =
+            if Directory.Exists apiBaselineDir then
+                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
+                |> Seq.collect (fun f ->
+                    let lines =
+                        File.ReadAllLines f
+                        |> Array.filter (fun l -> l.Trim() <> "" && not (l.StartsWith "#"))
+
+                    lines
+                    |> Array.choose (rxGroups @"^(\S+) \((?:class|interface|struct|enum|delegate)\)$")
+                    |> Array.filter (fun groups -> not (unreadableTypes.Contains groups[1]))
+                    |> Array.map (fun groups ->
+                        let full = groups[1]
+                        let prefix = full + "."
+
+                        let members =
+                            lines
+                            |> Array.filter (fun l -> l.StartsWith prefix)
+                            |> Array.map (fun l ->
+                                let rest = l.Substring prefix.Length
+                                let cut = rest.IndexOfAny [| '('; ' ' |]
+                                (if cut >= 0 then rest.Substring(0, cut) else rest), rest)
+                            |> List.ofArray
+
+                        full, members))
+                |> List.ofSeq
+            else
+                []
+
+        let realFullNames = realTypes |> List.map fst |> Set.ofList
+
+        // An F# `module X` holding a `type X` renders as BOTH `A.X` and
+        // `A.X+X`. That is not two competing types — it is a container and
+        // the thing inside it, and a doc writing `X` after `open A` means
+        // the latter. Left uncollapsed it reads as ambiguous, and the
+        // whole family of interfaces whose module shares their name
+        // (`IVectorStore`, `IRetrievalPipeline`, `IRetrievalTracer`, …)
+        // drops silently out of the comparison. Found by the
+        // demonstrated-red probe rather than by reading the code, which is
+        // what that discipline is for: the check was green on a
+        // deliberately staled signature.
+        let realByName =
+            realTypes
+            |> List.groupBy (fst >> simpleNameOf)
+            |> List.map (fun (name, candidates) ->
+                let fulls = candidates |> List.map fst |> Set.ofList
+
+                let collapsed =
+                    candidates
+                    |> List.filter (fun (full, _) -> not (fulls.Contains(full + "+" + name)))
+
+                name, (if collapsed.IsEmpty then candidates else collapsed))
+            |> Map.ofList
+
+        // A simple name the SURFACE uses for a BCL type is not evidence of
+        // a ToolUp type of that name — see the soundness filters above.
+        let bclSimpleNames =
+            realTypes
+            |> Seq.collect (fun (_, ms) -> ms |> Seq.map snd)
+            |> Seq.collect (rxMatches @"[A-Za-z_][A-Za-z0-9_.+`]*")
+            |> Seq.filter (fun v -> v.StartsWith "System." || v.StartsWith "Microsoft.")
+            |> Seq.map simpleNameOf
+            |> Set.ofSeq
+
+        let ownedSimpleNames =
+            Set.difference (realByName |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
+
+        let unambiguousTypeNames =
+            realByName |> Map.filter (fun _ v -> v.Length = 1) |> Map.keys |> Set.ofSeq
+        // ---- Phase 672: the name universe a fragment is held to ----
+        //
+        // Same `api-baselines/` reading as 668 above, re-keyed for the
+        // question this arm asks. 668 resolves a DECLARED type name to one
+        // rendered type; this resolves a USED container name to the set of
+        // members a doc may name on it, which is a union rather than a
+        // choice — over-accepting only ever passes a doc, and the subset
+        // direction stays sound.
+        // Phase 669 — member names by full type name, so a container can
+        // fold in the cases of a DU nested inside it (see `surfaceContainers`).
+        let membersByFull =
+            realTypes |> List.map (fun (full, ms) -> full, ms |> List.map fst) |> Map.ofList
+
+        let nestedByParent =
+            realFullNames
+            |> Seq.choose (fun f ->
+                let i = f.LastIndexOf '+'
+
+                if i > 0 then
+                    Some(f.Substring(0, i), f.Substring(i + 1))
+                else
+                    None)
+            |> Seq.groupBy fst
+            |> Seq.map (fun (parent, xs) -> parent, xs |> Seq.map snd |> List.ofSeq)
+            |> Map.ofSeq
+
+        let realMemberNames =
+            realTypes
+            |> List.map (fun (f, ms) -> f, (ms |> List.map fst |> Set.ofList))
+            |> Map.ofList
+
+        // F# appends `Module` to a module that shares its name with a type
+        // in the same scope, so `RAGServerAppModule` IS what a doc calls
+        // `RAGServerApp`. The alias is ADDITIVE, never a replacement:
+        // `ServerModule` is a TYPE whose own name ends in `Module`, and
+        // replacing would file it under `Server` and lose it.
+        let docFacingNamesOf (full: string) =
+            let s = simpleNameOf full
+
+            if s.EndsWith "Module" && s.Length > 6 then
+                [ s; s.Substring(0, s.Length - 6) ]
+            else
+                [ s ]
+
+        let isDuCase (full: string) =
+            let i = full.LastIndexOf '+'
+
+            if i < 0 then
+                false
+            else
+                match realMemberNames.TryFind(full.Substring(0, i)) with
+                | Some ms -> ms.Contains("Is" + full.Substring(i + 1))
+                | None -> false
+
+        // doc-facing container name -> (distinct containers, member names)
+        let surfaceContainers =
+            let byName =
+                System.Collections.Generic.Dictionary<string, ResizeArray<string * (string * string) list>>()
+
+            for (full, members) in realTypes do
+                for key in docFacingNamesOf full do
+                    if not (byName.ContainsKey key) then
+                        byName[key] <- ResizeArray()
+
+                    byName[key].Add(full, members)
+
+            byName
+            |> Seq.map (fun kv ->
+                let usable =
+                    kv.Value |> Seq.filter (fun (full, _) -> not (isDuCase full)) |> List.ofSeq
+
+                // Two renderings can be ONE doc-facing container: a module
+                // and the type it shadows (`X` / `XModule`), and a module
+                // and the type nested inside it (`A.X` / `A.X+X`). Generic
+                // arity is a third such detail. Collapse only WITHIN this
+                // key's candidates — the global form of the first rule
+                // fuses `ToolUp.Platform.Server` with the unrelated
+                // `ToolUp.Platform.ServerModule`.
+                let dropArity (f: string) =
+                    System.Text.RegularExpressions.Regex.Replace(f, @"`\d+", "")
+
+                let here = usable |> List.map (fst >> dropArity) |> Set.ofList
+
+                let canonical (raw: string) =
+                    let full = dropArity raw
+
+                    let f =
+                        if
+                            full.EndsWith "Module"
+                            && full.Length > 6
+                            && here.Contains(full.Substring(0, full.Length - 6))
+                        then
+                            full.Substring(0, full.Length - 6)
+                        else
+                            full
+
+                    let nested = f + "+" + simpleNameOf f
+                    if here.Contains nested then nested else f
+
+                // A GENERIC member renders with its arity —
+                // ``ModuleQueryBus.ask`2``, ``Cmd.none`1`` — and a doc
+                // writes the bare name. Stripping it here is load-bearing
+                // rather than tidy: without it every generic function in
+                // the surface reads as absent, which is a false positive on
+                // exactly the composition helpers the docs teach most.
+                //
+                // Phase 669 — and the GRANDCHILDREN, because an F# DU
+                // declared inside a module is reached THROUGH the module.
+                // `StopWords.German` is how the language resolves a case of
+                // the `Language` DU declared in `module StopWords`, and it
+                // is how the compiling block on the same page spells it —
+                // but the case renders as `StopWords+Language+German`, two
+                // levels down, so a children-only fold reported a correct
+                // line as naming a member the surface does not have.
+                let members =
+                    usable
+                    |> List.collect (fun (full, ms) ->
+                        let children = nestedByParent.TryFind full |> Option.defaultValue []
+
+                        // Phase 669 — the CASES of a DU nested in this
+                        // container are reached through the container.
+                        // `StopWords.German` is how F# resolves a case of
+                        // the `Language` DU declared in `module StopWords`,
+                        // and how the compiling block on the same page
+                        // spells it — but the case renders as a property of
+                        // `StopWords+Language`, one level down, so a
+                        // children-only fold reported a correct line as
+                        // naming a member the surface does not have.
+                        //
+                        // Narrowed to DU CASES rather than every nested
+                        // member, by the `IsXxx` companion property the F#
+                        // compiler emits for each case. Folding a nested
+                        // record's FIELDS into its parent would widen the
+                        // accepted set for no rule the language has.
+                        let nestedDuCases =
+                            children
+                            |> List.collect (fun c ->
+                                match membersByFull.TryFind(full + "+" + c) with
+                                | None -> []
+                                | Some names -> names |> List.filter (fun n -> names |> List.contains ("Is" + n)))
+
+                        (ms |> List.map fst) @ children @ nestedDuCases)
+                    |> List.map (fun m -> m.Split('`')[0])
+                    |> Set.ofList
+
+                kv.Key, (usable |> List.map (fst >> canonical) |> List.distinct, members))
+            |> Seq.filter (fun (_, (fulls, _)) -> not fulls.IsEmpty)
+            |> Map.ofSeq
+
+        let ownedContainerNames =
+            Set.difference (surfaceContainers |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
+
+        {|
+            RealTypes = realTypes
+            RealFullNames = realFullNames
+            RealByName = realByName
+            BclSimpleNames = bclSimpleNames
+            OwnedSimpleNames = ownedSimpleNames
+            UnambiguousTypeNames = unambiguousTypeNames
+            SurfaceContainers = surfaceContainers
+            OwnedContainerNames = ownedContainerNames
+        |}
+
+    let apiSurface = lazy (readApiSurface __SOURCE_DIRECTORY__)
+
+    // Arm 1 — dotted, capitalized identifiers. The anchor is the first
+    // segment the surface owns, and every segment before it must be
+    // capitalized (so a lowercase value's property can never anchor).
+    // Phase 669 — anchor at the RIGHTMOST container in the chain, not
+    // the leftmost.
+    //
+    // A fully-qualified reference is namespace segments followed by a
+    // container followed by a member: in
+    // `ToolUp.Voice.Client.VoiceInput.registerPromptMic` the container
+    // is `VoiceInput` and everything before it is qualification.
+    // Scanning left-to-right stopped at `Client` — a real container in
+    // a different package — and then reported the NAMESPACE segment
+    // `VoiceInput` as a member `Client` does not have, on three pages
+    // whose prose was correct as written. Rightmost-first reads the
+    // chain the way F# does.
+    //
+    // The leading guard is unchanged and still load-bearing: a chain
+    // whose first segment is lower-case is a local value being
+    // dereferenced, not a container path, and must never anchor.
+    let anchorIn (ownedContainerNames: Set<string>) (chain: string) =
+        let segs = chain.Split('.')
+
+        if segs.Length < 2 || not (System.Char.IsUpper(segs[0].[0])) then
+            None
+        else
+            let rec go i =
+                if i < 0 then
+                    None
+                elif ownedContainerNames.Contains segs[i] then
+                    Some(segs[i], segs[i + 1])
+                else
+                    go (i - 1)
+
+            go (segs.Length - 2)
+    // A finding's value is the fix it suggests. `ServerConfig` renders
+    // ~150 members, so the whole set is unreadable and an alphabetical
+    // truncation of it reliably omits the answer — every `with*` helper
+    // sorts after every field. Rank by shared trigrams, tie-broken by
+    // shared prefix. Prefix alone was tried and measured against the
+    // demonstrated-red probe: for a `withStorage` -> `withBlobStorage`
+    // rename it offered `withScheduledJob` first, because an INFIX
+    // insertion is exactly the case a prefix measure cannot see, and
+    // insertion is a common rename shape.
+    let nearestTo (wanted: string) (members: Set<string>) =
+        let trigrams (s: string) =
+            let t = s.ToLowerInvariant()
+
+            if t.Length < 3 then
+                Set.singleton t
+            else
+                set [ for i in 0 .. t.Length - 3 -> t.Substring(i, 3) ]
+
+        let wantedGrams = trigrams wanted
+
+        let sharedPrefix (candidate: string) =
+            let n = min wanted.Length candidate.Length
+
+            let rec go i =
+                if
+                    i < n
+                    && System.Char.ToLowerInvariant wanted[i] = System.Char.ToLowerInvariant candidate[i]
+                then
+                    go (i + 1)
+                else
+                    i
+
+            go 0
+
+        members
+        |> Set.toList
+        |> List.filter (fun m -> m <> ".ctor" && not (m.StartsWith "Is" && members.Contains(m.Substring 2)))
+        |> List.sortBy (fun m -> -(Set.intersect wantedGrams (trigrams m)).Count, -(sharedPrefix m), m)
+        |> List.truncate 10
+        |> String.concat ", "
+
     Target.create "VerifyDocSnippets" (fun _ ->
         // Read from the process argv rather than `p.Context.Arguments`:
         // FAKE's own CLI parser consumes trailing options before the
@@ -1076,127 +1452,14 @@ let main args =
             |> List.countBy id
             |> List.sortBy fst
 
-        // ---- Phase 668: the public surface, read from api-baselines ----
-        let apiBaselineDir = Path.Combine(repoRoot, "api-baselines")
-
-        let rxMatches (pattern: string) (input: string) =
-            System.Text.RegularExpressions.Regex.Matches(input, pattern)
-            |> Seq.map (fun m -> m.Value)
-            |> List.ofSeq
-
-        let rxGroups (pattern: string) (input: string) =
-            let m = System.Text.RegularExpressions.Regex.Match(input, pattern)
-
-            if m.Success then
-                Some [ for g in m.Groups -> g.Value ]
-            else
-                None
-
-        let simpleNameOf (s: string) =
-            let bare = s.Split('`')[0]
-            let i = max (bare.LastIndexOf '.') (bare.LastIndexOf '+')
-            if i >= 0 then bare.Substring(i + 1) else bare
-
-        // Phase 669 — a container the RENDERER could not read is NOT
-        // COMPARABLE, and must never be rendered as "this type has no
-        // members".
-        //
-        // `PublicApiApproval` writes `<full>  # <members unavailable:
-        // FileNotFoundException>` when reflection cannot load an
-        // assembly's dependencies to enumerate its members. That line is
-        // not a member line, so an unguarded reader below sees a
-        // container with an EMPTY member list — and every doc that names
-        // one of its members becomes a finding whose remedy is to delete
-        // a perfectly correct sentence. Phase 669's walk hit exactly that
-        // on ten findings across `AwsLambdaHost`, the three
-        // `*KmsKeyResolver`s and the KMS artefact signers, all of which
-        // exist in source and are spelled right in the docs.
-        //
-        // Same posture the estate takes everywhere else: "I cannot read
-        // this" is reported as unknown, never as wrong. Dropping the
-        // container entirely puts its members in the lint's OUTSIDE
-        // bucket, where an unresolvable name already lives.
-        let unreadableTypes =
-            if Directory.Exists apiBaselineDir then
-                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
-                |> Seq.collect File.ReadAllLines
-                |> Seq.choose (rxGroups @"^(\S+)\s+# <members unavailable")
-                |> Seq.map (fun groups -> groups[1])
-                |> Set.ofSeq
-            else
-                Set.empty
-
-        // (full name, [member name, rendered member line]). Nested types
-        // keep their `+`, so the DU-case reader below finds `T+Case`.
-        let realTypes =
-            if Directory.Exists apiBaselineDir then
-                Directory.EnumerateFiles(apiBaselineDir, "*.approved.txt")
-                |> Seq.collect (fun f ->
-                    let lines =
-                        File.ReadAllLines f
-                        |> Array.filter (fun l -> l.Trim() <> "" && not (l.StartsWith "#"))
-
-                    lines
-                    |> Array.choose (rxGroups @"^(\S+) \((?:class|interface|struct|enum|delegate)\)$")
-                    |> Array.filter (fun groups -> not (unreadableTypes.Contains groups[1]))
-                    |> Array.map (fun groups ->
-                        let full = groups[1]
-                        let prefix = full + "."
-
-                        let members =
-                            lines
-                            |> Array.filter (fun l -> l.StartsWith prefix)
-                            |> Array.map (fun l ->
-                                let rest = l.Substring prefix.Length
-                                let cut = rest.IndexOfAny [| '('; ' ' |]
-                                (if cut >= 0 then rest.Substring(0, cut) else rest), rest)
-                            |> List.ofArray
-
-                        full, members))
-                |> List.ofSeq
-            else
-                []
-
-        let realFullNames = realTypes |> List.map fst |> Set.ofList
-
-        // An F# `module X` holding a `type X` renders as BOTH `A.X` and
-        // `A.X+X`. That is not two competing types — it is a container and
-        // the thing inside it, and a doc writing `X` after `open A` means
-        // the latter. Left uncollapsed it reads as ambiguous, and the
-        // whole family of interfaces whose module shares their name
-        // (`IVectorStore`, `IRetrievalPipeline`, `IRetrievalTracer`, …)
-        // drops silently out of the comparison. Found by the
-        // demonstrated-red probe rather than by reading the code, which is
-        // what that discipline is for: the check was green on a
-        // deliberately staled signature.
-        let realByName =
-            realTypes
-            |> List.groupBy (fst >> simpleNameOf)
-            |> List.map (fun (name, candidates) ->
-                let fulls = candidates |> List.map fst |> Set.ofList
-
-                let collapsed =
-                    candidates
-                    |> List.filter (fun (full, _) -> not (fulls.Contains(full + "+" + name)))
-
-                name, (if collapsed.IsEmpty then candidates else collapsed))
-            |> Map.ofList
-
-        // A simple name the SURFACE uses for a BCL type is not evidence of
-        // a ToolUp type of that name — see the soundness filters above.
-        let bclSimpleNames =
-            realTypes
-            |> Seq.collect (fun (_, ms) -> ms |> Seq.map snd)
-            |> Seq.collect (rxMatches @"[A-Za-z_][A-Za-z0-9_.+`]*")
-            |> Seq.filter (fun v -> v.StartsWith "System." || v.StartsWith "Microsoft.")
-            |> Seq.map simpleNameOf
-            |> Set.ofSeq
-
-        let ownedSimpleNames =
-            Set.difference (realByName |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
-
-        let unambiguousTypeNames =
-            realByName |> Map.filter (fun _ v -> v.Length = 1) |> Map.keys |> Set.ofSeq
+        // ---- the shared api-baseline surface universe (hoisted, Phase 670) ----
+        let surface = apiSurface.Value
+        let realTypes = surface.RealTypes
+        let realFullNames = surface.RealFullNames
+        let realByName = surface.RealByName
+        let bclSimpleNames = surface.BclSimpleNames
+        let ownedSimpleNames = surface.OwnedSimpleNames
+        let unambiguousTypeNames = surface.UnambiguousTypeNames
 
         // The public SDK type names a DOC signature mentions. A trailing
         // `//` comment is cut first: `Kind: HealthKind  // Liveness |
@@ -1421,156 +1684,11 @@ let main args =
                 | _ -> [])
 
         // ---- Phase 672: the name universe a fragment is held to ----
-        //
-        // Same `api-baselines/` reading as 668 above, re-keyed for the
-        // question this arm asks. 668 resolves a DECLARED type name to one
-        // rendered type; this resolves a USED container name to the set of
-        // members a doc may name on it, which is a union rather than a
-        // choice — over-accepting only ever passes a doc, and the subset
-        // direction stays sound.
-        // Phase 669 — member names by full type name, so a container can
-        // fold in the cases of a DU nested inside it (see `surfaceContainers`).
-        let membersByFull =
-            realTypes |> List.map (fun (full, ms) -> full, ms |> List.map fst) |> Map.ofList
+        // Built once by `readApiSurface` above and shared with
+        // `VerifySourceCitations`; the reasoning for its shape lives there.
+        let surfaceContainers = surface.SurfaceContainers
+        let ownedContainerNames = surface.OwnedContainerNames
 
-        let nestedByParent =
-            realFullNames
-            |> Seq.choose (fun f ->
-                let i = f.LastIndexOf '+'
-
-                if i > 0 then
-                    Some(f.Substring(0, i), f.Substring(i + 1))
-                else
-                    None)
-            |> Seq.groupBy fst
-            |> Seq.map (fun (parent, xs) -> parent, xs |> Seq.map snd |> List.ofSeq)
-            |> Map.ofSeq
-
-        let realMemberNames =
-            realTypes
-            |> List.map (fun (f, ms) -> f, (ms |> List.map fst |> Set.ofList))
-            |> Map.ofList
-
-        // F# appends `Module` to a module that shares its name with a type
-        // in the same scope, so `RAGServerAppModule` IS what a doc calls
-        // `RAGServerApp`. The alias is ADDITIVE, never a replacement:
-        // `ServerModule` is a TYPE whose own name ends in `Module`, and
-        // replacing would file it under `Server` and lose it.
-        let docFacingNamesOf (full: string) =
-            let s = simpleNameOf full
-
-            if s.EndsWith "Module" && s.Length > 6 then
-                [ s; s.Substring(0, s.Length - 6) ]
-            else
-                [ s ]
-
-        let isDuCase (full: string) =
-            let i = full.LastIndexOf '+'
-
-            if i < 0 then
-                false
-            else
-                match realMemberNames.TryFind(full.Substring(0, i)) with
-                | Some ms -> ms.Contains("Is" + full.Substring(i + 1))
-                | None -> false
-
-        // doc-facing container name -> (distinct containers, member names)
-        let surfaceContainers =
-            let byName =
-                System.Collections.Generic.Dictionary<string, ResizeArray<string * (string * string) list>>()
-
-            for (full, members) in realTypes do
-                for key in docFacingNamesOf full do
-                    if not (byName.ContainsKey key) then
-                        byName[key] <- ResizeArray()
-
-                    byName[key].Add(full, members)
-
-            byName
-            |> Seq.map (fun kv ->
-                let usable =
-                    kv.Value |> Seq.filter (fun (full, _) -> not (isDuCase full)) |> List.ofSeq
-
-                // Two renderings can be ONE doc-facing container: a module
-                // and the type it shadows (`X` / `XModule`), and a module
-                // and the type nested inside it (`A.X` / `A.X+X`). Generic
-                // arity is a third such detail. Collapse only WITHIN this
-                // key's candidates — the global form of the first rule
-                // fuses `ToolUp.Platform.Server` with the unrelated
-                // `ToolUp.Platform.ServerModule`.
-                let dropArity (f: string) =
-                    System.Text.RegularExpressions.Regex.Replace(f, @"`\d+", "")
-
-                let here = usable |> List.map (fst >> dropArity) |> Set.ofList
-
-                let canonical (raw: string) =
-                    let full = dropArity raw
-
-                    let f =
-                        if
-                            full.EndsWith "Module"
-                            && full.Length > 6
-                            && here.Contains(full.Substring(0, full.Length - 6))
-                        then
-                            full.Substring(0, full.Length - 6)
-                        else
-                            full
-
-                    let nested = f + "+" + simpleNameOf f
-                    if here.Contains nested then nested else f
-
-                // A GENERIC member renders with its arity —
-                // ``ModuleQueryBus.ask`2``, ``Cmd.none`1`` — and a doc
-                // writes the bare name. Stripping it here is load-bearing
-                // rather than tidy: without it every generic function in
-                // the surface reads as absent, which is a false positive on
-                // exactly the composition helpers the docs teach most.
-                //
-                // Phase 669 — and the GRANDCHILDREN, because an F# DU
-                // declared inside a module is reached THROUGH the module.
-                // `StopWords.German` is how the language resolves a case of
-                // the `Language` DU declared in `module StopWords`, and it
-                // is how the compiling block on the same page spells it —
-                // but the case renders as `StopWords+Language+German`, two
-                // levels down, so a children-only fold reported a correct
-                // line as naming a member the surface does not have.
-                let members =
-                    usable
-                    |> List.collect (fun (full, ms) ->
-                        let children = nestedByParent.TryFind full |> Option.defaultValue []
-
-                        // Phase 669 — the CASES of a DU nested in this
-                        // container are reached through the container.
-                        // `StopWords.German` is how F# resolves a case of
-                        // the `Language` DU declared in `module StopWords`,
-                        // and how the compiling block on the same page
-                        // spells it — but the case renders as a property of
-                        // `StopWords+Language`, one level down, so a
-                        // children-only fold reported a correct line as
-                        // naming a member the surface does not have.
-                        //
-                        // Narrowed to DU CASES rather than every nested
-                        // member, by the `IsXxx` companion property the F#
-                        // compiler emits for each case. Folding a nested
-                        // record's FIELDS into its parent would widen the
-                        // accepted set for no rule the language has.
-                        let nestedDuCases =
-                            children
-                            |> List.collect (fun c ->
-                                match membersByFull.TryFind(full + "+" + c) with
-                                | None -> []
-                                | Some names -> names |> List.filter (fun n -> names |> List.contains ("Is" + n)))
-
-                        (ms |> List.map fst) @ children @ nestedDuCases)
-                    |> List.map (fun m -> m.Split('`')[0])
-                    |> Set.ofList
-
-                kv.Key, (usable |> List.map (fst >> canonical) |> List.distinct, members))
-            |> Seq.filter (fun (_, (fulls, _)) -> not fulls.IsEmpty)
-            |> Map.ofSeq
-
-        let ownedContainerNames =
-            Set.difference (surfaceContainers |> Map.keys |> Set.ofSeq) (Set.union bclSimpleNames docParityAliasNames)
 
         // ---- Phase 672: what a fragment says ----
         let stripDocLiterals (line: string) =
@@ -1637,40 +1755,11 @@ let main args =
             System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*(open|namespace|#r|#load)\b")
             || System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*(?:\[<[^\]]*>\]\s*)?module\b")
 
-        // Arm 1 — dotted, capitalized identifiers. The anchor is the first
-        // segment the surface owns, and every segment before it must be
-        // capitalized (so a lowercase value's property can never anchor).
-        // Phase 669 — anchor at the RIGHTMOST container in the chain, not
-        // the leftmost.
-        //
-        // A fully-qualified reference is namespace segments followed by a
-        // container followed by a member: in
-        // `ToolUp.Voice.Client.VoiceInput.registerPromptMic` the container
-        // is `VoiceInput` and everything before it is qualification.
-        // Scanning left-to-right stopped at `Client` — a real container in
-        // a different package — and then reported the NAMESPACE segment
-        // `VoiceInput` as a member `Client` does not have, on three pages
-        // whose prose was correct as written. Rightmost-first reads the
-        // chain the way F# does.
-        //
-        // The leading guard is unchanged and still load-bearing: a chain
-        // whose first segment is lower-case is a local value being
-        // dereferenced, not a container path, and must never anchor.
-        let anchorOf (chain: string) =
-            let segs = chain.Split('.')
+        // Arm 1 — dotted, capitalized identifiers, anchored by `anchorIn`
+        // (hoisted to module scope in Phase 670, where its rules are
+        // explained — they are the same rules a source comment is held to).
+        let anchorOf = anchorIn ownedContainerNames
 
-            if segs.Length < 2 || not (System.Char.IsUpper(segs[0].[0])) then
-                None
-            else
-                let rec go i =
-                    if i < 0 then
-                        None
-                    elif ownedContainerNames.Contains segs[i] then
-                        Some(segs[i], segs[i + 1])
-                    else
-                        go (i - 1)
-
-                go (segs.Length - 2)
 
         // Arm 2 — one brace region is one record construction.
         let labelRx =
@@ -1730,46 +1819,6 @@ let main args =
             |> List.filter (fun (_, (fulls, ms)) -> fulls.Length = 1 && ms.Count >= docFragmentMinRecordMatches)
             |> List.map (fun (name, (_, ms)) -> name, ms)
 
-        // A finding's value is the fix it suggests. `ServerConfig` renders
-        // ~150 members, so the whole set is unreadable and an alphabetical
-        // truncation of it reliably omits the answer — every `with*` helper
-        // sorts after every field. Rank by shared trigrams, tie-broken by
-        // shared prefix. Prefix alone was tried and measured against the
-        // demonstrated-red probe: for a `withStorage` -> `withBlobStorage`
-        // rename it offered `withScheduledJob` first, because an INFIX
-        // insertion is exactly the case a prefix measure cannot see, and
-        // insertion is a common rename shape.
-        let nearestTo (wanted: string) (members: Set<string>) =
-            let trigrams (s: string) =
-                let t = s.ToLowerInvariant()
-
-                if t.Length < 3 then
-                    Set.singleton t
-                else
-                    set [ for i in 0 .. t.Length - 3 -> t.Substring(i, 3) ]
-
-            let wantedGrams = trigrams wanted
-
-            let sharedPrefix (candidate: string) =
-                let n = min wanted.Length candidate.Length
-
-                let rec go i =
-                    if
-                        i < n
-                        && System.Char.ToLowerInvariant wanted[i] = System.Char.ToLowerInvariant candidate[i]
-                    then
-                        go (i + 1)
-                    else
-                        i
-
-                go 0
-
-            members
-            |> Set.toList
-            |> List.filter (fun m -> m <> ".ctor" && not (m.StartsWith "Is" && members.Contains(m.Substring 2)))
-            |> List.sortBy (fun m -> -(Set.intersect wantedGrams (trigrams m)).Count, -(sharedPrefix m), m)
-            |> List.truncate 10
-            |> String.concat ", "
 
         // (dotted candidates, resolvable, local, out-of-universe, ambiguous)
         let mutable fragDotted = 0
@@ -2532,6 +2581,593 @@ let main args =
                 baselineKeys.Count
 
         if updateBaseline then writeBaseline () else runChecks ())
+
+    // ---- Phase 670: comment-cited API resolution ----
+    //
+    // Everything above gates DOCS. A comment in `src/**/*.fs` is read with
+    // more trust than a doc page and checked by nothing at all: it ships
+    // inside the source it describes, so a reader — human or agent — takes
+    // it as the local authority and follows it without a second thought.
+    // Phase 660's burn-down surfaced the resulting class:
+    // `ServerApp.withEntityStore` named in two comments and a migration doc
+    // when the helper is `withEntity<'T>`; `ServerApp.withEntities` cited
+    // where nothing of that name has ever existed;
+    // `RedisNotificationChannelValidator.create` in three comments for a
+    // module called `RedisValidator`; and one pointer comment reading
+    // `UserSession.fs:342` copied verbatim into fourteen files while the
+    // binding it points at sat four hundred lines further down.
+    //
+    // The check is deliberately NARROWER than the sweep that preceded it,
+    // and the boundary is mechanical checkability rather than importance:
+    //
+    //   * ARM 1 — a `file.fs:NNN` pointer whose file RESOLVES. The claim is
+    //     that the file still has that many lines, and — where the same
+    //     comment names a binding as `File.member` — that the member's name
+    //     still occurs near the cited line. A citation naming a path this
+    //     repo does not hold is UNKNOWN, not wrong: a comment may legitimately
+    //     point into a consumer's tree. The one exception is a path that
+    //     begins `src/`, which can only mean this repo, so an unresolvable
+    //     one is a finding.
+    //
+    //   * ARM 2 — a BACKTICK-QUALIFIED `Container.member` citation, resolved
+    //     against the same api-baseline universe Phase 672 holds a fragment
+    //     to, through the same `anchorIn`. Backticks are the whole
+    //     false-positive budget: comment prose is full of dotted things
+    //     (`ctx.Request.Path`, a sentence's `e.g.`, a URL), and a bare-token
+    //     scan of it would need an allow-list, which this repo has twice
+    //     argued against. A name a writer chose to mark as code is a name the
+    //     writer is claiming exists.
+    //
+    // What stays OUT, on purpose: bare (un-backticked) API prose, a
+    // citation of a private helper the public surface does not render (the
+    // anchor rule makes those silent by construction — the lint speaks only
+    // about names the surface OWNS), whether a comment is TRUE, and whether
+    // a public member has a comment at all. That last one is Phase 261's,
+    // and is a different question: 261 owns PRESENCE, this owns ACCURACY.
+    // A noisy lint is a disabled lint, which is worth more than the extra
+    // findings a fuzzier rule would buy.
+    //
+    // ARM 1's CORPUS IS ZERO AT LANDING, and that is the intended end
+    // state rather than a reason to delete it. The sweep that shipped
+    // with this check converted all twenty surviving `file.fs:NNN`
+    // pointers to name or file citations, because a line number is the
+    // one citation shape that cannot be made durable — it rots on any
+    // edit above it and rots SILENTLY, since the file still exists and
+    // the line still has content. So the arm is prospective: it holds
+    // the first pointer someone writes to the two claims it can check,
+    // and the census line says how many exist. A zero there is the rule
+    // in CONTRIBUTING.md being kept, not a check with nothing to do.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifySourceCitations`
+    let sourceCitationWindow = 15
+
+    Target.create "VerifySourceCitations" (fun _ ->
+        let repoRoot = __SOURCE_DIRECTORY__
+        let toSlash (s: string) = s.Replace('\\', '/')
+
+        let rec walkSources (dir: string) = seq {
+            for d in Directory.EnumerateDirectories dir do
+                let name = Path.GetFileName d
+
+                if name <> "bin" && name <> "obj" && name <> "output" && name <> "node_modules" then
+                    yield! walkSources d
+
+            yield! Directory.EnumerateFiles(dir, "*.fs")
+        }
+
+        let sources =
+            walkSources (Path.Combine(repoRoot, "src"))
+            |> Seq.map (fun f -> toSlash (Path.GetRelativePath(repoRoot, f)), File.ReadAllLines f)
+            |> List.ofSeq
+
+        let byRelPath = sources |> Map.ofList
+
+        let byBaseName =
+            sources |> List.groupBy (fun (rel, _) -> Path.GetFileName rel) |> Map.ofList
+
+        // A line's COMMENT TEXT, or nothing. String literals are erased
+        // FIRST, in that order deliberately: a `"http://…"` or a
+        // `"(* not a comment *)"` in code must never be read as prose, and
+        // cutting at `//` before erasing strings gets exactly that wrong.
+        // `(*)` is the multiplication operator, not a block opener.
+        let commentLinesOf (lines: string[]) =
+            let out = ResizeArray<int * string>()
+            let mutable inBlock = false
+
+            lines
+            |> Array.iteri (fun i raw ->
+                let noStr =
+                    System.Text.RegularExpressions.Regex.Replace(
+                        System.Text.RegularExpressions.Regex.Replace(raw, @"""""""[\s\S]*?""""""", @""""""),
+                        @"""(\\.|[^""\\])*""",
+                        @""""""
+                    )
+
+                let sb = System.Text.StringBuilder()
+                let mutable c = 0
+                let mutable lineDone = false
+
+                while not lineDone && c < noStr.Length do
+                    if inBlock then
+                        if c + 1 < noStr.Length && noStr[c] = '*' && noStr[c + 1] = ')' then
+                            inBlock <- false
+                            c <- c + 2
+                        else
+                            sb.Append noStr[c] |> ignore
+                            c <- c + 1
+                    elif c + 1 < noStr.Length && noStr[c] = '/' && noStr[c + 1] = '/' then
+                        sb.Append(noStr.Substring(c + 2)) |> ignore
+                        lineDone <- true
+                    elif
+                        c + 1 < noStr.Length
+                        && noStr[c] = '('
+                        && noStr[c + 1] = '*'
+                        && not (c + 2 < noStr.Length && noStr[c + 2] = ')')
+                    then
+                        inBlock <- true
+                        c <- c + 2
+                    else
+                        c <- c + 1
+
+                if sb.Length > 0 then
+                    out.Add(i + 1, sb.ToString()))
+
+            List.ofSeq out
+
+        let pointerRx =
+            System.Text.RegularExpressions.Regex(
+                @"(?<path>[A-Za-z0-9_./\\+-]*[A-Za-z0-9_])\.fs:(?<from>\d{1,6})(?:\s*[-–—]\s*(?<to>\d{1,6}))?"
+            )
+
+        let namedBindingRx =
+            System.Text.RegularExpressions.Regex(@"`([A-Z][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)`")
+
+        let citationRx =
+            System.Text.RegularExpressions.Regex(@"`([A-Z][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)`")
+
+        let surfaceContainers = apiSurface.Value.SurfaceContainers
+        let anchorOf = anchorIn apiSurface.Value.OwnedContainerNames
+
+        // ---- what the REPO declares, over and above what it publishes ----
+        //
+        // Two indexes, and both exist to answer the same objection: the
+        // api-baseline universe renders a PUBLIC SURFACE, while a source
+        // comment is written by someone who can see the whole module and
+        // legitimately cites what the surface does not carry.
+        //
+        //   * `sourceDecls` — every name the tree declares, attributed to
+        //     its enclosing container by indentation. This is what makes a
+        //     `private` helper (`RAGCompose.makeVectorisationHook`), an
+        //     interface implementation reached through the implementing
+        //     type (`LocalFileStorage.List`), and a test-only binding
+        //     resolve instead of reading as absent. Attribution is to EVERY
+        //     enclosing container rather than the innermost, deliberately:
+        //     over-accepting only ever passes a comment, so the subset
+        //     direction stays sound, and an attribution slip then costs a
+        //     missed finding rather than a false one.
+        //
+        //   * `namespacePairs` — parent/child segment pairs, from the
+        //     baseline full names AND from every `namespace` and `open` in
+        //     the tree. A package path is not a member access, and without
+        //     this `Fable.SimpleJson` reads as "Fable has no member
+        //     SimpleJson" nineteen times over. Taking the pairs from `open`
+        //     is what makes the check know about VENDOR namespaces at all:
+        //     a repo that opens `Google.Api.Gax` has told us `Api.Gax` is a
+        //     path, and nothing else in the tree ever will.
+        //
+        // Both are unions with the surface, never replacements for it, and
+        // both are rebuilt from source on every run — there is no second
+        // baseline to drift, which this repo has now three times declined
+        // to introduce.
+        let containerHeadRx =
+            System.Text.RegularExpressions.Regex(
+                @"^(\s*)(?:\[<[^\]]*>\]\s*)*(module|type)\s+(?:rec\s+|private\s+|internal\s+|public\s+)*(?:\[<[^\]]*>\]\s*)*([A-Za-z_][A-Za-z0-9_.']*)"
+            )
+
+        let namespaceRx =
+            System.Text.RegularExpressions.Regex(
+                @"^\s*(?:namespace|open)\s+(?:rec\s+|global\.)?([A-Za-z_][A-Za-z0-9_.]*)"
+            )
+
+        // The modifier run is a REPEATED alternation rather than a fixed
+        // order, because F# permits several and the orders differ:
+        // `member inline this.addCellRange`, `member private this.IsLastOwner`,
+        // `static member val internal Instance`, `let mutable private state`.
+        // An ordered pattern captured the FIRST modifier as the name — so
+        // every extension member on `IGridApi` recorded as `inline`, and the
+        // four correct citations of them read as absent.
+        let declRx =
+            System.Text.RegularExpressions.Regex(
+                @"^(\s*)(?:\[<[^\]]*>\]\s*)*(?:let|and|member|abstract|static|override|default|val)\b(?:\s+(?:inline|mutable|rec|private|internal|public|val|member|static))*\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_']*)"
+            )
+
+        let caseOrFieldRx =
+            System.Text.RegularExpressions.Regex(@"^(\s*)(?:\|\s*)?([A-Z][A-Za-z0-9_']*)\s*(?::|of\b|$)")
+
+        let sourceDeclIndex, namespacePairIndex, sameUnitIndex =
+            let decls =
+                System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>()
+
+            let pairs = System.Collections.Generic.HashSet<string * string>()
+
+            // container simple name -> the files declaring it; and, per file,
+            // everything that file declares. The pair answers a THIRD
+            // question the two indexes above cannot: is the cited name at
+            // least in the same compilation unit as the container it is
+            // hung off? `BlobShareTokenStore.resolveSigningKey` names a
+            // `let private` helper beside `type BlobShareTokenStore`, and
+            // `EventStoreAuditLog.serialise` does the same — attributing
+            // those to their nearest enclosing MODULE, which is what
+            // indentation gives, files them under the wrong name and reads
+            // them as absent. They are neither members nor lies; a comment
+            // is prose, and "the helper next to that type" is how prose
+            // refers to one. Same unit is the honest bound: it is the scope
+            // a reader can actually check by opening the file.
+            let containerFiles =
+                System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<int>>()
+
+            let fileDecls = ResizeArray<System.Collections.Generic.HashSet<string>>()
+
+            let addDecl (container: string) (name: string) =
+                match decls.TryGetValue container with
+                | true, s -> s.Add name |> ignore
+                | _ ->
+                    let s = System.Collections.Generic.HashSet<string>()
+                    s.Add name |> ignore
+                    decls[container] <- s
+
+            let addPath (path: string) =
+                let segs = path.Split('.')
+
+                for i in 0 .. segs.Length - 2 do
+                    pairs.Add(segs[i], segs[i + 1]) |> ignore
+
+            for full, _ in apiSurface.Value.RealTypes do
+                addPath (full.Split('+')[0])
+
+            sources
+            |> List.iteri (fun fileIx (_, lines) ->
+                let here = System.Collections.Generic.HashSet<string>()
+                fileDecls.Add here
+
+                let addContainerFile (name: string) =
+                    match containerFiles.TryGetValue name with
+                    | true, s -> s.Add fileIx |> ignore
+                    | _ ->
+                        let s = System.Collections.Generic.HashSet<int>()
+                        s.Add fileIx |> ignore
+                        containerFiles[name] <- s
+
+                // (indent, container). A head with no `=` is a FILE-SCOPE
+                // declaration whose contents sit at the same indent as it
+                // does, so it is recorded at -1 or everything under it
+                // dedents straight back out of scope.
+                let stack = ResizeArray<int * string>()
+
+                for raw in lines do
+                    let cut = raw.IndexOf "//"
+                    let line = if cut >= 0 then raw.Substring(0, cut) else raw
+
+                    let ns = namespaceRx.Match line
+
+                    if ns.Success then
+                        addPath ns.Groups[1].Value
+
+                    let head = containerHeadRx.Match line
+
+                    if head.Success then
+                        let indent = head.Groups[1].Value.Length
+
+                        let scopeIndent =
+                            if line.Contains "=" || head.Groups[2].Value = "type" then
+                                indent
+                            else
+                                -1
+
+                        while stack.Count > 0 && fst stack[stack.Count - 1] >= scopeIndent && scopeIndent >= 0 do
+                            stack.RemoveAt(stack.Count - 1)
+
+                        let name = simpleNameOf (head.Groups[3].Value.TrimEnd '.')
+                        stack.Add(scopeIndent, name)
+                        addContainerFile name
+                        here.Add name |> ignore
+                    else
+                        let m = declRx.Match line
+                        let m2 = if m.Success then m else caseOrFieldRx.Match line
+
+                        if m2.Success then
+                            let indent = m2.Groups[1].Value.Length
+                            let name = m2.Groups[m2.Groups.Count - 1].Value
+                            here.Add name |> ignore
+
+                            while stack.Count > 0 && fst stack[stack.Count - 1] >= indent do
+                                stack.RemoveAt(stack.Count - 1)
+
+                            for _, container in stack do
+                                addDecl container name)
+
+            let sameUnit (container: string) (name: string) =
+                match containerFiles.TryGetValue container with
+                | true, ixs -> ixs |> Seq.exists (fun i -> fileDecls[i].Contains name)
+                | _ -> false
+
+            (decls |> Seq.map (fun kv -> kv.Key, Set.ofSeq kv.Value) |> Map.ofSeq), (pairs |> Set.ofSeq), sameUnit
+
+        // A dotted token in prose is not always a member access, and the
+        // three shapes below are the ones a comment corpus actually
+        // contains. Each is DERIVED — there is no list of blessed names.
+        //
+        //   * a FILE PATH (`Directory.Build.props`, `Client.js`,
+        //     `AIAgentEngine.fs.emitLatency`): a segment that is a source
+        //     extension this repo holds.
+        //   * an EXTERNAL namespace (`System.Diagnostics.ActivitySource`,
+        //     `Fable.Mocha`, `Google.Api.Gax`): a root the tree `open`s or
+        //     declares but the public surface never renders a type under.
+        //     That difference IS the definition of external, and it costs
+        //     nothing to keep current.
+        //   * a QUALIFICATION step (`Platform.Client.HostRouteContract`):
+        //     the "member" is itself a container the surface owns, so the
+        //     dot is a path separator rather than an access.
+        let citationFileExtensions =
+            set [
+                "config"
+                "css"
+                "csproj"
+                "dll"
+                "fs"
+                "fsi"
+                "fsproj"
+                "fsx"
+                "html"
+                "js"
+                "json"
+                "md"
+                "nupkg"
+                "props"
+                "ps1"
+                "sln"
+                "targets"
+                "ts"
+                "txt"
+                "xml"
+                "yaml"
+                "yml"
+            ]
+
+        let externalRoots =
+            let surfaceRoots =
+                apiSurface.Value.RealTypes
+                |> List.map (fun (full: string, _) -> (full.Split('+')[0]).Split('.')[0])
+                |> Set.ofList
+
+            let openedRoots =
+                sources
+                |> Seq.collect (fun (_, lines) -> lines)
+                |> Seq.choose (fun l ->
+                    let m = namespaceRx.Match l
+
+                    if m.Success then
+                        Some(m.Groups[1].Value.Split('.')[0])
+                    else
+                        None)
+                |> Set.ofSeq
+
+            Set.difference openedRoots surfaceRoots
+
+        let mutable pointersSeen = 0
+        let mutable pointersChecked = 0
+        let mutable pointersOutside = 0
+        let mutable pointersAmbiguous = 0
+        let mutable pointersNamed = 0
+        let mutable citationsSeen = 0
+        let mutable citationsResolved = 0
+        let mutable citationsOutside = 0
+        let mutable citationsAmbiguous = 0
+        let mutable citationsLocal = 0
+        let mutable citationsNamespace = 0
+
+        let findings =
+            sources
+            |> List.collect (fun (rel, lines) ->
+                commentLinesOf lines
+                |> List.collect (fun (ln, text) ->
+                    let where = sprintf "%s:%d" rel ln
+
+                    let pointerFindings =
+                        pointerRx.Matches text
+                        |> Seq.collect (fun m ->
+                            pointersSeen <- pointersSeen + 1
+                            let token = m.Groups["path"].Value
+                            let citedFrom = int m.Groups["from"].Value
+
+                            let citedTo =
+                                if m.Groups["to"].Success then
+                                    int m.Groups["to"].Value
+                                else
+                                    citedFrom
+
+                            let target =
+                                if token.Contains "/" || token.Contains "\\" then
+                                    let relPath = toSlash token + ".fs"
+
+                                    match byRelPath.TryFind relPath with
+                                    | Some ls -> Ok(relPath, ls)
+                                    | None when relPath.StartsWith "src/" -> Error(Some relPath)
+                                    | None ->
+                                        pointersOutside <- pointersOutside + 1
+                                        Error None
+                                else
+                                    match byBaseName.TryFind(token + ".fs") with
+                                    | Some [ (r, ls) ] -> Ok(r, ls)
+                                    | Some(_ :: _ :: _) ->
+                                        // Two files share this basename, so the
+                                        // citation resolves to neither. Reported
+                                        // as UNKNOWN, never as wrong — and
+                                        // counted only here, so the census
+                                        // classes stay disjoint and sum.
+                                        pointersAmbiguous <- pointersAmbiguous + 1
+                                        Error None
+                                    | _ ->
+                                        pointersOutside <- pointersOutside + 1
+                                        Error None
+
+                            match target with
+                            | Error(Some missing) -> [
+                                sprintf "%s: cites `%s:%d`, and this repo has no such file." where missing citedFrom
+                              ]
+                            | Error None -> []
+                            | Ok(targetRel, targetLines) ->
+                                pointersChecked <- pointersChecked + 1
+
+                                if targetLines.Length < citedTo then
+                                    [
+                                        sprintf
+                                            "%s: cites `%s:%d`, but that file has %d line(s)."
+                                            where
+                                            targetRel
+                                            citedTo
+                                            targetLines.Length
+                                    ]
+                                else
+                                    // …and where the SAME comment names the
+                                    // binding as `File.member`, the name must
+                                    // still be near the line cited for it.
+                                    let container = Path.GetFileNameWithoutExtension targetRel
+
+                                    let named =
+                                        namedBindingRx.Matches text
+                                        |> Seq.filter (fun b -> b.Groups[1].Value = container)
+                                        |> Seq.map (fun b -> b.Groups[2].Value)
+                                        |> Seq.distinct
+                                        |> List.ofSeq
+
+                                    named
+                                    |> List.collect (fun member' ->
+                                        pointersNamed <- pointersNamed + 1
+                                        let lo = max 1 (citedFrom - sourceCitationWindow)
+
+                                        let hi = min targetLines.Length (citedTo + sourceCitationWindow)
+
+                                        let inWindow =
+                                            seq { lo..hi }
+                                            |> Seq.exists (fun i ->
+                                                System.Text.RegularExpressions.Regex.IsMatch(
+                                                    targetLines[i - 1],
+                                                    @"\b"
+                                                    + System.Text.RegularExpressions.Regex.Escape member'
+                                                    + @"\b"
+                                                ))
+
+                                        if inWindow then
+                                            []
+                                        else
+                                            [
+                                                sprintf
+                                                    "%s: cites `%s.%s` at `%s:%d`, but `%s` does not occur within %d line(s) of there."
+                                                    where
+                                                    container
+                                                    member'
+                                                    targetRel
+                                                    citedFrom
+                                                    member'
+                                                    sourceCitationWindow
+                                            ]))
+                        |> List.ofSeq
+
+                    let citationFindings =
+                        citationRx.Matches text
+                        |> Seq.collect (fun m ->
+                            let chain = m.Groups[1].Value
+                            citationsSeen <- citationsSeen + 1
+
+                            let segs = chain.Split('.')
+
+                            if
+                                segs |> Array.exists citationFileExtensions.Contains
+                                || externalRoots.Contains segs[0]
+                            then
+                                citationsOutside <- citationsOutside + 1
+                                []
+                            else
+                                match anchorOf chain with
+                                | None ->
+                                    citationsOutside <- citationsOutside + 1
+                                    []
+                                | Some(root, memberName) ->
+                                    let fulls, members = surfaceContainers |> Map.find root
+
+                                    let declaredLocally =
+                                        (sourceDeclIndex.TryFind root
+                                         |> Option.map (Set.contains memberName)
+                                         |> Option.defaultValue false)
+                                        || sameUnitIndex root memberName
+
+                                    if fulls.Length > 1 then
+                                        citationsAmbiguous <- citationsAmbiguous + 1
+                                        []
+                                    elif members.Contains memberName then
+                                        citationsResolved <- citationsResolved + 1
+                                        []
+                                    elif
+                                        namespacePairIndex.Contains(root, memberName)
+                                        || apiSurface.Value.OwnedContainerNames.Contains memberName
+                                    then
+                                        citationsNamespace <- citationsNamespace + 1
+                                        []
+                                    elif declaredLocally then
+                                        citationsLocal <- citationsLocal + 1
+                                        []
+                                    else
+                                        [
+                                            sprintf
+                                                "%s: `%s` — %s has no member `%s`.\n      nearest: %s"
+                                                where
+                                                chain
+                                                root
+                                                memberName
+                                                (nearestTo memberName members)
+                                        ])
+                        |> List.ofSeq
+
+                    pointerFindings @ citationFindings))
+
+        Trace.tracefn ""
+        Trace.tracefn "VerifySourceCitations summary:"
+        Trace.tracefn "  source files    : %d (src/**/*.fs)" sources.Length
+
+        Trace.tracefn
+            "  line pointers   : %d seen — %d checked, %d named a binding, %d outside, %d ambiguous"
+            pointersSeen
+            pointersChecked
+            pointersNamed
+            pointersOutside
+            pointersAmbiguous
+
+        Trace.tracefn
+            "  API citations   : %d backticked — %d on the surface, %d declared in-tree, %d namespace path(s), %d outside, %d ambiguous"
+            citationsSeen
+            citationsResolved
+            citationsLocal
+            citationsNamespace
+            citationsOutside
+            citationsAmbiguous
+
+        if not findings.IsEmpty then
+            Trace.tracefn ""
+
+            for f in findings do
+                Trace.traceError ("    " + f)
+
+            failwithf
+                "VerifySourceCitations: %d comment(s) in src/**/*.fs cite something that is not there. Fix the citation against the current surface (api-baselines/<assembly>.approved.txt renders it). Prefer citing an API BY NAME over a bare `file.fs:NNN` pointer — a name is checkable and a line number rots the moment anything above it moves; where the pointer adds nothing a name cannot, delete it. See CONTRIBUTING.md, \"Citing APIs in comments\"."
+                findings.Length
+
+        Trace.tracefn ""
+
+        Trace.tracefn
+            "VerifySourceCitations: OK — %d pointer(s) and %d API citation(s) resolve."
+            pointersChecked
+            citationsResolved)
 
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->

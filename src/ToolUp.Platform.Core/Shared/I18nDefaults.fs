@@ -22,7 +22,7 @@ module ToolUp.Platform.I18nDefaults
 //     fallback path.
 //
 // Apps that need additional locales register their own translations
-// on top of these via `ServerApp.withTranslations` (server) or by
+// on top of these by merging into `sdkTranslations` (server) or by
 // merging into the client `LocaleProvider` (client).
 
 let private withLocales (pairs: (LocaleCode * string) list) = pairs |> Map.ofList

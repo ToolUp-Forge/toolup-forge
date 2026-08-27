@@ -12,7 +12,7 @@ open ToolUp.AI.Client.PlatformAIKeysAdminUI
 // from Phase 70's deferred-task body: list providers → set platform
 // key → verify hasKey → set team key → verify team-scope reflection.
 //
-// Why Fable-side and not .NET Expecto? `PlatformAIKeysAdminUI.fs:67`
+// Why Fable-side and not .NET Expecto? `PlatformAIKeysAdminUI.fs`
 // declares a module-level `let private api = Api.makeProxy<…>`. F#
 // initialises module-level bindings eagerly via the static
 // constructor on first member access. ToolUp.Remoting's reflection-

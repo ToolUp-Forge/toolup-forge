@@ -275,7 +275,7 @@ let withUrlContentFetcher = KnowledgeBase.ServerBulkImport.withUrlContentFetcher
 ///
 /// Call this once from the consumer's composition root *before*
 /// `RAGServerApp.run`, passing the list of containers the deployment
-/// manages (typically `ITeamStore.ListAll` results plus any `_platform`
+/// manages (typically `ITeamStore.ListTeams` results plus any `_platform`
 /// / `_deployment` containers the consumer uses). Stuck documents are
 /// marked Failed with a clear remediation reason so the KB UI surfaces a
 /// badge and the user can re-upload. Defined in `Server/Recovery.fs`.

@@ -177,6 +177,42 @@ Highlights:
   interface should have a contract test pack that companion
   implementations can run against themselves.
 
+### Citing APIs in comments
+
+A comment ships inside the code it describes, so a reader — human or AI
+assistant — takes it as the local authority and follows it without a
+second thought. That makes a stale citation in source more expensive
+than a stale one in the docs, and it is why
+`dotnet run --project Build.fsproj -- VerifySourceCitations` checks
+every one it mechanically can.
+
+Two rules, and the gate enforces both:
+
+- **Cite an API by NAME, in backticks: `` `Container.member` ``.** A
+  name is checkable — the gate resolves it against the rendered public
+  surface in `api-baselines/`, against everything the tree declares, and
+  against the namespaces it opens. Backticks are the claim: a
+  backticked `Container.member` asserts that it exists *today*. A name
+  that has been renamed, retired, or has not shipped yet is written in
+  ordinary prose without them ("the legacy setApiOrigin seam", "a future
+  ServerApp.withForms builder"), so the sentence still teaches the
+  history without asserting the API.
+
+- **Do not point at a line number.** `Foo.fs:342` rots the moment
+  anything above line 342 moves, and it rots silently: the file still
+  exists, the line still has content, and the comment now sends the
+  reader somewhere arbitrary. One such pointer was copied verbatim into
+  fourteen files while the binding it named drifted four hundred lines
+  down. Name the binding instead; cite the file alone (`Foo.fs`) when
+  the file is the useful unit. The gate holds any surviving
+  `file.fs:NNN` pointer to two claims — the file must still be that
+  long, and where the same comment names the binding as
+  `` `Foo.member` ``, that name must still occur near the cited line.
+
+Neither rule asks for more comments. The house style is still to write
+one only when the *why* is non-obvious; these say what a comment must
+be true about once you have written it.
+
 ## Security-affecting changes
 
 The SDK publishes a versioned, evidence-cited statement of what it

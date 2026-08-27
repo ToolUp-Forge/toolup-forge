@@ -14,8 +14,8 @@ type PrefetchStatus<'a> =
 
 /// `Prefetch<'a>` — wraps an async-loaded value with explicit lifecycle.
 /// Codifies the "load N config sources at startup, fire one re-init when
-/// the last one resolves" pattern observed at SDK.Client.fs:487-505 (boot)
-/// and :772-808 (team switch fan-in).
+/// the last one resolves" pattern `SDK.Client` uses at boot
+/// and on team-switch fan-in.
 ///
 /// Replaces the manual `IsConfigsPending` / `IsFlagsPending` bookkeeping
 /// fields with a single typed shape — combine with `Prefetch.onAllReady`

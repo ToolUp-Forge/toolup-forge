@@ -42,7 +42,7 @@ module DataSourceCredentialUIRegistry =
     let setHandlers (entries: (string * DataSourceCredentialHandler) list) : unit = handlers <- entries |> Map.ofList
 
     /// Snapshot of the cached map — used by `Client.run` validators
-    /// and `ClientRequestSeam.snapshot` to surface what's wired.
+    /// to surface what is wired.
     let snapshot () : (string * DataSourceCredentialHandler) list = handlers |> Map.toList
 
     /// Look up the form for `kind`. `None` when no companion is

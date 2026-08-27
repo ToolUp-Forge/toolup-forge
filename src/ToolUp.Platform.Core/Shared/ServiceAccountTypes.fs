@@ -440,7 +440,7 @@ type MintedServiceAccountTokenView = {
     Token: ServiceAccountTokenView
 }
 
-/// Payload for `IServiceAccountApi.Create`. `ScopeId`, `CreatedBy`,
+/// Payload for `IServiceAccountApi.CreateAccount`. `ScopeId`, `CreatedBy`,
 /// `CreatedAt` and `Status` are resolved server-side from the request
 /// context — an admin chooses only the name and the authority.
 type CreateServiceAccountRequest = {

@@ -24,7 +24,7 @@ open ToolUp.Platform.ConfigValidation
 //     for this to produce HTTPS URLs. The warning is the lowest-
 //     friction prompt to set the env var explicitly.
 //   - `Warning`: the env var resolves to `localhost` / `127.0.0.1`
-//     while `ServerConfig.Mode` is non-Anonymous (production-shaped).
+//     while `ServerConfig.Surfaces` is non-Anonymous (production-shaped).
 //     Almost certainly a dev URL leaked into a production deploy.
 //
 // **Gating.** The validator only runs when at least one
