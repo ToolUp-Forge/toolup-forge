@@ -100,7 +100,7 @@
       pinned to 0.20.1 in a same-version repack. That is the exact defect
       Phases 647-651 left behind on 0.18.0; do not repeat it.
     -->
-    <Version>0.21.0</Version>
+    <Version>0.22.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
