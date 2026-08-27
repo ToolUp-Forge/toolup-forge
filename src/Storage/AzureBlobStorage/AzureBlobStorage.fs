@@ -133,8 +133,8 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             let! response = blob.GetPropertiesAsync() |> Async.AwaitTask
             return Ok(Some(response.Value.ETag.ToString()))
         with
-        | :? RequestFailedException as ex when ex.Status = 404 -> return Ok None
-        | ex -> return Error ex.Message
+        | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 -> return Ok None
+        | Unwrapped ex -> return Error ex.Message
     }
 
     interface IBlobStorage with
@@ -152,7 +152,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 use ms = new MemoryStream(content)
                 let! _ = blob.UploadAsync(ms, overwrite = true) |> Async.AwaitTask
                 return Ok(blob.Uri.ToString())
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -162,9 +162,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! response = blob.DownloadContentAsync() |> Async.AwaitTask
                 return Ok(response.Value.Content.ToArray())
             with
-            | :? RequestFailedException as ex when ex.Status = 404 ->
+            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -200,7 +200,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 // blob succeeds.
                 let! _ = blob.DeleteIfExistsAsync() |> Async.AwaitTask
                 return Ok()
-            with ex ->
+            with Unwrapped ex ->
                 return Error ex.Message
         }
 
@@ -262,9 +262,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                         ContentType = contentType
                     }
             with
-            | :? RequestFailedException as ex when ex.Status = 404 ->
+            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -286,9 +286,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let result = response.Value
                 return Ok(result.Content.ToArray(), result.Details.ETag.ToString())
             with
-            | :? RequestFailedException as ex when ex.Status = 404 ->
+            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | ex -> return Error ex.Message
+            | Unwrapped ex -> return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -307,12 +307,12 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! response = blob.UploadAsync(ms, options) |> Async.AwaitTask
                 return Ok(response.Value.ETag.ToString())
             with
-            | :? RequestFailedException as ex when ex.Status = 412 || ex.Status = 409 ->
+            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 412 || ex.Status = 409 ->
                 match! currentETag key with
                 | Ok current -> return Error(ETagMismatch current)
                 | Error msg ->
                     return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
-            | ex -> return Error(ConditionalWriteFailure ex.Message)
+            | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -345,7 +345,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                         blob.GenerateSasUri(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add ttl)
 
                     return Ok(uri.ToString())
-            with ex ->
+            with Unwrapped ex ->
                 return Error(SignedUrlRefusal.SigningFailed ex.Message)
         }
 

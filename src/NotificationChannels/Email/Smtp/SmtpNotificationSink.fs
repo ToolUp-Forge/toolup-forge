@@ -157,6 +157,22 @@ let private resolveFromAddress (settings: SmtpSettings) (_scopeId: string) : Res
 /// Map a vendor-neutral `EmailAddress` to MailKit's `MailboxAddress`.
 /// Phase 6f uses MimeKit at the wire boundary only — `EmailAddress`
 /// stays in the shared layer so a future SendGrid sink reuses it.
+/// Vendor exceptions can surface at the `with` handlers below wrapped
+/// in `AggregateException` — MailKit's connect/authenticate/disconnect
+/// calls are non-generic `Task` awaits, the highest-risk shape for the
+/// class the first armed cloud-parity run (2026-08-27) proved live in
+/// the AWS companions. A wrapped `SmtpCommandException` would lose the
+/// mechanical 4xx-transient / 5xx-permanent classification. Match
+/// through the wrapper: flatten and take the single inner exception a
+/// one-Task await carries; a bare exception passes through unchanged.
+let private (|Unwrapped|) (ex: exn) =
+    match ex with
+    | :? AggregateException as aggregate ->
+        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+        | Some inner -> inner
+        | None -> ex
+    | _ -> ex
+
 let private toMailbox (addr: EmailAddress) : MailboxAddress =
     let display = addr.DisplayName |> Option.defaultValue ""
     MailboxAddress(display, addr.Address)
@@ -248,7 +264,7 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
                                 // equivalent.
                                 return SinkResult.Delivered(Some message.MessageId)
                             with
-                            | :? SmtpCommandException as ex ->
+                            | Unwrapped(:? SmtpCommandException as ex) ->
                                 // SMTP error codes 4xx are transient
                                 // (mailbox temporarily unavailable,
                                 // service shutting down, exceeded
@@ -264,13 +280,13 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
                                     return SinkResult.TransientFailure(sprintf "SMTP %d: %s" code ex.Message)
                                 else
                                     return SinkResult.PermanentFailure(sprintf "SMTP %d: %s" code ex.Message)
-                            | :? System.Net.Sockets.SocketException as ex ->
+                            | Unwrapped(:? System.Net.Sockets.SocketException as ex) ->
                                 // Network-level failure: connection
                                 // refused, DNS lookup failed, TCP
                                 // reset. All transient — retry could
                                 // succeed.
                                 return SinkResult.TransientFailure(sprintf "SMTP socket: %s" ex.Message)
-                            | ex ->
+                            | Unwrapped ex ->
                                 // Any other exception (TLS handshake
                                 // failure, protocol parse error) is
                                 // also transient by default — the

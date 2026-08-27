@@ -37,6 +37,23 @@ module internal Constants =
     [<Literal>]
     let KeyIdPrefix = "aws-kms:v1:"
 
+    /// AWS SDK exceptions can surface at the `with` handlers below
+    /// wrapped in `AggregateException`, so a direct `:? NotFoundException`
+    /// (etc.) type test never fires — the class the first armed
+    /// cloud-parity run (2026-08-27) proved live in the AWS Secrets
+    /// Manager companion. A wrapped exception here would degrade the
+    /// KeyNotFound / KeyDestroyed (crypto-shred) classification to a
+    /// generic StorageFailure. Match through the wrapper: flatten and
+    /// take the single inner exception a one-Task await carries; a bare
+    /// exception passes through unchanged.
+    let (|Unwrapped|) (ex: exn) =
+        match ex with
+        | :? AggregateException as aggregate ->
+            match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+            | Some inner -> inner
+            | None -> ex
+        | _ -> ex
+
 /// AWS KMS-backed key resolver. Pass an `IAmazonKeyManagementService`
 /// (constructed by the deployment with its region + credentials) and the
 /// CMK id/ARN to mint data keys under. `cmkForScope` lets a multi-tenant
@@ -85,13 +102,13 @@ type AwsKmsKeyResolver(kms: IAmazonKeyManagementService, cmkForScope: StorageSco
                             Material = resp.Plaintext.ToArray()
                         }
                 with
-                | :? NotFoundException -> return Error(KeyNotFound keyId)
+                | Unwrapped(:? NotFoundException) -> return Error(KeyNotFound keyId)
                 // A disabled / pending-deletion / deleted CMK surfaces as
                 // KMSInvalidStateException or DisabledException — the data
                 // key is permanently unrecoverable (crypto-shred).
-                | :? KMSInvalidStateException -> return Error(KeyDestroyed keyId)
-                | :? DisabledException -> return Error(KeyDestroyed keyId)
-                | ex -> return Error(StorageFailure ex.Message)
+                | Unwrapped(:? KMSInvalidStateException) -> return Error(KeyDestroyed keyId)
+                | Unwrapped(:? DisabledException) -> return Error(KeyDestroyed keyId)
+                | Unwrapped ex -> return Error(StorageFailure ex.Message)
         }
 
 module AwsKmsKeyResolver =

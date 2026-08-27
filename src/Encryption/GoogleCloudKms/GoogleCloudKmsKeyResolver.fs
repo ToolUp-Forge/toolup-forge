@@ -75,7 +75,22 @@ module internal Constants =
 /// (`projects/p/locations/l/keyRings/r/cryptoKeys/k`).
 type GoogleCloudKmsKeyResolver(client: KeyManagementServiceClient, keyNameForScope: StorageScope -> string) =
 
+    // Vendor SDK exceptions can arrive here wrapped in
+    // `AggregateException` (the class the first armed cloud-parity run
+    // proved live in the AWS + GCS companions, 2026-08-27), which would
+    // degrade the KeyNotFound / KeyDestroyed (crypto-shred)
+    // classification to a generic StorageFailure — so unwrap before the
+    // type test: flatten and take the single inner exception a one-Task
+    // await carries; a bare exception passes through unchanged.
     let mapFailure (keyId: string) (ex: exn) : KeyResolutionError =
+        let ex =
+            match ex with
+            | :? AggregateException as aggregate ->
+                match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
+                | Some inner -> inner
+                | None -> ex
+            | _ -> ex
+
         match ex with
         | :? RpcException as rpc ->
             match rpc.StatusCode with
