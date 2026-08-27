@@ -1124,6 +1124,7 @@
         <Compile Include="InProcess\DisclosureExportWebhookTests.fs" />
         <!-- Phase 562 — taint-propagating disclosure + declassification. -->
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
+        <Compile Include="InProcess\MultiPartyDisclosureTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->

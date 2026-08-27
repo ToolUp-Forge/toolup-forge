@@ -29,12 +29,27 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // fact is audited (GP 6). An **empty** config (the default) skips the walk
 // entirely — the gate is byte-for-byte the Phase 525 gate (GP 11 / GP 13).
 //
+// **Phase 674 — multi-party conjunction.** When policies declare a
+// contributor scope, the taint verdict becomes a conjunction over the
+// contributing parties: the derivation path must satisfy EVERY one, and a
+// declassification routine clears only the parties that accepted it. One
+// party's consent therefore never launders another's data. Fail-closed —
+// absent or unevaluable acceptance denies — and inert when no policy
+// declares a scope, so a single-party deployment is byte-for-byte the
+// Phase 562 gate. The contributor scope is resolved from the composed
+// policy vocabulary keyed by the ref the STORED fact carries; no party
+// identity is ever read from the caller.
+//
 // **Audit (GP 6).** Every deny writes a `FactDisclosureDenied` event
 // (surface, fact id, metric, policy ref, principal — never the value); a
 // declassification-cleared disclosure writes a `FactDisclosureDeclassified`
-// event per crossing. Both ride the reserved `_facts` source module,
-// joining the assert / supersession trail in one queryable record.
-// Emission is best-effort: an audit-write failure never flips the verdict.
+// event per crossing; and — Phase 674.C — a disclosure carrying a
+// contributing party's data writes a `FactDisclosureAccessed` event. All
+// three carry the contributor scopes involved, so the per-party
+// projection (plan D4) is derivable from this one stream. They ride the
+// reserved `_facts` source module, joining the assert / supersession trail
+// in one queryable record. Emission is best-effort: an audit-write failure
+// never flips the verdict.
 //
 // GP 12: stateless between calls; identity by value; async at the
 // boundary; scope is the shard key.
@@ -120,6 +135,23 @@ type FactDisclosureGate
 
     let writeDeclassified (scopeId: string) (payload: FactDisclosureDeclassifiedEvent) : Async<unit> =
         writeEvent scopeId DisclosureEvents.DeclassifiedType (JsonSerializer.Serialize(payload, jsonOptions))
+
+    // Phase 674.C — the per-party access facet. Written only for a fact
+    // that actually carries a contributing party's data, so a deployment
+    // declaring no contributor scope never emits this row (GP 11 / GP 13).
+    let writeAccessed (scopeId: string) (payload: FactDisclosureAccessedEvent) : Async<unit> =
+        writeEvent scopeId DisclosureEvents.AccessedType (JsonSerializer.Serialize(payload, jsonOptions))
+
+    // Phase 674 — the contributing party of a fact's OWN registered policy.
+    // Resolved server-side from the composed vocabulary keyed by the ref the
+    // stored fact carries; nothing a caller supplies reaches this lookup.
+    let ownContributorScopes (fact: Fact option) : string list =
+        match fact with
+        | Some f ->
+            match f.Disclosure with
+            | Restricted policyRef -> DisclosureTaintConfig.scopeOf taintConfig policyRef |> Option.toList
+            | _ -> []
+        | None -> []
 
     // The Phase 525 base verdict over a fact's own disclosure classification,
     // plus its metric for the audit payload.
@@ -208,12 +240,41 @@ type FactDisclosureGate
                             | FactDisclosable, Some g ->
                                 let outcome = DisclosureTaint.analyze taintConfig g factId
 
+                                // Phase 674 — the conjunction: the path must
+                                // satisfy EVERY contributing party's policy.
+                                // A surviving party-scoped restriction denies
+                                // and the ref names the unsatisfied party
+                                // (never the counterparty's data); an
+                                // unscoped survivor keeps the Phase 562 ref,
+                                // so single-party verdicts are unchanged.
                                 match outcome.InheritedPolicyRef with
-                                | Some inheritedRef -> FactNotDisclosable inheritedRef, Some outcome
+                                | Some inheritedRef ->
+                                    let denyRef =
+                                        if List.isEmpty outcome.UnsatisfiedScopes then
+                                            inheritedRef
+                                        else
+                                            DisclosureContributorScope.unsatisfiedRef outcome.UnsatisfiedScopes
+
+                                    FactNotDisclosable denyRef, Some outcome
                                 | None -> FactDisclosable, Some outcome
                             | _ -> baseV, None
 
                     let finalVerdict, taintOutcome = verdict
+
+                    // Phase 674.C — the contribution facet on every audit
+                    // row. With a taint outcome it is the whole walked
+                    // lineage; without one (a directly-denied fact, or a
+                    // deployment with no taint config) it is the fact's own
+                    // registered policy — empty when no party is declared.
+                    let contributorScopes =
+                        match taintOutcome with
+                        | Some outcome -> outcome.ContributorScopes
+                        | None -> ownContributorScopes fact
+
+                    let unsatisfiedScopes =
+                        match taintOutcome with
+                        | Some outcome -> outcome.UnsatisfiedScopes
+                        | None -> []
 
                     match finalVerdict with
                     | FactNotDisclosable policyRef ->
@@ -226,6 +287,8 @@ type FactDisclosureGate
                                 Principal = principal
                                 Purpose = claimedPurpose
                                 TaxonomyVersion = taxonomyVersion
+                                ContributorScopes = contributorScopes
+                                UnsatisfiedScopes = unsatisfiedScopes
                             }
                     | FactDisclosable ->
                         // A disclosed fact whose derivation crossed a declared
@@ -243,8 +306,25 @@ type FactDisclosureGate
                                         Principal = principal
                                         Purpose = claimedPurpose
                                         TaxonomyVersion = taxonomyVersion
+                                        ContributorScopes = outcome.ContributorScopes
+                                        AcceptedScopes = crossing.AcceptedScopes
                                     }
                         | None -> ()
+
+                        // Phase 674.C — the per-party ACCESS row. Only when
+                        // a contributing party's data actually left, so a
+                        // party-free deployment emits nothing new (GP 11).
+                        if not (List.isEmpty contributorScopes) then
+                            do!
+                                writeAccessed scopeId {
+                                    Surface = FactEgressSurface.toString surface
+                                    FactId = factId
+                                    Metric = metric
+                                    ContributorScopes = contributorScopes
+                                    Principal = principal
+                                    Purpose = claimedPurpose
+                                    TaxonomyVersion = taxonomyVersion
+                                }
 
                     return factId, finalVerdict
                 })
