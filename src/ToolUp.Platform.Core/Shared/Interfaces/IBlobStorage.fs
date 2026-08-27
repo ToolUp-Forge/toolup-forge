@@ -88,12 +88,67 @@ type IBlobStorage =
     /// **Semantics (contract-tested across every implementation):**
     ///   - `offset < 0` or `length <= 0` → `Error` (invalid arguments).
     ///   - Missing blob → `Error` (parity with `Download`).
-    ///   - `offset >= size` → `Ok [||]` (past-EOF clamp; providers'
-    ///     416 responses map here, distinguished from not-found).
-    ///   - Otherwise the bytes `[offset, min(offset + length, size))` —
-    ///     the result may be SHORTER than `length` when the range runs
-    ///     off the end; concatenating consecutive ranges byte-equals
-    ///     the full `Download`.
+    ///   - **Fully past EOF** (`offset >= size`) → `Ok [||]` (past-EOF
+    ///     clamp; providers' 416 responses map here, distinguished
+    ///     from not-found).
+    ///   - **Partial overlap** (`offset < size < offset + length`) →
+    ///     `Ok` with the overlapping bytes ONLY — a result SHORTER
+    ///     than `length`. Never an error, never zero-padded to
+    ///     `length`, never a whole-blob read.
+    ///   - Otherwise the bytes `[offset, min(offset + length, size))`;
+    ///     concatenating consecutive ranges byte-equals the full
+    ///     `Download`.
+    ///
+    /// The two clauses meet at `offset = size`, which is the FIRST
+    /// fully-past offset and reads empty — the boundary an off-by-one
+    /// lands on, so it is pinned by its own contract case.
+    ///
+    /// **Why past-EOF is `Ok [||]` and not an error (Phase 733,
+    /// 2026-08-27 — decided, not inherited).** Every real object store
+    /// answers a fully-past range with HTTP **416 / range-not-
+    /// satisfiable**; only a local seek returns nothing naturally. The
+    /// seam nonetheless keeps `Ok [||]` and requires each
+    /// implementation to NORMALISE. That is a promise implementations
+    /// owe callers, not a description of what the vendors do, and it
+    /// was weighed against following the clouds:
+    ///
+    ///   1. **Callers rely on it, and the deepest one fails SILENTLY
+    ///      without it.** `IContentRangeReader.ReadContentRange` and
+    ///      `IStreamingDatasetCodec.DecodeChunk` each re-state
+    ///      "past-EOF → `Ok [||]`" as their own documented semantics,
+    ///      and the streaming paging path treats ANY range-read error
+    ///      as "streaming unavailable" and falls back to materialising
+    ///      the whole blob. Turning end-of-stream into an error would
+    ///      raise nothing — it would quietly abandon the bounded read
+    ///      path this method exists to provide, on exactly the
+    ///      multi-GB vintages it was cut for.
+    ///   2. **There is no honest error to return.** The failure channel
+    ///      here is `string`. A typed `RangeNotSatisfiable` outcome
+    ///      would mean widening the return type of a Core public
+    ///      surface across every implementation, decorator and
+    ///      consumer, for a distinction no caller asked for.
+    ///   3. **The normalisation demonstrably holds.** The first armed
+    ///      cloud-parity run measured all three clouds red on this
+    ///      case, which read as a cross-cloud contract disagreement.
+    ///      It was not one: each companion already mapped 416 here and
+    ///      the mapping was unreachable — see the implementer's note.
+    ///
+    /// **Partial overlap needs no normalisation** — S3, Azure Blob and
+    /// GCS all clamp a range that starts inside the object and runs off
+    /// the end, answering 206 with the overlapping bytes. It is only
+    /// the fully-past case they refuse.
+    ///
+    /// **Implementer's note — the 416 catch must survive
+    /// `AggregateException`.** `Async.AwaitTask` can surface a faulted
+    /// task's `AggregateException` rather than the vendor exception
+    /// inside it, so a `catch` that type-tests the vendor exception
+    /// directly never fires and the 416 falls through to the catch-all
+    /// as an `Error`. The defect is invisible against a local or
+    /// in-memory store and reproduces only against a real backend,
+    /// which is why it survived to the first armed parity run in all
+    /// three companions at once. Unwrap before matching — the in-tree
+    /// cloud companions each carry a private `(|Unwrapped|)` active
+    /// pattern for exactly this.
     ///
     /// **No open-ended range.** "Offset to EOF" is deliberately not
     /// expressible — callers combine `GetMetadata` (`Size`) with a

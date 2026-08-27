@@ -242,6 +242,39 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             | Ok bytes -> Expect.isEmpty bytes "offset > size yields empty"
         }
 
+        // Phase 733 — the partial-overlap clause and the boundary it
+        // meets the fully-past clause at. The clouds clamp partial
+        // overlap natively (206 with the overlapping bytes) and refuse
+        // only the fully-past case, so the two clauses are answered by
+        // different backend paths; `offset = size` is where they meet
+        // and is exactly where an off-by-one would land.
+        testCaseAsync "DownloadRange partial overlap returns only the overlapping bytes"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            // Maximal partial overlap: one byte inside the object, the
+            // rest of the requested window past it.
+            match! store.DownloadRange(container, "r.bin", 99L, 64) with
+            | Error e -> failtestf "DownloadRange at the last byte failed: %s" e
+            | Ok bytes -> Expect.sequenceEqual bytes (Array.sub content 99 1) "the last byte only, not zero-padded"
+
+            // An exact fit is NOT a partial overlap — the window ends
+            // precisely at EOF, so the full `length` comes back.
+            match! store.DownloadRange(container, "r.bin", 60L, 40) with
+            | Error e -> failtestf "DownloadRange exact-fit to EOF failed: %s" e
+            | Ok bytes ->
+                Expect.sequenceEqual bytes (Array.sub content 60 40) "an exact fit ending at EOF reads full length"
+
+            // One byte on from that fit is the FIRST fully-past offset.
+            match! store.DownloadRange(container, "r.bin", 100L, 40) with
+            | Error e -> failtestf "DownloadRange at the clause boundary failed: %s" e
+            | Ok bytes -> Expect.isEmpty bytes "offset = size is the first fully-past offset"
+        }
+
         testCaseAsync "DownloadRange concatenated ranges byte-equal the full download"
         <| async {
             let store = factory ()

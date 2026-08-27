@@ -4,6 +4,7 @@
 module ToolUp.OpenXml.Tests.Program
 
 open Expecto
+open ToolUp.OpenXml.Tests
 open ToolUp.OpenXml.Tests.InProcess
 open System.Reflection
 open ToolUp.Platform.Tests.Support
@@ -15,6 +16,7 @@ let private registeredTests =
         CustomPartTests.tests
         RevisionTests.tests
         KnowledgeBaseTests.tests
+        RoundTripFidelityTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
@@ -25,5 +27,12 @@ let private registeredTests =
 let allTests =
     TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 0 registeredTests
 
+/// Sequenced by default, for the reason `docs/platform/testing-
+/// conventions.md` records: Expecto replaces the console writers with a
+/// synchronized pair, and a parallel test writing through them can
+/// deadlock against the real console stream lock. This pack joins
+/// `VerifyAll` with Phase 206, so it inherits the same default every
+/// other pack runs under. `--parallel` overrides it.
 [<EntryPoint>]
-let main argv = runTestsWithCLIArgs [] argv allTests
+let main argv =
+    runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests

@@ -1,0 +1,5 @@
+entries 4
+w:sdt | section 1, block 3 | carried-opaque | block-level element outside the model's vocabulary; carried verbatim
+w:hyperlink | section 1, block 4 | dropped | hyperlink wrapper flattened to its text runs; the link target is not modelled
+w:bookmarkStart | section 1, block 4 | dropped | bookmark "a-bookmark" is not modelled
+w:drawing | section 1, block 4, run 3 | dropped | inline run content outside the model's vocabulary

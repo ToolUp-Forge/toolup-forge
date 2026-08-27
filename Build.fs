@@ -77,6 +77,15 @@ let config = {
             // remote arm is env-gated and reports Pending on a
             // credential-free checkout.
             TestPack.create "DataSources" "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj"
+            // Phase 206 — the ToolUp.OpenXml structural / revision
+            // layer: the import + emit + tracked-changes surfaces, and
+            // the round-trip fidelity corpus that pins six `.docx`
+            // fixtures against committed DocModel / OpenXml-element /
+            // residue goldens. The pack existed before this phase but
+            // was never reached by `VerifyAll`, so a fidelity
+            // regression could land green. No env gating; the fixtures
+            // are built in-process.
+            TestPack.create "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj"
         ]
 }
 

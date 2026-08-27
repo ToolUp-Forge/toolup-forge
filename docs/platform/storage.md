@@ -48,6 +48,41 @@ The shipped cloud companions:
 
 Each cloud companion ships a matching `IConfigValidator` (`AwsS3EncryptionAtRestValidator`, etc.) that probes the bucket / container at preflight and emits a `Warning` if encryption-at-rest is not enabled at the cloud level.
 
+## Ranged reads — `DownloadRange`
+
+`DownloadRange(container, name, offset, length)` reads at most `length` bytes from `offset` without
+materialising the rest of the blob. Three clauses, and they are the same on every backend:
+
+| Case | Result |
+|---|---|
+| `offset < 0` or `length <= 0` | `Error` — invalid arguments |
+| Missing blob | `Error` — parity with `Download` |
+| **Fully past EOF** (`offset >= size`) | `Ok [||]` |
+| **Partial overlap** (`offset < size < offset + length`) | `Ok` with the overlapping bytes only — SHORTER than `length` |
+| Otherwise | the bytes `[offset, min(offset + length, size))` |
+
+A short read is normal, not an error: concatenating consecutive ranges byte-equals `Download`, and a
+chunked reader terminates when a read returns fewer bytes than it asked for. There is deliberately no
+open-ended "offset to EOF" form — pair `GetMetadata` (`Size`) with a capped-chunk loop.
+
+**The past-EOF clause is a normalisation, and worth knowing about if you also call a cloud SDK
+directly.** Every real object store answers a fully-past range with HTTP **416 /
+range-not-satisfiable**; the companions catch that and return `Ok [||]`, so the seam's promise holds
+everywhere. A consumer that reaches past this interface to the vendor SDK will see the 416 instead,
+and should not conclude the seam is lying to it. Partial overlap needs no such normalisation — S3,
+Azure Blob and GCS all clamp it natively and answer 206 with the overlapping bytes.
+
+The decision to normalise rather than surface the 416 — and the three arguments behind it, including
+the consumer that would have degraded *silently* the other way — is recorded in full on the
+`DownloadRange` doc-comment in `IBlobStorage`. If you implement `IBlobStorage` yourself, the
+`IBlobStorageContract` pack in `ToolUp.Platform.Tests` holds you to exactly these clauses; the shared
+`BlobStorage.downloadRangeViaDownload` fallback satisfies them if your store has no native range
+primitive (correct, but it downloads the whole blob).
+
+**Encryption caveat.** The `EncryptedBlobStorage` decorator refuses ranged reads — its envelope is
+whole-blob AES-GCM, so a mid-blob ciphertext range is undecryptable. Read encrypted content with
+`Download`, and treat the refusal as the signal to do so.
+
 ## Encryption at rest (application-level)
 
 The `EncryptedBlobStorage` decorator wraps any `IBlobStorage` and applies AES-GCM envelope encryption transparently. Useful in three scenarios:
