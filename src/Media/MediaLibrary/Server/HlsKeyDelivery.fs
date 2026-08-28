@@ -129,15 +129,17 @@ type MediaHlsKeyStore(secretStore: ISecretStore, logger: ILogger, options: Media
             logger.Warn(sprintf "[MediaLibrary] HLS key delete failed for %s: %s" (MediaId.value id) ex.Message)
     }
 
-    /// Record a granted key delivery (GP 6). Gated on
-    /// `MediaLibraryOptions.EmitAudit`, which until now had no consumer
-    /// in this companion.
+    /// Log a granted key delivery. Gated on
+    /// `MediaLibraryOptions.EmitAudit`.
     ///
-    /// This is the STRUCTURED-LOG half of the trail; denials go through
-    /// `IAuthAuditHook` and land as queryable `AuthorizationDenied`
-    /// rows. A queryable GRANT row would need a new `AuditEvent` case in
-    /// `ToolUp.Platform.Core` — a widening of the SDK's most central DU,
-    /// which is outside what this companion should reach for on its own.
+    /// This is the STRUCTURED-LOG half of the trail and Phase 739 KEPT
+    /// it rather than replacing it. The queryable half now exists —
+    /// `AuditEvent.MediaKeyDelivered`, emitted unconditionally by
+    /// `recordDelivery` below — and the two serve different readers: this
+    /// line is what an operator tailing stdout sees while a playback
+    /// problem is happening, the row is what a reviewer queries months
+    /// later. Deleting it would remove behaviour a deployment already
+    /// has, for no gain (GP 11); it costs nothing when the opt-in is off.
     member _.RecordDelivery(scopeContainer: string, id: MediaId, via: string) : unit =
         if options.EmitAudit then
             logger.Info(
@@ -351,6 +353,49 @@ let private recordDenial (ctx: HttpContext) (verdict: string) (viaSignature: boo
         with _ ->
             ()
 
+/// Phase 739 — emit the queryable GRANT row, the twin of the denial
+/// above. Best-effort and detached, exactly like `recordDenial`: a
+/// downed audit pipeline must not turn a successful key delivery into a
+/// failed one, and must not delay the response.
+///
+/// **Unconditional, not gated on `MediaLibraryOptions.EmitAudit`, and
+/// that is the deliberate half of this phase.** The asymmetry Phase 739
+/// exists to close is "refusals are queryable, grants are not"; gating
+/// the grant row on an opt-in the denial row does not respect would
+/// reproduce precisely that asymmetry inside any deployment that turned
+/// the opt-in off — and it would do so silently, at the moment the trail
+/// mattered. `EmitAudit` gates the STRUCTURED LOG, which is a volume
+/// knob; the security rows on this endpoint are both unconditional so
+/// the two halves are always present or both absent together.
+///
+/// **`container`, not the request's scope, is the row's scope id.** It
+/// is the container the key was actually resolved from, which on the
+/// signed route is the one bound into the token rather than any the
+/// caller holds — so the row lands in the trail of the scope that owns
+/// the media, which is the scope that asks who fetched its key.
+///
+/// A deployment composing no `IAuditLog` emits nothing and pays nothing
+/// (GP 13), like every other optional seam this endpoint reaches for.
+let private recordDelivery (ctx: HttpContext) (container: string) (id: MediaId) (via: string) =
+    match service<IAuditLog> ctx with
+    | None -> ()
+    | Some log ->
+        let subjectKind, subjectId = AuditSubject.sanitise (subjectOf ctx)
+
+        let payload: MediaKeyDeliveredPayload = {
+            MediaId = MediaId.value id
+            SubjectKind = subjectKind
+            SubjectId = subjectId
+            ScopeContainer = container
+            AdmissionRoute = via
+            At = DateTime.UtcNow
+        }
+
+        try
+            log.Record(container, MediaKeyDelivered payload) |> Async.Start
+        with _ ->
+            ()
+
 /// `GET /api/media/hls-key/{mediaId}` — the gated key endpoint.
 ///
 /// Admits on the SAME two credentials the media bytes themselves are
@@ -412,7 +457,17 @@ let keyHandler: HttpHandler =
                         ctx.SetStatusCode 404
                         return Some ctx
                     | Ok(Some key) ->
+                        // Both halves of the trail, at the one choke
+                        // point, AFTER the key resolved and before it
+                        // reaches the wire. The ordering is deliberate:
+                        // the act being recorded is the RELEASE of key
+                        // material, which is settled the moment the
+                        // resolve succeeds — a row written only after a
+                        // completed socket write would go missing on a
+                        // client that disconnected mid-transfer, i.e.
+                        // exactly the fetch a reviewer most wants to see.
                         store.RecordDelivery(container, id, via)
+                        recordDelivery ctx container id via
                         ctx.Response.Headers["Cache-Control"] <- StringValues "no-store"
                         ctx.Response.Headers["Pragma"] <- StringValues "no-cache"
                         ctx.Response.ContentType <- "application/octet-stream"

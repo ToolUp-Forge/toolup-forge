@@ -224,6 +224,27 @@ let private mediumEvents =
         // sits in the High table.
         "GrantConsentProposed"
         "HealthStateChanged"
+        // Phase 739 — a gated-HLS decryption key was handed over. Medium,
+        // and deliberately NOT High beside its 730 sibling
+        // `GrantRecorded`: that row is the moment authority on a governed
+        // module COMES INTO EXISTENCE, whereas this one is authority
+        // being EXERCISED — the gate admitted on a credential the
+        // deployment had already issued (a resolved scope, or a signed
+        // URL this origin minted). Its true neighbours are the rows
+        // already in this table for reads of protected material by an
+        // already-authorised principal: `ClassifiedFieldRead`,
+        // `ConversationExported`, `DiagnosticBundleAccessed`,
+        // `TenantDataExported`.
+        //
+        // Not Informational either, and that is the other half of the
+        // argument. The key IS the protection on segments that are cached
+        // at an edge and exported to disk, so "who obtained it" is a
+        // security fact rather than playback telemetry — and its
+        // per-viewing volume is exactly why it must not sit in High: a
+        // band whose baseline is "someone watched a video" is one
+        // operators stop reading, which would degrade the authority-change
+        // rows that share it.
+        "MediaKeyDelivered"
         "MemberRemoved"
         "MemberRoleChanged"
         "NotificationDeliveryFailed"

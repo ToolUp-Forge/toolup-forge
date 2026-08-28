@@ -94,6 +94,28 @@ module AuditSubject =
         | TeamMember(uid, tid) -> TeamAudit(uid, tid)
         | ClaimBearer claim -> ClaimAudit(claim.TokenId, claim.AttributedHandle, claim.ResourceKind, claim.ResourceId)
 
+    /// Project a `Subject` to the `(kind, id)` pair an audit ROW carries —
+    /// the only subject information that reaches a flat payload, and no
+    /// PII beyond the id. `None` for an anonymous session: the session id
+    /// is a cookie value, not an identity, and a row asserting it as one
+    /// would be worse than a row that says "anonymous".
+    ///
+    /// Phase 739 promoted this out of `AuthAuditHook`, where it was
+    /// `internal` and therefore unreachable from the companions. It is
+    /// here rather than duplicated because both halves of an
+    /// authorization trail must name a subject the SAME way or they do
+    /// not join: `AuthorizationDenied` and `MediaKeyDelivered` are the
+    /// refusal and the grant for one endpoint, and a reviewer asking "who
+    /// reached this media" has to be able to union them on one key. A
+    /// second spelling at the second site is the re-declared-literal
+    /// defect Phase 730 recorded — it drifts with no compile error.
+    let sanitise (subject: Subject) : string * string option =
+        match subject with
+        | AnonymousSession _ -> "anonymous", None
+        | AuthenticatedUser uid -> "user", Some uid
+        | TeamMember(uid, _) -> "team", Some uid
+        | ClaimBearer claim -> "claim", Some claim.TokenId
+
     /// Sentinel `userId` for `TeamAudit` cases derived from `ScopeId`
     /// alone — see `fromScopeId`. Sinks treat this value as "team event
     /// with unknown actor".
@@ -4359,6 +4381,62 @@ type EvidenceChainWalkedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 739 — the decryption key for a gated HLS media item was handed
+/// over. The grant twin of the `AuthorizationDenied` row Phase 471
+/// already emits at the same endpoint.
+///
+/// **Why this exists.** Phase 471 gated the key and audited every
+/// REFUSAL as a queryable row, leaving every GRANT as a structured log
+/// line. So a deployment could answer "who was turned away from this
+/// media" from the audit store and could not answer "who fetched the
+/// key for it" — the wrong half of the trail to have, because the key
+/// is the entire protection on segments that are, by design, cached at
+/// an edge and exported to disk. Once it is out, it is out; the row is
+/// the only record that it was (GP 6).
+///
+/// **Volume is bounded by construction.** An HLS client fetches the key
+/// once per playback session (or per key rotation, which is a
+/// re-transcode), never per segment. So this is one row per viewing, not
+/// one per second of video, and it is deliberately NOT deduplicated or
+/// sampled: two viewings of the same item by the same subject are two
+/// facts, and a trail that collapses them cannot answer when access
+/// happened. A deployment wanting quieter trails filters at the sink.
+///
+/// **Emitted after the key is resolved and before it is written to the
+/// wire**, at the same choke point as the denial row, so no caller has
+/// to remember it. That direction is deliberate: a released key that
+/// went unrecorded is a worse failure than a recorded key whose transfer
+/// the client then abandoned.
+type MediaKeyDeliveredPayload = {
+    /// The media item whose key was handed over — `MediaId.value`. The
+    /// axis "who fetched the key for media X" is queried on.
+    MediaId: string
+    /// Subject kind, from `AuditSubject.sanitise` — `"anonymous"` /
+    /// `"user"` / `"team"` / `"claim"`. The SAME projection
+    /// `AuthorizationDenied` carries, so the grant and refusal halves
+    /// join on one key rather than on two spellings.
+    SubjectKind: string
+    /// Subject id, or `None` for an anonymous session. Anonymous is a
+    /// legitimate outcome here rather than an anomaly: a signed-URL
+    /// fetch carries no session at all, which is the whole point of the
+    /// signed route — `AdmissionRoute` is what names the authority in
+    /// that case.
+    SubjectId: string option
+    /// The scope container the key was resolved FROM — always one the
+    /// gate derived (a resolved scope, or the container bound into the
+    /// signed token), never one the caller supplied (GP 4).
+    ScopeContainer: string
+    /// The admitting route, verbatim from `HlsKeyAccess.KeyAccessGranted`:
+    /// `"scope"` (an ordinary resolved session scope) or `"signature"` (a
+    /// valid, unexpired signed URL bound to this media id). Carried
+    /// unmapped, from the one place the gate decides it — a second
+    /// spelling here would be a translation table that can drift silently
+    /// from the decision it claims to report.
+    AdmissionRoute: string
+    /// When the key left the origin.
+    At: DateTime
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -5084,6 +5162,12 @@ type AuditEvent =
     /// nothing moved, and the row records who asked, what the link set
     /// was, and the digest that commits to it.
     | EvidenceChainWalked of EvidenceChainWalkedPayload
+    /// Phase 739 — the decryption key for a gated HLS media item was
+    /// delivered. The grant twin of the `AuthorizationDenied` row the
+    /// same endpoint already emits on a refusal, closing the asymmetry
+    /// Phase 471 shipped with: refusals were queryable, grants were a
+    /// log line.
+    | MediaKeyDelivered of MediaKeyDeliveredPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -5285,6 +5369,7 @@ module AuditEvent =
         | CertificateIssued _ -> "CertificateIssued"
         | DeploymentVerified _ -> "DeploymentVerified"
         | EvidenceChainWalked _ -> "EvidenceChainWalked"
+        | MediaKeyDelivered _ -> "MediaKeyDelivered"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

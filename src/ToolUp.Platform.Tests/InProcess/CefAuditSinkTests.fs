@@ -577,6 +577,26 @@ let private severityTests =
                 (severityBandOf (FileDeleted { UserId = "u1"; FileName = "f" }))
                 CefMedium
                 "a deletion is notable"
+
+            // Phase 739 — pins the band the phase argued for, in both
+            // directions. Medium rather than High because this row is
+            // authority EXERCISED under a credential the deployment
+            // already issued, not authority coming into existence; and
+            // strictly above Low because the key is the whole protection
+            // on segments that leave the origin.
+            Expect.equal
+                (severityBandOf (
+                    MediaKeyDelivered {
+                        MediaId = "m1"
+                        SubjectKind = "user"
+                        SubjectId = Some "u1"
+                        ScopeContainer = "team-a"
+                        AdmissionRoute = "scope"
+                        At = DateTime.UtcNow
+                    }
+                ))
+                CefMedium
+                "a delivered media key is access under existing authority, not an authority change"
         }
 
         test "an unclassified event falls to CefLow rather than failing" {
