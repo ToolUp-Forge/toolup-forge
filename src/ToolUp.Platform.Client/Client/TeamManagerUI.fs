@@ -120,6 +120,17 @@ type Model = {
     /// `Some (teamId, email)` = a confirmation dialog is open for
     /// that team's pending entry.
     RevokeByEmailConfirm: (string * string) option
+    /// Phase 547.B — recently-expired pending-by-email invites per
+    /// team, loaded alongside `PendingByEmail` on entry to the
+    /// `PendingInvites` view via
+    /// `ITeamInviteApi.ListRecentlyExpiredInvites` (30-day window,
+    /// read from the audit trail). `Map.tryFind` `None` = not loaded
+    /// yet; an empty list hides the section.
+    ExpiredInvites: Map<string, TeamInviteExpiredPayload list>
+    /// Phase 547.B — re-issue calls in flight, keyed
+    /// `"{teamId}|{email}"`. Disables that row's Re-issue button so a
+    /// double-click cannot fire two issues.
+    ReissueInFlight: Set<string>
     /// Phase 304 — ownership-transfer modal state. `None` = closed.
     TransferOwnershipModal: TransferOwnershipModalState option
     /// Resolved directory entries keyed by user id (id → display name +
@@ -174,6 +185,11 @@ type Msg =
     | CancelRevokeByEmail
     | ConfirmRevokeByEmail
     | RevokeByEmailDone of teamId: string * email: string * Result<unit, string>
+    // ─── Phase 547.B — expired-invite visibility + re-issue ───────
+    | LoadExpiredInvites of teamId: string
+    | ExpiredInvitesLoaded of teamId: string * TeamInviteExpiredPayload list
+    | ReissueExpiredInvite of teamId: string * email: string * role: TeamRole
+    | ExpiredInviteReissued of teamId: string * email: string * Result<unit, string>
     /// Reverse directory resolution (id → name/email) completed for the
     /// most recently loaded member set.
     | DirectoryResolved of Result<UserSummary list, string>
@@ -235,6 +251,8 @@ let init (ctx: ClientModuleContext) =
         PendingByEmail = Map.empty
         IssueByEmailModal = None
         RevokeByEmailConfirm = None
+        ExpiredInvites = Map.empty
+        ReissueInFlight = Set.empty
         TransferOwnershipModal = None
         Directory = Map.empty
     }
@@ -580,7 +598,9 @@ let update (msg: Msg) (model: Model) =
             model with
                 CurrentView = PendingInvites teamId
         },
-        Cmd.ofMsg (LoadPendingByEmail teamId)
+        // Phase 547.B — the expired list loads alongside the live one so
+        // the view renders both sections from one navigation.
+        Cmd.batch [ Cmd.ofMsg (LoadPendingByEmail teamId); Cmd.ofMsg (LoadExpiredInvites teamId) ]
 
     | LoadPendingByEmail teamId ->
         let onLoad (result: Result<(string * PendingInviteByEmail) list, string>) =
@@ -747,6 +767,57 @@ let update (msg: Msg) (model: Model) =
     | RevokeByEmailDone(teamId, _, Ok()) -> model, Cmd.ofMsg (LoadPendingByEmail teamId)
 
     | RevokeByEmailDone(_, _, Error e) -> { model with Error = Some e }, Cmd.none
+
+    // ─── Phase 547.B — expired-invite visibility + re-issue ───────
+
+    | LoadExpiredInvites teamId ->
+        let onLoad (result: Result<TeamInviteExpiredPayload list, string>) =
+            match result with
+            | Ok entries -> ExpiredInvitesLoaded(teamId, entries)
+            | Error e -> ApiError e
+
+        model, Cmd.OfRemoting.call inviteApi.ListRecentlyExpiredInvites teamId onLoad (fun e -> ApiError e.Message)
+
+    | ExpiredInvitesLoaded(teamId, entries) ->
+        {
+            model with
+                ExpiredInvites = model.ExpiredInvites |> Map.add teamId entries
+        },
+        Cmd.none
+
+    | ReissueExpiredInvite(teamId, email, role) ->
+        // One-click re-issue: same email, the original role, the default
+        // expiry (`ExpiresIn = None` → `TeamInviteTypes.DefaultExpiry`
+        // server-side). Reuses the existing issue path verbatim.
+        let request = {
+            TeamId = teamId
+            Email = email
+            Role = role
+            ExpiresIn = None
+        }
+
+        {
+            model with
+                ReissueInFlight = model.ReissueInFlight |> Set.add (sprintf "%s|%s" teamId email)
+        },
+        Cmd.OfRemoting.call
+            inviteApi.IssuePendingInviteByEmail
+            request
+            (fun r -> ExpiredInviteReissued(teamId, email, r))
+            (fun e -> ExpiredInviteReissued(teamId, email, Error e.Message))
+
+    | ExpiredInviteReissued(teamId, email, result) ->
+        let cleared = {
+            model with
+                ReissueInFlight = model.ReissueInFlight |> Set.remove (sprintf "%s|%s" teamId email)
+        }
+
+        match result with
+        | Ok() ->
+            // Both lists shift: the email gains a live pending entry (which
+            // also removes it from the server's expired projection).
+            cleared, Cmd.batch [ Cmd.ofMsg (LoadPendingByEmail teamId); Cmd.ofMsg (LoadExpiredInvites teamId) ]
+        | Error e -> { cleared with Error = Some e }, Cmd.none
 
     | DirectoryResolved(Ok summaries) ->
         let directory =
@@ -1311,6 +1382,59 @@ let private pendingEmailRow (teamId: string) (email: string) (entry: PendingInvi
         ]
     ]
 
+/// Phase 547.B — one recently-expired invite, rendered greyed with an
+/// **Expired** badge and a one-click **Re-issue** action. The re-issue
+/// re-calls `IssuePendingInviteByEmail` with the original role and the
+/// default expiry; the row then migrates back to the live list above.
+let private expiredInviteRow
+    (teamId: string)
+    (entry: TeamInviteExpiredPayload)
+    (inFlight: bool)
+    (dispatch: Msg -> unit)
+    =
+    Html.div [
+        prop.className
+            "flex items-center justify-between p-3 border border-border rounded-lg mb-2 bg-gray-50 opacity-70"
+        prop.children [
+            Html.div [
+                prop.className "flex flex-col"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center gap-2"
+                        prop.children [
+                            Html.span [ prop.className "font-medium text-muted"; prop.text entry.InviteeEmail ]
+                            Html.span [
+                                prop.className "text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
+                                prop.text "Expired"
+                            ]
+                        ]
+                    ]
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text (
+                            sprintf
+                                "%s · expired %s"
+                                (TeamRoles.displayName entry.Role)
+                                (entry.ExpiredAt.ToString "yyyy-MM-dd")
+                        )
+                    ]
+                ]
+            ]
+            Html.button [
+                prop.disabled inFlight
+                prop.className [
+                    "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
+                    if inFlight then
+                        "bg-gray-200 text-gray-500 border-border cursor-not-allowed"
+                    else
+                        "bg-white text-brand border-brand hover:bg-brand/10"
+                ]
+                prop.text (if inFlight then "Re-issuing…" else "Re-issue")
+                prop.onClick (fun _ -> dispatch (ReissueExpiredInvite(teamId, entry.InviteeEmail, entry.Role)))
+            ]
+        ]
+    ]
+
 let private emptyPendingEmailState =
     Html.p [
         prop.className "text-sm text-muted py-4"
@@ -1521,6 +1645,32 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
                         for email, entry in rows do
                             pendingEmailRow teamId email entry dispatch
                     ]
+
+                // Phase 547.B — recently-expired invites (30-day window,
+                // read from the audit trail). Rendered only when there is
+                // something to show — an empty history is not worth a
+                // heading. Each row is greyed with an Expired badge and a
+                // one-click Re-issue.
+                match model.ExpiredInvites |> Map.tryFind teamId with
+                | Some expired when not (List.isEmpty expired) ->
+                    Html.div [
+                        prop.className "mt-4"
+                        prop.children [
+                            Html.h4 [
+                                prop.className "text-sm font-medium text-muted mb-2"
+                                prop.text "Recently expired (last 30 days)"
+                            ]
+                            Html.div [
+                                for entry in expired do
+                                    let inFlight =
+                                        model.ReissueInFlight
+                                        |> Set.contains (sprintf "%s|%s" teamId entry.InviteeEmail)
+
+                                    expiredInviteRow teamId entry inFlight dispatch
+                            ]
+                        ]
+                    ]
+                | _ -> Html.none
             ]
 
             match model.IssueByEmailModal with

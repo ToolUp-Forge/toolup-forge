@@ -718,6 +718,67 @@ let teamInvitationApi
                                     return Ok()
                                 | Error err -> return Error(sprintf "Could not revoke pending invite: %A" err)
             }
+
+        // ─── Phase 547.B — recently-expired invite visibility ─────
+        //
+        // Reads the `TeamInviteExpired` audit trail the Phase 547.A
+        // store hook writes, so the previously-silent lapse is visible
+        // in the admin UI with a re-issue affordance. The window bound
+        // is on the payload's `ExpiredAt` (when the invite lapsed),
+        // not the row's `OccurredAt` (when a sweep noticed) — but the
+        // `GetAuditTrail` date range on `OccurredAt` is still a valid
+        // pre-filter, because a sweep can only record an expiry AFTER
+        // it happened, so every in-window `ExpiredAt` row has an
+        // in-window `OccurredAt`.
+        ListRecentlyExpiredInvites =
+            fun teamId -> async {
+                match! ensureManageMembers teamStore access.UserId teamId with
+                | Error msg -> return Error msg
+                | Ok() ->
+                    let now = DateTime.UtcNow
+                    let windowStart = now - TeamInviteTypes.ExpiredInviteWindow
+
+                    let! trail =
+                        auditLog.GetAuditTrail(scopeOf teamId, Some(windowStart, now), Some "TeamInviteExpired")
+
+                    let expired =
+                        trail
+                        |> List.choose (function
+                            // The scope filter already isolates the team;
+                            // the TeamId check is belt-and-braces against a
+                            // mis-scoped historical row.
+                            | TeamInviteExpired p when p.TeamId = teamId && p.ExpiredAt >= windowStart -> Some p
+                            | _ -> None)
+
+                    // Exclude emails that hold a live pending entry again —
+                    // an already-re-issued invite rendering as "Expired,
+                    // re-issue?" would invite a duplicate issue. Best-effort:
+                    // a store read failure degrades to showing the full
+                    // expired list rather than failing the whole view.
+                    let pendingStore =
+                        ctx.RequestServices.GetService(typeof<IPendingInviteStore>) :?> IPendingInviteStore
+
+                    let! live = pendingStore.ListAll()
+
+                    let liveEmails =
+                        match live with
+                        | Ok all ->
+                            all
+                            |> List.filter (fun (_, entry) -> entry.TeamId = teamId)
+                            |> List.map fst
+                            |> Set.ofList
+                        | Error _ -> Set.empty
+
+                    return
+                        expired
+                        |> List.filter (fun p -> not (Set.contains (p.InviteeEmail.ToLowerInvariant()) liveEmails))
+                        // Most-recent lapse first; one row per email (a
+                        // re-issued-then-lapsed-again email keeps only its
+                        // latest lapse).
+                        |> List.sortByDescending _.ExpiredAt
+                        |> List.distinctBy (fun p -> p.InviteeEmail.ToLowerInvariant())
+                        |> Ok
+            }
     }
 
 /// Helper used by `ScopeResolutionMiddleware` (and any other

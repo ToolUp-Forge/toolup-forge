@@ -1119,6 +1119,10 @@ let private registeredTests =
         // sibling `[<Tests>]` bindings in TeamInvitationTests.fs that were
         // never in `allTests`; wired in by the 2026-07-20 orphaned-pack audit.
         TeamInvitationTests.pendingInviteExpiryAuditTests
+        // Phase 547.B/C — expired-invite visibility (the API projection over
+        // the TeamInviteExpired trail) + the opt-in inviter notification.
+        TeamInvitationTests.expiredInviteVisibilityTests
+        TeamInvitationTests.inviteExpiryNotificationTests
         TeamInvitationTests.activeTeamPolicyTests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

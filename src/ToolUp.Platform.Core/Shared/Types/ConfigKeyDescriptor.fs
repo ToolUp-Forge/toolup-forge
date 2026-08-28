@@ -342,6 +342,10 @@ module Names =
     let acceptInviteByEmailWithoutDirectory =
         "TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY"
 
+    // --- Phase 547.C: inviter notification on pending-invite expiry ---
+    [<Literal>]
+    let notifyInviterOnInviteExpiry = "TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY"
+
     [<Literal>]
     let acceptPendingInviteStoreMultiInstance =
         "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE"
@@ -2313,6 +2317,15 @@ let all: ConfigKeyDescriptor list = [
         Category = "Notification channels"
     }
     {
+        EnvVar = Names.notifyInviterOnInviteExpiry
+        Description =
+            "Opt in to emailing the inviter when a pending-by-email team invite expires unconsumed (needs an Email transactional sink)."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
         EnvVar = Names.sendGridFrom
         Description = "Default From address for SendGrid-delivered notifications."
         Type = StringKey
@@ -2567,6 +2580,7 @@ let manifestBindable: Set<string> =
         Names.moduleBindingAllowUnbound
         Names.moduleFilter
         Names.notificationChannel
+        Names.notifyInviterOnInviteExpiry
         Names.oauthRedirectBase
         Names.oauthRefresher
         Names.oidcAudience

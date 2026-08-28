@@ -57,6 +57,51 @@ let registerTeamPermissionStores
         |> ignore
     | None -> ()
 
+    // Phase 547.C — opt-in inviter notification on pending-invite
+    // expiry. Wired only when `ServerConfig.NotifyInviterOnInviteExpiry`
+    // is `true` (default `false`, GP 13); the store guards each
+    // invocation, so a transport failure degrades to a `Warn` and never
+    // fails a sweep. Publishes a `TransactionalEmail` addressed to the
+    // inviter under the team scope — with no Email-kind
+    // `INotificationSink` composed the envelope reaches no sink
+    // (transactional kinds are SSE-filtered) and the publish is a no-op.
+    let inviteExpiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option =
+        if config.NotifyInviterOnInviteExpiry then
+            Some(fun expired -> async {
+                for email, entry in expired do
+                    let! teamName = async {
+                        match teamStoreOpt with
+                        | Some ts ->
+                            match! (ts :> ITeamStore).GetTeam entry.TeamId with
+                            | Some info -> return info.Name
+                            | None -> return entry.TeamId
+                        | None -> return entry.TeamId
+                    }
+
+                    let subject = sprintf "Your invitation to %s expired unconsumed" teamName
+
+                    let body =
+                        sprintf
+                            "Your invitation for %s to join %s as %s expired on %s without being used. \
+                             Re-issue it from the Pending Invites panel if it is still wanted."
+                            email
+                            teamName
+                            (TeamRoles.displayName entry.Role)
+                            (entry.ExpiresAt.ToString "yyyy-MM-dd")
+
+                    do!
+                        resolvedNotificationChannel.Publish(
+                            $"team-{entry.TeamId}",
+                            TransactionalEmail {
+                                RecipientUserIds = [ entry.InviterUserId ]
+                                Content = InlineEmail(subject, body, None)
+                                CorrelationId = Some $"invite-expiry:{entry.TeamId}:{email}:{entry.ExpiresAt.Ticks}"
+                            }
+                        )
+            })
+        else
+            None
+
     // Phase 5h — register `IPendingInviteStore`. Default
     // `InMemoryPendingInviteStore` over the resolved `IBlobStorage`
     // preserves the single-instance blob+lock+cache impl carried
@@ -68,11 +113,17 @@ let registerTeamPermissionStores
     // Phase 547 — pass the resolved `IAuditLog` so the default store emits
     // `TeamInviteExpired` under `team-{TeamId}` scope on every expiry sweep
     // (GP 6). A consumer-supplied override owns its own audit wiring; the
-    // default single-instance store gets the log via its 3-arg constructor.
+    // default single-instance store gets the log (and the Phase 547.C
+    // notifier, when opted in) via its 4-arg constructor.
     let resolvedPendingInviteStore: IPendingInviteStore =
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
-            ToolUp.Platform.Teams.InMemoryPendingInviteStore(resolvedBlobStorage, resolvedLogger, Some auditLog)
+            ToolUp.Platform.Teams.InMemoryPendingInviteStore(
+                resolvedBlobStorage,
+                resolvedLogger,
+                Some auditLog,
+                inviteExpiryNotifier
+            )
             :> IPendingInviteStore)
 
     services.AddSingleton<IPendingInviteStore>(resolvedPendingInviteStore) |> ignore

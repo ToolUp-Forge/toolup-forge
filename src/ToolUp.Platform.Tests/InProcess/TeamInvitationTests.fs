@@ -765,6 +765,269 @@ let pendingInviteExpiryAuditTests =
         }
     ]
 
+// ─── Phase 547.B — expired-invite visibility (ListRecentlyExpiredInvites) ──
+//
+// The API projection over the 547.A audit rows: a lapsed invite is listed
+// (with inviter / role / timestamps), an active one is not, a re-issued
+// one leaves the list, an out-of-window lapse is excluded, and the
+// Owner/Admin gate holds. This is the server half of the UI's
+// active / expired / re-issued state machine.
+
+/// Audit-log fake whose `GetAuditTrail` actually filters — the shared
+/// `CapturingAuditLog` returns `[]` unconditionally, which would make
+/// every visibility assertion below vacuous.
+type private TrailAuditLog() =
+    let recorded = ConcurrentQueue<string * AuditEvent * DateTime>()
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit, DateTime.UtcNow) }
+
+        member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
+            return
+                recorded
+                |> Seq.filter (fun (s, e, at) ->
+                    s = scopeId
+                    && (match eventType with
+                        | Some t -> AuditEvent.eventTypeName e = t
+                        | None -> true)
+                    && (match dateRange with
+                        | Some(fromAt, toAt) -> at >= fromAt && at <= toAt
+                        | None -> true))
+                |> Seq.sortByDescending (fun (_, _, at) -> at)
+                |> Seq.map (fun (_, e, _) -> e)
+                |> List.ofSeq
+        }
+
+/// Production-shaped per-request context for the expired-invite surface:
+/// the handler resolves `IPendingInviteStore` (live-entry exclusion) from
+/// `RequestServices`, mirroring the composition root's registration.
+let private ctxWithPendingStore (storage: IBlobStorage) (store: IPendingInviteStore) (userId: string) : HttpContext =
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(storage) |> ignore
+    services.AddSingleton<IPendingInviteStore>(store) |> ignore
+    let sp = services.BuildServiceProvider() :> IServiceProvider
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- sp
+    ctx.Items["ToolUp.UserId"] <- box userId
+    ctx
+
+[<Tests>]
+let expiredInviteVisibilityTests =
+    testList "ExpiredInviteVisibility" [
+        testCaseAsync "lapsed invite is listed; active is not; re-issue clears it (active/expired/re-issued)"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = TrailAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            // A live entry — must stay out of the expired list.
+            let! seeded =
+                store.Upsert(
+                    "active@x.com",
+                    {
+                        TeamId = teamId
+                        Role = Member
+                        ExpiresAt = DateTime.UtcNow.AddDays 5.0
+                        InviterUserId = "alice@example.com"
+                        IssuedAt = DateTime.UtcNow
+                    }
+                )
+
+            Expect.isOk seeded "live entry seeded"
+
+            // A lapsed entry — seeded silently, then dropped by the consume
+            // path, which emits the TeamInviteExpired row the API reads.
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                    storage
+                    "late@x.com"
+                    (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
+
+            let! consumed = store.TryConsumeForEmail "late@x.com"
+            Expect.equal consumed (Ok None) "lapsed entry consumed as absent"
+
+            let ctx = ctxWithPendingStore storage store "alice@example.com"
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! listed = api.ListRecentlyExpiredInvites teamId
+
+            match listed with
+            | Error e -> failtestf "expected Ok, got Error %s" e
+            | Ok rows ->
+                Expect.equal (List.length rows) 1 "exactly the lapsed invite is listed"
+                let row = rows.Head
+                Expect.equal row.InviteeEmail "late@x.com" "names the lapsed email"
+                Expect.equal row.InviterUserId "alice@example.com" "names the inviter"
+                Expect.equal row.Role Member "carries the role"
+
+            // Re-issue — the email holds a live pending entry again, so the
+            // expired projection excludes it (the UI's "re-issued" state).
+            let! reissued =
+                api.IssuePendingInviteByEmail {
+                    TeamId = teamId
+                    Email = "late@x.com"
+                    Role = Member
+                    ExpiresIn = None
+                }
+
+            Expect.isOk reissued "re-issue succeeds"
+
+            let! listedAfter = api.ListRecentlyExpiredInvites teamId
+
+            match listedAfter with
+            | Error e -> failtestf "expected Ok after re-issue, got Error %s" e
+            | Ok rows -> Expect.isEmpty rows "a re-issued email leaves the expired list"
+        }
+
+        testCaseAsync "a lapse older than the 30-day window is not listed"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = TrailAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            // Recorded NOW (inside the GetAuditTrail date pre-filter) with an
+            // out-of-window ExpiredAt — pins the payload-side window filter
+            // specifically, the case of a sweep noticing an old lapse late.
+            do!
+                (audit :> IAuditLog)
+                    .Record(
+                        $"team-{teamId}",
+                        TeamInviteExpired {
+                            TeamId = teamId
+                            InviteeEmail = "old@x.com"
+                            InviterUserId = "alice@example.com"
+                            Role = Member
+                            IssuedAt = DateTime.UtcNow.AddDays -45.0
+                            ExpiredAt = DateTime.UtcNow.AddDays -40.0
+                        }
+                    )
+
+            let ctx = ctxWithPendingStore storage store "alice@example.com"
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! listed = api.ListRecentlyExpiredInvites teamId
+            Expect.equal listed (Ok []) "out-of-window lapse excluded"
+        }
+
+        testCaseAsync "a Member caller is refused (Owner/Admin gate)"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = TrailAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let api = mkApi ts sts (audit :> IAuditLog) "bob@example.com"
+
+            let! listed = api.ListRecentlyExpiredInvites teamId
+            Expect.isError listed "Owner/Admin gate enforced on the expired-invite listing"
+        }
+    ]
+
+// ─── Phase 547.C — opt-in inviter notification on invite expiry ────────
+//
+// Composed through the real `ComposeTeamRuntime` registration so the test
+// pins the wiring, not a hand-built notifier: opted in, a sweep publishes
+// one `TransactionalEmail` to the inviter under the team scope; on the
+// default config the identical sweep publishes nothing (GP 13) while the
+// audit row still lands (547.A is independent of 547.C).
+
+type private CapturingChannel() =
+    let published = ConcurrentQueue<string * Notification>()
+    member _.Published = published |> Seq.toList
+
+    interface INotificationChannel with
+        member _.Publish(scopeId, notification) = async { published.Enqueue(scopeId, notification) }
+        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+        member _.Unsubscribe _ = async { return () }
+
+/// Run one lapsed-entry sweep through a store composed by
+/// `ComposeTeamRuntime.registerTeamPermissionStores` under `config`,
+/// returning what the channel saw and what the audit log recorded.
+let private sweepUnderConfig (config: ServerConfig) : Async<(string * Notification) list * (string * AuditEvent) list> = async {
+    do! CacheReset.invalidateAll ()
+    let storage = InMemoryBlobStorage() :> IBlobStorage
+    let channel = CapturingChannel()
+    let audit = CapturingAuditLog()
+    let services = ServiceCollection()
+
+    ComposeTeamRuntime.registerTeamPermissionStores
+        services
+        config
+        storage
+        (channel :> INotificationChannel)
+        silentLogger
+        (audit :> IAuditLog)
+        None
+    |> ignore
+
+    use sp = services.BuildServiceProvider()
+
+    let store = sp.GetService(typeof<IPendingInviteStore>) :?> IPendingInviteStore
+
+    do!
+        ToolUp.Platform.Teams.PendingInviteStore.upsert
+            storage
+            "lapsed@x.com"
+            (expiredEntry "teamN" "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
+
+    let! swept = store.SweepExpired()
+    Expect.equal swept (Ok 1) "sweep drops the lapsed entry"
+
+    return channel.Published, audit.Recorded
+}
+
+[<Tests>]
+let inviteExpiryNotificationTests =
+    testList "InviteExpiryNotification" [
+        testCaseAsync "opted in: sweep publishes one TransactionalEmail to the inviter under the team scope"
+        <| async {
+            let! published, _ =
+                sweepUnderConfig {
+                    cfg with
+                        NotifyInviterOnInviteExpiry = true
+                }
+
+            match published with
+            | [ scope, TransactionalEmail envelope ] ->
+                Expect.equal scope "team-teamN" "published under the team scope"
+                Expect.equal envelope.RecipientUserIds [ "alice@example.com" ] "addressed to the inviter"
+
+                match envelope.Content with
+                | InlineEmail(subject, body, _) ->
+                    Expect.stringContains subject "expired" "subject names the expiry"
+                    Expect.stringContains body "lapsed@x.com" "body names the invitee"
+                | TemplatedEmail _ -> failtest "expected an inline email body"
+            | other -> failtestf "expected exactly one TransactionalEmail publish, got %A" other
+        }
+
+        testCaseAsync "default config: the identical sweep publishes nothing (GP 13); the audit row still lands"
+        <| async {
+            let! published, recorded = sweepUnderConfig cfg
+
+            Expect.isEmpty published "no notification without the opt-in"
+
+            let expiredRows =
+                recorded
+                |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = "TeamInviteExpired")
+
+            Expect.equal (List.length expiredRows) 1 "the 547.A audit emission is independent of the 547.C opt-in"
+        }
+    ]
+
 // ─── First-team-becomes-active policy (onboarding fix) ─────────────────
 //
 // Every membership-confirming path (admin AddTeamMember, invite-link

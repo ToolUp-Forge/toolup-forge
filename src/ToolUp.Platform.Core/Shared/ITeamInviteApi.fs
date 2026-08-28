@@ -151,6 +151,18 @@ type ITeamInviteApi = {
     [<RequiresClaim "scope">]
     [<Audit "PermissionRevoked">]
     RevokePendingInviteByEmail: string -> Async<Result<unit, string>>
+
+    /// Phase 547.B — list recently-expired pending-by-email invites
+    /// for the supplied team, read from the audit trail
+    /// (`TeamInviteExpired` rows whose `ExpiredAt` falls inside
+    /// `TeamInviteTypes.ExpiredInviteWindow`). Most-recent first, one
+    /// row per email (the latest lapse wins), excluding any email
+    /// that has a live pending entry again (already re-issued).
+    /// Caller must hold `Owner`/`Admin` on the team. The admin UI
+    /// renders these greyed with a re-issue affordance so a lapsed
+    /// invite is visible rather than silently gone.
+    [<RequiresClaim "scope">]
+    ListRecentlyExpiredInvites: string -> Async<Result<TeamInviteExpiredPayload list, string>>
 }
 
 module TeamInviteApi =

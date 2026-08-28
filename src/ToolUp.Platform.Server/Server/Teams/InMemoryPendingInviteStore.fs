@@ -366,7 +366,13 @@ module PendingInviteStore =
 /// (raised as `PendingInvitesBlobCorrupt` by the load path) is surfaced
 /// at `Error` level rather than disappearing into a generic
 /// `StorageFailed` string.
-type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog option) =
+type InMemoryPendingInviteStore
+    (
+        storage: IBlobStorage,
+        logger: ILogger,
+        auditLog: IAuditLog option,
+        expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
+    ) =
 
     /// Phase 547 — per-expiry audit hook. Emits one `TeamInviteExpired`
     /// under the entry's `team-{TeamId}` scope for every entry a sweep
@@ -375,7 +381,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger, auditLog
     /// entry is already durably gone — so each emission is guarded and a
     /// failure degrades to a `Warn`. No audit log composed → no-op (GP 11
     /// / GP 13).
-    let onExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+    let auditExpired: (string * PendingInviteByEmail) list -> Async<unit> =
         match auditLog with
         | None -> fun _ -> async { return () }
         | Some log ->
@@ -403,6 +409,29 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger, auditLog
                         )
             }
 
+    /// Phase 547.C — the optional inviter-notification leg, run AFTER
+    /// audit emission so the durable trail row exists whatever the
+    /// notification transport does. Same best-effort posture as the
+    /// audit hook: a throwing notifier degrades to a `Warn`, never
+    /// fails the sweep. Not composed (`None` — the default, and the
+    /// only state reachable through the 2-/3-arg constructors) → the
+    /// hook is byte-for-byte the pre-547.C audit-only shape (GP 11 /
+    /// GP 13). `ComposeTeamRuntime` wires a real notifier only when
+    /// `ServerConfig.NotifyInviterOnInviteExpiry` is `true`.
+    let onExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+        match expiryNotifier with
+        | None -> auditExpired
+        | Some notify ->
+            fun expired -> async {
+                do! auditExpired expired
+
+                if not (List.isEmpty expired) then
+                    try
+                        do! notify expired
+                    with ex ->
+                        logger.Warn(sprintf "[PendingInviteStore] invite-expiry notification failed: %s" ex.Message)
+            }
+
     /// Map a load-path failure onto the interface's error shape. A
     /// `PendingInvitesBlobCorrupt` is logged at `Error` (operator must
     /// recover the quarantined blob); every other exception collapses to
@@ -422,11 +451,19 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger, auditLog
             PendingInviteStoreError.StorageFailed(sprintf "pending-invites blob was corrupt (quarantined to %s)" path)
         | _ -> PendingInviteStoreError.StorageFailed ex.Message
 
+    /// Phase 547 3-arg constructor — audit log but no expiry notifier
+    /// (the pre-547.C shape). Kept as an explicit secondary constructor
+    /// so the Phase 547.C notifier parameter reads as an additive ctor
+    /// in the public-API baseline rather than a retype of this one.
+    new(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog option) =
+        InMemoryPendingInviteStore(storage, logger, auditLog, None)
+
     /// Phase 5h backward-compatible 2-arg constructor — composes the store
     /// without an audit log, so the expiry sweep stays silent exactly as
-    /// before Phase 547 (GP 11). `ComposeTeamRuntime` uses the 3-arg form
-    /// to wire the resolved `IAuditLog` when one is present.
-    new(storage: IBlobStorage, logger: ILogger) = InMemoryPendingInviteStore(storage, logger, None)
+    /// before Phase 547 (GP 11). `ComposeTeamRuntime` uses the 4-arg form
+    /// to wire the resolved `IAuditLog` (and, when the deployment opts in,
+    /// the Phase 547.C expiry notifier).
+    new(storage: IBlobStorage, logger: ILogger) = InMemoryPendingInviteStore(storage, logger, None, None)
 
     interface IPendingInviteStore with
         member _.Upsert(email, pending) = async {

@@ -179,6 +179,15 @@ module TeamInviteTypes =
     /// every sign-in resolve (in-memory cached, 30-second TTL).
     [<Literal>]
     let PendingInvitesBlobPath = "_platform/pending-invites.json"
+
+    /// Phase 547.B — how far back
+    /// `ITeamInviteApi.ListRecentlyExpiredInvites` reads the audit
+    /// trail for `TeamInviteExpired` rows. 30 days: long enough that
+    /// an operator returning from leave still sees what lapsed, short
+    /// enough that the Pending Invites view stays a working surface
+    /// rather than an archive (the full history remains queryable via
+    /// `IAuditLog.GetAuditTrail`).
+    let ExpiredInviteWindow: TimeSpan = TimeSpan.FromDays 30.0
 // (Audit payload records live in `AuditTypes.fs` alongside the other
 // share-token audit payloads — appended at the end of that file. The
 // `AuditEvent` DU and its `eventTypeName` projection are extended in

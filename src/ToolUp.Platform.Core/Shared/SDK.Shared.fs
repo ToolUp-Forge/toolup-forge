@@ -3039,6 +3039,22 @@ type ServerConfig = {
     /// the warning.
     AcceptInviteByEmailWithoutDirectory: bool
 
+    /// Phase 547.C — opt-in inviter notification on pending-invite
+    /// expiry. When `true` AND a transactional email sink is composed
+    /// (`ServerApp.withTransactionalSink`, `Kind = Email`), every
+    /// pending-by-email invite that lapses unconsumed publishes a
+    /// `TransactionalEmail` to the inviter ("your invite to X expired
+    /// unconsumed — re-issue?") alongside the `TeamInviteExpired`
+    /// audit row. Best-effort: a failed publish logs at `Warn` and
+    /// never fails the sweep.
+    ///
+    /// Default `false` (GP 13) — a deployment that composes an email
+    /// sink for other purposes must not silently start emailing
+    /// inviters. With no email sink composed the published envelope
+    /// reaches no sink and the feature is a no-op. Set `true` (or
+    /// `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY=1`) to opt in.
+    NotifyInviterOnInviteExpiry: bool
+
     /// Phase 460 — explicit operator acknowledgement that the
     /// share-token HMAC signing key may be **ephemeral**: absent from
     /// `ISecretStore` at boot and therefore CSPRNG-generated and
@@ -3787,6 +3803,7 @@ module ServerConfig =
         AcceptInMemoryShareTokenRateLimiterInMultiInstance = false
         AcceptPendingInviteStoreInMultiInstance = false
         AcceptInviteByEmailWithoutDirectory = false
+        NotifyInviterOnInviteExpiry = false
         AcceptEphemeralShareTokenKey = false
         EphemeralStoreEvictionMinutes = 60.0
         MaxSseConnectionsPerScope = Some 10
@@ -4488,6 +4505,9 @@ module ServerConfig =
                 AcceptInMemoryOAuthStateInMultiInstance = envFlag ConfigKeys.Names.acceptInMemoryOAuthStateMultiInstance
                 AcceptPendingInviteStoreInMultiInstance = envFlag ConfigKeys.Names.acceptPendingInviteStoreMultiInstance
                 AcceptInviteByEmailWithoutDirectory = envFlag ConfigKeys.Names.acceptInviteByEmailWithoutDirectory
+                // Phase 547.C — inviter notification on invite expiry.
+                // Same GP 11 shape: unset ⇒ `false` (off).
+                NotifyInviterOnInviteExpiry = envFlag ConfigKeys.Names.notifyInviterOnInviteExpiry
                 // Phase 460 — the share-token ephemeral-key acknowledgement.
                 // Same GP 11 shape as the rest of the family: unset ⇒ `false`,
                 // and the provenance validator still refuses a production-shaped
