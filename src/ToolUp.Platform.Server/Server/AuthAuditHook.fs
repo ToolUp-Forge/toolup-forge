@@ -52,12 +52,14 @@ type private FloodEntry = {
 /// Sanitise a `Subject` to the `(kind, id)` pair the audit row carries —
 /// the only subject information that reaches the trail (no PII beyond the
 /// id). Mirrors `SurfaceEnforcementMiddleware`'s sanitisation.
-let internal sanitiseSubject (subject: Subject) : string * string option =
-    match subject with
-    | AnonymousSession _ -> "anonymous", None
-    | AuthenticatedUser uid -> "user", Some uid
-    | TeamMember(uid, _) -> "team", Some uid
-    | ClaimBearer claim -> "claim", Some claim.TokenId
+///
+/// Phase 739 moved the body to `AuditSubject.sanitise` in Core and left
+/// this as the delegating alias, so every existing caller reads
+/// unchanged. The move was forced by the grant twin: `MediaKeyDelivered`
+/// is emitted from a COMPANION assembly, which cannot see an `internal`
+/// binding here, and the two halves of one endpoint's trail must name a
+/// subject identically or a reviewer cannot union them.
+let internal sanitiseSubject (subject: Subject) : string * string option = AuditSubject.sanitise subject
 
 /// Stable dedup key for a denial — `(route, subject-id-or-anon)`. Anonymous
 /// subjects share one bucket per route (a flood of anonymous probes on one

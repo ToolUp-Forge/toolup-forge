@@ -977,6 +977,7 @@ ToolUp.Platform.AuditEvent.IsKnowledgeIngestionDropped : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeOriginalRetrievalDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeOriginalRetrieved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsKnowledgeScopeErased : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsMediaKeyDelivered : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberAdded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsMemberRoleChanged : System.Boolean { get }
@@ -1254,6 +1255,8 @@ ToolUp.Platform.AuditEvent+KnowledgeOriginalRetrieved (class)
 ToolUp.Platform.AuditEvent+KnowledgeOriginalRetrieved.Item : ToolUp.Platform.KnowledgeOriginalRetrievedPayload { get }
 ToolUp.Platform.AuditEvent+KnowledgeScopeErased (class)
 ToolUp.Platform.AuditEvent+KnowledgeScopeErased.Item : ToolUp.Platform.KnowledgeScopeErasedPayload { get }
+ToolUp.Platform.AuditEvent+MediaKeyDelivered (class)
+ToolUp.Platform.AuditEvent+MediaKeyDelivered.Item : ToolUp.Platform.MediaKeyDeliveredPayload { get }
 ToolUp.Platform.AuditEvent+MemberAdded (class)
 ToolUp.Platform.AuditEvent+MemberAdded.Item : ToolUp.Platform.MemberAddedPayload { get }
 ToolUp.Platform.AuditEvent+MemberRemoved (class)
@@ -1485,6 +1488,7 @@ ToolUp.Platform.AuditEvent+Tags.KnowledgeIngestionDropped : System.Int32 (litera
 ToolUp.Platform.AuditEvent+Tags.KnowledgeOriginalRetrievalDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeOriginalRetrieved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.KnowledgeScopeErased : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.MediaKeyDelivered : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberAdded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.MemberRoleChanged : System.Int32 (literal)
@@ -1746,6 +1750,7 @@ ToolUp.Platform.AuditSubjectModule.fromScopeId(System.String) : ToolUp.Platform.
 ToolUp.Platform.AuditSubjectModule.fromSubject(ToolUp.Platform.Subject) : ToolUp.Platform.AuditSubject
 ToolUp.Platform.AuditSubjectModule.kind(ToolUp.Platform.AuditSubject) : ToolUp.Platform.AuditSubjectKind
 ToolUp.Platform.AuditSubjectModule.kindString(ToolUp.Platform.AuditSubjectKind) : System.String
+ToolUp.Platform.AuditSubjectModule.sanitise(ToolUp.Platform.Subject) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.Auth (class)
 ToolUp.Platform.Auth+AuthenticatedUser (class)
 ToolUp.Platform.Auth+AuthenticatedUser..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
@@ -6867,6 +6872,14 @@ ToolUp.Platform.MaxLengthAttribute.MaxLength : System.Int32 { get }
 ToolUp.Platform.MaxValueAttribute (class)
 ToolUp.Platform.MaxValueAttribute..ctor(System.Double)
 ToolUp.Platform.MaxValueAttribute.MaxValue : System.Double { get }
+ToolUp.Platform.MediaKeyDeliveredPayload (class)
+ToolUp.Platform.MediaKeyDeliveredPayload..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.DateTime)
+ToolUp.Platform.MediaKeyDeliveredPayload.AdmissionRoute : System.String { get }
+ToolUp.Platform.MediaKeyDeliveredPayload.At : System.DateTime { get }
+ToolUp.Platform.MediaKeyDeliveredPayload.MediaId : System.String { get }
+ToolUp.Platform.MediaKeyDeliveredPayload.ScopeContainer : System.String { get }
+ToolUp.Platform.MediaKeyDeliveredPayload.SubjectId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.MediaKeyDeliveredPayload.SubjectKind : System.String { get }
 ToolUp.Platform.MediaLibraryMode (class)
 ToolUp.Platform.MediaLibraryMode.EnabledMediaLibrary : ToolUp.Platform.MediaLibraryMode { get }
 ToolUp.Platform.MediaLibraryMode.IsEnabledMediaLibrary : System.Boolean { get }
