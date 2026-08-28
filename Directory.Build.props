@@ -109,6 +109,15 @@
       rather than at compile time, because the consumer's warm NuGet cache
       keeps serving the narrower union. So the slot must advance, not be
       rewritten.
+
+      The same slot also carries Phase 741, which added two abstract
+      members to `IBlobStorage` (`CanComposeFrom` / `ComposeFrom`). That
+      is breaking for IMPLEMENTORS in the same class as Phase 455's
+      `DownloadRange` — every custom store stops compiling until it
+      answers them — and MINOR is where this repo's SemVer-on-0.x policy
+      puts a break. It is deliberately NOT a second bump: 739's raise
+      already carries the slot past `v0.22.0`, and a second one here
+      would publish a version nobody asked for to say the same thing.
     -->
     <Version>0.23.0</Version>
     <!--
