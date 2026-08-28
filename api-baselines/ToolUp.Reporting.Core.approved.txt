@@ -100,8 +100,19 @@ ToolUp.Reporting.IReportRenderer (interface)
 ToolUp.Reporting.IReportRenderer.Name : System.String { get }
 ToolUp.Reporting.IReportRenderer.Render(ToolUp.Reporting.ReportTemplate, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Reporting.RenderError]]
 ToolUp.Reporting.IReportRenderer.SupportedFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
+ToolUp.Reporting.IStructuralNarrativeRenderer (interface)
+ToolUp.Reporting.IStructuralNarrativeRenderer.StructuralNarrativeFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
 ToolUp.Reporting.MarkdownRenderer (class)
 ToolUp.Reporting.MarkdownRenderer.create() : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.NewReportSubscription (class)
+ToolUp.Reporting.NewReportSubscription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.TemplateFormat, System.Boolean)
+ToolUp.Reporting.NewReportSubscription.DisplayName : System.String { get }
+ToolUp.Reporting.NewReportSubscription.Enabled : System.Boolean { get }
+ToolUp.Reporting.NewReportSubscription.Format : ToolUp.Reporting.TemplateFormat { get }
+ToolUp.Reporting.NewReportSubscription.Parameters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Reporting.NewReportSubscription.ProducerKey : System.String { get }
+ToolUp.Reporting.NewReportSubscription.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Reporting.NewReportSubscription.Schedule : System.String { get }
 ToolUp.Reporting.PlaceholderKind (class)
 ToolUp.Reporting.PlaceholderKind.IsDate : System.Boolean { get }
 ToolUp.Reporting.PlaceholderKind.IsImage : System.Boolean { get }
@@ -196,6 +207,73 @@ ToolUp.Reporting.RenderError+UnsupportedPlaceholderKind.kind : System.String { g
 ToolUp.Reporting.RenderError+UnsupportedPlaceholderKind.renderer : System.String { get }
 ToolUp.Reporting.RenderErrorModule (class)
 ToolUp.Reporting.RenderErrorModule.toMessage(ToolUp.Reporting.RenderError) : System.String
+ToolUp.Reporting.ReportComponentRegistryModule (class)
+ToolUp.Reporting.ReportComponentRegistryModule.empty(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Reporting.ReportComponentResult
+ToolUp.Reporting.ReportComponentResult (class)
+ToolUp.Reporting.ReportComponentResult.ComponentFallback : ToolUp.Reporting.ReportComponentResult { get }
+ToolUp.Reporting.ReportComponentResult.IsComponentFallback : System.Boolean { get }
+ToolUp.Reporting.ReportComponentResult.IsComponentImage : System.Boolean { get }
+ToolUp.Reporting.ReportComponentResult.IsComponentSvg : System.Boolean { get }
+ToolUp.Reporting.ReportComponentResult.Tag : System.Int32 { get }
+ToolUp.Reporting.ReportComponentResult+ComponentImage (class)
+ToolUp.Reporting.ReportComponentResult+ComponentImage.bytes : System.Byte[] { get }
+ToolUp.Reporting.ReportComponentResult+ComponentImage.mimeType : System.String { get }
+ToolUp.Reporting.ReportComponentResult+ComponentSvg (class)
+ToolUp.Reporting.ReportComponentResult+ComponentSvg.svg : System.String { get }
+ToolUp.Reporting.ReportComponentResult+Tags (class)
+ToolUp.Reporting.ReportComponentResult+Tags.ComponentFallback : System.Int32 (literal)
+ToolUp.Reporting.ReportComponentResult+Tags.ComponentImage : System.Int32 (literal)
+ToolUp.Reporting.ReportComponentResult+Tags.ComponentSvg : System.Int32 (literal)
+ToolUp.Reporting.ReportParameterKind (class)
+ToolUp.Reporting.ReportParameterKind.DateParameter : ToolUp.Reporting.ReportParameterKind { get }
+ToolUp.Reporting.ReportParameterKind.IsChoiceParameter : System.Boolean { get }
+ToolUp.Reporting.ReportParameterKind.IsDateParameter : System.Boolean { get }
+ToolUp.Reporting.ReportParameterKind.IsNumberParameter : System.Boolean { get }
+ToolUp.Reporting.ReportParameterKind.IsTextParameter : System.Boolean { get }
+ToolUp.Reporting.ReportParameterKind.NumberParameter : ToolUp.Reporting.ReportParameterKind { get }
+ToolUp.Reporting.ReportParameterKind.Tag : System.Int32 { get }
+ToolUp.Reporting.ReportParameterKind.TextParameter : ToolUp.Reporting.ReportParameterKind { get }
+ToolUp.Reporting.ReportParameterKind+ChoiceParameter (class)
+ToolUp.Reporting.ReportParameterKind+ChoiceParameter.options : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Reporting.ReportParameterKind+Tags (class)
+ToolUp.Reporting.ReportParameterKind+Tags.ChoiceParameter : System.Int32 (literal)
+ToolUp.Reporting.ReportParameterKind+Tags.DateParameter : System.Int32 (literal)
+ToolUp.Reporting.ReportParameterKind+Tags.NumberParameter : System.Int32 (literal)
+ToolUp.Reporting.ReportParameterKind+Tags.TextParameter : System.Int32 (literal)
+ToolUp.Reporting.ReportParameterSchema (class)
+ToolUp.Reporting.ReportParameterSchema..ctor(System.String, System.String, ToolUp.Reporting.ReportParameterKind, System.Boolean)
+ToolUp.Reporting.ReportParameterSchema.DisplayName : System.String { get }
+ToolUp.Reporting.ReportParameterSchema.Key : System.String { get }
+ToolUp.Reporting.ReportParameterSchema.Kind : ToolUp.Reporting.ReportParameterKind { get }
+ToolUp.Reporting.ReportParameterSchema.Required : System.Boolean { get }
+ToolUp.Reporting.ReportProducerDescriptor (class)
+ToolUp.Reporting.ReportProducerDescriptor..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportParameterSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat])
+ToolUp.Reporting.ReportProducerDescriptor.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ReportProducerDescriptor.DisplayName : System.String { get }
+ToolUp.Reporting.ReportProducerDescriptor.Formats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
+ToolUp.Reporting.ReportProducerDescriptor.Key : System.String { get }
+ToolUp.Reporting.ReportProducerDescriptor.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportParameterSchema] { get }
+ToolUp.Reporting.ReportSubscription (class)
+ToolUp.Reporting.ReportSubscription..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.TemplateFormat, System.Boolean, ToolUp.Reporting.SubscriptionRunOutcome, System.String, System.DateTimeOffset)
+ToolUp.Reporting.ReportSubscription.CreatedAt : System.DateTimeOffset { get }
+ToolUp.Reporting.ReportSubscription.CreatedBy : System.String { get }
+ToolUp.Reporting.ReportSubscription.DisplayName : System.String { get }
+ToolUp.Reporting.ReportSubscription.Enabled : System.Boolean { get }
+ToolUp.Reporting.ReportSubscription.Format : ToolUp.Reporting.TemplateFormat { get }
+ToolUp.Reporting.ReportSubscription.Id : System.String { get }
+ToolUp.Reporting.ReportSubscription.LastRun : ToolUp.Reporting.SubscriptionRunOutcome { get }
+ToolUp.Reporting.ReportSubscription.Parameters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Reporting.ReportSubscription.ProducerKey : System.String { get }
+ToolUp.Reporting.ReportSubscription.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Reporting.ReportSubscription.Schedule : System.String { get }
+ToolUp.Reporting.ReportSubscription.ScopeId : System.String { get }
+ToolUp.Reporting.ReportSubscriptionModule (class)
+ToolUp.Reporting.ReportSubscriptionModule.ArtefactDataType : System.String (literal)
+ToolUp.Reporting.ReportSubscriptionModule.JobHandlerName : System.String (literal)
+ToolUp.Reporting.ReportSubscriptionModule.StorePrefix : System.String (literal)
+ToolUp.Reporting.ReportSubscriptionModule.artefactObjectId(System.String) : System.String
+ToolUp.Reporting.ReportSubscriptionModule.validateFormat(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat], ToolUp.Reporting.TemplateFormat) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]
+ToolUp.Reporting.ReportSubscriptionModule.validateParameters(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportParameterSchema], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]
 ToolUp.Reporting.ReportTemplate (class)
 ToolUp.Reporting.ReportTemplate..ctor(System.String, System.String, ToolUp.Reporting.TemplateFormat, System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.PlaceholderSchema], System.Int32)
 ToolUp.Reporting.ReportTemplate.Body : System.Byte[] { get }
@@ -204,6 +282,68 @@ ToolUp.Reporting.ReportTemplate.Format : ToolUp.Reporting.TemplateFormat { get }
 ToolUp.Reporting.ReportTemplate.Id : System.String { get }
 ToolUp.Reporting.ReportTemplate.Placeholders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.PlaceholderSchema] { get }
 ToolUp.Reporting.ReportTemplate.Version : System.Int32 { get }
+ToolUp.Reporting.SubscriptionError (class)
+ToolUp.Reporting.SubscriptionError.IsInvalidParameter : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsInvalidSchedule : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsNoRecipients : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsSchedulerUnavailable : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsSubscriptionNotAuthorised : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsSubscriptionNotFound : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsSubscriptionStorageFailure : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsUnknownProducer : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.IsUnsupportedFormat : System.Boolean { get }
+ToolUp.Reporting.SubscriptionError.NoRecipients : ToolUp.Reporting.SubscriptionError { get }
+ToolUp.Reporting.SubscriptionError.Tag : System.Int32 { get }
+ToolUp.Reporting.SubscriptionError+InvalidParameter (class)
+ToolUp.Reporting.SubscriptionError+InvalidParameter.key : System.String { get }
+ToolUp.Reporting.SubscriptionError+InvalidParameter.reason : System.String { get }
+ToolUp.Reporting.SubscriptionError+InvalidSchedule (class)
+ToolUp.Reporting.SubscriptionError+InvalidSchedule.expression : System.String { get }
+ToolUp.Reporting.SubscriptionError+InvalidSchedule.reason : System.String { get }
+ToolUp.Reporting.SubscriptionError+SchedulerUnavailable (class)
+ToolUp.Reporting.SubscriptionError+SchedulerUnavailable.reason : System.String { get }
+ToolUp.Reporting.SubscriptionError+SubscriptionNotAuthorised (class)
+ToolUp.Reporting.SubscriptionError+SubscriptionNotAuthorised.reason : System.String { get }
+ToolUp.Reporting.SubscriptionError+SubscriptionNotFound (class)
+ToolUp.Reporting.SubscriptionError+SubscriptionNotFound.Item : System.String { get }
+ToolUp.Reporting.SubscriptionError+SubscriptionStorageFailure (class)
+ToolUp.Reporting.SubscriptionError+SubscriptionStorageFailure.Item : System.String { get }
+ToolUp.Reporting.SubscriptionError+Tags (class)
+ToolUp.Reporting.SubscriptionError+Tags.InvalidParameter : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.InvalidSchedule : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.NoRecipients : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.SchedulerUnavailable : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.SubscriptionNotAuthorised : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.SubscriptionNotFound : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.SubscriptionStorageFailure : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.UnknownProducer : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+Tags.UnsupportedFormat : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionError+UnknownProducer (class)
+ToolUp.Reporting.SubscriptionError+UnknownProducer.Item : System.String { get }
+ToolUp.Reporting.SubscriptionError+UnsupportedFormat (class)
+ToolUp.Reporting.SubscriptionError+UnsupportedFormat.Item1 : ToolUp.Reporting.TemplateFormat { get }
+ToolUp.Reporting.SubscriptionError+UnsupportedFormat.supported : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
+ToolUp.Reporting.SubscriptionErrorModule (class)
+ToolUp.Reporting.SubscriptionErrorModule.toMessage(ToolUp.Reporting.SubscriptionError) : System.String
+ToolUp.Reporting.SubscriptionRunOutcome (class)
+ToolUp.Reporting.SubscriptionRunOutcome.IsNeverRun : System.Boolean { get }
+ToolUp.Reporting.SubscriptionRunOutcome.IsRunFailed : System.Boolean { get }
+ToolUp.Reporting.SubscriptionRunOutcome.IsRunSucceeded : System.Boolean { get }
+ToolUp.Reporting.SubscriptionRunOutcome.NeverRun : ToolUp.Reporting.SubscriptionRunOutcome { get }
+ToolUp.Reporting.SubscriptionRunOutcome.Tag : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunFailed (class)
+ToolUp.Reporting.SubscriptionRunOutcome+RunFailed.at : System.DateTimeOffset { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunFailed.reason : System.String { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunFailed.terminal : System.Boolean { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunSucceeded (class)
+ToolUp.Reporting.SubscriptionRunOutcome+RunSucceeded.at : System.DateTimeOffset { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunSucceeded.dataObjectKey : System.String { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunSucceeded.deliveredTo : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunOutcome+RunSucceeded.version : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunOutcome+Tags (class)
+ToolUp.Reporting.SubscriptionRunOutcome+Tags.NeverRun : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionRunOutcome+Tags.RunFailed : System.Int32 (literal)
+ToolUp.Reporting.SubscriptionRunOutcome+Tags.RunSucceeded : System.Int32 (literal)
 ToolUp.Reporting.TemplateFormat (class)
 ToolUp.Reporting.TemplateFormat.Docx : ToolUp.Reporting.TemplateFormat { get }
 ToolUp.Reporting.TemplateFormat.Html : ToolUp.Reporting.TemplateFormat { get }

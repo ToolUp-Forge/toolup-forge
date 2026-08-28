@@ -11,6 +11,20 @@ ToolUp.Reporting.IReportApi.DeleteTemplate : Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Reporting.IReportApi.ListTemplates : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportTemplate]]] { get }
 ToolUp.Reporting.IReportApi.Render : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.RenderOutcome, ToolUp.Reporting.RenderRpcError]]] { get }
 ToolUp.Reporting.IReportApi.SaveTemplate : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportTemplate, System.String]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi (class)
+ToolUp.Reporting.IReportSubscriptionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportProducerDescriptor]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportSubscription]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.NewReportSubscription, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Reporting.NewReportSubscription], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]]])
+ToolUp.Reporting.IReportSubscriptionApi.CreateSubscription : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.NewReportSubscription, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.DeleteSubscription : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.ListProducers : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportProducerDescriptor]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.ListSubscriptions : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportSubscription]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.RunSubscriptionNow : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Reporting.SubscriptionError]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.SetSubscriptionEnabled : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]] { get }
+ToolUp.Reporting.IReportSubscriptionApi.UpdateSubscription : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Reporting.NewReportSubscription], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]] { get }
+ToolUp.Reporting.IReportSubscriptionStore (interface)
+ToolUp.Reporting.IReportSubscriptionStore.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Reporting.IReportSubscriptionStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportSubscription]]
+ToolUp.Reporting.IReportSubscriptionStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportSubscription]]
+ToolUp.Reporting.IReportSubscriptionStore.Save(System.String, ToolUp.Reporting.ReportSubscription) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, System.String]]
 ToolUp.Reporting.IReportTemplateStore (class)
 ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore (interface)
 ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
@@ -70,6 +84,7 @@ ToolUp.Reporting.ReportApiHandler.TemplateManagementDenied : System.String (lite
 ToolUp.Reporting.ReportApiHandler.applyExportDisclosure(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.Reporting.ReportApiHandler.create(ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.RendererRegistry+RendererRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Reporting.ReportApiConfig, System.String) : ToolUp.Reporting.IReportApi
 ToolUp.Reporting.ReportApiHandler.createWithDisclosureGate(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.RendererRegistry+RendererRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Reporting.ReportApiConfig, System.String) : ToolUp.Reporting.IReportApi
+ToolUp.Reporting.ReportApiHandler.resolveValuesFor(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String]], System.String, ToolUp.Reporting.IReportRenderer, ToolUp.Reporting.TemplateFormat, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]]
 ToolUp.Reporting.ReportApiHandler.withManagementGate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], ToolUp.Reporting.IReportApi) : ToolUp.Reporting.IReportApi
 ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit (class)
 ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit..ctor(System.String, System.String, ToolUp.Reporting.TemplateFormat, System.Int32, System.Boolean)
@@ -78,6 +93,90 @@ ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit.Inline : System.Boolean { 
 ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit.OutputSize : System.Int32 { get }
 ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit.ScopeId : System.String { get }
 ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit.TemplateId : System.String { get }
+ToolUp.Reporting.ReportProducer (class)
+ToolUp.Reporting.ReportProducer..ctor(ToolUp.Reporting.ReportProducerDescriptor, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportRenderRequest, System.String]]]])
+ToolUp.Reporting.ReportProducer.Descriptor : ToolUp.Reporting.ReportProducerDescriptor { get }
+ToolUp.Reporting.ReportProducer.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportRenderRequest, System.String]]]] { get }
+ToolUp.Reporting.ReportProducerModule (class)
+ToolUp.Reporting.ReportProducerModule.create(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportParameterSchema], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportRenderRequest, System.String]]]]) : ToolUp.Reporting.ReportProducer
+ToolUp.Reporting.ReportProducerModule.withDescription(System.String, ToolUp.Reporting.ReportProducer) : ToolUp.Reporting.ReportProducer
+ToolUp.Reporting.ReportProducerModule.withFormats(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat], ToolUp.Reporting.ReportProducer) : ToolUp.Reporting.ReportProducer
+ToolUp.Reporting.ReportProducerRegistry (class)
+ToolUp.Reporting.ReportProducerRegistry..ctor()
+ToolUp.Reporting.ReportProducerRegistry.Count : System.Int32 { get }
+ToolUp.Reporting.ReportProducerRegistry.Descriptors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportProducerDescriptor] { get }
+ToolUp.Reporting.ReportProducerRegistry.Register(ToolUp.Reporting.ReportProducer) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Reporting.ReportProducerRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportProducer]
+ToolUp.Reporting.ReportRenderRequest (class)
+ToolUp.Reporting.ReportRenderRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Reporting.ReportRenderRequest.FileNameStem : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.ReportRenderRequest.TemplateId : System.String { get }
+ToolUp.Reporting.ReportRenderRequest.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue] { get }
+ToolUp.Reporting.ReportSubscriptionApiHandler (class)
+ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionManagementDenied : System.String (literal)
+ToolUp.Reporting.ReportSubscriptionApiHandler.create(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, System.String) : ToolUp.Reporting.IReportSubscriptionApi
+ToolUp.Reporting.ReportSubscriptionApiHandler.withManagementGate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], ToolUp.Reporting.IReportSubscriptionApi) : ToolUp.Reporting.IReportSubscriptionApi
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps (class)
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, ToolUp.Platform.IJobScheduler, ToolUp.Platform.JobRetryPolicy, ToolUp.Platform.JobPrecision)
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps.Precision : ToolUp.Platform.JobPrecision { get }
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps.Producers : ToolUp.Reporting.ReportProducerRegistry { get }
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps.RetryPolicy : ToolUp.Platform.JobRetryPolicy { get }
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps.Scheduler : ToolUp.Platform.IJobScheduler { get }
+ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps.Subscriptions : ToolUp.Reporting.IReportSubscriptionStore { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps (class)
+ToolUp.Reporting.ReportSubscriptionJobDeps..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.RendererRegistry+RendererRegistry, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.INotificationSink, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.SubscriptionRunAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Reporting.ReportApiConfig, ToolUp.Platform.JobRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String]])
+ToolUp.Reporting.ReportSubscriptionJobDeps.AddressBook : ToolUp.Platform.INotificationAddressBook { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Artefacts : ToolUp.Platform.IDataObjectStore { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Audit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.SubscriptionRunAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Config : ToolUp.Reporting.ReportApiConfig { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Disclosure : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String]] { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Producers : ToolUp.Reporting.ReportProducerRegistry { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Renderers : ToolUp.Reporting.RendererRegistry+RendererRegistry { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.RetryPolicy : ToolUp.Platform.JobRetryPolicy { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Sink : ToolUp.Platform.INotificationSink { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Subscriptions : ToolUp.Reporting.IReportSubscriptionStore { get }
+ToolUp.Reporting.ReportSubscriptionJobDeps.Templates : ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore { get }
+ToolUp.Reporting.ReportSubscriptionJobHandler (class)
+ToolUp.Reporting.ReportSubscriptionJobHandler.create(ToolUp.Reporting.ReportSubscriptionJobDeps) : ToolUp.Platform.IJobHandler
+ToolUp.Reporting.ReportSubscriptionJobHandler.decodePayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload]
+ToolUp.Reporting.ReportSubscriptionJobHandler.encodePayload(System.String) : System.String
+ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload (class)
+ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload..ctor(System.String)
+ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload.SubscriptionId : System.String { get }
+ToolUp.Reporting.ReportSubscriptionStore (class)
+ToolUp.Reporting.ReportSubscriptionStore.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Reporting.IReportSubscriptionStore
+ToolUp.Reporting.ReportSubscriptionStore.validate(ToolUp.Reporting.ReportProducerRegistry, System.String, System.String, System.String, System.DateTimeOffset, ToolUp.Reporting.SubscriptionRunOutcome, ToolUp.Reporting.NewReportSubscription) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]
+ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore (class)
+ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Reporting.ReportSubscriptionsContributor (class)
+ToolUp.Reporting.ReportSubscriptionsContributor..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, System.String)
 ToolUp.Reporting.ReportingCompose (class)
 ToolUp.Reporting.ReportingCompose.buildDefaultRegistry() : ToolUp.Reporting.RendererRegistry+RendererRegistry
+ToolUp.Reporting.ReportingCompose.buildRegistryWith(ToolUp.Reporting.ReportingCompose+ReportingComposeOptions) : ToolUp.Reporting.RendererRegistry+RendererRegistry
+ToolUp.Reporting.ReportingCompose.subscriptionDiagnostic(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Reporting.ReportingCompose.withRenderer(ToolUp.Reporting.IReportRenderer, ToolUp.Reporting.RendererRegistry+RendererRegistry) : ToolUp.Reporting.RendererRegistry+RendererRegistry
+ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]
+ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable (class)
+ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor()
+ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
+ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptions (class)
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.IReportRenderer], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]], ToolUp.Reporting.IReportRenderer]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]])
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptions.ComponentAwareRenderers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]], ToolUp.Reporting.IReportRenderer]] { get }
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptions.NarrativeComponents : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]] { get }
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptions.Renderers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.IReportRenderer] { get }
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptionsModule (class)
+ToolUp.Reporting.ReportingCompose+ReportingComposeOptionsModule.defaults : ToolUp.Reporting.ReportingCompose+ReportingComposeOptions { get }
+ToolUp.Reporting.SubscriptionRunAudit (class)
+ToolUp.Reporting.SubscriptionRunAudit..ctor(System.String, System.String, System.String, ToolUp.Reporting.TemplateFormat, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.Reporting.SubscriptionRunAudit.Attempt : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunAudit.DeliveredTo : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunAudit.Failure : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Reporting.SubscriptionRunAudit.Format : ToolUp.Reporting.TemplateFormat { get }
+ToolUp.Reporting.SubscriptionRunAudit.OutputSize : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Reporting.SubscriptionRunAudit.ProducerKey : System.String { get }
+ToolUp.Reporting.SubscriptionRunAudit.ScopeId : System.String { get }
+ToolUp.Reporting.SubscriptionRunAudit.SkippedRecipients : System.Int32 { get }
+ToolUp.Reporting.SubscriptionRunAudit.SubscriptionId : System.String { get }
+ToolUp.Reporting.SubscriptionRunAudit.Terminal : System.Boolean { get }

@@ -543,6 +543,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Skia.Tests", "Skia.Tests", 
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.OpenXml.SvgRasterizer.Skia.Tests", "src\SvgRasterizers\Skia.Tests\ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj", "{CCFEAAC4-BEA4-47F2-AC0C-2C37CAC616DE}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Reporting.Tests", "src\ToolUp.Reporting.Tests\ToolUp.Reporting.Tests.fsproj", "{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2833,6 +2835,18 @@ Global
 		{CCFEAAC4-BEA4-47F2-AC0C-2C37CAC616DE}.Release|x64.Build.0 = Release|Any CPU
 		{CCFEAAC4-BEA4-47F2-AC0C-2C37CAC616DE}.Release|x86.ActiveCfg = Release|Any CPU
 		{CCFEAAC4-BEA4-47F2-AC0C-2C37CAC616DE}.Release|x86.Build.0 = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|x64.Build.0 = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Debug|x86.Build.0 = Debug|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|x64.ActiveCfg = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|x64.Build.0 = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|x86.ActiveCfg = Release|Any CPU
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -3089,5 +3103,6 @@ Global
 		{618701D0-E98E-4D41-BD77-02E97CC65E21} = {92646703-BADF-75A3-9E55-658B25B7C283}
 		{AEFF7AC0-5521-7A2E-1C78-C95485EC3CE9} = {3A79E5E2-33DA-A4E7-CCF6-1016352E2FC4}
 		{CCFEAAC4-BEA4-47F2-AC0C-2C37CAC616DE} = {AEFF7AC0-5521-7A2E-1C78-C95485EC3CE9}
+		{A4333C28-6C55-4B0D-B0C3-95F5BA59DDA1} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

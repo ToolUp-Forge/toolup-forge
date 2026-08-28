@@ -27,6 +27,19 @@
              above ReportApiHandler because it calls that module's
              `FactExport` door rather than reproducing it. -->
         <Compile Include="NarrativeExportBundle.fs" />
+        <!-- Phase 534 — scheduled report subscriptions. Ordered by
+             dependency: the producer registry names nothing above it;
+             the store validates against the registry; the job handler
+             renders through ReportApiHandler's value-resolution door
+             (hence above it); the API handler schedules the job and so
+             needs its payload encoder; the contributor reads the store.
+             ReportingCompose stays last — it assembles all of them. -->
+        <Compile Include="ReportProducerRegistry.fs" />
+        <Compile Include="ReportSubscriptionStore.fs" />
+        <Compile Include="ReportSubscriptionApi.fs" />
+        <Compile Include="ReportSubscriptionJobHandler.fs" />
+        <Compile Include="ReportSubscriptionApiHandler.fs" />
+        <Compile Include="ReportSubscriptionsContributor.fs" />
         <Compile Include="ReportingCompose.fs" />
     </ItemGroup>
 </Project>

@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="InProcess\Fakes.fs" />
+        <Compile Include="InProcess\SubscriptionTests.fs" />
+        <!-- Phase 534 / 575 spillover — the structural narrative egress
+             path, which needs BOTH the report API handler (Server) and the
+             Docx renderer (sub-companion) in one process. Neither project
+             references the other, which is why this pack exists. -->
+        <Compile Include="InProcess\NarrativeEgressTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Reporting.Server\ToolUp.Reporting.Server.fsproj" />
+        <ProjectReference Include="..\Reporting\Docx\ToolUp.Reporting.Docx.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Testing\ToolUp.Platform.Testing.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

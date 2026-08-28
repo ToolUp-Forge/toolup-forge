@@ -28,5 +28,10 @@
         <Compile Include="PlaceholderSubstitution.fs" />
         <Compile Include="MarkdownRenderer.fs" />
         <Compile Include="HtmlRenderer.fs" />
+        <!-- Phase 534 — the subscription record + producer-descriptor
+             vocabulary. Sits above ReportingTypes (it names
+             TemplateFormat) and below nothing: the renderers do not
+             know subscriptions exist. -->
+        <Compile Include="ReportSubscriptionTypes.fs" />
     </ItemGroup>
 </Project>

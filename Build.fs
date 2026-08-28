@@ -116,6 +116,14 @@ let config = {
             TestPack.create
                 "SvgRasterizerSkia"
                 "src/SvgRasterizers/Skia.Tests/ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj"
+            // Phase 534 — scheduled report subscriptions, plus the
+            // narrative egress path Phase 575 could not reach. Its own
+            // pack because the cases that matter need BOTH
+            // ToolUp.Reporting.Server (the API handler) and
+            // ToolUp.Reporting.Docx (the renderer) in one process, and
+            // neither project references the other — nor should it, so
+            // neither of the existing packs could host them.
+            TestPack.create "Reporting" "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj"
         ]
 }
 

@@ -6,6 +6,8 @@
 ToolUp.Reporting.Docx.DocxReportRenderer (class)
 ToolUp.Reporting.Docx.DocxReportRenderer.create() : ToolUp.Reporting.IReportRenderer
 ToolUp.Reporting.Docx.DocxReportRenderer.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult]]) : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.Docx.DocxReportRenderer.createWithComponents(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]]) : ToolUp.Reporting.IReportRenderer
+ToolUp.Reporting.Docx.DocxReportRenderer.ofComponentRegistry(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Reporting.Docx.NarrativeOoxml+ComponentResult
 ToolUp.Reporting.Docx.NarrativeOoxml (class)
 ToolUp.Reporting.Docx.NarrativeOoxml.ensureListNumbering(ToolUp.Reporting.Docx.NarrativeOoxml+ProjectionOptions, ToolUp.OpenXml.DocModel) : ToolUp.OpenXml.DocModel
 ToolUp.Reporting.Docx.NarrativeOoxml.freeNumberingIds(ToolUp.OpenXml.NumberingDefinitions) : System.Tuple`2[System.Int32, System.Int32]
