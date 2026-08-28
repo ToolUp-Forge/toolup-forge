@@ -148,9 +148,12 @@ download).
 ## Health + config
 
 The companion registers a `media_library` readiness `IHealthCheck` (blob
-store reachability) and a `media_library:options` `IConfigValidator`
-(rejects a zero size cap, an empty MIME allowlist, or a non-positive
-signed-URL TTL at startup).
+store reachability) and two `IConfigValidator`s:
+
+| Validator | Grade | Fires when |
+|---|---|---|
+| `media_library:options` | Error — aborts startup | A zero size cap, an empty MIME allowlist, or a non-positive signed-URL TTL. |
+| `media_library:ranged-reads` | Warning — advisory only | The composed `IBlobStorage` refuses bounded ranged reads, so range serving falls back to whole-object slicing (see [above](#encrypted-originals-are-correct-but-not-cheap-to-seek)). |
 
 ## Storage layout
 
@@ -163,15 +166,69 @@ Per scope container:
 {container}/media/derived/{mediaId}/hls/…        HLS manifest + segments
 ```
 
-> **Range serving note.** The default `OpenRange` downloads the whole
-> original and slices it in memory — `IBlobStorage` exposes no native
-> byte-range read. This is correct and portable but loads the full object
-> per range request; a deployment hosting very large media over a
-> range-capable object store can supply a streaming `IMediaLibrary` via
-> `MediaLibraryServerApp.withMediaLibrary` without changing the interface.
+## Range serving reads O(range), not O(object)
+
+`OpenRange` serves a byte window through `IBlobStorage.DownloadRange` in
+bounded chunks: a scrub into a 2 GiB video costs the requested window
+plus at most one chunk of look-ahead. The object's size comes from
+`GetMetadata`, so no read is ever open-ended — the storage seam has no
+"offset to EOF" form precisely so that no implementation can be tempted
+to materialise a whole object to satisfy a range.
+
+The chunk is `MediaLibraryOptions.RangeChunkBytes` (default 1 MiB).
+Raising it trades peak memory per in-flight response for fewer round
+trips; lowering it does the reverse:
+
+```fsharp skip=fragment
+app
+|> MediaLibraryServerApp.withOptions
+    { MediaLibraryOptions.defaults with RangeChunkBytes = 4 * 1024 * 1024 }
+```
+
+The same bounded path serves derived blobs — HLS manifests and segments,
+posters — so a player range-requesting a segment reads only its window.
+That affordance is the optional `IMediaRangeReader` capability interface
+rather than a member on `IMediaLibrary`: an implementation that answers
+with a CDN redirect has no window to open, so consumers probe for it and
+fall back to the whole-blob `OpenDerived` read.
+
+```fsharp skip=fragment
+match box mediaLibrary with
+| :? IMediaRangeReader as ranged -> // bounded window
+| _ -> // whole-blob OpenDerived
+```
+
+### Encrypted originals are correct, but not cheap to seek
+
+The whole-blob AES-GCM encryption-at-rest decorator (see
+[storage providers](storage-providers.md)) refuses
+ranged reads by design: a mid-blob ciphertext window is undecryptable
+without the surrounding blob, so `EncryptedBlobStorage.DownloadRange`
+returns an honest `Error` rather than plausible garbage.
+
+Media over an encrypted store therefore falls back to the pre-existing
+path — download the whole original, slice in memory. **Serving is
+byte-for-byte identical**; only the cost differs, and it is O(object) per
+range request. A 2 GiB encrypted video re-reads 2 GiB on every scrub.
+
+This is a **startup advisory, not an error**. The
+`media_library:ranged-reads` config validator probes the composed store
+once at compose end (a sentinel write / ranged read / delete under
+`_platform`) and emits a `Warning` naming the trade if ranged reads come
+back refused. It is a live probe rather than a type test because a
+decorator stack — resilience over encryption — type-tests as its
+outermost layer while refusing ranges underneath. Every arm that cannot
+answer stays silent rather than guessing.
+
+Deployments that need both encryption and cheap seeking have two levers
+today: keep large media in an unencrypted scope container, or supply a
+custom `IMediaLibrary` via `MediaLibraryServerApp.withMediaLibrary` that
+brokers a signed direct URL. A chunked encryption envelope — which would
+make mid-blob ranges decryptable — is a separate, larger piece of work.
 
 ## See also
 
-- [`IMediaLibrary`](../../src/Media/MediaLibrary/Server/IMediaLibrary.fs) — the interface.
+- [`IMediaLibrary`](../../src/Media/MediaLibrary/Server/IMediaLibrary.fs) — the interface, plus the optional `IMediaRangeReader` capability.
+- [`455-iblobstorage-ranged-read.md`](../migrations/455-iblobstorage-ranged-read.md) — the storage-seam member range serving is built on.
 - [`narrative-elements.md`](../platform/narrative-elements.md) — the `Video` / `Audio` blocks media serves into.
 - [`IMediaLibraryContract`](../../src/ToolUp.Platform.Tests/Contracts/IMediaLibraryContract.fs) — the conformance pack any implementation can validate against.

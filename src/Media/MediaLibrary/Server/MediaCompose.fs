@@ -226,7 +226,13 @@ module MediaLibraryServerApp =
 
             let final =
                 match app.Base.Storage with
-                | Some blob -> ServerApp.withHealthCheck (MediaHealthCheck.create blob) withValidator
+                | Some blob ->
+                    withValidator
+                    |> ServerApp.withHealthCheck (MediaHealthCheck.create blob)
+                    // Phase 468 — advisory (never an error) when the
+                    // composed store refuses ranged reads, so range
+                    // serving falls back to whole-object slicing.
+                    |> ServerApp.withConfigValidator (MediaConfigValidator.createRangeProbe blob)
                 | None -> withValidator
 
             ServerApp.run final

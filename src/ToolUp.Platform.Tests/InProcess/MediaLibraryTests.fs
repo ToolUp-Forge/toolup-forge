@@ -4,8 +4,11 @@
 module ToolUp.Platform.Tests.InProcess.MediaLibraryTests
 
 open System
+open System.IO
+open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.MediaLibrary
 open ToolUp.Platform.Tests.Contracts
@@ -16,6 +19,17 @@ open ToolUp.Platform.Tests.Contracts
 // `SignedUrl` mint/verify + expiry crypto, and the full `IMediaLibrary`
 // contract pack run against `DefaultMediaLibrary` over an in-memory blob
 // store.
+//
+// ─── Phase 468 — three more bindings ─────────────────────────────────
+//
+// The behavioural pack is bound TWICE: once over the ordinary store,
+// and once over a store that refuses ranged reads, because the
+// whole-object fallback is the shipped serving path for every encrypted
+// deployment and "unchanged" is a claim that has to be run, not
+// asserted. `rangedReadTests` adds the cost claim over the original,
+// and `derivedRangeTests` below covers the HLS / poster seam — which
+// needs a transcoder to have produced something, so it cannot live in
+// the implementation-agnostic pack.
 
 // ─── Test doubles ─────────────────────────────────────────────────────
 
@@ -51,23 +65,31 @@ type private InMemorySecretStore() =
 
         member _.ListKeys(_) = async { return [] }
 
-let private makeLibrary () : IMediaLibrary =
-    let blob =
-        InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+let private makeStore () : IBlobStorage =
+    InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
+let private makeLibraryOver
+    (transcoder: IMediaTranscoder)
+    (options: MediaLibraryOptions)
+    (blob: IBlobStorage)
+    : IMediaLibrary =
     let secrets = InMemorySecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
 
-    DefaultMediaLibrary(
-        blob,
-        signer,
-        NoopMediaDerivation.create (),
-        NoopMediaTranscoder.create (),
-        None,
-        MediaLibraryOptions.defaults,
-        NullLogger()
-    )
+    DefaultMediaLibrary(blob, signer, NoopMediaDerivation.create (), transcoder, None, options, NullLogger())
     :> IMediaLibrary
+
+let private makeLibrary () : IMediaLibrary =
+    makeLibraryOver (NoopMediaTranscoder.create ()) MediaLibraryOptions.defaults (makeStore ())
+
+/// Phase 468 — the same library over a store that refuses ranged reads
+/// (the Phase 22 encryption decorator's shape), so the behavioural pack
+/// runs against the whole-object fallback end to end.
+let private makeRefusingLibrary () : IMediaLibrary =
+    makeLibraryOver
+        (NoopMediaTranscoder.create ())
+        MediaLibraryOptions.defaults
+        (IMediaLibraryContract.RangeRefusingBlobStorage(makeStore ()) :> IBlobStorage)
 
 // ─── Pure ByteRange.parse — the 206 / 416 decision ────────────────────
 
@@ -180,10 +202,166 @@ let private signedUrlTests =
         }
     ]
 
+// ─── Phase 468 — the derived (HLS / poster) ranged path ───────────────
+
+let private derivedContainer = "team-derived"
+
+/// One segment big enough that "read the window" and "read the segment"
+/// are different numbers.
+let private segmentPayload = Array.init (64 * 1024) (fun i -> byte ((i * 7) % 251))
+
+let private derivedChunkBytes = 4096
+
+/// A transcoder that emits a small master manifest plus one large
+/// segment. Deterministic and dependency-free — the point is to put a
+/// derived blob in the store, not to transcode anything.
+let private fakeHlsTranscoder =
+    { new IMediaTranscoder with
+        member _.Capabilities = {
+            CanExtractPoster = false
+            CanTranscodeHls = true
+        }
+
+        member _.TranscodeToHls(_, _) = async {
+            return
+                Ok [
+                    {
+                        BlobSuffix = "index.m3u8"
+                        Bytes = Encoding.UTF8.GetBytes "#EXTM3U\n#EXT-X-VERSION:3\n"
+                        MimeType = "application/vnd.apple.mpegurl"
+                        RenditionName = "hls"
+                        IsMasterManifest = true
+                    }
+                    {
+                        BlobSuffix = "seg0.ts"
+                        Bytes = segmentPayload
+                        MimeType = "video/mp2t"
+                        RenditionName = "hls"
+                        IsMasterManifest = false
+                    }
+                ]
+        }
+    }
+
+let private derivedUpload () =
+    match
+        MediaUploadRequest.create
+            MediaLibraryOptions.defaults
+            (Array.init 128 byte)
+            "clip.mp4"
+            "video/mp4"
+            "user-1"
+            None
+    with
+    | Ok r -> r
+    | Error e -> failwithf "derived-path setup: invalid upload request %A" e
+
+let private derivedRangeTests =
+    testList "Phase 468 derived-path ranged reads" [
+        testCaseAsync "an HLS segment window reads O(range), not O(segment)"
+        <| async {
+            let counting = IMediaLibraryContract.CountingBlobStorage(makeStore ())
+
+            let options = {
+                MediaLibraryOptions.defaults with
+                    RangeChunkBytes = derivedChunkBytes
+            }
+
+            let lib = makeLibraryOver fakeHlsTranscoder options (counting :> IBlobStorage)
+            let! upload = lib.Upload(derivedContainer, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+            counting.Reset()
+
+            match box lib with
+            | :? IMediaRangeReader as ranged ->
+                let! total = ranged.DerivedContentLength(derivedContainer, record.Id, "seg0.ts")
+                Expect.equal (Expect.wantOk total "derived length") (int64 segmentPayload.Length) "segment length"
+                Expect.equal counting.TotalBytesRead 0L "a length question costs no bytes"
+
+                let window = { Start = 20000L; End = 20999L }
+                let! opened = ranged.OpenDerivedRange(derivedContainer, record.Id, "seg0.ts", window)
+                let stream, mime = Expect.wantOk opened "open derived range"
+                Expect.equal mime "video/mp2t" "content type inferred from the extension"
+
+                use ms = new MemoryStream()
+                stream.CopyTo ms
+                stream.Dispose()
+                Expect.equal (ms.ToArray()) segmentPayload[20000..20999] "the exact window, byte for byte"
+
+                if counting.DownloadCalls <> 0 then
+                    failtestf
+                        "the derived ranged path must not Download the whole segment — saw %d"
+                        counting.DownloadCalls
+
+                let ceiling = window.Length + int64 derivedChunkBytes
+
+                if counting.TotalBytesRead > ceiling then
+                    failtestf
+                        "serving a %d-byte segment window read %d bytes (ceiling %d)"
+                        window.Length
+                        counting.TotalBytesRead
+                        ceiling
+            | _ -> failtest "DefaultMediaLibrary must declare IMediaRangeReader"
+        }
+
+        testCaseAsync "the manifest still round-trips whole through OpenDerived"
+        <| async {
+            let lib =
+                makeLibraryOver fakeHlsTranscoder MediaLibraryOptions.defaults (makeStore ())
+
+            let! upload = lib.Upload(derivedContainer, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+            let! opened = lib.OpenDerived(derivedContainer, record.Id, "index.m3u8")
+            let bytes, mime = Expect.wantOk opened "open derived"
+            Expect.equal mime "application/vnd.apple.mpegurl" "manifest content type"
+            Expect.stringContains (Encoding.UTF8.GetString bytes) "#EXTM3U" "manifest body"
+        }
+
+        testCaseAsync "directory traversal is refused on the ranged derived seam too"
+        <| async {
+            let lib =
+                makeLibraryOver fakeHlsTranscoder MediaLibraryOptions.defaults (makeStore ())
+
+            let! upload = lib.Upload(derivedContainer, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            match box lib with
+            | :? IMediaRangeReader as ranged ->
+                let! len = ranged.DerivedContentLength(derivedContainer, record.Id, "../../records/x.json")
+
+                match len with
+                | Error MediaRangeError.NotFound -> ()
+                | other -> failtestf "expected NotFound for a traversal path, got %A" other
+
+                let! opened =
+                    ranged.OpenDerivedRange(
+                        derivedContainer,
+                        record.Id,
+                        "../../records/x.json",
+                        { Start = 0L; End = 9L }
+                    )
+
+                match opened with
+                | Error MediaRangeError.NotFound -> ()
+                | Ok _ -> failtest "a traversal path must never open"
+                | other -> failtestf "expected NotFound for a traversal path, got %A" other
+            | _ -> failtest "DefaultMediaLibrary must declare IMediaRangeReader"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
         rangeTests
         signedUrlTests
         IMediaLibraryContract.tests "DefaultMediaLibrary" makeLibrary
+        // Phase 468 — the same behavioural bar over the whole-object
+        // fallback: the 206 / 416 matrix must be unchanged for a store
+        // that refuses ranged reads.
+        IMediaLibraryContract.tests "DefaultMediaLibrary (range-refusing store)" makeRefusingLibrary
+        IMediaLibraryContract.rangedReadTests
+            "DefaultMediaLibrary"
+            makeStore
+            (makeLibraryOver (NoopMediaTranscoder.create ()))
+        derivedRangeTests
     ]

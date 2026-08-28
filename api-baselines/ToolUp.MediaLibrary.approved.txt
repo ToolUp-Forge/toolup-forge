@@ -31,6 +31,9 @@ ToolUp.MediaLibrary.IMediaLibrary.OpenDerived(System.String, ToolUp.MediaLibrary
 ToolUp.MediaLibrary.IMediaLibrary.OpenRange(System.String, ToolUp.MediaLibrary.MediaId, ToolUp.MediaLibrary.ByteRange) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.IO.Stream, ToolUp.MediaLibrary.MediaRangeError]]
 ToolUp.MediaLibrary.IMediaLibrary.SignedUrl(ToolUp.MediaLibrary.MediaId, ToolUp.Platform.StorageScope, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.SignedUrlError]]
 ToolUp.MediaLibrary.IMediaLibrary.Upload(System.String, ToolUp.MediaLibrary.MediaUploadRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaRecord, ToolUp.MediaLibrary.MediaUploadError]]
+ToolUp.MediaLibrary.IMediaRangeReader (interface)
+ToolUp.MediaLibrary.IMediaRangeReader.DerivedContentLength(System.String, ToolUp.MediaLibrary.MediaId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.MediaLibrary.MediaRangeError]]
+ToolUp.MediaLibrary.IMediaRangeReader.OpenDerivedRange(System.String, ToolUp.MediaLibrary.MediaId, System.String, ToolUp.MediaLibrary.ByteRange) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.IO.Stream, System.String], ToolUp.MediaLibrary.MediaRangeError]]
 ToolUp.MediaLibrary.IMediaTranscoder (interface)
 ToolUp.MediaLibrary.IMediaTranscoder.Capabilities : ToolUp.MediaLibrary.MediaDerivationCapabilities { get }
 ToolUp.MediaLibrary.IMediaTranscoder.TranscodeToHls(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.TranscodedFile], System.String]]
@@ -61,6 +64,7 @@ ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withStorage(ToolUp.
 ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withTranscoder(ToolUp.MediaLibrary.IMediaTranscoder, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
 ToolUp.MediaLibrary.MediaConfigValidator (class)
 ToolUp.MediaLibrary.MediaConfigValidator.create(ToolUp.MediaLibrary.MediaLibraryOptions) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.MediaLibrary.MediaConfigValidator.createRangeProbe(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.MediaLibrary.MediaDeleteError (class)
 ToolUp.MediaLibrary.MediaDeleteError.IsNotFound : System.Boolean { get }
 ToolUp.MediaLibrary.MediaDeleteError.IsStorageError : System.Boolean { get }
@@ -111,13 +115,16 @@ ToolUp.MediaLibrary.MediaIngestionStatusUpdate.MediaId : System.String { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Status : System.String { get }
 ToolUp.MediaLibrary.MediaLibraryOptions (class)
-ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean)
+ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean, System.Int32)
 ToolUp.MediaLibrary.MediaLibraryOptions.AcceptedMimeTypes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.EmitAudit : System.Boolean { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.MaxBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaLibraryOptions.RangeChunkBytes : System.Int32 { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.SignedUrlDefaultTtl : System.TimeSpan { get }
 ToolUp.MediaLibrary.MediaLibraryOptionsModule (class)
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultRangeChunkBytes : System.Int32 (literal)
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.defaults : ToolUp.MediaLibrary.MediaLibraryOptions { get }
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveRangeChunkBytes(ToolUp.MediaLibrary.MediaLibraryOptions) : System.Int32
 ToolUp.MediaLibrary.MediaProbe (class)
 ToolUp.MediaLibrary.MediaProbe..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.MediaLibrary.MediaProbe.DurationSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }

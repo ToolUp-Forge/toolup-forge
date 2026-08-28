@@ -199,17 +199,35 @@ type SignedUrlError =
 /// Compose-time tunables for the media library. `MaxBytes` caps upload
 /// size; `AcceptedMimeTypes` gates allowed content; `SignedUrlDefaultTtl`
 /// is the lifetime used when a caller passes a non-positive TTL;
-/// `EmitAudit` gates `IAuditLog` emission.
+/// `EmitAudit` gates `IAuditLog` emission; `RangeChunkBytes` bounds each
+/// blob read taken while range-serving.
 type MediaLibraryOptions = {
     MaxBytes: int64
     AcceptedMimeTypes: Set<string>
     SignedUrlDefaultTtl: TimeSpan
     EmitAudit: bool
+    /// Phase 468 — bytes pulled per `IBlobStorage.DownloadRange` call
+    /// while serving a byte range. A `Range` request therefore costs
+    /// O(range) reads of at most this size each, never O(object): the
+    /// seam has no open-ended "offset to EOF" form precisely so no
+    /// implementation can be tempted to materialise a whole object
+    /// (see the `DownloadRange` docs). Raising it trades peak memory
+    /// per in-flight response for fewer round trips; lowering it does
+    /// the reverse. A non-positive value falls back to the default at
+    /// read time rather than failing, so a hand-built options record
+    /// that omits it cannot break serving.
+    RangeChunkBytes: int
 }
 
 module MediaLibraryOptions =
+    /// Default chunk for `RangeChunkBytes` — 1 MiB. Large enough that a
+    /// typical `<video>` scrub (a few hundred KiB) is one round trip,
+    /// small enough that a hundred concurrent responses are bounded.
+    [<Literal>]
+    let DefaultRangeChunkBytes = 1024 * 1024
+
     /// Default options: 2 GiB cap, common web video / audio MIME types,
-    /// 1-hour signed-URL TTL, audit on.
+    /// 1-hour signed-URL TTL, audit on, 1 MiB range chunks.
     let defaults: MediaLibraryOptions = {
         MaxBytes = 2L * 1024L * 1024L * 1024L
         AcceptedMimeTypes =
@@ -227,7 +245,16 @@ module MediaLibraryOptions =
             ]
         SignedUrlDefaultTtl = TimeSpan.FromHours 1.0
         EmitAudit = true
+        RangeChunkBytes = DefaultRangeChunkBytes
     }
+
+    /// The effective chunk size for an options record — the configured
+    /// value when positive, the default otherwise.
+    let effectiveRangeChunkBytes (options: MediaLibraryOptions) =
+        if options.RangeChunkBytes > 0 then
+            options.RangeChunkBytes
+        else
+            DefaultRangeChunkBytes
 
 /// Smart-constructed, validated upload request. Construct via
 /// `MediaUploadRequest.create`, which enforces `MaxBytes` /

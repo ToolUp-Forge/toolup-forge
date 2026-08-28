@@ -8,6 +8,8 @@ open System.IO
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json
+open System.Threading
+open System.Threading.Tasks
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -24,14 +26,30 @@ open ToolUp.Platform.BlobStorage
 //   {container}/media/derived/{mediaId}/poster.{ext} [poster frame]
 //   {container}/media/derived/{mediaId}/{suffix}     [HLS manifest/segments]
 //
-// Range serving (`OpenRange`) downloads the whole original and slices in
-// memory — `IBlobStorage` has no native byte-range read, so this is the
-// portable default. A range-capable `IBlobStorage` implementation could
-// back a streaming override without changing this interface. Poster /
-// HLS production is delegated to the injected `IMediaDerivation` /
-// `IMediaTranscoder`; the default `Noop*` providers declare no
-// capability, so the default path stores the original and reports
-// `Ready` immediately.
+// ─── Phase 468 — range serving reads O(range), not O(object) ─────────
+//
+// `OpenRange` (and the `IMediaRangeReader` derived path) serve a byte
+// window through `IBlobStorage.DownloadRange` (Phase 455) in bounded
+// `MediaLibraryOptions.RangeChunkBytes` chunks: a scrub into a 2 GiB
+// video costs the requested window plus at most one chunk of
+// look-ahead, where the pre-468 path cost a 2 GiB object read PER
+// `Range` request. The size comes from `GetMetadata`, so no read is
+// ever open-ended — the seam has no "offset to EOF" form for exactly
+// that reason.
+//
+// The pre-468 download-and-slice path survives as the FALLBACK, taken
+// when the store refuses ranged reads. The refusal that matters in
+// practice is the Phase 22 `EncryptedBlobStorage` decorator: content is
+// whole-blob AES-GCM, so a mid-blob ciphertext range is undecryptable
+// and the decorator returns an honest `Error`. Encrypted originals are
+// therefore correct but not cheap to seek — the `media_library:
+// ranged-reads` config validator says so at startup as an ADVISORY,
+// and `docs/companions/media-library.md` documents the trade.
+//
+// Poster / HLS production is delegated to the injected
+// `IMediaDerivation` / `IMediaTranscoder`; the default `Noop*`
+// providers declare no capability, so the default path stores the
+// original and reports `Ready` immediately.
 
 [<AutoOpen>]
 module private MediaPrefixes =
@@ -108,6 +126,194 @@ module private MediaPaths =
         else
             "application/octet-stream"
 
+/// Phase 468 — a forward-only read stream over ONE byte window of a
+/// blob, pulled through `IBlobStorage.DownloadRange` in bounded chunks.
+///
+/// `fetch offset want` is the store's ranged read; `start` / `length`
+/// delimit the window (`length` is already clamped to the object);
+/// `chunkBytes` caps each fetch; `prefetched` is the first chunk, which
+/// the opener has already read in order to learn whether the store
+/// serves ranges at all — so constructing this stream costs no extra
+/// round trip.
+///
+/// Peak memory is one chunk plus the caller's copy buffer, whatever the
+/// object's size. Internal by design: it is an implementation of
+/// `Stream`, not public surface, and the seam consumers hold is
+/// `IMediaLibrary.OpenRange` / `IMediaRangeReader.OpenDerivedRange`.
+type internal RangedBlobStream
+    (
+        fetch: int64 -> int -> Async<Result<byte[], string>>,
+        start: int64,
+        length: int64,
+        chunkBytes: int,
+        prefetched: byte[]
+    ) =
+    inherit Stream()
+
+    /// The chunk currently being handed out, and the read cursor in it.
+    let mutable chunk = prefetched
+    let mutable chunkPos = 0
+    /// Absolute blob offset of the next byte to FETCH (everything below
+    /// it has been pulled into a chunk, not necessarily delivered).
+    let mutable nextOffset = start + int64 prefetched.Length
+    /// Bytes handed to the caller — the stream's `Position`.
+    let mutable delivered = 0L
+
+    /// Ensure `chunk` has an unread byte, pulling the next bounded
+    /// window when it does not. `false` means end of window.
+    member private _.FillAsync(ct: CancellationToken) : Task<bool> =
+        if chunkPos < chunk.Length then
+            Task.FromResult true
+        elif nextOffset - start >= length then
+            Task.FromResult false
+        else
+            task {
+                let want = int (min (length - (nextOffset - start)) (int64 chunkBytes))
+                let! result = Async.StartAsTask(fetch nextOffset want, cancellationToken = ct)
+
+                match result with
+                | Error e ->
+                    // Mid-serve store failure. Ending the stream quietly
+                    // would emit a body shorter than the declared
+                    // `Content-Length` and look like a client-side
+                    // truncation; raising lets the host abort the
+                    // response, which is the honest signal.
+                    return raise (IOException(sprintf "MediaLibrary: ranged read failed mid-stream: %s" e))
+                | Ok bytes ->
+                    if bytes.Length = 0 then
+                        // Past EOF (`Ok [||]` per the `DownloadRange`
+                        // contract) — the object shrank under us.
+                        return false
+                    else
+                        chunk <- bytes
+                        chunkPos <- 0
+                        nextOffset <- nextOffset + int64 bytes.Length
+                        return true
+            }
+
+    member private this.ReadCoreAsync(buffer: Memory<byte>, ct: CancellationToken) : Task<int> = task {
+        if buffer.Length = 0 then
+            return 0
+        else
+            let! more = this.FillAsync ct
+
+            if not more then
+                return 0
+            else
+                let n = min buffer.Length (chunk.Length - chunkPos)
+                ReadOnlyMemory<byte>(chunk, chunkPos, n).CopyTo(buffer)
+                chunkPos <- chunkPos + n
+                delivered <- delivered + int64 n
+                return n
+    }
+
+    override _.CanRead = true
+    override _.CanSeek = false
+    override _.CanWrite = false
+
+    /// The window's length. Reported even though `CanSeek` is false —
+    /// it is genuinely known up front (the opener read the object's
+    /// size), and callers sizing a buffer from it get a useful answer.
+    override _.Length = length
+
+    override _.Position
+        with get () = delivered
+        and set (_: int64) = raise (NotSupportedException "RangedBlobStream is forward-only")
+
+    override _.Flush() = ()
+
+    override _.Seek(_: int64, _: SeekOrigin) : int64 =
+        raise (NotSupportedException "RangedBlobStream is forward-only")
+
+    override _.SetLength(_: int64) =
+        raise (NotSupportedException "RangedBlobStream is read-only")
+
+    override _.Write(_: byte[], _: int, _: int) =
+        raise (NotSupportedException "RangedBlobStream is read-only")
+
+    override this.ReadAsync(buffer: byte[], offset: int, count: int, ct: CancellationToken) : Task<int> =
+        this.ReadCoreAsync(Memory<byte>(buffer, offset, count), ct)
+
+    override this.ReadAsync(buffer: Memory<byte>, ct: CancellationToken) : ValueTask<int> =
+        ValueTask<int>(this.ReadCoreAsync(buffer, ct))
+
+    /// Synchronous compatibility shim. The SDK's own serve path never
+    /// takes it — `RangeHandler` copies via `ReadAsync` throughout
+    /// (GP 7: the chunk loop is async end to end) — but `Stream`
+    /// consumers outside the SDK may call `Read` / `CopyTo`, and a
+    /// stream that throws on the sync API would break them.
+    override this.Read(buffer: byte[], offset: int, count: int) : int =
+        this.ReadCoreAsync(Memory<byte>(buffer, offset, count), CancellationToken.None).GetAwaiter().GetResult()
+
+module private MediaRangeRead =
+
+    /// The pre-468 path, retained as the fallback: download the whole
+    /// object and slice in memory. Correct against every store, cheap
+    /// against none.
+    let viaDownload
+        (blobStorage: IBlobStorage)
+        (container: string)
+        (blobName: string)
+        (range: ByteRange)
+        : Async<Result<Stream, MediaRangeError>> =
+        async {
+            match! blobStorage.Download(container, blobName) with
+            | Error _ -> return Error MediaRangeError.NotFound
+            | Ok bytes ->
+                let total = int64 bytes.Length
+
+                if range.Start < 0L || range.Start >= total || range.End < range.Start then
+                    return Error MediaRangeError.Unsatisfiable
+                else
+                    let endIdx = min range.End (total - 1L)
+                    let length = int (endIdx - range.Start + 1L)
+                    return Ok(new MemoryStream(bytes, int range.Start, length, false) :> Stream)
+        }
+
+    /// Phase 468 fast path: size the object with `GetMetadata`, validate
+    /// the window, then serve it from bounded `DownloadRange` chunks.
+    ///
+    /// Two conditions fall back to `viaDownload`, and both are
+    /// deliberate:
+    ///
+    ///   - **The store refuses ranged reads** (the Phase 22 encryption
+    ///     decorator, or any custom implementation returning `Error`).
+    ///     The refusal is discovered by taking the window's FIRST chunk
+    ///     up front, which the stream then consumes — so the probe is
+    ///     not an extra round trip, it is the first real read.
+    ///   - **`GetMetadata` is unreadable.** Without a size the read
+    ///     cannot be bounded, and "no metadata" cannot be told apart
+    ///     from "absent" — so the fast path must never convert a blob
+    ///     that used to serve into a 404.
+    let openRange
+        (blobStorage: IBlobStorage)
+        (chunkBytes: int)
+        (container: string)
+        (blobName: string)
+        (range: ByteRange)
+        : Async<Result<Stream, MediaRangeError>> =
+        async {
+            match! blobStorage.GetMetadata(container, blobName) with
+            | Error _ -> return! viaDownload blobStorage container blobName range
+            | Ok meta ->
+                let total = meta.Size
+
+                if range.Start < 0L || range.Start >= total || range.End < range.Start then
+                    return Error MediaRangeError.Unsatisfiable
+                else
+                    let endIdx = min range.End (total - 1L)
+                    let length = endIdx - range.Start + 1L
+                    let firstWant = int (min length (int64 chunkBytes))
+
+                    match! blobStorage.DownloadRange(container, blobName, range.Start, firstWant) with
+                    | Error _ -> return! viaDownload blobStorage container blobName range
+                    | Ok first ->
+                        let fetch offset want =
+                            blobStorage.DownloadRange(container, blobName, offset, want)
+
+                        return Ok(new RangedBlobStream(fetch, range.Start, length, chunkBytes, first) :> Stream)
+        }
+
 /// Default `IMediaLibrary`. `derivation` / `transcoder` default to the
 /// `Noop*` providers (no transcode dependency); `notifications` is
 /// `None` when the deployment runs without an `INotificationChannel`.
@@ -121,6 +327,17 @@ type DefaultMediaLibrary
         options: MediaLibraryOptions,
         logger: ILogger
     ) =
+
+    /// Bytes pulled per ranged blob read while serving (Phase 468).
+    let chunkBytes = MediaLibraryOptions.effectiveRangeChunkBytes options
+
+    /// Resolve a derived blob's path, rejecting directory traversal —
+    /// derived paths are always flat under the item's derived directory.
+    let derivedPath (id: MediaId) (relativePath: string) =
+        if relativePath.Contains ".." || relativePath.StartsWith "/" then
+            None
+        else
+            Some(MediaPaths.derivedDir id + relativePath)
 
     let publishStatus (uploadedBy: string) (record: MediaRecord) = async {
         match notifications with
@@ -346,30 +563,46 @@ type DefaultMediaLibrary
             | Error _ -> return Error MediaRangeError.NotFound
         }
 
+        /// Whole-derived-blob read. Unchanged by Phase 468 — the
+        /// interface hands back every byte, so there is no window to
+        /// bound. Callers that want a window take `IMediaRangeReader`
+        /// below.
         member _.OpenDerived(scopeContainer, id, relativePath) = async {
-            // Reject directory traversal — derived paths are always flat
-            // under the item's derived directory.
-            if relativePath.Contains ".." || relativePath.StartsWith "/" then
-                return Error MediaRangeError.NotFound
-            else
-                let path = MediaPaths.derivedDir id + relativePath
-
+            match derivedPath id relativePath with
+            | None -> return Error MediaRangeError.NotFound
+            | Some path ->
                 match! blobStorage.Download(scopeContainer, path) with
                 | Ok bytes -> return Ok(bytes, MediaPaths.contentTypeFor relativePath)
                 | Error _ -> return Error MediaRangeError.NotFound
         }
 
-        member _.OpenRange(scopeContainer, id, range) = async {
-            match! blobStorage.Download(scopeContainer, MediaPaths.original id) with
-            | Error _ -> return Error MediaRangeError.NotFound
-            | Ok bytes ->
-                let total = int64 bytes.Length
+        /// Phase 468 — serve the window from bounded ranged reads, with
+        /// the pre-468 download-and-slice retained as the fallback for
+        /// stores and decorators that refuse them.
+        member _.OpenRange(scopeContainer, id, range) =
+            MediaRangeRead.openRange blobStorage chunkBytes scopeContainer (MediaPaths.original id) range
 
-                if range.Start < 0L || range.Start >= total || range.End < range.Start then
-                    return Error MediaRangeError.Unsatisfiable
-                else
-                    let endIdx = min range.End (total - 1L)
-                    let length = int (endIdx - range.Start + 1L)
-                    let stream = new MemoryStream(bytes, int range.Start, length, false) :> Stream
-                    return Ok stream
+    interface IMediaRangeReader with
+
+        member _.DerivedContentLength(scopeContainer, id, relativePath) = async {
+            match derivedPath id relativePath with
+            | None -> return Error MediaRangeError.NotFound
+            | Some path ->
+                // A store that will not report metadata gets `NotFound`
+                // here, which the range handler reads as "this blob has
+                // no bounded path" and serves whole via `OpenDerived` —
+                // where a genuinely absent blob then earns its 404. No
+                // second whole-object download is spent guessing.
+                match! blobStorage.GetMetadata(scopeContainer, path) with
+                | Ok meta -> return Ok meta.Size
+                | Error _ -> return Error MediaRangeError.NotFound
+        }
+
+        member _.OpenDerivedRange(scopeContainer, id, relativePath, range) = async {
+            match derivedPath id relativePath with
+            | None -> return Error MediaRangeError.NotFound
+            | Some path ->
+                match! MediaRangeRead.openRange blobStorage chunkBytes scopeContainer path range with
+                | Ok stream -> return Ok(stream, MediaPaths.contentTypeFor relativePath)
+                | Error e -> return Error e
         }

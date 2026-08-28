@@ -66,3 +66,46 @@ type IMediaLibrary =
     /// when `relativePath` attempts directory traversal.
     abstract OpenDerived:
         scopeContainer: string * id: MediaId * relativePath: string -> Async<Result<byte[] * string, MediaRangeError>>
+
+// ─── Phase 468 — IMediaRangeReader (the derived-path range seam) ──────
+//
+// `OpenDerived` returns the WHOLE derived blob, which is right for a
+// manifest and wrong for a multi-megabyte HLS segment a player
+// range-requests. The bounded-read affordance is therefore an OPTIONAL
+// capability interface rather than a new `IMediaLibrary` member — the
+// same shape `IConditionalBlobStorage` / `ISignedUrlBlobStorage` take
+// over `IBlobStorage`, and for the same two reasons:
+//
+//   1. `IMediaLibrary` stays byte-for-byte source-compatible (GP 11).
+//      Every existing implementation keeps compiling.
+//   2. Not every implementation CAN serve a mid-blob window. A
+//      CDN-direct or cloud-native library that answers with a redirect
+//      has no window to open; a capability the default cannot promise
+//      belongs behind a probe, not in the contract everyone must
+//      answer (GP 3).
+//
+// Consumers probe with a type test and fall back to `OpenDerived`:
+//
+//     match box mediaLibrary with
+//     | :? IMediaRangeReader as ranged -> // bounded window
+//     | _ -> // whole-blob OpenDerived
+//
+// `DefaultMediaLibrary` implements it over `IBlobStorage.DownloadRange`
+// (Phase 455), degrading to whole-blob download-and-slice when the
+// backing store or a decorator refuses ranged reads.
+type IMediaRangeReader =
+    /// Total byte length of a derived blob (poster, HLS manifest or
+    /// segment) without downloading it — drives the `Content-Range`
+    /// total and the `Satisfiable` / `Unsatisfiable` decision, exactly
+    /// as `ContentLength` does for the original. `NotFound` when absent
+    /// or when `relativePath` attempts directory traversal.
+    abstract DerivedContentLength:
+        scopeContainer: string * id: MediaId * relativePath: string -> Async<Result<int64, MediaRangeError>>
+
+    /// Open a readable stream over a satisfiable byte range of a derived
+    /// blob, plus the content type inferred from its extension. The
+    /// stream pulls bounded chunks on demand — reading a 1 MiB window of
+    /// a 200 MiB segment costs O(window), not O(segment).
+    abstract OpenDerivedRange:
+        scopeContainer: string * id: MediaId * relativePath: string * range: ByteRange ->
+            Async<Result<Stream * string, MediaRangeError>>
