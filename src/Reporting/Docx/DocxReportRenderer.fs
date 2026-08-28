@@ -269,9 +269,44 @@ let createWith (componentRenderers: NarrativeOoxml.ComponentRenderers) : IReport
                 with ex ->
                     return Error(RendererFailure(name, $"template could not be processed as .docx: {ex.Message}"))
         }
+
+      // Phase 534 — the declaration that makes the expansion above
+      // REACHABLE through the report API, closing Phase 575's spillover.
+      // `ReportApiHandler` resolves a `NarrativeValue` (after the
+      // disclosure door) to text unless the renderer about to consume it
+      // says it does better. Without this, every narrative arriving
+      // through `IReportApi.Render` was flattened to markdown before it
+      // got here, and `tryNarrativeFor` above could only ever fire for a
+      // caller who bypassed the handler.
+      interface IStructuralNarrativeRenderer with
+          member _.StructuralNarrativeFormats = [ Docx ]
     }
 
 /// The renderer with no component registry: every `Component` block in a
 /// projected narrative takes its data-table degradation.
 let create () : IReportRenderer =
     createWith (fun _ _ -> NarrativeOoxml.Fallback)
+
+/// Adapt the tier-neutral `ReportComponentRegistry` (Phase 534, Core)
+/// onto this package's `NarrativeOoxml.ComponentRenderers`.
+///
+/// Two structurally-identical shapes with one adapter between them, and
+/// the duplication is deliberate. The compose surface has to be able to
+/// name a component registry without referencing a sub-companion (GP 1
+/// — Reporting never names a rendering companion), which puts the
+/// declarable type in Core; `NarrativeOoxml.ComponentResult` is Phase
+/// 575's already-shipped public surface, and re-pointing it at a Core
+/// type would rename its cases out from under every existing caller.
+/// One four-line adapter, pinned by a test, is the cheaper of the two.
+let ofComponentRegistry (registry: ReportComponentRegistry) : NarrativeOoxml.ComponentRenderers =
+    fun name props ->
+        match registry name props with
+        | ComponentSvg svg -> NarrativeOoxml.ComponentResult.Svg svg
+        | ComponentImage(bytes, mimeType) -> NarrativeOoxml.ComponentResult.Image(bytes, mimeType)
+        | ComponentFallback -> NarrativeOoxml.Fallback
+
+/// Build the renderer from a tier-neutral component registry — the
+/// shape `ReportingCompose`'s component-aware renderer factories take.
+/// `ReportComponentRegistry.empty` degrades exactly as `create ()` does.
+let createWithComponents (registry: ReportComponentRegistry) : IReportRenderer =
+    createWith (ofComponentRegistry registry)

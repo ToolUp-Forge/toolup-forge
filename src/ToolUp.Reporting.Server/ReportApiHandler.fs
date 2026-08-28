@@ -143,14 +143,53 @@ let applyExportDisclosure
                 }
     }
 
-/// Resolve every top-level `NarrativeValue` in the supplied values —
-/// through the export door when a gate is present, pass-through
-/// projection otherwise — into the `TextValue` the renderer consumes.
+/// Does this renderer expand a narrative into the output format's own
+/// structures, for THIS format?
+///
+/// Phase 534 (closing Phase 575's spillover). Until this existed, the
+/// handler projected every disclosure-resolved narrative to text before
+/// any renderer ran — so `Docx`, the one format that had gained native
+/// Word structures, was the one format the shipped API path denied them
+/// to: a narrative exported as `.docx` arrived as flattened markdown
+/// prose, and Phase 575's projection engine was unreachable except by a
+/// direct caller bypassing the handler.
+///
+/// The test is the RENDERER's own declaration, never the format. A
+/// deployment composing some other `Docx` renderer — one that never
+/// learned about `NarrativeValue` — would read the value as a kind
+/// mismatch, so keying on `format = Docx` would break a working
+/// deployment on an SDK upgrade it did not ask for. A renderer that
+/// declares nothing is treated exactly as before (GP 11).
+let private expandsStructurally (renderer: IReportRenderer) (format: TemplateFormat) =
+    match box renderer with
+    | :? IStructuralNarrativeRenderer as structural -> structural.StructuralNarrativeFormats |> List.contains format
+    | _ -> false
+
+/// Resolve every top-level `NarrativeValue` in the supplied values for
+/// the renderer that is about to consume them.
+///
+/// **The disclosure door runs first, always, either way.** That is the
+/// invariant Phase 564 established and the one that matters: what
+/// reaches a structural renderer is the *redacted* document, including
+/// the "Withheld values" section the door appends — an ordinary
+/// `NarrativeSection`, so it survives the structural projection like
+/// any other content. What changed in Phase 534 is only the SHAPE the
+/// resolved value arrives in: a structural renderer receives the
+/// `NarrativeValue` and expands it; every other renderer receives the
+/// format-appropriate text projection, exactly as before.
+///
 /// A values map with no narrative content is returned as-is, so the
 /// pre-existing render path is untouched (GP 11).
-let private resolveNarrativeValues
+///
+/// Public since Phase 534, and for the same reason
+/// `applyExportDisclosure` is: the scheduled-subscription job is a
+/// second render surface, and a second surface with its own copy of
+/// this routing is how one door becomes two doors that agree until they
+/// do not.
+let resolveValuesFor
     (disclosure: (IFactDisclosureGate * string) option)
     (scopeId: string)
+    (renderer: IReportRenderer)
     (format: TemplateFormat)
     (values: Map<string, PlaceholderValue>)
     : Async<Map<string, PlaceholderValue>> =
@@ -165,6 +204,8 @@ let private resolveNarrativeValues
         if not hasNarrative then
             return values
         else
+            let structural = expandsStructurally renderer format
+
             let! resolved =
                 values
                 |> Map.toList
@@ -176,7 +217,12 @@ let private resolveNarrativeValues
                             | Some(gate, principal) -> applyExportDisclosure gate principal scopeId document
                             | None -> async.Return document
 
-                        return key, TextValue(projectNarrative format disclosed)
+                        return
+                            key,
+                            if structural then
+                                NarrativeValue disclosed
+                            else
+                                TextValue(projectNarrative format disclosed)
                     | other -> return key, other
                 })
                 |> Async.Sequential
@@ -227,7 +273,10 @@ let private createCore
                         // Phase 564.B — the disclosure export door runs
                         // before rendering; a values map with no
                         // narrative content passes through untouched.
-                        let! values = resolveNarrativeValues disclosure scopeId template.Format values
+                        // Phase 534 — and the resolved value keeps its
+                        // narrative shape when THIS renderer expands it
+                        // structurally.
+                        let! values = resolveValuesFor disclosure scopeId renderer template.Format values
 
                         let! renderResult = renderer.Render(template, values)
 
