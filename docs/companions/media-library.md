@@ -170,10 +170,49 @@ indistinguishable from a single-shot upload of the same bytes — same
 derivation and transcode hooks. That is a property by construction
 rather than a claim to be maintained.
 
-The limit that follows honestly: assembly materialises the object in
-memory, because `MediaUploadRequest` carries `byte[]`. That is the same
-ceiling single-shot upload has today — this path removes the **network**
-single point of failure, not the server-side memory one.
+### Commit costs one chunk, not one object
+
+Assembly used to materialise the object in memory, because
+`MediaUploadRequest` carries `byte[]` — so a 2 GiB commit pinned ~2 GiB
+of heap, the same ceiling single-shot upload has. Resumable upload
+removed the **network** single point of failure; this removes the
+server-side memory one.
+
+The chunks are already blobs, so assembly is a **store-side compose over
+parts the store already holds**: `IBlobStorage.ComposeFrom` concatenates
+them into `media/originals/{mediaId}`, and commit hands the library the
+two facts it measured while walking the parts — the size and the
+content hash — instead of the bytes. Peak memory is one chunk.
+
+Both paths survive, and which one a deployment takes is decided by one
+cheap read at commit time. The streaming path is taken when **both**
+hold:
+
+- the composed `IBlobStorage` declares `CanComposeFrom = true` — the
+  bundled local / Azure / S3 / GCS stores all do; the whole-blob
+  encryption decorator does not (see
+  [Encrypted originals](#encrypted-originals-are-correct-but-not-cheap-to-seek)); and
+- no derivation or transcode provider is installed. Poster extraction
+  and HLS transcoding both take the original **bytes**, so a deployment
+  that has composed `ToolUp.Media.FFmpeg` (or any provider declaring
+  `CanExtractPoster` / `CanTranscodeHls`) materialises regardless — the
+  bytes are needed either way.
+
+Otherwise commit assembles in memory exactly as before. The fallback is
+not a degraded corner to be worked around: it is the shipped behaviour
+for every encrypted deployment and every transcoding deployment, and it
+produces a **content-hash-equal record** either way. The size, contiguity
+and hash checks are one shared walk over the chunks, so the two paths
+cannot diverge on what they accept.
+
+A `media_library:composed-commit` config validator emits a startup
+`Warning` — never an error — when the composed store cannot compose, so
+a deployment that sized its heap for O(chunk) commits learns at preflight
+rather than at its first multi-gigabyte upload.
+
+Custom `IBlobStorage` implementations gain the member; declining it is a
+two-line adoption. See
+[`docs/migrations/741-iblobstorage-compose-from.md`](../migrations/741-iblobstorage-compose-from.md).
 
 ### Progress + audit
 
@@ -458,6 +497,21 @@ today: keep large media in an unencrypted scope container, or supply a
 custom `IMediaLibrary` via `MediaLibraryServerApp.withMediaLibrary` that
 brokers a signed direct URL. A chunked encryption envelope — which would
 make mid-blob ranges decryptable — is a separate, larger piece of work.
+
+**The same envelope refuses `ComposeFrom`, for the same reason.** Each
+stored part is its own AES-GCM envelope (nonce + ciphertext + tag), and
+concatenating the envelopes does not produce the envelope of the
+concatenated plaintext — a composed target would decrypt as nothing at
+all. Composing the *plaintexts* would mean decrypting every part and
+re-encrypting the whole, which materialises exactly what the member
+exists to avoid, so the decorator refuses rather than fakes it. The
+refusal is the decorator's **own**: it is not delegated to the inner
+store, which can compose and would — over ciphertext.
+
+So an encrypted deployment commits resumable uploads through the
+materialised path, at O(object) memory, and the
+`media_library:composed-commit` validator says so at startup. The
+chunked envelope that would lift the range refusal lifts this one too.
 
 ## Playback + delivery telemetry
 

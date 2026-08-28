@@ -72,6 +72,14 @@ type DivergentBlobStorage(divergence: Divergence) =
     let inner = InMemoryBlobStorage() :> IBlobStorage
 
     interface IBlobStorage with
+        // Phase 741 — this double perturbs one named behaviour at a
+        // time; compose is not among the modelled divergences, so it
+        // passes through to the inner store unaltered.
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
+            inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
+
         member this.Erase(container, prefix, policy, dryRun) =
             // Routed through the perturbed members on purpose — erasure is
             // defined in terms of List + Delete, so a provider that gets

@@ -1388,6 +1388,12 @@ let stateStoreTests =
         test "a blob backend without conditional writes is refused at construction" {
             let plain =
                 { new IBlobStorage with
+                    // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+                    member _.CanComposeFrom = false
+
+                    member _.ComposeFrom(_, _, _) =
+                        ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
                     member _.Upload(_, _, _) = async { return Ok "" }
                     member _.Download(_, _) = async { return Error "no" }
                     member _.Delete(_, _) = async { return Ok() }

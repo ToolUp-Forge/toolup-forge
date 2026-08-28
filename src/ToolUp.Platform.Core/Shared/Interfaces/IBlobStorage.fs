@@ -21,6 +21,32 @@ type BlobMetadata = {
     ContentType: string option
 }
 
+/// Phase 741 — why a compose-from-parts did not produce an object.
+/// Two answers, and they are not interchangeable:
+///
+///   * `NotSupported` — this implementation has no bounded-memory
+///     multi-part commit primitive (or, like the whole-blob encryption
+///     decorator, cannot have one). Advisory: the caller falls back to
+///     materialised assembly and the object is still produced. This is
+///     the answer `CanComposeFrom = false` promises, and it must be
+///     reachable without side effects.
+///   * `ComposeFailed` — a compose was attempted and failed
+///     operationally. The caller SURFACES this rather than falling
+///     back: retrying the whole object through memory after the store
+///     has already begun a multi-part commit is how a deployment that
+///     deliberately sized its heap for O(chunk) discovers it did not.
+///
+/// Qualified access — `NotSupported` is a common word.
+[<RequireQualifiedAccess>]
+type ComposeRefusal =
+    /// This implementation cannot compose server-side. `reason` is a
+    /// diagnostic for logs and preflight advisories, never shown to an
+    /// end user.
+    | NotSupported of reason: string
+    /// The compose was attempted and failed. Callers surface this
+    /// rather than falling back.
+    | ComposeFailed of message: string
+
 /// Abstraction for blob/object storage.
 /// Implementations may target Azure Blob Storage, AWS S3, GCS, or local filesystem.
 ///
@@ -170,6 +196,80 @@ type IBlobStorage =
     abstract DownloadRange:
         container: string * blobName: string * offset: int64 * length: int -> Async<Result<byte[], string>>
 
+    /// Phase 741 — does this implementation have a bounded-memory
+    /// multi-part commit primitive? A cheap, side-effect-free
+    /// declaration, read BEFORE any work is done, so a caller with an
+    /// O(object) fallback never pays for a walk it is about to repeat.
+    ///
+    /// `true` promises that `ComposeFrom` will attempt a real compose —
+    /// not that it will succeed. `false` promises the converse
+    /// completely: `ComposeFrom` returns `NotSupported` and touches
+    /// nothing.
+    ///
+    /// A property rather than probing `ComposeFrom` with an empty part
+    /// list: a capability question answered by calling the operation is
+    /// a capability question that can have side effects, and the one
+    /// caller this exists for (media-library session commit) must decide
+    /// which of two whole strategies to run before it reads a byte.
+    abstract CanComposeFrom: bool
+
+    /// Phase 741 — concatenate objects ALREADY IN THIS STORE into one
+    /// target object, in the order given, without ever materialising the
+    /// whole result. Returns the total byte length written.
+    ///
+    /// This is the seam that makes resumable-upload commit cost
+    /// O(chunk) instead of O(object): the chunks a session accumulated
+    /// are already blobs, so assembly is a compose over parts the store
+    /// holds, not a download-concatenate-upload through the app's heap.
+    ///
+    /// **Semantics (contract-tested across every implementation):**
+    ///   - `CanComposeFrom = false` → `Error (NotSupported …)`, always,
+    ///     with no write attempted.
+    ///   - An empty `sourceBlobNames` → `Error (ComposeFailed …)`. A
+    ///     zero-part compose has no honest answer: writing an empty
+    ///     object and returning `Ok 0L` would let a caller whose part
+    ///     listing silently came back empty commit an empty object over
+    ///     a real one.
+    ///   - A missing source → `Error (ComposeFailed …)`; the target is
+    ///     left as it was where the backend allows (a multi-part commit
+    ///     is abandoned rather than completed).
+    ///   - Otherwise the target holds the parts' bytes concatenated in
+    ///     the given order, and `Ok n` where `n` is that total —
+    ///     `Download`ing the target byte-equals concatenating the
+    ///     parts' `Download`s.
+    ///   - The target may be one of the sources' container but MUST NOT
+    ///     be one of the sources; implementations are not required to
+    ///     detect that, and the behaviour is undefined.
+    ///
+    /// **Memory (the whole point).** An implementation MUST NOT hold
+    /// more than a bounded working set — one part, or a fixed
+    /// coalescing buffer — regardless of the number of parts or the
+    /// size of the result. An implementation that cannot honour that
+    /// declares `CanComposeFrom = false` and refuses; it does not
+    /// quietly buffer. `BlobStorage.composeFromViaDownload` exists for
+    /// implementors who want correctness NOW and accept the O(object)
+    /// cost knowingly — it is not the default, and a store that uses it
+    /// still declares `CanComposeFrom = false` so the media library
+    /// keeps taking the path it can reason about.
+    ///
+    /// **Scope isolation (GP 4).** `container` is scope-derived exactly
+    /// as everywhere else on this interface; target and sources share
+    /// it, so a compose can never cross scopes.
+    ///
+    /// **Encryption caveat:** the Phase 22 `EncryptedBlobStorage`
+    /// decorator refuses (whole-blob AES-GCM — concatenated ciphertext
+    /// envelopes are not the envelope of the concatenated plaintext),
+    /// exactly as it refuses ranged reads. Encrypted deployments commit
+    /// through the materialised path with the documented advisory.
+    ///
+    /// Portability audit (GP 12): identity by value (part NAMES and a
+    /// byte count, no streams handed across the seam — so a retry
+    /// decorator can re-run the call), async at boundary, failure as
+    /// `Result` data, stateless, single-container.
+    abstract ComposeFrom:
+        container: string * targetBlobName: string * sourceBlobNames: string list ->
+            Async<Result<int64, ComposeRefusal>>
+
     /// Phase 9h — GDPR Article 17 erasure surface. Erase (or redact)
     /// every blob in `container` whose name starts with `prefix`,
     /// per `policy`:
@@ -234,6 +334,63 @@ let downloadRangeViaDownload
                     let start = int offset
                     let count = min length (bytes.Length - start)
                     return Ok(Array.sub bytes start count)
+    }
+
+/// Phase 741 — the one-line refusal every implementation without a
+/// bounded multi-part commit primitive returns. Paired with
+/// `CanComposeFrom = false`; the two are the complete adoption for a
+/// custom `IBlobStorage` that does not want to compose.
+let composeNotSupported (implementation: string) : Async<Result<int64, ComposeRefusal>> =
+    async.Return(
+        Error(
+            ComposeRefusal.NotSupported(
+                sprintf
+                    "%s has no bounded-memory multi-part commit primitive; callers assemble through memory instead"
+                    implementation
+            )
+        )
+    )
+
+/// Phase 741 — shared download-then-concatenate-then-upload fallback for
+/// `IBlobStorage.ComposeFrom`. Correct against the contract semantics
+/// but NOT cheap: it materialises the whole result, which is the cost
+/// the member exists to avoid.
+///
+/// It is deliberately NOT what an implementation should reach for by
+/// default, and an implementation that delegates here should still
+/// declare `CanComposeFrom = false` — that flag is how the media
+/// library decides whether a streaming commit is worth attempting, so a
+/// store that answers `true` and then buffers the object has told the
+/// one caller that cares exactly the wrong thing. Delegate here when a
+/// custom store needs the member to WORK before it can be made to work
+/// cheaply.
+let composeFromViaDownload
+    (store: IBlobStorage)
+    (container: string)
+    (targetBlobName: string)
+    (sourceBlobNames: string list)
+    : Async<Result<int64, ComposeRefusal>> =
+    async {
+        if List.isEmpty sourceBlobNames then
+            return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+        else
+            let mutable failure = None
+            let parts = ResizeArray<byte[]>()
+
+            for name in sourceBlobNames do
+                if failure.IsNone then
+                    match! store.Download(container, name) with
+                    | Error e -> failure <- Some(ComposeRefusal.ComposeFailed e)
+                    | Ok bytes -> parts.Add bytes
+
+            match failure with
+            | Some e -> return Error e
+            | None ->
+                let joined = Array.concat parts
+
+                match! store.Upload(container, targetBlobName, joined) with
+                | Error e -> return Error(ComposeRefusal.ComposeFailed e)
+                | Ok _ -> return Ok(int64 joined.Length)
     }
 
 /// Shared default for `IBlobStorage.Erase`. Every concrete

@@ -389,6 +389,11 @@ module MediaLibraryServerApp =
                     // composed store refuses ranged reads, so range
                     // serving falls back to whole-object slicing.
                     |> ServerApp.withConfigValidator (MediaConfigValidator.createRangeProbe blob)
+                    // Phase 741 — advisory (never an error) when the
+                    // composed store cannot compose stored parts, so
+                    // resumable commit falls back to materialised
+                    // assembly.
+                    |> ServerApp.withConfigValidator (MediaConfigValidator.createComposeProbe blob)
                 | None -> withValidator
 
             ServerApp.run final

@@ -1951,6 +1951,8 @@ ToolUp.Platform.BindingRevocationList.none : ToolUp.Platform.IBindingRevocationL
 ToolUp.Platform.BindingTransparencyLog (class)
 ToolUp.Platform.BindingTransparencyLog.none : ToolUp.Platform.IBindingTransparencyLog { get }
 ToolUp.Platform.BlobStorage (class)
+ToolUp.Platform.BlobStorage.composeFromViaDownload(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Platform.BlobStorage+ComposeRefusal]]
+ToolUp.Platform.BlobStorage.composeNotSupported(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Platform.BlobStorage+ComposeRefusal]]
 ToolUp.Platform.BlobStorage.downloadRangeViaDownload(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.BlobStorage.eraseByPrefix(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.BlobStorage.trySignedUrl(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
@@ -1959,6 +1961,17 @@ ToolUp.Platform.BlobStorage+BlobMetadata..ctor(System.Int64, System.DateTime, Mi
 ToolUp.Platform.BlobStorage+BlobMetadata.ContentType : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.BlobStorage+BlobMetadata.LastModified : System.DateTime { get }
 ToolUp.Platform.BlobStorage+BlobMetadata.Size : System.Int64 { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal (class)
+ToolUp.Platform.BlobStorage+ComposeRefusal.IsComposeFailed : System.Boolean { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal.IsNotSupported : System.Boolean { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal+ComposeFailed (class)
+ToolUp.Platform.BlobStorage+ComposeRefusal+ComposeFailed.message : System.String { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal+NotSupported (class)
+ToolUp.Platform.BlobStorage+ComposeRefusal+NotSupported.reason : System.String { get }
+ToolUp.Platform.BlobStorage+ComposeRefusal+Tags (class)
+ToolUp.Platform.BlobStorage+ComposeRefusal+Tags.ComposeFailed : System.Int32 (literal)
+ToolUp.Platform.BlobStorage+ComposeRefusal+Tags.NotSupported : System.Int32 (literal)
 ToolUp.Platform.BlobStorage+ConditionalWriteError (class)
 ToolUp.Platform.BlobStorage+ConditionalWriteError.IsConditionalWriteFailure : System.Boolean { get }
 ToolUp.Platform.BlobStorage+ConditionalWriteError.IsETagMismatch : System.Boolean { get }
@@ -1981,6 +1994,8 @@ ToolUp.Platform.BlobStorage+ETagCondition+Tags (class)
 ToolUp.Platform.BlobStorage+ETagCondition+Tags.IfAbsent : System.Int32 (literal)
 ToolUp.Platform.BlobStorage+ETagCondition+Tags.IfMatch : System.Int32 (literal)
 ToolUp.Platform.BlobStorage+IBlobStorage (interface)
+ToolUp.Platform.BlobStorage+IBlobStorage.CanComposeFrom : System.Boolean { get }
+ToolUp.Platform.BlobStorage+IBlobStorage.ComposeFrom(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Platform.BlobStorage+ComposeRefusal]]
 ToolUp.Platform.BlobStorage+IBlobStorage.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.BlobStorage+IBlobStorage.Download(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.BlobStorage+IBlobStorage.DownloadRange(System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]

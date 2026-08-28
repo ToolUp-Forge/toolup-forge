@@ -5,6 +5,7 @@ namespace ToolUp.MediaLibrary
 
 open System
 open System.IO
+open System.Security.Cryptography
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -41,11 +42,27 @@ open ToolUp.Platform.BlobStorage
 // construction, and keeps derivation / transcode / status notification
 // in exactly one place.
 //
-// The honest limit that follows: assembly materialises the object in
-// memory, because `MediaUploadRequest` carries `byte[]`. That is the
-// same ceiling single-shot upload has today — this phase removes the
-// NETWORK single point of failure, not the server-side memory one. A
-// streaming ingestion path is a separate, larger piece of work.
+// ─── Phase 741 — and the ceiling that followed, removed ──────────────
+//
+// 469 recorded its own limit honestly: assembly materialised the object
+// in memory, because `MediaUploadRequest` carries `byte[]`, so a 2 GiB
+// commit pinned ~2 GiB of heap. 469 removed the NETWORK single point of
+// failure; 741 removes the memory one.
+//
+// The chunks are already blobs, so assembly is a store-side compose over
+// parts the store holds — `IBlobStorage.ComposeFrom` — and the commit
+// hands the library the two facts it measured while walking the parts
+// (size and content hash) instead of the bytes. Commit then peaks at
+// ONE CHUNK.
+//
+// Both paths survive, and the fallback is not a degraded corner: it is
+// the shipped behaviour for every encrypted deployment (Phase 22's
+// whole-blob AES-GCM decorator cannot compose, exactly as it cannot
+// serve ranges) and for every deployment with a real derivation or
+// transcode provider, which needs the original bytes anyway. What is
+// NOT duplicated is the validation — `walkChunks` is one function, and
+// the two paths differ only in what they do with each chunk as it
+// passes.
 //
 // ─── No background service (GP 13) ───────────────────────────────────
 //
@@ -172,6 +189,15 @@ type BlobUploadSessionStore
     let maxChunkBytes = MediaLibraryOptions.effectiveMaxChunkBytes options
     let sessionTtl = MediaLibraryOptions.effectiveUploadSessionTtl options
 
+    // 741.C — the composed-ingest probe, taken ONCE at construction.
+    // The type test is a fact about the composed library, not about a
+    // request, so it belongs here rather than on every commit; the
+    // per-commit question (`CanIngestComposed`) is the cheap read.
+    let composedIngest =
+        match library with
+        | :? IComposedMediaIngest as ingest -> Some ingest
+        | _ -> None
+
     let publishProgress (uploadedBy: string) (payload: MediaUploadProgressUpdate) = async {
         match notifications with
         | None -> ()
@@ -253,11 +279,34 @@ type BlobUploadSessionStore
             logger.Warn(sprintf "[MediaLibrary] upload-session sweep failed: %s" ex.Message)
     }
 
-    /// Read every accepted chunk in offset order and concatenate.
-    /// Verifies contiguity from zero as it goes: a gap means the
-    /// session's chunk set does not describe a whole object, and
-    /// assembling it anyway would produce a plausible, wrong file.
-    let assemble (container: string) (sessionId: UploadSessionId) = async {
+    /// 741.C — the ONE commit-time measurement, and the whole of the
+    /// reason both commit paths agree.
+    ///
+    /// Walks the session's chunks in offset order exactly once,
+    /// verifying contiguity from zero as it goes (a gap means the chunk
+    /// set does not describe a whole object, and assembling it anyway
+    /// would produce a plausible, wrong file), accumulating the total
+    /// length and the SHA-256 of the concatenation, and handing every
+    /// chunk to `sink`.
+    ///
+    /// **The sink is the only difference between the two paths.** The
+    /// streaming path passes `ignore` and peaks at one chunk; the
+    /// materialised path passes a buffer write and peaks at the object.
+    /// Neither path re-implements contiguity, size or hashing, so
+    /// "identical validation on both paths" is a property of the code
+    /// rather than a claim two implementations have to keep agreeing
+    /// on.
+    ///
+    /// Returns the total size, the lowercase-hex SHA-256, and the
+    /// ordered chunk blob names — the last being what a store-side
+    /// compose is given.
+    ///
+    /// The materialised path then hashes a second time inside
+    /// `IMediaLibrary.Upload`. That is deliberate: `Upload` owns the
+    /// hash on the single-shot path and must keep owning it, and one
+    /// extra SHA-256 pass is not the binding cost on a path that is
+    /// already holding the whole object in memory.
+    let walkChunks (container: string) (sessionId: UploadSessionId) (sink: byte[] -> unit) = async {
         let! names = blobStorage.List(container, UploadSessionPaths.chunksDir sessionId)
 
         let ordered =
@@ -265,7 +314,7 @@ type BlobUploadSessionStore
             |> List.choose (fun n -> UploadSessionPaths.chunkOffset n |> Option.map (fun o -> o, n))
             |> List.sortBy fst
 
-        use buffer = new MemoryStream()
+        use hasher = IncrementalHash.CreateHash HashAlgorithmName.SHA256
         let mutable expected = 0L
         let mutable failure = None
 
@@ -278,12 +327,15 @@ type BlobUploadSessionStore
                     match! blobStorage.Download(container, name) with
                     | Error e -> failure <- Some(SessionStorageError e)
                     | Ok bytes ->
-                        buffer.Write(bytes, 0, bytes.Length)
+                        hasher.AppendData bytes
+                        sink bytes
                         expected <- expected + int64 bytes.Length
 
         match failure with
         | Some e -> return Error e
-        | None -> return Ok(buffer.ToArray())
+        | None ->
+            let hash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant()
+            return Ok(expected, hash, ordered |> List.map snd)
     }
 
     /// Wall-clock composition — the shape every composition root uses.
@@ -395,17 +447,34 @@ type BlobUploadSessionStore
             match! loadManifest scopeContainer sessionId with
             | Error e -> return Error e
             | Ok manifest ->
-                match! assemble scopeContainer sessionId with
-                | Error e -> return Error e
-                | Ok bytes ->
-                    let actual = int64 bytes.Length
+                // 741.C — the strategy is chosen BEFORE the walk,
+                // because the walk is what the two strategies disagree
+                // about. `CanIngestComposed` folds in both refusal
+                // reasons (a store with no compose primitive; a
+                // derivation or transcode provider that needs the
+                // bytes), so this one read is the whole decision.
+                let streaming =
+                    match composedIngest with
+                    | Some ingest when ingest.CanIngestComposed -> Some ingest
+                    | _ -> None
 
+                use buffer = new MemoryStream()
+
+                let sink: byte[] -> unit =
+                    match streaming with
+                    | Some _ -> ignore
+                    | None -> fun bytes -> buffer.Write(bytes, 0, bytes.Length)
+
+                match! walkChunks scopeContainer sessionId sink with
+                | Error e -> return Error e
+                | Ok(actual, contentHash, parts) ->
                     // 469.B — the actual measurement, taken where it is
-                    // the only honest one. Under-delivery keeps the
-                    // session (the client can send the rest); any
-                    // over-delivery or cap breach fails CLOSED and
-                    // takes the session with it, so a client cannot
-                    // retry its way past the cap.
+                    // the only honest one, and now taken identically on
+                    // both paths because there is only one walk.
+                    // Under-delivery keeps the session (the client can
+                    // send the rest); any over-delivery or cap breach
+                    // fails CLOSED and takes the session with it, so a
+                    // client cannot retry its way past the cap.
                     if actual < manifest.DeclaredSizeBytes then
                         return Error(IncompleteUpload(actual, manifest.DeclaredSizeBytes))
                     elif actual > manifest.DeclaredSizeBytes then
@@ -415,37 +484,79 @@ type BlobUploadSessionStore
                         do! deleteSession scopeContainer sessionId
                         return Error(InvalidDeclaration(FileTooLarge(actual, options.MaxBytes)))
                     else
-                        match
-                            MediaUploadRequest.create
-                                options
-                                bytes
-                                manifest.OriginalFilename
-                                manifest.MimeType
-                                manifest.UploadedBy
-                                manifest.Caption
-                        with
-                        | Error e ->
+                        let committed (record: MediaRecord) = async {
                             do! deleteSession scopeContainer sessionId
-                            return Error(InvalidDeclaration e)
-                        | Ok request ->
-                            match! library.Upload(scopeContainer, request) with
-                            // A storage failure is not the client's
-                            // fault and is not fatal to the session —
-                            // leave it standing so commit can be
-                            // retried without re-sending gigabytes.
-                            | Error e -> return Error(UploadFailed e)
-                            | Ok record ->
+
+                            do!
+                                publishProgress
+                                    manifest.UploadedBy
+                                    (progressOf
+                                        { manifest with ReceivedBytes = actual }
+                                        UploadSessionPhase.committed
+                                        (Some(MediaId.value record.Id)))
+                        }
+
+                        match streaming with
+                        | Some ingest ->
+                            // `MediaUploadDeclaration.create` applies
+                            // exactly the filename / MIME / size checks
+                            // `MediaUploadRequest.create` applies below,
+                            // against the same measured size — the two
+                            // paths reject the same commits with the
+                            // same error values.
+                            match
+                                MediaUploadDeclaration.create
+                                    options
+                                    manifest.OriginalFilename
+                                    manifest.MimeType
+                                    actual
+                                    manifest.UploadedBy
+                                    manifest.Caption
+                            with
+                            | Error e ->
                                 do! deleteSession scopeContainer sessionId
+                                return Error(InvalidDeclaration e)
+                            | Ok declaration ->
+                                let original = {
+                                    Parts = parts
+                                    SizeBytes = actual
+                                    ContentHash = contentHash
+                                }
 
-                                do!
-                                    publishProgress
-                                        manifest.UploadedBy
-                                        (progressOf
-                                            { manifest with ReceivedBytes = actual }
-                                            UploadSessionPhase.committed
-                                            (Some(MediaId.value record.Id)))
-
-                                return Ok record
+                                match! ingest.IngestComposed(scopeContainer, original, declaration) with
+                                // As on the materialised path: a
+                                // storage failure is not the client's
+                                // fault and is not fatal to the session
+                                // — the chunks are still there, so
+                                // commit can be retried without
+                                // re-sending gigabytes.
+                                | Error e -> return Error(UploadFailed e)
+                                | Ok record ->
+                                    do! committed record
+                                    return Ok record
+                        | None ->
+                            match
+                                MediaUploadRequest.create
+                                    options
+                                    (buffer.ToArray())
+                                    manifest.OriginalFilename
+                                    manifest.MimeType
+                                    manifest.UploadedBy
+                                    manifest.Caption
+                            with
+                            | Error e ->
+                                do! deleteSession scopeContainer sessionId
+                                return Error(InvalidDeclaration e)
+                            | Ok request ->
+                                match! library.Upload(scopeContainer, request) with
+                                // A storage failure is not the client's
+                                // fault and is not fatal to the session —
+                                // leave it standing so commit can be
+                                // retried without re-sending gigabytes.
+                                | Error e -> return Error(UploadFailed e)
+                                | Ok record ->
+                                    do! committed record
+                                    return Ok record
         }
 
         member _.AbortUpload(scopeContainer, sessionId) = async {

@@ -67,6 +67,14 @@ type CountingBlobStorage(inner: IBlobStorage) =
     let mutable rangeCalls = 0
     let mutable rangeBytes = 0L
 
+    // Phase 741 — the PEAK counters. The 468 totals answer "how much
+    // did it read?"; a memory claim needs "how much at once?", and the
+    // two come apart exactly where this phase lives: a streaming commit
+    // reads every byte of the object and holds one chunk of it.
+    let mutable maxDownloadBytes = 0
+    let mutable maxUploadBytes = 0
+    let mutable composeCalls = 0
+
     /// Whole-object `Download` calls — the pre-468 range path, and the
     /// Phase 468 fallback. Zero on a working ranged fast path.
     member _.DownloadCalls = downloadCalls
@@ -77,6 +85,18 @@ type CountingBlobStorage(inner: IBlobStorage) =
     /// Bytes returned through any read path.
     member _.TotalBytesRead = downloadBytes + rangeBytes
 
+    /// Phase 741 — the largest single `Download` result. The memory
+    /// claim in one number: a commit that never materialises the object
+    /// never pulls more than one chunk in one call.
+    member _.MaxDownloadBytes = maxDownloadBytes
+    /// Phase 741 — the largest single `Upload` payload: the same claim
+    /// from the write side, since a streaming commit hands the store
+    /// part NAMES and never the assembled object.
+    member _.MaxUploadBytes = maxUploadBytes
+    /// Phase 741 — how many times assembly went through the compose
+    /// seam. Zero on the materialised path.
+    member _.ComposeCalls = composeCalls
+
     /// Zero the counters — called after upload so the measurement
     /// covers serving only.
     member _.Reset() =
@@ -84,10 +104,25 @@ type CountingBlobStorage(inner: IBlobStorage) =
         downloadBytes <- 0L
         rangeCalls <- 0
         rangeBytes <- 0L
+        maxDownloadBytes <- 0
+        maxUploadBytes <- 0
+        composeCalls <- 0
 
     interface IBlobStorage with
-        member _.Upload(container, blobName, content) =
-            inner.Upload(container, blobName, content)
+        // Phase 741 — the capability passes through, so what this
+        // double measures is the library's behaviour over a real
+        // store's answer rather than one this double invented.
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) = async {
+            composeCalls <- composeCalls + 1
+            return! inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
+        }
+
+        member _.Upload(container, blobName, content) = async {
+            maxUploadBytes <- max maxUploadBytes (if isNull content then 0 else content.Length)
+            return! inner.Upload(container, blobName, content)
+        }
 
         member _.Delete(container, blobName) = inner.Delete(container, blobName)
         member _.List(container, prefix) = inner.List(container, prefix)
@@ -102,7 +137,9 @@ type CountingBlobStorage(inner: IBlobStorage) =
             downloadCalls <- downloadCalls + 1
 
             match result with
-            | Ok bytes -> downloadBytes <- downloadBytes + int64 bytes.Length
+            | Ok bytes ->
+                downloadBytes <- downloadBytes + int64 bytes.Length
+                maxDownloadBytes <- max maxDownloadBytes bytes.Length
             | Error _ -> ()
 
             return result
@@ -126,6 +163,15 @@ type CountingBlobStorage(inner: IBlobStorage) =
 /// the encrypted deployment's serving path.
 type RangeRefusingBlobStorage(inner: IBlobStorage) =
     interface IBlobStorage with
+        // Phase 741 — this double refuses ranged READS only; compose
+        // passes through, so the encryption decorator's two refusals
+        // stay independently testable rather than arriving as one
+        // undifferentiated "encrypted store" shape.
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
+            inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
+
         member _.Upload(container, blobName, content) =
             inner.Upload(container, blobName, content)
 
@@ -143,6 +189,39 @@ type RangeRefusingBlobStorage(inner: IBlobStorage) =
                 Error
                     "test double: ranged reads refused (mirrors EncryptedBlobStorage — whole-blob AES-GCM is undecryptable from a mid-blob window)"
         }
+
+/// Phase 741 — a store that refuses to compose stored parts: the shape
+/// of the `EncryptedBlobStorage` decorator (each part is its own
+/// whole-blob AES-GCM envelope, so concatenating them yields nothing
+/// decryptable) and of every custom `IBlobStorage` that adopts the
+/// member by declining it.
+///
+/// A SEPARATE double from `RangeRefusingBlobStorage` above, though the
+/// same decorator motivates both: the refusals are independent
+/// capabilities and a single "encrypted-shaped" double would make it
+/// impossible to say which one a failure was about.
+type ComposeRefusingBlobStorage(inner: IBlobStorage) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported
+                "test double: compose refused (mirrors EncryptedBlobStorage — concatenated AES-GCM envelopes are not the envelope of the concatenated plaintext)"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
 
 /// Conformance suite. `makeLibrary` returns a fresh empty library.
 let tests (name: string) (makeLibrary: unit -> IMediaLibrary) : Test =
@@ -727,5 +806,170 @@ let uploadSessionTests
             // Nothing was ingested.
             let! items = lib.List(container, "", 0)
             Expect.isEmpty items "an aborted session leaves no media record"
+        }
+    ]
+
+// ─── Phase 741 — the O(chunk) commit proof ───────────────────────────
+//
+// `uploadSessionTests` above is behavioural: it says what the committed
+// record contains, never what committing it COST. Phase 741's whole
+// claim is a cost claim — a commit on a store that can compose stored
+// parts must peak at one chunk, not at the object — and a behavioural
+// pack cannot fail when that regresses. This pack closes it the way
+// Phase 468 closed the ranged-read claim: interpose a counting
+// `IBlobStorage` and assert on the byte counts.
+//
+// The discriminator is `MaxUploadBytes`, and it is worth saying why,
+// because the obvious one does not work. BOTH paths read the chunks one
+// at a time — `walkChunks` is shared — so the largest single DOWNLOAD is
+// one chunk either way and separates nothing. What differs is the
+// write: the materialised path hands `IMediaLibrary.Upload` the
+// assembled object, which reaches the store as one whole-object
+// `Upload`; the streaming path hands over part NAMES and the store
+// composes. The two paths are therefore separated by the largest single
+// payload the store was ever given — which is exactly the quantity a
+// deployment's heap cares about.
+//
+// Both halves are asserted, and the refusing half is not a degraded
+// corner being tolerated: it is the shipped behaviour of every
+// encrypted deployment and of every custom store that adopts the member
+// by declining it.
+
+/// Conformance for the commit COST over a store that composes and a
+/// store that refuses. Same `makeOver` shape as `uploadSessionTests`,
+/// so a caller binds both from one factory.
+let streamingCommitTests
+    (name: string)
+    (makeStore: unit -> IBlobStorage)
+    (makeOver:
+        MediaLibraryOptions -> (unit -> System.DateTimeOffset) -> IBlobStorage -> IUploadSessionStore * IMediaLibrary)
+    : Test =
+
+    let defaultOptions = MediaLibraryOptions.defaults
+
+    let fixedNow () =
+        System.DateTimeOffset(2026, 8, 28, 12, 0, 0, System.TimeSpan.Zero)
+
+    let largestChunk = sessionChunks |> Array.map Array.length |> Array.max
+
+    /// Open a session and append every chunk. The caller zeroes the
+    /// counters afterwards, so what is measured is the COMMIT and not
+    /// the appends that preceded it.
+    let uploadedSession (sessions: IUploadSessionStore) = async {
+        let! opened = sessions.BeginUpload(container, declaration defaultOptions (int64 sessionPayload.Length))
+        let sessionId = Expect.wantOk opened "begin upload"
+
+        let mutable offset = 0L
+
+        for chunk in sessionChunks do
+            let! appended = sessions.AppendChunk(container, sessionId, offset, chunk)
+            Expect.isOk appended "append"
+            offset <- offset + int64 chunk.Length
+
+        return sessionId
+    }
+
+    testList (sprintf "resumable commit cost (%s)" name) [
+
+        testCaseAsync "a commit over a composing store never handles more than one chunk at a time"
+        <| async {
+            let counting = CountingBlobStorage(makeStore ())
+            let sessions, _ = makeOver defaultOptions fixedNow (counting :> IBlobStorage)
+            let! sessionId = uploadedSession sessions
+            counting.Reset()
+
+            let! commit = sessions.CommitUpload(container, sessionId)
+            let record = Expect.wantOk commit "commit"
+
+            Expect.equal counting.ComposeCalls 1 "assembly went through the compose seam exactly once"
+
+            Expect.isLessThanOrEqual counting.MaxDownloadBytes largestChunk "no single read pulled more than one chunk"
+
+            Expect.isLessThan
+                counting.MaxUploadBytes
+                sessionPayload.Length
+                "the assembled object was never handed to the store as one payload — that is the O(chunk) claim"
+
+            Expect.equal record.SizeBytes (int64 sessionPayload.Length) "the committed record is the whole object"
+        }
+
+        testCaseAsync "a commit over a refusing store materialises — the fallback, measured"
+        <| async {
+            let counting =
+                CountingBlobStorage(ComposeRefusingBlobStorage(makeStore ()) :> IBlobStorage)
+
+            let sessions, _ = makeOver defaultOptions fixedNow (counting :> IBlobStorage)
+            let! sessionId = uploadedSession sessions
+            counting.Reset()
+
+            let! commit = sessions.CommitUpload(container, sessionId)
+            let record = Expect.wantOk commit "commit over a refusing store still succeeds"
+
+            Expect.equal
+                counting.ComposeCalls
+                0
+                "a store that declares CanComposeFrom = false is never asked to compose"
+
+            Expect.isGreaterThanOrEqual
+                counting.MaxUploadBytes
+                sessionPayload.Length
+                "the fallback does hand the store the whole object — stated, not hidden"
+
+            Expect.equal record.SizeBytes (int64 sessionPayload.Length) "the committed record is the whole object"
+        }
+
+        // The equality that makes the fast path safe to take: whichever
+        // path a deployment lands on, the committed item is the same
+        // item. Stated against the single-shot upload too, so this is
+        // the 469 acceptance criterion extended to the new path rather
+        // than a weaker claim about the two new paths agreeing with
+        // each other.
+        testCaseAsync "streamed and materialised commits are content-hash-equal, and equal to a single-shot upload"
+        <| async {
+            let sessionsA, libA = makeOver defaultOptions fixedNow (makeStore ())
+            let! idA = uploadedSession sessionsA
+            let! commitA = sessionsA.CommitUpload(container, idA)
+            let streamed = Expect.wantOk commitA "streamed commit"
+
+            let refusing = ComposeRefusingBlobStorage(makeStore ()) :> IBlobStorage
+            let sessionsB, _ = makeOver defaultOptions fixedNow refusing
+            let! idB = uploadedSession sessionsB
+            let! commitB = sessionsB.CommitUpload(container, idB)
+            let materialised = Expect.wantOk commitB "materialised commit"
+
+            let! single = libA.Upload(container, request "video/mp4" sessionPayload)
+            let singleRecord = Expect.wantOk single "single-shot upload of the same bytes"
+
+            Expect.equal streamed.ContentHash materialised.ContentHash "streamed hash = materialised hash"
+            Expect.equal streamed.ContentHash singleRecord.ContentHash "streamed hash = single-shot hash"
+            Expect.equal streamed.SizeBytes materialised.SizeBytes "same size"
+            Expect.equal streamed.MimeType materialised.MimeType "same MIME"
+            Expect.equal streamed.OriginalFilename materialised.OriginalFilename "same filename"
+            Expect.equal streamed.Status materialised.Status "same terminal ingestion status"
+        }
+
+        // The composed original must be the object, not merely
+        // something of the right length: a compose that concatenated in
+        // the wrong order passes every size assertion above.
+        testCaseAsync "the streamed original round-trips byte-equal through the library"
+        <| async {
+            let sessions, lib = makeOver defaultOptions fixedNow (makeStore ())
+            let! sessionId = uploadedSession sessions
+
+            let! commit = sessions.CommitUpload(container, sessionId)
+            let record = Expect.wantOk commit "commit"
+
+            let! ranged =
+                lib.OpenRange(
+                    container,
+                    record.Id,
+                    {
+                        Start = 0L
+                        End = int64 sessionPayload.Length - 1L
+                    }
+                )
+
+            let stream = Expect.wantOk ranged "open the whole composed original"
+            Expect.sequenceEqual (readAll stream) sessionPayload "composed bytes are the payload, in order"
         }
     ]
