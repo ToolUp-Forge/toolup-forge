@@ -4,12 +4,14 @@
 module ToolUp.Platform.Tests.InProcess.EdgeCacheTests
 
 open System
+open System.Collections.Concurrent
 open System.Net
 open System.Net.Http
 open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
 open ToolUp.MediaLibrary
 open ToolUp.PublicRendering
@@ -995,6 +997,543 @@ let private callbackSignerTests =
             Expect.equal signer.Name "cb" "and it names itself"
     ]
 
+// ─── 6. Phase 740 — purge outcome telemetry ───────────────────────────
+//
+// 472 left a terminal purge failure as one `Warn` line, which is enough
+// to diagnose a purge you already suspect and nothing at all to notice
+// one you do not. These cases pin the three counters, the failure-class
+// mapping the log line and the metric now share, and — the part worth
+// the most care — that a deployment which composed no metrics endpoint
+// pays nothing for any of it.
+
+/// `IMetricsSink` recording every `Increment`, with a bounded wait so a
+/// detached purge can be observed without a sleep long enough to be a
+/// flake either way.
+type private RecordingPurgeMetrics() =
+    let increments = ConcurrentBag<string * Map<string, string>>()
+
+    member _.Increments = increments |> List.ofSeq
+
+    member this.CountOf(name: string) =
+        this.Increments |> List.filter (fun (n, _) -> n = name) |> List.length
+
+    member this.TagsOf(name: string) =
+        this.Increments |> List.filter (fun (n, _) -> n = name) |> List.map snd
+
+    /// Wait until `name` has been incremented at least `n` times.
+    member this.WaitFor (name: string) (n: int) =
+        let deadline = DateTime.UtcNow.AddSeconds 5.0
+        let mutable satisfied = false
+
+        while not satisfied && DateTime.UtcNow < deadline do
+            if this.CountOf name >= n then
+                satisfied <- true
+            else
+                Thread.Sleep 10
+
+        satisfied
+
+    /// Nothing arrived within `window`. The negative claim's honest
+    /// shape — a bounded wait, not an instant read.
+    member this.StaysEmptyFor(window: TimeSpan) =
+        Thread.Sleep window
+        this.Increments |> List.isEmpty
+
+    interface IMetricsSink with
+        member _.Record(_name, _value, _tags) = ()
+        member _.Increment(name, tags) = increments.Add(name, tags)
+        member _.SetGauge(_name, _value, _tags) = ()
+
+/// A sink whose every emission throws. A metrics backend having a bad
+/// day must not take the purge — or the thread-pool work item running
+/// it — down with it.
+type private ThrowingMetrics() =
+    interface IMetricsSink with
+        member _.Record(_name, _value, _tags) = failwith "the exporter is down"
+        member _.Increment(_name, _tags) = failwith "the exporter is down"
+        member _.SetGauge(_name, _value, _tags) = failwith "the exporter is down"
+
+type private PurgeWarnLogger() =
+    let warnings = ResizeArray<string>()
+
+    member _.Warnings = lock warnings (fun () -> warnings |> List.ofSeq)
+
+    member this.WaitForWarning() =
+        let deadline = DateTime.UtcNow.AddSeconds 5.0
+        let mutable satisfied = false
+
+        while not satisfied && DateTime.UtcNow < deadline do
+            if not (List.isEmpty this.Warnings) then
+                satisfied <- true
+            else
+                Thread.Sleep 10
+
+        satisfied
+
+    interface ILogger with
+        member _.Debug(_: string) = ()
+        member _.Info(_: string) = ()
+
+        member _.Warn(message: string) =
+            lock warnings (fun () -> warnings.Add message)
+
+        member _.Error(_: string, _: exn option) = ()
+
+/// An edge answering every verb with one fixed outcome.
+let private edgeAnswering (name: string) (outcome: Result<unit, EdgePurgeError>) : IEdgeCache =
+    { new IEdgeCache with
+        member _.Name = name
+        member _.Propagation = PurgeEventualUnbounded
+        member _.PurgePaths(_) = async.Return outcome
+        member _.PurgePrefix(_) = async.Return outcome
+        member _.PurgeTags(_) = async.Return outcome
+    }
+
+/// The shape the in-tree HTTP adapter writes a rejection detail in.
+let private rejectionAt (status: int) (reason: string) =
+    PurgeRejected(sprintf "https://edge.example/purge returned %d %s" status reason)
+
+let private purgeClassificationTests =
+    testList "EdgePurgeMetrics.classify" [
+        test "the typed cases that need no refinement" {
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeTransportFailure "timeout"))
+                EdgePurgeMetrics.ClassTransport
+                "a transport failure"
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeNotSupported "PurgePrefix"))
+                EdgePurgeMetrics.ClassUnsupported
+                "a capability this edge does not have is not a network failure and not a credential one"
+        }
+
+        test "auth and rate-limit are separated out of PurgeRejected by status" {
+            // Both arrive as `PurgeRejected` because both are 4xx, so
+            // the typed case alone cannot tell them apart — which is
+            // the whole reason the detail is read at all. The remedies
+            // are completely different: rotate a credential vs. purge
+            // less.
+            for status in [ 401; 403; 407 ] do
+                Expect.equal
+                    (EdgePurgeMetrics.classify (rejectionAt status "Forbidden"))
+                    EdgePurgeMetrics.ClassAuth
+                    (sprintf "%d is a credential problem" status)
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (rejectionAt 429 "Too Many Requests"))
+                EdgePurgeMetrics.ClassRateLimit
+                "429 is a quota problem"
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (rejectionAt 404 "Not Found"))
+                EdgePurgeMetrics.ClassOther
+                "a 4xx that is neither reads as other, not as a guess at one of them"
+        }
+
+        test "a detail the convention cannot be read out of degrades to `other`, never to a wrong class" {
+            // The refinement is a stated convention, not a dependency —
+            // `Platform.Server` references no edge sub-companion. A
+            // third-party adapter that writes its rejection some other
+            // way must still be classified, and the only honest answer
+            // is the unrefined one.
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeRejected "the distribution is not configured for purging"))
+                EdgePurgeMetrics.ClassOther
+                "no marker at all"
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeRejected "quota exceeded: 429 requests this minute"))
+                EdgePurgeMetrics.ClassOther
+                "a number that is not a status, in a detail with no marker"
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeRejected "endpoint returned 4291 objects"))
+                EdgePurgeMetrics.ClassOther
+                "four digits after the marker is not a three-digit status"
+
+            Expect.equal
+                (EdgePurgeMetrics.classify (PurgeRejected "endpoint returned nothing"))
+                EdgePurgeMetrics.ClassOther
+                "non-digits after the marker"
+        }
+
+        test "every class the classifier can produce is enumerated in `classes`" {
+            // The enumeration is what the registered tag allowlist and
+            // any dashboard are written against; a class the classifier
+            // emits but nobody enumerated would be a series nobody
+            // queries.
+            let produced = [
+                EdgePurgeMetrics.classify (PurgeTransportFailure "x")
+                EdgePurgeMetrics.classify (PurgeNotSupported "PurgeTags")
+                EdgePurgeMetrics.classify (rejectionAt 401 "Unauthorized")
+                EdgePurgeMetrics.classify (rejectionAt 429 "Too Many Requests")
+                EdgePurgeMetrics.classify (PurgeRejected "opaque")
+            ]
+
+            for cls in produced do
+                Expect.isTrue (List.contains cls EdgePurgeMetrics.classes) (sprintf "%s is enumerated" cls)
+
+            Expect.equal
+                (produced |> List.distinct |> List.length)
+                (List.length EdgePurgeMetrics.classes)
+                "and the enumeration carries no class the classifier cannot produce"
+        }
+    ]
+
+let private purgeMetricRegistrationTests =
+    testList "Phase 740 — metric declarations" [
+        test "all three counters are declared in the SDK standard registrations" {
+            // An unregistered series is silently dropped by the sink, so
+            // a counter that is emitted but not declared is a counter
+            // that does not exist.
+            let names =
+                StandardMetrics.registrations
+                |> List.map (fun r -> r.Definition.Name)
+                |> Set.ofList
+
+            for name in
+                [
+                    EdgePurgeMetrics.Attempted
+                    EdgePurgeMetrics.Succeeded
+                    EdgePurgeMetrics.Failed
+                ] do
+                Expect.isTrue (names.Contains name) (sprintf "%s is registered" name)
+        }
+
+        test "they are counters under the reserved SDK prefix" {
+            let declared =
+                EdgePurgeMetrics.registrations
+                |> List.map (fun r -> r.Definition.Name, r.Definition.Kind, r.Module)
+
+            Expect.equal (List.length declared) 3 "three series, no more"
+
+            for name, kind, modul in declared do
+                Expect.isTrue
+                    (name.StartsWith MetricDefinition.ReservedPrefix)
+                    (sprintf "%s carries the SDK-owned prefix" name)
+
+                Expect.equal kind Counter (sprintf "%s is a counter" name)
+                Expect.isNone modul (sprintf "%s is SDK-owned, not module-scoped" name)
+        }
+
+        test "the failure counter allows the class tag and the other two do not" {
+            let tagsFor name =
+                EdgePurgeMetrics.registrations
+                |> List.find (fun r -> r.Definition.Name = name)
+                |> fun r -> r.Definition.Tags
+
+            Expect.equal (tagsFor EdgePurgeMetrics.Attempted) [ EdgePurgeMetrics.EdgeTagKey ] "attempted"
+            Expect.equal (tagsFor EdgePurgeMetrics.Succeeded) [ EdgePurgeMetrics.EdgeTagKey ] "succeeded"
+
+            Expect.equal
+                (tagsFor EdgePurgeMetrics.Failed)
+                [ EdgePurgeMetrics.EdgeTagKey; EdgePurgeMetrics.ClassTagKey ]
+                "failed — there is no class for a success, and a constant tag would be an allowlist entry for nobody"
+        }
+    ]
+
+let private purgeTelemetryGateTests =
+    testList "Phase 740 — the zero-cost gate" [
+        test "an unwrapped edge carries no telemetry, and a wrapped one does — the gate discriminates" {
+            // Asserting only the OFF half would prove nothing: a gate
+            // that is always off passes it. The control is the point.
+            let plain = edgeAnswering "plain" (Ok())
+            let sink = RecordingPurgeMetrics()
+            let wrapped = EdgeCache.withMetrics (sink :> IMetricsSink) plain
+
+            Expect.equal (EdgePurgeTelemetry.forEdge plain) EdgePurgeUnmetered "an ordinary edge is unmetered"
+
+            match EdgePurgeTelemetry.forEdge wrapped with
+            | EdgePurgeMetered s -> Expect.isTrue (obj.ReferenceEquals(s, sink)) "the wrap carries THAT sink"
+            | EdgePurgeUnmetered -> failtest "the wrapped edge should be metered"
+        }
+
+        test "the OFF value is a shared singleton — the allocation-free claim, structurally" {
+            // Same form as the no-op's claim above: `EdgePurgeUnmetered`
+            // is nullary, so F# caches one instance and resolving the
+            // gate on an unmetered deployment cannot allocate. A fact a
+            // test can hold, where a timing would be a hope.
+            let a = EdgePurgeTelemetry.forEdge (edgeAnswering "one" (Ok()))
+            let b = EdgePurgeTelemetry.forEdge (edgeAnswering "two" (Ok()))
+
+            Expect.isTrue (obj.ReferenceEquals(box a, box b)) "two resolutions share one value"
+        }
+
+        test "a NO-OP sink leaves the composition byte-for-byte unwrapped (GP 11 / GP 13)" {
+            // `NoOpMetricsSink` is what the SDK registers when a
+            // deployment composed no metrics endpoint. Reading it as a
+            // live sink would put a wrapper object and two type tests on
+            // the purge path of every deployment that measures nothing.
+            let plain = edgeAnswering "plain" (Ok())
+            let wrapped = EdgeCache.withMetrics (NoOpMetricsSink() :> IMetricsSink) plain
+
+            Expect.isTrue (obj.ReferenceEquals(wrapped, plain)) "the same instance comes back"
+
+            // Control — a live sink DOES produce a different object, so
+            // the assertion above is about the no-op and not about
+            // `withMetrics` never wrapping anything.
+            let live = EdgeCache.withMetrics (RecordingPurgeMetrics() :> IMetricsSink) plain
+
+            Expect.isFalse (obj.ReferenceEquals(live, plain)) "a live sink wraps"
+        }
+
+        test "the declared no-op edge is never wrapped, so `isNoop` still recognises it" {
+            // A wrapper would defeat `EdgeCache.isNoop` and start
+            // scheduling purges for a deployment that declared it wanted
+            // none — turning 472's "declaring your absence is free" into
+            // a cost.
+            let sink = RecordingPurgeMetrics()
+
+            let wrapped = EdgeCache.withMetrics (sink :> IMetricsSink) NoopEdgeCache.instance
+
+            Expect.isTrue (obj.ReferenceEquals(wrapped, NoopEdgeCache.instance)) "the shared no-op comes back"
+            Expect.isTrue (EdgeCache.isNoop wrapped) "and it is still recognised as the no-op"
+        }
+
+        test "wrapping twice hands back the first wrap rather than nesting" {
+            let sink = RecordingPurgeMetrics() :> IMetricsSink
+            let once = EdgeCache.withMetrics sink (edgeAnswering "plain" (Ok()))
+            let twice = EdgeCache.withMetrics sink once
+
+            Expect.isTrue (obj.ReferenceEquals(once, twice)) "no second wrapper, so `Inner` never lies"
+        }
+
+        test "the wrap forwards every verb and its identity unchanged" {
+            let recording = IEdgeCacheContract.RecordingEdgeCache()
+
+            let wrapped =
+                EdgeCache.withMetrics (RecordingPurgeMetrics() :> IMetricsSink) (recording :> IEdgeCache)
+
+            Expect.equal wrapped.Name (recording :> IEdgeCache).Name "Name"
+            Expect.equal wrapped.Propagation (recording :> IEdgeCache).Propagation "Propagation"
+
+            Expect.equal (wrapped.PurgePaths [ "/a" ] |> Async.RunSynchronously) (Ok()) "PurgePaths"
+            Expect.equal (wrapped.PurgePrefix "/p/" |> Async.RunSynchronously) (Ok()) "PurgePrefix"
+            Expect.equal (wrapped.PurgeTags [ "t" ] |> Async.RunSynchronously) (Ok()) "PurgeTags"
+        }
+    ]
+
+let private purgeCounterTests =
+    testList "Phase 740 — purge outcome counters" [
+        test "a SUCCESSFUL purge counts attempted + succeeded, tagged by the edge's own name" {
+            let sink = RecordingPurgeMetrics()
+
+            let edge =
+                EdgeCache.withMetrics (sink :> IMetricsSink) (edgeAnswering "cdn-a" (Ok()))
+
+            EdgeCache.purgePathsDetached None (Some edge) [ "/a" ]
+
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Succeeded 1) "the success was counted"
+            Expect.equal (sink.CountOf EdgePurgeMetrics.Attempted) 1 "one attempt"
+            Expect.equal (sink.CountOf EdgePurgeMetrics.Failed) 0 "and nothing failed"
+
+            Expect.equal
+                (sink.TagsOf EdgePurgeMetrics.Succeeded)
+                [ Map.ofList [ EdgePurgeMetrics.EdgeTagKey, "cdn-a" ] ]
+                "tagged with the edge the Warn line would have named"
+        }
+
+        test "a FAILING purge counts attempted + failed with the class, and never succeeded" {
+            let sink = RecordingPurgeMetrics()
+
+            let edge =
+                EdgeCache.withMetrics
+                    (sink :> IMetricsSink)
+                    (edgeAnswering "cdn-b" (Error(rejectionAt 429 "Too Many Requests")))
+
+            EdgeCache.purgePathsDetached None (Some edge) [ "/a" ]
+
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Failed 1) "the failure was counted"
+            Expect.equal (sink.CountOf EdgePurgeMetrics.Succeeded) 0 "nothing succeeded"
+
+            Expect.equal
+                (sink.TagsOf EdgePurgeMetrics.Failed)
+                [
+                    Map.ofList [
+                        EdgePurgeMetrics.EdgeTagKey, "cdn-b"
+                        EdgePurgeMetrics.ClassTagKey, EdgePurgeMetrics.ClassRateLimit
+                    ]
+                ]
+                "the class an operator acts on, on the series they alert from"
+        }
+
+        test "`attempted` counts PURGES, not retry attempts" {
+            // The retry policy runs two attempts against a failing edge.
+            // If `attempted` moved per attempt it would stop being the
+            // denominator of the other two, and a flapping edge would
+            // read as a healthier one.
+            let sink = RecordingPurgeMetrics()
+
+            let edge =
+                EdgeCache.withMetrics
+                    (sink :> IMetricsSink)
+                    (edgeAnswering "cdn-c" (Error(PurgeTransportFailure "unreachable")))
+
+            EdgeCache.purgePathsDetached None (Some edge) [ "/a" ]
+
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Failed 1) "the failure was counted"
+            Expect.equal (sink.CountOf EdgePurgeMetrics.Attempted) 1 "one purge, whatever the retry policy did"
+            Expect.equal (sink.CountOf EdgePurgeMetrics.Failed) 1 "and one terminal failure"
+
+            Expect.equal
+                (sink.TagsOf EdgePurgeMetrics.Failed
+                 |> List.map (Map.find EdgePurgeMetrics.ClassTagKey))
+                [ EdgePurgeMetrics.ClassTransport ]
+                "classified transport"
+        }
+
+        test "an unsupported verb is a counted failure, in its own class" {
+            let sink = RecordingPurgeMetrics()
+
+            let edge =
+                EdgeCache.withMetrics
+                    (sink :> IMetricsSink)
+                    (edgeAnswering "cdn-d" (Error(PurgeNotSupported "PurgePrefix")))
+
+            EdgeCache.purgePrefixDetached None (Some edge) "/p/"
+
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Failed 1) "counted"
+
+            Expect.equal
+                (sink.TagsOf EdgePurgeMetrics.Failed
+                 |> List.map (Map.find EdgePurgeMetrics.ClassTagKey))
+                [ EdgePurgeMetrics.ClassUnsupported ]
+                "an absent capability is not a transport problem and not a credential one"
+        }
+
+        test "every tag key emitted is in the metric's registered allowlist" {
+            // A tag whose key is not registered is silently DROPPED by
+            // the sink, so an emitter and its declaration drifting apart
+            // is invisible in production. Asserted against real
+            // emissions rather than against a comment.
+            let sink = RecordingPurgeMetrics()
+
+            let ok = EdgeCache.withMetrics (sink :> IMetricsSink) (edgeAnswering "cdn-e" (Ok()))
+
+            let bad =
+                EdgeCache.withMetrics
+                    (sink :> IMetricsSink)
+                    (edgeAnswering "cdn-e" (Error(rejectionAt 403 "Forbidden")))
+
+            EdgeCache.purgePathsDetached None (Some ok) [ "/a" ]
+            EdgeCache.purgePathsDetached None (Some bad) [ "/b" ]
+
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Succeeded 1) "the success landed"
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Failed 1) "and the failure landed"
+
+            let allowed =
+                EdgePurgeMetrics.registrations
+                |> List.map (fun r -> r.Definition.Name, Set.ofList r.Definition.Tags)
+                |> Map.ofList
+
+            for name, tags in sink.Increments do
+                match Map.tryFind name allowed with
+                | None -> failtestf "%s was emitted but is not declared here" name
+                | Some allowedKeys ->
+                    for key in tags |> Map.toList |> List.map fst do
+                        Expect.isTrue
+                            (allowedKeys.Contains key)
+                            (sprintf "%s emits tag `%s`, which its declaration allows" name key)
+        }
+
+        test "an unmetered edge emits nothing at all" {
+            // The other half of the gate: the purge still happens, it
+            // just is not counted. Without the recording edge this
+            // would pass for a purge that never ran.
+            let sink = RecordingPurgeMetrics()
+            let recording = IEdgeCacheContract.RecordingEdgeCache()
+
+            EdgeCache.purgePathsDetached None (Some(recording :> IEdgeCache)) [ "/a" ]
+
+            Expect.isTrue (recording.WaitFor 1) "the purge reached the edge"
+
+            Expect.isTrue
+                (sink.StaysEmptyFor(TimeSpan.FromMilliseconds 200.0))
+                "and nothing was counted, because no sink was composed"
+        }
+
+        test "the declared no-op emits nothing even with a live sink in hand" {
+            // 472's short-circuit runs BEFORE any telemetry resolution,
+            // so a no-op deployment reaches none of this code.
+            let sink = RecordingPurgeMetrics()
+
+            let wrapped = EdgeCache.withMetrics (sink :> IMetricsSink) NoopEdgeCache.instance
+
+            EdgeCache.purgePathsDetached None (Some wrapped) [ "/a" ]
+
+            Expect.isTrue (sink.StaysEmptyFor(TimeSpan.FromMilliseconds 200.0)) "no counters for a declared no-op"
+        }
+
+        test "a sink that THROWS does not take the purge down with it" {
+            let recording = IEdgeCacheContract.RecordingEdgeCache()
+
+            let edge =
+                EdgeCache.withMetrics (ThrowingMetrics() :> IMetricsSink) (recording :> IEdgeCache)
+
+            EdgeCache.purgePathsDetached None (Some edge) [ "/a" ]
+
+            Expect.isTrue (recording.WaitFor 1) "the purge still reached the edge"
+            Thread.Sleep 150
+        }
+
+        test "the Warn line gains the class, so the log and the metric agree" {
+            // 740.B — one derivation feeds both, so a dashboard and the
+            // line an operator greps for cannot disagree about the same
+            // failure.
+            let sink = RecordingPurgeMetrics()
+            let logger = PurgeWarnLogger()
+
+            let edge =
+                EdgeCache.withMetrics
+                    (sink :> IMetricsSink)
+                    (edgeAnswering "cdn-f" (Error(rejectionAt 401 "Unauthorized")))
+
+            EdgeCache.purgePathsDetached (Some(logger :> ILogger)) (Some edge) [ "/a" ]
+
+            Expect.isTrue (logger.WaitForWarning()) "the failure was logged"
+            Expect.isTrue (sink.WaitFor EdgePurgeMetrics.Failed 1) "and counted"
+
+            let line = logger.Warnings |> List.head
+
+            Expect.stringContains line (sprintf "class=%s" EdgePurgeMetrics.ClassAuth) "the line names the class"
+            Expect.stringContains line "cdn-f" "and the edge"
+
+            Expect.equal
+                (sink.TagsOf EdgePurgeMetrics.Failed
+                 |> List.map (Map.find EdgePurgeMetrics.ClassTagKey))
+                [ EdgePurgeMetrics.ClassAuth ]
+                "the metric carries the same class the line printed"
+        }
+
+        test "the purge is still detached — counting did not put the edge on the calling thread (GP 7)" {
+            use gate = new ManualResetEventSlim(false)
+
+            let slow =
+                { new IEdgeCache with
+                    member _.Name = "slow-metered"
+                    member _.Propagation = PurgeEventualUnbounded
+
+                    member _.PurgePaths(_) = async {
+                        gate.Wait(TimeSpan.FromSeconds 5.0) |> ignore
+                        return Ok()
+                    }
+
+                    member _.PurgePrefix(_) = async { return Ok() }
+                    member _.PurgeTags(_) = async { return Ok() }
+                }
+
+            let edge = EdgeCache.withMetrics (RecordingPurgeMetrics() :> IMetricsSink) slow
+
+            let sw = Diagnostics.Stopwatch.StartNew()
+            EdgeCache.purgePathsDetached None (Some edge) [ "/a" ]
+            sw.Stop()
+
+            Expect.isLessThan sw.ElapsedMilliseconds 1000L "the publish path did not wait on the edge or on the sink"
+
+            gate.Set()
+        }
+    ]
+
 // ─── Bindings ─────────────────────────────────────────────────────────
 
 let private stubbedHttpEdge () : IEdgeCache =
@@ -1023,6 +1562,11 @@ let tests =
         mediaEdgePathTests
         httpEdgeCacheTests
         callbackSignerTests
+        // Phase 740 — purge outcome telemetry at the 472 choke point.
+        purgeClassificationTests
+        purgeMetricRegistrationTests
+        purgeTelemetryGateTests
+        purgeCounterTests
         // The conformance bar, over all three implementations — the
         // in-tree no-op, the recording fake, and the sub-companion that
         // proves the seam from outside the SDK (GP 12).

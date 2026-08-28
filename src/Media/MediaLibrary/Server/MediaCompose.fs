@@ -315,6 +315,18 @@ module MediaLibraryServerApp =
                                     sp.GetService(typeof<HlsKeyDelivery.MediaHlsKeyStore>)
                                     :?> HlsKeyDelivery.MediaHlsKeyStore
 
+                                // Phase 740 — carry the deployment's
+                                // metrics sink on the edge so purge
+                                // outcomes are counted at the choke
+                                // point. Resolved here because the
+                                // container does not exist when
+                                // `withEdgeCache` declared the edge.
+                                // Identity when no live sink is
+                                // registered, so an unmetered
+                                // deployment composes exactly what it
+                                // composed before.
+                                let meteredEdge = edgeCache |> Option.map (EdgeCache.withMetricsFrom sp)
+
                                 DefaultMediaLibrary(
                                     blob,
                                     signer,
@@ -324,7 +336,7 @@ module MediaLibraryServerApp =
                                     options,
                                     asLogger,
                                     Option.ofObj hlsKeys,
-                                    edgeCache,
+                                    meteredEdge,
                                     delegatedSigner
                                 )
                                 :> IMediaLibrary)

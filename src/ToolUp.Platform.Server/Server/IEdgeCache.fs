@@ -4,6 +4,7 @@
 namespace ToolUp.Platform
 
 open System
+open ToolUp.Platform.Metrics
 
 // ─── Phase 472 — IEdgeCache: the CDN / edge invalidation seam ─────────
 //
@@ -226,6 +227,304 @@ module EdgeCacheHeader =
         | EdgePublic(maxAge, sharedMaxAge) ->
             Some(sprintf "public, max-age=%d, s-maxage=%d" (age maxAge) (age sharedMaxAge))
 
+// ─── Phase 740 — purge outcome telemetry ──────────────────────────────
+//
+// A purge is fire-and-forget by design (GP 7), and 472 left its terminal
+// failure as one `Warn` line naming the edge. That is enough to diagnose
+// a purge you already suspect and nothing at all to NOTICE one you do
+// not: a mis-credentialed or rate-limited adapter fails identically on
+// every publish, forever, while pages and media serve stale from the
+// edge and no series moves. These three counters are that missing
+// signal — attempted / succeeded / failed, at the one choke point every
+// in-tree purge passes through, tagged by the edge's own name and (on a
+// failure) by a class an operator can act on.
+//
+// **Off is free, and off is the default.** Nothing here allocates or
+// emits unless the composed edge cache carries a live `IMetricsSink`
+// (see `IEdgePurgeMetered` below). The two short-circuits 472 put ahead
+// of the scheduling — no edge composed, or the declared no-op — are
+// untouched and still run FIRST, so a no-op deployment reaches no
+// telemetry code at all and the allocation-free claim it pins is
+// unaffected.
+
+/// Why a purge failed, in the vocabulary an operator acts on. The
+/// classes are deliberately about the REMEDY rather than about the
+/// wire: `auth` means rotate or re-scope the credential, `rate-limit`
+/// means purge less or ask for more headroom, `transport` means the
+/// endpoint could not be reached and may well succeed next time, and
+/// `unsupported` means this edge does not offer the verb at all and no
+/// amount of retrying or re-crediting will change that.
+module EdgePurgeMetrics =
+
+    /// Counter — one increment per detached purge that got as far as
+    /// being scheduled. The denominator for the other two.
+    [<Literal>]
+    let Attempted = "toolup.edge.purge.attempted"
+
+    /// Counter — purges whose terminal outcome was `Ok`.
+    [<Literal>]
+    let Succeeded = "toolup.edge.purge.succeeded"
+
+    /// Counter — purges whose terminal outcome was an error, after the
+    /// retry policy was exhausted. The series this phase exists for.
+    [<Literal>]
+    let Failed = "toolup.edge.purge.failed"
+
+    /// Tag key carrying `IEdgeCache.Name` — the same token the `Warn`
+    /// line names, so a dashboard and a log line agree on which edge.
+    /// Bounded by construction: a deployment composes one edge, or a
+    /// small handful.
+    [<Literal>]
+    let EdgeTagKey = "edge"
+
+    /// Tag key carrying the failure class. Present on `Failed` only —
+    /// there is no class for a success, and inventing one (`"none"`)
+    /// would put a constant in an allowlist for no reader's benefit.
+    [<Literal>]
+    let ClassTagKey = "class"
+
+    /// The purge could not be delivered — DNS, TLS, timeout, 5xx.
+    [<Literal>]
+    let ClassTransport = "transport"
+
+    /// The edge refused the request on credentials (401 / 403 / 407).
+    [<Literal>]
+    let ClassAuth = "auth"
+
+    /// The edge refused the request on quota (429).
+    [<Literal>]
+    let ClassRateLimit = "rate-limit"
+
+    /// The edge does not offer the verb that was called. Not a failure
+    /// of the network or the credential; a fact about the adapter's
+    /// declared capability, which is why it is not folded into `other`.
+    [<Literal>]
+    let ClassUnsupported = "unsupported"
+
+    /// A rejection this SDK could not refine any further. The honest
+    /// answer for a third-party adapter whose rejection detail says
+    /// nothing a machine can read.
+    [<Literal>]
+    let ClassOther = "other"
+
+    /// The token an adapter puts between its endpoint and the HTTP
+    /// status it received, when it formats a rejection detail as
+    /// `"<endpoint> returned <status> <reason>"`.
+    ///
+    /// This is a stated CONVENTION, not a dependency: `Platform.Server`
+    /// takes no reference on any edge sub-companion (GP 1), and the
+    /// classifier below degrades to `other` — never to a wrong class —
+    /// for a detail it cannot read. The in-tree HTTP adapter formats
+    /// its detail this way, which is what makes `auth` and `rate-limit`
+    /// distinguishable at all: both arrive as `PurgeRejected`, because
+    /// both are 4xx, so the typed case alone cannot separate them.
+    [<Literal>]
+    let StatusMarker = " returned "
+
+    /// Read an HTTP status out of a rejection detail written to the
+    /// convention above. Strict on purpose: exactly three digits
+    /// immediately after the marker, not followed by a fourth, so a
+    /// detail carrying some other number cannot be misread as a status.
+    let private httpStatusIn (detail: string) : int option =
+        if String.IsNullOrEmpty detail then
+            None
+        else
+            let marker = detail.IndexOf(StatusMarker, StringComparison.Ordinal)
+
+            if marker < 0 then
+                None
+            else
+                let start = marker + StatusMarker.Length
+
+                if start + 3 > detail.Length then
+                    None
+                elif start + 3 < detail.Length && Char.IsDigit detail[start + 3] then
+                    None
+                else
+                    let candidate = detail.Substring(start, 3)
+
+                    if candidate |> Seq.forall Char.IsDigit then
+                        Some(int candidate)
+                    else
+                        None
+
+    /// The failure class for one terminal purge error.
+    let classify (error: EdgePurgeError) : string =
+        match error with
+        | PurgeTransportFailure _ -> ClassTransport
+        | PurgeNotSupported _ -> ClassUnsupported
+        | PurgeRejected detail ->
+            match httpStatusIn detail with
+            | Some 401
+            | Some 403
+            | Some 407 -> ClassAuth
+            | Some 429 -> ClassRateLimit
+            | _ -> ClassOther
+
+    /// Every class the classifier can produce. Exposed so the metric's
+    /// tag allowlist and the classifier cannot drift apart unnoticed —
+    /// the test pack asserts the two against each other rather than
+    /// trusting this comment.
+    let classes: string list = [ ClassTransport; ClassAuth; ClassRateLimit; ClassUnsupported; ClassOther ]
+
+    /// Declarations, spliced into `StandardMetrics.registrations` so a
+    /// deployment with a metrics endpoint has all three series declared
+    /// without composing anything — an unregistered series is dropped
+    /// by the sink, so declaring them centrally is what makes the
+    /// emissions below reachable at all.
+    let registrations: MetricRegistration list = [
+        {
+            Module = None
+            Definition = {
+                Name = Attempted
+                Kind = Counter
+                Description = "Edge-cache purges scheduled (tags: edge)"
+                Unit = "1"
+                Tags = [ EdgeTagKey ]
+            }
+        }
+        {
+            Module = None
+            Definition = {
+                Name = Succeeded
+                Kind = Counter
+                Description = "Edge-cache purges that succeeded (tags: edge)"
+                Unit = "1"
+                Tags = [ EdgeTagKey ]
+            }
+        }
+        {
+            Module = None
+            Definition = {
+                Name = Failed
+                Kind = Counter
+                Description =
+                    "Edge-cache purges that failed after retries "
+                    + "(tags: edge + class=transport|auth|rate-limit|unsupported|other). "
+                    + "A non-zero rate means the edge is serving bytes this origin has replaced."
+                Unit = "1"
+                Tags = [ EdgeTagKey; ClassTagKey ]
+            }
+        }
+    ]
+
+/// An edge cache that carries the sink its purge outcomes are counted
+/// through. Implemented by `MeteredEdgeCache` (the wrap a compose root
+/// applies), and available to any out-of-tree adapter that would rather
+/// carry its own sink than be wrapped.
+///
+/// **Why the sink rides the EDGE rather than the call.** The choke point
+/// already holds the edge and nothing else: `purgeDetachedWith` is
+/// reached from a publish, a delete and a slug purge, none of which has
+/// a request, a response or a container in hand. Threading a sink down
+/// to each of them would have widened two public constructors and three
+/// composition records to carry a value only this one line reads. The
+/// edge is the thing being metered, so it is the thing that carries the
+/// meter.
+type IEdgePurgeMetered =
+    /// The live sink. Never a no-op — `EdgeCache.withMetrics` refuses to
+    /// wrap with one, so an instance implementing this interface is a
+    /// promise that emission is worth doing.
+    abstract PurgeMetrics: IMetricsSink
+
+/// What a purge about to be scheduled will emit. `EdgePurgeUnmetered`
+/// is a nullary case — an F#-cached singleton — and every emit function
+/// below matches it and returns, so the off path allocates nothing at
+/// all (GP 13).
+///
+/// Resolved per purge from the composed edge, NOT cached in a
+/// process-wide `mutable`: a cached static would make "counters appear
+/// only when a sink is composed" structurally untestable in a shared
+/// test process, where two tests with different compositions would see
+/// each other's cache. The resolution is one type test on an object the
+/// caller already holds.
+type EdgePurgeTelemetry =
+    | EdgePurgeUnmetered
+    | EdgePurgeMetered of sink: IMetricsSink
+
+module EdgePurgeTelemetry =
+
+    /// The telemetry a sink implies. `NoOpMetricsSink` — which is what
+    /// the SDK registers when a deployment composed no metrics endpoint
+    /// — reads as OFF rather than as a live sink that happens to
+    /// discard, so the gate is discriminating rather than always-on.
+    let forSink (sink: IMetricsSink) : EdgePurgeTelemetry =
+        match box sink with
+        | null -> EdgePurgeUnmetered
+        | :? NoOpMetricsSink -> EdgePurgeUnmetered
+        | _ -> EdgePurgeMetered sink
+
+    /// The telemetry a composed edge carries, or `EdgePurgeUnmetered`
+    /// for an edge that carries none.
+    let forEdge (edge: IEdgeCache) : EdgePurgeTelemetry =
+        match box edge with
+        | :? IEdgePurgeMetered as metered -> forSink metered.PurgeMetrics
+        | _ -> EdgePurgeUnmetered
+
+    /// Increment one counter, best-effort. A sink that throws must not
+    /// take the detached purge — or the thread-pool work item running
+    /// it — down with it; the purge's own outcome is the thing that
+    /// matters and it has already been decided by the time we are here.
+    let private increment (sink: IMetricsSink) (name: string) (tags: Map<string, string>) =
+        try
+            sink.Increment(name, tags)
+        with _ ->
+            ()
+
+    /// One purge was scheduled.
+    let attempted (telemetry: EdgePurgeTelemetry) (edge: IEdgeCache) : unit =
+        match telemetry with
+        | EdgePurgeUnmetered -> ()
+        | EdgePurgeMetered sink ->
+            increment sink EdgePurgeMetrics.Attempted (Map.ofList [ EdgePurgeMetrics.EdgeTagKey, edge.Name ])
+
+    /// That purge reached a terminal `Ok`.
+    let succeeded (telemetry: EdgePurgeTelemetry) (edge: IEdgeCache) : unit =
+        match telemetry with
+        | EdgePurgeUnmetered -> ()
+        | EdgePurgeMetered sink ->
+            increment sink EdgePurgeMetrics.Succeeded (Map.ofList [ EdgePurgeMetrics.EdgeTagKey, edge.Name ])
+
+    /// That purge reached a terminal error of the given class.
+    let failed (telemetry: EdgePurgeTelemetry) (edge: IEdgeCache) (failureClass: string) : unit =
+        match telemetry with
+        | EdgePurgeUnmetered -> ()
+        | EdgePurgeMetered sink ->
+            increment
+                sink
+                EdgePurgeMetrics.Failed
+                (Map.ofList [
+                    EdgePurgeMetrics.EdgeTagKey, edge.Name
+                    EdgePurgeMetrics.ClassTagKey, failureClass
+                ])
+
+/// An `IEdgeCache` that forwards every verb to `inner` unchanged and
+/// carries the sink its purge outcomes are counted through. Applied by
+/// the compose roots via `EdgeCache.withMetrics`; a deployment may also
+/// apply it itself.
+///
+/// It is a pure carrier: it observes nothing and decides nothing. The
+/// counting happens at `EdgeCache.purgeDetachedWith`, where the TERMINAL
+/// outcome is known — a decorator counting each verb call would count
+/// every retry as its own attempt and could never see the difference
+/// between a purge that recovered on its second try and one that did
+/// not.
+type MeteredEdgeCache(inner: IEdgeCache, metrics: IMetricsSink) =
+
+    /// The wrapped edge, so a caller holding the wrapper can still
+    /// reach the implementation it decorates.
+    member _.Inner = inner
+
+    interface IEdgePurgeMetered with
+        member _.PurgeMetrics = metrics
+
+    interface IEdgeCache with
+        member _.Name = inner.Name
+        member _.Propagation = inner.Propagation
+        member _.PurgePaths(paths) = inner.PurgePaths paths
+        member _.PurgePrefix(prefix) = inner.PurgePrefix prefix
+        member _.PurgeTags(tags) = inner.PurgeTags tags
+
 // ─── Detached purge (the only shape in-tree callers use) ─────────────
 
 module EdgeCache =
@@ -237,6 +536,46 @@ module EdgeCache =
         match box edge with
         | :? NoopEdgeCache -> true
         | _ -> false
+
+    /// Phase 740 — carry a metrics sink on an edge cache, so its purge
+    /// outcomes are counted at the choke point.
+    ///
+    /// Three cases return `edge` UNCHANGED rather than a wrapper, and
+    /// each is load-bearing rather than tidy:
+    ///
+    ///   * a no-op sink — the SDK registers one when a deployment
+    ///     composed no metrics endpoint, and wrapping for it would put
+    ///     an object and two type tests on the purge path of every
+    ///     deployment that measures nothing;
+    ///   * the declared no-op edge — 472 pins that it is
+    ///     indistinguishable from an absent edge, and a wrapper would
+    ///     defeat `isNoop` and start scheduling work for a deployment
+    ///     that declared it wanted none;
+    ///   * an edge that already carries a sink — wrapping twice would
+    ///     be harmless but would leave `Inner` lying about what it
+    ///     decorates.
+    let withMetrics (metrics: IMetricsSink) (edge: IEdgeCache) : IEdgeCache =
+        match EdgePurgeTelemetry.forSink metrics with
+        | EdgePurgeUnmetered -> edge
+        | EdgePurgeMetered sink ->
+            if isNoop edge then
+                edge
+            else
+                match box edge with
+                | :? IEdgePurgeMetered -> edge
+                | _ -> MeteredEdgeCache(edge, sink) :> IEdgeCache
+
+    /// `withMetrics` over the sink registered in a container. The shape
+    /// a compose root uses: the container does not exist when the edge
+    /// is declared, so the wrap happens where the provider does.
+    /// Returns `edge` unchanged when nothing live is registered.
+    let withMetricsFrom (services: IServiceProvider) (edge: IEdgeCache) : IEdgeCache =
+        match box services with
+        | null -> edge
+        | _ ->
+            match services.GetService typeof<IMetricsSink> with
+            | :? IMetricsSink as sink -> withMetrics sink edge
+            | _ -> edge
 
     let private describe (error: EdgePurgeError) =
         match error with
@@ -310,8 +649,16 @@ module EdgeCache =
         | None -> ()
         | Some e when isNoop e -> ()
         | Some e ->
+            // Phase 740 — resolved once per purge, from the edge the
+            // caller already holds. `EdgePurgeUnmetered` is a cached
+            // singleton, so an unmetered deployment pays one type test
+            // and no allocation; the resolution sits INSIDE the detached
+            // body so even that test is off the calling thread.
             Async.Start(
                 async {
+                    let telemetry = EdgePurgeTelemetry.forEdge e
+                    EdgePurgeTelemetry.attempted telemetry e
+
                     let! outcome =
                         purgeWithRetry retry (fun () ->
                             try
@@ -319,17 +666,27 @@ module EdgeCache =
                             with ex ->
                                 async.Return(Error(PurgeTransportFailure ex.Message)))
 
-                    match outcome, logger with
-                    | Ok(), _ -> ()
-                    | Error err, Some log ->
-                        log.Warn(
-                            sprintf
-                                "[EdgeCache:%s] purge of %s failed — the edge may serve stale bytes until its own TTL expires (%s)"
-                                e.Name
-                                what
-                                (describe err)
-                        )
-                    | Error _, None -> ()
+                    match outcome with
+                    | Ok() -> EdgePurgeTelemetry.succeeded telemetry e
+                    | Error err ->
+                        // The class the metric is tagged with is the
+                        // class the log line names — one derivation, so
+                        // a dashboard and the line an operator greps
+                        // for cannot disagree about the same failure.
+                        let failureClass = EdgePurgeMetrics.classify err
+                        EdgePurgeTelemetry.failed telemetry e failureClass
+
+                        match logger with
+                        | Some log ->
+                            log.Warn(
+                                sprintf
+                                    "[EdgeCache:%s] purge of %s failed [class=%s] — the edge may serve stale bytes until its own TTL expires (%s)"
+                                    e.Name
+                                    what
+                                    failureClass
+                                    (describe err)
+                            )
+                        | None -> ()
                 }
             )
 
