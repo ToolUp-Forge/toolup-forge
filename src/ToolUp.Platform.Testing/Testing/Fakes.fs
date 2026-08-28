@@ -25,6 +25,31 @@ type TestBlobStorage() =
     let blobs = ConcurrentDictionary<string * string, byte[]>()
 
     interface IBlobStorage with
+        // Phase 741 — a dictionary write IS this store's multi-part
+        // commit, so the member's memory bound is met vacuously and the
+        // capability is declared honestly. Consumers testing against
+        // this fake therefore exercise the STREAMING commit path, which
+        // is what a fake for a cloud-backed deployment should do.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                let missing =
+                    sourceBlobNames
+                    |> List.tryFind (fun n -> not (blobs.ContainsKey((container, n))))
+
+                match missing with
+                | Some name -> return Error(ComposeRefusal.ComposeFailed $"not found: {container}/{name}")
+                | None ->
+                    let joined =
+                        sourceBlobNames |> List.map (fun n -> blobs[(container, n)]) |> Array.concat
+
+                    blobs[(container, targetBlobName)] <- joined
+                    return Ok(int64 joined.Length)
+        }
+
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix (this :> IBlobStorage) container prefix policy dryRun
 

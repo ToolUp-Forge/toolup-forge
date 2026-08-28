@@ -196,6 +196,12 @@ let tests =
             // The seam's consumer pattern: type-test, fall back when absent.
             let bare =
                 { new IBlobStorage with
+                    // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+                    member _.CanComposeFrom = false
+
+                    member _.ComposeFrom(_, _, _) =
+                        ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
                     member _.Upload(_, _, _) = async { return Ok "" }
                     member _.Download(_, _) = async { return Error "nope" }
                     member _.DownloadRange(_, _, _, _) = async { return Error "nope" }

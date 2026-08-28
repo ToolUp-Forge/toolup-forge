@@ -794,3 +794,107 @@ type DefaultMediaLibrary
                 | Ok stream -> return Ok(stream, MediaPaths.contentTypeFor relativePath)
                 | Error e -> return Error e
         }
+    // ─── Phase 741 — composed (streaming) ingest ─────────────────────
+    //
+    // The O(chunk) commit path for resumable uploads. It writes the same
+    // three things `Upload` writes — `media/originals/{id}`, the record
+    // blob, the status notification — differing only in that the
+    // original arrives by a store-side compose over parts rather than as
+    // a `byte[]` this process is holding.
+    //
+    // Deliberately NOT a second copy of `Upload`'s body: everything
+    // `Upload` does that needs the bytes (probe, poster, transcode) is
+    // exactly what `CanIngestComposed` refuses to promise, so this
+    // member has nothing to skip. What remains is the same sequence in
+    // the same order — original first, record second, purge last — and
+    // the status it publishes is `Ready`, which is what the no-provider
+    // `Upload` also publishes.
+    interface IComposedMediaIngest with
+
+        // Both halves must hold, and neither is the other's proxy: a
+        // store that cannot compose makes the path impossible, and a
+        // derivation or transcode provider makes it wrong (both take the
+        // original bytes, and an ingest that never materialises them
+        // would silently drop the poster and the renditions rather than
+        // fail). A deployment with either one takes the materialised
+        // path and behaves exactly as it did before this phase.
+        member _.CanIngestComposed =
+            blobStorage.CanComposeFrom
+            && not derivation.Capabilities.CanExtractPoster
+            && not derivation.Capabilities.CanTranscodeHls
+
+        member _.IngestComposed(scopeContainer, original, declaration) = async {
+            let id = MediaId.create ()
+
+            match! blobStorage.ComposeFrom(scopeContainer, MediaPaths.original id, original.Parts) with
+            | Error(ComposeRefusal.NotSupported reason) ->
+                // Reachable only if a store answered `CanComposeFrom =
+                // true` and then refused — a contract violation, not a
+                // fallback, so it surfaces rather than silently
+                // materialising behind the caller's back.
+                return Error(MediaUploadError.StorageError(sprintf "composed ingest refused by the store: %s" reason))
+            | Error(ComposeRefusal.ComposeFailed message) -> return Error(MediaUploadError.StorageError message)
+            | Ok written ->
+                if written <> original.SizeBytes then
+                    // The store composed something other than what the
+                    // caller measured. Fail closed and take the target
+                    // with it — a record written over this would claim a
+                    // hash for bytes nobody verified.
+                    let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
+
+                    return
+                        Error(
+                            MediaUploadError.StorageError(
+                                sprintf
+                                    "composed original is %d bytes, expected %d — the store's compose disagrees with the measured parts"
+                                    written
+                                    original.SizeBytes
+                            )
+                        )
+                else
+                    let provisional = {
+                        Id = id
+                        OriginalFilename = declaration.OriginalFilename
+                        MimeType = declaration.MimeType
+                        SizeBytes = original.SizeBytes
+                        ContentHash = original.ContentHash
+                        UploadedBy = declaration.UploadedBy
+                        UploadedAt = DateTimeOffset.UtcNow
+                        Status = MediaIngestionStatus.Queued
+                        PosterBlob = None
+                        Renditions = []
+                        Caption = declaration.Caption
+                        DurationSeconds = None
+                    }
+
+                    // The `Queued` → `Ready` pair is not decoration: a
+                    // committed session must produce the SAME
+                    // ingestion-status stream as a single-shot upload
+                    // of the same bytes, which is the 469 acceptance
+                    // criterion and is asserted token-for-token. It is
+                    // always `Queued` here rather than `Transcoding`
+                    // because `CanIngestComposed` is false whenever a
+                    // transcoder declares a capability — the same
+                    // branch `Upload` takes with no transcoder
+                    // composed.
+                    do! publishStatus declaration.UploadedBy provisional
+
+                    let record = {
+                        provisional with
+                            Status = MediaIngestionStatus.Ready
+                    }
+
+                    match! writeRecord scopeContainer record with
+                    | Error e ->
+                        let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
+                        return Error(MediaUploadError.StorageError e)
+                    | Ok() ->
+                        do! publishStatus declaration.UploadedBy record
+
+                        // Same reasoning as `Upload`'s publish-time
+                        // purge (Phase 472): the id space is the
+                        // deployment's, so a reused or restored id must
+                        // not inherit a predecessor's cached bytes.
+                        purgeEdge id "upload"
+                        return Ok record
+        }

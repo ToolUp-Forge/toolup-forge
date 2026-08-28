@@ -5,6 +5,9 @@ open System.IO
 open Azure
 open Azure.Storage.Blobs
 open Azure.Storage.Blobs.Models
+// Phase 741 — `GetBlockBlobClient` (the block-list compose primitive)
+// is an extension on `BlobContainerClient` in the Specialized namespace.
+open Azure.Storage.Blobs.Specialized
 open Azure.Storage.Sas
 open ToolUp.Platform.BlobStorage
 
@@ -190,6 +193,60 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                     // doc-comment for what that cost.
                     return Ok Array.empty
                 | Unwrapped ex -> return Error ex.Message
+        }
+
+        // Phase 741 — Azure's native multi-part commit is the BLOCK
+        // LIST: stage each part as its own block, then commit the list
+        // in one call. Nothing is visible at the target name until the
+        // commit, and an abandoned staging set is garbage-collected by
+        // the service after a week, so a failed compose leaves no
+        // half-object.
+        //
+        // Each part is pulled into memory once and staged from there, so
+        // the peak is ONE part — not the object — which is the member's
+        // whole contract. `StageBlockFromUri` would keep the bytes
+        // entirely service-side, but it needs a source URI the service
+        // can itself read: that means minting a SAS, which this
+        // companion cannot do under every credential shape it accepts
+        // (a SAS-token connection string carries no account key, and
+        // Azurite's shape differs again). A primitive that works for
+        // some deployments and silently degrades for others is worse
+        // here than one bounded relay that works for all of them.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(toolupContainer, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                try
+                    let cc = container ()
+                    let target = cc.GetBlockBlobClient(blobKey toolupContainer targetBlobName)
+
+                    let mutable total = 0L
+                    let blockIds = ResizeArray<string>()
+
+                    for index, source in List.indexed sourceBlobNames do
+                        let sourceBlob = cc.GetBlobClient(blobKey toolupContainer source)
+                        let! part = sourceBlob.DownloadContentAsync() |> Async.AwaitTask
+                        let bytes = part.Value.Content.ToArray()
+
+                        // Block ids must be equal-length base64 within
+                        // one blob — a fixed-width ordinal satisfies
+                        // that and keeps the committed order explicit.
+                        let blockId =
+                            Convert.ToBase64String(Text.Encoding.UTF8.GetBytes(index.ToString("D10")))
+
+                        use ms = new MemoryStream(bytes)
+                        let! _ = target.StageBlockAsync(blockId, ms) |> Async.AwaitTask
+                        blockIds.Add blockId
+                        total <- total + int64 bytes.Length
+
+                    let! _ = target.CommitBlockListAsync blockIds |> Async.AwaitTask
+                    return Ok total
+                with
+                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+                    return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
+                | Unwrapped ex -> return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
         member _.Delete(toolupContainer, blobName) = async {

@@ -284,6 +284,33 @@ type EncryptedBlobStorage(inner: IBlobStorage, resolver: IBlobEncryptionKeyResol
                     "EncryptedBlobStorage does not support ranged reads: content is whole-blob AES-GCM encrypted, so a mid-blob range is undecryptable. Use Download for encrypted content."
         }
 
+        // Phase 741 — the same honest refusal, for the same reason one
+        // layer along. Each stored part is its own AES-GCM envelope
+        // (nonce + ciphertext + tag); concatenating the envelopes does
+        // not produce the envelope of the concatenated plaintext, so a
+        // composed target would `Download` as an unparseable envelope —
+        // a corrupt object rather than a loud failure. Composing the
+        // PLAINTEXTS would mean decrypting every part and re-encrypting
+        // the whole, which materialises exactly what the member exists
+        // to avoid, so it is refused rather than faked. The refusal is
+        // deliberately NOT delegated to the inner store: the inner store
+        // can compose, and would — over ciphertext.
+        //
+        // Encrypted deployments therefore commit resumable uploads
+        // through the materialised path, exactly as they serve ranges
+        // through `Download`, and `MediaConfigValidator` says so at
+        // preflight. A chunked envelope would lift both refusals at
+        // once; it is a separate phase.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) = async {
+            return
+                Error(
+                    ComposeRefusal.NotSupported
+                        "EncryptedBlobStorage does not support server-side compose: each part is its own whole-blob AES-GCM envelope, so concatenating parts does not yield a decryptable object. Encrypted deployments assemble through memory."
+                )
+        }
+
         member _.Delete(container, blobName) = inner.Delete(container, blobName)
         member _.List(container, prefix) = inner.List(container, prefix)
         member _.Exists(container, blobName) = inner.Exists(container, blobName)

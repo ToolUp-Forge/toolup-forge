@@ -99,6 +99,12 @@ type private EcdsaHeadVerifier(expectedKeyId: string, publicKey: ECDsa) =
 /// dispatcher is about to retry the whole batch.
 type private HeadWriteFailingStorage(inner: IBlobStorage, failures: int ref) =
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(container, blobName, content) = async {
             if blobName.EndsWith "head.json" && failures.Value > 0 then
                 failures.Value <- failures.Value - 1

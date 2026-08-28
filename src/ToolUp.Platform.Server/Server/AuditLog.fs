@@ -1806,6 +1806,20 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> EvidenceChainWalked(fromAuditJson<EvidenceChainWalkedPayload> j)
     }
+    // Phase 739 — the grant twin of the `AuthorizationDenied` row the
+    // gated-HLS key endpoint already emits. Phase 471 made every REFUSED
+    // key fetch queryable and left every GRANTED one as a structured log
+    // line, so the store could answer "who was turned away" and not "who
+    // holds the key" — and the key is the whole protection on segments
+    // that are cached at an edge and exported to disk.
+    {
+        EventType = "MediaKeyDelivered"
+        TryEncode =
+            (function
+            | MediaKeyDelivered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> MediaKeyDelivered(fromAuditJson<MediaKeyDeliveredPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

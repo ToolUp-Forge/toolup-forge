@@ -51,6 +51,32 @@ type InMemoryBlobStorage() =
         }
 
     interface IBlobStorage with
+        // Phase 741 — a dict-backed store's "multi-part commit" is a
+        // dictionary write, so the bound is met vacuously. Declared
+        // `true` deliberately: this is the double the contract pack
+        // binds for the CAPABLE half of the compose conformance, and a
+        // hermetic capable store is what lets that half run everywhere
+        // rather than only where a cloud is armed.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                let missing =
+                    sourceBlobNames
+                    |> List.tryFind (fun n -> not (blobs.ContainsKey((container, n))))
+
+                match missing with
+                | Some name -> return Error(ComposeRefusal.ComposeFailed $"not found: {container}/{name}")
+                | None ->
+                    let joined =
+                        sourceBlobNames |> List.map (fun n -> blobs[(container, n)]) |> Array.concat
+
+                    blobs[(container, targetBlobName)] <- joined
+                    return Ok(int64 joined.Length)
+        }
+
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix (this :> IBlobStorage) container prefix policy dryRun
 

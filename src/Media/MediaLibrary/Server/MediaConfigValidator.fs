@@ -147,3 +147,35 @@ type private RangeProbe(storage: IBlobStorage) =
 /// alongside the options validator whenever an `IBlobStorage` is
 /// composed.
 let createRangeProbe (storage: IBlobStorage) : IConfigValidator = RangeProbe(storage) :> IConfigValidator
+// ─── Phase 741 — composed-commit capability advisory ─────────────────
+//
+// The sibling of the ranged-read advisory above, and for the same
+// reason one verb along: a store that cannot compose still commits
+// resumable uploads correctly, it just does so by materialising the
+// whole object — so a deployment that sized its heap expecting O(chunk)
+// commits learns at preflight rather than at the first 2 GiB upload.
+//
+// Unlike the range probe this needs NO sentinel blob and no IO at all:
+// `CanComposeFrom` is the store's own cheap, side-effect-free
+// declaration, which is exactly what it was added for. A validator that
+// costs one property read is one nobody has a reason to disable.
+
+type private ComposeProbe(storage: IBlobStorage) =
+    interface IConfigValidator with
+        member _.Name = "media_library:composed-commit"
+        member _.Timeout = IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            if storage.CanComposeFrom then
+                return ValidationResult.Ok
+            else
+                return
+                    ValidationResult.Warning
+                        "MediaLibrary: the composed IBlobStorage cannot compose stored parts (the whole-blob AES-GCM encryption decorator cannot, by design). Resumable uploads still commit correctly, but assembly materialises the whole object in memory — committing a 2 GiB upload pins ~2 GiB of heap, O(object) rather than O(chunk). See docs/companions/media-library.md."
+        }
+
+/// Phase 741 — the composed-commit capability advisory. Registered
+/// alongside the ranged-read probe whenever an `IBlobStorage` is
+/// composed.
+let createComposeProbe (storage: IBlobStorage) : IConfigValidator =
+    ComposeProbe(storage) :> IConfigValidator

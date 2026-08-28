@@ -46,6 +46,12 @@ module AwsS3StorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
+/// Phase 741 — S3's minimum multipart part size (5 MiB) for every part
+/// but the last. A hard service constraint, not a tuning knob: it is
+/// why `ComposeFrom` coalesces source objects rather than mapping one
+/// part per source.
+let private minPartBytes = 5L * 1024L * 1024L
+
 /// AWS SDK exceptions can surface at this companion's `with` handlers
 /// wrapped in `AggregateException`, so a direct `:? AmazonS3Exception`
 /// test never fires. Measured by the armed cloud-parity run (Phase 733,
@@ -175,6 +181,105 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                     // for what that cost.
                     return Ok Array.empty
                 | Unwrapped ex -> return Error ex.Message
+        }
+
+        // Phase 741 — S3's native multi-part commit, with the one
+        // constraint that shapes the whole implementation: EVERY part
+        // of a multipart upload except the last must be at least
+        // 5 MiB. That rules out the obvious mapping (one upload part
+        // per source object, server-side via `UploadPartCopy`) for the
+        // case this member exists to serve — a resumable upload whose
+        // chunks are whatever the client chose to send, typically well
+        // under 5 MiB. `CopyPart` would 400 on the first of them.
+        //
+        // So sources are COALESCED into parts of at least
+        // `minPartBytes` before upload. The cost is that the bytes pass
+        // through this process; the benefit is that the peak is the
+        // coalescing buffer — a constant, 5 MiB, independent of the
+        // number of sources and of the size of the result — which is
+        // exactly what the member promises. A future refinement can
+        // take `CopyPart` for any single source already over the
+        // threshold; it is not taken here because the mixed path would
+        // need both branches proven against a real bucket and the
+        // uniform one needs one.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(toolupContainer, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                let key = blobKey toolupContainer targetBlobName
+                let mutable uploadId = null
+
+                try
+                    let initReq = InitiateMultipartUploadRequest()
+                    initReq.BucketName <- config.BucketName
+                    initReq.Key <- key
+                    let! init = client.InitiateMultipartUploadAsync initReq |> Async.AwaitTask
+                    uploadId <- init.UploadId
+
+                    let etags = Collections.Generic.List<PartETag>()
+                    let pending = new MemoryStream()
+                    let mutable partNumber = 0
+                    let mutable total = 0L
+
+                    // Upload whatever is buffered as one part. Called
+                    // when the buffer crosses the threshold, and once
+                    // more at the end for the remainder (the final part
+                    // has no minimum).
+                    let flush () = async {
+                        if pending.Length > 0L then
+                            partNumber <- partNumber + 1
+                            let body = pending.ToArray()
+                            let req = UploadPartRequest()
+                            req.BucketName <- config.BucketName
+                            req.Key <- key
+                            req.UploadId <- uploadId
+                            req.PartNumber <- partNumber
+                            req.PartSize <- int64 body.Length
+                            req.InputStream <- new MemoryStream(body)
+                            let! resp = client.UploadPartAsync req |> Async.AwaitTask
+                            etags.Add(PartETag(partNumber, resp.ETag))
+                            pending.SetLength 0L
+                    }
+
+                    for source in sourceBlobNames do
+                        let getReq = GetObjectRequest()
+                        getReq.BucketName <- config.BucketName
+                        getReq.Key <- blobKey toolupContainer source
+                        use! response = client.GetObjectAsync getReq |> Async.AwaitTask
+                        do! response.ResponseStream.CopyToAsync pending |> Async.AwaitTask
+                        total <- total + response.ContentLength
+
+                        if pending.Length >= minPartBytes then
+                            do! flush ()
+
+                    do! flush ()
+
+                    let completeReq = CompleteMultipartUploadRequest()
+                    completeReq.BucketName <- config.BucketName
+                    completeReq.Key <- key
+                    completeReq.UploadId <- uploadId
+                    completeReq.PartETags <- etags
+                    let! _ = client.CompleteMultipartUploadAsync completeReq |> Async.AwaitTask
+                    pending.Dispose()
+                    return Ok total
+                with Unwrapped ex ->
+                    // Abandon the multipart upload — an uncompleted one
+                    // keeps billing for its staged parts until a
+                    // lifecycle rule reaps it, and the target name
+                    // stays untouched either way.
+                    if not (isNull uploadId) then
+                        try
+                            let abortReq = AbortMultipartUploadRequest()
+                            abortReq.BucketName <- config.BucketName
+                            abortReq.Key <- key
+                            abortReq.UploadId <- uploadId
+                            do! client.AbortMultipartUploadAsync abortReq |> Async.AwaitTask |> Async.Ignore
+                        with _ ->
+                            ()
+
+                    return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
         member _.Delete(toolupContainer, blobName) = async {

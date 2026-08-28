@@ -17,6 +17,14 @@ type IBlobStorage =
     abstract Exists: container: string * objectId: string -> Async<bool>
     abstract List: container: string * prefix: string -> Async<string list>
     abstract GetMetadata: container: string * objectId: string -> Async<Result<BlobMetadata, string>>
+    // Concatenate objects the store already holds into one target,
+    // without materialising the result. `CanComposeFrom` is the cheap,
+    // side-effect-free declaration a caller reads before choosing a
+    // strategy.
+    abstract CanComposeFrom: bool
+    abstract ComposeFrom:
+        container: string * targetBlobName: string * sourceBlobNames: string list ->
+            Async<Result<int64, ComposeRefusal>>
 ```
 
 Blob names returned by `List` are **always** `/`-delimited, on every backend and every OS — callers
@@ -82,6 +90,47 @@ primitive (correct, but it downloads the whole blob).
 **Encryption caveat.** The `EncryptedBlobStorage` decorator refuses ranged reads — its envelope is
 whole-blob AES-GCM, so a mid-blob ciphertext range is undecryptable. Read encrypted content with
 `Download`, and treat the refusal as the signal to do so.
+
+## Composing stored parts — `ComposeFrom`
+
+`ComposeFrom(container, target, sources)` concatenates objects the store **already holds** into one
+target object, in the order given, and returns the total byte length written. It exists so a caller
+that accumulated an object in parts — resumable media upload is the shipped consumer — can assemble
+it without pulling the whole thing through the application's heap.
+
+`CanComposeFrom` is the capability declaration, read *before* any work: a caller with an O(object)
+fallback must be able to choose its whole strategy up front, rather than walking every part,
+discovering a refusal, and walking them again.
+
+| Case | Result |
+|---|---|
+| `CanComposeFrom = false` | `Error (NotSupported …)`, always, with nothing written |
+| No sources | `Error (ComposeFailed …)` — see below |
+| A missing source | `Error (ComposeFailed …)`, with no completed target |
+| Otherwise | the target holds the parts concatenated in order; `Ok n` is that total |
+
+A zero-part compose is refused rather than answered with an empty object, deliberately: a caller
+whose part listing came back empty by accident would otherwise commit an empty object over a real one
+and see `Ok`.
+
+**Bounded memory is the contract, not a quality of implementation.** An implementation holds one part,
+or one fixed coalescing buffer — never an amount that grows with the part count or the result size.
+One that cannot honour that declares `CanComposeFrom = false` and refuses; it does not quietly
+buffer. `BlobStorage.composeFromViaDownload` is a correct download-concatenate-upload fallback for
+implementors who need the member to work before they can make it cheap — a store delegating to it
+should still declare `CanComposeFrom = false`, so the media library keeps taking the path it can
+reason about.
+
+How the shipped backends do it: the local store streams source files into a temp file and renames it
+into place; Azure stages one block per part and commits the block list; S3 runs a multipart upload
+with parts coalesced up to its 5 MiB minimum (which is why one-part-per-source `UploadPartCopy` is
+not usable for small chunks); GCS uses `Objects.compose`, folded in batches of 32 — the only fully
+server-side compose of the four.
+
+**Encryption caveat, again and for the same reason.** `EncryptedBlobStorage` refuses: each part is its
+own whole-blob AES-GCM envelope, so concatenating envelopes does not produce the envelope of the
+concatenated plaintext. The refusal is the decorator's own and is *not* delegated to the inner store,
+which can compose and would — over ciphertext.
 
 ## Encryption at rest (application-level)
 
