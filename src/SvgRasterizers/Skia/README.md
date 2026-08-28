@@ -38,10 +38,16 @@ open ToolUp.OpenXml.SvgRasterizer.Skia
 // Stateless — hold one for the lifetime of the deployment.
 let rasterizer = SkiaSvgRasterizer.create ()
 
-// The figure carries both parts: the SVG verbatim, and a PNG fallback.
-let! figure = Figures.svgWith (Some rasterizer) chartSvg (Pixels(640, 360))
-
-let bytes = Emit.toBytes (DocModel.ofBlocks [ figure ])
+// The seam is asynchronous, so a figure that carries a fallback is built
+// inside an async block: `Figures.svgWith` returns `Async<Block>`, not
+// `Block`. That is the one shape change composing a rasteriser forces on a
+// caller.
+let renderChart (chartSvg: string) =
+    async {
+        // The figure carries both parts: the SVG verbatim, and a PNG fallback.
+        let! figure = Figures.svgWith (Some rasterizer) chartSvg (Pixels(640, 360))
+        return Emit.toBytes (DocModel.ofBlocks [ figure ])
+    }
 ```
 
 Passing `None` instead of `Some rasterizer` is not a degraded mode — it is the vector-only embed, and

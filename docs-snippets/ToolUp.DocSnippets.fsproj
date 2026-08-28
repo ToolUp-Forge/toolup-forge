@@ -143,6 +143,7 @@
     <ProjectReference Include="../src/Storage/AwsS3Storage/AwsS3Storage.fsproj" />
     <ProjectReference Include="../src/Storage/AzureBlobStorage/AzureBlobStorage.fsproj" />
     <ProjectReference Include="../src/Storage/GoogleCloudStorage/GoogleCloudStorage.fsproj" />
+    <ProjectReference Include="../src/SvgRasterizers/Skia/ToolUp.OpenXml.SvgRasterizer.Skia.fsproj" />
     <ProjectReference Include="../src/TelemetrySinks/Ga4/Ga4TelemetrySink.fsproj" />
     <ProjectReference Include="../src/ToolUp.AI.Client/ToolUp.AI.Client.fsproj" />
     <ProjectReference Include="../src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj" />
