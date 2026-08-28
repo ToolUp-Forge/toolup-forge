@@ -314,7 +314,12 @@ module MediaEdgePaths =
 /// Compose-time tunables for the media library. `MaxBytes` caps upload
 /// size; `AcceptedMimeTypes` gates allowed content; `SignedUrlDefaultTtl`
 /// is the lifetime used when a caller passes a non-positive TTL;
-/// `EmitAudit` gates `IAuditLog` emission; `RangeChunkBytes` bounds each
+/// `EmitAudit` gates this companion's structured-LOG emission (Phase 739
+/// narrowed the wording: the two security ROWS on the gated-HLS key
+/// endpoint — the `AuthorizationDenied` refusal and its
+/// `MediaKeyDelivered` grant twin — are unconditional, so a deployment
+/// can quieten the logs without losing half of an authorization trail);
+/// `RangeChunkBytes` bounds each
 /// blob read taken while range-serving; `MaxChunkBytes` /
 /// `UploadSessionTtl` bound the Phase 469 resumable-upload path.
 type MediaLibraryOptions = {

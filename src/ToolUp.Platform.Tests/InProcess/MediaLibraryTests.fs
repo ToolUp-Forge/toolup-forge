@@ -7,6 +7,7 @@ open System
 open System.IO
 open System.Security.Cryptography
 open System.Text
+open System.Threading
 open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
@@ -2782,6 +2783,301 @@ let private beaconEndpointTests =
                 "the literal IS what the route builder would produce for a member named `beacon` — which is why no such member may exist"
     ]
 
+// ─── Phase 739 — the queryable GRANT row on key delivery ─────────────
+//
+// Phase 471 audited every REFUSED key fetch as a queryable
+// `AuthorizationDenied` row and left every GRANTED one as a structured
+// log line, so the store could answer "who was turned away from this
+// media" and not "who holds the key for it". These cases pin the row
+// that closes that asymmetry, and — as much to the point — pin the
+// places it must NOT appear, because an audit row that fires on a
+// refusal would make the trail actively misleading.
+//
+// The emission is detached (`Async.Start`), exactly like the denial it
+// twins, so every positive case polls for the row rather than reading
+// straight after the call.
+
+/// Accumulates every recorded event. Deliberately never fails on its
+/// own — "exactly one row of this shape" is only a real assertion
+/// because this would happily record nothing.
+type private RecordingMediaAuditLog() =
+    let recorded = ResizeArray<string * AuditEvent>()
+
+    member _.Recorded = List.ofSeq recorded
+
+    member this.KeyRows =
+        this.Recorded
+        |> List.choose (function
+            | scope, MediaKeyDelivered p -> Some(scope, p)
+            | _ -> None)
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
+/// Poll to a deadline rather than sleeping a fixed interval: a fixed
+/// sleep is either flaky or slow, and this returns the moment the row
+/// lands. Returns whatever it has at the deadline instead of throwing,
+/// so a failure reads "expected 1 row, got 0" — which names the defect —
+/// rather than a timeout that does not.
+let private awaitKeyRows (log: RecordingMediaAuditLog) (expected: int) =
+    let deadline = DateTime.UtcNow.AddSeconds 5.0
+
+    while log.KeyRows.Length < expected && DateTime.UtcNow < deadline do
+        Thread.Sleep 10
+
+    log.KeyRows
+
+/// A negative case cannot poll for an absence, so it waits a fixed,
+/// generous slice and then asserts the log is still empty. Long enough
+/// that a row which WAS emitted has landed — the fail-once probe
+/// confirms these cases go red when the emission is defeated, which is
+/// what makes the wait long enough rather than merely hopeful.
+let private assertNoKeyRow (log: RecordingMediaAuditLog) (why: string) =
+    Thread.Sleep 250
+    Expect.isEmpty log.KeyRows why
+
+/// `drive`, plus an `IAuditLog` and an optional resolved `Subject`, and
+/// with the key store made omittable so the "companion not composed"
+/// case can be driven through the same code path.
+let private driveAudited
+    (f: EncryptedFixture)
+    (log: RecordingMediaAuditLog)
+    (withKeyStore: bool)
+    (subject: Subject option)
+    (path: string)
+    (query: string)
+    (scope: string option)
+    : int * byte[] =
+    let services = ServiceCollection()
+
+    services
+        .AddSingleton<SignedUrl.MediaUrlSigner>(f.Signer)
+        .AddSingleton<IMediaLibrary>(f.Library)
+        .AddSingleton<MediaLibraryOptions>(f.Options)
+        .AddSingleton<IAuditLog>(log)
+    |> ignore
+
+    if withKeyStore then
+        services.AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(f.Keys) |> ignore
+
+    let ctx = DefaultHttpContext()
+    ctx.Request.Method <- "GET"
+    ctx.Request.Scheme <- "https"
+    ctx.Request.Host <- HostString "media.example.test"
+    ctx.Request.Path <- PathString path
+
+    if query <> "" then
+        ctx.Request.QueryString <- QueryString("?" + query)
+
+    ctx.RequestServices <- services.BuildServiceProvider() :> IServiceProvider
+
+    match scope with
+    | Some container ->
+        ctx.Items["ToolUp.StorageScope"] <-
+            box {
+                ScopeId = "u1"
+                Container = container
+                Persist = true
+            }
+    | None -> ()
+
+    match subject with
+    | Some s -> ctx.Items["ToolUp.Subject"] <- box s
+    | None -> ()
+
+    let body = new MemoryStream()
+    ctx.Response.Body <- body
+
+    let next: HttpFunc = Some >> Task.FromResult
+    (HlsKeyDelivery.keyHandler next ctx).GetAwaiter().GetResult() |> ignore
+
+    ctx.Response.StatusCode, body.ToArray()
+
+/// One encrypted item in `encContainer`, ready to have its key fetched.
+let private encryptedItem (f: EncryptedFixture) =
+    f.Library.Upload(encContainer, encUpload ())
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failwithf "739 setup: %A" e)
+
+let private mediaKeyGrantAuditTests =
+    testList "Phase 739 key-delivery grant audit" [
+        testCase "a scope-gated fetch lands ONE row naming media, subject, scope and route"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let record = encryptedItem f
+            let log = RecordingMediaAuditLog()
+
+            let status, body =
+                driveAudited f log true (Some(TeamMember("u1", "t1"))) (keyRoute record.Id) "" (Some encContainer)
+
+            Expect.equal status 200 "admitted"
+            Expect.equal body.Length 16 "the key still reaches the caller"
+
+            let rows = awaitKeyRows log 1
+            Expect.hasLength rows 1 "exactly one row — a key handed over silently is the defect"
+            let scopeId, row = rows.Head
+
+            Expect.equal scopeId encContainer "the row is filed under the scope that OWNS the media"
+            Expect.equal row.MediaId (MediaId.value record.Id) "the axis the question is asked on"
+            Expect.equal row.ScopeContainer encContainer "the container the key was resolved from"
+            Expect.equal row.AdmissionRoute "scope" "the admitting route, verbatim from the gate"
+
+            // The same `(kind, id)` projection `AuthorizationDenied`
+            // carries — that identity is what lets a reviewer union the
+            // two halves of this endpoint's trail on one key.
+            Expect.equal row.SubjectKind "team" "subject kind"
+            Expect.equal row.SubjectId (Some "u1") "subject id"
+
+        testCase "a signed-URL fetch is distinguishable by its route, with no session at all"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let record = encryptedItem f
+            let log = RecordingMediaAuditLog()
+
+            let scope: StorageScope = {
+                ScopeId = "u1"
+                Container = encContainer
+                Persist = true
+            }
+
+            let live =
+                f.Signer.SignAsync(record.Id, scope, TimeSpan.FromHours 1.0, DateTimeOffset.UtcNow)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, _ =
+                driveAudited f log true None (keyRoute record.Id) ("token=" + Uri.EscapeDataString live) None
+
+            Expect.equal status 200 "a live signature admits with no session"
+
+            let rows = awaitKeyRows log 1
+            Expect.hasLength rows 1 "one row"
+            let scopeId, row = rows.Head
+
+            // The token's container, not the request's — there is no
+            // request scope on this route at all, which is exactly why
+            // the row has to carry the one the gate DERIVED (GP 4).
+            Expect.equal scopeId encContainer "filed under the container bound into the token"
+            Expect.equal row.ScopeContainer encContainer "and carried on the row"
+
+            Expect.equal
+                row.AdmissionRoute
+                "signature"
+                "the two admitted routes are distinguishable — 'by what authority' is half the question"
+
+            Expect.equal row.SubjectKind "anonymous" "a signed fetch legitimately carries no identity"
+
+            Expect.equal row.SubjectId None "and the row says so rather than asserting a session id as an identity"
+
+        testCase "the row is emitted UNCONDITIONALLY — EmitAudit off does not silence it"
+        <| fun () ->
+            // The 739.B decision, pinned. Gating the grant row on an
+            // opt-in the denial row does not respect would reproduce, in
+            // any deployment that turned the opt-in off, precisely the
+            // asymmetry this phase exists to close.
+            let quiet = {
+                MediaLibraryOptions.defaults with
+                    EncryptHlsByDefault = true
+                    EmitAudit = false
+            }
+
+            let f = makeFixtureWith encryptingTranscoder true quiet None None
+            let record = encryptedItem f
+            let log = RecordingMediaAuditLog()
+
+            let status, _ =
+                driveAudited f log true (Some(AuthenticatedUser "u9")) (keyRoute record.Id) "" (Some encContainer)
+
+            Expect.equal status 200 "admitted"
+            Expect.hasLength (awaitKeyRows log 1) 1 "the security row does not follow the log-volume knob"
+
+        testCase "no row on ANY refused fetch — anonymous, expired signature, or cross-scope"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let record = encryptedItem f
+
+            let anonLog = RecordingMediaAuditLog()
+            let anonStatus, _ = driveAudited f anonLog true None (keyRoute record.Id) "" None
+            Expect.equal anonStatus 401 "unchanged from Phase 471"
+            assertNoKeyRow anonLog "a 401 must never produce a DELIVERED row"
+
+            let scope: StorageScope = {
+                ScopeId = "u1"
+                Container = encContainer
+                Persist = true
+            }
+
+            let stale =
+                f.Signer.SignAsync(record.Id, scope, TimeSpan.FromMinutes 1.0, DateTimeOffset.UtcNow.AddHours -2.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let expiredLog = RecordingMediaAuditLog()
+
+            let expiredStatus, _ =
+                driveAudited f expiredLog true None (keyRoute record.Id) ("token=" + Uri.EscapeDataString stale) None
+
+            Expect.equal expiredStatus 403 "unchanged from Phase 471"
+            assertNoKeyRow expiredLog "a 403 must never produce a DELIVERED row"
+
+            // The cross-scope case is the sharpest of the three: the
+            // caller IS a good authenticated subject and the gate admits
+            // the route. What refuses is the container lookup, and the
+            // row must sit after THAT, not after the gate.
+            let foreignLog = RecordingMediaAuditLog()
+
+            let foreignStatus, _ =
+                driveAudited
+                    f
+                    foreignLog
+                    true
+                    (Some(TeamMember("u2", "t2")))
+                    (keyRoute record.Id)
+                    ""
+                    (Some foreignContainer)
+
+            Expect.equal foreignStatus 404 "unchanged from Phase 471"
+
+            assertNoKeyRow
+                foreignLog
+                "an admitted route that resolved no key delivered nothing — the row would assert a fetch that never happened"
+
+        testCase "no row — and no cost — when the media companion is not composed (GP 13)"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let record = encryptedItem f
+            let log = RecordingMediaAuditLog()
+
+            let status, _ =
+                driveAudited
+                    f
+                    log
+                    false // no MediaHlsKeyStore in the container
+                    (Some(TeamMember("u1", "t1")))
+                    (keyRoute record.Id)
+                    ""
+                    (Some encContainer)
+
+            Expect.equal status 404 "no key store composed"
+            assertNoKeyRow log "a deployment with no encrypted media pays nothing for this phase"
+
+        testCase "a deployment composing no IAuditLog still serves the key"
+        <| fun () ->
+            // The seam is optional in both directions: the row is
+            // best-effort and its absence must never change what the
+            // caller sees. Driven through the Phase 471 `drive`, whose
+            // service provider deliberately has no `IAuditLog` at all.
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let record = encryptedItem f
+
+            let status, body, _ =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) "" (Some encContainer)
+
+            Expect.equal status 200 "the key is served with no audit log composed"
+            Expect.equal body.Length 16 "and it is the whole key"
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
@@ -2817,4 +3113,6 @@ let tests =
         playbackPureTests
         egressAccountingTests
         beaconEndpointTests
+        // Phase 739 — the queryable grant twin of Phase 471's denial row.
+        mediaKeyGrantAuditTests
     ]
