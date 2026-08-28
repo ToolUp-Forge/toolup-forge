@@ -352,7 +352,15 @@ module MediaLibraryServerApp =
 
             let mergedExt: ComposeExtensions = {
                 baseExt with
-                    Handlers = baseExt.Handlers @ RangeHandler.handlers @ [ mediaApiHandler ]
+                    // Phase 473 — the playback beacon rides the same
+                    // handler list as the serving routes. It is mounted
+                    // only under `EnabledMediaLibrary`, so a deployment
+                    // that composes no media library has no beacon
+                    // endpoint at all (GP 13).
+                    Handlers =
+                        baseExt.Handlers
+                        @ RangeHandler.handlers
+                        @ [ PlaybackTelemetry.beaconHandler; mediaApiHandler ]
                     ServiceConfig =
                         match baseExt.ServiceConfig with
                         | None -> Some mediaServiceConfig
@@ -361,8 +369,16 @@ module MediaLibraryServerApp =
 
             let withExtensions = { app.Base with Extensions = mergedExt }
 
+            // Phase 473 — declare the two telemetry series so a composed
+            // metrics sink pre-allocates them and the emissions flow
+            // rather than being dropped as unregistered. Declaring costs
+            // nothing when no sink is composed: `NoOpMetricsSink` reads
+            // no registrations.
+            let withMetrics =
+                ServerApp.withMetricRegistrations PlaybackTelemetry.registrations withExtensions
+
             let withValidator =
-                ServerApp.withConfigValidator (MediaConfigValidator.create options) withExtensions
+                ServerApp.withConfigValidator (MediaConfigValidator.create options) withMetrics
 
             let final =
                 match app.Base.Storage with

@@ -78,3 +78,17 @@ module MediaApi =
 
     let routeBuilder (_typeName: string) (methodName: string) =
         sprintf "%s/%s" routeBuilderPrefix methodName
+
+    /// Phase 473 — the playback beacon route (`PlaybackTelemetry
+    /// .beaconHandler`).
+    ///
+    /// Declared HERE, beside the remoting route builder, because it
+    /// shares that builder's `/api/media/` prefix: the builder maps
+    /// `IMediaApi`'s member names onto `/api/media/{methodName}`, so
+    /// this literal is the one thing that says a future contract member
+    /// may not be called `Beacon`. It is deliberately NOT a remoting
+    /// member — the endpoint answers `204` to everything (see the
+    /// handler), and the remoting dispatcher's job is precisely to turn
+    /// a failure into a status a caller can read.
+    [<Literal>]
+    let beaconRoute = "/api/media/beacon"

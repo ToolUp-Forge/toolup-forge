@@ -459,9 +459,142 @@ custom `IMediaLibrary` via `MediaLibraryServerApp.withMediaLibrary` that
 brokers a signed direct URL. A chunked encryption envelope — which would
 make mid-blob ranges decryptable — is a separate, larger piece of work.
 
+## Playback + delivery telemetry
+
+Hosting media without knowing plays, completion rates or egress bytes is
+a gap, and a monetised deployment cannot close it after the fact — the
+bytes have already left. Two emissions close it, and neither invents a
+pipeline: both flow into the metrics sink (`IMetricsSink`) and the usage
+ledger (`IUsageLog`) the SDK already ships.
+
+### Egress accounting
+
+Every media response counts the bytes it **actually wrote** and attributes
+them to `(mediaId, scope)`. Not `Content-Length` — that is what the server
+intended to send, and a `<video>` seek the viewer abandons mid-window is
+exactly the case where the two differ. A `416` writes no body and meters
+nothing.
+
+Two surfaces receive it, at deliberately different resolutions:
+
+| Surface | Name | Shape |
+|---|---|---|
+| `IMetricsSink` | `toolup.media.egress.bytes` | Histogram, `bytes`, tagged `scope` + `class` |
+| `IUsageLog` | `media.egress.bytes` | One row per response; `Quantity` = bytes, `Metadata` carries `mediaId` + `class` |
+
+`class` is one of `original` (the stored file, via `/api/media/stream/{id}`
+or `/media/signed/{id}`), `manifest`, `segment`, or `poster` — the same
+classes `MediaEdgeCacheOptions` declares cacheability for, keyed on the
+same extension test.
+
+**The media id is in the ledger row, not in the metric tag, and that is
+deliberate.** `IMetricsSink` carries a per-metric distinct-tag-set ceiling
+(default 1 000, with the overflow routed to one `_overflow=true` series),
+and a media id is precisely the unbounded key that would blow it. The
+ledger is row-shaped and partitioned by scope, so per-item attribution is
+exact where it is queried and bounded where it is aggregated.
+
+### This is ORIGIN egress, not delivered egress
+
+**With a CDN in front (see the edge-cache seam), an edge hit never reaches
+this process.** The bytes are served from a POP and nothing here observes
+them, so `media.egress.bytes` is what left *this origin* — never what a
+viewer received. The gap between the two grows with the `s-maxage` the
+deployment declared per response class, and that declaration is the only
+origin-side signal about its size.
+
+Forge does not estimate delivered egress from it. A number derived from a
+declared TTL would be a guess presented as a measurement; the CDN's own
+logs are the authority for what an edge served. Read `media.egress.bytes`
+as an origin cost line, and join it with the CDN's reporting when you need
+the delivered figure.
+
+### Playback beacons
+
+`POST /api/media/beacon` takes a small JSON body from a player:
+
+```json
+{ "mediaId": "3f2b…", "event": "progress", "percent": 42, "session": "opaque-player-handle" }
+```
+
+`event` is `started`, `progress` (which requires `percent`, 0–100) or
+`completed`. The beacon is admitted on exactly the two credentials the
+media bytes themselves are reachable by — a resolved scope, or a valid
+signed-URL token for **that** media id (`?token=…`), so a token minted for
+one item cannot report plays against another.
+
+Three properties are worth stating plainly:
+
+- **It never returns anything but `204`.** Accepted, malformed, rate-limited,
+  unauthenticated and forbidden are indistinguishable to the caller. A
+  telemetry endpoint that can return an error to a player is a telemetry
+  endpoint that gets reported as a broken video — and a differentiated
+  response would be an oracle telling an unauthenticated prober which
+  media ids exist in which scope. What the outcomes differ in is whether
+  a ledger row appears.
+- **The session id you send is never stored.** It is hashed together with
+  the scope and the media id, and only that 16-character correlator
+  reaches the ledger. The correlator is stable within one `(scope, media)`
+  — which is all that counting unique sessions and completion rates needs
+  — and is useless as a cross-item or cross-scope tracking key. A player
+  that (wrongly) puts a user identifier in the field does not thereby put
+  one in your usage ledger.
+- **It is rate-limited per partition**, over the same partition key the
+  platform limiter derives (`token:` / `team:` / `user:` / `ip:`), at
+  300/minute. A beacon over the limit is *dropped*, never rejected: the
+  losing branch costs telemetry fidelity, not playback.
+
+Accepted beacons land as `media.playback.events` ledger rows (one per
+event, `Metadata` carrying `mediaId`, `event`, `session`, and `percent` on
+progress) and as `toolup.media.playback.events` counter increments tagged
+`scope` + `event`.
+
+### Reading the numbers back
+
+There is **no new API, no new store and no dashboard**. The rows are
+ordinary usage records, so a deployment reads them through the read path
+its usage dashboard already uses — `IUsageQueryApi.Query` — and folds them
+with a pure function the companion ships:
+
+```fsharp skip=fragment
+let! rows = usageQueryApi.Query(None, Some { From = from; To = until })
+
+let rollups = PlaybackTelemetry.PlaybackRollup.ofUsageRecords rows
+// each: MediaId, ScopeId, Day, Plays, UniqueSessions, Completions,
+//       CompletionRate, OriginEgressBytes
+```
+
+`ofUsageRecords` ignores records of other kinds, so handing it a whole
+scope's ledger is the expected call, and its output is ordered
+`(Day, MediaId, ScopeId)` so two readers of the same rows render the same
+table.
+
+### Nothing is composed until you compose it
+
+A deployment with neither `MetricsEndpoint` nor `UsageMetering` enabled —
+the SDK defaults — pays two singleton service lookups per media response
+and **no allocation at all** for telemetry: the resolved account is a
+cached singleton and both the per-chunk count and the trailing flush are a
+tag test (GP 13). The serve path is byte-for-byte what it was. Enabling
+either one alone is enough to start receiving that half.
+
+To receive both, compose them as usual:
+
+```fsharp skip=fragment
+{ ServerConfig.defaults with
+    MediaLibrary = EnabledMediaLibrary
+    UsageMetering = EnabledUsageMetering
+    MetricsEndpoint = EnabledMetricsEndpoint }
+```
+
+The two metric series are declared into `ServerApp.MetricRegistrations` by
+`MediaLibraryServerApp.run`, so a composed sink pre-allocates them and the
+emissions flow rather than being dropped as unregistered.
+
 ## See also
 
 - [`IMediaLibrary`](../../src/Media/MediaLibrary/Server/IMediaLibrary.fs) — the interface, plus the optional `IMediaRangeReader` capability and the `IUploadSessionStore` resumable-upload seam.
+- [`473-playback-delivery-telemetry.md`](../migrations/473-playback-delivery-telemetry.md) — the beacon contract, the metric + ledger vocabulary, and the origin-vs-delivered caveat.
 - [`469-resumable-chunked-uploads.md`](../migrations/469-resumable-chunked-uploads.md) — what the chunked upload surface means for a consumer.
 - [`471-gated-hls.md`](../migrations/471-gated-hls.md) — AES-128 segments + the scope-gated key endpoint.
 - [`455-iblobstorage-ranged-read.md`](../migrations/455-iblobstorage-ranged-read.md) — the storage-seam member range serving is built on.

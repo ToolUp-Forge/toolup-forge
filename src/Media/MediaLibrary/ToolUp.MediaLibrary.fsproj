@@ -26,6 +26,7 @@
     <Compile Include="Server\DefaultMediaLibrary.fs" />
     <Compile Include="Server\UploadSessions.fs" />
     <Compile Include="Server\MediaApi.fs" />
+    <Compile Include="Server\PlaybackTelemetry.fs" />
     <Compile Include="Server\RangeHandler.fs" />
     <Compile Include="Server\MediaHealthCheck.fs" />
     <Compile Include="Server\MediaConfigValidator.fs" />

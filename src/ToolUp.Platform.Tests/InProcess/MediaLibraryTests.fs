@@ -14,7 +14,9 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Usage
 open ToolUp.MediaLibrary
 open ToolUp.Media.FFmpeg
 open ToolUp.Platform.Tests.Contracts
@@ -1815,6 +1817,971 @@ let private declaredCacheHeaderTests =
                 "the validator refuses it before a deployment can start"
     ]
 
+// ─── Phase 473 — playback + delivery telemetry ────────────────────────
+//
+// Four layers, mirroring the phase's own shape:
+//
+//   1. The pure surfaces — beacon parsing, the session correlator, the
+//      response-class map, the rate-limiter window, the rollup fold.
+//   2. Egress reconciliation against the served `Content-Range` window,
+//      driven through the real handlers over the 206 matrix.
+//   3. The GP 13 claim: nothing is emitted, and nothing is allocated,
+//      when neither sink is composed.
+//   4. The beacon's validation matrix, read through the ledger rather
+//      than through the status code — because every outcome is `204`.
+
+let private telemetryContainer = "team-telemetry"
+
+/// A metrics sink that keeps what it was handed.
+type private RecordingMetricsSink() =
+    let observations =
+        System.Collections.Concurrent.ConcurrentBag<string * float * Map<string, string>>()
+
+    let increments =
+        System.Collections.Concurrent.ConcurrentBag<string * Map<string, string>>()
+
+    member _.Observations = observations |> Seq.toList
+    member _.Increments = increments |> Seq.toList
+
+    interface IMetricsSink with
+        member _.Record(name, value, tags) = observations.Add((name, value, tags))
+        member _.Increment(name, tags) = increments.Add((name, tags))
+        member _.SetGauge(_, _, _) = ()
+
+/// A usage log that keeps its rows.
+///
+/// Emission is fire-and-forget (`Async.Start`), so both directions need
+/// a bounded wait: `WaitFor` for "a row arrived", and `SettleThenCount`
+/// for "no row arrived", which is only a credible claim after the
+/// emission has been given a chance to happen.
+type private RecordingUsageLog() =
+    let rows = System.Collections.Concurrent.ConcurrentBag<UsageRecord>()
+
+    member _.Rows = rows |> Seq.toList
+
+    member _.WaitFor(n: int) =
+        let deadline = DateTime.UtcNow.AddSeconds 5.0
+        let mutable satisfied = rows.Count >= n
+
+        while not satisfied && DateTime.UtcNow < deadline do
+            System.Threading.Thread.Sleep 10
+            satisfied <- rows.Count >= n
+
+        satisfied
+
+    member _.SettleThenCount() =
+        System.Threading.Thread.Sleep 250
+        rows.Count
+
+    interface IUsageLog with
+        member _.Record record = async { rows.Add record }
+        member _.Query(_, _, _) = async.Return []
+        member _.Aggregate(_, _) = async.Return Map.empty
+
+type private TelemetryHost = {
+    Fixture: EncryptedFixture
+    Metrics: RecordingMetricsSink option
+    Usage: RecordingUsageLog option
+}
+
+/// A host with both sinks live.
+let private meteredHost () =
+    let f = plainTranscoderFixture MediaLibraryOptions.defaults None None
+
+    {
+        Fixture = f
+        Metrics = Some(RecordingMetricsSink())
+        Usage = Some(RecordingUsageLog())
+    }
+
+/// A host composed exactly as the SDK default composes: the services
+/// ARE registered, and they are the no-ops. This is the shape GP 13 is
+/// a claim about — not an absent registration.
+let private unmeteredHost () =
+    let f = plainTranscoderFixture MediaLibraryOptions.defaults None None
+
+    {
+        Fixture = f
+        Metrics = None
+        Usage = None
+    }
+
+let private telemetryServices (h: TelemetryHost) : IServiceProvider =
+    let services = ServiceCollection()
+
+    services.AddSingleton<SignedUrl.MediaUrlSigner>(h.Fixture.Signer) |> ignore
+    services.AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(h.Fixture.Keys) |> ignore
+    services.AddSingleton<IMediaLibrary>(h.Fixture.Library) |> ignore
+    services.AddSingleton<MediaLibraryOptions>(h.Fixture.Options) |> ignore
+
+    match h.Metrics with
+    | Some m -> services.AddSingleton<IMetricsSink>(m :> IMetricsSink) |> ignore
+    | None -> services.AddSingleton<IMetricsSink>(NoOpMetricsSink() :> IMetricsSink) |> ignore
+
+    match h.Usage with
+    | Some u -> services.AddSingleton<IUsageLog>(u :> IUsageLog) |> ignore
+    | None -> services.AddSingleton<IUsageLog>(NoOpUsageLog() :> IUsageLog) |> ignore
+
+    services.BuildServiceProvider() :> IServiceProvider
+
+/// A 5,000-byte item, big enough that the 206 matrix has room to move.
+let private telemetryPayload = Array.init 5000 (fun i -> byte ((i * 13 + 5) % 251))
+
+let private telemetryUpload () =
+    match
+        MediaUploadRequest.create MediaLibraryOptions.defaults telemetryPayload "clip.mp4" "video/mp4" "user-1" None
+    with
+    | Ok r -> r
+    | Error e -> failwithf "473 setup: invalid upload request %A" e
+
+let private uploadTelemetryItem (h: TelemetryHost) =
+    h.Fixture.Library.Upload(telemetryContainer, telemetryUpload ())
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failwithf "473 setup: %A" e)
+
+let private driveMedia
+    (h: TelemetryHost)
+    (handler: HttpHandler)
+    (path: string)
+    (range: string option)
+    (scope: string option)
+    : int * int * HttpContext =
+    let ctx = DefaultHttpContext()
+    ctx.Request.Method <- "GET"
+    ctx.Request.Scheme <- "https"
+    ctx.Request.Host <- HostString "media.example.test"
+    ctx.Request.Path <- PathString path
+
+    match range with
+    | Some r -> ctx.Request.Headers["Range"] <- Microsoft.Extensions.Primitives.StringValues r
+    | None -> ()
+
+    ctx.RequestServices <- telemetryServices h
+
+    match scope with
+    | Some container ->
+        ctx.Items["ToolUp.StorageScope"] <-
+            box {
+                ScopeId = "u1"
+                Container = container
+                Persist = true
+            }
+    | None -> ()
+
+    let body = new MemoryStream()
+    ctx.Response.Body <- body
+
+    let next: HttpFunc = Some >> Task.FromResult
+    (handler next ctx).GetAwaiter().GetResult() |> ignore
+
+    ctx.Response.StatusCode, int body.Length, ctx
+
+let private driveBeacon (h: TelemetryHost) (body: string) (query: string) (scope: string option) : int =
+    let ctx = DefaultHttpContext()
+    ctx.Request.Method <- "POST"
+    ctx.Request.Scheme <- "https"
+    ctx.Request.Host <- HostString "media.example.test"
+    ctx.Request.Path <- PathString MediaApi.beaconRoute
+    ctx.Request.ContentType <- "application/json"
+
+    if query <> "" then
+        ctx.Request.QueryString <- QueryString("?" + query)
+
+    let bytes = Encoding.UTF8.GetBytes body
+    ctx.Request.Body <- new MemoryStream(bytes)
+    ctx.Request.ContentLength <- Nullable(int64 bytes.Length)
+    ctx.RequestServices <- telemetryServices h
+
+    match scope with
+    | Some container ->
+        ctx.Items["ToolUp.StorageScope"] <-
+            box {
+                ScopeId = "u1"
+                Container = container
+                Persist = true
+            }
+    | None -> ()
+
+    ctx.Response.Body <- new MemoryStream()
+
+    let next: HttpFunc = Some >> Task.FromResult
+    (PlaybackTelemetry.beaconHandler next ctx).GetAwaiter().GetResult() |> ignore
+
+    ctx.Response.StatusCode
+
+/// The window length a `Content-Range: bytes a-b/total` header declares.
+let private contentRangeWindow (header: string) : int64 =
+    let segments = header.Substring(6).Split('/')
+    let spec = segments[0].Trim()
+    let parts = spec.Split('-')
+    let first = Int64.Parse parts[0]
+    let last = Int64.Parse parts[1]
+    last - first + 1L
+
+let private egressRows (u: RecordingUsageLog) =
+    u.Rows
+    |> List.filter (fun r -> r.ResourceKind = PlaybackTelemetry.EgressBytesKind)
+
+let private beaconRows (u: RecordingUsageLog) =
+    u.Rows
+    |> List.filter (fun r -> r.ResourceKind = PlaybackTelemetry.PlaybackEventsKind)
+
+let private playbackPureTests =
+    testList "Phase 473 playback telemetry (pure)" [
+        testCase "the response class agrees with the edge-cache class on every extension"
+        <| fun () ->
+            // The two classifiers are separate functions in separate
+            // modules keyed on the same extension tests, so the risk is
+            // drift, not correctness today. Pinned with an options
+            // record whose four classes are pairwise distinct, so a
+            // divergence on ANY extension shows up as a mismatch rather
+            // than as a coincidence.
+            let distinct = {
+                MediaLibraryOptions.defaults with
+                    EdgeCache = {
+                        Segment = EdgePublic(1, 1)
+                        Manifest = EdgePublic(2, 2)
+                        Poster = EdgePublic(3, 3)
+                        Original = EdgePrivate 4
+                    }
+            }
+
+            let expected =
+                Map.ofList [
+                    PlaybackTelemetry.ClassManifest, distinct.EdgeCache.Manifest
+                    PlaybackTelemetry.ClassSegment, distinct.EdgeCache.Segment
+                    PlaybackTelemetry.ClassPoster, distinct.EdgeCache.Poster
+                ]
+
+            for file in
+                [
+                    "index.m3u8"
+                    "INDEX.M3U8"
+                    "seg0.ts"
+                    "seg0.m4s"
+                    "rendition.mp4"
+                    "poster.jpg"
+                    "poster.PNG"
+                    "thumb.webp"
+                    "unknown"
+                ] do
+                let cls = PlaybackTelemetry.responseClassForDerived file
+
+                Expect.equal
+                    (MediaLibraryOptions.edgeCacheabilityForDerived distinct file)
+                    expected[cls]
+                    (sprintf "%s is metered as %s and must be cached as that class" file cls)
+
+        testCase "a well-formed beacon parses for each event"
+        <| fun () ->
+            let parse body = PlaybackTelemetry.parseBeacon body
+
+            Expect.equal
+                (parse """{"mediaId":"m1","event":"started","session":"s1"}""")
+                (Some("m1", PlaybackTelemetry.Started, "s1"))
+                "started"
+
+            Expect.equal
+                (parse """{"mediaId":"m1","event":"completed","session":"s1"}""")
+                (Some("m1", PlaybackTelemetry.Completed, "s1"))
+                "completed"
+
+            Expect.equal
+                (parse """{"mediaId":"m1","event":"progress","percent":42,"session":"s1"}""")
+                (Some("m1", PlaybackTelemetry.Progress 42, "s1"))
+                "progress carries its percent"
+
+            Expect.equal
+                (parse """{"mediaId":"m1","event":"STARTED","session":"s1","extra":{"a":1}}""")
+                (Some("m1", PlaybackTelemetry.Started, "s1"))
+                "the token is case-insensitive and an unknown field is tolerated — third-party players author this body"
+
+        testCase "the malformed matrix is dropped, every shape of it"
+        <| fun () ->
+            let dropped name body =
+                Expect.isNone (PlaybackTelemetry.parseBeacon body) name
+
+            dropped "empty" ""
+            dropped "whitespace" "   "
+            dropped "not JSON" "{not json"
+            dropped "a JSON array root" """["mediaId","m1"]"""
+            dropped "a JSON scalar root" "42"
+            dropped "no mediaId" """{"event":"started","session":"s1"}"""
+            dropped "empty mediaId" """{"mediaId":"","event":"started","session":"s1"}"""
+            dropped "no event" """{"mediaId":"m1","session":"s1"}"""
+            dropped "unknown event" """{"mediaId":"m1","event":"paused","session":"s1"}"""
+            dropped "no session" """{"mediaId":"m1","event":"started"}"""
+            dropped "progress with no percent" """{"mediaId":"m1","event":"progress","session":"s1"}"""
+
+            dropped "progress below range" """{"mediaId":"m1","event":"progress","percent":-1,"session":"s1"}"""
+
+            dropped "progress above range" """{"mediaId":"m1","event":"progress","percent":101,"session":"s1"}"""
+
+            dropped
+                "a percent that is a string, not a number"
+                """{"mediaId":"m1","event":"progress","percent":"50","session":"s1"}"""
+
+            dropped
+                "an over-long session"
+                (sprintf """{"mediaId":"m1","event":"started","session":"%s"}""" (String('x', 201)))
+
+            dropped "a numeric mediaId" """{"mediaId":7,"event":"started","session":"s1"}"""
+
+        testCase "the session correlator is stable per (scope, media) and useless across them"
+        <| fun () ->
+            let a = PlaybackTelemetry.sessionCorrelator "scope-1" "media-1" "raw-session"
+            let again = PlaybackTelemetry.sessionCorrelator "scope-1" "media-1" "raw-session"
+
+            let otherMedia =
+                PlaybackTelemetry.sessionCorrelator "scope-1" "media-2" "raw-session"
+
+            let otherScope =
+                PlaybackTelemetry.sessionCorrelator "scope-2" "media-1" "raw-session"
+
+            Expect.equal a again "stable — which is what counting unique sessions needs"
+            Expect.notEqual a otherMedia "the same viewer on another item is not joinable"
+            Expect.notEqual a otherScope "nor across scopes (GP 4)"
+            Expect.notEqual a "raw-session" "the client's own value never reaches the ledger"
+            Expect.equal a.Length 16 "a fixed-width opaque handle"
+            Expect.isTrue (a |> Seq.forall (fun c -> Char.IsDigit c || (c >= 'a' && c <= 'f'))) "lowercase hex"
+
+            // Length-prefixed material, so a shifted boundary cannot
+            // collide: ("ab","c") and ("a","bc") must differ.
+            Expect.notEqual
+                (PlaybackTelemetry.sessionCorrelator "ab" "c" "s")
+                (PlaybackTelemetry.sessionCorrelator "a" "bc" "s")
+                "no boundary ambiguity between the hashed coordinates"
+
+        testCase "the beacon rate limiter admits a window's worth and then drops"
+        <| fun () ->
+            let policy: RateLimitPolicy = {
+                PermitLimit = 3
+                WindowSeconds = 60
+                QueueLimit = 0
+            }
+
+            let limiter = PlaybackTelemetry.BeaconRateLimiter policy
+            let t0 = DateTime(2026, 8, 28, 12, 0, 0, DateTimeKind.Utc)
+
+            Expect.isTrue (limiter.Admit(t0, "ip:a")) "1"
+            Expect.isTrue (limiter.Admit(t0, "ip:a")) "2"
+            Expect.isTrue (limiter.Admit(t0, "ip:a")) "3"
+            Expect.isFalse (limiter.Admit(t0, "ip:a")) "4 is over the permit"
+
+            Expect.isTrue (limiter.Admit(t0, "ip:b")) "a different partition has its own budget"
+
+            Expect.isTrue
+                (limiter.Admit(t0.AddMinutes 5.0, "ip:a"))
+                "and the spent partition recovers in the next window"
+
+        testCase "the shipped beacon policy is a drop-not-reject shape"
+        <| fun () ->
+            Expect.equal PlaybackTelemetry.beaconRateLimit.QueueLimit 0 "a refused beacon is never queued"
+
+            Expect.isGreaterThan
+                PlaybackTelemetry.beaconRateLimit.PermitLimit
+                100
+                "headroom for a shared team partition — the losing branch costs telemetry, not playback"
+
+        testCase "the rollup folds plays, unique sessions, completion rate and egress"
+        <| fun () ->
+            let day = DateTime(2026, 8, 20, 9, 0, 0, DateTimeKind.Utc)
+
+            let beacon media session event =
+                PlaybackTelemetry.beaconRecord
+                    "scope-1"
+                    {
+                        Media = MediaId media
+                        Event = event
+                        Session = session
+                    }
+                    (Guid.NewGuid())
+                    day
+
+            let egress media bytes =
+                PlaybackTelemetry.egressRecord
+                    {
+                        Media = MediaId media
+                        ScopeId = "scope-1"
+                        Class = PlaybackTelemetry.ClassOriginal
+                    }
+                    bytes
+                    (Guid.NewGuid())
+                    day
+
+            let records = [
+                beacon "m1" "s1" PlaybackTelemetry.Started
+                beacon "m1" "s1" (PlaybackTelemetry.Progress 50)
+                beacon "m1" "s1" PlaybackTelemetry.Completed
+                beacon "m1" "s2" PlaybackTelemetry.Started
+                beacon "m1" "s2" (PlaybackTelemetry.Progress 10)
+                egress "m1" 1000L
+                egress "m1" 2500L
+                beacon "m2" "s3" PlaybackTelemetry.Started
+                // Not ours, and a row with no media id — both ignored,
+                // because the expected call passes a whole scope's
+                // ledger.
+                {
+                    RecordId = Guid.NewGuid()
+                    ScopeId = "scope-1"
+                    ResourceKind = ResourceKinds.storageBytes
+                    Quantity = 99m
+                    Unit = "bytes"
+                    Origin = None
+                    Metadata = Map.empty
+                    Timestamp = day
+                }
+                {
+                    (egress "m1" 77L) with
+                        Metadata = Map.empty
+                }
+            ]
+
+            let rollups = PlaybackTelemetry.PlaybackRollup.ofUsageRecords records
+
+            Expect.equal (rollups |> List.map _.MediaId) [ "m1"; "m2" ] "one row per (media, scope, day), ordered"
+
+            let m1 = rollups |> List.find (fun r -> r.MediaId = "m1")
+            Expect.equal m1.Day "2026-08-20" "the UTC day bucket"
+            Expect.equal m1.Plays 2 "two starts"
+            Expect.equal m1.Completions 1 "one completion"
+            Expect.equal m1.UniqueSessions 2 "two distinct correlators across five beacons"
+            Expect.equal m1.CompletionRate 0.5 "one of two started viewings finished"
+            Expect.equal m1.OriginEgressBytes 3500L "the egress rows summed — and the metadata-less one skipped"
+
+            let m2 = rollups |> List.find (fun r -> r.MediaId = "m2")
+            Expect.equal m2.CompletionRate 0.0 "a start with no completion is 0.0, not a division by zero"
+            Expect.equal m2.OriginEgressBytes 0L "no egress attributed"
+
+        testCase "the ledger row shapes are what a billing reader expects"
+        <| fun () ->
+            let at = DateTime(2026, 8, 20, 9, 0, 0, DateTimeKind.Utc)
+            let id = Guid.NewGuid()
+
+            let e =
+                PlaybackTelemetry.egressRecord
+                    {
+                        Media = MediaId "m1"
+                        ScopeId = "scope-1"
+                        Class = PlaybackTelemetry.ClassSegment
+                    }
+                    4096L
+                    id
+                    at
+
+            Expect.equal e.ResourceKind "media.egress.bytes" "the kind the phase names"
+            Expect.equal e.Quantity 4096m "decimal, because billing"
+            Expect.equal e.Unit "bytes" ""
+            Expect.equal e.ScopeId "scope-1" "attributed to the scope, never to the caller"
+            Expect.equal e.Origin None "not an AI resource"
+            Expect.equal e.Metadata[PlaybackTelemetry.MediaIdKey] "m1" "per-media attribution lives here, not in a tag"
+            Expect.equal e.Metadata[PlaybackTelemetry.ClassKey] "segment" ""
+
+            let b =
+                PlaybackTelemetry.beaconRecord
+                    "scope-1"
+                    {
+                        Media = MediaId "m1"
+                        Event = PlaybackTelemetry.Progress 42
+                        Session = "abc"
+                    }
+                    id
+                    at
+
+            Expect.equal b.Quantity 1m "one row per event"
+            Expect.equal b.Metadata[PlaybackTelemetry.EventKey] "progress" ""
+            Expect.equal b.Metadata[PlaybackTelemetry.PercentKey] "42" ""
+            Expect.equal b.Metadata[PlaybackTelemetry.SessionKey] "abc" "the correlator, already derived"
+
+            let started =
+                PlaybackTelemetry.beaconRecord
+                    "scope-1"
+                    {
+                        Media = MediaId "m1"
+                        Event = PlaybackTelemetry.Started
+                        Session = "abc"
+                    }
+                    id
+                    at
+
+            Expect.isFalse
+                (started.Metadata.ContainsKey PlaybackTelemetry.PercentKey)
+                "a non-progress event carries no percent"
+
+        testCase "both metric series are declared, with bounded tag allowlists"
+        <| fun () ->
+            let names = PlaybackTelemetry.registrations |> List.map (fun r -> r.Definition.Name)
+
+            Expect.contains names PlaybackTelemetry.EgressBytesMetric "egress"
+            Expect.contains names PlaybackTelemetry.PlaybackEventsMetric "beacons"
+
+            for r in PlaybackTelemetry.registrations do
+                Expect.isTrue
+                    (r.Definition.Name.StartsWith MetricDefinition.ReservedPrefix)
+                    "SDK-owned metrics carry the reserved prefix"
+
+                Expect.isFalse
+                    (r.Definition.Tags |> List.contains PlaybackTelemetry.MediaIdKey)
+                    "the media id is NOT a metric tag — it is unbounded, and the sink's series ceiling is the reason"
+    ]
+
+let private egressAccountingTests =
+    testList "Phase 473 egress accounting (driven)" [
+        testCase "a full 200 meters exactly the body it wrote"
+        <| fun () ->
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+            let metrics = h.Metrics.Value
+
+            let status, bodyLength, _ =
+                driveMedia
+                    h
+                    RangeHandler.streamHandler
+                    (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                    None
+                    (Some telemetryContainer)
+
+            Expect.equal status 200 "served whole"
+            Expect.equal bodyLength telemetryPayload.Length "the whole body"
+            Expect.isTrue (usage.WaitFor 1) "one egress row"
+
+            let row = egressRows usage |> List.exactlyOne
+            Expect.equal row.Quantity (decimal telemetryPayload.Length) "bytes actually written"
+            Expect.equal row.ScopeId "u1" "the resolved scope, not the container"
+
+            Expect.equal
+                row.Metadata[PlaybackTelemetry.MediaIdKey]
+                (MediaId.value record.Id)
+                "attributed to the media item"
+
+            Expect.equal row.Metadata[PlaybackTelemetry.ClassKey] PlaybackTelemetry.ClassOriginal ""
+
+            let name, value, tags =
+                metrics.Observations
+                |> List.find (fun (n, _, _) -> n = PlaybackTelemetry.EgressBytesMetric)
+
+            Expect.equal name PlaybackTelemetry.EgressBytesMetric ""
+            Expect.equal value (float telemetryPayload.Length) "the same count reaches the metric"
+            Expect.equal tags["scope"] "u1" ""
+            Expect.equal tags["class"] PlaybackTelemetry.ClassOriginal ""
+
+        testCase "every 206 window meters exactly what its Content-Range declared"
+        <| fun () ->
+            // The reconciliation claim, over the same range matrix
+            // `ByteRange.parse` is pinned on: an explicit window, a
+            // one-byte window, an open-ended window, and a suffix
+            // window.
+            for spec in [ "bytes=0-0"; "bytes=100-199"; "bytes=4900-"; "bytes=-50" ] do
+                let h = meteredHost ()
+                let record = uploadTelemetryItem h
+                let usage = h.Usage.Value
+
+                let status, bodyLength, ctx =
+                    driveMedia
+                        h
+                        RangeHandler.streamHandler
+                        (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                        (Some spec)
+                        (Some telemetryContainer)
+
+                Expect.equal status 206 (sprintf "%s is a partial content response" spec)
+                Expect.isTrue (usage.WaitFor 1) (sprintf "%s metered" spec)
+
+                let declared = contentRangeWindow (headerOf ctx "Content-Range")
+                let row = egressRows usage |> List.exactlyOne
+
+                Expect.equal (int64 bodyLength) declared (sprintf "%s: the body is the declared window" spec)
+
+                Expect.equal
+                    row.Quantity
+                    (decimal declared)
+                    (sprintf "%s: the metered bytes reconcile against Content-Range" spec)
+
+        testCase "a 416 meters nothing"
+        <| fun () ->
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+
+            let status, _, _ =
+                driveMedia
+                    h
+                    RangeHandler.streamHandler
+                    (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                    (Some "bytes=99999-")
+                    (Some telemetryContainer)
+
+            Expect.equal status 416 "unsatisfiable"
+            Expect.equal (usage.SettleThenCount()) 0 "no body was written, so nothing is billed"
+
+        testCase "a signed serve is attributed to the signature's own scope"
+        <| fun () ->
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+
+            let scope: StorageScope = {
+                ScopeId = "signed-scope"
+                Container = telemetryContainer
+                Persist = true
+            }
+
+            let url =
+                h.Fixture.Library.SignedUrl(record.Id, scope, TimeSpan.FromMinutes 10.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let token = url.Substring(url.IndexOf "token=" + 6)
+
+            let ctx = DefaultHttpContext()
+            ctx.Request.Method <- "GET"
+            ctx.Request.Scheme <- "https"
+            ctx.Request.Host <- HostString "media.example.test"
+            ctx.Request.Path <- PathString(sprintf "/media/signed/%s" (MediaId.value record.Id))
+            ctx.Request.QueryString <- QueryString("?token=" + token)
+            ctx.RequestServices <- telemetryServices h
+            ctx.Response.Body <- new MemoryStream()
+
+            let next: HttpFunc = Some >> Task.FromResult
+            (RangeHandler.signedHandler next ctx).GetAwaiter().GetResult() |> ignore
+
+            Expect.equal ctx.Response.StatusCode 200 "the signature admitted"
+            Expect.isTrue (usage.WaitFor 1) "metered"
+
+            Expect.equal
+                (egressRows usage |> List.exactlyOne).ScopeId
+                "signed-scope"
+                "the scope that minted the token pays, not an ambient one"
+
+        testCase "a derived segment is metered under its own class"
+        <| fun () ->
+            let f =
+                makeFixtureWith encryptingTranscoder true MediaLibraryOptions.defaults None None
+
+            let h = {
+                Fixture = f
+                Metrics = Some(RecordingMetricsSink())
+                Usage = Some(RecordingUsageLog())
+            }
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let usage = h.Usage.Value
+
+            let status, bodyLength, _ =
+                driveMedia
+                    h
+                    RangeHandler.hlsHandler
+                    (sprintf "/api/media/hls/%s/seg0.ts" (MediaId.value record.Id))
+                    None
+                    (Some encContainer)
+
+            Expect.equal status 200 "served"
+            Expect.isTrue (usage.WaitFor 1) "metered"
+
+            let row = egressRows usage |> List.exactlyOne
+            Expect.equal row.Metadata[PlaybackTelemetry.ClassKey] PlaybackTelemetry.ClassSegment "class=segment"
+            Expect.equal row.Quantity (decimal bodyLength) "the bytes the segment response wrote"
+
+        testCase "a manifest served through the rewrite path is metered too"
+        <| fun () ->
+            // The rewrite path does not go through `copyToBody`, so this
+            // is the claim that the second write site was not forgotten.
+            let f =
+                makeFixtureWith encryptingTranscoder true MediaLibraryOptions.defaults None None
+
+            let h = {
+                Fixture = f
+                Metrics = Some(RecordingMetricsSink())
+                Usage = Some(RecordingUsageLog())
+            }
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let usage = h.Usage.Value
+
+            let status, bodyLength, _ =
+                driveMedia
+                    h
+                    RangeHandler.hlsHandler
+                    (sprintf "/api/media/hls/%s/index.m3u8" (MediaId.value record.Id))
+                    None
+                    (Some encContainer)
+
+            Expect.equal status 200 "served"
+            Expect.isTrue (usage.WaitFor 1) "metered"
+
+            let row = egressRows usage |> List.exactlyOne
+            Expect.equal row.Metadata[PlaybackTelemetry.ClassKey] PlaybackTelemetry.ClassManifest "class=manifest"
+
+            Expect.equal row.Quantity (decimal bodyLength) "the REWRITTEN body's length, which is what actually left"
+
+        testCase "with neither sink composed nothing is emitted and nothing is allocated (GP 13)"
+        <| fun () ->
+            let h = unmeteredHost ()
+            let record = uploadTelemetryItem h
+
+            let status, bodyLength, _ =
+                driveMedia
+                    h
+                    RangeHandler.streamHandler
+                    (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                    None
+                    (Some telemetryContainer)
+
+            Expect.equal status 200 "the serve path is unchanged"
+            Expect.equal bodyLength telemetryPayload.Length "byte-for-byte the same body"
+
+            // The structural half of the claim: the account resolved for
+            // this exact composition IS the singleton no-op case, so the
+            // per-chunk `count` and the trailing `flush` are a tag test
+            // and nothing more. Asserting the emission is absent would
+            // only show that the no-op sinks are no-ops.
+            let ctx = DefaultHttpContext()
+            ctx.RequestServices <- telemetryServices h
+
+            Expect.equal
+                (PlaybackTelemetry.accountFor ctx (MediaId "m1") "u1" PlaybackTelemetry.ClassOriginal)
+                PlaybackTelemetry.EgressUnmetered
+                "the SDK-default composition resolves to the allocation-free account"
+
+            let live = meteredHost ()
+            let liveCtx = DefaultHttpContext()
+            liveCtx.RequestServices <- telemetryServices live
+
+            Expect.notEqual
+                (PlaybackTelemetry.accountFor liveCtx (MediaId "m1") "u1" PlaybackTelemetry.ClassOriginal)
+                PlaybackTelemetry.EgressUnmetered
+                "and a composed deployment does NOT — so the gate is discriminating, not always-off"
+
+        testCase "either sink alone is enough to meter"
+        <| fun () ->
+            // The gate is a disjunction: a deployment with metrics but
+            // no usage metering (or the reverse) must still get the half
+            // it composed.
+            let usageOnly = {
+                unmeteredHost () with
+                    Usage = Some(RecordingUsageLog())
+            }
+
+            let record = uploadTelemetryItem usageOnly
+
+            driveMedia
+                usageOnly
+                RangeHandler.streamHandler
+                (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                None
+                (Some telemetryContainer)
+            |> ignore
+
+            Expect.isTrue (usageOnly.Usage.Value.WaitFor 1) "usage metering alone still records"
+
+            let metricsOnly = {
+                unmeteredHost () with
+                    Metrics = Some(RecordingMetricsSink())
+            }
+
+            let record2 = uploadTelemetryItem metricsOnly
+
+            driveMedia
+                metricsOnly
+                RangeHandler.streamHandler
+                (sprintf "/api/media/stream/%s" (MediaId.value record2.Id))
+                None
+                (Some telemetryContainer)
+            |> ignore
+
+            Expect.isNonEmpty metricsOnly.Metrics.Value.Observations "metrics alone still observes"
+    ]
+
+let private beaconEndpointTests =
+    testList "Phase 473 beacon endpoint (driven)" [
+        testCase "a valid scoped beacon is accepted and lands one ledger row"
+        <| fun () ->
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+
+            let status =
+                driveBeacon
+                    h
+                    (sprintf """{"mediaId":"%s","event":"started","session":"viewer-1"}""" (MediaId.value record.Id))
+                    ""
+                    (Some telemetryContainer)
+
+            Expect.equal status 204 "no content"
+            Expect.isTrue (usage.WaitFor 1) "recorded"
+
+            let row = beaconRows usage |> List.exactlyOne
+            Expect.equal row.ScopeId "u1" "attributed to the resolved scope"
+            Expect.equal row.Metadata[PlaybackTelemetry.EventKey] "started" ""
+
+            Expect.notEqual
+                row.Metadata[PlaybackTelemetry.SessionKey]
+                "viewer-1"
+                "the raw client session id never reaches the ledger"
+
+            Expect.isNonEmpty h.Metrics.Value.Increments "and the counter moved"
+
+        testCase "every rejected shape is 204 and leaves no row"
+        <| fun () ->
+            // The status code is deliberately uninformative — a beacon
+            // must never surface an error to a player, and must not be
+            // an existence oracle. So the matrix is read through the
+            // ledger.
+            let cases = [
+                "malformed JSON", """{""", Some telemetryContainer, ""
+                "unknown event", """{"mediaId":"m1","event":"paused","session":"s"}""", Some telemetryContainer, ""
+                "missing session", """{"mediaId":"m1","event":"started"}""", Some telemetryContainer, ""
+                "out-of-range percent",
+                """{"mediaId":"m1","event":"progress","percent":250,"session":"s"}""",
+                Some telemetryContainer,
+                ""
+                "no credential at all", """{"mediaId":"m1","event":"started","session":"s"}""", None, ""
+                "a bad signature",
+                """{"mediaId":"m1","event":"started","session":"s"}""",
+                None,
+                "token=not-a-real-token"
+            ]
+
+            for name, body, scope, query in cases do
+                let h = meteredHost ()
+                let status = driveBeacon h body query scope
+                Expect.equal status 204 (sprintf "%s answers 204" name)
+                Expect.equal (h.Usage.Value.SettleThenCount()) 0 (sprintf "%s records nothing" name)
+
+        testCase "an over-cap body is dropped without being read whole"
+        <| fun () ->
+            let h = meteredHost ()
+
+            let oversized =
+                sprintf """{"mediaId":"m1","event":"started","session":"s","pad":"%s"}""" (String('x', 4096))
+
+            let status = driveBeacon h oversized "" (Some telemetryContainer)
+            Expect.equal status 204 "still 204"
+            Expect.equal (h.Usage.Value.SettleThenCount()) 0 "and nothing recorded"
+
+        testCase "a signed token admits a beacon for its own media and no other"
+        <| fun () ->
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+
+            let scope: StorageScope = {
+                ScopeId = "signed-scope"
+                Container = telemetryContainer
+                Persist = true
+            }
+
+            let url =
+                h.Fixture.Library.SignedUrl(record.Id, scope, TimeSpan.FromMinutes 10.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let token = url.Substring(url.IndexOf "token=" + 6)
+
+            // The token's own media, with no ambient scope at all.
+            let status =
+                driveBeacon
+                    h
+                    (sprintf """{"mediaId":"%s","event":"completed","session":"v"}""" (MediaId.value record.Id))
+                    ("token=" + Uri.EscapeDataString token)
+                    None
+
+            Expect.equal status 204 ""
+            Expect.isTrue (usage.WaitFor 1) "the signature admitted it"
+
+            Expect.equal
+                (beaconRows usage |> List.exactlyOne).ScopeId
+                "signed-scope"
+                "attributed to the scope the token was minted for"
+
+            // A DIFFERENT media id under the same token is refused —
+            // the token cannot report plays against another item.
+            let other = meteredHost ()
+
+            let otherStatus =
+                driveBeacon
+                    other
+                    """{"mediaId":"someone-elses-media","event":"started","session":"v"}"""
+                    ("token=" + Uri.EscapeDataString token)
+                    None
+
+            Expect.equal otherStatus 204 ""
+            Expect.equal (other.Usage.Value.SettleThenCount()) 0 "a token minted for one item unlocks only that item"
+
+        testCase "beacons feed the rollup the usage read path already returns"
+        <| fun () ->
+            // The 473.C claim, end to end and with no new API: drive
+            // real beacons + a real serve, then fold exactly the rows a
+            // scope's `IUsageQueryApi.Query` would hand back.
+            let h = meteredHost ()
+            let record = uploadTelemetryItem h
+            let usage = h.Usage.Value
+            let mediaId = MediaId.value record.Id
+
+            let beacon session event =
+                driveBeacon
+                    h
+                    (sprintf """{"mediaId":"%s","event":"%s","session":"%s"}""" mediaId event session)
+                    ""
+                    (Some telemetryContainer)
+                |> ignore
+
+            beacon "viewer-a" "started"
+            beacon "viewer-a" "completed"
+            beacon "viewer-b" "started"
+
+            driveMedia
+                h
+                RangeHandler.streamHandler
+                (sprintf "/api/media/stream/%s" mediaId)
+                None
+                (Some telemetryContainer)
+            |> ignore
+
+            Expect.isTrue (usage.WaitFor 4) "three beacons and one egress row"
+
+            let rollup =
+                PlaybackTelemetry.PlaybackRollup.ofUsageRecords usage.Rows |> List.exactlyOne
+
+            Expect.equal rollup.MediaId mediaId ""
+            Expect.equal rollup.Plays 2 "two viewers started"
+            Expect.equal rollup.Completions 1 "one finished"
+            Expect.equal rollup.UniqueSessions 2 "two correlators"
+            Expect.equal rollup.CompletionRate 0.5 "a correct completion rate"
+
+            Expect.equal rollup.OriginEgressBytes (int64 telemetryPayload.Length) "and the origin egress beside it"
+
+        testCase "the beacon route is POST-only"
+        <| fun () ->
+            let h = meteredHost ()
+            let ctx = DefaultHttpContext()
+            ctx.Request.Method <- "GET"
+            ctx.Request.Path <- PathString MediaApi.beaconRoute
+            ctx.RequestServices <- telemetryServices h
+            ctx.Response.Body <- new MemoryStream()
+
+            let next: HttpFunc = Some >> Task.FromResult
+            let result = (PlaybackTelemetry.beaconHandler next ctx).GetAwaiter().GetResult()
+
+            Expect.isNone result "a GET falls through to the rest of the pipeline"
+
+        testCase "the beacon route cannot collide with a remoting member"
+        <| fun () ->
+            Expect.equal
+                MediaApi.beaconRoute
+                (MediaApi.routeBuilder "IMediaApi" "beacon")
+                "the literal IS what the route builder would produce for a member named `beacon` — which is why no such member may exist"
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
@@ -1845,4 +2812,9 @@ let tests =
         edgeFanOutTests
         delegatedSigningTests
         declaredCacheHeaderTests
+        // Phase 473 — the pure surfaces, egress reconciled against
+        // Content-Range, the GP 13 off path, and the beacon matrix.
+        playbackPureTests
+        egressAccountingTests
+        beaconEndpointTests
     ]

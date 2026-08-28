@@ -46,6 +46,24 @@ open ToolUp.Platform
 // `IMediaLibrary` declares the optional `IMediaRangeReader` capability,
 // and degrades to the whole-blob `OpenDerived` read otherwise, so a
 // custom or CDN-direct library keeps working byte-for-byte.
+//
+// ─── Phase 473 — every body is counted where it is written ──────────
+//
+// Each serving path resolves ONE `PlaybackTelemetry.EgressAccount`
+// before it writes, and the account is counted from the write sites
+// rather than from `Content-Length`: a `206` the client abandons
+// mid-window costs the origin what it actually sent, and that is the
+// number a deployment bills or budgets against. `copyToBody` flushes in
+// its `finally`, so an aborted scrub is metered rather than lost.
+//
+// **The count is ORIGIN egress.** With an edge in front (Phase 472) a
+// cache hit never reaches this process, so these numbers are what left
+// here — not what a viewer received. See the `PlaybackTelemetry` module
+// header.
+//
+// With neither `IMetricsSink` nor `IUsageLog` composed, `accountFor`
+// answers `EgressUnmetered` and the write sites do a tag test and
+// nothing else — no allocation on the serve path at all (GP 13).
 
 let private library (ctx: HttpContext) : IMediaLibrary =
     ctx.RequestServices.GetService(typeof<IMediaLibrary>) :?> IMediaLibrary
@@ -53,9 +71,9 @@ let private library (ctx: HttpContext) : IMediaLibrary =
 let private urlSigner (ctx: HttpContext) : SignedUrl.MediaUrlSigner =
     ctx.RequestServices.GetService(typeof<SignedUrl.MediaUrlSigner>) :?> SignedUrl.MediaUrlSigner
 
-let private scopeContainer (ctx: HttpContext) : string option =
+let private mediaScope (ctx: HttpContext) : StorageScope option =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> Some s.Container
+    | true, (:? StorageScope as s) -> Some s
     | _ -> None
 
 let private headerValue (ctx: HttpContext) (name: string) : string =
@@ -122,18 +140,26 @@ let private bodyBufferBytes = 65536
 /// An explicit loop rather than `Stream.CopyToAsync`, for two reasons
 /// that are load-bearing rather than stylistic:
 ///
-///   1. **One seam for what was actually served.** Every `200` / `206`
-///      body in this module leaves through here, so the served byte
-///      count is observable at a single point rather than inferred from
-///      `Content-Length` (which is what the server INTENDED to send).
+///   1. **One seam for what was actually served.** Every streamed
+///      `200` / `206` body in this module leaves through here, so the
+///      served byte count is observable at a single point rather than
+///      inferred from `Content-Length` (which is what the server
+///      INTENDED to send).
 ///   2. **Cancellation reaches the store.** The served stream is lazy —
 ///      it pulls the next window from blob storage on each read — so
 ///      honouring `ctx.RequestAborted` here is what stops an abandoned
 ///      scrub from paying for the rest of the range. `CopyToAsync`
 ///      with no token would drain it.
 ///
+/// Phase 473 attaches egress accounting to reason 1: `account` is
+/// counted per chunk and flushed in the `finally`, so an aborted scrub
+/// meters what it actually cost rather than what it promised. The
+/// account is `EgressUnmetered` — a singleton — when neither telemetry
+/// sink is composed, and both calls are then a tag test with no
+/// allocation (GP 13).
+///
 /// Fully async: no sync-over-async anywhere on the serve path (GP 7).
-let private copyToBody (ctx: HttpContext) (stream: Stream) : Task<int64> = task {
+let private copyToBody (ctx: HttpContext) (account: PlaybackTelemetry.EgressAccount) (stream: Stream) : Task<int64> = task {
     let buffer = ArrayPool<byte>.Shared.Rent bodyBufferBytes
 
     try
@@ -148,10 +174,12 @@ let private copyToBody (ctx: HttpContext) (stream: Stream) : Task<int64> = task 
             else
                 do! ctx.Response.Body.WriteAsync(ReadOnlyMemory<byte>(buffer, 0, read), ctx.RequestAborted)
                 written <- written + int64 read
+                PlaybackTelemetry.count account read
 
         return written
     finally
         ArrayPool<byte>.Shared.Return buffer
+        PlaybackTelemetry.flush account
 }
 
 /// Serve a stored original through the library's `ContentLength` +
@@ -160,6 +188,7 @@ let private copyToBody (ctx: HttpContext) (stream: Stream) : Task<int64> = task 
 let private serveOriginal
     (ctx: HttpContext)
     (lib: IMediaLibrary)
+    (scopeId: string)
     (container: string)
     (id: MediaId)
     : Task<HttpContext option> =
@@ -204,7 +233,13 @@ let private serveOriginal
                         use body = stream
                         ctx.Response.StatusCode <- 200
                         ctx.Response.ContentLength <- Nullable total
-                        let! _ = copyToBody ctx body
+
+                        let! _ =
+                            copyToBody
+                                ctx
+                                (PlaybackTelemetry.accountFor ctx id scopeId PlaybackTelemetry.ClassOriginal)
+                                body
+
                         return Some ctx
                     | Error _ ->
                         ctx.SetStatusCode 404
@@ -216,7 +251,13 @@ let private serveOriginal
                         ctx.Response.StatusCode <- 206
                         setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" r.Start r.End total)
                         ctx.Response.ContentLength <- Nullable r.Length
-                        let! _ = copyToBody ctx body
+
+                        let! _ =
+                            copyToBody
+                                ctx
+                                (PlaybackTelemetry.accountFor ctx id scopeId PlaybackTelemetry.ClassOriginal)
+                                body
+
                         return Some ctx
                     | Error _ ->
                         ctx.Response.StatusCode <- 416
@@ -230,28 +271,43 @@ let private serveOriginal
 /// not declare `IMediaRangeReader`, when it does but the store will
 /// not report the blob's size, and (Phase 471) for any manifest, whose
 /// body the serve path may rewrite.
-let private serveBytes (ctx: HttpContext) (mime: string) (bytes: byte[]) : Task<HttpContext option> = task {
-    let total = int64 bytes.Length
-    setHeader ctx "Accept-Ranges" "bytes"
-    ctx.Response.ContentType <- mime
+///
+/// Phase 473 — this path does NOT go through `copyToBody` (there is no
+/// stream to pace: the bytes are already in hand), so it meters its own
+/// write. The count is the window's own length rather than the buffer's,
+/// which is what a `206` from here actually puts on the wire.
+let private serveBytes
+    (ctx: HttpContext)
+    (account: PlaybackTelemetry.EgressAccount)
+    (mime: string)
+    (bytes: byte[])
+    : Task<HttpContext option> =
+    task {
+        let total = int64 bytes.Length
+        setHeader ctx "Accept-Ranges" "bytes"
+        ctx.Response.ContentType <- mime
 
-    match ByteRange.parse (headerValue ctx "Range") total with
-    | NoRange ->
-        ctx.Response.StatusCode <- 200
-        ctx.Response.ContentLength <- Nullable total
-        do! ctx.Response.Body.WriteAsync(bytes, 0, bytes.Length)
-        return Some ctx
-    | Satisfiable r ->
-        ctx.Response.StatusCode <- 206
-        setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" r.Start r.End total)
-        ctx.Response.ContentLength <- Nullable r.Length
-        do! ctx.Response.Body.WriteAsync(bytes, int r.Start, int r.Length)
-        return Some ctx
-    | RangeRequest.Unsatisfiable ->
-        ctx.Response.StatusCode <- 416
-        setHeader ctx "Content-Range" (sprintf "bytes */%d" total)
-        return Some ctx
-}
+        match ByteRange.parse (headerValue ctx "Range") total with
+        | NoRange ->
+            ctx.Response.StatusCode <- 200
+            ctx.Response.ContentLength <- Nullable total
+            do! ctx.Response.Body.WriteAsync(bytes, 0, bytes.Length)
+            PlaybackTelemetry.count account bytes.Length
+            PlaybackTelemetry.flush account
+            return Some ctx
+        | Satisfiable r ->
+            ctx.Response.StatusCode <- 206
+            setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" r.Start r.End total)
+            ctx.Response.ContentLength <- Nullable r.Length
+            do! ctx.Response.Body.WriteAsync(bytes, int r.Start, int r.Length)
+            PlaybackTelemetry.count account (int r.Length)
+            PlaybackTelemetry.flush account
+            return Some ctx
+        | RangeRequest.Unsatisfiable ->
+            ctx.Response.StatusCode <- 416
+            setHeader ctx "Content-Range" (sprintf "bytes */%d" total)
+            return Some ctx
+    }
 
 /// Phase 471 — read a derived manifest whole and rewrite its
 /// `#EXT-X-KEY` URIs to origin-absolute form before serving it.
@@ -280,6 +336,7 @@ let private serveBytes (ctx: HttpContext) (mime: string) (bytes: byte[]) : Task<
 /// before this phase.
 let private serveManifestRewritten
     (ctx: HttpContext)
+    (account: PlaybackTelemetry.EgressAccount)
     (ranged: IMediaRangeReader)
     (container: string)
     (id: MediaId)
@@ -310,7 +367,7 @@ let private serveManifestRewritten
                 else
                     Text.Encoding.UTF8.GetBytes rewritten
 
-            return! serveBytes ctx mime served
+            return! serveBytes ctx account mime served
     }
 
 /// Phase 468 — serve a derived blob (HLS manifest / segment, poster)
@@ -324,6 +381,7 @@ let private serveManifestRewritten
 /// unchanged.
 let private serveDerivedRanged
     (ctx: HttpContext)
+    (account: PlaybackTelemetry.EgressAccount)
     (ranged: IMediaRangeReader)
     (container: string)
     (id: MediaId)
@@ -332,7 +390,7 @@ let private serveDerivedRanged
     : Task<HttpContext option> =
     task {
         if HlsKeyDelivery.isManifest file then
-            return! serveManifestRewritten ctx ranged container id file total
+            return! serveManifestRewritten ctx account ranged container id file total
         else
             setHeader ctx "Accept-Ranges" "bytes"
             let parsed = ByteRange.parse (headerValue ctx "Range") total
@@ -362,7 +420,7 @@ let private serveDerivedRanged
                         setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" window.Start window.End total)
 
                     ctx.Response.ContentLength <- Nullable window.Length
-                    let! _ = copyToBody ctx body
+                    let! _ = copyToBody ctx account body
                     return Some ctx
     }
 
@@ -371,11 +429,11 @@ let streamHandler: HttpHandler =
     GET
     >=> routef "/api/media/stream/%s" (fun raw ->
         fun (_: HttpFunc) (ctx: HttpContext) -> task {
-            match scopeContainer ctx with
+            match mediaScope ctx with
             | None ->
                 ctx.SetStatusCode 401
                 return Some ctx
-            | Some container -> return! serveOriginal ctx (library ctx) container (MediaId raw)
+            | Some scope -> return! serveOriginal ctx (library ctx) scope.ScopeId scope.Container (MediaId raw)
         })
 
 /// Scope-signed public stream — `GET /media/signed/{mediaId}?token=...`.
@@ -401,7 +459,12 @@ let signedHandler: HttpHandler =
                 | Ok payload when payload.MediaId <> raw ->
                     ctx.SetStatusCode 403
                     return Some ctx
-                | Ok payload -> return! serveOriginal ctx (library ctx) payload.Container (MediaId raw)
+                | Ok payload ->
+                    // Phase 473 — the signature's OWN payload carries the
+                    // attribution, so a signed serve meters against the
+                    // scope that minted the token rather than against
+                    // whatever ambient scope (if any) the request has.
+                    return! serveOriginal ctx (library ctx) payload.ScopeId payload.Container (MediaId raw)
         })
 
 /// Scoped HLS manifest / segment serving — `GET
@@ -412,13 +475,22 @@ let hlsHandler: HttpHandler =
     GET
     >=> routef "/api/media/hls/%s/%s" (fun (raw, file) ->
         fun (_: HttpFunc) (ctx: HttpContext) -> task {
-            match scopeContainer ctx with
+            match mediaScope ctx with
             | None ->
                 ctx.SetStatusCode 401
                 return Some ctx
-            | Some container ->
+            | Some scope ->
+                let container = scope.Container
                 let lib = library ctx
                 let id = MediaId raw
+
+                // Phase 473 — one account per response, resolved before
+                // either serving path runs, for the same reason the edge
+                // declaration below is decided once: both paths write the
+                // same derived file, so classifying it twice is two
+                // chances to disagree.
+                let account =
+                    PlaybackTelemetry.accountFor ctx id scope.ScopeId (PlaybackTelemetry.responseClassForDerived file)
 
                 // Phase 472 — declare the edge posture ONCE, here,
                 // before either serving path runs. Both paths write the
@@ -448,9 +520,9 @@ let hlsHandler: HttpHandler =
                                 else
                                     Text.Encoding.UTF8.GetBytes rewritten
 
-                            return! serveBytes ctx mime served
+                            return! serveBytes ctx account mime served
                         else
-                            return! serveBytes ctx mime bytes
+                            return! serveBytes ctx account mime bytes
                     | Error _ ->
                         ctx.SetStatusCode 404
                         return Some ctx
@@ -463,7 +535,7 @@ let hlsHandler: HttpHandler =
                 match box lib with
                 | :? IMediaRangeReader as ranged ->
                     match! ranged.DerivedContentLength(container, id, file) |> Async.StartAsTask with
-                    | Ok total when total > 0L -> return! serveDerivedRanged ctx ranged container id file total
+                    | Ok total when total > 0L -> return! serveDerivedRanged ctx account ranged container id file total
                     | _ -> return! serveWhole ()
                 | _ -> return! serveWhole ()
         })
