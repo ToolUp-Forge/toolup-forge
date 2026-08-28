@@ -1296,6 +1296,13 @@
              ToolUp.Hosts.EdgeCache sub-companion proving both seams
              from outside the SDK. -->
         <Compile Include="InProcess\EdgeCacheTests.fs" />
+        <!-- Phase 742 - delivered-egress reconciliation: the pure
+             inverse of MediaEdgePaths, the dedup key that carries the
+             whole idempotency guarantee, attribution + scope isolation +
+             the counted drops, the delivered-beside-origin rollup fold,
+             and the ToolUp.Hosts.DeliveredEgress field-mapped parsers
+             proving the record shape from outside the SDK. -->
+        <Compile Include="InProcess\DeliveredEgressTests.fs" />
         <Compile Include="InProcess\ContentAuthoringTests.fs" />
         <Compile Include="InProcess\ContentAdminAuthorizationTests.fs" />
         <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
@@ -2296,6 +2303,12 @@
              HTTP calls run against a stub HttpMessageHandler, so the
              pack reaches no network. -->
         <ProjectReference Include="..\Hosts\EdgeCache\ToolUp.Hosts.EdgeCache.fsproj" />
+        <!-- Phase 742 - the reference delivered-egress adapter.
+             Referenced so the field-mapped parsers and the two callback
+             seams are exercised from OUTSIDE the SDK (GP 12). It opens
+             no socket by construction - reaching a log store is the
+             deployment's callback - so the pack reaches no network. -->
+        <ProjectReference Include="..\Hosts\DeliveredEgress\ToolUp.Hosts.DeliveredEgress.fsproj" />
         <ProjectReference Include="..\ContentAuthoring\ToolUp.ContentAuthoring.fsproj" />
         <!-- Phase 59 — IConsentProvider lives in ToolUp.Platform.Client
              (consent decisions are browser-local). The contract pack

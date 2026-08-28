@@ -1089,6 +1089,9 @@ let private registeredTests =
         // Phase 472 — the CDN / edge-cache seam + the reference
         // sub-companion that proves it from outside the SDK.
         EdgeCacheTests.tests
+        // Phase 742 — delivered-egress reconciliation from CDN access
+        // logs, plus the reference field-mapped parsers.
+        DeliveredEgressTests.tests
         ContentAuthoringTests.tests
         ContentAdminAuthorizationTests.tests
         InMemoryRateLimitStoreTests.tests

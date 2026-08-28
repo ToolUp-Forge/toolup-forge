@@ -42,6 +42,20 @@ open ToolUp.Platform.Usage
 // — the CDN's own logs are the authority for what an edge served, and
 // the honest thing is to label the dimension rather than to guess.
 //
+// **Phase 742 measures the gap rather than closing it.** A deployment
+// that feeds its CDN access logs to `DeliveredEgress` gets a SECOND
+// series here — `DeliveredEgressKind`, folded into `PlaybackRollup` as
+// `DeliveredEgressBytes` / `EdgeServedBytes` / `EdgeHitRateByBytes` —
+// carrying what the edge actually returned. It is a distinct series and
+// never a correction: `OriginEgressBytes` still means exactly what it
+// meant, measured the same way, and a deployment that ingests nothing
+// reads byte-identically to Phase 473. The two are deliberately NOT
+// summed anywhere, because a cache miss appears in both and their byte
+// definitions differ (a CDN log field is typically the whole response
+// including headers; the origin count is body bytes only). Where they
+// disagree, the delivered figure is the billable one and the origin
+// figure is the one this process can prove — which is why both survive.
+//
 // **The two sinks carry different resolutions, on purpose.** The metric
 // series are tagged `scope` + `class` only; the per-MEDIA attribution
 // lives in the usage ledger's `Metadata`. `IMetricsSink` carries a
@@ -78,6 +92,17 @@ let EgressBytesMetric = "toolup.media.egress.bytes"
 [<Literal>]
 let PlaybackEventsMetric = "toolup.media.playback.events"
 
+/// Phase 742 — histogram of per-response DELIVERED egress, reconciled
+/// from CDN access logs. Same bucket boundaries as `EgressBytesMetric`
+/// so the two are readable on one axis.
+[<Literal>]
+let DeliveredEgressMetric = "toolup.media.egress.delivered.bytes"
+
+/// Phase 742 — counter of access-log records that could not be
+/// attributed, tagged by reason.
+[<Literal>]
+let DeliveredDroppedMetric = "toolup.media.delivered.dropped"
+
 /// Usage-ledger `ResourceKind` for origin egress. `Quantity` is the
 /// byte count, `Unit` is `bytes`, and `Metadata` carries the media id
 /// and the response class.
@@ -88,6 +113,19 @@ let EgressBytesKind = "media.egress.bytes"
 /// `Quantity` is always `1`; the event token is in `Metadata`.
 [<Literal>]
 let PlaybackEventsKind = "media.playback.events"
+
+/// Phase 742 — usage-ledger `ResourceKind` for DELIVERED egress: bytes
+/// a CDN edge returned to a viewer, reconciled from the deployment's own
+/// access logs. `Quantity` is the byte count, `Unit` is `bytes`, and
+/// `Metadata` carries the media id, the response class, and the
+/// `OutcomeKey` distinguishing an edge-served response from one that
+/// passed through to this origin.
+///
+/// **A distinct kind, never a correction of `EgressBytesKind`.** The two
+/// measure different things from different vantage points and are not
+/// summable — see the delivered-egress note in the module header.
+[<Literal>]
+let DeliveredEgressKind = "media.egress.delivered.bytes"
 
 [<Literal>]
 let MediaIdKey = "mediaId"
@@ -129,6 +167,30 @@ let EventProgress = "progress"
 [<Literal>]
 let EventCompleted = "completed"
 
+/// Phase 742 — `Metadata` key on a `DeliveredEgressKind` row recording
+/// whether the edge served the response itself or passed it through to
+/// this origin. The whole reconciliation turns on this distinction: a
+/// pass-through response is ALSO counted by `EgressBytesKind`, so only
+/// the edge-served subset is the gap Phase 473 could not see.
+[<Literal>]
+let OutcomeKey = "outcome"
+
+/// The edge answered from its own cache. The origin never saw these
+/// bytes, so they appear in no `EgressBytesKind` row.
+[<Literal>]
+let OutcomeEdge = "edge"
+
+/// The edge went to the origin for this response. Counted here AND by
+/// `EgressBytesKind`, from two vantage points with two byte definitions.
+[<Literal>]
+let OutcomeOrigin = "origin"
+
+/// The deployment's parser could not classify the record's cache
+/// disposition. Counted in delivered bytes, excluded from the hit-rate
+/// numerator — an unknown is not evidence of a miss.
+[<Literal>]
+let OutcomeUnknown = "unknown"
+
 /// Metric declarations, wired into `ServerApp.MetricRegistrations` by
 /// `MediaCompose.run` so a media-composing deployment has both series
 /// declared the moment it composes — the `AILatencyMetrics` /
@@ -159,6 +221,33 @@ let registrations: MetricRegistration list = [
                 + "(tags: scope + event=started|progress|completed)"
             Unit = "1"
             Tags = [ "scope"; "event" ]
+        }
+    }
+    {
+        Module = None
+        Definition = {
+            Name = DeliveredEgressMetric
+            Kind = Histogram [ 65536.0; 262144.0; 1048576.0; 4194304.0; 16777216.0; 67108864.0; 268435456.0 ]
+            Description =
+                "Bytes an edge DELIVERED to a viewer per logged response, reconciled "
+                + "from the deployment's CDN access logs (tags: scope + class + "
+                + "outcome=edge|origin|unknown). Not summable with the origin-egress "
+                + "series: outcome=origin responses appear in both."
+            Unit = "bytes"
+            Tags = [ "scope"; "class"; "outcome" ]
+        }
+    }
+    {
+        Module = None
+        Definition = {
+            Name = DeliveredDroppedMetric
+            Kind = Counter
+            Description =
+                "CDN access-log records the delivered-egress ingestion could not attribute "
+                + "and DROPPED (tags: reason). Never an error — an unattributable record is "
+                + "counted so the shortfall is visible, not raised."
+            Unit = "1"
+            Tags = [ "reason" ]
         }
     }
 ]
@@ -234,6 +323,42 @@ let egressRecord (attribution: EgressAttribution) (bytes: int64) (recordId: Guid
     Metadata = Map.ofList [ MediaIdKey, MediaId.value attribution.Media; ClassKey, attribution.Class ]
     Timestamp = timestamp
 }
+
+/// Phase 742 — the usage-ledger row for `bytes` of DELIVERED egress.
+/// Pure, and explicitly parameterised on the id + timestamp for the same
+/// reason `egressRecord` is: the row shape is assertable without a clock,
+/// a host, or a CDN.
+///
+/// **`recordId` is the ingestion's whole idempotency story.** The
+/// blob-backed `IUsageLog` merges incoming rows into the existing
+/// per-`(scope, day)` rollup de-duped by `RecordId`, so a batch ingested
+/// twice writes rows the ledger already holds and the second write
+/// changes nothing. That is why this phase adds no dedup store of its
+/// own: the substrate already has the property, and the part worth
+/// owning is the DERIVATION of a stable id — see
+/// `DeliveredEgress.dedupKey`.
+let deliveredRecord
+    (attribution: EgressAttribution)
+    (outcome: string)
+    (bytes: int64)
+    (recordId: Guid)
+    (timestamp: DateTime)
+    : UsageRecord =
+    {
+        RecordId = recordId
+        ScopeId = attribution.ScopeId
+        ResourceKind = DeliveredEgressKind
+        Quantity = decimal bytes
+        Unit = "bytes"
+        Origin = None
+        Metadata =
+            Map.ofList [
+                MediaIdKey, MediaId.value attribution.Media
+                ClassKey, attribution.Class
+                OutcomeKey, outcome
+            ]
+        Timestamp = timestamp
+    }
 
 /// The live sinks plus the attribution for ONE metered response, and
 /// the running count of what that response actually wrote.
@@ -712,6 +837,32 @@ type PlaybackRollup = {
     /// `Completions / Plays`, or `0.0` when nothing started.
     CompletionRate: float
     OriginEgressBytes: int64
+    /// Phase 742 — every byte an edge returned to a viewer for this
+    /// bucket, as reconciled from the deployment's CDN access logs. `0`
+    /// on a deployment that ingests none, which is byte-identical to
+    /// Phase 473.
+    ///
+    /// **Not comparable term-by-term with `OriginEgressBytes`, and not
+    /// summable with it.** A cache MISS is counted in both — once by the
+    /// origin as it wrote the body, once by the edge as it relayed it —
+    /// and the two counts differ even for that one response, because a
+    /// CDN log's byte field is typically the whole HTTP response
+    /// including headers while `OriginEgressBytes` is body bytes only.
+    /// The delivered figure is the billable one; the origin figure is
+    /// the one this process can prove.
+    DeliveredEgressBytes: int64
+    /// The subset of `DeliveredEgressBytes` the edge served from its own
+    /// cache — the bytes Phase 473 structurally could not see, because
+    /// they never reached this origin. Records whose cache disposition
+    /// the deployment's parser could not classify are excluded: an
+    /// unknown is not evidence of a hit.
+    EdgeServedBytes: int64
+    /// `EdgeServedBytes / DeliveredEgressBytes`, or `0.0` when nothing
+    /// was delivered. A BY-BYTES hit rate, not by request: the question
+    /// the origin-vs-delivered gap poses is about volume, and one large
+    /// origin pull outweighs a hundred small edge hits in every way that
+    /// matters to a bill.
+    EdgeHitRateByBytes: float
 }
 
 module PlaybackRollup =
@@ -734,7 +885,11 @@ module PlaybackRollup =
         let relevant =
             records
             |> List.choose (fun r ->
-                if r.ResourceKind <> EgressBytesKind && r.ResourceKind <> PlaybackEventsKind then
+                if
+                    r.ResourceKind <> EgressBytesKind
+                    && r.ResourceKind <> PlaybackEventsKind
+                    && r.ResourceKind <> DeliveredEgressKind
+                then
                     None
                 else
                     match r.Metadata.TryFind MediaIdKey with
@@ -774,6 +929,19 @@ module PlaybackRollup =
                     else
                         0L)
 
+            let deliveredBytesWhere (predicate: UsageRecord -> bool) =
+                rs
+                |> List.sumBy (fun r ->
+                    if r.ResourceKind = DeliveredEgressKind && predicate r then
+                        int64 r.Quantity
+                    else
+                        0L)
+
+            let delivered = deliveredBytesWhere (fun _ -> true)
+
+            let edgeServed =
+                deliveredBytesWhere (fun r -> r.Metadata.TryFind OutcomeKey = Some OutcomeEdge)
+
             {
                 MediaId = media
                 ScopeId = scope
@@ -783,5 +951,12 @@ module PlaybackRollup =
                 Completions = completions
                 CompletionRate = if plays = 0 then 0.0 else float completions / float plays
                 OriginEgressBytes = egress
+                DeliveredEgressBytes = delivered
+                EdgeServedBytes = edgeServed
+                EdgeHitRateByBytes =
+                    if delivered = 0L then
+                        0.0
+                    else
+                        float edgeServed / float delivered
             })
         |> List.sortBy (fun r -> r.Day, r.MediaId, r.ScopeId)

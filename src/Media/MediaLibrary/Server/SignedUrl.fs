@@ -109,11 +109,24 @@ let mint (signingKey: byte[]) (id: MediaId) (scope: StorageScope) (expiresAt: Da
     let signature = hmacSha256 signingKey payloadBytes
     sprintf "%s.%s.%s" payload.MediaId (base64UrlEncode payloadBytes) (base64UrlEncode signature)
 
-/// Verify a signed token against the signing key and the current clock.
-/// Pure — returns the validated payload, or a `SignedUrlError`
-/// (`Malformed` / `InvalidSignature` / `Expired`). Signature comparison
-/// is constant-time.
-let verify (signingKey: byte[]) (token: string) (now: DateTimeOffset) : Result<MediaSignedPayload, SignedUrlError> =
+/// Verify a token's SIGNATURE and structure, WITHOUT consulting the
+/// expiry. Pure — returns the payload the signature covers, or
+/// `Malformed` / `InvalidSignature`. Never returns `Expired`, because it
+/// never looks.
+///
+/// **This is not an access decision and must never back one.** Every
+/// serving path calls `verify` below, which layers the expiry check on
+/// top; this function exists for Phase 742's delivered-egress
+/// reconciliation, where the question is "which scope minted the URL
+/// whose bytes an edge has already served" — asked from a CDN access log
+/// that arrives HOURS after the fact (an edge of the class above
+/// typically delivers within the hour and can lag a day). By then a
+/// validly-signed
+/// token is expired far more often than not, so refusing it would
+/// discard the attribution for precisely the normal case. The bytes left
+/// the edge whatever the clock now says; the signature still identifies
+/// who minted the grant, and that is the only claim made here.
+let verifySignature (signingKey: byte[]) (token: string) : Result<MediaSignedPayload, SignedUrlError> =
     let parts = token.Split('.')
 
     if parts.Length <> 3 then
@@ -129,14 +142,28 @@ let verify (signingKey: byte[]) (token: string) (now: DateTimeOffset) : Result<M
                 Error InvalidSignature
             else
                 match Json.tryDeserialize<MediaSignedPayload> payloadBytes with
-                | Some payload when payload.MediaId = mediaIdFromPrefix ->
-                    if payload.ExpiresAtUnix <= now.ToUnixTimeSeconds() then
-                        Error SignedUrlError.Expired
-                    else
-                        Ok payload
+                | Some payload when payload.MediaId = mediaIdFromPrefix -> Ok payload
                 | Some _ -> Error InvalidSignature
                 | None -> Error Malformed
         | _ -> Error Malformed
+
+/// Verify a signed token against the signing key and the current clock.
+/// Pure — returns the validated payload, or a `SignedUrlError`
+/// (`Malformed` / `InvalidSignature` / `Expired`). Signature comparison
+/// is constant-time.
+///
+/// Layered over `verifySignature` rather than duplicating it, so the two
+/// cannot drift into disagreeing about what a well-formed token is —
+/// the expiry test is the whole of the difference, and it is visible
+/// here as the whole of the difference.
+let verify (signingKey: byte[]) (token: string) (now: DateTimeOffset) : Result<MediaSignedPayload, SignedUrlError> =
+    match verifySignature signingKey token with
+    | Error e -> Error e
+    | Ok payload ->
+        if payload.ExpiresAtUnix <= now.ToUnixTimeSeconds() then
+            Error SignedUrlError.Expired
+        else
+            Ok payload
 
 // ─── Signing-key resolution (mirrors ShareTokenStore) ─────────────────
 
@@ -198,6 +225,15 @@ type MediaUrlSigner(secretStore: ISecretStore) =
         match! getSigningKey () with
         | Error e -> return Error e
         | Ok key -> return verify key token now
+    }
+
+    /// Verify a token's signature against the resolved key WITHOUT
+    /// consulting expiry — see `verifySignature`. Used by Phase 742's
+    /// delivered-egress attribution, never by a serving path.
+    member _.VerifySignatureAsync(token: string) : Async<Result<MediaSignedPayload, SignedUrlError>> = async {
+        match! getSigningKey () with
+        | Error e -> return Error e
+        | Ok key -> return verifySignature key token
     }
 
 // ─── Phase 472 — delegated URL signing ────────────────────────────────

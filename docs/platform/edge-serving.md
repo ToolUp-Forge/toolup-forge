@@ -197,6 +197,89 @@ Four behaviours to know:
   or its policy document, exactly as the origin HMAC does. One that ignores it has widened the gate;
   the seam is shaped so that is a visible choice rather than an impossible one.
 
+## Delivered egress vs origin egress — reconciling what the edge served
+
+Putting a CDN in front of the origin creates a measurement blind spot, and it is worth naming
+plainly because it is invisible from inside the deployment: **an edge cache hit never reaches this
+process.** The media library's egress accounting counts the bytes that left *here*, so once an edge
+is serving, origin egress understates delivered egress by exactly the edge hit rate — and nothing on
+the origin side can tell you how large that gap is. The declared `s-maxage` is a hint about intent,
+not a measurement, and a figure derived from it would be a guess wearing a measurement's clothes.
+
+For metered or monetised media, delivered bytes are the billable number. The only authority for what
+an edge served is the edge's own access log, so the SDK reads that rather than estimating.
+
+### The shape: parsed records in, a distinct series out
+
+`DeliveredEgressIngestor.IngestBatch` takes records the **deployment** has already parsed:
+
+```fsharp skip=signature
+type DeliveredRecord = {
+    Url: string
+    Bytes: int64
+    At: DateTimeOffset
+    Status: int
+    Outcome: DeliveredCacheOutcome // ServedFromEdge | ServedFromOrigin | DeliveredOutcomeUnknown
+    RequestId: string option
+}
+```
+
+Parsing is the deployment's because a fixed in-SDK parser is not merely undesirable, it is not well
+defined. Both major CDN log products let the operator **choose the field set per delivery**, so two
+deployments on the *same* platform emit different records; both offer several output containers with
+a configurable delimiter; and their field names and vocabularies differ, including what a byte count
+means (whole response including headers, versus bytes returned to the client). Once the field names
+are a parameter there is nothing vendor-specific left — which is why
+[`ToolUp.Hosts.DeliveredEgress`](https://github.com/ToolUp-Forge/toolup-forge/tree/main/src/Hosts/DeliveredEgress)
+ships two *field-mapped* parsers (delimited and newline-delimited JSON) and no vendor-specific code
+path at all.
+
+It runs as an ordinary scheduled job on the existing scheduler — no `BackgroundService`, no new
+pipeline. A deployment that composes none of this runs nothing and is byte-for-byte unchanged.
+
+### Attribution, and the one place it needs your help
+
+The media id is recoverable from every URL the library mints. The **scope** is not:
+
+| Route | Media id | Scope |
+|---|---|---|
+| `/media/signed/{id}?token=` | yes | **yes** — carried in the token, and the signature is verified |
+| `/api/media/stream/{id}` | yes | no — resolved from ambient request context |
+| `/api/media/hls/{id}/{file}` | yes | no — resolved from ambient request context |
+
+The signed form carries its own scope, and the token's signature is **verified** before that scope is
+believed — anything a viewer can put in a query string ends up on a log line, so trusting an
+unverified payload would let anyone attribute bytes to any scope they named. Expiry is deliberately
+*not* checked here: the log arrives hours after the response, so a validly-signed token is usually
+expired by then, and the bytes left the edge regardless of what the clock now says.
+
+The other two routes cannot be resolved from the URL, and `IMediaLibrary` cannot help — every one of
+its members takes the scope as a parameter precisely so a cross-scope read cannot be expressed.
+Attributing them needs an `IDeliveredScopeResolver` in which the deployment declares the mapping its
+own catalogue already holds. Without one, those records are dropped and **counted** as
+`scope-unresolved` — never raised as an error, because a batch that is 3% unattributable must still
+contribute the other 97%, but never silent either.
+
+### Reading the two series
+
+`PlaybackRollup` carries `OriginEgressBytes` alongside `DeliveredEgressBytes`, `EdgeServedBytes` and
+`EdgeHitRateByBytes`. The delivered figures are a **distinct series, never a correction** of the
+origin one, and the two are deliberately never summed anywhere:
+
+- A cache **miss** appears in both — once as the origin wrote the body, once as the edge relayed it.
+- Even for that single response the two counts differ, because a CDN's byte field is typically the
+  whole HTTP response *including headers* while the origin count is body bytes only.
+
+So expect them not to reconcile term-by-term; that is the honest result, not a defect. The delivered
+figure is the billable one, the origin figure is the one this process can prove, and both survive for
+that reason. `EdgeHitRateByBytes` is a ratio **by bytes rather than by request**, because a delivery
+bill is a question about volume — one large origin pull outweighs a hundred small edge hits.
+
+Two limits worth planning around: log delivery lags (one platform pushes sub-minute, the other
+typically delivers within an hour and may delay entries by up to a day, so a source **declares** its
+own lag and a rollup read sooner is early rather than incomplete), and **nothing backfills** — if the
+log pipeline drops a period, the delivered series is short for that period permanently.
+
 ## Checklist for putting a CDN in front of an existing deployment
 
 1. Compose an `IEdgeCache` on the surfaces that publish — public rendering, media, or both.
@@ -211,6 +294,8 @@ Four behaviours to know:
    is verified only at the origin — which a CDN-fronted viewer does not reach.
 6. Verify a purge end to end before trusting it: publish, then request the edge URL. `Propagation`
    tells you how long to wait, and an unbounded one means "no promise".
+7. If you meter or bill on egress, wire delivered-egress reconciliation — from the moment the edge
+   starts serving, origin egress is no longer the delivered figure. See the section above.
 
 ## See also
 

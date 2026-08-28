@@ -121,6 +121,7 @@
     <ProjectReference Include="../src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj" />
     <ProjectReference Include="../src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj" />
     <ProjectReference Include="../src/Hosts/EdgeCache/ToolUp.Hosts.EdgeCache.fsproj" />
+    <ProjectReference Include="../src/Hosts/DeliveredEgress/ToolUp.Hosts.DeliveredEgress.fsproj" />
     <ProjectReference Include="../src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj" />
     <ProjectReference Include="../src/IngestionQueues/Redis/ToolUp.IngestionQueues.Redis.fsproj" />
     <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />

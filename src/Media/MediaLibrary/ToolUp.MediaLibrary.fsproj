@@ -27,6 +27,10 @@
     <Compile Include="Server\UploadSessions.fs" />
     <Compile Include="Server\MediaApi.fs" />
     <Compile Include="Server\PlaybackTelemetry.fs" />
+    <!-- Phase 742 — after PlaybackTelemetry, which owns the metering
+         vocabulary this reads, and before the serving paths, which do
+         not depend on it. -->
+    <Compile Include="Server\DeliveredEgress.fs" />
     <Compile Include="Server\RangeHandler.fs" />
     <Compile Include="Server\MediaHealthCheck.fs" />
     <Compile Include="Server\MediaConfigValidator.fs" />

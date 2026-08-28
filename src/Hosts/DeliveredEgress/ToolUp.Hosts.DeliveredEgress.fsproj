@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Hosts.DeliveredEgress</PackageId>
+    <AssemblyName>ToolUp.Hosts.DeliveredEgress</AssemblyName>
+    <Description>CDN access-log ingestion adapter for ToolUp.MediaLibrary (Phase 742). Field-mapped parsers for delimited and newline-delimited-JSON access logs, turning whatever field set a deployment's edge delivery emits into DeliveredRecord values; plus CallbackLogSource and CallbackScopeResolver, the two delivered-egress seams over plain callbacks. Field names, timestamp shapes and cache-status vocabularies are all data — no cloud SDK dependency and no vendor-specific code path.</Description>
+    <PackageTags>fsharp;sdk;cdn;edge;access-logs;egress;metering;telemetry;host-adapter</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="FieldMappedParser.fs" />
+    <Compile Include="CallbackLogSource.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The delivered-egress seams are media-scoped (they resolve a
+         MediaId within a StorageScope and fold into the media rollup),
+         so they live in ToolUp.MediaLibrary and this adapter references
+         it. Separate from ToolUp.Hosts.EdgeCache rather than folded into
+         it, because the two are adopted independently: a deployment can
+         purge and sign at the edge without ever reconciling its logs,
+         and can reconcile logs having adopted neither. -->
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
+  </ItemGroup>
+  <!-- No vendor package reference, by design (GP 1). There is nothing to
+       depend on: this package parses text and calls back into the
+       deployment, and every vendor-shaped detail — field names, the
+       container, the timestamp shape, the cache-status vocabulary, the
+       credential that reaches the log store — arrives as data or as a
+       callback. FSharp.Core is implicit via the .NET SDK. -->
+</Project>
