@@ -5,12 +5,18 @@ module ToolUp.Platform.Tests.InProcess.MediaLibraryTests
 
 open System
 open System.IO
+open System.Security.Cryptography
 open System.Text
+open System.Threading.Tasks
 open Expecto
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
+open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.MediaLibrary
+open ToolUp.Media.FFmpeg
 open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 88 — media library tests ───────────────────────────────────
@@ -585,6 +591,791 @@ let private uploadSessionImplTests =
         }
     ]
 
+// ─── Phase 471 — gated HLS: AES-128 segments + key delivery ──────────
+//
+// Four layers, mirroring how the phase is built:
+//
+//   1. The PURE gate (`HlsKeyDelivery.decideAccess`) and the PURE
+//      manifest rewrite (`rewriteKeyUris`), exhaustively — the shape
+//      Phase 86's `AudienceGate` established.
+//   2. The PURE half of the FFmpeg sub-companion — the
+//      `-hls_key_info_file` payload and the argument list. **Nothing
+//      here shells ffmpeg**, and that is a deliberate limit rather than
+//      an omission: this pack has never required a media binary, and a
+//      case that silently no-ops when `ffmpeg` is absent would report a
+//      vacuous green on every CI runner. What IS asserted is the part a
+//      wrong answer would break — the file format ffmpeg parses
+//      positionally with no error reporting, and the claim that the
+//      encrypted argument list differs from the plain one by exactly
+//      the encryption flag.
+//   3. The library end to end over a fake transcoder that performs a
+//      REAL AES-128-CBC encryption, so "the segments are byte-garbage
+//      without the key" is measured against actual ciphertext rather
+//      than asserted.
+//   4. The endpoint and the serve path, driven through a real
+//      `DefaultHttpContext` (the `SurfaceEnforcementMiddlewareTests`
+//      shape) so the status codes, the `no-store` header and the
+//      rewritten manifest body are the ones a client would see.
+
+let private encContainer = "team-encrypted"
+let private foreignContainer = "team-intruder"
+
+/// The plaintext one "segment" carries. Distinctive enough that finding
+/// it inside the stored blob is unambiguous.
+let private clearSegment = Array.init 4096 (fun i -> byte ((i * 31 + 17) % 251))
+
+let private aesCbc (key: byte[]) (transform: Aes -> ICryptoTransform) (input: byte[]) =
+    use aes = Aes.Create()
+    aes.Key <- key
+    aes.IV <- Array.zeroCreate 16
+    aes.Mode <- CipherMode.CBC
+    aes.Padding <- PaddingMode.PKCS7
+    use t = transform aes
+    t.TransformFinalBlock(input, 0, input.Length)
+
+let private aesEncrypt (key: byte[]) (plain: byte[]) = aesCbc key _.CreateEncryptor() plain
+let private aesDecrypt (key: byte[]) (cipher: byte[]) = aesCbc key _.CreateDecryptor() cipher
+
+/// The unencrypted manifest a plain pass produces. Held as a value so
+/// the "byte-identical when unencrypted" claim has something exact to
+/// compare against.
+let private plainManifest =
+    "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:6.0,\nseg0.ts\n#EXT-X-ENDLIST\n"
+
+/// A transcoder that emits a manifest + one segment, and — when asked
+/// through `IMediaHlsEncryptingTranscoder` — really encrypts the
+/// segment with the supplied key and writes the supplied key URI into
+/// the manifest's `#EXT-X-KEY`.
+///
+/// Not an ffmpeg emulation: the IV is fixed at zero rather than derived
+/// from the media sequence number, because the claim under test is what
+/// the LIBRARY does with a key (mint it, hand it over once, persist
+/// only ciphertext, keep the key in `ISecretStore`) — not ffmpeg's
+/// segment-IV convention.
+let private encryptingTranscoder =
+    { new IMediaTranscoder with
+        member _.Capabilities = {
+            CanExtractPoster = false
+            CanTranscodeHls = true
+        }
+
+        member _.TranscodeToHls(_, _) = async {
+            return
+                Ok [
+                    {
+                        BlobSuffix = "index.m3u8"
+                        Bytes = Encoding.UTF8.GetBytes plainManifest
+                        MimeType = "application/vnd.apple.mpegurl"
+                        RenditionName = "hls"
+                        IsMasterManifest = true
+                    }
+                    {
+                        BlobSuffix = "seg0.ts"
+                        Bytes = clearSegment
+                        MimeType = "video/mp2t"
+                        RenditionName = "hls"
+                        IsMasterManifest = false
+                    }
+                ]
+        }
+
+      interface IMediaHlsEncryptingTranscoder with
+          member _.TranscodeToHlsEncrypted(_, _, key) = async {
+              let manifest =
+                  sprintf
+                      "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-KEY:METHOD=AES-128,URI=\"%s\"\n#EXTINF:6.0,\nseg0.ts\n#EXT-X-ENDLIST\n"
+                      key.KeyUri
+
+              return
+                  Ok [
+                      {
+                          BlobSuffix = "index.m3u8"
+                          Bytes = Encoding.UTF8.GetBytes manifest
+                          MimeType = "application/vnd.apple.mpegurl"
+                          RenditionName = "hls"
+                          IsMasterManifest = true
+                      }
+                      {
+                          BlobSuffix = "seg0.ts"
+                          Bytes = aesEncrypt key.KeyBytes clearSegment
+                          MimeType = "video/mp2t"
+                          RenditionName = "hls"
+                          IsMasterManifest = false
+                      }
+                  ]
+          }
+    }
+
+/// A library plus the pieces the key endpoint needs to answer for it.
+type private EncryptedFixture = {
+    Library: IMediaLibrary
+    Keys: HlsKeyDelivery.MediaHlsKeyStore
+    Signer: SignedUrl.MediaUrlSigner
+    Blob: IBlobStorage
+}
+
+let private makeEncryptedFixture (transcoder: IMediaTranscoder) (withKeyStore: bool) (encryptByDefault: bool) =
+    let blob = makeStore ()
+    let secrets = InMemorySecretStore() :> ISecretStore
+    let signer = SignedUrl.MediaUrlSigner(secrets)
+
+    let options = {
+        MediaLibraryOptions.defaults with
+            EncryptHlsByDefault = encryptByDefault
+    }
+
+    let keys = HlsKeyDelivery.MediaHlsKeyStore(secrets, NullLogger(), options)
+
+    let lib =
+        DefaultMediaLibrary(
+            blob,
+            signer,
+            NoopMediaDerivation.create (),
+            transcoder,
+            None,
+            options,
+            NullLogger(),
+            (if withKeyStore then Some keys else None)
+        )
+        :> IMediaLibrary
+
+    {
+        Library = lib
+        Keys = keys
+        Signer = signer
+        Blob = blob
+    }
+
+let private encUpload () =
+    match
+        MediaUploadRequest.create
+            MediaLibraryOptions.defaults
+            (Array.init 128 byte)
+            "clip.mp4"
+            "video/mp4"
+            "user-1"
+            None
+    with
+    | Ok r -> r
+    | Error e -> failwithf "471 setup: invalid upload request %A" e
+
+/// Read the stored bytes of a derived blob straight out of the blob
+/// store, bypassing the library — the byte-level assertion has to look
+/// at what is ACTUALLY at rest, not at what a serving path chose to
+/// hand back.
+let private storedDerived (blob: IBlobStorage) (container: string) (id: MediaId) (file: string) =
+    let name = sprintf "media/derived/%s/%s" (MediaId.value id) file
+
+    match blob.Download(container, name) |> Async.RunSynchronously with
+    | Ok bytes -> bytes
+    | Error e -> failwithf "471: derived blob %s unreadable: %s" name e
+
+// ─── 1. The pure gate ─────────────────────────────────────────────────
+
+let private payloadFor (mediaId: string) (container: string) : SignedUrl.MediaSignedPayload = {
+    MediaId = mediaId
+    ScopeId = "u1"
+    Container = container
+    ExpiresAtUnix = 0L
+}
+
+let private hlsGateTests =
+    testList "Phase 471 key-endpoint gate (pure)" [
+        test "no credential at all → 401" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None None "m1")
+                HlsKeyDelivery.KeyAccessUnauthenticated
+                "anonymous"
+        }
+
+        test "a resolved scope admits, and names the container the key is read from" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess (Some "team-a") None "m1")
+                (HlsKeyDelivery.KeyAccessGranted("team-a", "scope"))
+                "scope gate"
+        }
+
+        test "a valid signature for THIS media admits, on the signed payload's own container" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None (Some(Ok(payloadFor "m1" "team-b"))) "m1")
+                (HlsKeyDelivery.KeyAccessGranted("team-b", "signature"))
+                "signature gate"
+        }
+
+        test "a signature minted for ANOTHER media id does not unlock this one" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None (Some(Ok(payloadFor "other" "team-b"))) "m1")
+                (HlsKeyDelivery.KeyAccessForbidden "media_id_mismatch")
+                "id binding"
+        }
+
+        test "an expired signature is 403, not a fall-through" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None (Some(Error SignedUrlError.Expired)) "m1")
+                (HlsKeyDelivery.KeyAccessForbidden "expired_signature")
+                "expiry"
+        }
+
+        test "a tampered signature is 403" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None (Some(Error SignedUrlError.InvalidSignature)) "m1")
+                (HlsKeyDelivery.KeyAccessForbidden "invalid_signature")
+                "signature"
+        }
+
+        test "a malformed token is 403" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess None (Some(Error SignedUrlError.Malformed)) "m1")
+                (HlsKeyDelivery.KeyAccessForbidden "malformed_signature")
+                "malformed"
+        }
+
+        // The ordering claim, both directions. A present-but-bad token
+        // must NOT quietly fall through to the scope gate: if it did,
+        // an expired signature presented by an ordinary session would
+        // read as a success, and the expired-signature refusal would be
+        // unobservable from outside.
+        test "a bad token beside a valid scope is still refused" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess (Some "team-a") (Some(Error SignedUrlError.Expired)) "m1")
+                (HlsKeyDelivery.KeyAccessForbidden "expired_signature")
+                "no fall-through"
+        }
+
+        test "a valid token beside a scope resolves on the token's container" {
+            Expect.equal
+                (HlsKeyDelivery.decideAccess (Some "team-a") (Some(Ok(payloadFor "m1" "team-b"))) "m1")
+                (HlsKeyDelivery.KeyAccessGranted("team-b", "signature"))
+                "token wins"
+        }
+    ]
+
+// ─── 2. The pure manifest rewrite + FFmpeg argument surface ──────────
+
+let private hlsRewriteTests =
+    testList "Phase 471 manifest rewrite (pure)" [
+        test "a manifest with no key tag comes back byte-for-byte (the same string)" {
+            let rewritten =
+                HlsKeyDelivery.rewriteKeyUris "https://o/api/media/hls-key/m1" plainManifest
+
+            Expect.isTrue
+                (obj.ReferenceEquals(rewritten, plainManifest))
+                "an unencrypted manifest must not be re-serialised at all"
+        }
+
+        test "the key URI is replaced and every other attribute survives" {
+            let source =
+                "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/api/media/hls-key/m1\",IV=0x00\n#EXTINF:6.0,\nseg0.ts\n"
+
+            let rewritten =
+                HlsKeyDelivery.rewriteKeyUris "https://origin.test/api/media/hls-key/m1" source
+
+            Expect.stringContains
+                rewritten
+                "#EXT-X-KEY:METHOD=AES-128,URI=\"https://origin.test/api/media/hls-key/m1\",IV=0x00"
+                "URI swapped in place, METHOD and IV untouched"
+
+            Expect.stringContains rewritten "\nseg0.ts\n" "segment lines untouched"
+            Expect.isFalse (rewritten.Contains "\"/api/media/hls-key/m1\"") "the relative URI is gone"
+        }
+
+        test "#EXT-X-SESSION-KEY is rewritten too" {
+            let source =
+                "#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"/api/media/hls-key/m1\"\n"
+
+            let rewritten = HlsKeyDelivery.rewriteKeyUris "https://o/k" source
+            Expect.stringContains rewritten "URI=\"https://o/k\"" "session key rewritten"
+        }
+
+        test "CRLF line endings survive the rewrite" {
+            let source = "#EXTM3U\r\n#EXT-X-KEY:METHOD=AES-128,URI=\"/rel\"\r\nseg0.ts\r\n"
+            let rewritten = HlsKeyDelivery.rewriteKeyUris "https://o/k" source
+            Expect.stringContains rewritten "URI=\"https://o/k\"\r\n" "the CRLF after the rewritten tag"
+            Expect.equal (rewritten.Split("\r\n").Length) (source.Split("\r\n").Length) "same line count"
+            Expect.isFalse (rewritten.Contains "\n\n") "no line ending was doubled"
+        }
+
+        test "a segment URI that merely LOOKS like a key line is not rewritten" {
+            let source = "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\nseg0.ts\n"
+            Expect.isTrue (obj.ReferenceEquals(HlsKeyDelivery.rewriteKeyUris "https://o/k" source, source)) "EXT-X-MAP"
+        }
+
+        test "the secret name is namespaced by media id" {
+            Expect.equal (HlsKeyDelivery.secretName (MediaId "abc")) "media_hls_key:abc" "secret name"
+        }
+
+        test "the key-info file is the URI, the key path, and nothing else when there is no IV" {
+            let content = FFmpegMediaProvider.keyInfoContent "https://o/k" "C:/tmp/hls.key" None
+            Expect.equal content "https://o/k\nC:/tmp/hls.key\n" "two positional lines"
+        }
+
+        test "an explicit IV is appended as lowercase hex" {
+            let iv = Array.init 16 (fun i -> byte i)
+            let content = FFmpegMediaProvider.keyInfoContent "u" "p" (Some iv)
+            Expect.equal content "u\np\n000102030405060708090a0b0c0d0e0f\n" "three positional lines"
+        }
+
+        test "the encrypted argument list differs from the plain one by exactly the encryption flag" {
+            let plain = FFmpegMediaProvider.hlsArgs "in.mp4" "out.m3u8" None
+
+            let encrypted =
+                FFmpegMediaProvider.hlsArgs "in.mp4" "out.m3u8" (Some "info.keyinfo")
+
+            Expect.equal
+                (encrypted
+                 |> List.filter (fun a -> a <> "-hls_key_info_file" && a <> "info.keyinfo"))
+                plain
+                "removing the two encryption tokens recovers the pre-471 argument list exactly (GP 11)"
+
+            Expect.isFalse (plain |> List.contains "-hls_key_info_file") "the plain pass names no key file"
+        }
+    ]
+
+// ─── 3. The library end to end ────────────────────────────────────────
+
+let private hlsEncryptionTests =
+    testList "Phase 471 encrypted renditions" [
+        testCaseAsync "an encrypted rendition is byte-garbage at rest and recovers exactly with the stored key"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+            Expect.equal record.Status MediaIngestionStatus.Ready "ingestion completed"
+
+            let atRest = storedDerived f.Blob encContainer record.Id "seg0.ts"
+
+            // The claim, at the byte level: a stolen segment file is not
+            // the video. Length differs (PKCS7 pads) and, more to the
+            // point, the plaintext is nowhere in it.
+            Expect.notEqual atRest clearSegment "the stored segment is not the plaintext"
+
+            Expect.isFalse
+                (Convert.ToHexString(atRest).Contains(Convert.ToHexString(clearSegment[0..63])))
+                "no run of plaintext survives in the stored ciphertext"
+
+            // And it is genuinely THAT key, fetched from the gate's
+            // store, that opens it.
+            let! stored = f.Keys.TryGet(encContainer, record.Id)
+
+            match Expect.wantOk stored "key resolved" with
+            | None -> failtest "an encrypted rendition must leave a key in the owning scope"
+            | Some key ->
+                Expect.equal key.Length 16 "AES-128 — 16 bytes"
+                Expect.equal (aesDecrypt key atRest) clearSegment "the key recovers the plaintext exactly"
+        }
+
+        testCaseAsync "the key is filed under the owning scope, and a foreign scope cannot read it"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            let! foreign = f.Keys.TryGet(foreignContainer, record.Id)
+
+            // `Ok None`, not an error and not the key: the container is
+            // the isolation boundary, so a foreign scope's question is
+            // well-formed and simply has no answer here (GP 4).
+            Expect.equal (Expect.wantOk foreign "foreign lookup") None "a foreign scope resolves no key"
+        }
+
+        testCaseAsync "the key never lands beside the segments"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            let! stored = f.Keys.TryGet(encContainer, record.Id)
+            let key = (Expect.wantOk stored "key").Value
+
+            let prefix = sprintf "media/derived/%s/" (MediaId.value record.Id)
+            let! derived = f.Blob.List(encContainer, prefix)
+            Expect.isNonEmpty derived "the sweep must actually have blobs to look at"
+
+            for name in derived do
+                let bytes =
+                    match f.Blob.Download(encContainer, name) |> Async.RunSynchronously with
+                    | Ok b -> b
+                    | Error e -> failwithf "471: %s unreadable: %s" name e
+
+                Expect.isFalse
+                    (Convert.ToHexString(bytes).Contains(Convert.ToHexString key))
+                    (sprintf "the raw key must not appear inside derived blob %s" name)
+        }
+
+        testCaseAsync "deleting the item destroys its key"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            let! before = f.Keys.TryGet(encContainer, record.Id)
+            Expect.isSome (Expect.wantOk before "before") "the key exists while the item does"
+
+            let! deleted = f.Library.Delete(encContainer, record.Id)
+            Expect.isOk deleted "delete"
+
+            let! after = f.Keys.TryGet(encContainer, record.Id)
+            Expect.equal (Expect.wantOk after "after") None "no live key survives the item"
+        }
+
+        testCaseAsync "a transcoder that cannot encrypt FAILS the ingestion rather than shipping bare segments"
+        <| async {
+            // `fakeHlsTranscoder` declares `IMediaTranscoder` only.
+            let f = makeEncryptedFixture fakeHlsTranscoder true true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            match record.Status with
+            | MediaIngestionStatus.Failed reason ->
+                Expect.stringContains reason "cannot encrypt" "the reason names the missing capability"
+            | other -> failtestf "expected a failed ingestion, got %A" other
+
+            Expect.isEmpty record.Renditions "no rendition is published for a refused encryption"
+
+            // And no orphan secret: the key is minted only once both
+            // preconditions hold.
+            let! stored = f.Keys.TryGet(encContainer, record.Id)
+            Expect.equal (Expect.wantOk stored "key") None "a refused encryption mints no key"
+        }
+
+        testCaseAsync "no composed key store is also a refusal, not a bare rendition"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder false true
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+
+            match record.Status with
+            | MediaIngestionStatus.Failed reason ->
+                Expect.stringContains reason "no key store" "the reason names the missing substrate"
+            | other -> failtestf "expected a failed ingestion, got %A" other
+        }
+
+        testCaseAsync "with encryption off, the rendition is byte-identical to the pre-471 output"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true false
+            let! upload = f.Library.Upload(encContainer, encUpload ())
+            let record = Expect.wantOk upload "upload"
+            Expect.equal record.Status MediaIngestionStatus.Ready "ingestion completed"
+
+            Expect.equal
+                (storedDerived f.Blob encContainer record.Id "seg0.ts")
+                clearSegment
+                "the segment is stored in the clear, exactly as before this phase"
+
+            Expect.equal
+                (Encoding.UTF8.GetString(storedDerived f.Blob encContainer record.Id "index.m3u8"))
+                plainManifest
+                "and the manifest carries no key tag"
+
+            let! stored = f.Keys.TryGet(encContainer, record.Id)
+            Expect.equal (Expect.wantOk stored "key") None "an unencrypted item mints no key at all"
+        }
+
+        testCaseAsync "a per-upload opt-in encrypts even when the deployment default is off"
+        <| async {
+            let f = makeEncryptedFixture encryptingTranscoder true false
+
+            let request =
+                match
+                    MediaUploadRequest.createWithEncryption
+                        MediaLibraryOptions.defaults
+                        (Array.init 128 byte)
+                        "clip.mp4"
+                        "video/mp4"
+                        "user-1"
+                        None
+                        (Some true)
+                with
+                | Ok r -> r
+                | Error e -> failwithf "471 setup: %A" e
+
+            let! upload = f.Library.Upload(encContainer, request)
+            let record = Expect.wantOk upload "upload"
+            Expect.equal record.Status MediaIngestionStatus.Ready "ingestion completed"
+
+            Expect.notEqual
+                (storedDerived f.Blob encContainer record.Id "seg0.ts")
+                clearSegment
+                "the per-upload preference won over the deployment default"
+        }
+
+        test "a request built by the pre-471 constructor states no preference" {
+            Expect.equal (encUpload ()).EncryptHls None "create leaves the preference unstated"
+
+            Expect.equal
+                (MediaLibraryOptions.effectiveEncryptHls MediaLibraryOptions.defaults None)
+                false
+                "and the shipped default resolves it to off (GP 11)"
+        }
+    ]
+
+// ─── 4. The endpoint + the serve path, through a real HttpContext ────
+
+let private keyRoute (id: MediaId) =
+    HlsKeyDelivery.RoutePrefix + MediaId.value id
+
+let private servicesFor (f: EncryptedFixture) : IServiceProvider =
+    ServiceCollection()
+        .AddSingleton<SignedUrl.MediaUrlSigner>(f.Signer)
+        .AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(f.Keys)
+        .AddSingleton<IMediaLibrary>(f.Library)
+        .BuildServiceProvider()
+    :> IServiceProvider
+
+/// One driven request. `scope` is the container the scope-resolution
+/// middleware would have stamped; `query` is the raw query string.
+let private drive
+    (f: EncryptedFixture)
+    (handler: HttpHandler)
+    (path: string)
+    (query: string)
+    (scope: string option)
+    : int * byte[] * HttpContext =
+    let ctx = DefaultHttpContext()
+    ctx.Request.Method <- "GET"
+    ctx.Request.Scheme <- "https"
+    ctx.Request.Host <- HostString "media.example.test"
+    ctx.Request.Path <- PathString path
+
+    if query <> "" then
+        ctx.Request.QueryString <- QueryString("?" + query)
+
+    ctx.RequestServices <- servicesFor f
+
+    match scope with
+    | Some container ->
+        ctx.Items["ToolUp.StorageScope"] <-
+            box {
+                ScopeId = "u1"
+                Container = container
+                Persist = true
+            }
+    | None -> ()
+
+    let body = new MemoryStream()
+    ctx.Response.Body <- body
+
+    let next: HttpFunc = Some >> Task.FromResult
+    (handler next ctx).GetAwaiter().GetResult() |> ignore
+
+    ctx.Response.StatusCode, body.ToArray(), ctx
+
+let private headerOf (ctx: HttpContext) (name: string) =
+    match ctx.Response.Headers.TryGetValue name with
+    | true, v -> v.ToString()
+    | _ -> ""
+
+let private hlsKeyEndpointTests =
+    testList "Phase 471 key endpoint (driven)" [
+        testCase "an anonymous request is 401 and returns no bytes"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, _ = drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) "" None
+            Expect.equal status 401 "anonymous"
+            Expect.isEmpty body "no key material on a refused request"
+
+        testCase "the owning scope gets the key, no-store, as raw bytes"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, ctx =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) "" (Some encContainer)
+
+            Expect.equal status 200 "admitted"
+            Expect.equal body.Length 16 "AES-128 key, raw"
+
+            let expected =
+                (f.Keys.TryGet(encContainer, record.Id)
+                 |> Async.RunSynchronously
+                 |> Result.defaultWith (fun e -> failwith e))
+                    .Value
+
+            Expect.equal body expected "the delivered bytes are the stored key"
+            Expect.equal (headerOf ctx "Cache-Control") "no-store" "a key must never be cached"
+            Expect.equal ctx.Response.ContentType "application/octet-stream" "content type"
+
+        testCase "a DIFFERENT scope is admitted by the route and still gets nothing"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            // The cross-scope refusal is STRUCTURAL, not a check: the
+            // foreign caller is a perfectly good authenticated subject,
+            // and the key simply is not in its container (GP 4).
+            let status, body, _ =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) "" (Some foreignContainer)
+
+            Expect.equal status 404 "cross-scope"
+            Expect.isEmpty body "no key material crosses a scope boundary"
+
+        testCase "a valid signed token admits, and an expired one is 403"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let scope: StorageScope = {
+                ScopeId = "u1"
+                Container = encContainer
+                Persist = true
+            }
+
+            let live =
+                f.Signer.SignAsync(record.Id, scope, TimeSpan.FromHours 1.0, DateTimeOffset.UtcNow)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, _ =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) ("token=" + Uri.EscapeDataString live) None
+
+            Expect.equal status 200 "a live signature admits with no session at all"
+            Expect.equal body.Length 16 "the key"
+
+            // Minted in the past with a short TTL, so it is already dead
+            // by the time the handler checks it against the real clock.
+            let stale =
+                f.Signer.SignAsync(record.Id, scope, TimeSpan.FromMinutes 1.0, DateTimeOffset.UtcNow.AddHours -2.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let expiredStatus, expiredBody, _ =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) ("token=" + Uri.EscapeDataString stale) None
+
+            Expect.equal expiredStatus 403 "an expired signature"
+            Expect.isEmpty expiredBody "no key material on an expired signature"
+
+        testCase "a token minted for another media item does not unlock this one"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let scope: StorageScope = {
+                ScopeId = "u1"
+                Container = encContainer
+                Persist = true
+            }
+
+            let other =
+                f.Signer.SignAsync(MediaId "someone-elses", scope, TimeSpan.FromHours 1.0, DateTimeOffset.UtcNow)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, _ =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) ("token=" + Uri.EscapeDataString other) None
+
+            Expect.equal status 403 "id binding is enforced at the endpoint"
+            Expect.isEmpty body "no key material"
+
+        testCase "an encrypted manifest is served with an ORIGIN-ABSOLUTE key URI"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let path = sprintf "/api/media/hls/%s/index.m3u8" (MediaId.value record.Id)
+
+            let status, body, _ = drive f RangeHandler.hlsHandler path "" (Some encContainer)
+            Expect.equal status 200 "manifest served"
+            let text = Encoding.UTF8.GetString body
+
+            // This is the whole point of the rewrite: the stored
+            // manifest carries a root-relative URI, which would resolve
+            // against the CDN host once the segments are cached there.
+            Expect.stringContains
+                text
+                (sprintf "URI=\"https://media.example.test/api/media/hls-key/%s\"" (MediaId.value record.Id))
+                "the key URI points back at the origin's gate"
+
+            Expect.isFalse
+                (text.Contains "URI=\"/api/media/hls-key/")
+                "no root-relative key URI survives the serve path"
+
+        testCase "a token on the manifest request is carried onto the key URI"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let path = sprintf "/api/media/hls/%s/index.m3u8" (MediaId.value record.Id)
+
+            let _, body, _ =
+                drive f RangeHandler.hlsHandler path "token=abc123" (Some encContainer)
+
+            let text = Encoding.UTF8.GetString body
+
+            // The signed-playback path end to end: the token that
+            // admitted the manifest is bound to the same media id, so
+            // it admits the key fetch too — no second token species.
+            Expect.stringContains text "/api/media/hls-key/" "key URI present"
+            Expect.stringContains text "?token=abc123" "the admitting token rides onto the key URI"
+
+        testCase "an UNENCRYPTED manifest is served byte-for-byte"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true false
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let path = sprintf "/api/media/hls/%s/index.m3u8" (MediaId.value record.Id)
+
+            let status, body, ctx = drive f RangeHandler.hlsHandler path "" (Some encContainer)
+            Expect.equal status 200 "served"
+            Expect.equal body (Encoding.UTF8.GetBytes plainManifest) "the stored bytes, unmodified"
+            Expect.equal ctx.Response.ContentType "application/vnd.apple.mpegurl" "content type unchanged"
+
+        testCase "an encrypted SEGMENT is still served as opaque ranged bytes"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true true
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let path = sprintf "/api/media/hls/%s/seg0.ts" (MediaId.value record.Id)
+            let status, body, ctx = drive f RangeHandler.hlsHandler path "" (Some encContainer)
+
+            Expect.equal status 200 "segment served"
+            Expect.equal ctx.Response.ContentType "video/mp2t" "segments are untouched by the rewrite"
+
+            Expect.equal
+                body
+                (storedDerived f.Blob encContainer record.Id "seg0.ts")
+                "the ciphertext is served exactly as stored"
+
+            Expect.notEqual body clearSegment "and it is still not the plaintext"
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
@@ -604,4 +1395,9 @@ let tests =
         IMediaLibraryContract.uploadSessionTests "BlobUploadSessionStore" makeStore (makeSessionsOver None)
         // …and the three claims that are about this implementation.
         uploadSessionImplTests
+        // Phase 471 — the gate, the rewrite, the ciphertext, the endpoint.
+        hlsGateTests
+        hlsRewriteTests
+        hlsEncryptionTests
+        hlsKeyEndpointTests
     ]

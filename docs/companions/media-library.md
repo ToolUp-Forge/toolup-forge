@@ -281,6 +281,91 @@ app |> MediaLibraryServerApp.withTranscoder transcoder
 callback is wired (declares no capability — single-file progressive
 download).
 
+## Gated HLS — AES-128 segments + a scope-gated key
+
+A scope-signed URL protects **one file**. HLS does not have one file: a
+rendition is a manifest plus N segment blobs, and the moment those
+segments are statically exported or cached at a CDN edge, the origin's
+route auth is no longer on the path. The bytes are simply there.
+
+So the segments are encrypted and the **key** is what stays gated:
+
+```fsharp skip=fragment
+app
+|> MediaLibraryServerApp.withTranscoder (FFmpegMediaProvider.createTranscoder None)
+|> MediaLibraryServerApp.withOptions
+    { MediaLibraryOptions.defaults with EncryptHlsByDefault = true }
+```
+
+Per-upload instead of (or against) the deployment default:
+
+```fsharp skip=fragment
+MediaUploadRequest.createWithEncryption
+    options bytes filename mimeType uploadedBy caption (Some true)
+```
+
+`MediaUploadRequest.create` leaves the preference **unstated** (`None`),
+which resolves to `EncryptHlsByDefault` — so every pre-existing call site
+keeps its exact behaviour, and the shipped default is `false` (GP 11).
+
+### What happens at transcode time
+
+1. A 16-byte AES-128 key is minted and stored in `ISecretStore` under the
+   item's **owning scope container**, keyed `media_hls_key:{mediaId}` —
+   never beside the segments (GP 4).
+2. The transcoder encrypts the segments and writes
+   `#EXT-X-KEY:METHOD=AES-128,URI="/api/media/hls-key/{mediaId}"` into the
+   manifest. The FFmpeg sub-companion does this through
+   `-hls_key_info_file`; the key file it needs lives in a temp directory
+   of its own, deleted whether the pass succeeds or fails, and never in
+   the directory whose contents are uploaded.
+3. On serve, the manifest's key URI is rewritten to an **origin-absolute**
+   URI, so an exported or CDN-served manifest still points back at the
+   origin's gate rather than at whatever host handed it over.
+
+**Encryption is fail-closed.** Encryption requires a transcoder declaring
+the optional `IMediaHlsEncryptingTranscoder` capability. An upload that
+asks to be encrypted and cannot be fails its ingestion
+(`MediaIngestionStatus.Failed`) rather than quietly producing a bare
+rendition — a silently-unencrypted gated video is the exact exposure this
+is for, and nothing would say so.
+
+### The key endpoint
+
+`GET /api/media/hls-key/{mediaId}` returns the raw 16 bytes with
+`Cache-Control: no-store`. It admits on **the same two credentials the
+media bytes themselves are reachable by**, so the key is never easier to
+obtain than the video it decrypts:
+
+| Credential | Outcome |
+|---|---|
+| A resolved scope (the `/api/media/stream/…` gate) | Key for **that scope's** copy. |
+| A valid `SignedUrl` token for **this** media id | Key for the signed payload's container, until the token's TTL expires. |
+| A token that is expired, tampered, or minted for another media id | `403` — never a fall-through to the scope gate. |
+| No credential at all | `401`. |
+| An authenticated caller in a **different** scope | `404`. The refusal is structural: the key is filed under the owning container, so a foreign scope's lookup simply has no answer, and learns nothing beyond "not here". |
+
+A `token` on the manifest request is **carried onto the rewritten key
+URI**, which is what makes signed playback work end to end: the token
+that admitted the manifest is bound to the same media id, so it admits
+the key fetch too, on the same signing key and the same TTL. No second
+token species.
+
+Denials are recorded through `IAuthAuditHook`, landing in the same
+queryable `AuthorizationDenied` trail as every other authorization denial
+in the deployment; granted deliveries are logged when
+`MediaLibraryOptions.EmitAudit` is on (GP 6).
+
+### Rotation is a re-transcode
+
+There is deliberately no rotate verb. A key is bound to the ciphertext of
+the segments produced with it — handing out a new key without
+re-encrypting makes the rendition unplayable, and keeping both makes
+revocation meaningless. To rotate, re-upload or re-derive the item: the
+new pass mints a fresh key and replaces the segments in the same act.
+`IMediaLibrary.Delete` destroys the key with the item, so a deleted video
+leaves no live secret.
+
 ## Health + config
 
 The companion registers a `media_library` readiness `IHealthCheck` (blob
@@ -300,6 +385,9 @@ Per scope container:
 {container}/media/records/{mediaId}.json         MediaRecord
 {container}/media/derived/{mediaId}/poster.jpg   poster frame
 {container}/media/derived/{mediaId}/hls/…        HLS manifest + segments
+                                                 (ciphertext when encrypted;
+                                                  the key is in ISecretStore,
+                                                  never in the container)
 {container}/media/uploads/{sessionId}/session.json    in-flight upload session
 {container}/media/uploads/{sessionId}/chunks/{offset}  accepted chunk
 ```
@@ -375,6 +463,7 @@ make mid-blob ranges decryptable — is a separate, larger piece of work.
 
 - [`IMediaLibrary`](../../src/Media/MediaLibrary/Server/IMediaLibrary.fs) — the interface, plus the optional `IMediaRangeReader` capability and the `IUploadSessionStore` resumable-upload seam.
 - [`469-resumable-chunked-uploads.md`](../migrations/469-resumable-chunked-uploads.md) — what the chunked upload surface means for a consumer.
+- [`471-gated-hls.md`](../migrations/471-gated-hls.md) — AES-128 segments + the scope-gated key endpoint.
 - [`455-iblobstorage-ranged-read.md`](../migrations/455-iblobstorage-ranged-read.md) — the storage-seam member range serving is built on.
 - [`narrative-elements.md`](../platform/narrative-elements.md) — the `Video` / `Audio` blocks media serves into.
 - [`IMediaLibraryContract`](../../src/ToolUp.Platform.Tests/Contracts/IMediaLibraryContract.fs) — the conformance pack any implementation can validate against.

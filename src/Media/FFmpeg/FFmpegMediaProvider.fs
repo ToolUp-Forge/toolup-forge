@@ -183,10 +183,173 @@ let create (ffmpegPath: string option) (ffprobePath: string option) : IMediaDeri
         }
     }
 
+// ─── Phase 471 — AES-128 encrypted HLS ────────────────────────────────
+//
+// FFmpeg encrypts HLS segments through `-hls_key_info_file`, which
+// points at a small text file of two or three lines:
+//
+//     <key URI>          written verbatim into the manifest's #EXT-X-KEY
+//     <key file path>    ffmpeg reads the raw 16 key bytes from here
+//     <IV as hex>        optional; omitted → per-segment IV from the
+//                        media sequence number
+//
+// Two consequences shape everything below.
+//
+// **The key is on disk while ffmpeg runs**, in the key file and (as a
+// path) in the info file. Both live in a temp directory of their own —
+// NOT the HLS output directory — for one blunt reason: the output
+// directory is enumerated wholesale and every file in it is uploaded to
+// blob storage. A key file placed there would be persisted beside the
+// ciphertext it opens, which is precisely the arrangement this phase
+// exists to prevent (GP 4). The separate directory is deleted in a
+// `finally`, and the produced-file list is ALSO filtered by extension,
+// so the invariant does not rest on one mechanism.
+//
+// **The manifest carries the URI, not the key.** Line 1 is what ffmpeg
+// writes into `#EXT-X-KEY`; the library supplies the origin's gated key
+// endpoint, and the serve path rewrites it to origin-absolute form.
+
+/// Extensions an HLS pass is allowed to emit into blob storage. A
+/// belt-and-braces guard beside the separate key directory: even if a
+/// future ffmpeg flag dropped key material into the output directory,
+/// it would not be uploaded.
+let private hlsOutputExtensions = set [ ".m3u8"; ".ts"; ".m4s"; ".mp4"; ".vtt" ]
+
+/// The `-hls_key_info_file` payload. Pure, so its exact shape — which
+/// is a positional file format with no keys and no error reporting — is
+/// unit-testable without an ffmpeg binary present.
+let keyInfoContent (keyUri: string) (keyFilePath: string) (iv: byte[] option) : string =
+    let lines = [
+        yield keyUri
+        yield keyFilePath
+
+        match iv with
+        | Some bytes -> yield Convert.ToHexString(bytes).ToLowerInvariant()
+        | None -> ()
+    ]
+
+    String.Join("\n", lines) + "\n"
+
+/// The ffmpeg argument list for one HLS pass. Pure, and shared by the
+/// encrypted and unencrypted paths so the two cannot drift in anything
+/// but the encryption flag — which is the whole claim behind "the
+/// unencrypted path is unchanged" (GP 11).
+let hlsArgs (input: string) (manifest: string) (keyInfoFile: string option) : string list = [
+    "-y"
+    "-i"
+    input
+    "-codec:"
+    "copy"
+    "-start_number"
+    "0"
+    "-hls_time"
+    "6"
+    "-hls_list_size"
+    "0"
+
+    match keyInfoFile with
+    | Some path ->
+        "-hls_key_info_file"
+        path
+    | None -> ()
+
+    "-f"
+    "hls"
+    manifest
+]
+
+/// Collect the produced HLS files, filtered to the extensions an HLS
+/// package legitimately contains (see `hlsOutputExtensions`).
+let private collectHlsOutput (outDir: string) : Result<TranscodedFile list, string> =
+    let files =
+        Directory.GetFiles outDir
+        |> Array.toList
+        |> List.filter (fun f -> hlsOutputExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+        |> List.map (fun f ->
+            let name = Path.GetFileName f
+            let isMaster = name.EndsWith ".m3u8"
+
+            {
+                BlobSuffix = "hls/" + name
+                Bytes = File.ReadAllBytes f
+                MimeType =
+                    if isMaster then
+                        "application/vnd.apple.mpegurl"
+                    else
+                        "video/mp2t"
+                RenditionName = "hls"
+                IsMasterManifest = isMaster
+            })
+
+    if List.isEmpty files then
+        Error "ffmpeg produced no HLS output"
+    else
+        Ok files
+
+/// Run one HLS pass. `key` present ⇒ segments are AES-128 encrypted and
+/// the manifest carries `#EXT-X-KEY:METHOD=AES-128,URI="…"`.
+let private runHlsPass
+    (ffmpeg: string)
+    (mimeType: string)
+    (bytes: byte[])
+    (key: HlsEncryptionKey option)
+    : Result<TranscodedFile list, string> =
+    withTempInput mimeType bytes (fun input ->
+        let outDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
+        Directory.CreateDirectory outDir |> ignore
+        let manifest = Path.Combine(outDir, "master.m3u8")
+
+        // Key material lives in its own directory, never in `outDir` —
+        // see the section header. `None` when this is a plain pass, so
+        // the unencrypted path creates no extra directory at all.
+        let keyDir =
+            key
+            |> Option.map (fun _ ->
+                let d = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
+                Directory.CreateDirectory d |> ignore
+                d)
+
+        try
+            let keyInfoFile =
+                match key, keyDir with
+                | Some k, Some dir ->
+                    let keyFile = Path.Combine(dir, "hls.key")
+                    let infoFile = Path.Combine(dir, "hls.keyinfo")
+                    File.WriteAllBytes(keyFile, k.KeyBytes)
+                    File.WriteAllText(infoFile, keyInfoContent k.KeyUri keyFile k.Iv)
+                    Some infoFile
+                | _ -> None
+
+            match run ffmpeg (hlsArgs input manifest keyInfoFile) with
+            | Error e -> Error e
+            | Ok _ -> collectHlsOutput outDir
+        finally
+            // The key directory goes first and unconditionally: an
+            // ffmpeg failure must not be the reason key material
+            // outlives the pass.
+            match keyDir with
+            | Some dir ->
+                try
+                    Directory.Delete(dir, true)
+                with _ ->
+                    ()
+            | None -> ()
+
+            try
+                Directory.Delete(outDir, true)
+            with _ ->
+                ())
+
 /// FFmpeg-backed HLS transcoder. Produces a single-rendition HLS package
 /// (master `.m3u8` + `.ts` segments) by stream-copying the source. A
 /// production deployment would extend the ladder; this keeps the
 /// reference implementation dependency-light.
+///
+/// Phase 471 — also declares `IMediaHlsEncryptingTranscoder`, so a
+/// deployment that opts into encrypted HLS gets it from the same
+/// sub-companion. The plain `TranscodeToHls` path is byte-for-byte what
+/// it was: same argument list, no key directory created, nothing to
+/// clean up (GP 11).
 let createTranscoder (ffmpegPath: string option) : IMediaTranscoder =
     let ffmpeg = ffmpegPath |> Option.defaultValue defaultFfmpeg
 
@@ -196,61 +359,13 @@ let createTranscoder (ffmpegPath: string option) : IMediaTranscoder =
             CanTranscodeHls = true
         }
 
-        member _.TranscodeToHls(bytes, mimeType) = async {
-            return
-                withTempInput mimeType bytes (fun input ->
-                    let outDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
-                    Directory.CreateDirectory outDir |> ignore
-                    let manifest = Path.Combine(outDir, "master.m3u8")
+        member _.TranscodeToHls(bytes, mimeType) = async { return runHlsPass ffmpeg mimeType bytes None }
 
-                    try
-                        match
-                            run ffmpeg [
-                                "-y"
-                                "-i"
-                                input
-                                "-codec:"
-                                "copy"
-                                "-start_number"
-                                "0"
-                                "-hls_time"
-                                "6"
-                                "-hls_list_size"
-                                "0"
-                                "-f"
-                                "hls"
-                                manifest
-                            ]
-                        with
-                        | Error e -> Error e
-                        | Ok _ ->
-                            let files =
-                                Directory.GetFiles outDir
-                                |> Array.toList
-                                |> List.map (fun f ->
-                                    let name = Path.GetFileName f
-                                    let isMaster = name.EndsWith ".m3u8"
-
-                                    {
-                                        BlobSuffix = "hls/" + name
-                                        Bytes = File.ReadAllBytes f
-                                        MimeType =
-                                            if isMaster then
-                                                "application/vnd.apple.mpegurl"
-                                            else
-                                                "video/mp2t"
-                                        RenditionName = "hls"
-                                        IsMasterManifest = isMaster
-                                    })
-
-                            if List.isEmpty files then
-                                Error "ffmpeg produced no HLS output"
-                            else
-                                Ok files
-                    finally
-                        try
-                            Directory.Delete(outDir, true)
-                        with _ ->
-                            ())
-        }
+      interface IMediaHlsEncryptingTranscoder with
+          member _.TranscodeToHlsEncrypted(bytes, mimeType, key) = async {
+              if isNull (box key.KeyBytes) || key.KeyBytes.Length <> 16 then
+                  return Error "an AES-128 HLS key must be exactly 16 bytes"
+              else
+                  return runHlsPass ffmpeg mimeType bytes (Some key)
+          }
     }

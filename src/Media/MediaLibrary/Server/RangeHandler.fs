@@ -21,6 +21,10 @@ open ToolUp.Platform
 //   GET /media/signed/{mediaId}?token=...  scope-signed public stream
 //   GET /api/media/hls/{mediaId}/{file}    HLS manifest / segment
 //
+// Phase 471 adds a fourth, `GET /api/media/hls-key/{mediaId}` — see
+// `HlsKeyDelivery`, which owns both the endpoint and the manifest
+// rewrite this module applies on the way out.
+//
 // All honour `Range` (→ `206 Partial Content` + `Content-Range` +
 // `Accept-Ranges: bytes`) so `<video>`/`<audio>` seeking works; an
 // out-of-bounds range yields `416 Range Not Satisfiable` with a
@@ -182,57 +186,12 @@ let private serveOriginal
                         return Some ctx
     }
 
-/// Phase 468 — serve a derived blob (HLS manifest / segment, poster)
-/// from bounded ranged reads, the same way `serveOriginal` serves the
-/// original. `total` has already been read from
-/// `IMediaRangeReader.DerivedContentLength`, so a `416` needs no body
-/// read at all and a `206` reads only its window.
-let private serveDerivedRanged
-    (ctx: HttpContext)
-    (ranged: IMediaRangeReader)
-    (container: string)
-    (id: MediaId)
-    (file: string)
-    (total: int64)
-    : Task<HttpContext option> =
-    task {
-        setHeader ctx "Accept-Ranges" "bytes"
-        let parsed = ByteRange.parse (headerValue ctx "Range") total
-
-        match parsed with
-        | RangeRequest.Unsatisfiable ->
-            ctx.Response.StatusCode <- 416
-            setHeader ctx "Content-Range" (sprintf "bytes */%d" total)
-            return Some ctx
-        | NoRange
-        | Satisfiable _ ->
-            let window, status =
-                match parsed with
-                | Satisfiable r -> r, 206
-                | _ -> { Start = 0L; End = total - 1L }, 200
-
-            match! ranged.OpenDerivedRange(container, id, file, window) |> Async.StartAsTask with
-            | Error _ ->
-                ctx.SetStatusCode 404
-                return Some ctx
-            | Ok(stream, mime) ->
-                use body = stream
-                ctx.Response.ContentType <- mime
-                ctx.Response.StatusCode <- status
-
-                if status = 206 then
-                    setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" window.Start window.End total)
-
-                ctx.Response.ContentLength <- Nullable window.Length
-                let! _ = copyToBody ctx body
-                return Some ctx
-    }
-
 /// Serve an in-memory byte buffer (HLS manifest / segment) with `Range`
 /// support. Manifests are small, but players range-request segments.
 /// The whole-blob path — taken when the composed `IMediaLibrary` does
-/// not declare `IMediaRangeReader`, and when it does but the store will
-/// not report the blob's size.
+/// not declare `IMediaRangeReader`, when it does but the store will
+/// not report the blob's size, and (Phase 471) for any manifest, whose
+/// body the serve path may rewrite.
 let private serveBytes (ctx: HttpContext) (mime: string) (bytes: byte[]) : Task<HttpContext option> = task {
     let total = int64 bytes.Length
     setHeader ctx "Accept-Ranges" "bytes"
@@ -255,6 +214,119 @@ let private serveBytes (ctx: HttpContext) (mime: string) (bytes: byte[]) : Task<
         setHeader ctx "Content-Range" (sprintf "bytes */%d" total)
         return Some ctx
 }
+
+/// Phase 471 — read a derived manifest whole and rewrite its
+/// `#EXT-X-KEY` URIs to origin-absolute form before serving it.
+///
+/// Manifests are the one derived blob whose CONTENT the origin must
+/// still own after the bytes leave. The key URI is written at transcode
+/// time as a root-relative path, which resolves against whatever host
+/// serves the manifest — and once the rendition is statically exported
+/// or sitting on a CDN edge, that host is not this one. Rewriting here
+/// is what keeps the key fetch pointed at the gate no matter where the
+/// segments physically landed.
+///
+/// It leaves through `serveBytes` rather than the streaming path
+/// because the rewrite changes the body's length, so a `Content-Range`
+/// computed from the STORED size would be a lie. The two paths are
+/// otherwise header-for-header identical — same `Accept-Ranges`, same
+/// `200` / `206` / `416` decision over the same parsed `Range` — and a
+/// manifest is a few hundred bytes, so nothing is bounded differently
+/// in practice. It is also what `hlsHandler`'s whole-blob fallback has
+/// always done for manifests.
+///
+/// **A manifest carrying no key tag comes back byte-for-byte**:
+/// `rewriteKeyUris` short-circuits to the same string, and the ORIGINAL
+/// bytes are then served rather than a re-encoding of them, so an
+/// unencrypted deployment sees exactly the bytes and headers it saw
+/// before this phase.
+let private serveManifestRewritten
+    (ctx: HttpContext)
+    (ranged: IMediaRangeReader)
+    (container: string)
+    (id: MediaId)
+    (file: string)
+    (total: int64)
+    : Task<HttpContext option> =
+    task {
+        match!
+            ranged.OpenDerivedRange(container, id, file, { Start = 0L; End = total - 1L })
+            |> Async.StartAsTask
+        with
+        | Error _ ->
+            ctx.SetStatusCode 404
+            return Some ctx
+        | Ok(stream, mime) ->
+            use body = stream
+            use buffer = new MemoryStream()
+            do! body.CopyToAsync(buffer, ctx.RequestAborted)
+            let original = buffer.ToArray()
+            let text = Text.Encoding.UTF8.GetString original
+
+            let rewritten =
+                HlsKeyDelivery.rewriteKeyUris (HlsKeyDelivery.absoluteKeyUri ctx id) text
+
+            let served =
+                if obj.ReferenceEquals(rewritten, text) then
+                    original
+                else
+                    Text.Encoding.UTF8.GetBytes rewritten
+
+            return! serveBytes ctx mime served
+    }
+
+/// Phase 468 — serve a derived blob (HLS manifest / segment, poster)
+/// from bounded ranged reads, the same way `serveOriginal` serves the
+/// original. `total` has already been read from
+/// `IMediaRangeReader.DerivedContentLength`, so a `416` needs no body
+/// read at all and a `206` reads only its window.
+///
+/// Phase 471 diverts manifests to `serveManifestRewritten` first; every
+/// other derived blob (segments, posters) takes the bounded path
+/// unchanged.
+let private serveDerivedRanged
+    (ctx: HttpContext)
+    (ranged: IMediaRangeReader)
+    (container: string)
+    (id: MediaId)
+    (file: string)
+    (total: int64)
+    : Task<HttpContext option> =
+    task {
+        if HlsKeyDelivery.isManifest file then
+            return! serveManifestRewritten ctx ranged container id file total
+        else
+            setHeader ctx "Accept-Ranges" "bytes"
+            let parsed = ByteRange.parse (headerValue ctx "Range") total
+
+            match parsed with
+            | RangeRequest.Unsatisfiable ->
+                ctx.Response.StatusCode <- 416
+                setHeader ctx "Content-Range" (sprintf "bytes */%d" total)
+                return Some ctx
+            | NoRange
+            | Satisfiable _ ->
+                let window, status =
+                    match parsed with
+                    | Satisfiable r -> r, 206
+                    | _ -> { Start = 0L; End = total - 1L }, 200
+
+                match! ranged.OpenDerivedRange(container, id, file, window) |> Async.StartAsTask with
+                | Error _ ->
+                    ctx.SetStatusCode 404
+                    return Some ctx
+                | Ok(stream, mime) ->
+                    use body = stream
+                    ctx.Response.ContentType <- mime
+                    ctx.Response.StatusCode <- status
+
+                    if status = 206 then
+                        setHeader ctx "Content-Range" (sprintf "bytes %d-%d/%d" window.Start window.End total)
+
+                    ctx.Response.ContentLength <- Nullable window.Length
+                    let! _ = copyToBody ctx body
+                    return Some ctx
+    }
 
 /// Scoped (authenticated) stream — `GET /api/media/stream/{mediaId}`.
 let streamHandler: HttpHandler =
@@ -312,7 +384,27 @@ let hlsHandler: HttpHandler =
 
                 let serveWhole () = task {
                     match! lib.OpenDerived(container, id, file) |> Async.StartAsTask with
-                    | Ok(bytes, mime) -> return! serveBytes ctx mime bytes
+                    | Ok(bytes, mime) ->
+                        // Phase 471 — the rewrite belongs to SERVING, not
+                        // to the bounded path, so the whole-blob fallback
+                        // applies it too. A library that declares no
+                        // `IMediaRangeReader` must not hand out manifests
+                        // whose key URI resolves against the CDN.
+                        if HlsKeyDelivery.isManifest file then
+                            let text = Text.Encoding.UTF8.GetString bytes
+
+                            let rewritten =
+                                HlsKeyDelivery.rewriteKeyUris (HlsKeyDelivery.absoluteKeyUri ctx id) text
+
+                            let served =
+                                if obj.ReferenceEquals(rewritten, text) then
+                                    bytes
+                                else
+                                    Text.Encoding.UTF8.GetBytes rewritten
+
+                            return! serveBytes ctx mime served
+                        else
+                            return! serveBytes ctx mime bytes
                     | Error _ ->
                         ctx.SetStatusCode 404
                         return Some ctx
@@ -330,5 +422,10 @@ let hlsHandler: HttpHandler =
                 | _ -> return! serveWhole ()
         })
 
-/// All three media-serving handlers, in match order.
-let handlers: HttpHandler list = [ streamHandler; signedHandler; hlsHandler ]
+/// All media-serving handlers, in match order.
+///
+/// Phase 471 appends the HLS key endpoint. Its literal prefix
+/// (`/api/media/hls-key/`) cannot be confused with `hlsHandler`'s
+/// (`/api/media/hls/`), so order is not load-bearing here — it is
+/// listed beside the route it serves keys for.
+let handlers: HttpHandler list = [ streamHandler; signedHandler; hlsHandler; HlsKeyDelivery.keyHandler ]

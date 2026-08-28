@@ -15,6 +15,43 @@ ToolUp.MediaLibrary.ByteRangeModule (class)
 ToolUp.MediaLibrary.ByteRangeModule.parse(System.String, System.Int64) : ToolUp.MediaLibrary.RangeRequest
 ToolUp.MediaLibrary.DefaultMediaLibrary (class)
 ToolUp.MediaLibrary.DefaultMediaLibrary..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.SignedUrl+MediaUrlSigner, ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.IMediaTranscoder, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger)
+ToolUp.MediaLibrary.DefaultMediaLibrary..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.SignedUrl+MediaUrlSigner, ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.IMediaTranscoder, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore])
+ToolUp.MediaLibrary.HlsEncryptionKey (class)
+ToolUp.MediaLibrary.HlsEncryptionKey..ctor(System.Byte[], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]])
+ToolUp.MediaLibrary.HlsEncryptionKey.Iv : Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]] { get }
+ToolUp.MediaLibrary.HlsEncryptionKey.KeyBytes : System.Byte[] { get }
+ToolUp.MediaLibrary.HlsEncryptionKey.KeyUri : System.String { get }
+ToolUp.MediaLibrary.HlsKeyDelivery (class)
+ToolUp.MediaLibrary.HlsKeyDelivery.KeyLengthBytes : System.Int32 (literal)
+ToolUp.MediaLibrary.HlsKeyDelivery.RoutePrefix : System.String (literal)
+ToolUp.MediaLibrary.HlsKeyDelivery.absoluteKeyUri(Microsoft.AspNetCore.Http.HttpContext, ToolUp.MediaLibrary.MediaId) : System.String
+ToolUp.MediaLibrary.HlsKeyDelivery.decideAccess(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.SignedUrl+MediaSignedPayload, ToolUp.MediaLibrary.SignedUrlError]], System.String) : ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess
+ToolUp.MediaLibrary.HlsKeyDelivery.isManifest(System.String) : System.Boolean
+ToolUp.MediaLibrary.HlsKeyDelivery.keyHandler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.MediaLibrary.HlsKeyDelivery.relativeKeyUri(ToolUp.MediaLibrary.MediaId) : System.String
+ToolUp.MediaLibrary.HlsKeyDelivery.rewriteKeyUris(System.String, System.String) : System.String
+ToolUp.MediaLibrary.HlsKeyDelivery.secretName(ToolUp.MediaLibrary.MediaId) : System.String
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess (class)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess.IsKeyAccessForbidden : System.Boolean { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess.IsKeyAccessGranted : System.Boolean { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess.IsKeyAccessUnauthenticated : System.Boolean { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess.KeyAccessUnauthenticated : ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess.Tag : System.Int32 { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+KeyAccessForbidden (class)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+KeyAccessForbidden.verdict : System.String { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+KeyAccessGranted (class)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+KeyAccessGranted.container : System.String { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+KeyAccessGranted.via : System.String { get }
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+Tags (class)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+Tags.KeyAccessForbidden : System.Int32 (literal)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+Tags.KeyAccessGranted : System.Int32 (literal)
+ToolUp.MediaLibrary.HlsKeyDelivery+HlsKeyAccess+Tags.KeyAccessUnauthenticated : System.Int32 (literal)
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore (class)
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore..ctor(ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.ILogger, ToolUp.MediaLibrary.MediaLibraryOptions)
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore.Delete(System.String, ToolUp.MediaLibrary.MediaId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore.Mint(System.String, ToolUp.MediaLibrary.MediaId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore.RecordDelivery(System.String, ToolUp.MediaLibrary.MediaId, System.String) : System.Void
+ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore.TryGet(System.String, ToolUp.MediaLibrary.MediaId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]], System.String]]
 ToolUp.MediaLibrary.IMediaApi (class)
 ToolUp.MediaLibrary.IMediaApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.MediaDeleteError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.SignedUrlError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int64, System.Byte[]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.UploadProgress, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaRecord, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.UploadSessionError]]])
 ToolUp.MediaLibrary.IMediaApi.AbortUpload : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.UploadSessionError]]] { get }
@@ -29,6 +66,8 @@ ToolUp.MediaLibrary.IMediaDerivation (interface)
 ToolUp.MediaLibrary.IMediaDerivation.Capabilities : ToolUp.MediaLibrary.MediaDerivationCapabilities { get }
 ToolUp.MediaLibrary.IMediaDerivation.ExtractPoster(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.PosterResult, System.String]]
 ToolUp.MediaLibrary.IMediaDerivation.Probe(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.MediaLibrary.MediaProbe]
+ToolUp.MediaLibrary.IMediaHlsEncryptingTranscoder (interface)
+ToolUp.MediaLibrary.IMediaHlsEncryptingTranscoder.TranscodeToHlsEncrypted(System.Byte[], System.String, ToolUp.MediaLibrary.HlsEncryptionKey) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.TranscodedFile], System.String]]
 ToolUp.MediaLibrary.IMediaLibrary (interface)
 ToolUp.MediaLibrary.IMediaLibrary.ContentLength(System.String, ToolUp.MediaLibrary.MediaId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.MediaLibrary.MediaRangeError]]
 ToolUp.MediaLibrary.IMediaLibrary.Delete(System.String, ToolUp.MediaLibrary.MediaId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.MediaDeleteError]]
@@ -127,9 +166,10 @@ ToolUp.MediaLibrary.MediaIngestionStatusUpdate.MediaId : System.String { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Status : System.String { get }
 ToolUp.MediaLibrary.MediaLibraryOptions (class)
-ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean, System.Int32, System.Int32, System.TimeSpan)
+ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean, System.Int32, System.Int32, System.TimeSpan, System.Boolean)
 ToolUp.MediaLibrary.MediaLibraryOptions.AcceptedMimeTypes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.EmitAudit : System.Boolean { get }
+ToolUp.MediaLibrary.MediaLibraryOptions.EncryptHlsByDefault : System.Boolean { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.MaxBytes : System.Int64 { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.MaxChunkBytes : System.Int32 { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.RangeChunkBytes : System.Int32 { get }
@@ -140,6 +180,7 @@ ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultMaxChunkBytes : System.Int3
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultRangeChunkBytes : System.Int32 (literal)
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultUploadSessionTtl : System.TimeSpan { get }
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.defaults : ToolUp.MediaLibrary.MediaLibraryOptions { get }
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveEncryptHls(ToolUp.MediaLibrary.MediaLibraryOptions, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]) : System.Boolean
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveMaxChunkBytes(ToolUp.MediaLibrary.MediaLibraryOptions) : System.Int32
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveRangeChunkBytes(ToolUp.MediaLibrary.MediaLibraryOptions) : System.Int32
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveUploadSessionTtl(ToolUp.MediaLibrary.MediaLibraryOptions) : System.TimeSpan
@@ -219,11 +260,13 @@ ToolUp.MediaLibrary.MediaUploadProgressUpdate.SessionId : System.String { get }
 ToolUp.MediaLibrary.MediaUploadRequest (class)
 ToolUp.MediaLibrary.MediaUploadRequest.Bytes : System.Byte[] { get }
 ToolUp.MediaLibrary.MediaUploadRequest.Caption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.MediaLibrary.MediaUploadRequest.EncryptHls : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.MediaLibrary.MediaUploadRequest.MimeType : System.String { get }
 ToolUp.MediaLibrary.MediaUploadRequest.OriginalFilename : System.String { get }
 ToolUp.MediaLibrary.MediaUploadRequest.UploadedBy : System.String { get }
 ToolUp.MediaLibrary.MediaUploadRequestModule (class)
 ToolUp.MediaLibrary.MediaUploadRequestModule.create(ToolUp.MediaLibrary.MediaLibraryOptions, System.Byte[], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaUploadRequest, ToolUp.MediaLibrary.MediaUploadError]
+ToolUp.MediaLibrary.MediaUploadRequestModule.createWithEncryption(ToolUp.MediaLibrary.MediaLibraryOptions, System.Byte[], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaUploadRequest, ToolUp.MediaLibrary.MediaUploadError]
 ToolUp.MediaLibrary.NoopMediaDerivation (class)
 ToolUp.MediaLibrary.NoopMediaDerivation.create() : ToolUp.MediaLibrary.IMediaDerivation
 ToolUp.MediaLibrary.NoopMediaTranscoder (class)

@@ -207,6 +207,19 @@ module MediaLibraryServerApp =
                             let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
                             SignedUrl.MediaUrlSigner(secrets))
                     )
+                    // Phase 471 — the AES-128 HLS key store. Registered
+                    // under `EnabledMediaLibrary` only, over the
+                    // `ISecretStore` the URL signer already needs, so
+                    // there is no second substrate to provision and a
+                    // disabled deployment registers nothing (GP 13).
+                    // Resolved by BOTH the library (to mint at transcode
+                    // time) and the key endpoint (to serve), so the two
+                    // are looking at one store by construction.
+                    .AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(
+                        System.Func<System.IServiceProvider, HlsKeyDelivery.MediaHlsKeyStore>(fun sp ->
+                            let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
+                            HlsKeyDelivery.MediaHlsKeyStore(secrets, asLogger, options))
+                    )
                     .AddSingleton<IMediaLibrary>(
                         System.Func<System.IServiceProvider, IMediaLibrary>(fun sp ->
                             match storeOverride with
@@ -225,6 +238,10 @@ module MediaLibraryServerApp =
                                     transcoderOverride
                                     |> Option.defaultWith (fun () -> NoopMediaTranscoder.create ())
 
+                                let hlsKeys =
+                                    sp.GetService(typeof<HlsKeyDelivery.MediaHlsKeyStore>)
+                                    :?> HlsKeyDelivery.MediaHlsKeyStore
+
                                 DefaultMediaLibrary(
                                     blob,
                                     signer,
@@ -232,7 +249,8 @@ module MediaLibraryServerApp =
                                     transcoder,
                                     notifications,
                                     options,
-                                    asLogger
+                                    asLogger,
+                                    Option.ofObj hlsKeys
                                 )
                                 :> IMediaLibrary)
                     )

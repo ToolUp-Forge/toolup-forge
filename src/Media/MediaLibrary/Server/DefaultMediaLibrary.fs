@@ -325,7 +325,12 @@ type DefaultMediaLibrary
         transcoder: IMediaTranscoder,
         notifications: INotificationChannel option,
         options: MediaLibraryOptions,
-        logger: ILogger
+        logger: ILogger,
+        /// Phase 471 — the AES-128 HLS key store. `None` means this
+        /// deployment composed no `ISecretStore`-backed key store, and
+        /// an upload that asks for encryption is refused rather than
+        /// silently produced in the clear.
+        hlsKeys: HlsKeyDelivery.MediaHlsKeyStore option
     ) =
 
     /// Bytes pulled per ranged blob read while serving (Phase 468).
@@ -368,10 +373,50 @@ type DefaultMediaLibrary
         | Error e -> return Error e
     }
 
+    /// Phase 471 — run the HLS pass, encrypted or not.
+    ///
+    /// The key is minted only once BOTH preconditions hold (a composed
+    /// key store AND a transcoder that declares
+    /// `IMediaHlsEncryptingTranscoder`), so a refused request never
+    /// leaves an orphan secret behind it in the scope.
+    ///
+    /// Every refusal here is an `Error`, which the caller turns into
+    /// `MediaIngestionStatus.Failed`. That is the fail-closed choice
+    /// spelled out on `IMediaHlsEncryptingTranscoder`: an upload that
+    /// asked to be encrypted and got a bare rendition would be the
+    /// exact exposure the encryption exists to prevent, and it would be
+    /// invisible — the manifest plays, the segments are readable, and
+    /// nothing anywhere says so.
+    let transcodeHls (container: string) (id: MediaId) (bytes: byte[]) (mimeType: string) (encrypt: bool) = async {
+        if not encrypt then
+            return! transcoder.TranscodeToHls(bytes, mimeType)
+        else
+            match hlsKeys, box transcoder with
+            | Some keys, (:? IMediaHlsEncryptingTranscoder as encrypting) ->
+                match! keys.Mint(container, id) with
+                | Error e -> return Error(sprintf "HLS encryption requested but the key could not be minted: %s" e)
+                | Ok keyBytes ->
+                    let key: HlsEncryptionKey = {
+                        KeyBytes = keyBytes
+                        KeyUri = HlsKeyDelivery.relativeKeyUri id
+                        Iv = None
+                    }
+
+                    return! encrypting.TranscodeToHlsEncrypted(bytes, mimeType, key)
+            | None, _ ->
+                return
+                    Error
+                        "HLS encryption requested but no key store is composed (the media library needs an ISecretStore)"
+            | _, _ ->
+                return
+                    Error
+                        "HLS encryption requested but the composed transcoder cannot encrypt (it does not declare IMediaHlsEncryptingTranscoder)"
+    }
+
     /// Run the optional poster + HLS derivation passes, returning the
     /// derived poster blob path, the produced renditions, the probed
     /// duration, and the terminal status.
-    let derive (container: string) (id: MediaId) (bytes: byte[]) (mimeType: string) = async {
+    let derive (container: string) (id: MediaId) (bytes: byte[]) (mimeType: string) (encryptHls: bool) = async {
         // Probe (duration / dimensions) — best-effort.
         let! probe = derivation.Probe(bytes, mimeType)
 
@@ -398,7 +443,7 @@ type DefaultMediaLibrary
         // HLS transcode when the provider can.
         let! renditions, status = async {
             if transcoder.Capabilities.CanTranscodeHls then
-                match! transcoder.TranscodeToHls(bytes, mimeType) with
+                match! transcodeHls container id bytes mimeType encryptHls with
                 | Ok files ->
                     // Persist each produced file under the item's
                     // derived dir; the master manifest pins the
@@ -434,6 +479,28 @@ type DefaultMediaLibrary
 
         return posterBlob, renditions, probe.DurationSeconds, status
     }
+
+    /// Pre-Phase-471 constructor shape. Existing call sites compile and
+    /// behave byte-for-byte unchanged (GP 11): with no key store the
+    /// encryption path is structurally unreachable, so every upload
+    /// takes the plain transcode exactly as before.
+    ///
+    /// An explicit secondary constructor rather than an optional
+    /// parameter — `?hlsKeys` would fold into ONE widened constructor,
+    /// making the pre-471 seven-argument token disappear, which the
+    /// public-API baseline reads as a removal (a genuine break, not a
+    /// false positive).
+    new
+        (
+            blobStorage: IBlobStorage,
+            signer: SignedUrl.MediaUrlSigner,
+            derivation: IMediaDerivation,
+            transcoder: IMediaTranscoder,
+            notifications: INotificationChannel option,
+            options: MediaLibraryOptions,
+            logger: ILogger
+        ) =
+        DefaultMediaLibrary(blobStorage, signer, derivation, transcoder, notifications, options, logger, None)
 
     interface IMediaLibrary with
 
@@ -472,7 +539,13 @@ type DefaultMediaLibrary
 
                 do! publishStatus request.UploadedBy provisional
 
-                let! posterBlob, renditions, duration, status = derive scopeContainer id bytes request.MimeType
+                // Phase 471 — the per-upload preference wins where it is
+                // stated; every pre-471 call site states nothing and
+                // takes the deployment default (which is `false`).
+                let encryptHls = MediaLibraryOptions.effectiveEncryptHls options request.EncryptHls
+
+                let! posterBlob, renditions, duration, status =
+                    derive scopeContainer id bytes request.MimeType encryptHls
 
                 let record = {
                     provisional with
@@ -530,6 +603,14 @@ type DefaultMediaLibrary
                 for d in derived do
                     let! _ = blobStorage.Delete(scopeContainer, d)
                     ()
+
+                // Phase 471 — the item's HLS key lives in `ISecretStore`,
+                // not in the container, so deleting derived blobs does
+                // not reach it. Best-effort and idempotent: a deleted
+                // video must not leave live key material behind it.
+                match hlsKeys with
+                | Some keys -> do! keys.Delete(scopeContainer, id)
+                | None -> ()
 
                 let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
                 let! recDelete = blobStorage.Delete(scopeContainer, MediaPaths.record id)

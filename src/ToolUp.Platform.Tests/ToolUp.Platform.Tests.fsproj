@@ -2270,6 +2270,15 @@
         <!-- Phase 39 — asset-store contract pack + InProcess binding. -->
         <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
         <ProjectReference Include="..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
+        <!-- Phase 471 — the FFmpeg sub-companion's PURE surface only: the
+             `-hls_key_info_file` payload shape and the argument list an
+             HLS pass is built from. Both are ordinary functions with no
+             process launch, so this reference adds no binary dependency
+             to the pack and the cases run identically on a machine with
+             no ffmpeg installed. Anything that would actually SHELL
+             ffmpeg is deliberately not tested here — see the note in
+             `MediaLibraryTests`. -->
+        <ProjectReference Include="..\Media\FFmpeg\ToolUp.Media.FFmpeg.fsproj" />
         <ProjectReference Include="..\ContentAuthoring\ToolUp.ContentAuthoring.fsproj" />
         <!-- Phase 59 — IConsentProvider lives in ToolUp.Platform.Client
              (consent decisions are browser-local). The contract pack

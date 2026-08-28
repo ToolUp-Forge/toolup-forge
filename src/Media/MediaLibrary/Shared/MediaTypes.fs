@@ -235,6 +235,25 @@ type MediaLibraryOptions = {
     /// vary with the backing store's timestamp fidelity. Non-positive
     /// falls back to the default.
     UploadSessionTtl: TimeSpan
+    /// Phase 471 — whether an HLS rendition is AES-128 encrypted when
+    /// the upload itself states no preference. `false` by default, so
+    /// an existing deployment that upgrades produces byte-identical
+    /// renditions until it opts in (GP 11).
+    ///
+    /// There is no non-positive fallback here because a `bool` has no
+    /// "unset" value — the *per-upload* preference carries that,
+    /// as `MediaUploadRequest.EncryptHls: bool option`, where `None`
+    /// means "not stated" and defers to this field. See
+    /// `effectiveEncryptHls`.
+    ///
+    /// Turning it on is not free of consequence: encryption requires a
+    /// transcoder that declares `IMediaHlsEncryptingTranscoder`, and an
+    /// upload that asks for encryption a transcoder cannot provide
+    /// FAILS rather than quietly producing a bare rendition. That
+    /// fail-closed choice is the whole point — a gated video that
+    /// silently shipped unencrypted would be worse than one that did
+    /// not ship.
+    EncryptHlsByDefault: bool
 }
 
 module MediaLibraryOptions =
@@ -259,7 +278,7 @@ module MediaLibraryOptions =
 
     /// Default options: 2 GiB cap, common web video / audio MIME types,
     /// 1-hour signed-URL TTL, audit on, 1 MiB range chunks, 8 MiB
-    /// upload chunks, 24-hour upload-session TTL.
+    /// upload chunks, 24-hour upload-session TTL, HLS encryption OFF.
     let defaults: MediaLibraryOptions = {
         MaxBytes = 2L * 1024L * 1024L * 1024L
         AcceptedMimeTypes =
@@ -280,6 +299,7 @@ module MediaLibraryOptions =
         RangeChunkBytes = DefaultRangeChunkBytes
         MaxChunkBytes = DefaultMaxChunkBytes
         UploadSessionTtl = DefaultUploadSessionTtl
+        EncryptHlsByDefault = false
     }
 
     /// The effective chunk size for an options record — the configured
@@ -306,6 +326,15 @@ module MediaLibraryOptions =
         else
             DefaultUploadSessionTtl
 
+    /// Phase 471 — should THIS upload's HLS rendition be encrypted?
+    /// The per-upload preference wins where it is stated; `None` (which
+    /// is what `MediaUploadRequest.create` produces, and therefore what
+    /// every pre-471 call site produces) defers to the deployment
+    /// default. One function so both upload paths — single-shot and the
+    /// Phase 469 resumable commit — reach the same answer.
+    let effectiveEncryptHls (options: MediaLibraryOptions) (perUpload: bool option) =
+        perUpload |> Option.defaultValue options.EncryptHlsByDefault
+
 /// Smart-constructed, validated upload request. Construct via
 /// `MediaUploadRequest.create`, which enforces `MaxBytes` /
 /// `AcceptedMimeTypes` / filename validity up front so the store's
@@ -316,6 +345,7 @@ type MediaUploadRequest = private {
     mimeType: string
     uploadedBy: string
     caption: string option
+    encryptHls: bool option
 } with
 
     member this.Bytes = this.bytes
@@ -324,7 +354,17 @@ type MediaUploadRequest = private {
     member this.UploadedBy = this.uploadedBy
     member this.Caption = this.caption
 
+    /// Phase 471 — this upload's HLS-encryption preference. `None`
+    /// means "not stated": the deployment's
+    /// `MediaLibraryOptions.EncryptHlsByDefault` decides. Every
+    /// pre-471 call site produces `None`, because `create` does.
+    member this.EncryptHls = this.encryptHls
+
 module MediaUploadRequest =
+    /// Validate an upload with no stated HLS-encryption preference —
+    /// the deployment default applies. Signature-compatible with every
+    /// pre-471 call site (GP 11); `createWithEncryption` is the opt-in
+    /// entry point.
     let create
         (options: MediaLibraryOptions)
         (bytes: byte[])
@@ -346,7 +386,28 @@ module MediaUploadRequest =
                 mimeType = mimeType
                 uploadedBy = uploadedBy
                 caption = caption
+                encryptHls = None
             }
+
+    /// Phase 471 — the same validation, plus an explicit per-upload
+    /// HLS-encryption preference (`Some true` / `Some false` to state
+    /// one, `None` to defer to `MediaLibraryOptions.EncryptHlsByDefault`).
+    ///
+    /// A SEPARATE entry point rather than a seventh parameter on
+    /// `create`: widening `create` would retype a public function every
+    /// consumer calls, and the SDK's rule for an opt-in feature is a new
+    /// builder whose existing sibling delegates with the prior default.
+    let createWithEncryption
+        (options: MediaLibraryOptions)
+        (bytes: byte[])
+        (originalFilename: string)
+        (mimeType: string)
+        (uploadedBy: string)
+        (caption: string option)
+        (encryptHls: bool option)
+        : Result<MediaUploadRequest, MediaUploadError> =
+        create options bytes originalFilename mimeType uploadedBy caption
+        |> Result.map (fun r -> { r with encryptHls = encryptHls })
 
 // ─── Phase 469 — resumable chunked uploads ───────────────────────────
 //

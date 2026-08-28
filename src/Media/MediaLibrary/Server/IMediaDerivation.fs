@@ -70,6 +70,66 @@ type IMediaTranscoder =
     abstract Capabilities: MediaDerivationCapabilities
     abstract TranscodeToHls: originalBytes: byte[] * mimeType: string -> Async<Result<TranscodedFile list, string>>
 
+// ─── Phase 471 — AES-128 encrypted HLS ───────────────────────────────
+//
+// A scope-signed URL protects ONE file. HLS fans a video out into many
+// segments, so the moment those segments are statically exported or
+// CDN-cached, route auth at the origin protects nothing: the bytes are
+// bare wherever they landed. Encrypting the segments and gating only
+// the KEY moves the boundary from "where the bytes are" to "who may
+// ask for the key" — the Phase 86 gating guarantee extended from pages
+// to media bytes (GP 4).
+
+/// AES-128 key material for one encrypted HLS rendition.
+///
+/// **The key never travels with the segments.** It is minted per media
+/// item, stored in `ISecretStore` under the OWNING SCOPE, and handed to
+/// a transcoder only for the duration of one transcode. A packager that
+/// writes it to a scratch file (FFmpeg's `-hls_key_info_file` does
+/// exactly this) owns deleting that file before it returns — the
+/// library never persists it beside the derived blobs (GP 4).
+type HlsEncryptionKey = {
+    /// The raw 16 bytes of the AES-128 key.
+    KeyBytes: byte[]
+    /// The URI written verbatim into the manifest's `#EXT-X-KEY`.
+    /// The library supplies the origin's key endpoint
+    /// (`/api/media/hls-key/{mediaId}`) as a root-relative path; the
+    /// serve path rewrites it to an origin-absolute URI so an exported
+    /// or CDN-cached manifest still points back at the gate.
+    KeyUri: string
+    /// An explicit 16-byte IV, or `None` to let the packager derive one
+    /// per segment from the media sequence number (the HLS default, and
+    /// what a bare `#EXT-X-KEY` without an `IV=` attribute means).
+    Iv: byte[] option
+}
+
+/// Phase 471 — the encrypting-transcode capability.
+///
+/// A PROBE-style capability interface beside `IMediaTranscoder`, the
+/// same shape `IMediaRangeReader` takes beside `IMediaLibrary`, and for
+/// the same two reasons: `IMediaTranscoder` stays byte-for-byte
+/// source-compatible (GP 11), and not every transcoder CAN encrypt — a
+/// hosted transcode service that returns a job handle has no key to
+/// take. Consumers probe with a type test:
+///
+///     match box transcoder with
+///     | :? IMediaHlsEncryptingTranscoder as enc -> // encrypted rendition
+///     | _ -> // no encryption available
+///
+/// **The fallback is a refusal, not a bare rendition.** Where the other
+/// capability seams in this companion degrade to a slower-but-correct
+/// path when the probe misses, this one cannot: quietly producing an
+/// unencrypted rendition for an upload that asked to be encrypted would
+/// hand back exactly the exposure the encryption was for. The library
+/// fails the ingestion instead.
+type IMediaHlsEncryptingTranscoder =
+    /// Produce an AES-128-encrypted HLS package. The returned files are
+    /// the manifest(s) — which must carry
+    /// `#EXT-X-KEY:METHOD=AES-128,URI="<key.KeyUri>"` — plus the
+    /// encrypted segments. The key material itself is NEVER among them.
+    abstract TranscodeToHlsEncrypted:
+        originalBytes: byte[] * mimeType: string * key: HlsEncryptionKey -> Async<Result<TranscodedFile list, string>>
+
 module MediaDerivationCapabilities =
     let none: MediaDerivationCapabilities = {
         CanExtractPoster = false

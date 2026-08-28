@@ -22,6 +22,7 @@
     <Compile Include="Server\IMediaDerivation.fs" />
     <Compile Include="Server\IMediaLibrary.fs" />
     <Compile Include="Server\SignedUrl.fs" />
+    <Compile Include="Server\HlsKeyDelivery.fs" />
     <Compile Include="Server\DefaultMediaLibrary.fs" />
     <Compile Include="Server\UploadSessions.fs" />
     <Compile Include="Server\MediaApi.fs" />

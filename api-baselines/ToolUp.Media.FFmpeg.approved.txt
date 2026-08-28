@@ -6,3 +6,5 @@
 ToolUp.Media.FFmpeg.FFmpegMediaProvider (class)
 ToolUp.Media.FFmpeg.FFmpegMediaProvider.create(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.MediaLibrary.IMediaDerivation
 ToolUp.Media.FFmpeg.FFmpegMediaProvider.createTranscoder(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.MediaLibrary.IMediaTranscoder
+ToolUp.Media.FFmpeg.FFmpegMediaProvider.hlsArgs(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Media.FFmpeg.FFmpegMediaProvider.keyInfoContent(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]]) : System.String
