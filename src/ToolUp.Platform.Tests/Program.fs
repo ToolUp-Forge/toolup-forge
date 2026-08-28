@@ -216,6 +216,8 @@ let private registeredTests =
         ClientBrandLiftTests.tests
         // Phase 12d — AG Grid value-provenance overlay.
         CellProvenanceTests.tests
+        // Phase 578 — AG chart capture-to-placeholder export helper.
+        AgChartExportTests.tests
         AuthProviderTests.tests
         // Phase 463 — OIDC JWKS configurable TTL + surfaced revocation window.
         OidcJwksTtlTests.tests

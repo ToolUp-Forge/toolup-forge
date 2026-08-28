@@ -57,6 +57,13 @@
              compile unit can declare `let log = Logger.forCategory`. -->
         <Compile Include="Client\Logger.fs" />
         <Compile Include="Client\UI\AgChart.fs" />
+        <!-- Phase 578 — capture a rendered AG chart as export-ready image
+             bytes + package it as a report image placeholder. Sits
+             immediately after AgChart.fs: it is the same surface's export
+             leg, and it names nothing from the client tier beyond
+             Fable.Core / Browser.Dom, so anywhere after this point would
+             compile equally and beside its subject is where it is found. -->
+        <Compile Include="Client\UI\AgChartExport.fs" />
         <Compile Include="Client\UI\AgGrid.fs" />
         <Compile Include="Client\UI\AgGrid.Enterprise.fs" />
         <Compile Include="Client\SidebarPreferences.fs" />

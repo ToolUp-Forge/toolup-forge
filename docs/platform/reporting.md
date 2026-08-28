@@ -258,6 +258,80 @@ are functions of the document alone — nothing here reads a store or a
 clock — so the same document through the same renderer yields a
 byte-identical bundle.
 
+## Capturing a chart from the browser
+
+Everything above is the **server-side** path: a chart spec drawn through the
+deployment's own grammar, content-addressed, regenerable. Two kinds of chart
+are not on it. Some the deterministic projector does not draw — scatter,
+sankey, a custom AG series. And some exports do not want it at all, because
+what the user asked for was *this screen*, with its zoom, its filter and its
+legend toggles.
+
+`AgChartExport` (client tier) is the pragmatic leg for both: it captures a
+mounted AG chart as image bytes and packages them as the `ImageValue`
+placeholder a render call takes. The trade is explicit and worth stating
+once — **a capture is not evidence the way a `ChartArtifact` is.** Its bytes
+depend on the viewport, the theme and the fonts the machine had, so it
+cannot answer "would this redraw the same today?". Reach for it where that
+question is not being asked.
+
+An Export button is then four calls, and no data-URL string-handling
+anywhere in the module:
+
+```fsharp
+let onExport () = async {
+    let charts = [
+        "revenue_chart", AgChartExport.ChartElementId "revenue-chart"
+        "spend_chart", AgChartExport.ChartElementId "spend-chart"
+    ]
+
+    match! AgChartExport.captureAll ImageValue AgChartExport.CaptureOptions.defaults charts with
+    | Error reason -> return toast reason
+    | Ok values ->
+        let withNarrative = values |> Map.add "commentary" (NarrativeValue pageNarrative)
+
+        match! reportApi.Render(templateId, withNarrative) with
+        | Ok(RenderedInline(bytes, mimeType)) -> return saveToDisk "quarter-review.docx" bytes mimeType
+        | Ok(RenderedToBlob(key, version, _)) -> return openStoredReport key version
+        | Error _ -> return toast "The report could not be rendered."
+}
+```
+
+`captureAll` fails on the first chart it cannot capture and names that
+chart's key, because a report silently missing one of its figures is worse
+for its reader than an export that did not happen and said which chart
+stopped it. `AgChartExport.captureEach` is the partial view for a page whose
+report is still worth rendering without one of them.
+
+### What the options are for
+
+`CaptureOptions.defaults` is print-quality PNG on white, which is what an
+Export button wants. Both halves of that default are deliberate:
+
+- **`ResolutionScale = 2.0`.** The chart is *re-rendered* at the scaled
+  pixel size rather than its raster being stretched, so the scale buys real
+  detail. Values above 8 are refused at the boundary rather than failing
+  inside a canvas the browser will not allocate.
+- **`BackgroundFill = Some "#ffffff"`.** A dark-theme chart captured as-is
+  is light-on-dark, and light-on-dark on a white page is unreadable.
+  `CaptureOptions.transparent` opts out where the destination is itself
+  dark.
+
+```fsharp
+let deckCapture =
+    AgChartExport.CaptureOptions.defaults
+    |> AgChartExport.CaptureOptions.withScale 3.0
+    |> AgChartExport.CaptureOptions.withBackground "#101317"
+    |> AgChartExport.CaptureOptions.withBaseSize 1280 720
+```
+
+A chart handle is an element id (the shape a page already has), the element
+itself, or the instance an `ag-charts-react` ref yields; the first two
+resolve through `AgCharts.getInstance`, so a wrapper element works as well
+as the chart's own container. A chart that is not mounted — not yet
+rendered, already unmounted, or an id that matches nothing — comes back as
+`Error` carrying a sentence fit to show a user. Nothing on this path throws.
+
 ## See also
 
 - [facts.md](facts.md) — the fact store, disclosure classes, and the

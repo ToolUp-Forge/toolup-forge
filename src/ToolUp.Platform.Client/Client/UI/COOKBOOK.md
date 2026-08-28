@@ -246,6 +246,28 @@ Series.create [
 ]
 ```
 
+### Capture a chart for a document export
+
+Do not hand-roll `getImageDataURL` + a base64 split. `AgChartExport`
+([`AgChartExport.fs`](AgChartExport.fs)) captures a mounted chart at
+print resolution, fills the background so a dark-theme chart stays legible
+on a white page, and hands back the `ImageValue` placeholder a report
+render takes:
+
+```fsharp
+let! values =
+    AgChartExport.captureAll
+        ImageValue
+        AgChartExport.CaptureOptions.defaults
+        [ "revenue_chart", AgChartExport.ChartElementId "revenue-chart" ]
+```
+
+The handle is an element id, the element, or the instance an
+`ag-charts-react` ref yields. An unmounted chart comes back as `Error`
+with a sentence fit to show a user — nothing on this path throws. Full
+worked example, including the `Render` call and the options:
+`docs/platform/reporting.md`, "Capturing a chart from the browser".
+
 ## Grid recipes
 
 ### Basic table

@@ -2427,6 +2427,61 @@ ToolUp.Platform.AgChart+SeriesMarker+Marker.Item4 : System.String { get }
 ToolUp.Platform.AgChart+SeriesMarker+Tags (class)
 ToolUp.Platform.AgChart+SeriesMarker+Tags.Marker : System.Int32 (literal)
 ToolUp.Platform.AgChart+SeriesMarker+Tags.NoMarker : System.Int32 (literal)
+ToolUp.Platform.AgChartExport (class)
+ToolUp.Platform.AgChartExport.asPlaceholder`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.String, System.Byte[], System.String) : System.Tuple`2[System.String, value]
+ToolUp.Platform.AgChartExport.asPlaceholders`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Tuple`2[System.Byte[], System.String]]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, value]
+ToolUp.Platform.AgChartExport.captureAll`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], ToolUp.Platform.AgChartExport+CaptureOptions, System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, ToolUp.Platform.AgChartExport+ChartRef]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, value], System.String]]
+ToolUp.Platform.AgChartExport.captureEach(ToolUp.Platform.AgChartExport+CaptureOptions, System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, ToolUp.Platform.AgChartExport+ChartRef]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], System.String]]]]
+ToolUp.Platform.AgChartExport.captureForExport(ToolUp.Platform.AgChartExport+ChartRef, ToolUp.Platform.AgChartExport+CaptureOptions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], System.String]]
+ToolUp.Platform.AgChartExport+CaptureFailure (class)
+ToolUp.Platform.AgChartExport+CaptureFailure.captureRaised(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.chartNotMounted(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.elementNotFound(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.emptyDataUrl : System.String { get }
+ToolUp.Platform.AgChartExport+CaptureFailure.invalidMimeType(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.invalidScale(System.Double) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.malformedDataUrl(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.notAChartInstance : System.String { get }
+ToolUp.Platform.AgChartExport+CaptureFailure.notADataUrl : System.String { get }
+ToolUp.Platform.AgChartExport+CaptureFailure.scaleTooLarge(System.Double) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.sizeUnknown(System.String) : System.String
+ToolUp.Platform.AgChartExport+CaptureFailure.undecodablePayload : System.String { get }
+ToolUp.Platform.AgChartExport+CaptureOptions (class)
+ToolUp.Platform.AgChartExport+CaptureOptions..ctor(System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]])
+ToolUp.Platform.AgChartExport+CaptureOptions.BackgroundFill : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AgChartExport+CaptureOptions.BaseSize : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]] { get }
+ToolUp.Platform.AgChartExport+CaptureOptions.MimeType : System.String { get }
+ToolUp.Platform.AgChartExport+CaptureOptions.ResolutionScale : System.Double { get }
+ToolUp.Platform.AgChartExport+CaptureOptionsModule (class)
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.MaxResolutionScale : System.Double (literal)
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.defaults : ToolUp.Platform.AgChartExport+CaptureOptions { get }
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.screen : ToolUp.Platform.AgChartExport+CaptureOptions { get }
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.transparent(ToolUp.Platform.AgChartExport+CaptureOptions) : ToolUp.Platform.AgChartExport+CaptureOptions
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.validate(ToolUp.Platform.AgChartExport+CaptureOptions) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AgChartExport+CaptureOptions, System.String]
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.withBackground(System.String, ToolUp.Platform.AgChartExport+CaptureOptions) : ToolUp.Platform.AgChartExport+CaptureOptions
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.withBaseSize(System.Int32, System.Int32, ToolUp.Platform.AgChartExport+CaptureOptions) : ToolUp.Platform.AgChartExport+CaptureOptions
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.withMimeType(System.String, ToolUp.Platform.AgChartExport+CaptureOptions) : ToolUp.Platform.AgChartExport+CaptureOptions
+ToolUp.Platform.AgChartExport+CaptureOptionsModule.withScale(System.Double, ToolUp.Platform.AgChartExport+CaptureOptions) : ToolUp.Platform.AgChartExport+CaptureOptions
+ToolUp.Platform.AgChartExport+ChartRef (class)
+ToolUp.Platform.AgChartExport+ChartRef.IsChartElement : System.Boolean { get }
+ToolUp.Platform.AgChartExport+ChartRef.IsChartElementId : System.Boolean { get }
+ToolUp.Platform.AgChartExport+ChartRef.IsChartInstance : System.Boolean { get }
+ToolUp.Platform.AgChartExport+ChartRef.Tag : System.Int32 { get }
+ToolUp.Platform.AgChartExport+ChartRef+ChartElement (class)
+ToolUp.Platform.AgChartExport+ChartRef+ChartElement.element : Browser.Types.Element { get }
+ToolUp.Platform.AgChartExport+ChartRef+ChartElementId (class)
+ToolUp.Platform.AgChartExport+ChartRef+ChartElementId.elementId : System.String { get }
+ToolUp.Platform.AgChartExport+ChartRef+ChartInstance (class)
+ToolUp.Platform.AgChartExport+ChartRef+ChartInstance.instance : System.Object { get }
+ToolUp.Platform.AgChartExport+ChartRef+Tags (class)
+ToolUp.Platform.AgChartExport+ChartRef+Tags.ChartElement : System.Int32 (literal)
+ToolUp.Platform.AgChartExport+ChartRef+Tags.ChartElementId : System.Int32 (literal)
+ToolUp.Platform.AgChartExport+ChartRef+Tags.ChartInstance : System.Int32 (literal)
+ToolUp.Platform.AgChartExport+DataUrl (class)
+ToolUp.Platform.AgChartExport+DataUrl.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], System.String]
+ToolUp.Platform.AgChartExport+Sizing (class)
+ToolUp.Platform.AgChartExport+Sizing.requested(ToolUp.Platform.AgChartExport+CaptureOptions, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
+ToolUp.Platform.AgChartExport+Sizing.scaleDimension(System.Double, System.Int32) : System.Int32
 ToolUp.Platform.AgGrid (class)
 ToolUp.Platform.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement], ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value]) : Fable.React.ReactElement
 ToolUp.Platform.AgGrid.MemoizedGrid(System.Object) : Fable.React.ReactElement
