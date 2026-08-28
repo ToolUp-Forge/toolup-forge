@@ -4,6 +4,7 @@
 namespace ToolUp.MediaLibrary
 
 open System
+open ToolUp.Platform
 
 // ─── Phase 88 — IMediaLibrary shared types ───────────────────────────
 //
@@ -196,6 +197,120 @@ type SignedUrlError =
 
 // ─── Options ─────────────────────────────────────────────────────────
 
+/// Phase 472 — what the media routes DECLARE to a CDN, per response
+/// class. The point is that edge behaviour becomes a stated decision
+/// rather than an accident of whatever heuristic the CDN applies to a
+/// response carrying no `Cache-Control` at all.
+///
+/// Every field defaults to `EdgeCacheUnset`, which emits no header —
+/// exactly the pre-472 behaviour, so an upgrading deployment is
+/// byte-for-byte unchanged until it declares something (GP 11).
+///
+/// **What is safe to declare, from Phase 471's serving decisions:**
+///
+/// - `Segment` — HLS segments are NEVER rewritten on serve, and under
+///   AES-128 they are ciphertext whose key is fetched separately and
+///   gated separately. Safe to cache publicly and for a long time.
+/// - `Manifest` — a manifest with no `#EXT-X-KEY` tag comes back
+///   byte-for-byte and is likewise safe. A manifest carrying a key tag
+///   is REWRITTEN per request (the key URI is made origin-absolute, and
+///   a `?token=` on the request is carried onto it), so a cached copy
+///   would hand one viewer's token to the next. The default is
+///   `EdgeCacheUnset` for that reason, and a deployment that encrypts
+///   its renditions must not declare it `EdgePublic`. The library
+///   refuses that combination at compose time rather than trusting the
+///   reader — see `MediaConfigValidator`.
+/// - `Poster` — a derived still image, identical for every viewer.
+/// - `Original` — the progressive-download original. Reachable at
+///   `/api/media/stream/{id}` only under an authenticated scope, so a
+///   shared cache must not hold it; `EdgePrivate` is the strongest
+///   posture that is correct, and the validator refuses `EdgePublic`.
+///
+/// **The HLS key route is not here, and cannot be configured.**
+/// `/api/media/hls-key/{id}` is hard-wired `no-store` by Phase 471 and
+/// this phase does not add a knob that could relax it. A cached
+/// decryption key is the whole encryption scheme defeated, so the one
+/// response class where a wrong declaration is catastrophic is the one
+/// class a deployment cannot declare.
+type MediaEdgeCacheOptions = {
+    /// HLS segments (`.ts` / `.m4s`) — opaque, never rewritten.
+    Segment: EdgeCacheability
+    /// HLS manifests (`.m3u8`). Leave `EdgeCacheUnset` on any deployment
+    /// that encrypts renditions — see the type note.
+    Manifest: EdgeCacheability
+    /// Derived poster stills.
+    Poster: EdgeCacheability
+    /// The stored original served by `/api/media/stream/{id}` and
+    /// `/media/signed/{id}`. Scope- or signature-gated, so never
+    /// `EdgePublic`.
+    Original: EdgeCacheability
+}
+
+module MediaEdgeCacheOptions =
+    /// Declare nothing — no `Cache-Control` on any media route. The
+    /// default, and byte-for-byte the pre-472 behaviour (GP 11).
+    let defaults: MediaEdgeCacheOptions = {
+        Segment = EdgeCacheUnset
+        Manifest = EdgeCacheUnset
+        Poster = EdgeCacheUnset
+        Original = EdgeCacheUnset
+    }
+
+    /// A worked, conservative posture for an UNENCRYPTED library behind
+    /// a CDN: segments and manifests public for an hour at the edge,
+    /// posters for a day, the original private. Offered as a starting
+    /// point a deployment can read and adjust, not as a default — a
+    /// default that silently started caching would be exactly the
+    /// accident this record exists to prevent.
+    let cdnUnencrypted: MediaEdgeCacheOptions = {
+        Segment = EdgePublic(3600, 86400)
+        Manifest = EdgePublic(60, 3600)
+        Poster = EdgePublic(3600, 86400)
+        Original = EdgePrivate 0
+    }
+
+    /// The posture for a library that encrypts its HLS renditions:
+    /// segments are ciphertext and cache exactly as before, manifests do
+    /// NOT (they are rewritten per request and may carry a token).
+    let cdnEncrypted: MediaEdgeCacheOptions = {
+        Segment = EdgePublic(3600, 86400)
+        Manifest = EdgeCacheUnset
+        Poster = EdgePublic(3600, 86400)
+        Original = EdgePrivate 0
+    }
+
+/// Phase 472 — the origin-relative paths one media item occupies at an
+/// edge. Pure, so the fan-out set is testable without a running server,
+/// and stated once so the publish path and the delete path cannot drift
+/// apart — which is the failure mode that leaves a deleted video playing
+/// from a POP.
+module MediaEdgePaths =
+
+    /// Everything derived for an item lives under one prefix. Purged as
+    /// a PREFIX rather than as paths because an HLS rendition is an
+    /// arbitrary number of segment files: enumerating them would mean
+    /// listing blob storage from a path that must not block (GP 7), and
+    /// the list would be wrong the moment a re-transcode changed the
+    /// segmentation.
+    let derivedPrefix (id: MediaId) : string =
+        "/api/media/hls/" + MediaId.value id + "/"
+
+    /// The two routes that serve the stored ORIGINAL. Exact paths, since
+    /// there are exactly two and both are knowable.
+    ///
+    /// Note what a path purge does and does not reach: `/media/signed/`
+    /// is only ever requested with a `?token=` query, and a CDN that
+    /// keys on the full URI holds one object per token. Purging the path
+    /// clears the edge for implementations that key on path alone; for
+    /// the rest, the objects age out at their own TTL — which is bounded
+    /// by the signature's TTL anyway, because a stale edge copy served
+    /// after expiry is still a copy of a response the origin produced
+    /// for a then-valid token. This is why `MediaEdgeCacheOptions`
+    /// refuses `EdgePublic` on `Original`.
+    let originalPaths (id: MediaId) : string list =
+        let v = MediaId.value id
+        [ "/api/media/stream/" + v; "/media/signed/" + v ]
+
 /// Compose-time tunables for the media library. `MaxBytes` caps upload
 /// size; `AcceptedMimeTypes` gates allowed content; `SignedUrlDefaultTtl`
 /// is the lifetime used when a caller passes a non-positive TTL;
@@ -254,6 +369,13 @@ type MediaLibraryOptions = {
     /// silently shipped unencrypted would be worse than one that did
     /// not ship.
     EncryptHlsByDefault: bool
+    /// Phase 472 — what the media routes declare to a CDN, per response
+    /// class. `MediaEdgeCacheOptions.defaults` declares nothing, which
+    /// emits no `Cache-Control` header anywhere and is byte-for-byte the
+    /// pre-472 behaviour (GP 11). See `MediaEdgeCacheOptions` for which
+    /// classes are safe to cache and why the HLS key route is absent
+    /// from the record entirely.
+    EdgeCache: MediaEdgeCacheOptions
 }
 
 module MediaLibraryOptions =
@@ -300,7 +422,29 @@ module MediaLibraryOptions =
         MaxChunkBytes = DefaultMaxChunkBytes
         UploadSessionTtl = DefaultUploadSessionTtl
         EncryptHlsByDefault = false
+        EdgeCache = MediaEdgeCacheOptions.defaults
     }
+
+    /// Phase 472 — the effective edge-cache declaration for one derived
+    /// file, by extension. Pure, so the mapping the serve path uses is
+    /// testable without an `HttpContext` — and so the ONE place that
+    /// decides "is this a manifest or a segment" for cache purposes is
+    /// the same shape `HlsKeyDelivery.isManifest` uses for rewriting.
+    let edgeCacheabilityForDerived (options: MediaLibraryOptions) (relativePath: string) : EdgeCacheability =
+        let lower = relativePath.ToLowerInvariant()
+
+        if lower.EndsWith ".m3u8" then
+            options.EdgeCache.Manifest
+        elif lower.EndsWith ".ts" || lower.EndsWith ".m4s" || lower.EndsWith ".mp4" then
+            options.EdgeCache.Segment
+        else
+            // Posters (.jpg / .png / .webp) and anything else a
+            // derivation produced. Deliberately the poster class rather
+            // than the segment class: an unrecognised derived artefact is
+            // more like a still than like a ciphertext chunk, and the
+            // poster declaration is the one a deployment reasons about
+            // when it thinks "images".
+            options.EdgeCache.Poster
 
     /// The effective chunk size for an options record — the configured
     /// value when positive, the default otherwise.

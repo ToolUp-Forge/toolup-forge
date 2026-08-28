@@ -120,6 +120,20 @@ type PublicRenderingServerApp = {
     /// itself is used as the invalidator. Supply this only when the
     /// deployment's `IRenderCache` doesn't carry its own slug-purge.
     RenderCacheInvalidation: IRenderCacheInvalidation option
+    /// Phase 472 — opt-in CDN / edge-cache invalidation. `Some cache`
+    /// wraps the resolved `IRenderCacheInvalidation` in
+    /// `EdgeAwareRenderCacheInvalidation`, so a publish purges the origin
+    /// render cache AND fans the affected origin-relative paths out to
+    /// the edge, and registers the `IEdgeCache` in DI for other surfaces
+    /// to resolve. `None` (default) → no edge fan-out and no
+    /// registration; publishing is byte-for-byte pre-472 (GP 11 / GP 13).
+    EdgeCache: IEdgeCache option
+    /// Phase 472 — the origin-relative paths a purged slug maps to.
+    /// `None` (default) uses `RenderCacheEdgePaths.forSlug` (`"/slug"`
+    /// plus its trailing-slash twin). Supply this when the deployment's
+    /// public URL for a slug is not `"/" + slug` — a prefixed or
+    /// multi-site deployment. Ignored unless `EdgeCache` is `Some`.
+    EdgeCachePathsForSlug: (string -> string list) option
     /// Phase 100 — when `true`, `composePublicRendering` registers the
     /// `TaxonomyHandler.tagIndexSource` (serving `/tag/{slug}`) wired to
     /// the default content API automatically, so a deployment doesn't
@@ -238,6 +252,8 @@ module PublicRenderingServerApp =
         RenderCache = None
         RenderCacheDefaultPolicy = CachePolicy.NoCache
         RenderCacheInvalidation = None
+        EdgeCache = None
+        EdgeCachePathsForSlug = None
         TaxonomyEnabled = false
         Nav = []
         SemanticSearch = None
@@ -276,6 +292,8 @@ module PublicRenderingServerApp =
         RenderCache = None
         RenderCacheDefaultPolicy = CachePolicy.NoCache
         RenderCacheInvalidation = None
+        EdgeCache = None
+        EdgeCachePathsForSlug = None
         TaxonomyEnabled = false
         Nav = []
         SemanticSearch = None
@@ -651,6 +669,39 @@ module PublicRenderingServerApp =
                 RenderCacheInvalidation = Some invalidator
         }
 
+    /// Phase 472 — compose a CDN / edge cache. A successful publish then
+    /// purges the origin render cache first and fans the affected
+    /// origin-relative paths out to the edge second (the order matters —
+    /// see `EdgeAwareRenderCacheInvalidation`), never blocking the
+    /// request (GP 7).
+    ///
+    /// The edge fan-out rides the Phase 84 invalidation hook, so a
+    /// deployment that composes no render cache still gets one — the
+    /// wrap falls back to a no-op inner purge, because "there is no
+    /// origin cache to clear" and "there is no edge to purge" are
+    /// independent facts and a CDN-fronted deployment commonly has the
+    /// first without the second.
+    ///
+    /// `NoopEdgeCache.create ()` composes the declared no-op, which is
+    /// free (GP 13) and useful as an explicit statement that this
+    /// deployment has no edge.
+    let withEdgeCache (edgeCache: IEdgeCache) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            EdgeCache = Some edgeCache
+    }
+
+    /// Phase 472 — override the slug→origin-relative-path mapping the
+    /// edge fan-out purges. Default: `RenderCacheEdgePaths.forSlug`.
+    /// Ignored unless `withEdgeCache` is also composed.
+    let withEdgeCachePathsForSlug
+        (pathsForSlug: string -> string list)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                EdgeCachePathsForSlug = Some pathsForSlug
+        }
+
     /// Phase 199 — supply a custom render-cache request coalescer for
     /// cold-key stampede protection. The default (when `withRenderCache` is
     /// composed and this is not called) is the process-local
@@ -990,7 +1041,7 @@ module PublicRenderingServerApp =
             // cache itself when it implements `IRenderCacheInvalidation`
             // (both default impls do). `None` → publishing doesn't purge
             // (no cache composed, or a custom cache with no slug-purge).
-            let renderCacheInvalidator: IRenderCacheInvalidation option =
+            let originCacheInvalidator: IRenderCacheInvalidation option =
                 match app.RenderCacheInvalidation with
                 | Some inv -> Some inv
                 | None ->
@@ -1000,6 +1051,29 @@ module PublicRenderingServerApp =
                         | :? IRenderCacheInvalidation as inv -> Some inv
                         | _ -> None
                     | None -> None
+
+            // Phase 472 — wrap the origin-cache invalidator so a publish
+            // also purges the edge. When an `IEdgeCache` is composed but
+            // no origin render cache is (a perfectly ordinary CDN-fronted
+            // deployment — the edge IS the cache), the wrap still
+            // happens, over a no-op inner purge: "there is no origin
+            // cache to clear" and "there is no edge to purge" are
+            // independent facts, and a publish must still reach the edge.
+            //
+            // With no `IEdgeCache` composed this is the identity, so the
+            // pre-472 invalidator is registered exactly as before.
+            let renderCacheInvalidator: IRenderCacheInvalidation option =
+                match app.EdgeCache with
+                | None -> originCacheInvalidator
+                | Some edge ->
+                    let inner =
+                        originCacheInvalidator
+                        |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
+
+                    let pathsForSlug =
+                        app.EdgeCachePathsForSlug |> Option.defaultValue RenderCacheEdgePaths.forSlug
+
+                    Some(EdgeAwareRenderCacheInvalidation.createWith pathsForSlug app.Base.Logger edge inner)
 
             // Auto-register `PublicPageEntity` against the base
             // `ServerApp` so the default impl's entity-store fallthrough
@@ -1188,6 +1262,12 @@ module PublicRenderingServerApp =
                     // surface (so Phase 91 / CMS code can resolve it). When
                     // no cache is composed, none of these are registered →
                     // the page handler runs the pre-84 path (GP 11 / 13).
+                    //
+                    // Phase 472 — the edge fan-out is NOT part of this
+                    // block, and deliberately so: it is registered below
+                    // whether or not a render cache exists, because an
+                    // edge-fronted deployment commonly has no origin
+                    // cache at all.
                     match renderCache with
                     | None -> s
                     | Some cache ->
@@ -1215,6 +1295,22 @@ module PublicRenderingServerApp =
                         match renderCacheInvalidator with
                         | Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
                         | None -> s
+                |> fun s ->
+                    // Phase 472 — register the composed `IEdgeCache` (so
+                    // other surfaces — the media companion, an ops
+                    // endpoint — resolve the SAME edge this deployment
+                    // publishes through) and, when no render cache was
+                    // composed above, the edge-wrapped invalidator that
+                    // block could not register. Nothing is registered
+                    // when no edge is composed (GP 13).
+                    match app.EdgeCache with
+                    | None -> s
+                    | Some edge ->
+                        let s = s.AddSingleton<IEdgeCache>(edge)
+
+                        match renderCache, renderCacheInvalidator with
+                        | None, Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
+                        | _ -> s
                 |> fun s ->
                     // Phase 147 — cache-independent conditional-GET. When
                     // `withConditionalGet` is composed (and no render cache is

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Hosts.EdgeCache</PackageId>
+    <AssemblyName>ToolUp.Hosts.EdgeCache</AssemblyName>
+    <Description>CDN / edge host adapter for ToolUp.Platform (Phase 472). Two vendor-neutral implementations of the edge seams: HttpEdgeCache, an IEdgeCache over any authenticated HTTP purge API (endpoint, auth header and request body supplied as data, credential read per call from ISecretStore); and CallbackUrlSigner, an IDelegatedUrlSigner that hands the deployment's own signing callback what is being granted and returns the CDN-native signed URL it produces. No cloud SDK dependency — BCL HttpClient only.</Description>
+    <PackageTags>fsharp;sdk;cdn;edge;cache;purge;invalidation;signed-urls;host-adapter</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="HttpEdgeCache.fs" />
+    <Compile Include="CallbackUrlSigner.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- IEdgeCache + the Cache-Control declaration live in
+         ToolUp.Platform.Server; IDelegatedUrlSigner is media-scoped
+         (it signs a MediaId for a StorageScope) and lives in
+         ToolUp.MediaLibrary. Both halves of the edge story ship in one
+         package because a deployment adopting a CDN adopts both at
+         once — purging without signing leaves the objects public, and
+         signing without purging leaves them stale. -->
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
+  </ItemGroup>
+  <!-- No vendor package reference, by design (GP 1): BCL HttpClient is
+       the whole transport, and every vendor-specific detail arrives as
+       data or as a callback. FSharp.Core is implicit via the .NET SDK. -->
+</Project>

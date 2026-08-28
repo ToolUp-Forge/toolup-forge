@@ -2736,6 +2736,68 @@ ToolUp.Platform.Ed25519ArtifactVerifier (class)
 ToolUp.Platform.Ed25519ArtifactVerifier..ctor(ToolUp.Platform.IPublisherKeyStore, ToolUp.Platform.IAuditLog, System.String)
 ToolUp.Platform.Ed25519ArtifactVerifierModule (class)
 ToolUp.Platform.Ed25519ArtifactVerifierModule.create(ToolUp.Platform.IPublisherKeyStore, ToolUp.Platform.IAuditLog, System.String) : ToolUp.Platform.IArtifactVerifier
+ToolUp.Platform.EdgeCache (class)
+ToolUp.Platform.EdgeCache.isNoop(ToolUp.Platform.IEdgeCache) : System.Boolean
+ToolUp.Platform.EdgeCache.purgeDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IEdgeCache, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]]) : System.Void
+ToolUp.Platform.EdgeCache.purgeDetachedWith(ToolUp.Platform.EdgePurgeRetry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IEdgeCache, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]]) : System.Void
+ToolUp.Platform.EdgeCache.purgePathsDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Void
+ToolUp.Platform.EdgeCache.purgePrefixDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], System.String) : System.Void
+ToolUp.Platform.EdgeCache.purgeWithRetry(ToolUp.Platform.EdgePurgeRetry, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
+ToolUp.Platform.EdgeCacheHeader (class)
+ToolUp.Platform.EdgeCacheHeader.render(ToolUp.Platform.EdgeCacheability) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.EdgeCacheability (class)
+ToolUp.Platform.EdgeCacheability.EdgeCacheUnset : ToolUp.Platform.EdgeCacheability { get }
+ToolUp.Platform.EdgeCacheability.EdgeNoStore : ToolUp.Platform.EdgeCacheability { get }
+ToolUp.Platform.EdgeCacheability.IsEdgeCacheUnset : System.Boolean { get }
+ToolUp.Platform.EdgeCacheability.IsEdgeNoStore : System.Boolean { get }
+ToolUp.Platform.EdgeCacheability.IsEdgePrivate : System.Boolean { get }
+ToolUp.Platform.EdgeCacheability.IsEdgePublic : System.Boolean { get }
+ToolUp.Platform.EdgeCacheability.Tag : System.Int32 { get }
+ToolUp.Platform.EdgeCacheability+EdgePrivate (class)
+ToolUp.Platform.EdgeCacheability+EdgePrivate.maxAgeSeconds : System.Int32 { get }
+ToolUp.Platform.EdgeCacheability+EdgePublic (class)
+ToolUp.Platform.EdgeCacheability+EdgePublic.maxAgeSeconds : System.Int32 { get }
+ToolUp.Platform.EdgeCacheability+EdgePublic.sharedMaxAgeSeconds : System.Int32 { get }
+ToolUp.Platform.EdgeCacheability+Tags (class)
+ToolUp.Platform.EdgeCacheability+Tags.EdgeCacheUnset : System.Int32 (literal)
+ToolUp.Platform.EdgeCacheability+Tags.EdgeNoStore : System.Int32 (literal)
+ToolUp.Platform.EdgeCacheability+Tags.EdgePrivate : System.Int32 (literal)
+ToolUp.Platform.EdgeCacheability+Tags.EdgePublic : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeError (class)
+ToolUp.Platform.EdgePurgeError.IsPurgeNotSupported : System.Boolean { get }
+ToolUp.Platform.EdgePurgeError.IsPurgeRejected : System.Boolean { get }
+ToolUp.Platform.EdgePurgeError.IsPurgeTransportFailure : System.Boolean { get }
+ToolUp.Platform.EdgePurgeError.Tag : System.Int32 { get }
+ToolUp.Platform.EdgePurgeError+PurgeNotSupported (class)
+ToolUp.Platform.EdgePurgeError+PurgeNotSupported.verb : System.String { get }
+ToolUp.Platform.EdgePurgeError+PurgeRejected (class)
+ToolUp.Platform.EdgePurgeError+PurgeRejected.detail : System.String { get }
+ToolUp.Platform.EdgePurgeError+PurgeTransportFailure (class)
+ToolUp.Platform.EdgePurgeError+PurgeTransportFailure.detail : System.String { get }
+ToolUp.Platform.EdgePurgeError+Tags (class)
+ToolUp.Platform.EdgePurgeError+Tags.PurgeNotSupported : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeError+Tags.PurgeRejected : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeError+Tags.PurgeTransportFailure : System.Int32 (literal)
+ToolUp.Platform.EdgePurgePropagation (class)
+ToolUp.Platform.EdgePurgePropagation.IsPurgeEventualUnbounded : System.Boolean { get }
+ToolUp.Platform.EdgePurgePropagation.IsPurgeEventualWithin : System.Boolean { get }
+ToolUp.Platform.EdgePurgePropagation.IsPurgeImmediate : System.Boolean { get }
+ToolUp.Platform.EdgePurgePropagation.PurgeEventualUnbounded : ToolUp.Platform.EdgePurgePropagation { get }
+ToolUp.Platform.EdgePurgePropagation.PurgeImmediate : ToolUp.Platform.EdgePurgePropagation { get }
+ToolUp.Platform.EdgePurgePropagation.Tag : System.Int32 { get }
+ToolUp.Platform.EdgePurgePropagation+PurgeEventualWithin (class)
+ToolUp.Platform.EdgePurgePropagation+PurgeEventualWithin.Item : System.TimeSpan { get }
+ToolUp.Platform.EdgePurgePropagation+Tags (class)
+ToolUp.Platform.EdgePurgePropagation+Tags.PurgeEventualUnbounded : System.Int32 (literal)
+ToolUp.Platform.EdgePurgePropagation+Tags.PurgeEventualWithin : System.Int32 (literal)
+ToolUp.Platform.EdgePurgePropagation+Tags.PurgeImmediate : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeRetry (class)
+ToolUp.Platform.EdgePurgeRetry..ctor(System.Int32, System.TimeSpan)
+ToolUp.Platform.EdgePurgeRetry.Attempts : System.Int32 { get }
+ToolUp.Platform.EdgePurgeRetry.InitialBackoff : System.TimeSpan { get }
+ToolUp.Platform.EdgePurgeRetryModule (class)
+ToolUp.Platform.EdgePurgeRetryModule.defaults : ToolUp.Platform.EdgePurgeRetry { get }
+ToolUp.Platform.EdgePurgeRetryModule.effectiveAttempts(ToolUp.Platform.EdgePurgeRetry) : System.Int32
 ToolUp.Platform.EgressBoundary (class)
 ToolUp.Platform.EgressBoundary.AuditSink : ToolUp.Platform.EgressBoundary { get }
 ToolUp.Platform.EgressBoundary.ExportPayload : ToolUp.Platform.EgressBoundary { get }
@@ -4390,6 +4452,12 @@ ToolUp.Platform.IDistributedLock (interface)
 ToolUp.Platform.IDistributedLock.Release(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IDistributedLock.Renew(ToolUp.Platform.Lease) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
 ToolUp.Platform.IDistributedLock.TryAcquire(System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Lease]]
+ToolUp.Platform.IEdgeCache (interface)
+ToolUp.Platform.IEdgeCache.Name : System.String { get }
+ToolUp.Platform.IEdgeCache.Propagation : ToolUp.Platform.EdgePurgePropagation { get }
+ToolUp.Platform.IEdgeCache.PurgePaths(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
+ToolUp.Platform.IEdgeCache.PurgePrefix(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
+ToolUp.Platform.IEdgeCache.PurgeTags(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
 ToolUp.Platform.IEgressGate (interface)
 ToolUp.Platform.IEgressGate.Apply(ToolUp.Platform.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.IEmbeddingCache (class)
@@ -6363,6 +6431,11 @@ ToolUp.Platform.NoOpRateLimiter (class)
 ToolUp.Platform.NoOpRateLimiter..ctor()
 ToolUp.Platform.NoOpUserClaims (class)
 ToolUp.Platform.NoOpUserClaims..ctor()
+ToolUp.Platform.NoopEdgeCache (class)
+ToolUp.Platform.NoopEdgeCache..ctor()
+ToolUp.Platform.NoopEdgeCacheModule (class)
+ToolUp.Platform.NoopEdgeCacheModule.create() : ToolUp.Platform.IEdgeCache
+ToolUp.Platform.NoopEdgeCacheModule.instance : ToolUp.Platform.IEdgeCache { get }
 ToolUp.Platform.NotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook.saveContact(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.Platform.UserContact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook (class)

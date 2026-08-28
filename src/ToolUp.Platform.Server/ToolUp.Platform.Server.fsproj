@@ -100,6 +100,12 @@
         <Compile Include="Server\IMetricsSink.fs" />
         <Compile Include="Server\PrometheusMetricsSink.fs" />
         <Compile Include="Server\IActivitySink.fs" />
+        <!-- Phase 472 — the CDN / edge-cache invalidation seam
+             (purge-only; the CDN caches, the SDK invalidates) + the
+             declared no-op + the `Cache-Control` declaration helper.
+             Depends only on Core (`ILogger`), so it sits with the other
+             interface-only seams ahead of any implementation. -->
+        <Compile Include="Server\IEdgeCache.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
         <!-- Phase 696 — the deployment configuration manifest loader:

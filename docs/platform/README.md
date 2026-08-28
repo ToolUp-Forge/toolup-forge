@@ -100,6 +100,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 - [`auth.md`](auth.md) — auth providers and how to write one.
 - [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (`ClerkAuthUI` is deprecated).
 - [`storage.md`](storage.md) — `IBlobStorage` companions and the encryption-at-rest decorator.
+- [`edge-serving.md`](edge-serving.md) — origin vs CDN topology: the purge-only `IEdgeCache` seam and its fire-and-forget fan-out on publish / delete, per-response-class `Cache-Control` declaration on the media routes (and the two postures the preflight refuses because they leak), the HLS key route's unconfigurable `no-store`, and delegated URL signing for a viewer the origin never sees.
 - [`events.md`](events.md) — event store, audit log, audit-sink replication.
 - [`jobs.md`](jobs.md) — cron + event-triggered + manual background jobs.
 - [`external-compute.md`](external-compute.md) — `IExternalComputeDispatcher`: brokering a unit of work to compute outside this process (GPU box, batch service, worker pool), the opaque submit/poll/cancel handle model, the `NoExternalCompute` default, and how it composes with `IJobScheduler`.

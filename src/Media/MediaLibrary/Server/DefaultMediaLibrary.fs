@@ -330,7 +330,20 @@ type DefaultMediaLibrary
         /// deployment composed no `ISecretStore`-backed key store, and
         /// an upload that asks for encryption is refused rather than
         /// silently produced in the clear.
-        hlsKeys: HlsKeyDelivery.MediaHlsKeyStore option
+        hlsKeys: HlsKeyDelivery.MediaHlsKeyStore option,
+        /// Phase 472 — the CDN / edge cache to invalidate when an item's
+        /// bytes change. `None` (the default, and every pre-472 call
+        /// site) means no edge fan-out is attempted at all: the purge
+        /// helpers short-circuit before scheduling anything, so an
+        /// unconfigured deployment pays nothing (GP 13).
+        edgeCache: IEdgeCache option,
+        /// Phase 472 — a CDN-native URL signer. `None` (the default)
+        /// keeps `SignedUrl` on the origin HMAC path exactly as before
+        /// (GP 11). When composed, minting produces an edge-verified
+        /// absolute URL instead — but the origin route and its
+        /// verification stay mounted, so tokens minted before the switch
+        /// keep working until they expire.
+        delegatedSigner: SignedUrl.IDelegatedUrlSigner option
     ) =
 
     /// Bytes pulled per ranged blob read while serving (Phase 468).
@@ -364,6 +377,27 @@ type DefaultMediaLibrary
             with ex ->
                 logger.Error("[MediaLibrary] Failed to publish ingestion status", Some ex)
     }
+
+    /// Phase 472 — fan an item's edge objects out to the composed
+    /// `IEdgeCache`. Fire-and-forget (GP 7): a CDN outage must never
+    /// turn a successful upload or delete into a failed one, so the
+    /// purge is scheduled and the caller returns. A failure is audited
+    /// on the logger and the edge object expires on its own TTL.
+    ///
+    /// Both halves are purged together, always, because the two are one
+    /// event: replacing an item changes the original AND every derived
+    /// artefact, and a purge that reached only one of them leaves a
+    /// manifest at the edge pointing at segments that no longer exist.
+    let purgeEdge (id: MediaId) (what: string) =
+        match edgeCache with
+        | None -> ()
+        | Some _ ->
+            EdgeCache.purgePrefixDetached (Some logger) edgeCache (MediaEdgePaths.derivedPrefix id)
+
+            EdgeCache.purgePathsDetached (Some logger) edgeCache (MediaEdgePaths.originalPaths id)
+
+            if options.EmitAudit then
+                logger.Info(sprintf "[MediaLibrary] edge purge scheduled for %s (%s)" (MediaId.value id) what)
 
     let writeRecord (container: string) (record: MediaRecord) = async {
         let! result = blobStorage.Upload(container, MediaPaths.record record.Id, MediaJson.serialize record)
@@ -489,7 +523,8 @@ type DefaultMediaLibrary
     /// parameter — `?hlsKeys` would fold into ONE widened constructor,
     /// making the pre-471 seven-argument token disappear, which the
     /// public-API baseline reads as a removal (a genuine break, not a
-    /// false positive).
+    /// false positive). Phase 472 kept both prior arities alive for the
+    /// same reason.
     new
         (
             blobStorage: IBlobStorage,
@@ -500,7 +535,44 @@ type DefaultMediaLibrary
             options: MediaLibraryOptions,
             logger: ILogger
         ) =
-        DefaultMediaLibrary(blobStorage, signer, derivation, transcoder, notifications, options, logger, None)
+        DefaultMediaLibrary(
+            blobStorage,
+            signer,
+            derivation,
+            transcoder,
+            notifications,
+            options,
+            logger,
+            (None: HlsKeyDelivery.MediaHlsKeyStore option),
+            (None: IEdgeCache option),
+            (None: SignedUrl.IDelegatedUrlSigner option)
+        )
+
+    /// The Phase 471 eight-argument shape, preserved for the same
+    /// baseline reason as the seven-argument one above.
+    new
+        (
+            blobStorage: IBlobStorage,
+            signer: SignedUrl.MediaUrlSigner,
+            derivation: IMediaDerivation,
+            transcoder: IMediaTranscoder,
+            notifications: INotificationChannel option,
+            options: MediaLibraryOptions,
+            logger: ILogger,
+            hlsKeys: HlsKeyDelivery.MediaHlsKeyStore option
+        ) =
+        DefaultMediaLibrary(
+            blobStorage,
+            signer,
+            derivation,
+            transcoder,
+            notifications,
+            options,
+            logger,
+            hlsKeys,
+            (None: IEdgeCache option),
+            (None: SignedUrl.IDelegatedUrlSigner option)
+        )
 
     interface IMediaLibrary with
 
@@ -559,6 +631,17 @@ type DefaultMediaLibrary
                 | Error e -> return Error(MediaUploadError.StorageError e)
                 | Ok() ->
                     do! publishStatus request.UploadedBy record
+
+                    // Phase 472 — publish-time edge purge. A brand-new
+                    // id has nothing at the edge, so this is usually a
+                    // no-op request; it is issued anyway because the id
+                    // space is the deployment's, not forge's, and a
+                    // deployment that reuses or restores an id must not
+                    // inherit a previous item's cached bytes. The cost
+                    // of being wrong in the other direction — one video
+                    // that plays as its predecessor — is not worth the
+                    // saved call.
+                    purgeEdge id "upload"
                     return Ok record
         }
 
@@ -616,7 +699,15 @@ type DefaultMediaLibrary
                 let! recDelete = blobStorage.Delete(scopeContainer, MediaPaths.record id)
 
                 match recDelete with
-                | Ok() -> return Ok()
+                | Ok() ->
+                    // Phase 472 — a deleted item must stop playing, and
+                    // deleting the blobs does not reach an edge copy.
+                    // Purged only on a SUCCESSFUL record delete: a
+                    // failed delete leaves the item live, and purging
+                    // its edge objects would then be a pointless cache
+                    // miss rather than a correctness fix.
+                    purgeEdge id "delete"
+                    return Ok()
                 | Error e -> return Error(MediaDeleteError.StorageError e)
         }
 
@@ -632,10 +723,26 @@ type DefaultMediaLibrary
                     else
                         ttl
 
-                match! signer.SignAsync(id, scope, effectiveTtl, DateTimeOffset.UtcNow) with
-                | Error e -> return Error e
-                | Ok token ->
-                    return Ok(sprintf "/media/signed/%s?token=%s" (MediaId.value id) (Uri.EscapeDataString token))
+                // Phase 472 — a composed delegated signer mints instead.
+                // Not a decorator over the origin path but a replacement
+                // of it: minting BOTH would hand the caller one URL while
+                // leaving an origin token minted and unrevoked, which is
+                // a second live grant nobody asked for.
+                //
+                // A delegated signer that FAILS is an error, never a
+                // silent fall-through to the origin HMAC. Falling back
+                // would hand out an origin-relative URL that a
+                // CDN-fronted viewer cannot reach — a broken link
+                // dressed as a success — and, worse, would mean a
+                // deployment could not tell a working signer from a
+                // permanently broken one.
+                match delegatedSigner with
+                | Some ds -> return! ds.SignUrl(id, scope, effectiveTtl)
+                | None ->
+                    match! signer.SignAsync(id, scope, effectiveTtl, DateTimeOffset.UtcNow) with
+                    | Error e -> return Error e
+                    | Ok token ->
+                        return Ok(sprintf "/media/signed/%s?token=%s" (MediaId.value id) (Uri.EscapeDataString token))
         }
 
         member _.ContentLength(scopeContainer, id) = async {

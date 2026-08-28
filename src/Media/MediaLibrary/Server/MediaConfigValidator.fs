@@ -5,6 +5,7 @@ module ToolUp.MediaLibrary.MediaConfigValidator
 
 open System
 open System.Text
+open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 
@@ -40,6 +41,47 @@ open ToolUp.Platform.ConfigValidation
 // validator says nothing rather than guessing: a preflight advisory
 // that fires for the wrong reason is worse than one that stays quiet.
 
+// ─── Phase 472 — edge-cacheability refusals ──────────────────────────
+//
+// Two declarations in `MediaEdgeCacheOptions` are not merely unwise but
+// wrong, and both are wrong in the direction that leaks. Refused at
+// compose time (an `Error`, so startup aborts) rather than documented,
+// because the symptom of getting either wrong is "someone else can watch
+// the video" and it is invisible from inside the deployment: the origin
+// behaves perfectly, and the exposure lives in a cache the operator does
+// not own.
+//
+// Pure — takes the options record and returns a message, so the rules
+// are testable without composing a server.
+
+/// `Some message` when this options record declares an unsafe edge
+/// posture; `None` when it is safe.
+let edgeCacheabilityRefusal (options: MediaLibraryOptions) : string option =
+    let isSharedCacheable =
+        function
+        | EdgePublic _ -> true
+        | EdgeCacheUnset
+        | EdgeNoStore
+        | EdgePrivate _ -> false
+
+    if isSharedCacheable options.EdgeCache.Original then
+        // `/api/media/stream/{id}` requires a resolved scope and
+        // `/media/signed/{id}` requires a valid signature. A shared cache
+        // holding either serves the next caller a response that was
+        // authorised for the previous one.
+        Some
+            "MediaLibrary EdgeCache.Original is declared EdgePublic, but both routes that serve the original are gated (scope-authenticated, or signature-verified with a TTL). A shared cache holding that response serves it to callers who passed neither gate. Use EdgePrivate or EdgeCacheUnset."
+    elif options.EncryptHlsByDefault && isSharedCacheable options.EdgeCache.Manifest then
+        // An encrypted manifest is REWRITTEN per request: its
+        // `#EXT-X-KEY` URI is made origin-absolute, and a `?token=` on
+        // the manifest request is carried onto it (Phase 471). Caching
+        // that response in a shared cache hands one viewer's token to
+        // the next.
+        Some
+            "MediaLibrary EdgeCache.Manifest is declared EdgePublic while EncryptHlsByDefault is on. An encrypted manifest is rewritten per request and may carry the requesting viewer's token on its #EXT-X-KEY URI, so a shared cache would hand that token to the next viewer. Use EdgeCacheUnset for Manifest (MediaEdgeCacheOptions.cdnEncrypted does); segments stay safely EdgePublic because they are ciphertext and are never rewritten."
+    else
+        None
+
 type private Impl(options: MediaLibraryOptions) =
     interface IConfigValidator with
         member _.Name = "media_library:options"
@@ -53,7 +95,9 @@ type private Impl(options: MediaLibraryOptions) =
             elif options.SignedUrlDefaultTtl <= TimeSpan.Zero then
                 return ValidationResult.Error "MediaLibrary SignedUrlDefaultTtl must be positive"
             else
-                return ValidationResult.Ok
+                match edgeCacheabilityRefusal options with
+                | Some message -> return ValidationResult.Error message
+                | None -> return ValidationResult.Ok
         }
 
 let create (options: MediaLibraryOptions) : IConfigValidator = Impl(options) :> IConfigValidator

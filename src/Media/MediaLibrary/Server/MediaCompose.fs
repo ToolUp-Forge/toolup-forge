@@ -37,6 +37,16 @@ type MediaLibraryServerApp = {
     /// Override for the `IMediaLibrary` impl. `None` → `DefaultMediaLibrary`
     /// over the configured `IBlobStorage`.
     StoreOverride: IMediaLibrary option
+    /// Phase 472 — the CDN / edge cache media publication and deletion
+    /// purge through. `None` (default) → no edge fan-out at all and no
+    /// DI registration; the library behaves byte-for-byte pre-472
+    /// (GP 11 / GP 13).
+    EdgeCache: IEdgeCache option
+    /// Phase 472 — a CDN-native URL signer. `None` (default) keeps
+    /// `IMediaLibrary.SignedUrl` on the origin HMAC path. When composed,
+    /// minting delegates to it; the origin route and its verification
+    /// stay mounted either way.
+    DelegatedUrlSigner: SignedUrl.IDelegatedUrlSigner option
 }
 
 module MediaLibraryServerApp =
@@ -47,6 +57,8 @@ module MediaLibraryServerApp =
         DerivationOverride = None
         TranscoderOverride = None
         StoreOverride = None
+        EdgeCache = None
+        DelegatedUrlSigner = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -111,6 +123,39 @@ module MediaLibraryServerApp =
         app with
             StoreOverride = Some store
     }
+
+    /// Phase 472 — compose the CDN / edge cache this deployment sits
+    /// behind. An upload and a delete then purge the item's derived
+    /// prefix and its two original-serving paths, fire-and-forget, so a
+    /// CDN outage never fails the operation that triggered it (GP 7).
+    ///
+    /// Registered as an `IEdgeCache` DI singleton as well as being
+    /// handed to the default library, so a deployment's own handlers
+    /// resolve the SAME edge rather than composing a second one.
+    ///
+    /// Note this is *not* consulted when `withMediaLibrary` supplies a
+    /// custom `IMediaLibrary`: a custom store owns its own write path
+    /// and therefore its own invalidation. The DI registration still
+    /// happens, so that store can resolve the edge itself.
+    let withEdgeCache (edgeCache: IEdgeCache) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            EdgeCache = Some edgeCache
+    }
+
+    /// Phase 472 — compose a CDN-native URL signer. `SignedUrl` then
+    /// mints an absolute, edge-verified URL instead of an origin-relative
+    /// `/media/signed/{id}?token=` one. The origin HMAC route stays
+    /// mounted and keeps verifying, so previously-minted tokens work
+    /// until they expire and removing the signer restores the prior
+    /// behaviour exactly.
+    let withDelegatedUrlSigner
+        (signer: SignedUrl.IDelegatedUrlSigner)
+        (app: MediaLibraryServerApp)
+        : MediaLibraryServerApp =
+        {
+            app with
+                DelegatedUrlSigner = Some signer
+        }
 
     /// Build the `IMediaApi` Fable.Remoting contract from request context.
     let private mediaApi (options: MediaLibraryOptions) (ctx: HttpContext) : IMediaApi =
@@ -198,9 +243,37 @@ module MediaLibraryServerApp =
             let derivationOverride = app.DerivationOverride
             let transcoderOverride = app.TranscoderOverride
             let storeOverride = app.StoreOverride
+            let edgeCache = app.EdgeCache
+            let delegatedSigner = app.DelegatedUrlSigner
 
             // ─── DI registrations ────────────────────────────────
             let mediaServiceConfig (services: IServiceCollection) =
+                let services =
+                    // Phase 472 — the composed options, so the range
+                    // handlers can read this deployment's declared edge
+                    // cacheability. Registered under
+                    // `EnabledMediaLibrary` only; the handlers fall back
+                    // to `MediaLibraryOptions.defaults` (which declares
+                    // nothing) when it is absent, so a hand-built host
+                    // that never registers it emits exactly the headers
+                    // it emitted before this phase.
+                    services.AddSingleton<MediaLibraryOptions>(options)
+
+                let services =
+                    // Phase 472 — the edge cache, registered so a
+                    // deployment's own handlers (and a custom
+                    // `IMediaLibrary`) resolve the SAME edge the library
+                    // publishes through. Nothing is registered when none
+                    // is composed (GP 13).
+                    match edgeCache with
+                    | Some edge -> services.AddSingleton<IEdgeCache>(edge)
+                    | None -> services
+
+                let services =
+                    match delegatedSigner with
+                    | Some ds -> services.AddSingleton<SignedUrl.IDelegatedUrlSigner>(ds)
+                    | None -> services
+
                 services
                     .AddSingleton<SignedUrl.MediaUrlSigner>(
                         System.Func<System.IServiceProvider, SignedUrl.MediaUrlSigner>(fun sp ->
@@ -250,7 +323,9 @@ module MediaLibraryServerApp =
                                     notifications,
                                     options,
                                     asLogger,
-                                    Option.ofObj hlsKeys
+                                    Option.ofObj hlsKeys,
+                                    edgeCache,
+                                    delegatedSigner
                                 )
                                 :> IMediaLibrary)
                     )

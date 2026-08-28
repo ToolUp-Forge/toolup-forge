@@ -199,3 +199,82 @@ type MediaUrlSigner(secretStore: ISecretStore) =
         | Error e -> return Error e
         | Ok key -> return verify key token now
     }
+
+// ─── Phase 472 — delegated URL signing ────────────────────────────────
+//
+// The origin HMAC above binds `(MediaId, ScopeId, Container, ExpiresAt)`
+// and is verified by this origin's own range handler. That is exactly
+// right when the origin serves the bytes — and exactly wrong once a CDN
+// does: the viewer never reaches the origin, so nothing ever verifies
+// the token, and the object is world-readable at the edge.
+//
+// Every CDN of the CloudFront / Cloudflare class solves this with its
+// OWN signed-URL scheme, verified at the edge. `IDelegatedUrlSigner` is
+// the seam that lets a deployment mint those instead.
+//
+// **The seam takes the deployment's signing callback — no cloud SDK in
+// the interface** (the `ICloudTranscodeProvider` pattern). A signing
+// scheme needs a private key, and a private key belongs to the
+// deployment, not to the SDK: forge would otherwise have to model
+// key-pair provisioning, rotation and per-vendor canonicalisation for
+// every CDN anyone might use. Instead the interface speaks only in
+// value types the SDK already owns, and the reference sub-companion
+// (`ToolUp.Hosts.EdgeCache`) turns a plain `sign: string -> string`
+// callback into an implementation.
+//
+// **The origin HMAC remains the default AND the verification
+// fallback.** Composing a delegated signer changes what `SignedUrl`
+// MINTS; it does not remove `/media/signed/{id}?token=`, and does not
+// stop `MediaUrlSigner.VerifyAsync` from verifying an origin token. A
+// deployment that composes a signer and later removes it keeps working,
+// and a token minted before the switch keeps working until it expires.
+//
+// ─── The six portability rules (GP 12) ────────────────────────────────
+//
+// 1. *Identity by value* — `MediaId` (a single-case string DU) and
+//    `StorageScope` (a record) in, a `string` URL out.
+// 2. *Async at every boundary* — `SignUrl` returns `Async<Result<…>>`;
+//    a real signer may need to fetch a key from `ISecretStore`.
+// 3. *Failure / policy as data* — failure is the existing
+//    `SignedUrlError`, not an exception and not a callback. The TTL is
+//    a `TimeSpan` parameter, not a policy object the SDK closes over.
+// 4. *Stateless between invocations* — every call carries the item, the
+//    scope and the TTL. An implementation may cache a key; it holds no
+//    per-call continuity.
+// 5. *No cross-shard ordering promises* — each mint is independent.
+// 6. *Precision at the lower bound* — `ttl` is a `TimeSpan`, and an
+//    implementation declares the granularity its edge actually honours
+//    via `TtlPrecision` (most CDNs sign to whole seconds). A caller
+//    that needs sub-second expiry is told, not silently rounded.
+
+/// The granularity an edge actually honours for a signed URL's expiry.
+/// Rule 6 — declared rather than assumed, because a signer that rounds a
+/// 500 ms TTL up to a second has extended the window and nothing said so.
+type SignedUrlTtlPrecision =
+    | TtlSecond
+    | TtlMinute
+
+/// Mint a CDN-native signed URL for a media item, verified at the edge
+/// rather than at this origin. Composed via
+/// `MediaLibraryServerApp.withDelegatedUrlSigner`; absent it, media URL
+/// minting takes the origin HMAC path exactly as before (GP 11).
+type IDelegatedUrlSigner =
+    /// Stable name for diagnostics and audit lines (e.g.
+    /// `"callback-signer"`). Not an identity the SDK dispatches on.
+    abstract Name: string
+
+    /// The expiry granularity this signer's edge honours (rule 6).
+    abstract TtlPrecision: SignedUrlTtlPrecision
+
+    /// Mint an ABSOLUTE signed URL for `id`, viewable for `ttl`. The
+    /// scope is passed so a signer can bind the viewing tenant into the
+    /// URL (or into a signed policy document) exactly as the origin HMAC
+    /// does — a delegated signer that ignores it has widened the gate,
+    /// and the seam is shaped so that is a visible choice rather than an
+    /// impossible one.
+    ///
+    /// Returns an absolute URL because the whole point is that it does
+    /// not resolve against this origin. A relative result would resolve
+    /// against whatever host served the page, which on a CDN-fronted
+    /// deployment is the edge — where there is no origin route to hit.
+    abstract SignUrl: id: MediaId * scope: StorageScope * ttl: TimeSpan -> Async<Result<string, SignedUrlError>>

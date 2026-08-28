@@ -66,6 +66,41 @@ let private headerValue (ctx: HttpContext) (name: string) : string =
 let private setHeader (ctx: HttpContext) (name: string) (value: string) =
     ctx.Response.Headers[name] <- StringValues value
 
+// ─── Phase 472 — declared edge cacheability ───────────────────────────
+//
+// These routes emitted no `Cache-Control` at all before this phase, so a
+// CDN in front of them applied whatever heuristic it liked to a response
+// carrying no directive — which for a segment might be "cache forever"
+// and for a gated original might be the same. Declaring the posture per
+// response class makes edge behaviour a decision.
+//
+// The declaration is read from the composed `MediaLibraryOptions`, whose
+// default declares NOTHING, so an upgrading deployment emits exactly the
+// headers it emitted before (GP 11). A deployment that never composed
+// the media library never reaches this code at all.
+//
+// **The key route is not reachable from here and has no knob.**
+// `/api/media/hls-key/{id}` is served by `HlsKeyDelivery.keyHandler`,
+// which hard-wires `no-store` + `Pragma: no-cache`. A cached decryption
+// key is the encryption scheme defeated, so the one class where a wrong
+// declaration would be catastrophic is the one class this record cannot
+// express.
+
+/// The composed options, or the defaults when none is registered (which
+/// is what a hand-built test host or a pre-472 composition looks like).
+/// Never throws: a serving path must not 500 because a knob is absent.
+let private mediaOptions (ctx: HttpContext) : MediaLibraryOptions =
+    match ctx.RequestServices.GetService(typeof<MediaLibraryOptions>) with
+    | :? MediaLibraryOptions as o -> o
+    | _ -> MediaLibraryOptions.defaults
+
+/// Emit the declared `Cache-Control`, or no header at all for
+/// `EdgeCacheUnset`.
+let private declareCacheability (ctx: HttpContext) (cacheability: EdgeCacheability) =
+    match EdgeCacheHeader.render cacheability with
+    | Some value -> setHeader ctx "Cache-Control" value
+    | None -> ()
+
 /// Decide whether to honour the `Range` header given an `If-Range`
 /// validator. An empty `If-Range` always honours; a present `If-Range`
 /// honours only when it equals our strong `ETag` (otherwise the client's
@@ -142,6 +177,9 @@ let private serveOriginal
                 let etag = sprintf "\"%s\"" record.ContentHash
                 setHeader ctx "Accept-Ranges" "bytes"
                 setHeader ctx "ETag" etag
+                // Phase 472 — the original is scope- or signature-gated,
+                // so its declaration is the `Original` class.
+                declareCacheability ctx (mediaOptions ctx).EdgeCache.Original
                 ctx.Response.ContentType <- record.MimeType
 
                 let honour = shouldHonourRange (headerValue ctx "If-Range") etag
@@ -381,6 +419,14 @@ let hlsHandler: HttpHandler =
             | Some container ->
                 let lib = library ctx
                 let id = MediaId raw
+
+                // Phase 472 — declare the edge posture ONCE, here,
+                // before either serving path runs. Both paths write the
+                // same derived file, so deciding the class twice is two
+                // chances to disagree; `edgeCacheabilityForDerived` is
+                // pure and keyed on the same extension test the rewrite
+                // uses.
+                declareCacheability ctx (MediaLibraryOptions.edgeCacheabilityForDerived (mediaOptions ctx) file)
 
                 let serveWhole () = task {
                     match! lib.OpenDerived(container, id, file) |> Async.StartAsTask with

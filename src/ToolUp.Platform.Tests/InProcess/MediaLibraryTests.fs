@@ -707,23 +707,34 @@ let private encryptingTranscoder =
     }
 
 /// A library plus the pieces the key endpoint needs to answer for it.
+///
+/// Phase 472 added `Options` (so a driven request can see the
+/// deployment's declared edge cacheability, which the range handler
+/// resolves from DI) and `Edge` (the recording fake the fan-out claims
+/// assert against). Both are inert on the Phase 471 fixtures: `Options`
+/// declares nothing and `Edge` is `None`.
 type private EncryptedFixture = {
     Library: IMediaLibrary
     Keys: HlsKeyDelivery.MediaHlsKeyStore
     Signer: SignedUrl.MediaUrlSigner
     Blob: IBlobStorage
+    Options: MediaLibraryOptions
+    Edge: IEdgeCacheContract.RecordingEdgeCache option
 }
 
-let private makeEncryptedFixture (transcoder: IMediaTranscoder) (withKeyStore: bool) (encryptByDefault: bool) =
+/// Phase 472 — the general fixture builder. Every knob the two media
+/// phases need, in one place, so a 471 fixture and a 472 fixture cannot
+/// drift into two different libraries.
+let private makeFixtureWith
+    (transcoder: IMediaTranscoder)
+    (withKeyStore: bool)
+    (options: MediaLibraryOptions)
+    (edge: IEdgeCacheContract.RecordingEdgeCache option)
+    (delegated: SignedUrl.IDelegatedUrlSigner option)
+    =
     let blob = makeStore ()
     let secrets = InMemorySecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
-
-    let options = {
-        MediaLibraryOptions.defaults with
-            EncryptHlsByDefault = encryptByDefault
-    }
-
     let keys = HlsKeyDelivery.MediaHlsKeyStore(secrets, NullLogger(), options)
 
     let lib =
@@ -735,7 +746,9 @@ let private makeEncryptedFixture (transcoder: IMediaTranscoder) (withKeyStore: b
             None,
             options,
             NullLogger(),
-            (if withKeyStore then Some keys else None)
+            (if withKeyStore then Some keys else None),
+            (edge |> Option.map (fun e -> e :> IEdgeCache)),
+            delegated
         )
         :> IMediaLibrary
 
@@ -744,7 +757,17 @@ let private makeEncryptedFixture (transcoder: IMediaTranscoder) (withKeyStore: b
         Keys = keys
         Signer = signer
         Blob = blob
+        Options = options
+        Edge = edge
     }
+
+let private makeEncryptedFixture (transcoder: IMediaTranscoder) (withKeyStore: bool) (encryptByDefault: bool) =
+    let options = {
+        MediaLibraryOptions.defaults with
+            EncryptHlsByDefault = encryptByDefault
+    }
+
+    makeFixtureWith transcoder withKeyStore options None None
 
 let private encUpload () =
     match
@@ -1119,6 +1142,12 @@ let private servicesFor (f: EncryptedFixture) : IServiceProvider =
         .AddSingleton<SignedUrl.MediaUrlSigner>(f.Signer)
         .AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(f.Keys)
         .AddSingleton<IMediaLibrary>(f.Library)
+        // Phase 472 — mirrors what `MediaCompose` registers under
+        // `EnabledMediaLibrary`, so a driven request sees this
+        // deployment's declared edge cacheability. The 471 fixtures
+        // register `MediaLibraryOptions.defaults`, which declares
+        // nothing, so their assertions are unaffected.
+        .AddSingleton<MediaLibraryOptions>(f.Options)
         .BuildServiceProvider()
     :> IServiceProvider
 
@@ -1376,6 +1405,416 @@ let private hlsKeyEndpointTests =
             Expect.notEqual body clearSegment "and it is still not the plaintext"
     ]
 
+// ─── Phase 472 — edge purge fan-out + delegated signing ───────────────
+//
+// Three claims the phase's acceptance criteria state directly:
+//
+//   - publishing / deleting a media item purges the corresponding edge
+//     paths through the composed `IEdgeCache` (asserted via a recording
+//     fake);
+//   - a composed delegated signer replaces origin-signed media URLs end
+//     to end, and WITHOUT it behaviour is byte-identical to before;
+//   - the declared `Cache-Control` reaches the response — and the key
+//     route's `no-store` is not reachable by any declaration.
+
+let private plainTranscoderFixture (options: MediaLibraryOptions) (edge) (delegated) =
+    makeFixtureWith (NoopMediaTranscoder.create ()) false options edge delegated
+
+let private edgeFanOutTests =
+    testList "Phase 472 media edge fan-out" [
+        testCase "an upload purges the item's derived PREFIX and both original paths"
+        <| fun () ->
+            let edge = IEdgeCacheContract.RecordingEdgeCache()
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults (Some edge) None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            // Two purges: one prefix, one path list. Detached, so wait.
+            Expect.isTrue (edge.WaitFor 2) "both purges arrived"
+
+            Expect.equal
+                edge.Prefixes
+                [ sprintf "/api/media/hls/%s/" (MediaId.value record.Id) ]
+                "every rendition file of the item, as a prefix"
+
+            Expect.equal
+                edge.AllPaths
+                [
+                    sprintf "/api/media/stream/%s" (MediaId.value record.Id)
+                    sprintf "/media/signed/%s" (MediaId.value record.Id)
+                ]
+                "and the two routes that serve the original"
+
+        testCase "a DELETE purges the same set"
+        <| fun () ->
+            let edge = IEdgeCacheContract.RecordingEdgeCache()
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults (Some edge) None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            Expect.isTrue (edge.WaitFor 2) "the upload's purges landed first"
+
+            f.Library.Delete(encContainer, record.Id)
+            |> Async.RunSynchronously
+            |> Expect.wantOk
+            <| "delete"
+
+            Expect.isTrue (edge.WaitFor 4) "the delete's purges arrived too"
+
+            // The delete's purge set must be identical to the upload's —
+            // stated as an assertion because a deleted video that keeps
+            // playing from a POP is precisely the failure this phase
+            // exists to prevent, and the two call sites drifting apart
+            // is how it would happen.
+            Expect.equal (List.distinct edge.Prefixes).Length 1 "one distinct prefix across both events"
+            Expect.equal edge.Prefixes.Length 2 "issued twice — once per event"
+            Expect.equal (List.distinct edge.Paths).Length 1 "the same path set both times"
+
+        testCase "a FAILED delete purges nothing — the item is still live"
+        <| fun () ->
+            let edge = IEdgeCacheContract.RecordingEdgeCache()
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults (Some edge) None
+
+            match
+                f.Library.Delete(encContainer, MediaId "never-existed")
+                |> Async.RunSynchronously
+            with
+            | Error MediaDeleteError.NotFound -> ()
+            | other -> failtestf "expected NotFound, got %A" other
+
+            Expect.isTrue
+                (edge.StaysSilentFor(TimeSpan.FromMilliseconds 200.0))
+                "purging the edge for an item that was never deleted is a pointless cache miss, not a fix"
+
+        testCase "NO composed edge cache means no work is scheduled at all (GP 13)"
+        <| fun () ->
+            // The pre-472 deployment. There is nothing to observe on the
+            // library itself, so the claim is asserted where it is
+            // observable: the upload succeeds and the record is intact,
+            // with an edge cache that would have recorded any call.
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            Expect.equal record.Status MediaIngestionStatus.Ready "the upload is unaffected"
+
+        testCase "a BROKEN edge cache does not fail the upload (GP 7)"
+        <| fun () ->
+            // The claim that matters operationally: a CDN outage must
+            // not turn a successful upload into a failed one.
+            let broken =
+                IEdgeCacheContract.RecordingEdgeCache("broken", Error(PurgeTransportFailure "the CDN is down"))
+
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults (Some broken) None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "upload must succeed regardless: %A" e)
+
+            Expect.equal record.Status MediaIngestionStatus.Ready "the upload succeeded"
+            Expect.isTrue (broken.WaitFor 2) "and the purge was still attempted"
+    ]
+
+let private delegatedSigningTests =
+    let scopeFor container : StorageScope = {
+        ScopeId = "u1"
+        Container = container
+        Persist = true
+    }
+
+    testList "Phase 472 delegated URL signing" [
+        testCase "WITHOUT a delegated signer the origin HMAC URL is minted, exactly as before (GP 11)"
+        <| fun () ->
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let url =
+                f.Library.SignedUrl(record.Id, scopeFor encContainer, TimeSpan.FromHours 1.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            Expect.stringStarts url (sprintf "/media/signed/%s?token=" (MediaId.value record.Id)) "the origin route"
+
+        testCase "WITH one composed, the minted URL is the signer's, end to end"
+        <| fun () ->
+            let mutable seenScope = ""
+
+            let delegated =
+                { new SignedUrl.IDelegatedUrlSigner with
+                    member _.Name = "fake-cdn"
+                    member _.TtlPrecision = SignedUrl.TtlSecond
+
+                    member _.SignUrl(id, scope, _) = async {
+                        seenScope <- scope.Container
+                        return Ok(sprintf "https://cdn.test/%s?Signature=abc" (MediaId.value id))
+                    }
+                }
+
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None (Some delegated)
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let url =
+                f.Library.SignedUrl(record.Id, scopeFor encContainer, TimeSpan.FromHours 1.0)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            Expect.equal
+                url
+                (sprintf "https://cdn.test/%s?Signature=abc" (MediaId.value record.Id))
+                "the CDN-native URL"
+
+            Expect.stringContains url "https://" "absolute — it must not resolve against this origin"
+            Expect.equal seenScope encContainer "the signer was told which scope is viewing"
+
+        testCase "the origin HMAC remains the VERIFICATION fallback while a signer is composed"
+        <| fun () ->
+            // Composing a signer changes what is MINTED. It must not
+            // stop a previously-minted origin token from verifying, or
+            // every live URL would break at the moment of the switch.
+            let delegated =
+                { new SignedUrl.IDelegatedUrlSigner with
+                    member _.Name = "fake-cdn"
+                    member _.TtlPrecision = SignedUrl.TtlSecond
+                    member _.SignUrl(_, _, _) = async { return Ok "https://cdn.test/x" }
+                }
+
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None (Some delegated)
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let originToken =
+                f.Signer.SignAsync(record.Id, scopeFor encContainer, TimeSpan.FromHours 1.0, DateTimeOffset.UtcNow)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, _ =
+                drive
+                    f
+                    RangeHandler.signedHandler
+                    (sprintf "/media/signed/%s" (MediaId.value record.Id))
+                    ("token=" + Uri.EscapeDataString originToken)
+                    None
+
+            Expect.equal status 200 "the origin route still verifies its own tokens"
+            Expect.isNonEmpty body "and serves the bytes"
+
+        testCase "a FAILING delegated signer is an error, never a fall-through to an unreachable origin URL"
+        <| fun () ->
+            let delegated =
+                { new SignedUrl.IDelegatedUrlSigner with
+                    member _.Name = "fake-cdn"
+                    member _.TtlPrecision = SignedUrl.TtlSecond
+                    member _.SignUrl(_, _, _) = async { return Error(KeyResolutionFailed "no key") }
+                }
+
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None (Some delegated)
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            match
+                f.Library.SignedUrl(record.Id, scopeFor encContainer, TimeSpan.FromHours 1.0)
+                |> Async.RunSynchronously
+            with
+            | Error(KeyResolutionFailed detail) -> Expect.stringContains detail "no key" "the failure surfaces"
+            | other -> failtestf "expected the signer's failure, got %A" other
+
+        testCase "the signer is not consulted for an item that does not exist"
+        <| fun () ->
+            // `SignedUrl` checks existence first. Minting a signed URL
+            // for a missing item would hand out a live grant for a 404.
+            let mutable consulted = false
+
+            let delegated =
+                { new SignedUrl.IDelegatedUrlSigner with
+                    member _.Name = "fake-cdn"
+                    member _.TtlPrecision = SignedUrl.TtlSecond
+
+                    member _.SignUrl(_, _, _) = async {
+                        consulted <- true
+                        return Ok "https://cdn.test/x"
+                    }
+                }
+
+            let f = plainTranscoderFixture MediaLibraryOptions.defaults None (Some delegated)
+
+            match
+                f.Library.SignedUrl(MediaId "absent", scopeFor encContainer, TimeSpan.FromHours 1.0)
+                |> Async.RunSynchronously
+            with
+            | Error SignedUrlError.NotFound -> ()
+            | other -> failtestf "expected NotFound, got %A" other
+
+            Expect.isFalse consulted "no grant is minted for an item that is not there"
+    ]
+
+let private declaredCacheHeaderTests =
+    let declaring = {
+        MediaLibraryOptions.defaults with
+            EdgeCache = {
+                Segment = EdgePublic(3600, 86400)
+                Manifest = EdgeCacheUnset
+                Poster = EdgePublic(60, 60)
+                Original = EdgePrivate 30
+            }
+    }
+
+    testList "Phase 472 declared Cache-Control on the media routes" [
+        testCase "the DEFAULT options emit no Cache-Control anywhere (GP 11)"
+        <| fun () ->
+            let f = makeEncryptedFixture encryptingTranscoder true false
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let _, _, segCtx =
+                drive
+                    f
+                    RangeHandler.hlsHandler
+                    (sprintf "/api/media/hls/%s/seg0.ts" (MediaId.value record.Id))
+                    ""
+                    (Some encContainer)
+
+            Expect.equal (headerOf segCtx "Cache-Control") "" "a segment carries no declaration"
+
+            let _, _, streamCtx =
+                drive
+                    f
+                    RangeHandler.streamHandler
+                    (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                    ""
+                    (Some encContainer)
+
+            Expect.equal (headerOf streamCtx "Cache-Control") "" "nor does the original"
+
+        testCase "a declared SEGMENT posture reaches the response"
+        <| fun () ->
+            let f = makeFixtureWith encryptingTranscoder true declaring None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, _, ctx =
+                drive
+                    f
+                    RangeHandler.hlsHandler
+                    (sprintf "/api/media/hls/%s/seg0.ts" (MediaId.value record.Id))
+                    ""
+                    (Some encContainer)
+
+            Expect.equal status 200 "served"
+            Expect.equal (headerOf ctx "Cache-Control") "public, max-age=3600, s-maxage=86400" "the declaration"
+
+        testCase "a MANIFEST left unset carries no declaration even when segments are public"
+        <| fun () ->
+            // The asymmetry that matters: an encrypted manifest is
+            // rewritten per request and may carry a token; its segments
+            // are ciphertext and are not.
+            let f = makeFixtureWith encryptingTranscoder true declaring None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, _, ctx =
+                drive
+                    f
+                    RangeHandler.hlsHandler
+                    (sprintf "/api/media/hls/%s/index.m3u8" (MediaId.value record.Id))
+                    ""
+                    (Some encContainer)
+
+            Expect.equal status 200 "served"
+            Expect.equal (headerOf ctx "Cache-Control") "" "no shared cache is invited to hold a rewritten manifest"
+
+        testCase "a declared ORIGINAL posture reaches the scoped stream route"
+        <| fun () ->
+            let f = makeFixtureWith encryptingTranscoder true declaring None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, _, ctx =
+                drive
+                    f
+                    RangeHandler.streamHandler
+                    (sprintf "/api/media/stream/%s" (MediaId.value record.Id))
+                    ""
+                    (Some encContainer)
+
+            Expect.equal status 200 "served"
+            Expect.equal (headerOf ctx "Cache-Control") "private, max-age=30" "browser-only, never a shared cache"
+
+        testCase "the KEY route is no-store no matter what the deployment declares"
+        <| fun () ->
+            // The rule 471 set and 472 must not weaken. Driven with the
+            // most permissive declaration this record can express, which
+            // has no field for keys at all — so the assertion is that
+            // the header is unreachable from configuration, not merely
+            // that it happens to be right.
+            let permissive = {
+                MediaLibraryOptions.defaults with
+                    EncryptHlsByDefault = true
+                    EdgeCache = {
+                        Segment = EdgePublic(86400, 86400)
+                        Manifest = EdgePublic(86400, 86400)
+                        Poster = EdgePublic(86400, 86400)
+                        Original = EdgePublic(86400, 86400)
+                    }
+            }
+
+            let f = makeFixtureWith encryptingTranscoder true permissive None None
+
+            let record =
+                f.Library.Upload(encContainer, encUpload ())
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+            let status, body, ctx =
+                drive f HlsKeyDelivery.keyHandler (keyRoute record.Id) "" (Some encContainer)
+
+            Expect.equal status 200 "admitted"
+            Expect.equal body.Length 16 "the key"
+            Expect.equal (headerOf ctx "Cache-Control") "no-store" "still no-store"
+            Expect.equal (headerOf ctx "Pragma") "no-cache" "and still no-cache"
+
+            // And the same options record is REFUSED at compose time, so
+            // this permissive declaration could never have shipped.
+            Expect.isSome
+                (MediaConfigValidator.edgeCacheabilityRefusal permissive)
+                "the validator refuses it before a deployment can start"
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
@@ -1400,4 +1839,10 @@ let tests =
         hlsRewriteTests
         hlsEncryptionTests
         hlsKeyEndpointTests
+        // Phase 472 — the edge fan-out, delegated signing, and the
+        // declared Cache-Control (including the key route's unreachable
+        // no-store).
+        edgeFanOutTests
+        delegatedSigningTests
+        declaredCacheHeaderTests
     ]

@@ -9,6 +9,7 @@ open System.Collections.Generic
 open System.Threading.Tasks
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
 // ─── Phase 84 — render-cache implementations ─────────────────────────
@@ -182,6 +183,108 @@ module BlobRenderCache =
     /// name (for deployments that partition blob containers per concern).
     let createIn (container: string) (blobStorage: IBlobStorage) : IRenderCache =
         BlobRenderCache(blobStorage, container) :> IRenderCache
+
+// ─── Phase 472 — edge fan-out on render-cache invalidation ───────────
+//
+// Phase 84 gave a publish one purge: the origin's own render cache. With
+// a CDN in front, that is now the *inner* half of the job — the edge is
+// still handing out the previous render until its TTL expires, and the
+// publish that was supposed to make the change live has not.
+//
+// `EdgeAwareRenderCacheInvalidation` decorates the composed
+// `IRenderCacheInvalidation` so a publish purges both. The ORDER is
+// load-bearing and is the reason this is a decorator rather than a
+// second call at the publish site: the origin cache is purged first,
+// then the edge. Purging the edge first would let an edge node re-fetch
+// while the origin cache still held the stale render, re-populating the
+// edge with exactly the bytes the purge was meant to remove.
+//
+// The edge half never blocks (GP 7) — see `EdgeCache.purgeDetached`. A
+// publish succeeds whether or not the CDN's API is reachable; a failed
+// purge is audited and the edge object expires on its own TTL.
+
+/// Default origin-relative paths to purge for a published slug.
+module RenderCacheEdgePaths =
+    /// `"hello"` → `[ "/hello"; "/hello/" ]`.
+    ///
+    /// Both variants, because a CDN keys its cache on the request URI as
+    /// received: `/hello` and `/hello/` are two objects at the edge even
+    /// where the origin routes them to one page. Purging only the form
+    /// the SDK happens to spell would leave the other serving stale
+    /// bytes, which is the failure this seam exists to prevent — and it
+    /// is invisible, because the person checking types one of the two.
+    let forSlug (slug: string) : string list =
+        let trimmed = slug.Trim().TrimStart('/')
+
+        if String.IsNullOrEmpty trimmed then
+            [ "/" ]
+        else
+            let path = "/" + trimmed.TrimEnd('/')
+            [ path; path + "/" ]
+
+/// The origin half of the purge when a deployment composes an edge
+/// cache but no render cache — which is an ordinary CDN-fronted shape,
+/// not a misconfiguration: the edge IS that deployment's cache. Purging
+/// nothing is then the correct origin-side behaviour, and it lets the
+/// edge fan-out ride the one publish hook rather than needing a second.
+type NoopRenderCacheInvalidation() =
+
+    static let done': Async<unit> = async.Return()
+
+    interface IRenderCacheInvalidation with
+        member _.PurgeSlug(_: string) : Async<unit> = done'
+
+/// Purge the origin render cache, then fan the affected edge paths out
+/// to the composed `IEdgeCache`. Composed by
+/// `PublicRenderingServerApp.withEdgeCache`; absent it, the pre-472
+/// invalidator is registered unwrapped and nothing about publishing
+/// changes (GP 11).
+type EdgeAwareRenderCacheInvalidation
+    (
+        inner: IRenderCacheInvalidation,
+        edgeCache: IEdgeCache,
+        /// Origin-relative paths a purged slug maps to. Supplied rather
+        /// than hard-coded because a deployment's public URL for a slug
+        /// is its own routing decision — a multi-site or prefixed
+        /// deployment does not serve `"/" + slug`.
+        pathsForSlug: string -> string list,
+        logger: ILogger option
+    ) =
+
+    /// The decorated origin-cache invalidator, so a caller holding the
+    /// decorator can still reach the inner surface.
+    member _.Inner = inner
+
+    /// The composed edge cache this decorator fans out to.
+    member _.EdgeCache = edgeCache
+
+    interface IRenderCacheInvalidation with
+        member _.PurgeSlug(slug: string) : Async<unit> = async {
+            // Origin first — see the header note on ordering.
+            do! inner.PurgeSlug slug
+            EdgeCache.purgePathsDetached logger (Some edgeCache) (pathsForSlug slug)
+        }
+
+module EdgeAwareRenderCacheInvalidation =
+    /// Wrap an invalidator with edge fan-out over the default slug→path
+    /// mapping (`RenderCacheEdgePaths.forSlug`).
+    let create
+        (logger: ILogger option)
+        (edgeCache: IEdgeCache)
+        (inner: IRenderCacheInvalidation)
+        : IRenderCacheInvalidation =
+        EdgeAwareRenderCacheInvalidation(inner, edgeCache, RenderCacheEdgePaths.forSlug, logger)
+        :> IRenderCacheInvalidation
+
+    /// Wrap an invalidator with edge fan-out over an explicit slug→path
+    /// mapping, for a deployment whose public URLs are not `"/" + slug`.
+    let createWith
+        (pathsForSlug: string -> string list)
+        (logger: ILogger option)
+        (edgeCache: IEdgeCache)
+        (inner: IRenderCacheInvalidation)
+        : IRenderCacheInvalidation =
+        EdgeAwareRenderCacheInvalidation(inner, edgeCache, pathsForSlug, logger) :> IRenderCacheInvalidation
 
 // ─── Phase 199 — default request-coalescer (stampede protection) ─────
 //

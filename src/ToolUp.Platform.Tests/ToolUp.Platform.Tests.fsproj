@@ -152,6 +152,9 @@
         <Compile Include="Contracts\IRenderCacheContract.fs" />
         <Compile Include="Contracts\IAssetStoreContract.fs" />
         <Compile Include="Contracts\IMediaLibraryContract.fs" />
+        <!-- Phase 472 - IEdgeCache contract pack (the CDN purge seam) plus
+             the RecordingEdgeCache fake every wiring test asserts against. -->
+        <Compile Include="Contracts\IEdgeCacheContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
         <!-- Phase 159 — durable per-subject consent state store contract
              (round-trip + per-subject / per-scope isolation + withdraw). -->
@@ -1286,6 +1289,13 @@
         <Compile Include="InProcess\FelizLayoutAdapterTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />
+        <!-- Phase 472 - the CDN / edge-cache seam: the no-op's
+             allocation-free claim, the Cache-Control renderer, the
+             retry + detached-purge helpers, the render-cache fan-out,
+             the media declarations and their refusals, and the
+             ToolUp.Hosts.EdgeCache sub-companion proving both seams
+             from outside the SDK. -->
+        <Compile Include="InProcess\EdgeCacheTests.fs" />
         <Compile Include="InProcess\ContentAuthoringTests.fs" />
         <Compile Include="InProcess\ContentAdminAuthorizationTests.fs" />
         <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
@@ -2279,6 +2289,13 @@
              ffmpeg is deliberately not tested here — see the note in
              `MediaLibraryTests`. -->
         <ProjectReference Include="..\Media\FFmpeg\ToolUp.Media.FFmpeg.fsproj" />
+        <!-- Phase 472 - the reference edge sub-companion. Referenced so
+             the IEdgeCache contract pack and the IDelegatedUrlSigner
+             round-trip are bound over an implementation that lives
+             OUTSIDE the SDK (GP 12's second-implementation proof). Its
+             HTTP calls run against a stub HttpMessageHandler, so the
+             pack reaches no network. -->
+        <ProjectReference Include="..\Hosts\EdgeCache\ToolUp.Hosts.EdgeCache.fsproj" />
         <ProjectReference Include="..\ContentAuthoring\ToolUp.ContentAuthoring.fsproj" />
         <!-- Phase 59 — IConsentProvider lives in ToolUp.Platform.Client
              (consent decisions are browser-local). The contract pack

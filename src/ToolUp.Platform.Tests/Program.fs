@@ -1086,6 +1086,9 @@ let private registeredTests =
         FelizLayoutAdapterTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests
+        // Phase 472 — the CDN / edge-cache seam + the reference
+        // sub-companion that proves it from outside the SDK.
+        EdgeCacheTests.tests
         ContentAuthoringTests.tests
         ContentAdminAuthorizationTests.tests
         InMemoryRateLimitStoreTests.tests
