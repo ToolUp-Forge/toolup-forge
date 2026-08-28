@@ -109,3 +109,64 @@ type IMediaRangeReader =
     abstract OpenDerivedRange:
         scopeContainer: string * id: MediaId * relativePath: string * range: ByteRange ->
             Async<Result<Stream * string, MediaRangeError>>
+
+// ─── Phase 469 — IUploadSessionStore (the resumable-upload seam) ──────
+//
+// A SEPARATE interface rather than four more `IMediaLibrary` members,
+// for the reason the whole file already turns on: `IMediaLibrary` is
+// what every implementation must answer, and a CDN-direct or
+// cloud-native library brokering a provider's own multipart protocol
+// has no session of ours to open. Resumability is therefore a composed
+// service a deployment either has or has not, and `IMediaLibrary` stays
+// byte-for-byte source-compatible (GP 11).
+//
+// It is NOT a probe-style capability interface like `IMediaRangeReader`
+// above, and the difference is deliberate: `IMediaRangeReader` refines
+// how an EXISTING member serves, so the consumer must be able to fall
+// back to it. There is no member to fall back to here — a deployment
+// without an upload-session store simply has no chunked endpoints, and
+// a caller learns that from DI, not from a type test.
+//
+// Six-portability-rule clean (GP 12): identity-by-value
+// `UploadSessionId`, `Async` at every boundary, failure-as-data
+// `Result`, no state between calls (the session lives in blob storage,
+// so any instance on any node can answer for it), no cross-shard
+// ordering promise, and a `TimeSpan`-precision session TTL.
+//
+// **Scope isolation (GP 4).** Every method takes the scope container it
+// operates within, and the session's blobs live under it — so a scope
+// cannot even address another's session. The recorded container is
+// re-checked on every call as the second line, for a store that does
+// not isolate by container.
+type IUploadSessionStore =
+    /// Open a session for a validated declaration. Also the point at
+    /// which stale sessions in this scope are opportunistically swept
+    /// (469.C — no `BackgroundService`, per GP 13).
+    abstract BeginUpload:
+        scopeContainer: string * declaration: MediaUploadDeclaration ->
+            Async<Result<UploadSessionId, UploadSessionError>>
+
+    /// Append one chunk at an absolute `offset`. Idempotent: re-sending
+    /// a chunk already accepted at that offset, with the same length,
+    /// is a no-op that returns the current cursor, so a client that
+    /// retries a request whose response it never saw cannot corrupt the
+    /// object. Any other offset is refused with `OffsetMismatch`
+    /// carrying the expected cursor.
+    abstract AppendChunk:
+        scopeContainer: string * sessionId: UploadSessionId * offset: int64 * chunk: byte[] ->
+            Async<Result<UploadProgress, UploadSessionError>>
+
+    /// Assemble the accepted chunks and ingest them through the
+    /// ordinary upload path, so the committed item is indistinguishable
+    /// from a single-shot upload of the same bytes — same
+    /// `media/originals/{mediaId}` layout, same content hash, same
+    /// `Queued → … → Ready` ingestion. The session is deleted on
+    /// success. A commit whose assembled size disagrees with the
+    /// declaration fails closed.
+    abstract CommitUpload:
+        scopeContainer: string * sessionId: UploadSessionId -> Async<Result<MediaRecord, UploadSessionError>>
+
+    /// Abandon a session and delete its chunks. Idempotent from the
+    /// caller's view only in that a second abort reports
+    /// `SessionNotFound` — the bytes are gone either way.
+    abstract AbortUpload: scopeContainer: string * sessionId: UploadSessionId -> Async<Result<unit, UploadSessionError>>

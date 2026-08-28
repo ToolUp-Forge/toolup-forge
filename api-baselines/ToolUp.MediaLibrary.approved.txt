@@ -3,6 +3,9 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.MediaLibrary.BlobUploadSessionStore (class)
+ToolUp.MediaLibrary.BlobUploadSessionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.IMediaLibrary, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger)
+ToolUp.MediaLibrary.BlobUploadSessionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.IMediaLibrary, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.MediaLibrary.ByteRange (class)
 ToolUp.MediaLibrary.ByteRange..ctor(System.Int64, System.Int64)
 ToolUp.MediaLibrary.ByteRange.End : System.Int64 { get }
@@ -13,7 +16,11 @@ ToolUp.MediaLibrary.ByteRangeModule.parse(System.String, System.Int64) : ToolUp.
 ToolUp.MediaLibrary.DefaultMediaLibrary (class)
 ToolUp.MediaLibrary.DefaultMediaLibrary..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.SignedUrl+MediaUrlSigner, ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.IMediaTranscoder, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger)
 ToolUp.MediaLibrary.IMediaApi (class)
-ToolUp.MediaLibrary.IMediaApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.MediaDeleteError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.SignedUrlError]]])
+ToolUp.MediaLibrary.IMediaApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.MediaRecord]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.MediaDeleteError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.SignedUrlError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int64, System.Byte[]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.UploadProgress, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaRecord, ToolUp.MediaLibrary.UploadSessionError]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.UploadSessionError]]])
+ToolUp.MediaLibrary.IMediaApi.AbortUpload : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.UploadSessionError]]] { get }
+ToolUp.MediaLibrary.IMediaApi.AppendChunk : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int64, System.Byte[]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.UploadProgress, ToolUp.MediaLibrary.UploadSessionError]]] { get }
+ToolUp.MediaLibrary.IMediaApi.BeginUpload : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.UploadSessionError]]] { get }
+ToolUp.MediaLibrary.IMediaApi.CommitUpload : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaRecord, ToolUp.MediaLibrary.UploadSessionError]]] { get }
 ToolUp.MediaLibrary.IMediaApi.DeleteMedia : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.MediaDeleteError]]] { get }
 ToolUp.MediaLibrary.IMediaApi.GetMedia : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.MediaRecord]]] { get }
 ToolUp.MediaLibrary.IMediaApi.GetSignedUrl : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.MediaLibrary.SignedUrlError]]] { get }
@@ -37,6 +44,11 @@ ToolUp.MediaLibrary.IMediaRangeReader.OpenDerivedRange(System.String, ToolUp.Med
 ToolUp.MediaLibrary.IMediaTranscoder (interface)
 ToolUp.MediaLibrary.IMediaTranscoder.Capabilities : ToolUp.MediaLibrary.MediaDerivationCapabilities { get }
 ToolUp.MediaLibrary.IMediaTranscoder.TranscodeToHls(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.TranscodedFile], System.String]]
+ToolUp.MediaLibrary.IUploadSessionStore (interface)
+ToolUp.MediaLibrary.IUploadSessionStore.AbortUpload(System.String, ToolUp.MediaLibrary.UploadSessionId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.MediaLibrary.UploadSessionError]]
+ToolUp.MediaLibrary.IUploadSessionStore.AppendChunk(System.String, ToolUp.MediaLibrary.UploadSessionId, System.Int64, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.UploadProgress, ToolUp.MediaLibrary.UploadSessionError]]
+ToolUp.MediaLibrary.IUploadSessionStore.BeginUpload(System.String, ToolUp.MediaLibrary.MediaUploadDeclaration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.UploadSessionId, ToolUp.MediaLibrary.UploadSessionError]]
+ToolUp.MediaLibrary.IUploadSessionStore.CommitUpload(System.String, ToolUp.MediaLibrary.UploadSessionId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaRecord, ToolUp.MediaLibrary.UploadSessionError]]
 ToolUp.MediaLibrary.MediaApi (class)
 ToolUp.MediaLibrary.MediaApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.MediaLibrary.MediaApi.routeBuilderPrefix : System.String (literal)
@@ -115,16 +127,22 @@ ToolUp.MediaLibrary.MediaIngestionStatusUpdate.MediaId : System.String { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.MediaLibrary.MediaIngestionStatusUpdate.Status : System.String { get }
 ToolUp.MediaLibrary.MediaLibraryOptions (class)
-ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean, System.Int32)
+ToolUp.MediaLibrary.MediaLibraryOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.TimeSpan, System.Boolean, System.Int32, System.Int32, System.TimeSpan)
 ToolUp.MediaLibrary.MediaLibraryOptions.AcceptedMimeTypes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.EmitAudit : System.Boolean { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.MaxBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaLibraryOptions.MaxChunkBytes : System.Int32 { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.RangeChunkBytes : System.Int32 { get }
 ToolUp.MediaLibrary.MediaLibraryOptions.SignedUrlDefaultTtl : System.TimeSpan { get }
+ToolUp.MediaLibrary.MediaLibraryOptions.UploadSessionTtl : System.TimeSpan { get }
 ToolUp.MediaLibrary.MediaLibraryOptionsModule (class)
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultMaxChunkBytes : System.Int32 (literal)
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultRangeChunkBytes : System.Int32 (literal)
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.DefaultUploadSessionTtl : System.TimeSpan { get }
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.defaults : ToolUp.MediaLibrary.MediaLibraryOptions { get }
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveMaxChunkBytes(ToolUp.MediaLibrary.MediaLibraryOptions) : System.Int32
 ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveRangeChunkBytes(ToolUp.MediaLibrary.MediaLibraryOptions) : System.Int32
+ToolUp.MediaLibrary.MediaLibraryOptionsModule.effectiveUploadSessionTtl(ToolUp.MediaLibrary.MediaLibraryOptions) : System.TimeSpan
 ToolUp.MediaLibrary.MediaProbe (class)
 ToolUp.MediaLibrary.MediaProbe..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.MediaLibrary.MediaProbe.DurationSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
@@ -163,6 +181,14 @@ ToolUp.MediaLibrary.MediaRendition.BlobName : System.String { get }
 ToolUp.MediaLibrary.MediaRendition.MimeType : System.String { get }
 ToolUp.MediaLibrary.MediaRendition.Name : System.String { get }
 ToolUp.MediaLibrary.MediaRendition.SizeBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaUploadDeclaration (class)
+ToolUp.MediaLibrary.MediaUploadDeclaration.Caption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.MediaLibrary.MediaUploadDeclaration.DeclaredSizeBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaUploadDeclaration.MimeType : System.String { get }
+ToolUp.MediaLibrary.MediaUploadDeclaration.OriginalFilename : System.String { get }
+ToolUp.MediaLibrary.MediaUploadDeclaration.UploadedBy : System.String { get }
+ToolUp.MediaLibrary.MediaUploadDeclarationModule (class)
+ToolUp.MediaLibrary.MediaUploadDeclarationModule.create(ToolUp.MediaLibrary.MediaLibraryOptions, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.MediaLibrary.MediaUploadDeclaration, ToolUp.MediaLibrary.MediaUploadError]
 ToolUp.MediaLibrary.MediaUploadError (class)
 ToolUp.MediaLibrary.MediaUploadError.InvalidFilename : ToolUp.MediaLibrary.MediaUploadError { get }
 ToolUp.MediaLibrary.MediaUploadError.IsFileTooLarge : System.Boolean { get }
@@ -182,6 +208,14 @@ ToolUp.MediaLibrary.MediaUploadError+Tags.StorageError : System.Int32 (literal)
 ToolUp.MediaLibrary.MediaUploadError+Tags.UnsupportedMimeType : System.Int32 (literal)
 ToolUp.MediaLibrary.MediaUploadError+UnsupportedMimeType (class)
 ToolUp.MediaLibrary.MediaUploadError+UnsupportedMimeType.mime : System.String { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate (class)
+ToolUp.MediaLibrary.MediaUploadProgressUpdate..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Int64, System.Int64, System.String)
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.DeclaredSizeBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.FileName : System.String { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.MediaId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.Phase : System.String { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.ReceivedBytes : System.Int64 { get }
+ToolUp.MediaLibrary.MediaUploadProgressUpdate.SessionId : System.String { get }
 ToolUp.MediaLibrary.MediaUploadRequest (class)
 ToolUp.MediaLibrary.MediaUploadRequest.Bytes : System.Byte[] { get }
 ToolUp.MediaLibrary.MediaUploadRequest.Caption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -257,3 +291,72 @@ ToolUp.MediaLibrary.TranscodedFile.Bytes : System.Byte[] { get }
 ToolUp.MediaLibrary.TranscodedFile.IsMasterManifest : System.Boolean { get }
 ToolUp.MediaLibrary.TranscodedFile.MimeType : System.String { get }
 ToolUp.MediaLibrary.TranscodedFile.RenditionName : System.String { get }
+ToolUp.MediaLibrary.UploadProgress (class)
+ToolUp.MediaLibrary.UploadProgress..ctor(ToolUp.MediaLibrary.UploadSessionId, System.Int64, System.Int64)
+ToolUp.MediaLibrary.UploadProgress.DeclaredSizeBytes : System.Int64 { get }
+ToolUp.MediaLibrary.UploadProgress.ReceivedBytes : System.Int64 { get }
+ToolUp.MediaLibrary.UploadProgress.SessionId : ToolUp.MediaLibrary.UploadSessionId { get }
+ToolUp.MediaLibrary.UploadSessionError (class)
+ToolUp.MediaLibrary.UploadSessionError.IsChunkTooLarge : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsDeclaredSizeExceeded : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsIncompleteUpload : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsInvalidDeclaration : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsOffsetMismatch : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsSessionNotFound : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsSessionScopeMismatch : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsSessionStorageError : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.IsUploadFailed : System.Boolean { get }
+ToolUp.MediaLibrary.UploadSessionError.SessionNotFound : ToolUp.MediaLibrary.UploadSessionError { get }
+ToolUp.MediaLibrary.UploadSessionError.SessionScopeMismatch : ToolUp.MediaLibrary.UploadSessionError { get }
+ToolUp.MediaLibrary.UploadSessionError.Tag : System.Int32 { get }
+ToolUp.MediaLibrary.UploadSessionError+ChunkTooLarge (class)
+ToolUp.MediaLibrary.UploadSessionError+ChunkTooLarge.cap : System.Int32 { get }
+ToolUp.MediaLibrary.UploadSessionError+ChunkTooLarge.size : System.Int32 { get }
+ToolUp.MediaLibrary.UploadSessionError+DeclaredSizeExceeded (class)
+ToolUp.MediaLibrary.UploadSessionError+DeclaredSizeExceeded.attempted : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+DeclaredSizeExceeded.declared : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+IncompleteUpload (class)
+ToolUp.MediaLibrary.UploadSessionError+IncompleteUpload.declared : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+IncompleteUpload.received : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+InvalidDeclaration (class)
+ToolUp.MediaLibrary.UploadSessionError+InvalidDeclaration.Item : ToolUp.MediaLibrary.MediaUploadError { get }
+ToolUp.MediaLibrary.UploadSessionError+OffsetMismatch (class)
+ToolUp.MediaLibrary.UploadSessionError+OffsetMismatch.expected : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+OffsetMismatch.received : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionError+SessionStorageError (class)
+ToolUp.MediaLibrary.UploadSessionError+SessionStorageError.message : System.String { get }
+ToolUp.MediaLibrary.UploadSessionError+Tags (class)
+ToolUp.MediaLibrary.UploadSessionError+Tags.ChunkTooLarge : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.DeclaredSizeExceeded : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.IncompleteUpload : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.InvalidDeclaration : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.OffsetMismatch : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.SessionNotFound : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.SessionScopeMismatch : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.SessionStorageError : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+Tags.UploadFailed : System.Int32 (literal)
+ToolUp.MediaLibrary.UploadSessionError+UploadFailed (class)
+ToolUp.MediaLibrary.UploadSessionError+UploadFailed.Item : ToolUp.MediaLibrary.MediaUploadError { get }
+ToolUp.MediaLibrary.UploadSessionId (class)
+ToolUp.MediaLibrary.UploadSessionId.Item : System.String { get }
+ToolUp.MediaLibrary.UploadSessionId.Tag : System.Int32 { get }
+ToolUp.MediaLibrary.UploadSessionId.Value : System.String { get }
+ToolUp.MediaLibrary.UploadSessionIdModule (class)
+ToolUp.MediaLibrary.UploadSessionIdModule.create() : ToolUp.MediaLibrary.UploadSessionId
+ToolUp.MediaLibrary.UploadSessionIdModule.value(ToolUp.MediaLibrary.UploadSessionId) : System.String
+ToolUp.MediaLibrary.UploadSessionManifest (class)
+ToolUp.MediaLibrary.UploadSessionManifest..ctor(System.String, System.String, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset, System.DateTimeOffset, System.Int64)
+ToolUp.MediaLibrary.UploadSessionManifest.Caption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.MediaLibrary.UploadSessionManifest.CreatedAt : System.DateTimeOffset { get }
+ToolUp.MediaLibrary.UploadSessionManifest.DeclaredSizeBytes : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionManifest.LastTouchedAt : System.DateTimeOffset { get }
+ToolUp.MediaLibrary.UploadSessionManifest.MimeType : System.String { get }
+ToolUp.MediaLibrary.UploadSessionManifest.OriginalFilename : System.String { get }
+ToolUp.MediaLibrary.UploadSessionManifest.ReceivedBytes : System.Int64 { get }
+ToolUp.MediaLibrary.UploadSessionManifest.ScopeContainer : System.String { get }
+ToolUp.MediaLibrary.UploadSessionManifest.SessionId : System.String { get }
+ToolUp.MediaLibrary.UploadSessionManifest.UploadedBy : System.String { get }
+ToolUp.MediaLibrary.UploadSessionPhase (class)
+ToolUp.MediaLibrary.UploadSessionPhase.aborted : System.String (literal)
+ToolUp.MediaLibrary.UploadSessionPhase.appending : System.String (literal)
+ToolUp.MediaLibrary.UploadSessionPhase.committed : System.String (literal)

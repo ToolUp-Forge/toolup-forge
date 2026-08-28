@@ -390,3 +390,342 @@ let rangedReadTests
             Expect.equal counting.TotalBytesRead 0L "no bytes read to answer a length question"
         }
     ]
+
+// ─── Phase 469 — IUploadSessionStore conformance (the resume matrix) ──
+//
+// The pack above measures the READ side. This one is the write side's
+// failure matrix, and it is a failure matrix rather than a happy path
+// on purpose: a resumable protocol's whole value is what it does when
+// something goes wrong, so "resume after a drop" is one case among
+// duplicate chunk, wrong offset, oversize, TTL expiry and cross-scope
+// refusal, not the headline with six footnotes.
+//
+// The headline case is nonetheless the acceptance criterion, and it is
+// stated as an EQUALITY against the single-shot path rather than as a
+// property of the resumed record on its own: a resumed upload must
+// produce a record content-hash-equal to a single-shot upload of the
+// same bytes, with the same ingestion status. Asserting "the hash is
+// some 64 hex characters" would pass against a resumed upload that
+// assembled the chunks in the wrong order.
+
+/// A second scope, disjoint from `container` above — the cross-scope
+/// refusal case needs two containers over ONE store.
+let private otherContainer = "team-contract-other"
+
+/// The session payload: three unequal chunks, so an assembly that
+/// concatenates in the wrong order, drops one, or double-counts a
+/// retry produces a different hash rather than the same bytes.
+let private sessionChunks = [|
+    Array.init 1000 (fun i -> byte (i % 251))
+    Array.init 1500 (fun i -> byte ((i + 7) % 241))
+    Array.init 500 (fun i -> byte ((i + 19) % 229))
+|]
+
+let private sessionPayload = Array.concat sessionChunks
+
+let private declaration (options: MediaLibraryOptions) (size: int64) : MediaUploadDeclaration =
+    match MediaUploadDeclaration.create options "clip.mp4" "video/mp4" size "user-1" (Some "A clip") with
+    | Ok d -> d
+    | Error e -> failwithf "contract setup: invalid declaration %A" e
+
+/// Conformance for an `IUploadSessionStore` and the `IMediaLibrary` it
+/// commits through. `makeOver` takes the options and a clock so the
+/// pack can drive the session TTL without sleeping, and returns both
+/// halves because the acceptance criterion compares the committed
+/// record against a single-shot upload through the same library.
+let uploadSessionTests
+    (name: string)
+    (makeStore: unit -> IBlobStorage)
+    (makeOver:
+        MediaLibraryOptions -> (unit -> System.DateTimeOffset) -> IBlobStorage -> IUploadSessionStore * IMediaLibrary)
+    : Test =
+
+    let defaultOptions = MediaLibraryOptions.defaults
+
+    let fixedNow () =
+        System.DateTimeOffset(2026, 8, 28, 12, 0, 0, System.TimeSpan.Zero)
+
+    /// A store and library over a fresh blob store, at the wall-free
+    /// fixed clock most cases want.
+    let fresh () =
+        makeOver defaultOptions fixedNow (makeStore ())
+
+    /// Open a session for the whole payload.
+    let begun (sessions: IUploadSessionStore) (options: MediaLibraryOptions) = async {
+        let! opened = sessions.BeginUpload(container, declaration options (int64 sessionPayload.Length))
+        return Expect.wantOk opened "begin upload"
+    }
+
+    testList (sprintf "IUploadSessionStore contract (%s)" name) [
+
+        testCaseAsync "a dropped upload resumes and commits identically to a single-shot upload of the same bytes"
+        <| async {
+            let sessions, lib = fresh ()
+            let! sessionId = begun sessions defaultOptions
+
+            // Chunk 0 lands.
+            let! p0 = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+            let progress0 = Expect.wantOk p0 "first chunk"
+            Expect.equal progress0.ReceivedBytes 1000L "cursor after the first chunk"
+
+            // Chunk 1 lands — but the client never sees the response
+            // (the connection drops). It retries from the last cursor
+            // it DID see, which is the whole resume protocol.
+            let! _ = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+            let! retry = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+            let resumed = Expect.wantOk retry "retry of the chunk whose response was lost"
+            Expect.equal resumed.ReceivedBytes 2500L "the retry reports the cursor, it does not double-count"
+
+            let! p2 = sessions.AppendChunk(container, sessionId, 2500L, sessionChunks[2])
+            let progress2 = Expect.wantOk p2 "final chunk"
+            Expect.equal progress2.ReceivedBytes 3000L "every byte accepted"
+
+            let! commit = sessions.CommitUpload(container, sessionId)
+            let resumedRecord = Expect.wantOk commit "commit"
+
+            // The equality that IS the acceptance criterion.
+            let! single = lib.Upload(container, request "video/mp4" sessionPayload)
+            let singleRecord = Expect.wantOk single "single-shot upload of the same bytes"
+
+            Expect.equal resumedRecord.ContentHash singleRecord.ContentHash "content hash equal to the single-shot"
+            Expect.equal resumedRecord.SizeBytes singleRecord.SizeBytes "size equal to the single-shot"
+            Expect.equal resumedRecord.MimeType singleRecord.MimeType "mime equal to the single-shot"
+            Expect.equal resumedRecord.Status singleRecord.Status "ingestion reached the same terminal status"
+
+            // And it is a real, servable item — not merely a record.
+            let! ranged = lib.OpenRange(container, resumedRecord.Id, { Start = 0L; End = 2999L })
+            let stream = Expect.wantOk ranged "open the committed original"
+            Expect.equal (readAll stream) sessionPayload "the committed bytes, in order"
+        }
+
+        testCaseAsync "the session is gone once committed"
+        <| async {
+            let sessions, _ = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionPayload)
+            let! commit = sessions.CommitUpload(container, sessionId)
+            Expect.isOk commit "commit"
+
+            let! again = sessions.CommitUpload(container, sessionId)
+
+            match again with
+            | Error SessionNotFound -> ()
+            | other -> failtestf "expected SessionNotFound after commit, got %A" other
+        }
+
+        testCaseAsync "a duplicate chunk is a no-op, not a double-append"
+        <| async {
+            let sessions, lib = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            let! dup = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+            let progress = Expect.wantOk dup "duplicate chunk accepted idempotently"
+            Expect.equal progress.ReceivedBytes 1000L "the cursor did not move"
+
+            let! _ = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+            let! _ = sessions.AppendChunk(container, sessionId, 2500L, sessionChunks[2])
+            let! commit = sessions.CommitUpload(container, sessionId)
+            let record = Expect.wantOk commit "commit"
+
+            let! single = lib.Upload(container, request "video/mp4" sessionPayload)
+            let singleRecord = Expect.wantOk single "single-shot"
+            Expect.equal record.ContentHash singleRecord.ContentHash "the duplicate did not corrupt the object"
+        }
+
+        testCaseAsync "a chunk at the wrong offset is refused, and names the resume cursor"
+        <| async {
+            let sessions, _ = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            // A gap: the client skipped ahead.
+            let! gap = sessions.AppendChunk(container, sessionId, 2500L, sessionChunks[2])
+
+            match gap with
+            | Error(OffsetMismatch(expected, received)) ->
+                Expect.equal expected 1000L "the expected offset IS the resume cursor"
+                Expect.equal received 2500L "the offset the client sent"
+            | other -> failtestf "expected OffsetMismatch, got %A" other
+
+            // Behind the cursor, but not a chunk we ever accepted at
+            // that offset — a client rewriting history, not a retry.
+            let! rewrite = sessions.AppendChunk(container, sessionId, 500L, sessionChunks[2])
+
+            match rewrite with
+            | Error(OffsetMismatch(expected, _)) -> Expect.equal expected 1000L "cursor unmoved"
+            | other -> failtestf "expected OffsetMismatch for a mid-chunk rewrite, got %A" other
+        }
+
+        testCaseAsync "a chunk over the per-chunk cap is refused before a byte is written"
+        <| async {
+            let options = {
+                MediaLibraryOptions.defaults with
+                    MaxChunkBytes = 512
+            }
+
+            let sessions, _ = makeOver options fixedNow (makeStore ())
+            let! opened = sessions.BeginUpload(container, declaration options (int64 sessionPayload.Length))
+            let sessionId = Expect.wantOk opened "begin upload"
+
+            let! oversize = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            match oversize with
+            | Error(ChunkTooLarge(size, cap)) ->
+                Expect.equal size 1000 "the chunk's size"
+                Expect.equal cap 512 "the configured cap"
+            | other -> failtestf "expected ChunkTooLarge, got %A" other
+
+            // The cursor is untouched — a refused chunk wrote nothing.
+            let! ok = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0][0..499])
+            Expect.equal (Expect.wantOk ok "a within-cap chunk").ReceivedBytes 500L "cursor starts from zero"
+        }
+
+        testCaseAsync "a declaration over the deployment cap fails fast, before any chunk"
+        <| async {
+            let options = {
+                MediaLibraryOptions.defaults with
+                    MaxBytes = 2048L
+            }
+
+            let sessions, _ = makeOver options fixedNow (makeStore ())
+
+            match MediaUploadDeclaration.create options "clip.mp4" "video/mp4" 4096L "user-1" None with
+            | Ok _ -> failtest "a declaration above the cap must not construct"
+            | Error(FileTooLarge(size, cap)) ->
+                Expect.equal size 4096L "declared size"
+                Expect.equal cap 2048L "deployment cap"
+            | other -> failtestf "expected FileTooLarge, got %A" other
+
+            // And an unsupported MIME is refused on the same edge.
+            match MediaUploadDeclaration.create options "clip.bin" "application/x-evil" 1024L "user-1" None with
+            | Error(UnsupportedMimeType m) -> Expect.equal m "application/x-evil" "the rejected mime"
+            | other -> failtestf "expected UnsupportedMimeType, got %A" other
+
+            // Nothing above reached the store, so nothing is open.
+            let! orphan = sessions.AppendChunk(container, UploadSessionId "never-opened", 0L, sessionChunks[0])
+
+            match orphan with
+            | Error SessionNotFound -> ()
+            | other -> failtestf "expected SessionNotFound, got %A" other
+        }
+
+        testCaseAsync "a chunk that would exceed the declared size is refused"
+        <| async {
+            let sessions, _ = fresh ()
+            // Declare less than we will send.
+            let! opened = sessions.BeginUpload(container, declaration defaultOptions 1200L)
+            let sessionId = Expect.wantOk opened "begin upload"
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            let! over = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+
+            match over with
+            | Error(DeclaredSizeExceeded(attempted, declared)) ->
+                Expect.equal attempted 2500L "what the append would have reached"
+                Expect.equal declared 1200L "what was declared"
+            | other -> failtestf "expected DeclaredSizeExceeded, got %A" other
+        }
+
+        testCaseAsync "committing early is refused and the session survives so the rest can be sent"
+        <| async {
+            let sessions, _ = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            let! early = sessions.CommitUpload(container, sessionId)
+
+            match early with
+            | Error(IncompleteUpload(received, declared)) ->
+                Expect.equal received 1000L "bytes actually received"
+                Expect.equal declared 3000L "bytes declared"
+            | other -> failtestf "expected IncompleteUpload, got %A" other
+
+            // Under-delivery is the one commit failure that must NOT
+            // destroy the session — the client's remaining chunks are
+            // still worth sending.
+            let! _ = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+            let! _ = sessions.AppendChunk(container, sessionId, 2500L, sessionChunks[2])
+            let! commit = sessions.CommitUpload(container, sessionId)
+            Expect.isOk commit "the session was still there"
+        }
+
+        testCaseAsync "an abandoned session disappears after its TTL"
+        <| async {
+            let clock = ref (System.DateTimeOffset(2026, 8, 28, 12, 0, 0, System.TimeSpan.Zero))
+
+            let options = {
+                MediaLibraryOptions.defaults with
+                    UploadSessionTtl = System.TimeSpan.FromMinutes 30.0
+            }
+
+            let sessions, _ = makeOver options (fun () -> clock.Value) (makeStore ())
+            let! opened = sessions.BeginUpload(container, declaration options (int64 sessionPayload.Length))
+            let abandoned = Expect.wantOk opened "begin the session that will be abandoned"
+            let! _ = sessions.AppendChunk(container, abandoned, 0L, sessionChunks[0])
+
+            // Still live just inside the TTL: opening another session
+            // sweeps, and must not take this one.
+            clock.Value <- clock.Value.AddMinutes 20.0
+            let! _ = sessions.BeginUpload(container, declaration options 1000L)
+            let! live = sessions.AppendChunk(container, abandoned, 1000L, sessionChunks[1])
+            Expect.isOk live "a session inside its TTL survives a sweep"
+
+            // Past it. The sweep runs on the next BeginUpload — no
+            // timer, no hosted service (GP 13).
+            clock.Value <- clock.Value.AddMinutes 40.0
+            let! _ = sessions.BeginUpload(container, declaration options 1000L)
+            let! expired = sessions.AppendChunk(container, abandoned, 2500L, sessionChunks[2])
+
+            match expired with
+            | Error SessionNotFound -> ()
+            | other -> failtestf "expected the expired session to be gone, got %A" other
+        }
+
+        testCaseAsync "another scope cannot append to, commit, or abort this scope's session"
+        <| async {
+            let sessions, _ = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            // The container is the isolation boundary (GP 4), so the
+            // foreign scope cannot even address the session — every
+            // verb answers as though it does not exist, which is the
+            // honest answer: for that scope, it does not.
+            let! foreignAppend = sessions.AppendChunk(otherContainer, sessionId, 1000L, sessionChunks[1])
+            Expect.isError foreignAppend "a foreign scope's append is refused"
+
+            let! foreignCommit = sessions.CommitUpload(otherContainer, sessionId)
+            Expect.isError foreignCommit "a foreign scope's commit is refused"
+
+            let! foreignAbort = sessions.AbortUpload(otherContainer, sessionId)
+            Expect.isError foreignAbort "a foreign scope's abort is refused"
+
+            // And none of that moved the owning scope's cursor.
+            let! resume = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+            Expect.equal (Expect.wantOk resume "owner resumes").ReceivedBytes 2500L "cursor unharmed"
+        }
+
+        testCaseAsync "abort discards the session and its chunks"
+        <| async {
+            let sessions, lib = fresh ()
+            let! sessionId = begun sessions defaultOptions
+            let! _ = sessions.AppendChunk(container, sessionId, 0L, sessionChunks[0])
+
+            let! aborted = sessions.AbortUpload(container, sessionId)
+            Expect.isOk aborted "abort"
+
+            let! afterAppend = sessions.AppendChunk(container, sessionId, 1000L, sessionChunks[1])
+
+            match afterAppend with
+            | Error SessionNotFound -> ()
+            | other -> failtestf "expected SessionNotFound after abort, got %A" other
+
+            let! afterCommit = sessions.CommitUpload(container, sessionId)
+            Expect.isError afterCommit "an aborted session cannot commit"
+
+            // Nothing was ingested.
+            let! items = lib.List(container, "", 0)
+            Expect.isEmpty items "an aborted session leaves no media record"
+        }
+    ]

@@ -349,6 +349,242 @@ let private derivedRangeTests =
         }
     ]
 
+// ─── Phase 469 — upload sessions over BlobUploadSessionStore ─────────
+//
+// Three claims the implementation-agnostic contract pack cannot make,
+// because each is about `BlobUploadSessionStore` specifically: the
+// notification stream a commit produces, the on-disk chunk layout, and
+// what happens when the backing store does not isolate by container.
+
+/// Records every publish. `Subscribe` / `Unsubscribe` are inert — the
+/// question here is what the library PUBLISHED, and a real subscriber
+/// would only re-derive it.
+type private RecordingNotificationChannel() =
+    let published =
+        System.Collections.Concurrent.ConcurrentQueue<string * Notification>()
+
+    member _.Published = published |> Seq.toList
+
+    member this.CustomPayloads(key: string) =
+        this.Published
+        |> List.choose (fun (_, n) ->
+            match n with
+            | CustomNotification(k, json) when k = key -> Some json
+            | _ -> None)
+
+    member _.Clear() =
+        while not published.IsEmpty do
+            published.TryDequeue() |> ignore
+
+    interface INotificationChannel with
+        member _.Publish(scopeId, notification) = async { published.Enqueue((scopeId, notification)) }
+
+        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+
+        member _.Unsubscribe(_) = async { () }
+
+/// A store that ignores the container argument entirely — every scope
+/// shares one namespace. Not a realistic backend; it is the adversary
+/// that proves scope isolation does not rest solely on the store doing
+/// its job. `BlobUploadSessionStore` must still refuse a cross-scope
+/// call here, from the container recorded in the session's own
+/// manifest.
+type private ContainerCollapsingBlobStorage(inner: IBlobStorage) =
+    [<Literal>]
+    let one = "collapsed"
+
+    interface IBlobStorage with
+        member _.Upload(_, blobName, content) = inner.Upload(one, blobName, content)
+        member _.Download(_, blobName) = inner.Download(one, blobName)
+        member _.Delete(_, blobName) = inner.Delete(one, blobName)
+        member _.List(_, prefix) = inner.List(one, prefix)
+        member _.Exists(_, blobName) = inner.Exists(one, blobName)
+        member _.GetMetadata(_, blobName) = inner.GetMetadata(one, blobName)
+
+        member _.Erase(_, prefix, policy, dryRun) =
+            inner.Erase(one, prefix, policy, dryRun)
+
+        member _.DownloadRange(_, blobName, offset, length) =
+            inner.DownloadRange(one, blobName, offset, length)
+
+let private makeSessionsOver
+    (notifications: INotificationChannel option)
+    (options: MediaLibraryOptions)
+    (now: unit -> DateTimeOffset)
+    (blob: IBlobStorage)
+    : IUploadSessionStore * IMediaLibrary =
+    let secrets = InMemorySecretStore() :> ISecretStore
+    let signer = SignedUrl.MediaUrlSigner(secrets)
+
+    let lib =
+        DefaultMediaLibrary(
+            blob,
+            signer,
+            NoopMediaDerivation.create (),
+            NoopMediaTranscoder.create (),
+            notifications,
+            options,
+            NullLogger()
+        )
+        :> IMediaLibrary
+
+    let sessions =
+        BlobUploadSessionStore(blob, lib, notifications, options, NullLogger(), now) :> IUploadSessionStore
+
+    sessions, lib
+
+let private sessionContainer = "team-sessions"
+
+let private sessionPayload = Array.init 3000 (fun i -> byte (i % 251))
+
+let private sessionDeclaration (options: MediaLibraryOptions) (size: int64) =
+    match MediaUploadDeclaration.create options "clip.mp4" "video/mp4" size "user-1" (Some "A clip") with
+    | Ok d -> d
+    | Error e -> failwithf "session setup: invalid declaration %A" e
+
+let private uploadSessionImplTests =
+    testList "Phase 469 upload sessions (BlobUploadSessionStore)" [
+
+        testCaseAsync "a committed session produces the same ingestion-status stream as a single-shot upload"
+        <| async {
+            let channel = RecordingNotificationChannel()
+
+            let sessions, lib =
+                makeSessionsOver
+                    (Some(channel :> INotificationChannel))
+                    MediaLibraryOptions.defaults
+                    (fun () -> DateTimeOffset.UtcNow)
+                    (makeStore ())
+
+            // Baseline: what a single-shot upload of these bytes says.
+            let single =
+                match
+                    MediaUploadRequest.create
+                        MediaLibraryOptions.defaults
+                        sessionPayload
+                        "clip.mp4"
+                        "video/mp4"
+                        "user-1"
+                        (Some "A clip")
+                with
+                | Ok r -> r
+                | Error e -> failwithf "setup: %A" e
+
+            let! _ = lib.Upload(sessionContainer, single)
+            let singleShotStatuses = channel.CustomPayloads "MediaLibrary.IngestionStatus"
+            channel.Clear()
+
+            // The resumed path, in three chunks with one retry.
+            let! opened = sessions.BeginUpload(sessionContainer, sessionDeclaration MediaLibraryOptions.defaults 3000L)
+            let sessionId = Expect.wantOk opened "begin"
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 0L, sessionPayload[0..999])
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 1000L, sessionPayload[1000..2499])
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 1000L, sessionPayload[1000..2499])
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 2500L, sessionPayload[2500..2999])
+            let! commit = sessions.CommitUpload(sessionContainer, sessionId)
+            Expect.isOk commit "commit"
+
+            let resumedStatuses = channel.CustomPayloads "MediaLibrary.IngestionStatus"
+
+            // Same number of transitions, same status tokens in the
+            // same order. The ids differ, so compare the tokens.
+            let tokensOf (payloads: string list) =
+                payloads
+                |> List.map (fun json ->
+                    let parsed = System.Text.Json.JsonDocument.Parse json
+
+                    parsed.RootElement.GetProperty("Status").GetString())
+
+            Expect.equal
+                (tokensOf resumedStatuses)
+                (tokensOf singleShotStatuses)
+                "the committed session walks the same ingestion status sequence"
+
+            // And the resumable path publishes its own progress stream.
+            let progress = channel.CustomPayloads "MediaLibrary.UploadProgress"
+            Expect.isNonEmpty progress "upload progress is published over INotificationChannel"
+
+            let phases =
+                progress
+                |> List.map (fun json ->
+                    System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("Phase").GetString())
+
+            Expect.contains phases UploadSessionPhase.committed "the commit is announced"
+        }
+
+        testCaseAsync "a commit whose assembled bytes exceed the declaration fails closed and destroys the session"
+        <| async {
+            let blob = makeStore ()
+
+            let sessions, lib =
+                makeSessionsOver None MediaLibraryOptions.defaults (fun () -> DateTimeOffset.UtcNow) blob
+
+            let! opened = sessions.BeginUpload(sessionContainer, sessionDeclaration MediaLibraryOptions.defaults 1000L)
+            let sessionId = Expect.wantOk opened "begin"
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 0L, sessionPayload[0..999])
+
+            // Smuggle a chunk past `AppendChunk`'s declared-size guard
+            // by writing it straight into the documented layout — the
+            // only way to reach the commit-time check, which exists
+            // precisely because the append guard is not the only way
+            // bytes can arrive.
+            let rogueName =
+                sprintf "media/uploads/%s/chunks/%s" (UploadSessionId.value sessionId) ((1000L).ToString("D20"))
+
+            let! _ = blob.Upload(sessionContainer, rogueName, sessionPayload[1000..1499])
+
+            let! commit = sessions.CommitUpload(sessionContainer, sessionId)
+
+            match commit with
+            | Error(DeclaredSizeExceeded(actual, declared)) ->
+                Expect.equal actual 1500L "the bytes actually present"
+                Expect.equal declared 1000L "the declaration"
+            | other -> failtestf "expected DeclaredSizeExceeded, got %A" other
+
+            // Fails CLOSED: the session is gone, so a client cannot
+            // retry its way past the declaration.
+            let! retry = sessions.CommitUpload(sessionContainer, sessionId)
+
+            match retry with
+            | Error SessionNotFound -> ()
+            | other -> failtestf "expected the session to be destroyed, got %A" other
+
+            let! items = lib.List(sessionContainer, "", 0)
+            Expect.isEmpty items "nothing was ingested"
+
+            let! leftovers = blob.List(sessionContainer, sprintf "media/uploads/%s/" (UploadSessionId.value sessionId))
+
+            Expect.isEmpty leftovers "the session's chunks are gone"
+        }
+
+        testCaseAsync "a store that does not isolate by container still cannot be crossed"
+        <| async {
+            let collapsing = ContainerCollapsingBlobStorage(makeStore ()) :> IBlobStorage
+
+            let sessions, _ =
+                makeSessionsOver None MediaLibraryOptions.defaults (fun () -> DateTimeOffset.UtcNow) collapsing
+
+            let! opened = sessions.BeginUpload(sessionContainer, sessionDeclaration MediaLibraryOptions.defaults 3000L)
+            let sessionId = Expect.wantOk opened "begin"
+            let! _ = sessions.AppendChunk(sessionContainer, sessionId, 0L, sessionPayload[0..999])
+
+            // The foreign scope CAN now read the manifest blob — the
+            // store handed it over. The refusal has to come from the
+            // container recorded inside it.
+            let! foreign = sessions.AppendChunk("team-intruder", sessionId, 1000L, sessionPayload[1000..2499])
+
+            match foreign with
+            | Error SessionScopeMismatch -> ()
+            | other -> failtestf "expected SessionScopeMismatch, got %A" other
+
+            let! foreignCommit = sessions.CommitUpload("team-intruder", sessionId)
+
+            match foreignCommit with
+            | Error SessionScopeMismatch -> ()
+            | other -> failtestf "expected SessionScopeMismatch on commit, got %A" other
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [
@@ -364,4 +600,8 @@ let tests =
             makeStore
             (makeLibraryOver (NoopMediaTranscoder.create ()))
         derivedRangeTests
+        // Phase 469 — the resume matrix, bound implementation-agnostically…
+        IMediaLibraryContract.uploadSessionTests "BlobUploadSessionStore" makeStore (makeSessionsOver None)
+        // …and the three claims that are about this implementation.
+        uploadSessionImplTests
     ]

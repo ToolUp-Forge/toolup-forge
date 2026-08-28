@@ -113,8 +113,11 @@ module MediaLibraryServerApp =
     }
 
     /// Build the `IMediaApi` Fable.Remoting contract from request context.
-    let private mediaApi (ctx: HttpContext) : IMediaApi =
+    let private mediaApi (options: MediaLibraryOptions) (ctx: HttpContext) : IMediaApi =
         let lib = ctx.RequestServices.GetService(typeof<IMediaLibrary>) :?> IMediaLibrary
+
+        let sessions =
+            ctx.RequestServices.GetService(typeof<IUploadSessionStore>) :?> IUploadSessionStore
 
         let scope () =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
@@ -142,13 +145,45 @@ module MediaLibraryServerApp =
                     let s = scope ()
                     return! lib.SignedUrl(MediaId raw, s, TimeSpan.FromSeconds(float ttlSeconds))
                 }
+
+            // Phase 469 — the declaration is smart-constructed HERE,
+            // against this deployment's options, from wire primitives.
+            // `uploadedBy` comes from the resolved scope, never the
+            // wire, so an upload cannot be attributed elsewhere.
+            BeginUpload =
+                fun (filename, mimeType, declaredSize, caption) -> async {
+                    let s = scope ()
+
+                    match MediaUploadDeclaration.create options filename mimeType declaredSize s.ScopeId caption with
+                    | Error e -> return Error(InvalidDeclaration e)
+                    | Ok declaration ->
+                        match! sessions.BeginUpload(s.Container, declaration) with
+                        | Error e -> return Error e
+                        | Ok sessionId -> return Ok(UploadSessionId.value sessionId)
+                }
+            AppendChunk =
+                fun (rawSession, offset, chunk) -> async {
+                    let s = scope ()
+                    return! sessions.AppendChunk(s.Container, UploadSessionId rawSession, offset, chunk)
+                }
+            CommitUpload =
+                fun rawSession -> async {
+                    let s = scope ()
+                    return! sessions.CommitUpload(s.Container, UploadSessionId rawSession)
+                }
+            AbortUpload =
+                fun rawSession -> async {
+                    let s = scope ()
+                    return! sessions.AbortUpload(s.Container, UploadSessionId rawSession)
+                }
         }
 
     /// Drive the final composition. `NoMediaLibrary` short-circuits to
     /// `ServerApp.run`; `EnabledMediaLibrary` registers the signer +
-    /// `IMediaLibrary` DI singletons, mounts the range-serving handlers
-    /// and the Fable.Remoting `IMediaApi`, adds the readiness probe +
-    /// options validator, and delegates to `ServerApp.run`.
+    /// `IMediaLibrary` + `IUploadSessionStore` DI singletons, mounts the
+    /// range-serving handlers and the Fable.Remoting `IMediaApi`, adds
+    /// the readiness probe + options validator, and delegates to
+    /// `ServerApp.run`.
     let run (app: MediaLibraryServerApp) : int =
         match app.Base.Config.MediaLibrary with
         | NoMediaLibrary -> ServerApp.run app.Base
@@ -201,11 +236,23 @@ module MediaLibraryServerApp =
                                 )
                                 :> IMediaLibrary)
                     )
+                    // Phase 469 — the resumable-upload seam. Registered
+                    // only under `EnabledMediaLibrary`, over the same
+                    // `IBlobStorage` and the composed `IMediaLibrary`,
+                    // so there is no second substrate to provision and
+                    // a disabled deployment registers nothing (GP 13).
+                    .AddSingleton<IUploadSessionStore>(
+                        System.Func<System.IServiceProvider, IUploadSessionStore>(fun sp ->
+                            let blob = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+                            let lib = sp.GetService(typeof<IMediaLibrary>) :?> IMediaLibrary
+
+                            BlobUploadSessionStore(blob, lib, notifications, options, asLogger) :> IUploadSessionStore)
+                    )
 
             let mediaApiHandler =
                 Remoting.createApi ()
                 |> Remoting.withRouteBuilder MediaApi.routeBuilder
-                |> Remoting.fromContext mediaApi
+                |> Remoting.fromContext (mediaApi options)
                 |> Remoting.buildHttpHandler
 
             let baseExt = app.Base.Extensions
