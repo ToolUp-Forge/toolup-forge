@@ -100,6 +100,12 @@ type private ProbeBlobStorage(barrier: int) =
             (inner :> IConditionalBlobStorage).UploadWithETag(container, blobName, content, condition)
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(container, blobName, content) =
             (inner :> IBlobStorage).Upload(container, blobName, content)
 
@@ -188,6 +194,12 @@ type private RendezvousBlobStorage() =
         }
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(container, blobName, content) =
             (inner :> IBlobStorage).Upload(container, blobName, content)
 
@@ -218,6 +230,12 @@ type private PlainBlobStorage() =
     let inner = InMemoryBlobStorage()
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(container, blobName, content) =
             (inner :> IBlobStorage).Upload(container, blobName, content)
 

@@ -432,4 +432,105 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
                     (bytes[0] = 1uy || bytes[0] = 2uy)
                     "the surviving blob is a version some writer actually wrote"
         }
+
+        // ─── Phase 741 — ComposeFrom conformance ──────────────────────
+        //
+        // Every case branches on `CanComposeFrom`, which is the point:
+        // the member has TWO conformant answers and the refusing one is
+        // not a gap to be tolerated — it is the shipped behaviour of
+        // every encrypted deployment and of every custom store that
+        // adopts the member by declining it. So the refusal is asserted
+        // as strictly as the compose: it must be `NotSupported`, not a
+        // failure, and it must not write.
+
+        testCaseAsync "ComposeFrom concatenates the parts in order (or refuses cleanly)"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let parts = [ "p/0", "alpha"; "p/1", "-beta"; "p/2", "-gamma" ]
+
+            for name, text in parts do
+                match! store.Upload(container, name, Encoding.UTF8.GetBytes text) with
+                | Error e -> failtestf "Upload of compose source failed: %s" e
+                | Ok _ -> ()
+
+            let sources = parts |> List.map fst
+            let expected = parts |> List.map snd |> String.concat ""
+
+            match! store.ComposeFrom(container, "composed.bin", sources) with
+            | Error(ComposeRefusal.NotSupported _) ->
+                Expect.isFalse store.CanComposeFrom "a store that refuses must declare CanComposeFrom = false"
+
+                let! exists = store.Exists(container, "composed.bin")
+                Expect.isFalse exists "a refusing ComposeFrom must not write the target"
+            | Error(ComposeRefusal.ComposeFailed message) -> failtestf "ComposeFrom failed: %s" message
+            | Ok written ->
+                Expect.isTrue store.CanComposeFrom "a store that composes must declare CanComposeFrom = true"
+                Expect.equal written (int64 expected.Length) "reported byte count is the total composed"
+
+                match! store.Download(container, "composed.bin") with
+                | Error e -> failtestf "Download of the composed target failed: %s" e
+                | Ok bytes ->
+                    Expect.equal (Encoding.UTF8.GetString bytes) expected "composed bytes are the parts, in order"
+        }
+
+        // The equivalence that makes the member worth having: a caller
+        // may compose instead of concatenating and get the same object.
+        // Asserted over the store's OWN Download of both, so an
+        // implementation that composes into a different encoding or
+        // ordering is caught here rather than by a downstream hash.
+        testCaseAsync "ComposeFrom target byte-equals the concatenated parts"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            let payloads = [ for i in 0..4 -> Array.init (1000 + i) (fun j -> byte ((i * 31 + j) % 251)) ]
+
+            let sources = [ for i in 0..4 -> sprintf "chunk/%02d" i ]
+
+            for name, payload in List.zip sources payloads do
+                match! store.Upload(container, name, payload) with
+                | Error e -> failtestf "Upload of compose source failed: %s" e
+                | Ok _ -> ()
+
+            match! store.ComposeFrom(container, "whole.bin", sources) with
+            | Error(ComposeRefusal.NotSupported _) -> ()
+            | Error(ComposeRefusal.ComposeFailed message) -> failtestf "ComposeFrom failed: %s" message
+            | Ok _ ->
+                match! store.Download(container, "whole.bin") with
+                | Error e -> failtestf "Download of the composed target failed: %s" e
+                | Ok bytes -> Expect.sequenceEqual bytes (Array.concat payloads) "composed = concatenated"
+        }
+
+        // An empty source list is refused rather than answered with an
+        // empty object: a caller whose part listing came back empty by
+        // accident would otherwise commit an empty object over a real
+        // one and see `Ok`.
+        testCaseAsync "ComposeFrom with no sources is refused"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            match! store.ComposeFrom(container, "empty.bin", []) with
+            | Ok _ -> failtest "ComposeFrom with no sources must not succeed"
+            | Error _ ->
+                let! exists = store.Exists(container, "empty.bin")
+                Expect.isFalse exists "a refused zero-part compose must not write the target"
+        }
+
+        testCaseAsync "ComposeFrom with a missing source fails rather than composing a short object"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            match! store.Upload(container, "present", Encoding.UTF8.GetBytes "here") with
+            | Error e -> failtestf "Upload failed: %s" e
+            | Ok _ -> ()
+
+            match! store.ComposeFrom(container, "partial.bin", [ "present"; "absent" ]) with
+            | Ok _ -> failtest "ComposeFrom must not succeed when a source is missing"
+            | Error(ComposeRefusal.NotSupported _) ->
+                Expect.isFalse store.CanComposeFrom "a store that refuses must declare CanComposeFrom = false"
+            | Error(ComposeRefusal.ComposeFailed _) -> ()
+        }
     ]

@@ -59,6 +59,20 @@ type ResilientBlobStorage(inner: IBlobStorage, policy: TransientFaultPolicy) =
         member _.DownloadRange(container, blobName, offset, length) =
             runner.Run(fun () -> inner.DownloadRange(container, blobName, offset, length))
 
+        // Phase 741 — forward the inner store's declaration verbatim.
+        // The decorator adds retries, never capability: answering
+        // `true` over a store that cannot compose would put the media
+        // library on a path guaranteed to refuse.
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        // Safe to retry precisely because the seam hands across NAMES
+        // and a byte count, not a stream — a re-run re-reads the same
+        // parts and re-commits the same target (the GP 12 note on the
+        // member). A partially-committed multi-part upload is abandoned
+        // by the implementation, not resumed by the decorator.
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
+            runner.Run(fun () -> inner.ComposeFrom(container, targetBlobName, sourceBlobNames))
+
         member _.Delete(container, blobName) =
             runner.Run(fun () -> inner.Delete(container, blobName))
 

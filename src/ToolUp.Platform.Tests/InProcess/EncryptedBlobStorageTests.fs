@@ -85,6 +85,44 @@ let tests =
             | Result.Error e -> failwithf "download failed: %s" e
         }
 
+        testCaseAsync "ComposeFrom is refused, and refused as NotSupported (Phase 741)"
+        <| async {
+            // The 455 refusal one verb along. Each part is its own
+            // whole-blob AES-GCM envelope, so the concatenation of the
+            // envelopes is not the envelope of the concatenation — a
+            // composed target would `Download` as an unparseable
+            // envelope, i.e. a corrupt object rather than a loud
+            // failure.
+            let inner = newInnerStorage ()
+            let secrets = newSecretStore ()
+            let resolver = SingleKeyResolver.create secrets
+            let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
+
+            let! _ = storage.Upload(container, "part-0", samplePayload)
+            let! _ = storage.Upload(container, "part-1", samplePayload)
+
+            Expect.isFalse storage.CanComposeFrom "the decorator declares the refusal before it is called"
+
+            match! storage.ComposeFrom(container, "joined.bin", [ "part-0"; "part-1" ]) with
+            | Result.Ok _ -> failtest "Expected the encryption decorator to refuse compose"
+            | Result.Error(ComposeRefusal.ComposeFailed message) ->
+                failtestf "Expected NotSupported (a fallback signal), got an operational failure: %s" message
+            | Result.Error(ComposeRefusal.NotSupported reason) ->
+                Expect.stringContains reason "compose" "refusal names the unsupported operation"
+
+            // And the refusal must not have written anything — a caller
+            // that falls back must not find a corrupt target waiting.
+            let! exists = storage.Exists(container, "joined.bin")
+            Expect.isFalse exists "a refused compose writes nothing"
+
+            // The delegation boundary that matters: the INNER store can
+            // compose, and must not have been asked to. Composing
+            // ciphertext would produce exactly the corrupt object this
+            // refusal exists to prevent.
+            let! innerExists = inner.Exists(container, "joined.bin")
+            Expect.isFalse innerExists "the refusal is the decorator's own, not delegated to the inner store"
+        }
+
         testCaseAsync "SingleKeyResolver — inner storage holds ciphertext (not plaintext)"
         <| async {
             let inner = newInnerStorage ()

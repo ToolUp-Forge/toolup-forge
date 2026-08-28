@@ -97,6 +97,12 @@ let tests =
 /// is the condition `readClaim` now detects.
 type private ReadFailingBlobStorage(inner: IBlobStorage, shouldFail: string -> bool, message: string) =
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Download(container, blobName) =
             if shouldFail blobName then
                 async { return Error message }

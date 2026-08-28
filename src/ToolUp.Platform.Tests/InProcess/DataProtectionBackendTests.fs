@@ -46,6 +46,12 @@ type private UnreachableBlobStorage() =
         failwith "connection refused (simulated backend outage)"
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(_, _, _) = async { return boom () }
         member _.Download(_, _) = async { return boom () }
         member _.DownloadRange(_, _, _, _) = async { return boom () }
@@ -59,6 +65,12 @@ type private UnreachableBlobStorage() =
 /// download (permission gap / partial outage) — the per-key catch site.
 type private DownloadFailingBlobStorage(names: string list) =
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(_, blobName, _) = async { return Result.Ok blobName }
         member _.Download(_, _) = async { return Result.Error "access denied (simulated)" }
         member _.DownloadRange(_, _, _, _) = async { return Result.Error "access denied (simulated)" }
@@ -72,6 +84,12 @@ type private DownloadFailingBlobStorage(names: string list) =
 /// creation / rotation could never persist.
 type private WriteDeniedBlobStorage() =
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(_, _, _) = async { return Result.Error "write denied (simulated read-only credentials)" }
         member _.Download(_, _) = async { return Result.Error "not found" }
         member _.DownloadRange(_, _, _, _) = async { return Result.Error "not found" }

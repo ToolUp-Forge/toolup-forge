@@ -73,6 +73,12 @@ type private AgeStampedBlobStorage() =
     member _.Backdate(container: string, blobName: string, at: DateTime) = stamps[(container, blobName)] <- at
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix (this :> IBlobStorage) container prefix policy dryRun
 

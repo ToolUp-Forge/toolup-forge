@@ -170,6 +170,14 @@ type FaultInjectingBlobStorage(inner: IBlobStorage, ?seed: int) =
     member _.InjectBeforeUpload(hook: string -> string -> Async<unit>) = onBeforeUpload <- hook
 
     interface IBlobStorage with
+        // Phase 741 — no compose faults are modelled yet, so the call
+        // passes through to the inner store and reports its capability
+        // rather than masking it.
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
+            inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
+
         member this.Erase(container, prefix, policy, dryRun) =
             // Erase composes over List + Delete/Upload; route it through the
             // inner store so the erasure algorithm is exercised fault-free.

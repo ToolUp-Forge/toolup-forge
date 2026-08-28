@@ -76,6 +76,12 @@ type private InMemorySecretStore() =
 let private makeStore () : IBlobStorage =
     InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
+/// Phase 741 — the same in-memory store with the compose capability
+/// withheld: the `EncryptedBlobStorage` decorator's shape, and the
+/// shape of any custom store that adopts `ComposeFrom` by declining it.
+let private makeComposeRefusingStore () : IBlobStorage =
+    IMediaLibraryContract.ComposeRefusingBlobStorage(makeStore ()) :> IBlobStorage
+
 let private makeLibraryOver
     (transcoder: IMediaTranscoder)
     (options: MediaLibraryOptions)
@@ -402,6 +408,12 @@ type private ContainerCollapsingBlobStorage(inner: IBlobStorage) =
     let one = "collapsed"
 
     interface IBlobStorage with
+        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
         member _.Upload(_, blobName, content) = inner.Upload(one, blobName, content)
         member _.Download(_, blobName) = inner.Download(one, blobName)
         member _.Delete(_, blobName) = inner.Delete(one, blobName)
@@ -2799,6 +2811,18 @@ let tests =
         derivedRangeTests
         // Phase 469 — the resume matrix, bound implementation-agnostically…
         IMediaLibraryContract.uploadSessionTests "BlobUploadSessionStore" makeStore (makeSessionsOver None)
+        // Phase 741 — …and the SAME matrix over a store that cannot
+        // compose, so the materialised fallback keeps its own full
+        // behavioural bar rather than inheriting the streaming path's.
+        // The in-memory store composes, so without this binding the
+        // whole 469 matrix would silently stop covering the path every
+        // encrypted deployment takes.
+        IMediaLibraryContract.uploadSessionTests
+            "BlobUploadSessionStore (compose-refusing store)"
+            makeComposeRefusingStore
+            (makeSessionsOver None)
+        // Phase 741 — the cost claim the behavioural matrix cannot make.
+        IMediaLibraryContract.streamingCommitTests "BlobUploadSessionStore" makeStore (makeSessionsOver None)
         // …and the three claims that are about this implementation.
         uploadSessionImplTests
         // Phase 471 — the gate, the rewrite, the ciphertext, the endpoint.

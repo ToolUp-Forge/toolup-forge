@@ -170,3 +170,83 @@ type IUploadSessionStore =
     /// caller's view only in that a second abort reports
     /// `SessionNotFound` — the bytes are gone either way.
     abstract AbortUpload: scopeContainer: string * sessionId: UploadSessionId -> Async<Result<unit, UploadSessionError>>
+// ─── Phase 741 — IComposedMediaIngest (the streaming-commit seam) ─────
+//
+// [Phase 469](…) shipped resumable uploads with an honest ceiling:
+// commit assembles the chunks into one `byte[]` and hands it to
+// `IMediaLibrary.Upload`, so a 2 GiB commit pins ~2 GiB of heap. That
+// ceiling is `MediaUploadRequest`'s, and `MediaUploadRequest` is not
+// moving — it is the single-shot path's public surface and every
+// consumer constructs it (GP 11).
+//
+// So the streaming path is a SEAM rather than a widened verb: a session
+// commit that can avoid materialising asks the composed library to
+// ingest an original the store will assemble FROM PARTS IT ALREADY
+// HOLDS, and hands over the two facts it measured while walking those
+// parts — the size and the content hash — instead of the bytes.
+//
+// A probe-style capability interface (the `IConditionalBlobStorage` /
+// `ISignedUrlBlobStorage` shape), NOT a member on `IMediaLibrary`:
+// every implementation of that interface would otherwise have to answer
+// a question only a blob-backed one can, and a cloud-native library
+// brokering a provider's own multipart protocol has no notion of "our
+// chunks" at all. Callers type-test and fall back:
+//
+//     match library with
+//     | :? IComposedMediaIngest as ingest when ingest.CanIngestComposed -> // O(chunk)
+//     | _ -> // materialised assembly, exactly as before
+//
+// **Why the capability is a PROPERTY and not just a refusal case.** The
+// caller's two strategies diverge before the first byte is read — one
+// walks the chunks discarding them, the other walks them accumulating.
+// Discovering the refusal after the walk would mean walking twice, and
+// the refusing configurations are not exotic: every encrypted
+// deployment (Phase 22's whole-blob AES-GCM decorator cannot compose)
+// and every deployment with a real derivation or transcode provider
+// installed (poster extraction and HLS transcoding both take the
+// original BYTES, so an ingest that never sees them cannot run either).
+
+/// The measured facts about an original that has NOT been materialised:
+/// the parts it will be composed from, in order, and what the caller
+/// computed while walking them. Both are the caller's measurement of
+/// the same bytes the compose will concatenate — an implementation
+/// records them, it does not re-derive them (re-hashing would mean
+/// reading the object back, which is the cost being avoided).
+type ComposedOriginal = {
+    /// Blob names within the same scope container, in assembly order.
+    Parts: string list
+    /// Total length of the concatenation.
+    SizeBytes: int64
+    /// Lowercase hex SHA-256 of the concatenation — the same value
+    /// `IMediaLibrary.Upload` computes over the materialised bytes, so
+    /// a streamed commit and a materialised commit of the same bytes
+    /// produce content-hash-equal records.
+    ContentHash: string
+}
+
+/// Phase 741 — ingest an original from parts already in blob storage,
+/// without the bytes. Implemented alongside `IMediaLibrary` by
+/// blob-backed libraries; probed by type test.
+type IComposedMediaIngest =
+    /// Whether THIS composition can ingest without the bytes. Folds
+    /// together the two independent reasons it might not: the composed
+    /// `IBlobStorage` declares no bounded multi-part commit
+    /// (`CanComposeFrom = false`), or a derivation / transcode provider
+    /// is installed and needs the original bytes. Cheap and
+    /// side-effect-free — see the seam note above for why the caller
+    /// must be able to ask before it starts work.
+    abstract CanIngestComposed: bool
+
+    /// Compose `original.Parts` into this item's `media/originals/{id}`
+    /// and write its record, returning the record. The parts are NOT
+    /// deleted — the session that owns them deletes them, as it does on
+    /// the materialised path.
+    ///
+    /// `declaration` supplies filename / MIME / uploader / caption and
+    /// has already passed the same validation the materialised path
+    /// applies. An implementation MUST fail without writing a record if
+    /// the compose fails, so a failed commit leaves no half-ingested
+    /// item.
+    abstract IngestComposed:
+        scopeContainer: string * original: ComposedOriginal * declaration: MediaUploadDeclaration ->
+            Async<Result<MediaRecord, MediaUploadError>>

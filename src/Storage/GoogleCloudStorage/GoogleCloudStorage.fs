@@ -84,6 +84,11 @@ module GoogleCloudStorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
+/// Phase 741 — GCS composes at most 32 source objects per request. A
+/// hard service constraint, not a tuning knob: it is why `ComposeFrom`
+/// folds in batches rather than issuing one call.
+let private composeBatchSize = 32
+
 /// GCS SDK exceptions can surface at this companion's `with` handlers
 /// wrapped in `AggregateException` — proven by the first armed
 /// cloud-parity run (2026-08-27): `Delete`'s direct
@@ -250,6 +255,93 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                     // Past-EOF clamp per the interface contract.
                     return Ok Array.empty
                 | Unwrapped ex -> return Error ex.Message
+        }
+
+        // Phase 741 — GCS is the one companion whose compose is FULLY
+        // server-side: `Objects.compose` concatenates stored objects in
+        // the bucket and not one byte passes through this process, so
+        // the memory bound the member promises is trivially met and the
+        // network cost is nil.
+        //
+        // The one constraint is the 32-source-per-request cap, met by
+        // composing in batches into intermediates and composing those —
+        // a fold, repeated until one object remains. Intermediates are
+        // named under a reserved suffix on the target and deleted after
+        // the final compose; a crash between the two leaves objects
+        // that are discoverable by their names and cost storage, which
+        // is the honest trade for never materialising the object.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(toolupContainer, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                let targetKey = blobKey toolupContainer targetBlobName
+                let intermediates = System.Collections.Generic.List<string>()
+
+                // One `Objects.compose` call: `sources` (already full
+                // object keys, at most `composeBatchSize` of them) into
+                // `destination`.
+                let composeOnce (sources: string list) (destination: string) = async {
+                    let body = Google.Apis.Storage.v1.Data.ComposeRequest()
+
+                    body.SourceObjects <-
+                        sources
+                        |> List.map (fun name ->
+                            let s = Google.Apis.Storage.v1.Data.ComposeRequest.SourceObjectsData()
+                            s.Name <- name
+                            s)
+                        |> System.Collections.Generic.List
+
+                    let request =
+                        (client ()).Service.Objects.Compose(body, config.BucketName, destination)
+
+                    return! request.ExecuteAsync() |> Async.AwaitTask
+                }
+
+                try
+                    let mutable level = 0
+                    let mutable current = sourceBlobNames |> List.map (blobKey toolupContainer)
+
+                    // Fold down to at most `composeBatchSize` sources.
+                    while List.length current > composeBatchSize do
+                        let batches = List.chunkBySize composeBatchSize current
+                        let next = System.Collections.Generic.List<string>()
+
+                        for index, batch in List.indexed batches do
+                            if List.length batch = 1 then
+                                // Nothing to compose — carry it forward
+                                // rather than minting an intermediate
+                                // that is a copy of one object.
+                                next.Add(List.head batch)
+                            else
+                                let name = sprintf "%s.__compose/%d/%d" targetKey level index
+                                let! _ = composeOnce batch name
+                                intermediates.Add name
+                                next.Add name
+
+                        current <- List.ofSeq next
+                        level <- level + 1
+
+                    let! composed = composeOnce current targetKey
+
+                    for name in intermediates do
+                        try
+                            do! (client ()).DeleteObjectAsync(config.BucketName, name) |> Async.AwaitTask
+                        with _ ->
+                            ()
+
+                    return
+                        Ok(
+                            if composed.Size.HasValue then
+                                int64 composed.Size.Value
+                            else
+                                0L
+                        )
+                with
+                | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+                    return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
+                | Unwrapped ex -> return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
         member _.Delete(toolupContainer, blobName) = async {

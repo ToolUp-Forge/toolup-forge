@@ -161,6 +161,57 @@ type LocalFileStorage(baseDir: string) =
 
         attemptOpen 0
 
+    /// Phase 741 — stream `sources` into a temp file and swap it into
+    /// place, reusing `writeAtomically`'s replace-by-rename discipline
+    /// so a partial compose is never observable at the target name.
+    /// Memory peak is the copy buffer (80 KiB), whatever the sources
+    /// total — the filesystem's answer to a multi-part commit.
+    let composeAtomically (target: string) (sources: string list) : Result<int64, string> =
+        ensureDir target
+        Directory.CreateDirectory tempDir |> ignore
+        let temp = Path.Combine(tempDir, Guid.NewGuid().ToString "N" + ".tmp")
+
+        try
+            let written =
+                use out =
+                    new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920)
+
+                let mutable total = 0L
+
+                for source in sources do
+                    if not (File.Exists source) then
+                        raise (FileNotFoundException("compose source missing", source))
+
+                    // Under the source's own path lock, so a concurrent
+                    // atomic replace of a source cannot be read half-way.
+                    lock (pathLockFor source) (fun () ->
+                        use input = openSharedRead source
+                        input.CopyTo(out, 81920)
+                        total <- total + input.Length)
+
+                out.Flush()
+                total
+
+            let rec move attempt =
+                try
+                    File.Move(temp, target, true)
+                with ex when isRetryableIo attempt ex ->
+                    Thread.Sleep(5 <<< attempt)
+                    move (attempt + 1)
+
+            lock (pathLockFor target) (fun () -> move 0)
+            Ok written
+        with ex ->
+            // A failed compose must not strand the temp file — the same
+            // guarantee `writeAtomically` makes in its `finally`.
+            if File.Exists temp then
+                try
+                    File.Delete temp
+                with _ ->
+                    ()
+
+            Error ex.Message
+
     /// Read a whole blob under the per-path lock. The handle is a
     /// consistent snapshot: an atomic replace swaps the *name*, not
     /// the file object already open.
@@ -290,6 +341,37 @@ type LocalFileStorage(baseDir: string) =
                                         Ok buffer)
                     with ex ->
                         return Error ex.Message
+        }
+
+        // Phase 741 — the filesystem's multi-part commit: stream each
+        // source into a temp file and rename it into place. Bounded by
+        // the copy buffer, never by the object.
+        member _.CanComposeFrom = true
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) = async {
+            if List.isEmpty sourceBlobNames then
+                return Error(ComposeRefusal.ComposeFailed "ComposeFrom: at least one source blob is required")
+            else
+                match resolveBlobPath container targetBlobName with
+                | Result.Error reason -> return Error(ComposeRefusal.ComposeFailed reason)
+                | Result.Ok target ->
+                    let resolved =
+                        sourceBlobNames
+                        |> List.map (resolveBlobPath container)
+                        |> List.fold
+                            (fun acc r ->
+                                match acc, r with
+                                | Result.Error e, _ -> Result.Error e
+                                | _, Result.Error e -> Result.Error e
+                                | Result.Ok paths, Result.Ok p -> Result.Ok(p :: paths))
+                            (Result.Ok [])
+
+                    match resolved with
+                    | Result.Error reason -> return Error(ComposeRefusal.ComposeFailed reason)
+                    | Result.Ok reversed ->
+                        match composeAtomically target (List.rev reversed) with
+                        | Result.Ok total -> return Ok total
+                        | Result.Error message -> return Error(ComposeRefusal.ComposeFailed message)
         }
 
         member _.Delete(container, blobName) = async {
