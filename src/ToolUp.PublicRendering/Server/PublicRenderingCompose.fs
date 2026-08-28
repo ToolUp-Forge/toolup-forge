@@ -1062,7 +1062,16 @@ module PublicRenderingServerApp =
             //
             // With no `IEdgeCache` composed this is the identity, so the
             // pre-472 invalidator is registered exactly as before.
-            let renderCacheInvalidator: IRenderCacheInvalidation option =
+            //
+            // Phase 740 — a FUNCTION of the container rather than a
+            // value, because the edge fan-out now carries the
+            // deployment's metrics sink so its purge outcomes are
+            // counted, and the sink is only resolvable once a provider
+            // exists. Whether an invalidator exists at all is still
+            // decidable without one (`hasRenderCacheInvalidator`), so
+            // the registration decisions below are unchanged; only
+            // WHEN the object is built moved.
+            let renderCacheInvalidatorFor (services: System.IServiceProvider) : IRenderCacheInvalidation option =
                 match app.EdgeCache with
                 | None -> originCacheInvalidator
                 | Some edge ->
@@ -1073,7 +1082,25 @@ module PublicRenderingServerApp =
                     let pathsForSlug =
                         app.EdgeCachePathsForSlug |> Option.defaultValue RenderCacheEdgePaths.forSlug
 
-                    Some(EdgeAwareRenderCacheInvalidation.createWith pathsForSlug app.Base.Logger edge inner)
+                    let metered = EdgeCache.withMetricsFrom services edge
+
+                    Some(EdgeAwareRenderCacheInvalidation.createWith pathsForSlug app.Base.Logger metered inner)
+
+            // Whether `renderCacheInvalidatorFor` will yield an
+            // invalidator, decided from the composition alone. Exactly
+            // the `isSome` of what the function returns, for every
+            // container: the edge arm always yields `Some`, and the
+            // no-edge arm yields the origin invalidator either way.
+            let hasRenderCacheInvalidator =
+                app.EdgeCache.IsSome || originCacheInvalidator.IsSome
+
+            // The invalidator a container resolves, falling back to the
+            // no-op purge rather than throwing. Unreachable when
+            // `hasRenderCacheInvalidator` is false, which is the only
+            // condition under which the registrations below fire.
+            let resolveRenderCacheInvalidator (services: System.IServiceProvider) : IRenderCacheInvalidation =
+                renderCacheInvalidatorFor services
+                |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
 
             // Auto-register `PublicPageEntity` against the base
             // `ServerApp` so the default impl's entity-store fallthrough
@@ -1239,7 +1266,7 @@ module PublicRenderingServerApp =
                                 PublicRenderingNarrativePagePublisher.create
                                     entityStore
                                     registeredLayoutNames
-                                    renderCacheInvalidator
+                                    (renderCacheInvalidatorFor sp)
                                     aiPublishGuardrails
                                     indexNowSvc)
                         )
@@ -1292,9 +1319,14 @@ module PublicRenderingServerApp =
                                 renderCoalescer |> Option.defaultWith InProcessRenderCoalescer.create
                             )
 
-                        match renderCacheInvalidator with
-                        | Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
-                        | None -> s
+                        if hasRenderCacheInvalidator then
+                            s.AddSingleton<IRenderCacheInvalidation>(
+                                System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
+                                    resolveRenderCacheInvalidator
+                                )
+                            )
+                        else
+                            s
                 |> fun s ->
                     // Phase 472 — register the composed `IEdgeCache` (so
                     // other surfaces — the media companion, an ops
@@ -1308,8 +1340,13 @@ module PublicRenderingServerApp =
                     | Some edge ->
                         let s = s.AddSingleton<IEdgeCache>(edge)
 
-                        match renderCache, renderCacheInvalidator with
-                        | None, Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
+                        match renderCache, hasRenderCacheInvalidator with
+                        | None, true ->
+                            s.AddSingleton<IRenderCacheInvalidation>(
+                                System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
+                                    resolveRenderCacheInvalidator
+                                )
+                            )
                         | _ -> s
                 |> fun s ->
                     // Phase 147 — cache-independent conditional-GET. When

@@ -2743,6 +2743,8 @@ ToolUp.Platform.EdgeCache.purgeDetachedWith(ToolUp.Platform.EdgePurgeRetry, Micr
 ToolUp.Platform.EdgeCache.purgePathsDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Void
 ToolUp.Platform.EdgeCache.purgePrefixDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], System.String) : System.Void
 ToolUp.Platform.EdgeCache.purgeWithRetry(ToolUp.Platform.EdgePurgeRetry, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
+ToolUp.Platform.EdgeCache.withMetrics(ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IEdgeCache) : ToolUp.Platform.IEdgeCache
+ToolUp.Platform.EdgeCache.withMetricsFrom(System.IServiceProvider, ToolUp.Platform.IEdgeCache) : ToolUp.Platform.IEdgeCache
 ToolUp.Platform.EdgeCacheHeader (class)
 ToolUp.Platform.EdgeCacheHeader.render(ToolUp.Platform.EdgeCacheability) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.EdgeCacheability (class)
@@ -2778,6 +2780,21 @@ ToolUp.Platform.EdgePurgeError+Tags (class)
 ToolUp.Platform.EdgePurgeError+Tags.PurgeNotSupported : System.Int32 (literal)
 ToolUp.Platform.EdgePurgeError+Tags.PurgeRejected : System.Int32 (literal)
 ToolUp.Platform.EdgePurgeError+Tags.PurgeTransportFailure : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeMetrics (class)
+ToolUp.Platform.EdgePurgeMetrics.Attempted : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassAuth : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassOther : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassRateLimit : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassTagKey : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassTransport : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.ClassUnsupported : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.EdgeTagKey : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.Failed : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.StatusMarker : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.Succeeded : System.String (literal)
+ToolUp.Platform.EdgePurgeMetrics.classes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EdgePurgeMetrics.classify(ToolUp.Platform.EdgePurgeError) : System.String
+ToolUp.Platform.EdgePurgeMetrics.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
 ToolUp.Platform.EdgePurgePropagation (class)
 ToolUp.Platform.EdgePurgePropagation.IsPurgeEventualUnbounded : System.Boolean { get }
 ToolUp.Platform.EdgePurgePropagation.IsPurgeEventualWithin : System.Boolean { get }
@@ -2798,6 +2815,22 @@ ToolUp.Platform.EdgePurgeRetry.InitialBackoff : System.TimeSpan { get }
 ToolUp.Platform.EdgePurgeRetryModule (class)
 ToolUp.Platform.EdgePurgeRetryModule.defaults : ToolUp.Platform.EdgePurgeRetry { get }
 ToolUp.Platform.EdgePurgeRetryModule.effectiveAttempts(ToolUp.Platform.EdgePurgeRetry) : System.Int32
+ToolUp.Platform.EdgePurgeTelemetry (class)
+ToolUp.Platform.EdgePurgeTelemetry.EdgePurgeUnmetered : ToolUp.Platform.EdgePurgeTelemetry { get }
+ToolUp.Platform.EdgePurgeTelemetry.IsEdgePurgeMetered : System.Boolean { get }
+ToolUp.Platform.EdgePurgeTelemetry.IsEdgePurgeUnmetered : System.Boolean { get }
+ToolUp.Platform.EdgePurgeTelemetry.Tag : System.Int32 { get }
+ToolUp.Platform.EdgePurgeTelemetry+EdgePurgeMetered (class)
+ToolUp.Platform.EdgePurgeTelemetry+EdgePurgeMetered.sink : ToolUp.Platform.Metrics.IMetricsSink { get }
+ToolUp.Platform.EdgePurgeTelemetry+Tags (class)
+ToolUp.Platform.EdgePurgeTelemetry+Tags.EdgePurgeMetered : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeTelemetry+Tags.EdgePurgeUnmetered : System.Int32 (literal)
+ToolUp.Platform.EdgePurgeTelemetryModule (class)
+ToolUp.Platform.EdgePurgeTelemetryModule.attempted(ToolUp.Platform.EdgePurgeTelemetry, ToolUp.Platform.IEdgeCache) : System.Void
+ToolUp.Platform.EdgePurgeTelemetryModule.failed(ToolUp.Platform.EdgePurgeTelemetry, ToolUp.Platform.IEdgeCache, System.String) : System.Void
+ToolUp.Platform.EdgePurgeTelemetryModule.forEdge(ToolUp.Platform.IEdgeCache) : ToolUp.Platform.EdgePurgeTelemetry
+ToolUp.Platform.EdgePurgeTelemetryModule.forSink(ToolUp.Platform.Metrics.IMetricsSink) : ToolUp.Platform.EdgePurgeTelemetry
+ToolUp.Platform.EdgePurgeTelemetryModule.succeeded(ToolUp.Platform.EdgePurgeTelemetry, ToolUp.Platform.IEdgeCache) : System.Void
 ToolUp.Platform.EgressBoundary (class)
 ToolUp.Platform.EgressBoundary.AuditSink : ToolUp.Platform.EgressBoundary { get }
 ToolUp.Platform.EgressBoundary.ExportPayload : ToolUp.Platform.EgressBoundary { get }
@@ -4458,6 +4491,8 @@ ToolUp.Platform.IEdgeCache.Propagation : ToolUp.Platform.EdgePurgePropagation { 
 ToolUp.Platform.IEdgeCache.PurgePaths(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
 ToolUp.Platform.IEdgeCache.PurgePrefix(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
 ToolUp.Platform.IEdgeCache.PurgeTags(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
+ToolUp.Platform.IEdgePurgeMetered (interface)
+ToolUp.Platform.IEdgePurgeMetered.PurgeMetrics : ToolUp.Platform.Metrics.IMetricsSink { get }
 ToolUp.Platform.IEgressGate (interface)
 ToolUp.Platform.IEgressGate.Apply(ToolUp.Platform.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.IEmbeddingCache (class)
@@ -5665,6 +5700,9 @@ ToolUp.Platform.MembershipDoctor+MembershipWrites.SaveMemberships : Microsoft.FS
 ToolUp.Platform.MemoizedComputeDispatcher (class)
 ToolUp.Platform.MemoizedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.MemoizedComputeDispatcher.Stats : ToolUp.Platform.ComputeMemoStats { get }
+ToolUp.Platform.MeteredEdgeCache (class)
+ToolUp.Platform.MeteredEdgeCache..ctor(ToolUp.Platform.IEdgeCache, ToolUp.Platform.Metrics.IMetricsSink)
+ToolUp.Platform.MeteredEdgeCache.Inner : ToolUp.Platform.IEdgeCache { get }
 ToolUp.Platform.MetricCanonicalMethod (class)
 ToolUp.Platform.MetricCanonicalMethod..ctor(System.String, System.String)
 ToolUp.Platform.MetricCanonicalMethod.MetricId : System.String { get }

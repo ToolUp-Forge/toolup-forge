@@ -115,6 +115,47 @@ Two details that look like implementation trivia and are not:
   list would be wrong the moment a re-transcode changed the segmentation. If your purge API has no
   prefix verb, `HttpEdgeCache` reports `PurgeNotSupported` rather than guessing.
 
+## Knowing whether your purges are landing
+
+A purge is fire-and-forget: it never blocks the publish that triggered it, and a terminal failure
+lands as one `Warn` line naming the edge. That is enough to diagnose a purge you already suspect and
+nothing at all to *notice* one you do not — a mis-credentialed or rate-limited adapter fails
+identically on every publish, forever, while pages and media keep serving stale from the edge.
+
+Three counters close that gap. They are emitted at the single point every in-tree purge passes
+through, so nothing you compose changes where they come from:
+
+| Metric | Kind | Tags |
+|---|---|---|
+| `toolup.edge.purge.attempted` | counter | `edge` |
+| `toolup.edge.purge.succeeded` | counter | `edge` |
+| `toolup.edge.purge.failed` | counter | `edge`, `class` |
+
+`edge` is the adapter's own `Name` — the same token the `Warn` line prints, so a dashboard and a log
+search agree about which edge. `attempted` counts **purges, not retry attempts**, so it is the
+denominator of the other two.
+
+`class` is the failure's remedy, not its status code:
+
+| Class | What it means | What to do |
+|---|---|---|
+| `transport` | the endpoint could not be reached (DNS, TLS, timeout, 5xx) | usually transient; alert on a sustained rate |
+| `auth` | the endpoint refused the credential (401 / 403 / 407) | rotate or re-scope the secret |
+| `rate-limit` | the endpoint refused on quota (429) | purge less, or widen a path set into one prefix |
+| `unsupported` | this adapter does not offer the verb that was called | declare the capability, or purge with a verb it has |
+| `other` | a rejection that could not be refined further | read the `Warn` line — it carries the adapter's own detail |
+
+`auth` and `rate-limit` both arrive from an adapter as the same typed error (both are 4xx), so they
+are separated by reading the HTTP status out of the rejection detail. An adapter that formats its
+detail as `"<endpoint> returned <status> <reason>"` — which `HttpEdgeCache` does — gets that
+refinement for free. One that formats it some other way is classified `other`, never as a guess at
+one of the specific classes.
+
+**Nothing is emitted unless you have composed a metrics endpoint.** With none composed, the
+composition is byte-for-byte what it was without this: no wrapper object, no allocation, and the
+declared no-op edge short-circuits before any of it is reached (GP 13). An operator running an
+existing deployment sees the series appear the moment metrics are enabled, with no other change.
+
 ## Declaring cacheability on media routes
 
 The media routes emitted no `Cache-Control` at all before this phase. `MediaLibraryOptions.EdgeCache`

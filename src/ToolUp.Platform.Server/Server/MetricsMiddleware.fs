@@ -66,9 +66,9 @@ module StandardMetrics =
     [<Literal>]
     let OAuth1aSigningFailuresTotal = "toolup.oauth1a.signing_failures_total"
 
-    /// SDK standard registrations — registered unconditionally by
-    /// `compose` when `MetricsEndpoint = EnabledMetricsEndpoint`.
-    let registrations: MetricRegistration list = [
+    /// The request / job / storage / audit series this file owns.
+    /// Spliced into `registrations` below.
+    let private coreRegistrations: MetricRegistration list = [
         {
             Module = None
             Definition = {
@@ -186,6 +186,18 @@ module StandardMetrics =
             }
         }
     ]
+
+    /// SDK standard registrations — registered unconditionally by
+    /// `compose` when `MetricsEndpoint = EnabledMetricsEndpoint`.
+    ///
+    /// Phase 740 — the edge-purge outcome counters are declared beside
+    /// their emission in `IEdgeCache.fs` (which compiles before this
+    /// file) so each metric's tag allowlist sits next to the code that
+    /// emits those tags, and spliced in here so a deployment with a
+    /// metrics endpoint has them registered without composing anything
+    /// — an unregistered series is silently dropped by the sink.
+    let registrations: MetricRegistration list =
+        coreRegistrations @ ToolUp.Platform.EdgePurgeMetrics.registrations
 
 module private RouteClassifier =
     /// Bucket the request path to a stable two-segment prefix to
