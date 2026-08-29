@@ -494,51 +494,40 @@ jobs:
       # which is the whole reason it can find a defect no in-repo fixture
       # would. It is not vendored here, so CI has to fetch it.
       #
-      # Four things about the shape below are deliberate:
+      # The corpus home is public: the model-execution wire specification
+      # lives at https://github.com/Fuaran-Core/fuaran-model-execution-spec
+      # (Apache-2.0). Three things about the shape below are deliberate:
       #
       #   1. **The corpus repository is named by a repository VARIABLE,
-      #      not a literal.** The corpus lives in a private repository
-      #      whose name is not published here, and this workflow file is
-      #      public. A variable keeps the operational fact (where to
-      #      fetch from) in repository settings and out of the public
-      #      tree, at no cost to reproducibility.
+      #      not a literal.** Originally because the home was private and
+      #      unnameable here; kept now that it is public because the
+      #      variable is the single operational knob — a rename or
+      #      re-home changes repository settings, not this reviewed file.
+      #      No read token is needed against a public home; the checkout
+      #      uses the job's default credentials. (Fork PRs, which cannot
+      #      read repository secrets, run this job fine — the constraint
+      #      the private era imposed is gone.)
       #   2. **The revision IS a literal, and belongs in the tree.** The
       #      pin is the reviewable artefact: a corpus commit must never
       #      change what this build certifies without a reviewed commit
       #      here. It is the same value the harness pins in code, and the
       #      two are bumped together.
-      #   3. **A missing variable or secret FAILS this job.** The guard
-      #      step below runs first and says which one is unset. Without
-      #      it, `actions/checkout` with an empty `repository` silently
-      #      re-checks-out this repo, and the failure would arrive later
-      #      wearing the wrong reason. A conformance job that skips when
-      #      it cannot reach its corpus is worse than no job: it reports
-      #      green.
-      #   4. **A fork PR cannot read the secret, so this job fails on
-      #      one.** That is a real cost and is recorded rather than
-      #      worked around, because the alternative — degrading to a skip
-      #      — is the failure mode point 3 exists to prevent. It changes
-      #      if and when the corpus's home is made public.
+      #   3. **A missing variable FAILS this job.** The guard step below
+      #      runs first. Without it, `actions/checkout` with an empty
+      #      `repository` silently re-checks-out this repo, and the
+      #      failure would arrive later wearing the wrong reason. A
+      #      conformance job that skips when it cannot reach its corpus
+      #      is worse than no job: it reports green.
       #
       # Operator setup: repository variable `MODEL_EXECUTION_SPEC_REPO`
-      # (`owner/name` of the corpus repository) and repository secret
-      # `MODEL_EXECUTION_SPEC_READ_TOKEN` (a PAT with read access to it).
+      # (`owner/name` of the corpus repository).
       - name: Check the conformance-corpus configuration is present
         env:
           CORPUS_REPO: ${{ vars.MODEL_EXECUTION_SPEC_REPO }}
-          CORPUS_TOKEN: ${{ secrets.MODEL_EXECUTION_SPEC_READ_TOKEN }}
         run: |
           set -euo pipefail
-          missing=0
           if [ -z "${CORPUS_REPO}" ]; then
             echo "::error::Repository variable MODEL_EXECUTION_SPEC_REPO is unset. It must hold the owner/name of the model-execution conformance corpus repository."
-            missing=1
-          fi
-          if [ -z "${CORPUS_TOKEN}" ]; then
-            echo "::error::Repository secret MODEL_EXECUTION_SPEC_READ_TOKEN is unset. It must hold a token with read access to that repository. (A pull request from a fork cannot read repository secrets; this job fails there by design rather than skipping.)"
-            missing=1
-          fi
-          if [ "${missing}" -ne 0 ]; then
             echo "::error::The model-execution conformance family cannot run without its corpus, and a conformance run without its corpus certifies nothing."
             exit 1
           fi
@@ -551,8 +540,7 @@ jobs:
           # `Pin.manifestDigest` in
           # src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs,
           # in one reviewed commit, after reading the corpus diff.
-          ref: b55833f18334d4fd846c2cd91514946e95ca1941
-          token: ${{ secrets.MODEL_EXECUTION_SPEC_READ_TOKEN }}
+          ref: 5035c959780d64031e3fd171b8af4d4dc9b5127c
           path: .model-execution-corpus
           persist-credentials: false
 

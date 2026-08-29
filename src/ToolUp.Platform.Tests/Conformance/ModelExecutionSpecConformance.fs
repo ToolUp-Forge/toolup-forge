@@ -112,7 +112,7 @@ module Pin =
     /// The corpus revision this harness is certified against. CI checks
     /// the corpus out at exactly this revision. Bumping it is a
     /// deliberate commit with a diff review — never an incidental edit.
-    let commit = "b55833f18334d4fd846c2cd91514946e95ca1941"
+    let commit = "5035c959780d64031e3fd171b8af4d4dc9b5127c"
 
     /// SHA-256 over the corpus manifest's bytes. See the header: this is
     /// the value that moves whenever anything in the corpus moves.

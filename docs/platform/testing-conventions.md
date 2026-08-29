@@ -307,7 +307,11 @@ A second kind of corpus exists for the wire surfaces that are governed by a spec
 repo does not own. There the corpus is **external**: neither authored nor vendored here, canonical
 over this implementation rather than derived from it, and resolved at test time. The
 model-execution wire face is the first surface certified this way
-(`src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs`).
+(`src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs`), against the
+**model-execution wire specification** — `MODEL_EXECUTION_WIRE.md` and its conformance corpus,
+published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0). This repo
+conforms to that specification; it does not define the format, and where any in-repo description
+of the wire disagrees with the specification, the specification wins.
 
 Four rules apply to any family of this kind. They exist because a conformance suite is exactly the
 kind of code that passes by doing nothing.
@@ -345,5 +349,6 @@ its author decides deliberately whether the new field closes a gap.
 
 **Running it.** Nothing extra: the family is part of `ToolUp.Platform.Tests`, so
 `dotnet run --project Build.fsproj -- VerifyAll` covers it. CI fetches the corpus into the
-`verify-all` job; a repository variable names the corpus repository and a repository secret carries
-a read token for it, and the job fails by name when either is unset.
+`verify-all` job; a repository variable names the corpus repository and the job fails by name when
+it is unset. The specification's home is public, so no read token is involved — the checkout uses
+the job's default credentials, and fork PRs run the family like any other job.
