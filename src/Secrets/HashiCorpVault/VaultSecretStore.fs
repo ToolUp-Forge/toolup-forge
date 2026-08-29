@@ -296,6 +296,15 @@ type VaultSecretStore(config: VaultConfig) =
                 return []
     }
 
+    /// Phase 457 — Vault encrypts everything it writes to its storage
+    /// backend under the barrier key held by its own seal; nothing lands in
+    /// the clear even when the backend is a plain filesystem or Consul.
+    /// Declared so the at-rest preflight passes on the composed store's own
+    /// evidence rather than on the `TOOLUP_SECRET_STORE` spelling.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            EncryptsAtRest "HashiCorp Vault, barrier-encrypted storage backend"
+
     interface ISecretStore with
         member _.GetSecret(scopeId, key) =
             getValue (Naming.dataPath config.MountPath scopeId key)

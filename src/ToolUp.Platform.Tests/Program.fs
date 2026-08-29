@@ -177,6 +177,8 @@ let private registeredTests =
         OAuthSubstrateTests.pkceFlowTests
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
+        // Phase 457 — the at-rest posture of the store that is actually composed.
+        SecretStoreAtRestPostureValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
         ShareTokenSigningKeyGovernanceTests.tests

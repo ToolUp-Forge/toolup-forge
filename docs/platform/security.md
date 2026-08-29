@@ -197,6 +197,22 @@ The validator is a deploy-time gate, not a runtime check. A deployment whose com
 
 The `share-token-signing-key-provenance` preflight validator **refuses startup** when the share-token surface is live, the deployment is production / multi-instance shaped (`ReplicaCount > 1` or `PublicBaseUrl` set), and the key is still absent. It is security-class, so the refusal is not bypassable via `SkipPreflight`. Two downgrades to `Warning`, both of which say so rather than going quiet: `ServerConfig.AcceptEphemeralShareTokenKey = true` (`TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1`) acknowledges a throwaway key — the non-breaking route for a deployment already running — and a key that is present but was **auto-generated** by the SDK is reported for as long as that holds. Provenance is recorded by the `share_token_signing_key_origin` marker the store writes beside a key it mints; deleting the marker is how an operator acknowledges adopting the key. A single-instance, non-public deployment, or one where the key is operator-provisioned, is silent. Full operator procedure: [`DEPLOYMENT.md`](../../DEPLOYMENT.md) — "Share-token signing key".
 
+#### Secrets at rest — the posture of the store that is composed
+
+Everything held on a user's behalf that is not data lives behind `ISecretStore`: BYOK provider keys, OAuth refresh and cached access tokens, webhook signing secrets, per-tenant credentials. Whether any of it is encrypted where it lands is a property of the **composed store**, not of a config flag — and the SDK's default store (`FileSecretStore`) writes flat JSON. `EncryptedSecretStore` is a decorator that encrypts only when `TOOLUP_SECRETS_MASTER_KEY` is set; without the key it passes plaintext through, which is the shape most deployments trip over.
+
+Three validators cover this surface, and they ask different questions:
+
+| Validator | Asks | Scope |
+|---|---|---|
+| `encrypted-secret-store-mode` | is the **master-key env var** set? | auth-requiring deployments |
+| `oauth-secret-encryption-mode` | does the **composed store** encrypt? | deployments running connector OAuth flows |
+| `secret-store-at-rest-posture` | does the **composed store** encrypt? | every auth-requiring deployment, whatever the store and whatever else is composed |
+
+The third is the general one, and it **refuses startup**. It is security-class, so `SkipPreflight = true` does not bypass it. The posture it reads is what the store *declares* — the optional `ISecretStoreAtRestPosture` interface, which a companion or a consumer's own store implements to say `EncryptsAtRest` / `PlaintextAtRest` / `UnknownAtRest`. A store that declares nothing is treated as not encrypting and named as **undeclared**, not as plaintext: the refusal states what was established and no more. The `TOOLUP_SECRET_STORE` name is consulted only for an undeclaring store, because that switch records what was *asked for* — a companion that fell back to the local default still matches it.
+
+`TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1` (equivalently `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired`, which the older `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1` spelling also sets) lowers the refusal to a `Warning` that names the acknowledgement as the reason nothing was refused. That is the right lever when the storage medium supplies the encryption the store does not — disk FDE, an encrypting volume, a KMS-managed bucket — and the wrong one as a way past a failing boot. Full operator procedure, including master-key provisioning and rotation: [`DEPLOYMENT.md`](../../DEPLOYMENT.md) — "Secrets at rest".
+
 ## Vulnerability disclosure
 
 Security defects in the SDK itself are reported via the process documented in [`SECURITY.md`](../../SECURITY.md) at the repo root. Deployment-time hardening defects (a `SurfaceCoherenceValidator` rule that should fire and does not, a per-shape rate-limit partition that the documented partitioning model does not match, an audit envelope shape that breaks a downstream sink) are reported the same way — they are SDK defects, not operator-tuning concerns.

@@ -719,6 +719,7 @@
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
         <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
         <Compile Include="Server\OAuthSecretEncryptionModeValidator.fs" />
+        <Compile Include="Server\SecretStoreAtRestPostureValidator.fs" />
         <Compile Include="Server\ShareTokenSigningKeyProvenanceValidator.fs" />
         <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
         <Compile Include="Server\DeployPlaneDepsValidator.fs" />
